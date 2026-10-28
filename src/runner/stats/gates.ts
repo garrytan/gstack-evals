@@ -134,6 +134,7 @@ export function validateFamily(value: unknown): ComparisonFamily {
       if (!a || !['every_b_equals', 'b_at_most', 'b_at_least', 'no_item_regression'].includes(a.kind)) problems.push(`${label}: exact gate needs an assertion`);
       else if (a.kind === 'no_item_regression' ? !['higher', 'lower'].includes(a.direction) : !finite(a.value)) problems.push(`${label}: assertion needs ${a.kind === 'no_item_regression' ? 'a direction' : 'a finite value'}`);
       if (c.direction !== undefined && !['higher', 'lower'].includes(c.direction)) problems.push(`${label}: direction must be higher or lower`);
+      else if (c.direction !== undefined && a?.kind === 'no_item_regression' && c.direction !== a.direction) problems.push(`${label}: direction ${c.direction} contradicts the assertion's direction ${a.direction}`);
     } else if (c?.gate === 'noninferiority') {
       if (!['higher', 'lower'].includes(c.direction)) problems.push(`${label}: direction must be higher or lower`);
       if (!finite(c.tolerance) || c.tolerance < 0) problems.push(`${label}: tolerance must be a finite number >= 0, in metric units`);

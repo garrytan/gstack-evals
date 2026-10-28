@@ -26,7 +26,7 @@ const leaseFile: LeaseFile = { schema: 1, kind: "lease", item: "lanea", seq: 1, 
 function funded(cap = 5 * DOLLAR) {
   const dir = scratch();
   const record = join(dir, "record");
-  recordApproval(record, { action: "init", item: "lanea", cap_micros: cap, quotes: [quote] });
+  recordApproval(record, { action: "init", item: "lanea", cap_micros: cap, quotes: [quote], admission: "warn" });
   return { dir, record, local: LocalLedger.open(join(dir, "a.sqlite")) };
 }
 
@@ -45,7 +45,7 @@ describe("ledger edges", () => {
   test("reconciling a lease that was already settled is E_SETTLE_CONFLICT and the settled close stands", () => {
     const dir = scratch();
     const record = join(dir, "record");
-    recordApproval(record, { action: "init", item: "lanea", cap_micros: 5 * DOLLAR, quotes: [quote] });
+    recordApproval(record, { action: "init", item: "lanea", cap_micros: 5 * DOLLAR, quotes: [quote], admission: "warn" });
     const local = LocalLedger.open(join(dir, "a.sqlite"));
     const lease = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
     settleLease(record, local, lease.lease_id);
@@ -66,7 +66,7 @@ describe("ledger edges", () => {
       { item: "../x", cap_micros: DOLLAR },
       { item: "lanea", cap_micros: 0 },
       { item: "lanea", cap_micros: 1.5 },
-    ]) expect(codeOf(() => recordApproval(record, { action: "init", quotes: [quote], ...a }))).toBe("E_USAGE");
+    ]) expect(codeOf(() => recordApproval(record, { action: "init", quotes: [quote], admission: "warn", ...a }))).toBe("E_USAGE");
     expect(existsSync(join(record, "items"))).toBe(false);
   });
 
