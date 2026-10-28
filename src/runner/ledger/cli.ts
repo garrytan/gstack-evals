@@ -1,6 +1,6 @@
 // gstack-evals ledger: record approved caps with the owner's words, lease line items, settle and reconcile leases.
 // docs/budget-ledger.md is the guide; every error line on stderr starts with its reason code.
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { CODES, docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import { approvalsBin, mirrorApproval } from "./approvals.ts";
 import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "./ledger.ts";
@@ -40,6 +40,7 @@ const ALLOWED: Record<string, string[]> = {
   status: ["--item"],
 };
 const REPEATABLE = new Set(["--words", "--by", "--source"]);
+const FLAGS = new Set([...Object.values(ALLOWED).flat(), "--ledger", "--ledger-record", "--json"]);
 
 export interface LedgerIo {
   out: (text: string) => void;
@@ -82,7 +83,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       }
       if (![...allowed, "--ledger", "--ledger-record"].includes(flag)) throw new Usage("gstack-evals ledger " + cmd + " does not take " + flag);
       const value = rest[++i];
-      if (value === undefined) throw new Usage(flag + " needs a value");
+      if (value === undefined || FLAGS.has(value)) throw new Usage(flag + " needs a value");
       if (flags.has(flag) && !REPEATABLE.has(flag)) throw new Usage(flag + " is given twice");
       flags.set(flag, [...(flags.get(flag) ?? []), value]);
     }
@@ -110,7 +111,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       print(file, "LEASE_HELD: " + file.lease_id + " amount=" + usd(file.reserved_micros) + " expires=" + file.expires_at + " ledger=" + held.path);
     } else if (cmd === "lease" && flags.has("--lease")) {
       const file = exportLease(record, need("--lease"));
-      writeFileSync(need("--export"), JSON.stringify(file, null, 2) + "\n");
+      writeNew("--export", need("--export"), JSON.stringify(file, null, 2) + "\n", "run it again with another --export file");
       print(file, "LEASE_EXPORTED: " + file.lease_id + " amount=" + usd(file.reserved_micros) + " machine=" + file.machine_id + " export=" + one("--export"));
     } else if (cmd === "lease") {
       const exportTo = one("--export");
@@ -135,13 +136,13 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
         if (exportTo) rmSync(exportTo, { force: true });
         throw error;
       }
-      if (exportTo) writeFileSync(exportTo, JSON.stringify(exportLease(record, lease.lease_id), null, 2) + "\n");
+      if (exportTo) writeNew("--export", exportTo, JSON.stringify(exportLease(record, lease.lease_id), null, 2) + "\n", "lease " + lease.lease_id + " is recorded; write its export with gstack-evals ledger lease --lease " + lease.lease_id + " --export <file>");
       if (warnings.length) io.err(warnings.join("\n"));
       print({ ...lease, warnings }, "LEASE: " + lease.lease_id + " item=" + lease.line_item + " run=" + lease.run_id + " amount=" + usd(lease.reserved_micros) + " machine=" + lease.machine_id + " expires=" + lease.expires_at + (exportTo ? " export=" + exportTo : ""));
     } else if (cmd === "settle") {
       const artifact = one("--artifact");
       const close = flags.has("--from") ? importSettlement(record, readJson(need("--from"))) : settleLease(artifact ? null : record, local(), need("--lease"));
-      if (artifact) writeFileSync(artifact, JSON.stringify(close, null, 2) + "\n");
+      if (artifact) writeNew("--artifact", artifact, JSON.stringify(close, null, 2) + "\n", "the lease is staged to close in this ledger; run the same settle again with another --artifact file");
       print(close, "SETTLED: " + close.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " (" + close.unknown_calls + " calls)" + (artifact ? " artifact=" + artifact : " record=" + record));
     } else if (cmd === "reconcile") {
       const source = need("--source");
@@ -149,7 +150,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       const close = reconcileLease(record, { lease_id: need("--lease"), spent_micros: dollars("--spent"), quotes: quotes(flags), source });
       print(close, "RECONCILED: " + close.lease_id + " spent=" + usd(close.spent_micros) + " source=" + source + (close.source_sha256 ? " sha256=" + close.source_sha256 : ""));
     } else {
-      const items = ledgerStatus(record).filter((s) => !flags.has("--item") || s.item === one("--item"));
+      const items = ledgerStatus(record, one("--item"));
       const paths = { record: recordPath(one("--ledger-record"), env), ledger: ledgerPath(one("--ledger"), env) };
       const lines = ["RECORD: " + paths.record.path + " (" + paths.record.rule + ")", "LEDGER: " + paths.ledger.path + " (" + paths.ledger.rule + ")"];
       for (const s of items) {
@@ -172,6 +173,19 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
 
 function fail(message: string): never {
   throw new Usage(message);
+}
+
+/** Writes a file the operator named without replacing another file: an existing file must be empty or already hold these bytes. */
+function writeNew(flag: string, path: string, text: string, retry: string): void {
+  try {
+    if (!existsSync(path)) return writeFileSync(path, text, { flag: "wx" });
+    const held = readFileSync(path, "utf8");
+    if (held === text) return;
+    if (held !== "") throw new Error("it already holds something else");
+    writeFileSync(path, text);
+  } catch (error) {
+    throw new Usage("cannot write " + flag + " " + path + ": " + (error as Error).message + "; " + retry);
+  }
 }
 
 /** Pairs each --words with its --by and --source. A --by or --source given once applies to every quote. */

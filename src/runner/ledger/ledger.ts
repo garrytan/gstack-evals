@@ -9,7 +9,7 @@ import type { ReasonCode } from "../../errors/codes.ts";
 import type { Lease } from "../../types.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { isRecordFile, ITEM_NAME, LedgerError, listItems, readItem, slotPath, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { isRecordFile, isTime, ITEM_NAME, LedgerError, listItems, readItem, slotPath, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -163,7 +163,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     if (held === null) {
       const zero: CloseFile = { schema: 1, kind: "close", item: file.item, seq: file.seq, lease_id: file.lease_id, how: "settled", spent_micros: 0, unknown_micros: 0, unknown_calls: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 }, closed_at: now.toISOString() };
       if (typeof write(record, zero, "E_LEASE_UNSETTLED") !== "object") {
-        throw new LedgerError("E_LEDGER_PATH", "lease " + file.lease_id + " was recorded, but the local ledger " + local!.path + " could not hold it (" + (error as Error).message + "); no call can spend against it, so it is closed at $0. Fix the local ledger and lease again.");
+        throw new LedgerError("E_LEDGER_PATH", "lease " + file.lease_id + " was recorded, but the local ledger " + local!.path + " could not hold it (" + (error as Error).message + "); no call can spend against it, so it is closed at $0. Fix the local ledger and lease again. The new lease takes slot " + (file.seq + 1) + ", so on an item with --admission required it needs an admission record for that slot.");
       }
     }
     if (!held || JSON.stringify(held.file) !== JSON.stringify(file)) {
@@ -206,12 +206,21 @@ export function settleLease(record: string | null, local: LocalLedger, lease_id:
   return close;
 }
 
-/** Copies a sealed workflow's settle artifact into the record. Idempotent: the same artifact again is present. */
+const SETTLED_KEYS = "closed_at,how,item,kind,lease_id,schema,seq,spent_micros,unknown_calls,unknown_micros,usage";
+const USAGE_KEYS = "cache_read,cache_write,input,output,reasoning";
+const keysOf = (o: object | null) => (o === null || typeof o !== "object" ? "" : Object.keys(o).sort().join());
+
+/**
+ * Copies a sealed workflow's settle artifact into the record. Idempotent: the same artifact again is present. The record
+ * is write-once, so only the exact shape a local ledger stages is accepted, and never more than the lease reserved.
+ */
 export function importSettlement(record: string, close: unknown): CloseFile {
   if (!isRecordFile(close) || close.kind !== "close") throw new LedgerError("E_USAGE", "the settle artifact is not a lease close");
   const { lease, close: prior } = findLease(record, close.lease_id);
-  if (close.how !== "settled" || close.item !== lease.item || close.seq !== lease.seq) {
-    throw new LedgerError("E_USAGE", "the settle artifact for " + close.lease_id + " does not match the lease in the approval record " + record);
+  const usage = close.usage as Record<string, unknown> | null;
+  const shaped = keysOf(close) === SETTLED_KEYS && isTime(close.closed_at) && keysOf(usage) === USAGE_KEYS && Object.values(usage!).every(isMicros);
+  if (!shaped || close.how !== "settled" || close.item !== lease.item || close.seq !== lease.seq || close.spent_micros + close.unknown_micros > lease.reserved_micros) {
+    throw new LedgerError("E_USAGE", "the settle artifact for " + close.lease_id + " is not a settled close of the lease in the approval record " + record + " within its " + usd(lease.reserved_micros));
   }
   if (prior && JSON.stringify(prior) !== JSON.stringify(close)) throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(prior) + "; the artifact says " + closeText(close));
   const result = write(record, close, "E_LEASE_UNSETTLED");
@@ -272,8 +281,9 @@ export interface ItemStatus {
   approval: ApprovalFile | null;
 }
 
-export function ledgerStatus(record: string): ItemStatus[] {
-  return listItems(record).map((item) => {
+/** Every line item in the record, or only the one named, so a damaged item elsewhere does not hide it. */
+export function ledgerStatus(record: string, only?: string): ItemStatus[] {
+  return listItems(record).filter((item) => only === undefined || item === only).map((item) => {
     const s = read(record, item);
     return {
       item,

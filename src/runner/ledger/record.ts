@@ -167,7 +167,7 @@ export function isRecordFile(f: unknown): f is RecordFile {
   const r = f as RecordFile | null;
   if (typeof r !== "object" || r === null || r.schema !== 1 || typeof r.item !== "string" || !ITEM_NAME.test(r.item) || !Number.isSafeInteger(r.seq)) return false;
   if (r.kind === "approval") return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined);
-  if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && !Number.isNaN(Date.parse(r.expires_at));
+  if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at);
   return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
 }
 

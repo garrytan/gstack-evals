@@ -193,4 +193,61 @@ describe("lease exports", () => {
     await workflow.cli("settle", "--lease", lease.lease_id, "--artifact", join(workflow.dir, "settle.json"));
     expect((await workflow.cli("lease", "--from", again)).err).toStartWith("E_LEASE_CLOSED ");
   });
+
+  test("--export and --artifact never replace another file, and an output that cannot be written is E_USAGE naming the recovery", async () => {
+    const w = world();
+    await w.cli("init", "--cap", "9", "--item", "sealed-run-3", "--admission", "warn", "--words", "Rec", "--by", "Garry", "--source", "gate 3");
+    const first = join(w.dir, "lease.json");
+    const lease = JSON.parse((await w.cli("lease", "--item", "sealed-run-3", "--run", "s-3", "--machine", "workflow:sealed", "--export", first, "--json")).out);
+    const approval = join(w.env.GSTACK_EVALS_LEDGER_RECORD, "items", "sealed-run-3", "approval-0001.json");
+    const before = readFileSync(approval, "utf8");
+    const clobber = await w.cli("lease", "--lease", lease.lease_id, "--export", approval);
+    expect(clobber.code).toBe(2);
+    expect(clobber.err).toStartWith("E_USAGE cannot write --export " + approval + ": it already holds something else; run it again with another --export file");
+    expect(readFileSync(approval, "utf8")).toBe(before);
+    expect((await w.cli("lease", "--lease", lease.lease_id, "--export", first)).code).toBe(0);
+    const workflow = world();
+    await workflow.cli("lease", "--from", first);
+    const missing = await workflow.cli("settle", "--lease", lease.lease_id, "--artifact", join(workflow.dir, "missing", "settle.json"));
+    expect(missing.code).toBe(2);
+    expect(everyLine(missing.err, "E_USAGE")).toBe(true);
+    expect(missing.err).toContain("the lease is staged to close in this ledger; run the same settle again with another --artifact file");
+    const artifact = join(workflow.dir, "settle.json");
+    expect((await workflow.cli("settle", "--lease", lease.lease_id, "--artifact", artifact)).code).toBe(0);
+    expect((await w.cli("settle", "--from", artifact)).out).toStartWith("SETTLED: " + lease.lease_id);
+  });
+
+  test("lease --from refuses a file that is not a lease export, a numeric expiry included, before it opens a local ledger", async () => {
+    const w = world();
+    const lease = { schema: 1, kind: "lease", item: "lanea", seq: 1, lease_id: "lanea.0001.abcdef", run_id: "r", machine_id: "workflow:sealed", reserved_micros: 1_000_000, expires_at: "2026-10-29T00:00:00.000Z", created_at: "2026-10-28T00:00:00.000Z" };
+    for (const [name, text] of [["not-json.json", "{"], ["close.json", JSON.stringify({ ...lease, kind: "close" })], ["numeric.json", JSON.stringify({ ...lease, expires_at: 12345 })]]) {
+      writeFileSync(join(w.dir, name!), text!);
+      expect((await w.cli("lease", "--from", join(w.dir, name!))).err).toStartWith("E_USAGE ");
+    }
+    expect(existsSync(w.env.GSTACK_EVALS_LEDGER)).toBe(false);
+  });
+});
+
+describe("flag values and status", () => {
+  test("a flag given where a value belongs is E_USAGE and leases nothing", async () => {
+    const w = world();
+    await w.cli("init", "--cap", "5", "--item", "lanea-flags", "--admission", "warn", "--words", "Rec", "--by", "Garry", "--source", "gate 1");
+    for (const argv of [["lease", "--item", "lanea-flags", "--run", "--json"], ["lease", "--item", "lanea-flags", "--run", "--amount", "1"], ["lease", "--item", "--run", "r"]]) {
+      const r = await w.cli(...argv);
+      expect(r.code).toBe(2);
+      expect(r.err).toMatch(/^E_USAGE --(run|item) needs a value/);
+    }
+    expect(readItem(w.env.GSTACK_EVALS_LEDGER_RECORD, "lanea-flags").leases).toEqual([]);
+  });
+
+  test("status --item reads only that item, so a damaged item elsewhere does not hide it", async () => {
+    const w = world();
+    await w.cli("init", "--cap", "5", "--item", "lanea-ok", "--admission", "warn", "--words", "Rec", "--by", "Garry", "--source", "gate 1");
+    mkdirSync(join(w.env.GSTACK_EVALS_LEDGER_RECORD, "items", "broken"));
+    writeFileSync(join(w.env.GSTACK_EVALS_LEDGER_RECORD, "items", "broken", "approval-0001.json"), "{");
+    const one = await w.cli("status", "--item", "lanea-ok");
+    expect(one.code).toBe(0);
+    expect(one.out).toContain("ITEM: lanea-ok cap=$5.00");
+    expect((await w.cli("status")).err).toStartWith("E_LEDGER_RECORD ");
+  });
 });

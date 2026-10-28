@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
@@ -43,5 +43,18 @@ describe("tier paths", () => {
     }
     expect(code).toBe("E_LEDGER_PATH");
     openLocalLedger({ path: join(dir, "ledger.sqlite"), rule: "--ledger" }, [{ point: "/", type: "ext4" }]).close();
+  });
+
+  test("a local ledger SQLite cannot open on a local disk is E_LEDGER_PATH too", () => {
+    const dir = scratch();
+    writeFileSync(join(dir, "plain-file"), "");
+    let code = "";
+    try {
+      openLocalLedger({ path: join(dir, "plain-file", "ledger.sqlite"), rule: "--ledger" }, [{ point: "/", type: "ext4" }]);
+    } catch (error) {
+      code = (error as LedgerError).code;
+      expect((error as Error).message).toContain("cannot be used");
+    }
+    expect(code).toBe("E_LEDGER_PATH");
   });
 });

@@ -52,7 +52,7 @@ None of these changes the design. Each is a reading of a line the plan leaves op
 - **Binding.** The plan says `ledger init --item` binds a line item. init takes no run id, so the item binds to the run of its first lease, and later leases must carry that run id.
 - **Lease defaults.** A lease takes everything the item has left unless `--amount` says less, and expires after 24 hours (`--ttl`). An expired lease admits no new call (E_LEASE_CLOSED) but still blocks a new lease until it is settled or reconciled.
 - **Calls in flight at settle.** Calls still reserved when a lease settles become unknown and keep their full charge.
-- **Reconcile's `--source`.** It is the provider usage export, as in the plan's flag list. Its sha256 is recorded when it is a file.
+- **Reconcile's `--source`.** It is the provider usage export, as in the plan's flag list, and its sha256 is recorded.
 - **Reconcile waits for expiry.** A reconcile before the lease expires is refused with E_LEASE_UNSETTLED. Until then a machine that comes back could still spend beside a replacement worker. `--source` must be the export file, and its sha256 is recorded.
 - **The admission record's key.** GSTA-8's plan keys the record by lease id and reads it at lease time. A lease id carries a random suffix that only exists once the lease is written, so U4 keys the record by the lease's slot: the item and the slot number, which is the lease id without its suffix. A new lease after a reconcile is a new slot and still needs its own record, as the plan says.
 - **New codes.** E_LEDGER_RECORD (the record cannot be read or written), E_ITEM_BOUND, E_LEASE_CLOSED, E_RESERVE_CONFLICT, E_SETTLE_CONFLICT and E_RIG_UNPROVEN, plus the RIG_UNPROVEN warning.

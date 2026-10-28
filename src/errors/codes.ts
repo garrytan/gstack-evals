@@ -222,7 +222,7 @@ export const CODES = {
   E_LEDGER_PATH: {
     exit: 2,
     meaning: "The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE mount, or cannot be used. The approval record is not held to this rule.",
-    fix: "Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/).",
+    fix: "Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/). If a lease was closed at $0 because the local ledger failed while taking it (a busy lock, a full disk), fix that and lease again; the new lease takes the next slot.",
     side_effects: "None: refused before any spend. If the local ledger failed after a lease was recorded, that lease is closed at $0 in the record.",
     retry_safe: true,
     resumable: false,

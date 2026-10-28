@@ -40,7 +40,7 @@ An approved cap is split into line items, and each line item funds one run. A dr
 
 - The first lease on an item binds it to that lease's run. Another run asking for it gets E_ITEM_BOUND. So one cap cannot fund a second run to change a verdict.
 - A lease records its id, machine id, amount and expiry. By default it takes everything the item has left and lasts 24 hours; `--ttl` can set up to 168 hours (7 days).
-- If the machine's local ledger fails while it takes the lease, the lease is closed at $0 at once (E_LEDGER_PATH), since no call can spend against it. If the local ledger cannot even be read, the lease stays reserved (E_LEASE_UNSETTLED) until it is settled there or reconciled.
+- If the machine's local ledger fails while it takes the lease, the lease is closed at $0 at once (E_LEDGER_PATH), since no call can spend against it. The next lease takes the next slot, so on a `required` item it needs its own admission record. If the local ledger cannot even be read, the lease stays reserved (E_LEASE_UNSETTLED) until it is settled there or reconciled.
 - Only one lease on an item is open at a time. A replacement worker cannot lease until the old lease is settled or reconciled (E_LEASE_UNSETTLED).
 - When a lease runs out, a call is refused with CAP_STOP. When a lease has expired or been settled, it is E_LEASE_CLOSED. Either way, the run settles its lease and resumes on a new lease for the same run.
 - When the item itself has nothing left, a new lease is CAP_STOP until the owner raises the cap.
@@ -80,9 +80,9 @@ The sealed repo's workflow belongs to the second principal and cannot reach a Ca
 
 1. The thread leases the item for the workflow and exports it: `ledger lease --item <item> --run <run id> --machine workflow:<name> --export lease.json`. It passes lease.json as a dispatch input.
 2. The workflow holds the lease in its own local ledger with `ledger lease --from lease.json`, spends against it with provider keys from its protected environment, and writes a settle artifact with `ledger settle --lease <id> --artifact settle.json`.
-3. The thread copies the artifact into the record with `ledger settle --from settle.json`.
+3. The thread copies the artifact into the record with `ledger settle --from settle.json`. Only a settled close of that lease, in the shape a local ledger writes and within the lease's amount, is accepted; anything else is E_USAGE and nothing is written.
 
-If the export file is lost before dispatch, `ledger lease --lease <id> --export <file>` writes it again. If the export file cannot be created, no lease is recorded. If writing the lease into it fails after the lease is recorded, for example on a full disk, the lease stands and that same command writes the file again.
+If the export file is lost before dispatch, `ledger lease --lease <id> --export <file>` writes it again. If the export file cannot be created, no lease is recorded. If writing the lease into it fails after the lease is recorded, for example on a full disk, the lease stands and that same command writes the file again. `--export` and `--artifact` never replace a file that holds anything else; an output that cannot be written is E_USAGE, and the message names the command that recovers.
 
 The workflow's local ledger is the lease's journal, and the ledger cannot see across workflow attempts. So the workflow must keep that file across attempts of the same dispatch, for example as an artifact keyed by the lease id. It must not start an attempt on a fresh runner with the old lease file. A fresh runner needs a new lease, exported after the old one is settled or reconciled. Otherwise a rerun could spend the same allowance twice, and the record would see the second settle only as E_SETTLE_CONFLICT, after the money is gone. `ledger lease --from` refuses a lease that its own ledger has already settled.
 
