@@ -37,4 +37,6 @@ Two CEO rounds and two Eng rounds, each with a native voice (anthropic/claude-op
 
 ## Next
 
-In order, each through the Captain's queue under the ship gate: this wiki post; U19a's sealed.yml as its own PR, since it closes the leak gap the rest depends on; then U19's train work and dry run. The Captain routes the asks to U2, U4, U6, U9 and U10 and holds U20 to U22.
+In order, each through the Captain's queue under the ship gate: this wiki post; sealed.yml as its own small PR, since it closes the leak gap the rest depends on; then U19's train work and its dry run. The plan puts sealed.yml and the train workflows in U19a's first PR and the ship policy and index in U19b's second. Taking sealed.yml out first is the Captain's scheduling change after the gate, and the plan's scope for U19 stands.
+
+The Captain routes the plan's open asks. U1 merged without E_RIG_UNPROVEN, so that code goes to U4 with the requireAdmission seam and the --admission flag. U2 gets the preregistration check, and U6, U9 and U10 get theirs in their briefs. The Captain holds U20 to U22.
