@@ -3,8 +3,10 @@
 // contract lines, each with the ids of the tasks that cover it. A paid run needs it committed and clean at HEAD.
 //
 // Coverage claims come from the author: --lock lists every contract line with the tasks the author named for it, and a
-// relock keeps those claims for every line whose file and text are unchanged. Nothing claims a line automatically: a
-// claimed line that a passing task reaches can clear UNCOVERED_GATE_REMOVAL, so a guessed claim would weaken the gate.
+// relock keeps those claims for every line whose file and text are unchanged. When a file repeats a line, each copy
+// keeps its own claims, in order, and only while the file holds as many copies as before. Nothing claims a line
+// automatically: a claimed line that a passing task reaches can clear UNCOVERED_GATE_REMOVAL, so a guessed claim would
+// weaken the gate.
 //
 // A line counts as covered only when an old-arm run of a claiming task reached it: the run passed, it read the line's
 // file, and, for an ask line, it asked a question of the line's category (any question when the line names none). A
@@ -89,17 +91,23 @@ export interface LockBuild {
 export function buildLock(input: LockInput): LockBuild {
   const dir = dirname(input.lockPath);
   const ids = new Set(input.tasks.tasks.map((t) => t.id));
-  const claims = new Map<string, Set<string>>();
+  const previous = new Map<string, string[][]>();
   for (const l of input.previous?.lines ?? []) {
     const key = l.file + "\n" + l.text_sha256;
-    claims.set(key, new Set([...(claims.get(key) ?? []), ...l.tasks]));
+    previous.set(key, [...(previous.get(key) ?? []), l.tasks]);
   }
+  const found = contractLines(input.before).map((l) => {
+    const text_sha256 = sha256(l.norm);
+    return { l, text_sha256, key: l.file + "\n" + text_sha256 };
+  });
+  const copies = new Map<string, number>();
+  for (const { key } of found) copies.set(key, (copies.get(key) ?? 0) + 1);
+  const claims = new Map([...previous].filter(([key, list]) => list.length === copies.get(key)));
   let carried = 0;
   const dropped: string[] = [];
   const loads = new Map(input.before.map((f) => [f.path, f.load]));
-  const lines = contractLines(input.before).map((l): LockLine => {
-    const text_sha256 = sha256(l.norm);
-    const tasks = [...(claims.get(l.file + "\n" + text_sha256) ?? [])].sort();
+  const lines = found.map(({ l, text_sha256, key }): LockLine => {
+    const tasks = [...(claims.get(key)?.shift() ?? [])].sort();
     for (const t of tasks.filter((t) => !ids.has(t))) dropped.push(l.id + " " + t);
     const kept = tasks.filter((t) => ids.has(t));
     carried += kept.length;

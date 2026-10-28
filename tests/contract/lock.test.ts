@@ -141,6 +141,16 @@ describe("tasks.lock.json", () => {
     expect(again.dropped).toEqual(["B:SKILL:0014 summary"]);
   });
 
+  test("a relock keeps each copy of a repeated line to its own claims", () => {
+    const skill = { "SKILL.md": FRONT + "STOP and wait for the user.\n\n## Later\n\nSTOP and wait for the user.\n" };
+    const base = lockFor(skill).lock;
+    const again = lockFor(skill, TASKS, claim(base, { [base.lines[0]!.id]: ["no-code"] }));
+    expect(again.lock.lines.map((l) => [l.id, l.tasks])).toEqual([[base.lines[0]!.id, ["no-code"]], [base.lines[1]!.id, []]]);
+    expect(again.carried).toBe(1);
+    const third = { "SKILL.md": skill["SKILL.md"] + "\n## Last\n\nSTOP and wait for the user.\n" };
+    expect(lockFor(third, TASKS, again.lock).lock.lines.map((l) => l.tasks)).toEqual([[], [], []]);
+  });
+
   test("drift names what changed since the lock", () => {
     const { lock, contract } = lockFor(V1);
     const before = readSkillFiles(tree(V1));
