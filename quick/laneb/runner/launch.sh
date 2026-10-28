@@ -24,7 +24,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
-name=$("$S" up -s "${UBI_SIZE:-standard-16}" -S "${UBI_STORAGE:-400}")
+name=$("$S" up -s "${UBI_SIZE:-standard-16}" -S "${UBI_STORAGE:-600}")
 echo "vm: $name"
 "$S" sync "$name" "$here" work/runner
 "$S" sync "$name" "$run" work/run
