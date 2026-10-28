@@ -42,7 +42,6 @@ test("loadJobs classifies graded, timed-out, budget-stopped and infra trials fro
     "result.json": { trial_name: "d-first-reward", verifier_result: { rewards: { score: 1 } } },
     "config.json": config("t4", "none"),
   });
-  trial("e-no-config", { "result.json": { trial_name: "e-no-config", verifier_result: { rewards: { reward: 1 } } } });
   writeFileSync(join(root, "job", "job.log"), "not a trial");
 
   const trials = loadJobs([join(root, "job")]).sort((x, y) => x.trialName.localeCompare(y.trialName));

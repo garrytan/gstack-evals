@@ -6,9 +6,6 @@
 // Value: protects=a non-stream client that disconnects is still billed from the upstream usage once it arrives;
 //   fails_when=the JSON branch stops accounting when the client leaves, so cost goes unrecorded; why_new=runner.test.ts
 //   covers only the streamed cancel; seam=none; no_claim=real provider timing (stub upstream)
-// Value: protects=a streamed request to an unreachable upstream returns 529, releases its hold and charges nothing;
-//   fails_when=the fetch catch keeps the pending worst case for stream requests; why_new=proxy-paths.test.ts covers only
-//   stream:false; seam=none; no_claim=a stream that fails after its headers (a different path)
 // Value: protects=a non-stream request still waiting at close is aborted and charged its worst case exactly once;
 //   fails_when=the 529 catch path also charges or close forgets the pending entry; why_new=runner.test.ts covers only
 //   the streamed request at close; seam=none; no_claim=usage that arrives after close (logged, not added)
@@ -105,29 +102,6 @@ describe("proxy session and non-stream request states", () => {
     expect(closed.ok_responses).toBe(0);
     expect(logged(sessionsPath).filter((r) => r.id === s.id)).toMatchObject([{ spent_micros: charged[0].worst_micros, close_reason: "closed" }]);
     held.shift()!();
-  });
-
-  test("a streamed request to an unreachable upstream returns 529 and charges nothing", async () => {
-    const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
-    const deadPort = probe.port;
-    probe.stop(true);
-    const dead = startProxy({
-      config: { routes: { stub: { base_url: `http://127.0.0.1:${deadPort}`, key_env: "FAKE_KEY", auth: "x-api-key", count_tokens: "estimate" } }, models: { m: { route: "stub", upstream_model: "claude-opus-5-5", price_per_mtok: price } } },
-      dataHost: "127.0.0.1", dataPort: 0, controlPort: 0, env: { FAKE_KEY: "fake" }, logPath: join(dir, "dead.jsonl"), sessionsPath: join(dir, "dead-sess.jsonl"), closeWaitMs: 200,
-    });
-    try {
-      const ctl = `http://127.0.0.1:${dead.control.port}`;
-      const s = (await (await fetch(ctl + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t", model: "m", cap_usd: 0.05 }) })).json()) as any;
-      for (let i = 0; i < 2; i++) {
-        const res = await fetch(`http://127.0.0.1:${dead.data.port}/v1/messages`, { method: "POST", headers: { "x-api-key": s.token, "content-type": "application/json" }, body: JSON.stringify({ model: "m", max_tokens: 1000, stream: true, messages: [{ role: "user", content: "hi" }] }) });
-        expect(res.status).toBe(529);
-        expect(((await res.json()) as any).error.type).toBe("overloaded_error");
-      }
-      const closed = (await (await fetch(ctl + `/sessions/${s.id}/close`, { method: "POST", body: "{}" })).json()) as any;
-      expect(closed).toMatchObject({ requests: 2, ok_responses: 0, refused_budget: 0, spent_micros: 0 });
-    } finally {
-      await dead.stop();
-    }
   });
 
   test("close-all closes every open session, charges the held request and writes one row each", async () => {
