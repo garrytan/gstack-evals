@@ -125,12 +125,16 @@ describe("ledger edges", () => {
     expect(await local.settle(id, { kind: "spent", spent_micros: 0.5, usage })).toMatchObject({ ok: false, code: "E_INTERNAL" });
     expect(await local.settle(id, { kind: "spent", spent_micros: 1, usage: { input: 1, output: "2" } as unknown as TokenUsage })).toMatchObject({ ok: false, code: "E_INTERNAL" });
     expect(await local.reserve(request)).toMatchObject({ ok: true, reservation: { state: "reserved" } });
-    expect(await local.settle(id, { kind: "spent", spent_micros: 1, usage: { ...usage, cost: 5 } as TokenUsage })).toMatchObject({ ok: true, reservation: { usage } });
+    const s = await local.settle(id, { kind: "spent", spent_micros: 1, usage: { ...usage, cost: 5 } as TokenUsage });
+    if (!s.ok) throw new Error(s.message);
+    expect(s.reservation.usage).toEqual(usage);
     const u = await local.reserve({ ...request, idempotency_key: "k2" });
     if (!u.ok) throw new Error(u.message);
     await local.settle(u.reservation.reservation_id, { kind: "unknown" });
     expect(await local.settle(u.reservation.reservation_id, { kind: "unknown" })).toMatchObject({ ok: true, reservation: { state: "unknown" } });
-    expect(settleLease(record, local, lease.lease_id)).toMatchObject({ spent_micros: 1, unknown_micros: 500_000, usage });
+    const closed = settleLease(record, local, lease.lease_id);
+    expect(closed).toMatchObject({ spent_micros: 1, unknown_micros: 500_000 });
+    expect(closed.usage).toEqual(usage);
     local.close();
   });
 

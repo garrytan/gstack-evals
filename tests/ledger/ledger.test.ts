@@ -257,6 +257,9 @@ describe("settle failures and recovery", () => {
     const close = reconcileLease(record, owner);
     expect(close).toMatchObject({ how: "reconciled", spent_micros: 810_000, source_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(reconcileLease(record, owner)).toEqual(close);
+    const files = readdirSync(join(record, "items", "lanea")).sort();
+    expect(settleLease(record, machineB, lease.lease_id)).toEqual(close);
+    expect(readdirSync(join(record, "items", "lanea")).sort()).toEqual(files);
     expect(codeOf(() => reconcileLease(record, { ...owner, spent_micros: 1 }))).toBe("E_SETTLE_CONFLICT");
     expect(openLease(record, machineB, { item: "lanea", run_id: "run-a" }).reserved_micros).toBe(10 * DOLLAR - 810_000);
     const revived = LocalLedger.open(join(dir, "machine-a-restored.sqlite"));
