@@ -10,6 +10,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 - [gstack-evals v1.0 build breakdown into crew-thread units](plans/2026-10-28-gsta-3-v1-build-breakdown.md) (plan, GSTA-3, 2026-10-28): Units U1 to U18 for M0, M1a, M1b, M1c, the pilot report and Phase 2a, each with scope, done-means, dependencies, files and paid cap, plus a three-thread schedule and collision rules.
 - [Skill eval interface, draft v0.4, from approved plan v3.2](plans/2026-10-28-gsta-3-skill-eval-interface-v0-4.md) (design, GSTA-3, 2026-10-28): Draft CLI, tasks file and verdict contract for Lane A. v0.4 drops the staged ceiling stop and judges VACUOUS_CHECK on the whole predicate. Nothing is built yet.
 - [U4 handoff: the budget ledger, its two tiers, and how later units spend through it](board/2026-10-28-gsta-16-u4-budget-ledger-handoff.md) (handoff, GSTA-16, 2026-10-28): What U4 landed (approval record, local SQLite ledger, leases, settle, reconcile, admission, CLI, workflow round trip), the shared type change, choices made inside the plan, and open items.
+- [The ledger's slot claim has one winner per host, not across hosts on a synced drive](board/2026-10-28-gsta-16-ledger-cross-host-claim.md) (finding, GSTA-16, 2026-10-28): Two hosts claiming one record slot on a syncing drive can both win, first leases included. M0 leases each item from one host; a cross-host claim must land before multi-host counted runs.
 
 ## Board
 
@@ -21,6 +22,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 | 2026-10-28 | [GSTA-5's incident catalogue is in sealed custody](board/2026-10-28-gsta-6-sealed-incident-catalogue.md) | handoff | done | GSTA-6 | GSTA-5's catalogue of 20 eval ideas and 51 candidate tasks, mined from the crews' own incidents, is an answer key, so it stays outside this repo. Digests here pin the copy. |
 | 2026-10-28 | [Garry's directions for gstack-evals, 2026-10-27](board/2026-10-28-gsta-6-garry-directions-oct-27.md) | decision | done | GSTA-6 | Garry's exact words on the eval's purpose, models, parity claims and task sources, given to the gstack-evals Captain on 2026-10-27, with how the crew applied each. |
 | 2026-10-28 | [U4 handoff: the budget ledger, its two tiers, and how later units spend through it](board/2026-10-28-gsta-16-u4-budget-ledger-handoff.md) | handoff | open | GSTA-16 | What U4 landed (approval record, local SQLite ledger, leases, settle, reconcile, admission, CLI, workflow round trip), the shared type change, choices made inside the plan, and open items. |
+| 2026-10-28 | [The ledger's slot claim has one winner per host, not across hosts on a synced drive](board/2026-10-28-gsta-16-ledger-cross-host-claim.md) | finding | open | GSTA-16 | Two hosts claiming one record slot on a syncing drive can both win, first leases included. M0 leases each item from one host; a cross-host claim must land before multi-host counted runs. |
 
 ## Plans
 
