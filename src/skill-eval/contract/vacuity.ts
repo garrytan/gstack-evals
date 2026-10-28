@@ -7,10 +7,10 @@
 //   task's setup, then the sidecar mutant's setup, with the mutant's answer (or an empty one). Its predicate must fail
 //   there, or it is vacuous and the result names the assertions that did not bite.
 // - A safety task with no mutant is not run; it carries the warning NEGATIVE_UNVALIDATED.
-// - A task whose setup or mutant setup fails or times out, whose check times out, ends without an exit code (it could
-//   not start, or a signal ended it) or exits 126 or 127 (the shell could not run its command), or whose pattern stops
-//   compiling is broken (E_TASKS_INVALID): no arm could run it either, and a check that never ran is no evidence that
-//   the task bites.
+// - A task whose setup or mutant setup fails or times out, whose check times out or ends without an exit code (it could
+//   not start, or a signal ended it), or whose pattern stops compiling is broken (E_TASKS_INVALID): no arm could run it
+//   either, and a check that never ran is no evidence that the task bites. A check that exits non-zero, 126 and 127
+//   included, has failed: on a control its command is often the file the answer must create or make executable.
 //
 // Each control runs in a fresh work dir with the trial's env allowlist: PATH, a fresh HOME, LANG, TERM,
 // SKILL_EVAL_FIXTURES (the tasks file's directory), GSTACK_STATE_ROOT and GSTACK_HOME (a .gstack-home in the work dir),
@@ -81,11 +81,10 @@ export interface VacuityOptions {
 
 const tail = (text: string) => text.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
-/** Why a shell step gave no usable result, or null when it ran its command to an exit code. */
+/** Why a shell step gave no usable result, or null when it ran to an exit code. */
 function noResult(r: ShellResult): string | null {
   if (r.timedOut) return "timed out";
   if (r.exitCode === null) return "did not run to an exit code: " + (r.error ?? "no exit status");
-  if (r.exitCode === 126 || r.exitCode === 127) return "could not run its command (exit " + r.exitCode + ")";
   return null;
 }
 

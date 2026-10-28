@@ -84,9 +84,9 @@ describe("vacuity check on the whole task", () => {
     expect(r.stops.map((s) => s.code)).toEqual(["E_TASKS_INVALID"]);
   });
 
-  test("a check whose command cannot run (exit 126 or 127) is broken, never evidence that the task bites", () => {
-    const r = run([task("missing-tool", { check: "no-such-tool-gstack-evals", must: ["x"] }), task("not-executable", { setup: "touch tool", check: "./tool", must: ["x"] })]);
-    expect(r.results.map((x) => [x.id, x.status, x.reason])).toEqual([["missing-tool", "broken", "check could not run its command (exit 127)"], ["not-executable", "broken", "check could not run its command (exit 126)"]]);
+  test("a check that runs a file the answer must create or make executable bites on the no-op control (exit 127 or 126)", () => {
+    const r = run([task("create-it", { check: "./solution" }), task("make-it-executable", { setup: "touch tool", check: "./tool" })]);
+    expect(r.results.map((x) => [x.id, x.status, x.control])).toEqual([["create-it", "ok", "no-op"], ["make-it-executable", "ok", "no-op"]]);
   });
 
   test("a setup or mutant setup that exits 0 only after the timeout ended it is broken", () => {
