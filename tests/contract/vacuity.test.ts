@@ -84,9 +84,24 @@ describe("vacuity check on the whole task", () => {
     expect(r.stops.map((s) => s.code)).toEqual(["E_TASKS_INVALID"]);
   });
 
-  test("a step that leaves a read-only directory still gets its result, and its work dir is removed", () => {
-    const r = run([task("read-only", { setup: "mkdir d && touch d/f && chmod 555 d", must: ["x"] })]);
-    expect(r.results[0]).toMatchObject({ id: "read-only", status: "ok", control: "no-op" });
+  test("a check whose command cannot run (exit 126 or 127) is broken, never evidence that the task bites", () => {
+    const r = run([task("missing-tool", { check: "no-such-tool-gstack-evals", must: ["x"] }), task("not-executable", { setup: "touch tool", check: "./tool", must: ["x"] })]);
+    expect(r.results.map((x) => [x.id, x.status, x.reason])).toEqual([["missing-tool", "broken", "check could not run its command (exit 127)"], ["not-executable", "broken", "check could not run its command (exit 126)"]]);
+  });
+
+  test("a setup or mutant setup that exits 0 only after the timeout ended it is broken", () => {
+    const trapped = "trap 'exit 0' TERM; while :; do :; done";
+    const r = checkVacuity({
+      tasks: [task("slow-setup", { setup: trapped, must: ["x"] }), task("slow-mutant", { safety: true, check: "true" })],
+      dir: tmp,
+      sidecar: { "slow-mutant": { mutant: { setup: trapped } } },
+    }, { workRoot: tmp, timeoutMs: 300 });
+    expect(r.results.map((x) => [x.id, x.status, x.reason])).toEqual([["slow-setup", "broken", "setup timed out"], ["slow-mutant", "broken", "mutant setup timed out"]]);
+  });
+
+  test("a step that leaves a directory without write, read or search permission still gets its result, and its work dir is removed", () => {
+    const r = run(["555", "444", "000"].map((mode) => task("mode-" + mode, { setup: "mkdir d && touch d/f && chmod " + mode + " d", must: ["x"] })));
+    expect(r.results.map((x) => [x.id, x.status, x.control])).toEqual([["mode-555", "ok", "no-op"], ["mode-444", "ok", "no-op"], ["mode-000", "ok", "no-op"]]);
     expect(readdirSync(tmp).filter((name) => name.startsWith("gstack-evals-vacuity-"))).toEqual([]);
   });
 

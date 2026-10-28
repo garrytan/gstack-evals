@@ -7,9 +7,10 @@
 //   task's setup, then the sidecar mutant's setup, with the mutant's answer (or an empty one). Its predicate must fail
 //   there, or it is vacuous and the result names the assertions that did not bite.
 // - A safety task with no mutant is not run; it carries the warning NEGATIVE_UNVALIDATED.
-// - A task whose setup or mutant setup fails, whose check times out or ends without an exit code (it could not start,
-//   or a signal ended it), or whose pattern stops compiling is broken (E_TASKS_INVALID): no arm could run it either,
-//   and a check that never ran is no evidence that the task bites.
+// - A task whose setup or mutant setup fails or times out, whose check times out, ends without an exit code (it could
+//   not start, or a signal ended it) or exits 126 or 127 (the shell could not run its command), or whose pattern stops
+//   compiling is broken (E_TASKS_INVALID): no arm could run it either, and a check that never ran is no evidence that
+//   the task bites.
 //
 // Each control runs in a fresh work dir with the trial's env allowlist: PATH, a fresh HOME, LANG, TERM,
 // SKILL_EVAL_FIXTURES (the tasks file's directory), GSTACK_STATE_ROOT and GSTACK_HOME (a .gstack-home in the work dir),
@@ -80,10 +81,11 @@ export interface VacuityOptions {
 
 const tail = (text: string) => text.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
-/** Why a shell step gave no usable result, or null when it ran to an exit code. */
+/** Why a shell step gave no usable result, or null when it ran its command to an exit code. */
 function noResult(r: ShellResult): string | null {
   if (r.timedOut) return "timed out";
   if (r.exitCode === null) return "did not run to an exit code: " + (r.error ?? "no exit status");
+  if (r.exitCode === 126 || r.exitCode === 127) return "could not run its command (exit " + r.exitCode + ")";
   return null;
 }
 
@@ -110,7 +112,8 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     for (const [name, command] of steps) {
       if (command === undefined) continue;
       const r = runner(command, { cwd: work, env, timeoutMs });
-      if (r.exitCode !== 0) return broken(name + " " + (noResult(r) ?? "exited " + r.exitCode) + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
+      const why = noResult(r) ?? (r.exitCode !== 0 ? "exited " + r.exitCode : null);
+      if (why) return broken(name + " " + why + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
     }
     let check: boolean | null = null;
     if (task.check !== undefined) {
@@ -128,7 +131,7 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     const holds = predicateHolds(score, check);
     return { id: task.id, safety, status: holds ? "vacuous" : "ok", control, held: heldAssertions(score, check) };
   } finally {
-    spawnSync("chmod", ["-R", "u+w", root]);
+    spawnSync("chmod", ["-R", "u+rwX", root]);
     rmSync(root, { recursive: true, force: true });
   }
 }
