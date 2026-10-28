@@ -2,6 +2,9 @@
 # Runs one Lane B batch on the VM: the metering proxy (holding the provider keys) and
 # Harbor (holding none). The ledger service is reached through the SSH reverse tunnel
 # on 127.0.0.1:9911; if it is missing, no session can open.
+# Every exit writes out/vm-run.exit with the exit code, after the sessions are closed; launch.sh
+# pulls only once it exists. A STOP file in the run dir (launch.sh writes it on an interrupt)
+# keeps the paid run from starting, or stops a running one with one SIGINT to Harbor.
 # Usage: vm-run.sh <run dir> <ledger prefix> <batch cap usd>
 set -euo pipefail
 run=$(cd "$1" && pwd)
@@ -10,6 +13,8 @@ cap=$3
 runner=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 mkdir -p "$run/out"
+rm -f "$run/out/vm-run.exit"
+trap 'echo $? > "$run/out/vm-run.exit"' EXIT
 for gz in "$run"/arms/*.tar.gz; do
   [ -e "$gz" ] || continue
   gzip -dkf "$gz"
@@ -31,6 +36,7 @@ if [ -f "$run/oracle.json" ]; then
   if [ -s "$run/out/oracle-fails.txt" ]; then echo "oracle failed, no paid trial started:" >&2; cat "$run/out/oracle-fails.txt" >&2; exit 6; fi
   echo "oracle: every task passed on this host"
 fi
+[ ! -e "$run/STOP" ] || { echo "stop requested: no paid trial started" >&2; exit 130; }
 gw=$(sg docker -c "docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'")
 (
   set -a; . "$HOME/.laneb-keys"; set +a
@@ -39,11 +45,12 @@ gw=$(sg docker -c "docker network inspect bridge --format '{{(index .IPAM.Config
     --ledger-url http://127.0.0.1:9911 --ledger-prefix "$prefix" --global-cap-usd "$cap"
 ) > "$run/out/proxy.log" 2>&1 &
 proxy=$!
-trap 'curl -fsS -X POST 127.0.0.1:8788/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true' EXIT
+trap 'rc=$?; curl -fsS -X POST 127.0.0.1:8788/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; echo $rc > "$run/out/vm-run.exit"' EXIT
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && break; sleep 0.5; done
 curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
 sed "s#__GATEWAY__#$gw#g" "$run/job.json" > "$run/out/job.resolved.json"
 cd "$run"
+(while kill -0 $$ 2>/dev/null; do [ -e "$run/STOP" ] && pkill -INT -f "/bin/harbor run" && break; sleep 2; done) >/dev/null 2>&1 </dev/null &
 set +e
 sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' harbor run -y -c '$run/out/job.resolved.json'" > "$run/out/harbor.log" 2>&1
 rc=$?

@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
 
 // launch.sh against a fake ubi-runner and a fake ssh (fixtures/launch/): the "VM" is a local directory.
-function rig(opts: { failPull?: boolean }) {
+function freePort() {
+  const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+  const port = s.port;
+  s.stop(true);
+  return port;
+}
+
+function rig(opts: { failPull?: boolean; dropSsh?: boolean }) {
   const root = mkdtempSync(join(tmpdir(), "laneb-launch-"));
   const vm = join(root, "vm");
   const bin = join(root, "bin");
@@ -14,7 +21,7 @@ function rig(opts: { failPull?: boolean }) {
   for (const d of [vm, bin, run, state]) mkdirSync(d, { recursive: true });
   writeFileSync(join(run, "manifest.json"), "{}");
   const events = join(root, "events.log");
-  const port = 20000 + Math.floor(Math.random() * 20000);
+  const port = freePort();
   for (const f of ["ubi", "ssh"]) {
     copyFileSync(join(import.meta.dir, "fixtures", "launch", f), join(bin, f));
     chmodSync(join(bin, f), 0o755);
@@ -23,12 +30,15 @@ function rig(opts: { failPull?: boolean }) {
   const ledger = new Ledger(ledgerPath, "laneb-quick");
   ledger.approve(10, { quotes: ["test"] });
   ledger.reserve("p-s-1", toMicros(1));
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, UBI_RUNNER: join(bin, "ubi"), UBI_RUNNER_STATE: state, LEDGER: ledgerPath, LEDGER_PORT: String(port), EVENTS: events, VM: vm, STATE: state, PULL_RETRY_SEC: "0", FAIL_PULL: opts.failPull ? "1" : "", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, UBI_RUNNER: join(bin, "ubi"), UBI_RUNNER_STATE: state, LEDGER: ledgerPath, LEDGER_PORT: String(port), EVENTS: events, VM: vm, STATE: state, PULL_RETRY_SEC: "0", FAIL_PULL: opts.failPull ? "1" : "", DROP_SSH: opts.dropSsh ? "1" : "", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
   return { root, vm, run, events, ledgerPath, env };
 }
 
-async function interruptDuringBatch(r: ReturnType<typeof rig>) {
-  const proc = Bun.spawn(["bash", join(import.meta.dir, "../runner/launch.sh"), r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+const LAUNCH = join(import.meta.dir, "../runner/launch.sh");
+const events = (r: ReturnType<typeof rig>) => readFileSync(r.events, "utf8").trim().split("\n");
+
+async function interruptDuringBatch(r: ReturnType<typeof rig>, cmd = ["bash", LAUNCH, r.run, "p-", "5"]) {
+  const proc = Bun.spawn(cmd, { env: r.env, stdout: "pipe", stderr: "pipe" });
   for (let i = 0; i < 300 && !existsSync(join(r.vm, "started")); i++) await Bun.sleep(50);
   await Bun.sleep(300);
   proc.kill("SIGINT");
@@ -36,7 +46,7 @@ async function interruptDuringBatch(r: ReturnType<typeof rig>) {
   const code = await proc.exited;
   clearTimeout(timer);
   const stderr = await new Response(proc.stderr).text();
-  return { code, stderr, events: readFileSync(r.events, "utf8").trim().split("\n") };
+  return { code, stderr, events: events(r) };
 }
 
 describe("launch.sh on interrupt", () => {
@@ -44,7 +54,7 @@ describe("launch.sh on interrupt", () => {
     const r = rig({});
     const { code, events } = await interruptDuringBatch(r);
     const at = (prefix: string) => events.findIndex((e) => e.startsWith(prefix));
-    expect(at("ssh vm-1 pkill")).toBeGreaterThan(at("batch started"));
+    expect(at("ssh vm-1 touch work/run/STOP")).toBeGreaterThan(at("batch started"));
     expect(events).toContain("ledger up at close");
     expect(at("pull vm-1 work/run/out")).toBeGreaterThan(at("batch ended"));
     expect(at("down vm-1")).toBeGreaterThan(at("pull vm-1 work/run/jobs"));
@@ -61,5 +71,31 @@ describe("launch.sh on interrupt", () => {
     expect(stderr).toContain("pull vm-1 work/run/out");
     expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
     expect(code).toBe(130);
+  }, 60_000);
+
+  test("still stops the batch, pulls and destroys the VM when stderr is a broken pipe", async () => {
+    const r = rig({});
+    const { code, events } = await interruptDuringBatch(r, ["bash", "-c", 'exec bash "$0" "$@" 2> >(exit 0)', LAUNCH, r.run, "p-", "5"]);
+    const at = (prefix: string) => events.findIndex((e) => e.startsWith(prefix));
+    expect(at("ssh vm-1 touch work/run/STOP")).toBeGreaterThan(at("batch started"));
+    expect(at("down vm-1")).toBeGreaterThan(at("pull vm-1 work/run/jobs"));
+    expect(readRows(r.ledgerPath).at(-1)).toMatchObject({ kind: "settle", id: "p-s-1", reconciled: true });
+    expect(code).toBe(130);
+  }, 60_000);
+});
+
+describe("launch.sh when the batch connection drops", () => {
+  test("keeps the VM and pulls nothing while vm-run.sh has not finished", async () => {
+    const r = rig({ dropSsh: true });
+    const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    const stderr = await new Response(proc.stderr).text();
+    expect(events(r)).toContain("ssh dropped");
+    expect(events(r).some((e) => e.startsWith("pull") || e.startsWith("down"))).toBe(false);
+    expect(stderr).toContain("VM vm-1 is kept");
+    expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
+    expect(code).toBe(7);
   }, 60_000);
 });

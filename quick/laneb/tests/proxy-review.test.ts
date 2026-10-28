@@ -71,6 +71,7 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
         const mode = body.metadata?.user_id ?? "ok";
         const headers = { "retry-after": "7", "request-id": "req_123", "x-should-retry": "true" };
         if (mode === "slow") await new Promise<void>((r) => waiting.push(r));
+        if (mode === "error500") return Response.json({ type: "error", error: { type: "api_error", message: "boom" } }, { status: 500, headers });
         if (mode === "nousage") return Response.json({ type: "message", content: [{ type: "text", text: "hi" }], stop_reason: "end_turn" }, { headers });
         if (mode === "stream-nousage") return new Response(sse(streamEvents(false)), { headers: { "content-type": "text/event-stream" } });
         if (mode === "crlf") return new Response(sse(streamEvents(true), "\r\n"), { headers: { "content-type": "text/event-stream", ...headers } });
@@ -169,6 +170,30 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     await close(s.id);
   });
 
+  test("image and document blocks with a url or file source are refused before any upstream call, count_tokens included", async () => {
+    const s = await open();
+    const before = seen.length;
+    const blocks = [
+      { type: "image", source: { type: "url", url: "https://example.com/a.png" } },
+      { type: "document", source: { type: "url", url: "https://example.com/a.pdf" } },
+      { type: "document", source: { type: "file", file_id: "file_1" } },
+    ];
+    for (const block of blocks) {
+      const messages = [{ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: [block] }] }];
+      const res = await send(s.token, { messages });
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain("url or file source");
+    }
+    const count = await fetch(dataUrl + "/v1/messages/count_tokens", { method: "POST", headers: { "x-api-key": s.token, "content-type": "application/json" }, body: JSON.stringify({ model: "m", messages: [{ role: "user", content: [blocks[0]] }] }) });
+    expect(count.status).toBe(400);
+    expect(seen.length).toBe(before);
+    const inline = await send(s.token, { messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } }, { type: "text", text: "what is this?" }] }] });
+    expect(inline.status).toBe(200);
+    expect(seen.length).toBe(before + 1);
+    expect(entries(s.id).filter((e) => e.event === "refused").map((e) => e.sources)).toEqual([["url"], ["url"], ["file"], ["url"]]);
+    await close(s.id);
+  });
+
   test("finding 5 (json_request x truncated): a JSON body that fails mid-read releases its hold at the worst case", async () => {
     rawMode = "cut";
     const s = await open("raw");
@@ -187,6 +212,28 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     const closed = await close(s.id);
     expect(closed).toMatchObject({ requests: 1, ok_responses: 0 });
     expect(closed.spent_micros).toBe(worstOf(s.id));
+  });
+
+  test("stream_request x failed_after_send: a stream request that may have reached the provider and failed is charged its worst case", async () => {
+    rawMode = "reset";
+    const s = await open("raw");
+    expect((await send(s.token, { stream: true })).status).toBe(529);
+    expect(proxy.sessions.get(s.id)!.pending.size).toBe(0);
+    const closed = await close(s.id);
+    expect(closed).toMatchObject({ requests: 1, ok_responses: 0 });
+    expect(closed.spent_micros).toBe(worstOf(s.id));
+  });
+
+  test("json_request and stream_request x upstream_error_status: the error passes through and is billed from its usage, here none", async () => {
+    const s = await open();
+    for (const stream of [false, true]) {
+      const res = await send(s.token, { stream, metadata: { user_id: "error500" } });
+      expect(res.status).toBe(500);
+      expect(((await res.json()) as any).error.message).toBe("boom");
+      expect(proxy.sessions.get(s.id)!.pending.size).toBe(0);
+    }
+    expect(entries(s.id).filter((e) => e.event === "request").map((e) => [e.status, e.complete, e.cost_micros])).toEqual([[500, true, 0], [500, true, 0]]);
+    expect(await close(s.id)).toMatchObject({ spent_micros: 0, ok_responses: 0, requests: 2 });
   });
 
   test("finding 9: a 200 without usage is charged its worst case, JSON or stream", async () => {
@@ -311,6 +358,37 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
 });
 
 describe("batch cap", () => {
+  test("concurrent opens cannot pass the batch cap together while their reserves wait on the ledger", async () => {
+    const ledger = new Ledger(join(dir, "ledger-race.jsonl"), "laneb-quick");
+    ledger.approve(100, { quotes: ["test"] });
+    let garbage = 1;
+    const ledgerServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const b = (await req.json()) as any;
+        await Bun.sleep(100);
+        if (garbage-- > 0) return new Response("not json", { status: 502 });
+        const out = new URL(req.url).pathname === "/reserve" ? ledger.reserve(b.id, b.usd_micros, b.meta) : ledger.settle(b.id, b.usd_micros, b.meta);
+        return Response.json(out, { status: out.ok ? 200 : 409 });
+      },
+    });
+    const config: ProxyConfig = { routes: { up: { base_url: "http://127.0.0.1:1", key_env: "K", auth: "x-api-key", count_tokens: "estimate" } }, models: { m: { route: "up", upstream_model: "m", price_per_mtok: price } } };
+    const proxy = startProxy({ config, dataHost: "127.0.0.1", dataPort: 0, controlPort: 0, logPath: join(dir, "req-race.jsonl"), sessionsPath: join(dir, "sess-race.jsonl"), ledgerUrl: `http://127.0.0.1:${ledgerServer.port}`, env: { K: "k" }, globalCapMicros: toMicros(1), closeWaitMs: 50 });
+    try {
+      const open = () => fetch(`http://127.0.0.1:${proxy.control.port}/sessions`, { method: "POST", body: JSON.stringify({ trial: "t", model: "m", cap_usd: 0.6 }) });
+      expect((await open()).status).toBe(502);
+      expect(readFileSync(join(dir, "req-race.jsonl"), "utf8")).toContain("reserve_failed");
+      const statuses = (await Promise.all([open(), open()])).map((r) => r.status).sort();
+      expect(statuses).toEqual([200, 409]);
+      expect(ledger.status().openReservedMicros).toBe(toMicros(0.6));
+      expect(((await (await fetch(`http://127.0.0.1:${proxy.control.port}/totals`)).json()) as any).cap_stop).toContain("batch cap");
+    } finally {
+      await proxy.stop();
+      ledgerServer.stop(true);
+    }
+  });
+
   test("finding 6: the batch cap refuses at session open, never mid-session", async () => {
     const ledger = new Ledger(join(dir, "ledger-batch.jsonl"), "laneb-quick");
     ledger.approve(100, { quotes: ["test"] });

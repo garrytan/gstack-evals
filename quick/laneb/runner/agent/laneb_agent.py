@@ -91,7 +91,7 @@ NET_CAPS = {"CAP_NET_ADMIN": 12, "CAP_NET_RAW": 13}
 PROBE_TIMEOUT_S = 60
 
 KILL_CLAUDE = "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = claude ] && kill -9 ${p##*/} 2>/dev/null; done; true"
-LIST_PROCESSES = "for p in /proc/[0-9]*; do printf '%s\\t%s\\t' \"${p##*/}\" \"$(cat $p/comm 2>/dev/null)\"; tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done"
+LIST_PROCESSES = "for p in /proc/[0-9]*; do [ \"${p##*/}\" = $$ ] && continue; printf '%s\\t%s\\t' \"${p##*/}\" \"$(cat $p/comm 2>/dev/null)\"; tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done"
 
 
 def net_caps_held(status: str) -> list[str]:
@@ -201,10 +201,15 @@ class LanebAgent(ClaudeCode):
         """Before any model call: the agent's container holds no network capability, and the processes running now are recorded."""
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
-        res = self._exec(container, "cat /proc/self/status", timeout=PROBE_TIMEOUT_S)
+        try:
+            res = self._exec(container, "cat /proc/self/status", timeout=PROBE_TIMEOUT_S)
+        except (subprocess.SubprocessError, OSError) as e:
+            raise LanebInfraError(f"preflight probe failed: {e}") from None
+        if res.returncode != 0:
+            raise LanebInfraError(f"preflight probe failed: {res.stderr[-300:]!r}")
         held = net_caps_held(res.stdout.decode(errors="replace"))
-        if res.returncode != 0 or held:
-            raise RuntimeError(f"preflight: the agent container must drop NET_RAW and NET_ADMIN (cap_drop in the job's extra compose file); still held: {held or res.stderr[-300:]!r}")
+        if held:
+            raise RuntimeError(f"preflight: the agent container must drop NET_RAW and NET_ADMIN (cap_drop in the job's extra compose file); still held: {held!r}")
         (evdir / "processes-before.tsv").write_bytes(self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S).stdout)
 
     def _inject_arm(self, container: str) -> dict:
@@ -341,9 +346,17 @@ class LanebAgent(ClaudeCode):
             error = e
             log({"event": "agent_error", "type": type(e).__name__, "message": str(e)[:500]})
         finally:
-            # Shielded and run in a thread: the teardown, close and summary finish even if this task is cancelled again.
+            # Run in a thread and awaited to the end even if this task is cancelled again, so Harbor never moves on to the
+            # verifier before the teardown, close and summary finish.
             base = {"result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, "wall_s": round(time.time() - started, 1)}
-            summary = await asyncio.shield(asyncio.to_thread(self._teardown, container, session["id"], log, base))
+            teardown = asyncio.ensure_future(asyncio.to_thread(self._teardown, container, session["id"], log, base))
+            cancelled = None
+            while not teardown.done():
+                try:
+                    await asyncio.shield(teardown)
+                except asyncio.CancelledError as e:
+                    cancelled = e
+            summary = teardown.result()
             closed = summary["session"] or {}
             usage = closed.get("usage", {})
             cached = usage.get("cache_read_input_tokens", 0)
@@ -352,6 +365,8 @@ class LanebAgent(ClaudeCode):
             context.n_output_tokens = usage.get("output_tokens", 0)
             context.cost_usd = closed["spent_micros"] / 1_000_000 if "spent_micros" in closed else None
             context.metadata = {"laneb": {"arm": self.options.arm, "session": session["id"], "refused": closed.get("refused"), "requests": closed.get("requests"), "ok_responses": closed.get("ok_responses"), "close_error": summary["close_error"], "result": result}}
+            if cancelled is not None:
+                raise cancelled
         if summary["session"] is not None and not summary["session"].get("ok_responses"):
             raise LanebInfraError(f"no model response reached the agent, so this is an infrastructure failure: {error or result}") from error
 
@@ -360,6 +375,13 @@ class LanebAgent(ClaudeCode):
         Each step's failure is recorded and never skips a later step."""
         evdir = self._evaluator_dir()
         errors = {}
+
+        def note(entry: dict) -> None:
+            try:
+                log(entry)
+            except Exception as e:
+                errors.setdefault("log", f"{type(e).__name__}: {e}"[:300])
+
         try:
             self._exec(container, KILL_CLAUDE, timeout=30)
         except Exception as e:
@@ -368,22 +390,22 @@ class LanebAgent(ClaudeCode):
             after = self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S).stdout
             (evdir / "processes-after.tsv").write_bytes(after)
             before = parse_processes((evdir / "processes-before.tsv").read_text(errors="replace")) if (evdir / "processes-before.tsv").exists() else {}
-            survivors = {pid: cmd for pid, cmd in parse_processes(after.decode(errors="replace")).items() if pid not in before and "/proc/[0-9]*" not in cmd}
-            log({"event": "processes_after_agent", "new_since_setup": survivors})
+            survivors = {pid: cmd for pid, cmd in parse_processes(after.decode(errors="replace")).items() if pid not in before}
+            note({"event": "processes_after_agent", "new_since_setup": survivors})
         except Exception as e:
             errors["processes"] = f"{type(e).__name__}: {e}"[:300]
         try:
             patch = self._export_patch(container)
         except Exception as e:
             patch = {"event": "patch", "error": f"{type(e).__name__}: {e}"[:300]}
-        log(patch)
+        note(patch)
         closed = None
         close_error = None
         try:
             closed = post_json(self.options.control_url + f"/sessions/{session_id}/close", {"reason": "agent_finished"}, timeout=self.options.close_timeout_sec)
         except Exception as e:
             close_error = f"{type(e).__name__}: {e}"[:500]
-            log({"event": "close_failed", "session": session_id, "message": close_error})
+            note({"event": "close_failed", "session": session_id, "message": close_error})
         summary = {**base, "session": closed, "close_error": close_error, "patch": patch, "teardown_errors": errors}
         (evdir / "laneb-summary.json").write_text(json.dumps(summary, indent=2, default=str))
         return summary

@@ -4,8 +4,10 @@
 # and the VM reaches it through an SSH reverse tunnel. Provider keys go to a 0600 file
 # on the VM through stdin and are read only by the metering proxy.
 # The VM holds the only copy of the trial artifacts and proxy logs, so it is destroyed only
-# after they are pulled and counted, or when no batch started on it. An interrupt (INT, TERM
-# or HUP) stops Harbor on the VM, waits for vm-run.sh to close every session (settling
+# after vm-run.sh has finished (its out/vm-run.exit exists) and the results are pulled and
+# counted, or when no batch started on it. A dropped SSH connection therefore keeps the VM.
+# An interrupt (INT, TERM or HUP) writes work/run/STOP on the VM, which keeps the paid run
+# from starting or stops Harbor, waits for vm-run.sh to close every session (settling
 # through the tunnel, so the ledger service stays up until then), and then pulls as usual.
 # After the pull, open reserves are reconciled from the pulled proxy-sessions.jsonl.
 # Usage: UBI_OWNER=<thread code> launch.sh <run dir> <ledger prefix> <batch cap usd>
@@ -28,21 +30,22 @@ name=""
 started=no
 pulled=no
 stopping=no
+say() { (echo "$*" >&2) || true; }
 finish() {
+  kill "$lpid" 2>/dev/null || true
   if [ -n "$name" ]; then
     if [ "$started" = no ] || [ "$pulled" = yes ]; then
-      "$S" down "$name" || echo "WARNING: VM $name may still exist; run: $S down $name" >&2
+      "$S" down "$name" || say "WARNING: VM $name may still exist; run: $S down $name"
     else
-      echo "WARNING: results not fully pulled; VM $name is kept. Pull with: $S pull $name work/run/out $run/pulled; $S pull $name work/run/jobs $run/pulled; then: $S down $name" >&2
+      say "WARNING: results not fully pulled; VM $name is kept. Once work/run/out/vm-run.exit exists on it, pull with: $S pull $name work/run/out $run/pulled; $S pull $name work/run/jobs $run/pulled; then: $S down $name"
     fi
   fi
-  kill "$lpid" 2>/dev/null || true
 }
 trap finish EXIT
 on_signal() {
   stopping=yes
-  echo "interrupted: stopping the batch; sessions close and results are pulled before the VM goes" >&2
-  if [ "$started" = yes ]; then "$S" ssh "$name" 'pkill -INT -f "/bin/harbor run" || true' || true; fi
+  if [ "$started" = yes ]; then "$S" ssh "$name" 'touch work/run/STOP' || true; fi
+  say "interrupted: stopping the batch; sessions close and results are pulled before the VM goes"
 }
 trap on_signal INT TERM HUP
 not_stopping() { [ "$stopping" = no ] || exit 130; }
@@ -62,12 +65,12 @@ not_stopping
 . "$state_root/$name/env"
 key="$state_root/$name/key"
 not_stopping
+started=yes
 setsid ssh -i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
   -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o ExitOnForwardFailure=yes \
   -R 127.0.0.1:9911:127.0.0.1:$lport "ubi@$IP" \
   "bash -lc 'umask 022; bash work/runner/vm-run.sh work/run $prefix $cap'" < /dev/null &
 spid=$!
-started=yes
 set +e
 while :; do
   wait "$spid"
@@ -78,11 +81,11 @@ set -e
 "$S" ssh "$name" 'rm -f ~/.laneb-keys' || true
 mkdir -p "$run/pulled"
 for attempt in 1 2 3; do
-  if "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
+  if "$S" ssh "$name" 'test -f work/run/out/vm-run.exit' && "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
     && [ "$("$S" ssh "$name" 'cd work/run && find out jobs -type f | wc -l')" = "$(cd "$run/pulled" && find out jobs -type f | wc -l)" ]; then
     pulled=yes; break
   fi
-  echo "pull attempt $attempt failed" >&2; sleep "${PULL_RETRY_SEC:-20}"
+  say "pull attempt $attempt failed"; sleep "${PULL_RETRY_SEC:-20}"
 done
 [ "$pulled" = yes ] || rc=7
 kill "$lpid" 2>/dev/null || true

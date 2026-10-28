@@ -82,6 +82,17 @@ export const BODY_KEYS = new Set([
 ]);
 export const unknownBodyKeys = (body: Record<string, unknown>) => Object.keys(body).filter((k) => !BODY_KEYS.has(k));
 
+// Image and document blocks must carry their content inline. A url or file source makes the provider fetch outside the
+// sandbox, and what it fetches is not in the request bytes that bound the worst case.
+const INLINE_SOURCES = new Set(["base64", "text", "content"]);
+export function remoteSources(v: unknown): string[] {
+  if (Array.isArray(v)) return v.flatMap(remoteSources);
+  if (!v || typeof v !== "object") return [];
+  const o = v as any;
+  const own = (o.type === "image" || o.type === "document") && !INLINE_SOURCES.has(o.source?.type) ? [String(o.source?.type)] : [];
+  return [...own, ...Object.values(o).flatMap(remoteSources)];
+}
+
 // anthropic-beta values Claude Code 2.1.312 sends in the three cells. Others are dropped before the request leaves, so no
 // unlisted beta (MCP connector, code execution, files, server-side fallback) reaches the provider; a request that needed
 // one fails upstream with an unbilled 400.
@@ -199,6 +210,7 @@ export function startProxy(opts: ProxyOptions) {
   let globalSpent = 0;
   let reqSeq = 0;
   let capStop: string | null = null;
+  let openingMicros = 0;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const closeWaitMs = opts.closeWaitMs ?? 30_000;
   const settleRetryMs = opts.settleRetryMs ?? 2_000;
@@ -284,10 +296,10 @@ export function startProxy(opts: ProxyOptions) {
         const capMicros = Math.round(body.cap_usd * 1_000_000);
         if (!(capMicros > 0)) return Response.json({ error: "cap_usd must be positive" }, { status: 400 });
         if (capStop) return Response.json({ error: "budget stop latched: " + capStop }, { status: 409 });
-        // The batch cap is enforced here, against every session's full reserve, so a session that opened always runs
-        // inside its own cap and is never cut off by the batch cap mid-trial.
+        // The batch cap is enforced here, against every session's full reserve and every open still waiting on the ledger,
+        // so a session that opened always runs inside its own cap and is never cut off by the batch cap mid-trial.
         if (opts.globalCapMicros !== undefined) {
-          const committed = [...sessions.values()].reduce((x, o) => x + (o.closedAt ? o.spentMicros : Math.max(o.capMicros, o.spentMicros)), 0);
+          const committed = openingMicros + [...sessions.values()].reduce((x, o) => x + (o.closedAt ? o.spentMicros : Math.max(o.capMicros, o.spentMicros)), 0);
           if (committed + capMicros > opts.globalCapMicros) {
             capStop = `batch cap reached for ${body.trial} at ${new Date().toISOString()}`;
             log({ event: "cap_stop", reason: capStop, committed_micros: committed, cap_micros: capMicros, global_cap_micros: opts.globalCapMicros });
@@ -296,7 +308,16 @@ export function startProxy(opts: ProxyOptions) {
         }
         const id = "s-" + randomBytes(6).toString("hex");
         const s: Session = { id, token: "laneb-" + randomBytes(24).toString("hex"), trial: body.trial, model: body.model, capMicros, spentMicros: 0, usage: emptyUsage(), requests: 0, okResponses: 0, refused: 0, refusedBudget: 0, pending: new Map(), requestedModels: {}, open: true, openedAt: new Date().toISOString(), settled: false, meta: body.meta ?? {}, ledgerReserved: false };
-        const reserve = await ledgerCall("/reserve", { id: (opts.ledgerPrefix ?? "") + id, usd_micros: capMicros, meta: { trial: body.trial, model: body.model, worst_case: "session cap enforced by the proxy", ...s.meta } });
+        openingMicros += capMicros;
+        let reserve: any;
+        try {
+          reserve = await ledgerCall("/reserve", { id: (opts.ledgerPrefix ?? "") + id, usd_micros: capMicros, meta: { trial: body.trial, model: body.model, worst_case: "session cap enforced by the proxy", ...s.meta } });
+        } catch (e) {
+          log({ event: "reserve_failed", trial: body.trial, reserve_id: (opts.ledgerPrefix ?? "") + id, error: String(e).slice(0, 300) });
+          return Response.json({ error: "ledger reserve failed", detail: String(e).slice(0, 300) }, { status: 502 });
+        } finally {
+          openingMicros -= capMicros;
+        }
         if (!reserve.ok) {
           capStop = `ledger refused a reserve for ${body.trial} at ${new Date().toISOString()}`;
           log({ event: "cap_stop", reason: capStop, ledger: reserve });
@@ -355,6 +376,8 @@ export function startProxy(opts: ProxyOptions) {
       if (server.length) return refuse("server_tools", "provider-side tools are not allowed: " + server.join(","), { tools: server });
       const unknown = unknownBodyKeys(body);
       if (unknown.length) return refuse("body_keys", "request fields are not allowed: " + unknown.join(","), { keys: unknown });
+      const remote = remoteSources(body);
+      if (remote.length) return refuse("remote_source", "image and document content with a url or file source is not allowed", { sources: remote });
       if (!isCount && !validMaxTokens(body.max_tokens)) return refuse("max_tokens", "max_tokens must be a positive integer", { max_tokens: body.max_tokens });
       body.model = model.upstream_model;
       for (const f of model.strip_fields ?? []) delete body[f];

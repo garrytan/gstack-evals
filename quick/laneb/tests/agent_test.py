@@ -6,9 +6,11 @@ runner/agent on PYTHONPATH.
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 import types
 import urllib.error
@@ -213,6 +215,123 @@ def test_simulator_skips_an_option_marked_not_recommended(tmp):
     assert sim.pick(q) == ("Patch (Recommended)", "recommended_option"), sim.pick(q)
     only_not = {"question": "Which?", "options": [{"label": "A", "description": "not recommended"}, {"label": "B", "description": ""}]}
     assert sim.pick(only_not) == ("decide", "fallback"), sim.pick(only_not)
+
+
+def test_preflight_probe_failure_is_a_retryable_infra_error(tmp):
+    fake = Fake(tmp)
+    a = agent(tmp, fake)
+    a._inject_arm = lambda container: {"event": "arm", "tar_sha256": "x"}
+    env = types.SimpleNamespace(session_id="t1__env")
+
+    def exits_1(container, script, stdin=None, timeout=300):
+        return subprocess.CompletedProcess(script, 1, b"", b"Error: No such container: cid")
+
+    def hangs(container, script, stdin=None, timeout=300):
+        raise subprocess.TimeoutExpired(script, timeout)
+
+    for failing in (exits_1, hangs):
+        a._exec = failing
+        try:
+            asyncio.run(a.setup(env))
+        except Exception as e:
+            assert type(e).__name__ == "LanebInfraError", (type(e).__name__, e)
+        else:
+            raise AssertionError("a failed preflight probe passed")
+
+
+def test_the_process_listing_leaves_out_only_its_own_shell(tmp):
+    out = subprocess.run(["sh", "-c", "echo $$; " + la.LIST_PROCESSES], capture_output=True, text=True, check=True).stdout.splitlines()
+    pids = set(la.parse_processes("\n".join(out[1:])))
+    assert out[0] not in pids, out[0]
+    assert str(os.getpid()) in pids, sorted(pids)[:20]
+
+
+def test_a_process_whose_command_line_names_proc_is_still_recorded(tmp):
+    class Listing(Fake):
+        def exec(self, container, script, stdin=None, timeout=300):
+            if script == la.LIST_PROCESSES:
+                self.lists += 1
+                rows = "1\tsleep\tsleep infinity \n" + ("88\tsh\tsh -c while :; do ls /proc/[0-9]* >/dev/null; done \n" if self.lists > 1 else "")
+                return subprocess.CompletedProcess(script, 0, rows.encode(), b"")
+            return super().exec(container, script, stdin, timeout)
+
+    a = agent(tmp, Listing(tmp))
+    a._inject_arm = lambda container: {"event": "arm", "tar_sha256": "x"}
+    asyncio.run(a.setup(types.SimpleNamespace(session_id="t1__env")))
+    run(a)
+    events = [json.loads(l) for l in (tmp / "trial" / "evaluator" / "usersim-events.jsonl").read_text().splitlines()]
+    seen = [e for e in events if e.get("event") == "processes_after_agent"]
+    assert seen and list(seen[0]["new_since_setup"]) == ["88"], seen
+
+
+def hang_forever():
+    async def query(prompt, options):
+        await asyncio.sleep(3600)
+        yield None
+
+    return query
+
+
+def test_an_agent_timeout_still_closes_and_writes_the_summary(tmp):
+    fake = Fake(tmp)
+    a = agent(tmp, fake)
+    la.query = hang_forever()
+
+    async def main():
+        try:
+            await asyncio.wait_for(a.run("do it", types.SimpleNamespace(session_id="t1__env"), types.SimpleNamespace()), 0.2)
+        except (asyncio.TimeoutError, TimeoutError):
+            return
+        raise AssertionError("expected the agent timeout")
+
+    asyncio.run(main())
+    assert ("post", "close", 120) in fake.calls, fake.calls
+    assert (tmp / "trial" / "evaluator" / "laneb-summary.json").exists()
+
+
+def test_a_second_cancellation_still_waits_for_the_teardown(tmp):
+    fake = Fake(tmp)
+    a = agent(tmp, fake)
+    la.query = hang_forever()
+    teardown = a._teardown
+
+    def slow_teardown(*args):
+        time.sleep(0.3)
+        return teardown(*args)
+
+    a._teardown = slow_teardown
+    summary = tmp / "trial" / "evaluator" / "laneb-summary.json"
+
+    async def main():
+        task = asyncio.ensure_future(a.run("do it", types.SimpleNamespace(session_id="t1__env"), types.SimpleNamespace()))
+        await asyncio.sleep(0.1)
+        task.cancel()
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("expected the cancellation to reach the caller")
+        return summary.exists()
+
+    assert asyncio.run(main()), "run() returned before the teardown wrote the summary"
+    assert ("post", "close", 120) in fake.calls, fake.calls
+
+
+def test_a_failing_log_write_never_skips_the_close(tmp):
+    fake = Fake(tmp)
+    a = agent(tmp, fake)
+    (tmp / "trial" / "evaluator").mkdir(parents=True, exist_ok=True)
+
+    def full_disk(entry):
+        raise OSError(28, "No space left on device")
+
+    summary = a._teardown("cid", "s-1", full_disk, {"result": {}})
+    assert ("post", "close", 120) in fake.calls, fake.calls
+    assert summary["session"]["spent_micros"] == 1500 and "OSError" in summary["teardown_errors"]["log"], summary
+    assert (tmp / "trial" / "evaluator" / "laneb-summary.json").exists()
 
 
 # Generated by gstack /ship Step 7 (test coverage audit) for #25, pass 1.

@@ -36,6 +36,8 @@ test("cache_creation splits into 5m and 1h writes, and the 1h part bills at the 
 
 describe("proxy accounting against a stub upstream", () => {
   let countFails = false;
+  let countValue = 10;
+  let messagesSeen = 0;
   const enc = new TextEncoder();
   const ev = (type: string, data: unknown) => enc.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   let upstream: ReturnType<typeof Bun.serve>;
@@ -52,8 +54,9 @@ describe("proxy accounting against a stub upstream", () => {
         const body = (await req.json()) as any;
         if (url.pathname.endsWith("/count_tokens")) {
           if (countFails) return Response.json({ type: "error", error: { type: "api_error", message: "count down" } }, { status: 500 });
-          return Response.json({ input_tokens: 10 });
+          return Response.json({ input_tokens: countValue });
         }
+        messagesSeen++;
         const truncated = Boolean(body.metadata?.truncated);
         const stream = new ReadableStream<Uint8Array>({
           start(ctrl) {
@@ -124,6 +127,19 @@ describe("proxy accounting against a stub upstream", () => {
     expect(log.some((e) => e.event === "count_failed" && e.status === 500)).toBe(true);
     expect(log.find((e) => e.event === "refused")).toMatchObject({ reason: "session_cap", counted: false });
     countFails = false;
+  });
+
+  test("a worst case that is not a positive number is refused before any upstream call", async () => {
+    countValue = -1e9;
+    const s = (await (await open(forward, 1)).json()) as any;
+    const before = messagesSeen;
+    const res = await message(forward, s.token);
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("worst-case cost is not a positive number");
+    expect(messagesSeen).toBe(before);
+    expect(readLog("fwd.jsonl").find((e) => e.event === "refused" && e.session === s.id)).toMatchObject({ reason: "worst_case" });
+    expect((await close(forward, s.id)).spent_micros).toBe(0);
+    countValue = 10;
   });
 
   test("the global cap refuses a session that does not fit at open, latches the cap stop and blocks new sessions", async () => {
