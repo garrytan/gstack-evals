@@ -225,7 +225,7 @@
     },
     "lock": {
       "title": "tasks.lock.json",
-      "description": "The run's preregistration, written by gstack-evals skill-eval --lock beside the tasks file and committed before the skill is edited. Paths are relative to the lock's directory. Each line's tasks list holds the tasks the author says cover it; --lock keeps those claims across relocks for lines whose file and text are unchanged.",
+      "description": "The run's preregistration, written by gstack-evals skill-eval --lock beside the tasks file and committed before the skill is edited. The tasks and ext paths are relative to the lock's directory; the policy is named by its file name alone, since the default policy lives in the gstack-evals package, and its sha256 pins it. Each line's tasks list holds the tasks the author says cover it; --lock keeps those claims across relocks for lines whose file and text are unchanged.",
       "type": "object",
       "additionalProperties": false,
       "required": [
