@@ -7,6 +7,17 @@ import { costUsd, fromApiUsage } from "../src/usage.ts";
 import { bootstrapMeanCI, signFlipP, wilson } from "../src/analyze.ts";
 
 describe("ledger", () => {
+  test("the cap and line item come from LANEA_CAP_USD and LANEA_LINE_ITEM, and a bad cap refuses to load", () => {
+    const read = (env: Record<string, string>) =>
+      Bun.spawnSync(["bun", "-e", 'const c = await import("./src/config.ts"); console.log(c.CAP_USD, c.LINE_ITEM)'], { cwd: join(import.meta.dir, ".."), env: { ...process.env, LANEA_CAP_USD: "", LANEA_LINE_ITEM: "", ...env } });
+    const ok = read({ LANEA_CAP_USD: "35", LANEA_LINE_ITEM: "lanea-quick-rerun" });
+    expect(ok.stdout.toString().trim()).toBe("35 lanea-quick-rerun");
+    for (const bad of ["abc", "0", "-5", "Infinity"]) {
+      const r = read({ LANEA_CAP_USD: bad });
+      expect(r.exitCode).not.toBe(0);
+      expect(r.stderr.toString()).toContain("E_CONFIG");
+    }
+  });
   test("approval first, reserve before spend, cap stop never overspends", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     const l = new Ledger(p, 10, "t");

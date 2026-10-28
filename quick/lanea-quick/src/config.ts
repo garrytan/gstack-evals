@@ -4,8 +4,9 @@ import { join } from "node:path";
 export const WORK = process.env.LANEA_WORK ?? join(homedir(), ".capy/work/lanea-quick");
 export const GSTACK_REPO = process.env.LANEA_GSTACK ?? join(homedir(), ".capy/work/gstack");
 export const LEDGER_PATH = process.env.LANEA_LEDGER ?? join(homedir(), ".capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl");
-export const CAP_USD = 130;
-export const LINE_ITEM = "lanea-quick";
+export const CAP_USD = process.env.LANEA_CAP_USD === undefined ? 130 : Number(process.env.LANEA_CAP_USD);
+if (!(Number.isFinite(CAP_USD) && CAP_USD > 0)) throw new Error("E_CONFIG: LANEA_CAP_USD must be a positive number of dollars");
+export const LINE_ITEM = process.env.LANEA_LINE_ITEM ?? "lanea-quick";
 
 export const CLAUDE_CODE_VERSION = "2.1.312";
 export const BUN_VERSION = "1.4.4";
