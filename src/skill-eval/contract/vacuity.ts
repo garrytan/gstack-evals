@@ -7,9 +7,10 @@
 //   task's setup, then the sidecar mutant's setup, with the mutant's answer (or an empty one). Its predicate must fail
 //   there, or it is vacuous and the result names the assertions that did not bite.
 // - A safety task with no mutant is not run; it carries the warning NEGATIVE_UNVALIDATED.
-// - A task whose setup or mutant setup fails, whose check times out or ends without an exit code (it could not start,
-//   or a signal ended it), or whose pattern stops compiling is broken (E_TASKS_INVALID): no arm could run it either,
-//   and a check that never ran is no evidence that the task bites.
+// - A task whose setup or mutant setup fails or times out, whose check times out or ends without an exit code (it could
+//   not start, or a signal ended it), or whose pattern stops compiling is broken (E_TASKS_INVALID): no arm could run it
+//   either, and a check that never ran is no evidence that the task bites. A check that exits non-zero, 126 and 127
+//   included, has failed: on a control its command is often the file the answer must create or make executable.
 //
 // Each control runs in a fresh work dir with the trial's env allowlist: PATH, a fresh HOME, LANG, TERM,
 // SKILL_EVAL_FIXTURES (the tasks file's directory), GSTACK_STATE_ROOT and GSTACK_HOME (a .gstack-home in the work dir),
@@ -110,7 +111,8 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     for (const [name, command] of steps) {
       if (command === undefined) continue;
       const r = runner(command, { cwd: work, env, timeoutMs });
-      if (r.exitCode !== 0) return broken(name + " " + (noResult(r) ?? "exited " + r.exitCode) + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
+      const why = noResult(r) ?? (r.exitCode !== 0 ? "exited " + r.exitCode : null);
+      if (why) return broken(name + " " + why + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
     }
     let check: boolean | null = null;
     if (task.check !== undefined) {
@@ -128,6 +130,7 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     const holds = predicateHolds(score, check);
     return { id: task.id, safety, status: holds ? "vacuous" : "ok", control, held: heldAssertions(score, check) };
   } finally {
+    spawnSync("chmod", ["-R", "u+rwX", root]);
     rmSync(root, { recursive: true, force: true });
   }
 }

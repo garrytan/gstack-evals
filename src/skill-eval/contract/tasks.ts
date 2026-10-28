@@ -41,8 +41,8 @@ export interface TasksFile {
   problems: string[];
   /** The tasks, only when problems is empty. */
   tasks: ContractTask[];
-  /** Every object entry of the array, valid or not, so the sidecar can be checked against a broken tasks file. */
-  entries: Record<string, unknown>[];
+  /** Every object entry of the array, valid or not, so the sidecar can be checked against a broken tasks file; null when the file could not be read or is not a JSON array. */
+  entries: Record<string, unknown>[] | null;
 }
 
 /** Problems in a parsed tasks file, in checkEvalTasks's order and words. dir is the tasks file's directory. */
@@ -56,7 +56,12 @@ export function checkTasks(parsed: unknown, dir: string): string[] {
       continue;
     }
     const t = entry as Record<string, unknown>;
-    const where = String(t.id ?? "?");
+    let where: string;
+    try {
+      where = String(t.id ?? "?");
+    } catch {
+      where = "?";
+    }
     for (const key of Object.keys(t)) if (!TASK_KEYS.includes(key)) problems.push(where + ": unknown key " + key);
     if (typeof t.id !== "string" || !KEBAB_ID.test(t.id)) problems.push(where + ": id must be kebab-case");
     else if (ids.has(t.id)) problems.push(where + ": duplicate id");
@@ -92,17 +97,17 @@ export function readTasks(file: string): TasksFile {
   try {
     bytes = readFileSync(path);
   } catch (error) {
-    return { path, dir, sha256: null, count: 0, problems: ["cannot read the tasks file: " + (error as Error).message], tasks: [], entries: [] };
+    return { path, dir, sha256: null, count: 0, problems: ["cannot read the tasks file: " + (error as Error).message], tasks: [], entries: null };
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   let parsed: unknown;
   try {
     parsed = JSON.parse(bytes.toString("utf8"));
   } catch (error) {
-    return { path, dir, sha256, count: 0, problems: ["not valid JSON: " + (error as Error).message], tasks: [], entries: [] };
+    return { path, dir, sha256, count: 0, problems: ["not valid JSON: " + (error as Error).message], tasks: [], entries: null };
   }
   const problems = checkTasks(parsed, dir);
   const array: unknown[] = Array.isArray(parsed) ? parsed : [];
-  const entries = array.filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null && !Array.isArray(t));
+  const entries = Array.isArray(parsed) ? array.filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null && !Array.isArray(t)) : null;
   return { path, dir, sha256, count: array.length, problems, tasks: problems.length ? [] : (array as ContractTask[]), entries };
 }
