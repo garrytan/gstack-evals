@@ -55,6 +55,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SLOT_DENIED](#e_slot_denied) | 2 | U3 |
 | [E_ALLOWANCE](#e_allowance) | 2 | U3 |
 | [E_TRIPWIRE](#e_tripwire) | 2 | U3 |
+| [E_LEDGER_UNAVAILABLE](#e_ledger_unavailable) | 2 | U3 |
 | [E_IMAGE_BUILD](#e_image_build) | 2 | U9 |
 | [E_USERSIM](#e_usersim) | 2 | U10 |
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
@@ -402,11 +403,19 @@ Exit 2. Side effects: None for the refused request: it never reached the provide
 
 ### E_TRIPWIRE
 
-The metering proxy refused a request whose body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), so the cell is invalid.
+The metering proxy refused a request whose path, query string, headers or body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), raw or percent-decoded, so the cell is invalid.
 
 Fix: Find how the marker reached the agent (task setup, fixtures, arm files or env) and remove it, then run the cell again as a new run. The message counts markers and never prints them.
 
 Exit 2. Side effects: None for the refused request: it never reached the provider. Calls the cell made before it are charged. Retry safe: yes. Resumable: no. Owner: U3.
+
+### E_LEDGER_UNAVAILABLE
+
+The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.
+
+Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume &lt;out>.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U3.
 
 ### E_IMAGE_BUILD
 

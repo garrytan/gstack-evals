@@ -48,6 +48,12 @@ export const chatPrice = (id: string): ChatPrice | undefined => CHAT_PRICES[id] 
 /** Input reserved for an OpenAI previous_response_id: the largest priced OpenAI context window. */
 export const UNKNOWN_CHAIN_CONTEXT_TOKENS = 1_050_000;
 
+/** Framing tokens a provider adds around any request (roles, turn markers) that the body's bytes do not show. */
+export const REQUEST_OVERHEAD_TOKENS = 64;
+
+/** Bound on the system prompt a provider adds when a request carries tools (Anthropic documents about 350 tokens). */
+export const TOOL_USE_SYSTEM_TOKENS = 1_000;
+
 export class PriceError extends Error {}
 
 export interface RequestPrice extends TokenPrices {
@@ -56,7 +62,7 @@ export interface RequestPrice extends TokenPrices {
   /** The prompt-cache write the request may pay for: none, a cache_write-rate write, or Anthropic's one-hour write. */
   cacheWrite: "none" | "5m" | "1h";
   long?: ChatPrice["long"];
-  /** Input-token bound: one token per byte of the outgoing body, plus the stored context a previous_response_id, conversation or item_reference pulls in. */
+  /** Input-token bound: one token per byte of the outgoing body, plus framing, the tool-use system prompt, and the stored context a previous_response_id, conversation or item reference pulls in. */
   inputTokens: number;
   maxOutputTokens: number;
 }
@@ -106,13 +112,14 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   if (body.n !== undefined && body.n !== 1) throw new PriceError(`n=${JSON.stringify(body.n)} asks for several completions, each billed in full`);
   if (provider === "openai" && body.service_tier !== undefined && body.service_tier !== "default") throw new PriceError(`service_tier ${JSON.stringify(body.service_tier)} may bill above the standard rates in the price table`);
   if (provider === "anthropic" && body.speed !== undefined && body.speed !== "standard") throw new PriceError(`speed ${JSON.stringify(body.speed)} bills above the standard rates in the price table`);
-  if (provider === "anthropic" && body.inference_geo !== undefined) throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
+  if (provider === "anthropic" && body.inference_geo !== undefined && body.inference_geo !== "global") throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
   if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
   const json = JSON.stringify(body);
-  const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') || (Array.isArray(body.input) && body.input.some(i => i && typeof i === "object" && typeof i.id === "string" && i.type === undefined)) ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
+  const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') || (Array.isArray(body.input) && body.input.some(i => i && typeof i === "object" && typeof i.id === "string" && i.type == null && i.role === undefined)) ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
+  const toolUse = Array.isArray(body.tools) && body.tools.length > 0 ? TOOL_USE_SYSTEM_TOKENS : 0;
   // OpenAI caches automatically; Anthropic writes its cache only where a request sets cache_control.
   const cacheWrite = provider === "openai" ? "5m" : !json.includes('"cache_control"') ? "none" : /"ttl"\s*:\s*"1h"/.test(json) ? "1h" : "5m";
-  return { provider, model, ...price, cacheWrite, inputTokens: Buffer.byteLength(json) + 64 + chained, maxOutputTokens };
+  return { provider, model, ...price, cacheWrite, inputTokens: Buffer.byteLength(json) + REQUEST_OVERHEAD_TOKENS + toolUse + chained, maxOutputTokens };
 }
 
 /**
