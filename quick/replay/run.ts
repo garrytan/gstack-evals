@@ -49,8 +49,10 @@ const settled: (() => void)[] = [];
 const wake = () => { for (const w of settled.splice(0)) w(); };
 
 // Provider failures with no HTTP status in a row. Three stop the run, so a network outage marks
-// a handful of calls INFRA instead of every call left in the plan.
+// a handful of calls INFRA instead of every call left in the plan. No call is sent after the
+// stop, calls in flight finish and are recorded, and the run exits 3 so a resume sends the rest.
 let noStatusStreak = 0;
+let netStopped = false;
 
 function writeAtomic(file: string, rec: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -65,14 +67,14 @@ function writeAtomic(file: string, rec: any) {
 async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, out: string, meta: any, opts: { high?: boolean; cache?: boolean } = {}): Promise<any> {
   if (fs.existsSync(out)) return JSON.parse(fs.readFileSync(out, 'utf8'));
   if (fs.existsSync(out.replace(/\.json$/, '.error.json'))) return null;
-  if (capStopped) return null;
+  if (capStopped || netStopped) return null;
   if (DRY) {
     const rec = { ...meta, dry_run: true, worst_usd: worstUsd(spec, Buffer.byteLength(text)) };
     return rec;
   }
   return gates[spec.provider]!.run(async () => {
     for (;;) {
-      if (capStopped) return null;
+      if (capStopped || netStopped) return null;
       inFlight++;
       let r;
       try {
@@ -92,7 +94,10 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
         writeAtomic(out.replace(/\.json$/, '.error.json'), rec);
         console.error('INFRA ' + meta.call_id + ': ' + rec.error);
         noStatusStreak = e.http ? 0 : noStatusStreak + 1;
-        if (noStatusStreak >= 3) throw new Error('STOP: three provider failures in a row with no HTTP status (network?); calls not yet sent stay unsent');
+        if (noStatusStreak >= 3 && !netStopped) {
+          netStopped = true;
+          console.error('STOP: three provider failures in a row with no HTTP status (network?); calls not yet sent stay unsent');
+        }
         return null;
       }
       inFlight--;
@@ -160,9 +165,11 @@ if (import.meta.main) {
     if (DRY) {
       for (const c of cases) for (const r of [...(arms.includes('baseline') ? ['baseline'] : []), ...(arms.includes('gstack') ? ['core', ...c.specialists, ...(c.red_team_by_size ? ['red_team_template'] : [])] : [])]) worst += worstUsd(spec, fs.statSync(path.join(PROMPTS, c.prompts[r])).size) * trials;
     }
-    console.log(m + ' done' + (capStopped ? ' (cap stop)' : ''));
+    console.log(m + ' done' + (capStopped ? ' (cap stop)' : netStopped ? ' (network stop)' : ''));
+    if (netStopped) break;
   }
   if (DRY) console.log('dry run: worst case of the static calls ' + worst.toFixed(2) + ' USD');
   else console.log('ledger committed ' + ledger.committed().toFixed(4) + ' USD of ' + CAP);
   if (capStopped) process.exit(2);
+  if (netStopped) process.exit(3);
 }

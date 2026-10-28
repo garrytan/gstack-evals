@@ -234,11 +234,24 @@ describe('providers against the fake upstream', () => {
   test('three failures with no HTTP status in a row stop the run', async () => {
     const p = capPlan(6);
     const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], { ...p.env(55), ANTHROPIC_BASE_URL: 'http://127.0.0.1:1' });
-    expect(r.status).not.toBe(0);
+    expect(r.status).toBe(3);
     expect(r.stderr).toContain('STOP: three provider failures');
     const errs = fs.readdirSync(path.join(p.dir, 'results/haiku'), { recursive: true }).filter(f => String(f).endsWith('.error.json')).length;
     expect(errs).toBeGreaterThanOrEqual(3);
-    expect(errs).toBeLessThan(18);
+    expect(errs).toBeLessThanOrEqual(8);
+    const rows = fs.readFileSync(p.ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    expect(rows.filter(x => x.type === 'reserve').length).toBe(errs);
+    expect(rows.filter(x => x.type === 'settle').length).toBe(errs);
+  });
+  test('the network stop lets calls in flight finish and sends nothing after it', async () => {
+    const p = capPlan(4, i => (i < 3 ? 'FAKE_NO_USAGE' : 'FAKE_SLOW'));
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline', '--trials', '1'], p.env(55));
+    expect(r.status).toBe(3);
+    expect(r.stderr).toContain('STOP: three provider failures');
+    expect(fs.existsSync(path.join(p.dir, 'results/haiku/c3/baseline/t1/baseline.json'))).toBe(true);
+    const rows = fs.readFileSync(p.ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    expect(rows.filter(x => x.type === 'reserve').length).toBe(4);
+    expect(rows.filter(x => x.type === 'settle').length).toBe(4);
   });
   test('a 500 retries once and settles once', async () => {
     const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
@@ -299,10 +312,10 @@ describe('providers against the fake upstream', () => {
 
   // Two slow calls' worst case fits under the limit, so four groups queue refused calls that
   // must wait for real settles, not wake each other forever.
-  const capPlan = (n: number) => {
+  const capPlan = (n: number, mark: (i: number) => string = () => 'FAKE_SLOW') => {
     const dir = tmp();
     const files: Record<string, string> = {};
-    for (let i = 0; i < n; i++) files['c' + i + '/baseline.md'] = 'FAKE_SLOW ' + i + ' diff --git a/lib/a.ts b/lib/a.ts';
+    for (let i = 0; i < n; i++) files['c' + i + '/baseline.md'] = mark(i) + ' ' + i + ' diff --git a/lib/a.ts b/lib/a.ts';
     for (const [k, v] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, 'prompts', k)), { recursive: true }); fs.writeFileSync(path.join(dir, 'prompts', k), v); }
     fs.writeFileSync(path.join(dir, 'frozen.sha256'), Object.entries(files).map(([k, v]) => sha(v) + '  ' + k).join('\n') + '\n');
     fs.writeFileSync(path.join(dir, 'plan.json'), JSON.stringify({ cases: Array.from({ length: n }, (_, i) => ({ case: 'c' + i, kind: 'defect', diff_lines: 10, specialists: [], red_team_by_size: false, prompts: { baseline: 'c' + i + '/baseline.md', core: 'c' + i + '/baseline.md', red_team_template: 'c' + i + '/baseline.md' } })) }));
