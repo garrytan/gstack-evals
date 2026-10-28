@@ -283,7 +283,7 @@ export function preregistrationProblems(value: unknown): string[] {
   const power = new Map<string, PowerCheck>();
   for (const c of list<PowerCheck>(p.power)) {
     if (!comparisons.has(c?.comparison)) problems.push(`power check for ${c?.comparison}: no such comparison`);
-    if (power.has(c?.comparison)) problems.push(`power check for ${c.comparison} is listed twice`);
+    if (power.has(c?.comparison)) problems.push(`power check for ${c?.comparison} is listed twice`);
     power.set(c?.comparison, c);
   }
   const decided = [...comparisons.values()].filter((c) => c.gate === 'noninferiority' || c.gate === 'superiority');
