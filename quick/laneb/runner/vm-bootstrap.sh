@@ -9,7 +9,7 @@ BUN_PIN=1.4.4
 if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sudo sh >/dev/null
 fi
-command -v jq >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq jq >/dev/null; }
+{ command -v jq && command -v unzip; } >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq jq unzip >/dev/null; }
 sudo usermod -aG docker "$USER"
 sudo systemctl enable --now docker >/dev/null 2>&1 || true
 if sudo nft add table inet laneb_probe 2>/dev/null; then
