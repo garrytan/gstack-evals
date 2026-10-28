@@ -25,7 +25,7 @@ The treatment is gstack's /review reviewer prompts run on a diff alone: the core
 
 The models are Opus 5.5 and Haiku 5.5 at effort `medium`, and DeepSeek V4.1 Flash at effort `high` with 32,000 output tokens. The 24 cases come from public garrytan/gstack history: 6 defects that escaped review and were fixed by a later PR, 6 defects gstack's own review caught on the PR branch, and 12 size-matched decoys. Each cell ran 3 trials. A gpt-6.1-sol judge, blind to the arm, decided whether a finding on the defect's file names the defect.
 
-Recall is the share of trials in which a shown finding names the defect, averaged per case. A false alarm is a decoy trial with a shown CRITICAL finding. "Shown" follows /review's display rule: confidence 5 or more, or no confidence given. Cost per catch is a cell's spend on its defect units, failed calls included, divided by its catches. Intervals are 95% bootstrap intervals over cases, and differences are paired by case. A unit counts only when every reviewer call in it returned; the preregistration's "Changes during the run" section lists the failed and corrected calls.
+Recall is the share of trials in which a shown finding names the defect, averaged per case. A false alarm is a decoy trial with a shown CRITICAL finding. "Shown" follows /review's display rule: confidence 5 or more, or no confidence given. Cost per catch is a cell's spend on its defect units, failed calls included, divided by its catches. Intervals are 95% bootstrap intervals over cases, and differences are paired by case. A unit counts only when every reviewer call in it returned; the preregistration's "Changes during the run" section lists the restarts and the corrected calls, and the one other failed call is named under Cost.
 
 ## All 24 cases
 
@@ -38,19 +38,19 @@ Recall is the share of trials in which a shown finding names the defect, average
 | DeepSeek V4.1 Flash | plain | 17% | [0%, 42%] | 14% | 22% | [6%, 42%] | 50%, 50% (8) | $0.15 |
 | DeepSeek V4.1 Flash | gstack | 32% | [10%, 57%] | 17% | 17% | [3%, 36%] | 38%, 15% (15) | $0.25 |
 
-DeepSeek used all 32,000 output tokens without answering in 44 of 72 plain units (44 calls) and 28 of 72 gstack units (61 calls). The answered-only column drops every unit with such a call. Opus and Haiku had none. Incomplete units: DeepSeek plain 3, DeepSeek gstack 6, all others 0.
+DeepSeek used all 32,000 output tokens and returned no text in 44 of 72 plain units (44 calls) and 28 of 72 gstack units (61 calls). The answered-only column drops every unit with such a call. Opus and Haiku had none. These counts cover the units the scorer loads: one more empty cut-off, the Red Team call in DeepSeek gstack d10 trial 3, sits in a unit that is incomplete because its core call failed. Incomplete units: DeepSeek plain 3, DeepSeek gstack 6, all others 0.
 
 gstack minus plain, paired by case:
 
 - **Opus:** recall +6 pts [0, 17], while recall at CRITICAL falls from 28% to 11%. With gstack's prompts, Opus finds slightly more of the defects but rates most of its catches below CRITICAL. False alarms +6 pts [-22, 31].
 - **Haiku:** recall +3 pts [0, 8]. False alarms +17 pts [3, 33], so they double.
-- **DeepSeek:** recall +15 pts [0, 35], and most of that lift comes from the plain prompt not finishing: over the 4 cases with answered units in both arms, the recall gap is 0 pts and the false-alarm gap is -28 pts [-61, -6]. On all units, false alarms -6 pts [-22, 8].
+- **DeepSeek:** recall +15 pts [0, 35], and most of that lift comes from the plain prompt not finishing: over the 4 defects with answered units in both arms the recall gap is 0 pts, and over the 6 such decoys the false-alarm gap is -28 pts [-61, -6]. On all units, false alarms -6 pts [-22, 8].
 
-Counting findings below confidence 5 (ungated), Opus with gstack reaches 50% recall and DeepSeek with gstack 36%; the other cells do not move. Every gated-to-ungated change comes from findings at confidence 4. The models gave confidence on three scales (1 to 10 for most, 0 to 1 for 48 findings, 0 to 100 for 245), and no rate moves because of it.
+Counting findings below confidence 5 (ungated), Opus with gstack reaches 50% recall and DeepSeek with gstack 36%; the other cells do not move. Every gated-to-ungated change in recall comes from findings at confidence 4. The models gave confidence on three scales (1 to 10 for most, 0 to 1 for 48 findings, 0 to 100 for 245), and recall, recall at CRITICAL and false alarms do not move because of it. Two secondary rates for DeepSeek gstack do: on a common 1 to 10 scale, its file-and-line rate falls from 44% to 39% and its decoys with any finding rise from 79% to 83%.
 
 ## By stratum
 
-**Escaped defects** (6 bugs that shipped and were fixed by a later PR; 6 decoys). Three of the six PRs carry a passing gstack review receipt; the other three had no gstack review, so for them "escaped" means no gstack review ran.
+**Escaped defects** (6 bugs that shipped and were fixed by a later PR; 6 decoys). Three of the six PRs carry a passing gstack review receipt; the other three carry none, so for them "escaped" means the bug shipped without a passing gstack review receipt.
 
 | model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
 |---|---|---|---|---|---|---|---|---|
@@ -76,9 +76,9 @@ On escaped defects, gstack's prompts add 11 pts of recall on Opus [0, 33] while 
 | DeepSeek V4.1 Flash | plain | 0% | [0%, 0%] | 0% | 33% | [6%, 67%] | 0%, 58% (1) | - |
 | DeepSeek V4.1 Flash | gstack | 8% | [0%, 25%] | 0% | 17% | [0%, 50%] | 0%, 17% (6) | $1.13 |
 
-DeepSeek cut-offs here: plain 24 of 36 units, gstack 12 of 36 units (28 calls).
+DeepSeek cut-offs here: plain 24 of 36 units, gstack 12 of 36 units (28 calls), plus the d10 trial 3 Red Team call in an incomplete unit.
 
-Only d10 was caught by a shown finding; the other five review-caught defects never were. Opus with gstack named d09 once, at confidence 4, so its ungated recall on this stratum is 22%. Opus sits at 11% in both arms. This most likely reflects the treatment rather than the prompts. Going by the subjects of the live fix commits, d08 came from a Codex finding, d03 from a /ship fix-check, and d01 and d09 from a second review pass; only d02 and d10 came from a first pre-landing review. None of those later steps, and no repo access, are in this replay. The models do look at the right lines (Opus with gstack puts a shown finding within 10 lines of the defect in 44% of trials, averaged per case), but they report other problems there. I read the judge's 12 "does not name it" verdicts on such near-line findings (two per case) and agree with each.
+Only d10 was caught by a shown finding; the other five review-caught defects never were. Opus with gstack named d09 in one trial and d10 in a third trial, both at confidence 4, so its ungated recall on this stratum is 22%. Opus sits at 11% in both arms. This most likely reflects the treatment rather than the prompts. Going by the subjects of the live fix commits, d08 came from a Codex finding, d03 from a /ship fix-check, and d01 and d09 from a second review pass; only d02 clearly came from a first pre-landing review. d10's fix is the PR's second "pre-landing review fixes" commit, 4 minutes after the replayed head, so it may also be a later pass. None of those later steps, and no repo access, are in this replay. The models do look at the right lines (Opus with gstack puts a shown finding within 10 lines of the defect in 44% of trials, averaged per case), but they report other problems there. I also read 12 of the judge's "does not name it" verdicts on such near-line findings (two per case, counting findings below confidence 5) and agree with each; unlike the seeded audit, these reads are not archived.
 
 ## Cheap models against Opus
 
@@ -133,11 +133,11 @@ Three cases decide most of the escaped recall: every Opus and Haiku trial caught
 
 ## Exploratory: Opus at effort high
 
-The preregistered exploratory cell ran because the grid and its judging left $43.38 committed, under the $52 bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600. This cell enters no other table above.
+The preregistered exploratory cell ran because the grid and its judging left $43.38 committed, under the $52 bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600. The judge saw the Opus-high findings in batches of their own, while the medium cell's findings were judged in batches mixed with other cells. This cell enters no other table above.
 
 ## Cost
 
-Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5.43, gstack $31.05), DeepSeek $5.36, Haiku $1.18. The judge cost $0.39, and the Opus-high cell $5.05. The total is $48.46. DeepSeek's figure includes $0.81 settled at the worst case for 17 calls: 16 cut off by the harness restarts ($0.76) and one whose reply carried no cost. The seven DeepSeek replies that ended in a provider error settled at $0, so DeepSeek spend is slightly understated. Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
+Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5.43, gstack $31.05), DeepSeek $5.36, Haiku $1.18. The judge cost $0.39, and the Opus-high cell $5.05. The total is $48.46. DeepSeek's figure includes $0.81 settled at the worst case for 17 calls: 16 cut off by the harness restarts ($0.76) and one whose reply carried no cost (the core call in DeepSeek gstack y11 trial 2, which OpenRouter returned without `usage.cost`). The seven DeepSeek replies that ended in a provider error settled at $0, so DeepSeek spend is slightly understated. Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
 
 ## Limitations
 
@@ -145,10 +145,10 @@ Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5
 - Six defects per stratum: one case moves a stratum's recall by about 17 points.
 - The plain arm names the severity words. It is a frozen prompt, so it is not fully plain.
 - Opus and Haiku ran at effort `medium` in both arms, a Captain decision recorded in the preregistration, citing GSTA-131. The exploratory cell hints that `high` scores higher on Opus, but the difference rests on one case.
-- DeepSeek's plain arm mostly ran out of tokens before answering, and the answered-only columns pair only 4 of 12 cases overall. Three more DeepSeek replies held no review (two tool calls in DeepSeek's own markup, one empty with a normal stop) and count as answered with no findings.
+- DeepSeek's plain arm mostly ran out of tokens before answering, and the answered-only columns pair only 4 of the 12 defects and 6 of the 12 decoys. Four more DeepSeek replies held no review and count as answered with no findings: two tool calls in DeepSeek's own markup, one empty reply with a normal stop, and one cut off at the token limit after 76 characters of an unfinished finding (d03, gstack, trial 2). The answered-only rule drops only cut-offs with no text, as the harness defined it before the grid ran. Dropping these units as well leaves the paired answered-only gaps unchanged. It moves DeepSeek gstack's answered-only recall from 38% over 15 defect units to 43% over 14 (the cut-off reply only) or 33% over 12 (all four).
 - The review-caught set was chosen by gstack's own review, so it favours what gstack catches live. The escaped set was not.
 - Decoys are PRs whose gstack review receipt records no blocking finding, so a false alarm here is a CRITICAL finding gstack's live review did not raise.
-- The judge is one model (gpt-6.1-sol), blind to the arm. A seeded hand audit of 10 verdicts agreed with all 10, and the 12 near-line review-caught verdicts above also hold. All 488 right-file findings were judged; no unit is unjudged.
+- The judge is one model (gpt-6.1-sol), blind to the arm. A seeded hand audit of 10 verdicts agreed with all 10, and 12 unarchived reads of near-line review-caught verdicts (above) also agreed. All 479 right-file findings in counted units were judged (447 in the grid, 32 in the Opus-high cell); no counted unit is unjudged. The 3 right-file findings in one excluded unit (DeepSeek gstack d11 trial 3) were never judged.
 - The harness was fixed and restarted three times during the DeepSeek phase, before any Haiku or Opus call, and corrected once after the first score: seven DeepSeek replies that ended in a provider error now count as failed calls. The preregistration's "Changes during the run" section lists every change. That correction moved DeepSeek's all-case gap from +17 to +15 pts and its answered-only gap from +8 to 0.
 
 ## Notes for the rig (U4 and U7)
@@ -162,7 +162,7 @@ The Captain accepted two quick-look shortcuts that the rig must close:
 
 - Result files carry the commit they ran under in `prereg_sha`: 184 at 4ccef26, 166 at 5483453, 98 at eeaed8b and 905 at feb45fa (the grid), and 31 at b4f825a (the Opus-high cell). The judge ran at b4f825a and 02e46db. The tables come from a rescore without new judge calls at 7f8fffd, after the post-score correction. The ledger rows carry no commit; the preregistration is PR #5.
 - The prompts render from gstack 61e201ec08bcf59163ef2d3a69a26e334a536c04. Digests: frozen.sha256 72802811ab475c2513defc5470436ab210b5ff1c4823532f3dc37eea31a92bf7 (162 prompts), plan.json 50e474c5fda9ff89cf6dc45f542dc115b211ed399e56010d356f71be1838acaf.
-- `summary.json` beside this post holds every table, including the ungated and answered-only variants and the exploratory cell. The raw outputs, judge verdicts and the hand audit are in the Captain drive at handoffs/GSTA-11/results.tgz, sha256 f7c884c86189e0e704b7203735fa788db743f71898c3ca0eec8f295b75d1b7c8.
+- `summary.json` beside this post holds the overall and stratum tables with their ungated and answered-only variants, the paired comparisons and the exploratory cell. The per-case table is not in it; it comes from the raw outputs and judge verdicts. The raw outputs, judge verdicts and the hand audit are in the Captain drive at handoffs/GSTA-11/results.tgz, sha256 f7c884c86189e0e704b7203735fa788db743f71898c3ca0eec8f295b75d1b7c8.
 
 ## Next runs
 
