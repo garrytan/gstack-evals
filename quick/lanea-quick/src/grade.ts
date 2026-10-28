@@ -23,8 +23,9 @@ export interface ToolUse {
   ok: boolean;
 }
 
-// A tool call counts as done only when a tool_result without is_error answers its id. subagentToolUses repeats the
-// calls made inside a subagent (parent_tool_use_id set), so they can be counted apart.
+// Only the main agent is graded. A message from inside a subagent (parent_tool_use_id set) adds its tool calls to
+// subagentToolUses, to be counted apart, and nothing else. A tool call counts as done only when a tool_result without
+// is_error answers its id.
 export function parseTranscript(messages: any[]): Transcript {
   const assistantTexts: string[] = [];
   const askTexts: string[] = [];
@@ -40,15 +41,15 @@ export function parseTranscript(messages: any[]): Transcript {
     if (m?.type !== "assistant") continue;
     const content = m.message?.content;
     if (!Array.isArray(content)) continue;
+    const sub = Boolean(m.parent_tool_use_id);
     for (const b of content) {
-      if (b?.type === "text" && typeof b.text === "string" && b.text.trim()) {
+      if (b?.type === "text" && !sub && typeof b.text === "string" && b.text.trim()) {
         assistantTexts.push(b.text);
         finalAnswer = b.text;
       } else if (b?.type === "tool_use") {
         const u = { name: b.name, input: b.input, id: b.id, ok: done.get(b.id) === true };
-        toolUses.push(u);
-        if (m.parent_tool_use_id) subagentToolUses.push(u);
-        if (b.name === "AskUserQuestion") {
+        (sub ? subagentToolUses : toolUses).push(u);
+        if (!sub && b.name === "AskUserQuestion") {
           for (const q of b.input?.questions ?? []) {
             askTexts.push([q.question ?? "", q.header ?? "", ...(q.options ?? []).map((o: any) => `${o.label ?? ""}: ${o.description ?? ""}`)].join("\n"));
           }

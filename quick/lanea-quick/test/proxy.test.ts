@@ -6,7 +6,7 @@ import { MODELS } from "../src/config.ts";
 import { MeteringProxy, requestCeilingUsd } from "../src/proxy.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "proxy-"));
-let mode: "ok" | "drop" | "json-drop" | "json-nousage" | "json-nan" | "json-empty" | "slow" = "ok";
+let mode: "ok" | "drop" | "json-drop" | "json-nousage" | "json-nan" | "json-empty" | "slow" | "slow-big" | "delta-empty" = "ok";
 let inflight = 0;
 let maxInflight = 0;
 let hits = 0;
@@ -20,7 +20,7 @@ const upstream = Bun.serve({
     lastBody = await req.text();
     inflight++;
     maxInflight = Math.max(maxInflight, inflight);
-    await Bun.sleep(mode === "slow" ? 300 : 30);
+    await Bun.sleep(mode === "slow" || mode === "slow-big" ? 300 : 30);
     inflight--;
     if (mode === "json-nousage") return Response.json({ type: "message", content: [] });
     if (mode === "json-nan") return Response.json({ type: "message", usage: { input_tokens: "many", output_tokens: 10 } });
@@ -60,7 +60,9 @@ const upstream = Bun.serve({
         { headers: { "content-type": "text/event-stream" } },
       );
     }
-    return new Response(sse([start, { type: "message_delta", usage: { output_tokens: 1000 } }, { type: "message_stop" }]), { headers: { "content-type": "text/event-stream" } });
+    if (mode === "delta-empty") return new Response(sse([start, { type: "message_delta", usage: {} }, { type: "message_stop" }]), { headers: { "content-type": "text/event-stream" } });
+    const first = mode === "slow-big" ? { ...start, message: { usage: { ...start.message.usage, input_tokens: 200_000 } } } : start;
+    return new Response(sse([first, { type: "message_delta", usage: { output_tokens: 1000 } }, { type: "message_stop" }]), { headers: { "content-type": "text/event-stream" } });
   },
 });
 const proxy = new MeteringProxy({ hostname: "127.0.0.1", port: 0, upstream: `http://127.0.0.1:${upstream.port}`, upstreamKey: () => "k" });
@@ -180,6 +182,30 @@ describe("metering proxy accounting", () => {
     await Bun.sleep(20);
     mode = "ok";
     expect(session.requests).toBe(1);
+    expect(session.spentUsd).toBeCloseTo(bound, 9);
+  });
+  test("a reply that settles after drain adds what it cost beyond its bound", async () => {
+    mode = "slow-big";
+    const { token, session } = proxy.register("s10", "claude-haiku-5-5", 1, 1, join(dir, "s10.jsonl"));
+    const first = call(token, haiku);
+    await Bun.sleep(50);
+    proxy.revoke(token);
+    await proxy.drain(session, 10);
+    expect(session.spentUsd).toBeCloseTo(bound, 9);
+    await first;
+    await Bun.sleep(20);
+    mode = "ok";
+    expect(session.requests).toBe(1);
+    expect(session.spentUsd).toBeGreaterThan(bound * 2);
+    const row = readFileSync(join(dir, "s10.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((r) => r.event === "request");
+    expect(row).toMatchObject({ after_drain: true });
+    expect(row.added_usd).toBeCloseTo(session.spentUsd - bound, 9);
+  });
+  test("a stream whose message_delta carries no output count is charged at its bound", async () => {
+    mode = "delta-empty";
+    const { token, session } = proxy.register("s11", "claude-haiku-5-5", 1, 1, join(dir, "s11.jsonl"));
+    expect(await call(token, haiku)).toBe(200);
+    mode = "ok";
     expect(session.spentUsd).toBeCloseTo(bound, 9);
   });
   test("a parked request whose client left never goes upstream", async () => {

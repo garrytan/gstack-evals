@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BASE_IMAGE } from "../src/config.ts";
 
 const root = join(import.meta.dir, "..");
 const dir = mkdtempSync(join(tmpdir(), "build-"));
@@ -50,7 +51,7 @@ describe("build-arms.sh", () => {
 
 describe("resolveImages", () => {
   const pinned = JSON.parse(readFileSync(join(root, "images.json"), "utf8")).images as Record<string, string>;
-  const base = "lanea-quick/base:cc2.1.312-bun1.4.4";
+  const base = BASE_IMAGE;
   const arm = "lanea-quick/office-hours-after:latest";
   test("a paid run gets the pinned ids and refuses an image that does not match images.json", () => {
     writeFileSync(ids, `${base} ${pinned[base]}\n${arm} ${pinned[arm]}\n`);

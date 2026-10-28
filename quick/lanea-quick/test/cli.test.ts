@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,9 +36,38 @@ describe("run.ts arguments", () => {
     expect(none.err).toContain("E_TASKS: no cells");
     expect(existsSync(join(out, "stages"))).toBe(false);
   });
+  test("a stage that stopped is never resumed for a model it stopped", () => {
+    const out = join(work, "runs-stopped");
+    mkdirSync(join(out, "stages"), { recursive: true });
+    writeFileSync(join(out, "stages", "S1.1.json"), JSON.stringify({ stage: "S1", models: ["claude-haiku-5-5"], status: "done", cap_stop: "STOP: reason=budget_exhausted" }));
+    const r = cli("run", "--stage", "S1", "--fake", "--out", out, "--models", "claude-haiku-5-5");
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("E_STAGE_STOPPED");
+    expect(readdirSync(join(out, "stages"))).toEqual(["S1.1.json"]);
+  });
+  test("a stop in one stage refuses every later run into that --out", () => {
+    const out = join(work, "runs-stopped-any");
+    mkdirSync(join(out, "stages"), { recursive: true });
+    writeFileSync(join(out, "stages", "S1.1.json"), JSON.stringify({ stage: "S1", suite: "office-hours", models: ["claude-haiku-5-5", "claude-opus-5-5"], status: "done", cap_stop: "STOP: reason=reservation_exceeded" }));
+    for (const stage of ["S2", "S3"]) {
+      const r = cli("run", "--stage", stage, "--fake", "--out", out);
+      expect(r.code).not.toBe(0);
+      expect(r.err).toContain("E_STAGE_STOPPED: RESERVATION_EXCEEDED S1");
+    }
+    expect(readdirSync(join(out, "stages"))).toEqual(["S1.1.json"]);
+  });
+  test("a result that cost more than its reservation refuses later runs with no stage stop on file", () => {
+    const out = join(work, "runs-past-reserve");
+    const cell = join(out, "office-hours", "claude-haiku-5-5", "a", "before", "t1");
+    mkdirSync(cell, { recursive: true });
+    writeFileSync(join(cell, "result.json"), JSON.stringify({ suite: "office-hours", model: "claude-haiku-5-5", task: "a", arm: "before", trial: 1, status: "complete", cost_usd: 2 }));
+    const r = cli("run", "--stage", "S2", "--fake", "--out", out);
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("E_STAGE_STOPPED: RESERVATION_EXCEEDED S1");
+    expect(existsSync(join(out, "stages"))).toBe(false);
+  });
   test("prepare refuses while a runner holds WORK", () => {
-    const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-    writeFileSync(join(work, "runner.lock"), JSON.stringify({ pid: process.pid, boot, token: "t" }));
+    writeFileSync(join(work, "runner.lock"), JSON.stringify({ pid: process.pid, token: "t" }));
     try {
       const r = cli("prepare");
       expect(r.code).not.toBe(0);

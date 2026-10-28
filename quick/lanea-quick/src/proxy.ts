@@ -175,11 +175,12 @@ export class MeteringProxy {
     const charged = incomplete || !Number.isFinite(measured);
     const cost = charged ? Math.max(Number.isFinite(measured) ? measured : 0, bound) : measured;
     if (finiteUsage(u)) s.usage = addUsage(s.usage, u);
+    const afterDrain = s.drainedUsd > 0 ? { after_drain: true, added_usd: Math.max(0, cost - s.drainedUsd) } : {};
     s.spentUsd += Math.max(0, cost - s.drainedUsd);
     s.drainedUsd = 0;
     s.pendingUsd = 0;
     s.requests++;
-    this.log(s, { event: "request", model, status, ms: Date.now() - started, usage: u, cost_usd: cost, request_id: requestId, ...(charged ? { incomplete: true } : {}) });
+    this.log(s, { event: "request", model, status, ms: Date.now() - started, usage: u, cost_usd: cost, request_id: requestId, ...(charged ? { incomplete: true } : {}), ...afterDrain });
   }
 
   private async forward(req: Request, s: ProxySession, url: URL, body: string | undefined, model?: string, bound = 0, release: () => void = () => {}): Promise<Response> {
@@ -237,6 +238,7 @@ export class MeteringProxy {
     let delta = zeroUsage();
     let ended = false;
     let known = false;
+    let outputKnown = false;
     const take = (line: string) => {
       if (!line.startsWith("data:")) return;
       try {
@@ -245,7 +247,10 @@ export class MeteringProxy {
           start = fromApiUsage(ev.message?.usage);
           known = hasUsage(ev.message?.usage);
         }
-        else if (ev.type === "message_delta") delta = mergeStreamUsage(delta, fromApiUsage(ev.usage));
+        else if (ev.type === "message_delta") {
+          delta = mergeStreamUsage(delta, fromApiUsage(ev.usage));
+          if (Number.isFinite(ev.usage?.output_tokens)) outputKnown = true;
+        }
         else if (ev.type === "message_stop") ended = true;
       } catch {}
     };
@@ -255,7 +260,7 @@ export class MeteringProxy {
       settled = true;
       try {
         if (buf) take(buf);
-        this.settle(s, model, upstream.status, started, mergeStreamUsage(start, delta), requestId, bound, upstream.status < 400 && !(ended && known));
+        this.settle(s, model, upstream.status, started, mergeStreamUsage(start, delta), requestId, bound, upstream.status < 400 && !(ended && known && outputKnown));
       } finally {
         release();
       }

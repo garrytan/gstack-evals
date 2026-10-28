@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/garrytan/gstack-evals/blob/main/schema/arms.schema.json",
+  "$comment": "Version 1.0.0 (semver). The root is the --arms-file manifest; #/$defs/loadout is a loadout manifest file (name=<loadout.json>). Mirrors ArmSpec and LoadoutManifest in src/types.ts. The CLI also checks what a schema cannot: unique arm names, and a placebo's of naming another arm.",
+  "title": "Arm manifest",
+  "description": "The arms a run compares. One grammar covers Lane A skill versions, Lane B stacks and later stacks (plan v3.2, \"Arms and the measured configuration\"). On the command line, name=<dir>, name=<repo>@<sha>, name=<loadout.json>, none and placebo resolve to these.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arms"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "arms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/arm"
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "The arm's name, such as before, after, before2, none, placebo or bare."
+    },
+    "stackRef": {
+      "description": "A repository pinned at a full commit sha.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo",
+        "sha"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "arm": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "bare",
+            "placebo",
+            "stack",
+            "overlay",
+            "loadout"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/bare"
+        },
+        {
+          "$ref": "#/$defs/placebo"
+        },
+        {
+          "$ref": "#/$defs/stack"
+        },
+        {
+          "$ref": "#/$defs/overlay"
+        },
+        {
+          "$ref": "#/$defs/loadoutArm"
+        }
+      ]
+    },
+    "bare": {
+      "description": "No skills.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "const": "bare"
+        }
+      }
+    },
+    "placebo": {
+      "description": "Generated from the named arm's installed tree by the seeded placebo generator: folder names, descriptions and routing text kept, each SKILL.md body replaced by on-topic, non-procedural text within 5% of its tokens.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "of"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "const": "placebo"
+        },
+        "of": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    },
+    "stack": {
+      "description": "A whole stack at a sha, installed by its own setup, with one install command per host.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "stack",
+        "install"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "const": "stack"
+        },
+        "stack": {
+          "$ref": "#/$defs/stackRef"
+        },
+        "install": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "claude": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "codex": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      }
+    },
+    "overlay": {
+      "description": "A base stack with the target skill replaced at its real install path (dir set) or removed (dir null). With base null, dir is a loose folder, as in skill-diet.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "base",
+        "skill",
+        "dir"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "const": "overlay"
+        },
+        "base": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/stackRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skill": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "dir": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "loadoutArm": {
+      "description": "Unreviewed: plan Amendment A1. No plan review has read the loadout kind yet. A named set of modules that resolves to an installed tree whose hash goes into the verdict.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "manifest"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "const": "loadout"
+        },
+        "manifest": {
+          "$ref": "#/$defs/loadout"
+        }
+      }
+    },
+    "loadout": {
+      "title": "Loadout manifest",
+      "description": "Unreviewed: plan Amendment A1. Whole skills, skill sections (gstack's sections/*.md files), gstack's model-overlays/*.md and the preamble tiers 1 to 4 that gstack declares per skill, on a gstack base at a sha.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "base",
+        "modules"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^gstack@[0-9a-f]{40}$"
+        },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "skill",
+                  "section",
+                  "overlay",
+                  "preamble-tier"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "\\S"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

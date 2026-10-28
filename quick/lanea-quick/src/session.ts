@@ -271,7 +271,10 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
       ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "--mount", `type=bind,src=${spec.fixturesDir},dst=/fx,readonly`, "-w", "/work", spec.checkImage, "sh", "-c", spec.task.check],
       { env, timeoutMs: 120_000 },
     );
-    check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };
+    if (r.code === 125) {
+      if (status === "complete") status = "infra_error";
+      errors.push(`E_CHECK: docker could not start the check: ${r.out.slice(-500)}`);
+    } else check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };
   }
   const use = skillUse(t, spec.skill);
   const bytes = loadedBytes(use.files, spec.sizes);

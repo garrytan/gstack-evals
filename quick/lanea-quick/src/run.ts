@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { BASE_IMAGE, CAP_USD, GSTACK_REPO, LEDGER_PATH, LIMITS, LINE_ITEM, MODELS, SUITES, WORK, imageTag, type ArmName } from "./config.ts";
+import { loadResults, readStages } from "./analyze.ts";
 import { serveFake } from "./fake-upstream.ts";
 import type { Task } from "./grade.ts";
 import { Ledger, lockLedger, Reserver } from "./ledger.ts";
@@ -139,9 +140,10 @@ async function runCells(cells: Cell[], opts: RunOpts, stage: string, prep: Prepa
   const started = new Date();
   const stageFile = join(opts.out, "stages", `${stage}.${started.getTime()}.json`);
   const unique = <T>(xs: T[]) => [...new Set(xs)];
-  const planned = { stage, suite: STAGES[stage]!.suite, models: unique(cells.map((c) => c.model)), arms: unique(cells.map((c) => c.arm)), trials: unique(cells.map((c) => c.trial)), planned: cells.length, prereg: opts.prereg, fake: opts.fake, started: started.toISOString() };
+  const planned = { stage, suite: STAGES[stage]!.suite, models: unique(cells.map((c) => c.model)), tasks: unique(cells.map((c) => c.task.id)), arms: unique(cells.map((c) => c.arm)), trials: unique(cells.map((c) => c.trial)), planned: cells.length, prereg: opts.prereg, fake: opts.fake, started: started.toISOString() };
   mkdirSync(join(opts.out, "stages"), { recursive: true });
-  writeFileSync(stageFile, JSON.stringify({ ...planned, status: "running" }, null, 2) + "\n");
+  const writeStage = (extra: Record<string, unknown>) => writeFileSync(stageFile, JSON.stringify({ ...planned, ...extra }, null, 2) + "\n");
+  writeStage({ status: "running" });
   const reserver = new Reserver(ledger);
   let failure: unknown = null;
   let next = 0;
@@ -166,7 +168,10 @@ async function runCells(cells: Cell[], opts: RunOpts, stage: string, prep: Prepa
       const id = cellId(c);
       const spec = MODELS[c.model]!;
       const reservation = `${id}.${Date.now()}`;
-      if (!(await reserver.reserve(reservation, opts.fake ? 0 : spec.reserveUsd, { session: id, model: c.model, prereg: opts.prereg, fake: opts.fake }))) return;
+      if (!(await reserver.reserve(reservation, opts.fake ? 0 : spec.reserveUsd, { session: id, model: c.model, prereg: opts.prereg, fake: opts.fake }))) {
+        if (reserver.stopped) writeStage({ status: "running", cap_stop: reserver.stopped });
+        return;
+      }
       const s = SUITES[c.suite]!;
       const tag = imageTag(c.suite, c.arm);
       const ps = prep.suites[c.suite]!;
@@ -194,7 +199,10 @@ async function runCells(cells: Cell[], opts: RunOpts, stage: string, prep: Prepa
         proxy,
       );
       reserver.settle(reservation, opts.fake ? 0 : r.cost_usd, { session: id, usage: r.usage, measured_usd: r.cost_usd, requests: r.requests, sdk_reported_usd: r.sdk.total_cost_usd, status: r.status, fake: opts.fake });
-      if (r.cost_usd > spec.reserveUsd + 1e-9) reserver.stop(`STOP: reason=reservation_exceeded session=${id} spent=${r.cost_usd.toFixed(4)} reserved=${spec.reserveUsd}`);
+      if (r.cost_usd > spec.reserveUsd + 1e-9) {
+        reserver.stop(`STOP: reason=reservation_exceeded session=${id} spent=${r.cost_usd.toFixed(4)} reserved=${spec.reserveUsd}`);
+        writeStage({ status: "running", cap_stop: reserver.stopped });
+      }
       if (r.status === "infra_error" && failedAttempts(dir) === 0) {
         queue.splice(next, 0, c);
         console.log(`${new Date().toISOString()} ${id} infra_error, rerun queued once: ${r.errors.join(" | ").slice(0, 200)}`);
@@ -214,14 +222,14 @@ async function runCells(cells: Cell[], opts: RunOpts, stage: string, prep: Prepa
   proxy.stop();
   fake?.stop(true);
   try {
-    reserver.settleOpen("runner error before settling; charged at the full reservation");
+    ledger.settleStale("runner error before settling; charged at the full reservation");
   } catch (e) {
     failure ??= e;
   }
   if (failure) throw failure;
   const capStop = reserver.stopped;
   if (capStop) console.log(capStop);
-  writeFileSync(stageFile, JSON.stringify({ ...planned, status: "done", finished: results.length, cap_stop: capStop, ended: new Date().toISOString() }, null, 2) + "\n");
+  writeStage({ status: "done", finished: results.length, cap_stop: capStop, ended: new Date().toISOString() });
   return { results, capStop };
 }
 
@@ -301,6 +309,8 @@ async function main() {
     let cells = planStage(stage, tasks, trials, models);
     if (values.arms) cells = cells.filter((c) => values.arms!.split(",").includes(c.arm));
     if (!cells.length) throw new Error(`E_TASKS: no cells in ${stage} match --models, --tasks, --trials and --arms`);
+    const stops = Object.entries(readStages(opts.out, loadResults(opts.out)).stops).flatMap(([k, labels]) => labels.filter((l) => /^(CAP_STOP|RESERVATION_EXCEEDED) /.test(l)).map((l) => `${l} (${k})`));
+    if (stops.length) throw new Error(`E_STAGE_STOPPED: ${stops.join(", ")}; a stop ends the run, so nothing more runs into ${opts.out}`);
     const r = await execute(cells, opts, stage);
     process.exit(r.capStop ? 2 : 0);
   }

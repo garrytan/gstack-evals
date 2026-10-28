@@ -132,6 +132,7 @@ describe("stage files", () => {
     const v = verdict(root);
     expect(v.primary[0]).toMatchObject({ suite: "learn", model: "claude-haiku-5-5", verdict: "PASS", incomplete: [] });
     expect(v.stage_stops["learn|claude-opus-5-5"]).toEqual(["CAP_STOP S3"]);
+    expect(readFileSync(join(root, "verdict.md"), "utf8")).toContain("- learn on claude-opus-5-5: CAP_STOP S3");
   });
   const oh = { suite: "office-hours", arms: ["before", "after", "none"] };
   test("a later run of the stage for another model leaves this model's unfinished run in place", () => {
@@ -144,13 +145,37 @@ describe("stage files", () => {
   test("a cap stop sticks when a later run plans fewer trials, and a later run that finishes clears an unfinished one", () => {
     const root = mkdtempSync(join(tmpdir(), "stages-"));
     s1(root);
-    const haiku = { ...oh, models: ["claude-haiku-5-5"] };
+    const haiku = { ...oh, models: ["claude-haiku-5-5"], tasks: TASKS };
     stage(root, "S1", { ...haiku, status: "running", trials: [1, 2, 3], planned: 45, started: "2026-10-28T10:00:00.000Z" }, "S1.1");
     stage(root, "S1", { ...haiku, status: "done", trials: [1, 2, 3], planned: 45, finished: 45, cap_stop: null, started: "2026-10-28T11:00:00.000Z" }, "S1.2");
     expect(verdict(root).primary[0]).toMatchObject({ verdict: "PASS", incomplete: [] });
     stage(root, "S1", { ...haiku, status: "done", trials: [1, 2, 3], planned: 45, finished: 30, cap_stop: "STOP: reason=budget_exhausted", started: "2026-10-28T12:00:00.000Z" }, "S1.3");
     stage(root, "S1", { ...haiku, status: "done", trials: [1, 2], planned: 30, finished: 30, cap_stop: null, started: "2026-10-28T13:00:00.000Z" }, "S1.4");
     expect(verdict(root).primary[0]).toMatchObject({ verdict: "INCOMPLETE", incomplete: ["CAP_STOP S1"], trials_planned: 3 });
+  });
+  test("results for a model that no stage file lists are UNFINISHED", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    s1(root);
+    stage(root, "S1", { ...oh, status: "done", models: ["claude-opus-5-5"], trials: [1, 2, 3], planned: 45, finished: 45, cap_stop: null });
+    expect(verdict(root).primary[0].incomplete).toEqual(["UNFINISHED S1 no stage file"]);
+  });
+  test("a narrower resume after a crash leaves the block UNFINISHED", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    write(root, grid(base).filter((r) => r.trial !== 3).map((r) => ({ ...r, suite: "office-hours", model: "claude-haiku-5-5" })));
+    const haiku = { ...oh, models: ["claude-haiku-5-5"], tasks: TASKS };
+    stage(root, "S1", { ...haiku, status: "running", trials: [1, 2, 3], planned: 45, started: "2026-10-28T10:00:00.000Z" }, "S1.1");
+    stage(root, "S1", { ...haiku, status: "done", trials: [1, 2], planned: 30, finished: 30, cap_stop: null, started: "2026-10-28T11:00:00.000Z" }, "S1.2");
+    expect(verdict(root).primary[0]).toMatchObject({ verdict: "INCOMPLETE", incomplete: ["UNFINISHED S1"] });
+    stage(root, "S1", { ...haiku, tasks: ["a", "b"], status: "done", trials: [1, 2, 3], planned: 18, finished: 18, cap_stop: null, started: "2026-10-28T12:00:00.000Z" }, "S1.3");
+    expect(verdict(root).primary[0].incomplete).toEqual(["UNFINISHED S1"]);
+  });
+  test("a session that spent past its reservation keeps the block from passing even when no stage file says so", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    write(root, grid(base).map((r) => ({ ...r, suite: "office-hours", model: "claude-haiku-5-5", cost_usd: r.task === "a" && r.arm === "after" && r.trial === 2 ? 1.2 : 0.1 })));
+    const h = { ...oh, models: ["claude-haiku-5-5"], tasks: TASKS, trials: [1, 2, 3], planned: 45 };
+    stage(root, "S1", { ...h, status: "running", started: "2026-10-28T10:00:00.000Z" }, "S1.1");
+    stage(root, "S1", { ...h, status: "done", finished: 45, cap_stop: null, started: "2026-10-28T11:00:00.000Z" }, "S1.2");
+    expect(verdict(root).primary[0]).toMatchObject({ verdict: "INCOMPLETE", incomplete: ["RESERVATION_EXCEEDED S1"] });
   });
   test("a fake run's stage file keeps the block from passing", () => {
     const root = mkdtempSync(join(tmpdir(), "stages-"));

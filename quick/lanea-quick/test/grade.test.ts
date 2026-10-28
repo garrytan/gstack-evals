@@ -44,7 +44,7 @@ describe("grading", () => {
     ]);
     expect(skillUse(pending, "office-hours")).toEqual({ opened: false, how: [], files: {} });
   });
-  test("a subagent's reads are also counted apart", () => {
+  test("a subagent's reads are counted apart and never as the main agent's", () => {
     const sub = { parent_tool_use_id: "toolu_task" };
     const t = parseTranscript([
       { type: "assistant", message: { content: [{ type: "tool_use", id: "r0", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/sections/preamble.md" } }] } },
@@ -52,7 +52,18 @@ describe("grading", () => {
       { type: "assistant", ...sub, message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/SKILL.md" } }] } },
       { type: "user", ...sub, message: { content: [{ type: "tool_result", tool_use_id: "r1", content: "..." }] } },
     ]);
-    expect(skillUse(t, "office-hours").files).toEqual({ "office-hours/sections/preamble.md": 1, "office-hours/SKILL.md": 1 });
+    expect(skillUse(t, "office-hours")).toEqual({ opened: false, how: [], files: { "office-hours/sections/preamble.md": 1 } });
     expect(skillUse({ toolUses: t.subagentToolUses }, "office-hours").files).toEqual({ "office-hours/SKILL.md": 1 });
+  });
+  test("a subagent's text and questions grade nothing for the main agent", () => {
+    const t = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "text", text: "Here is my plan." }] } },
+      { type: "assistant", parent_tool_use_id: "toolu_task", message: { content: [{ type: "text", text: "SECOND OPINION (Claude subagent): ship it" }, { type: "tool_use", id: "q1", name: "AskUserQuestion", input: { questions: [{ question: "Proceed?" }] } }] } },
+    ]);
+    expect(transcriptText(t)).not.toContain("SECOND OPINION");
+    expect(t.askTexts).toEqual([]);
+    expect(t.finalAnswer).toBe("Here is my plan.");
+    expect(gradePatterns({ id: "x", prompt: "p", must: ["SECOND OPINION"] }, transcriptText(t)).ok).toBe(false);
+    expect(t.subagentToolUses.map((u) => u.name)).toEqual(["AskUserQuestion"]);
   });
 });
