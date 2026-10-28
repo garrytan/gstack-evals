@@ -41,7 +41,7 @@ sequenceDiagram
 | `runner/smoke.sh`, `fake_upstream.ts`, `smoke-task/` | Keyless end-to-end test: fake upstream, proxy, scratch ledger, Harbor, agent, real Claude Code, separate verifier. |
 | `arms/` | The gstack arm build and the seeded placebo generator. |
 | `tasks/` | The task pre-screen scripts and the fixed list with digests; the write-up is the wiki post [2026-10-28-gsta-12-tb2-task-selection](../../wiki/research/2026-10-28-gsta-12-tb2-task-selection.md). `final.json` is the list after oracle checks, with each dropped task and why. |
-| `analysis/analyze.ts` | Pass rates with task-clustered bootstrap intervals, paired contrasts, cost per success, share of the Opus gap closed, skill-open rates. |
+| `analysis/analyze.ts` | Pass rates with task-clustered bootstrap intervals, paired contrasts, cost per success, share of the Opus gap closed, skill-open rates. A trial is graded on its verifier reward; a trial without one scores 0 if a model response reached the agent (reported again with those trials dropped), and is infra otherwise. Cost comes from the proxy's session rows (`sessions` in the config: each run's `out/proxy-sessions.jsonl`); a trial without a row has a missing cost, never $0. |
 | `config/` | Proxy routes and prices, and the cells with their session caps. |
 
 ## Checks
