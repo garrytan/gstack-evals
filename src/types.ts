@@ -1,5 +1,6 @@
 // Interfaces that more than one build unit codes against. A change here lands with the agreement of every unit that
-// uses the type, and with a wiki post when it changes a contract. Amounts are US dollars; times are ISO-8601 UTC.
+// uses the type, and with a wiki post when it changes a contract. Money is integer micro-dollars (1 USD is 1,000,000
+// micros) wherever it is stored, summed or held against a cap, so sums never drift; times are ISO-8601 UTC.
 import type { ReasonCode } from "./errors/codes.ts";
 
 export type Host = "claude" | "codex";
@@ -68,7 +69,7 @@ export interface Lease {
   line_item: string;
   run_id: string;
   machine_id: string;
-  reserved_usd: number;
+  reserved_micros: number;
   expires_at: string;
   state: "open" | "settled" | "reconciled";
 }
@@ -91,21 +92,30 @@ export interface CellAttempt {
  */
 export interface Reservation {
   reservation_id: string;
+  /** The caller's key for this one call, such as its journaled cell attempt. A repeated reserve under it returns this reservation. */
+  idempotency_key: string;
   lease_id: string;
   cell: CellAttempt;
-  max_usd: number;
+  max_micros: number;
   state: "reserved" | "settled" | "unknown";
-  spent_usd: number | null;
+  spent_micros: number | null;
   usage: TokenUsage | null;
 }
 
-export type CallOutcome = { kind: "spent"; spent_usd: number; usage: TokenUsage } | { kind: "unknown" };
+export type CallOutcome = { kind: "spent"; spent_micros: number; usage: TokenUsage } | { kind: "unknown" };
+
+/** A ledger answer: the reservation, or a refusal with the reason code to print. */
+export type LedgerReply = { ok: true; reservation: Reservation } | { ok: false; code: ReasonCode; message: string };
 
 export interface ReservationLedger {
-  /** Holds max_usd against the lease, or refuses with the code to print (CAP_STOP, E_ALLOWANCE, E_LEDGER_MISSING, E_LEASE_UNSETTLED). */
-  reserve(request: { lease_id: string; cell: CellAttempt; max_usd: number }): Promise<{ ok: true; reservation: Reservation } | { ok: false; code: ReasonCode; message: string }>;
-  /** Idempotent by reservation_id: settling twice with the same outcome returns the same reservation. */
-  settle(reservation_id: string, outcome: CallOutcome): Promise<Reservation>;
+  /**
+   * Holds max_micros against the lease, or refuses with the code to print (CAP_STOP, E_LEDGER_MISSING, E_LEASE_CLOSED).
+   * Idempotent by idempotency_key: the same key with the same request returns the first reservation, and with a
+   * different lease, cell or amount refuses with E_RESERVE_CONFLICT.
+   */
+  reserve(request: { idempotency_key: string; lease_id: string; cell: CellAttempt; max_micros: number }): Promise<LedgerReply>;
+  /** Idempotent by reservation_id: the same outcome again returns the same reservation; a different one refuses with E_SETTLE_CONFLICT. */
+  settle(reservation_id: string, outcome: CallOutcome): Promise<LedgerReply>;
 }
 
 // Outcomes: how a trial or a replay item ended, apart from its grade and its effects (plan v3.2, Lane B error taxonomy
