@@ -35,10 +35,11 @@ describe("gstack-evals dispatcher", () => {
     for (const c of COMMANDS) expect(c.module).toMatch(/^(src|lanes)\/[a-z0-9_/.-]+\.ts$/);
   });
 
-  test("--help lists every planned command and exits 0", async () => {
+  test("--help lists every planned command and exits 0; --version prints VERSION", async () => {
     const r = await call(["--help"]);
     expect(r.code).toBe(0);
     for (const name of PLANNED) expect(r.out).toContain("  " + name + " ");
+    expect(await call(["--version"], fakeRoot({ VERSION: "9.8.7\n" }))).toMatchObject({ code: 0, out: "9.8.7" });
   });
 
   test("an unbuilt command exits 2 with E_USAGE and not built yet", async () => {
@@ -64,15 +65,18 @@ describe("gstack-evals dispatcher", () => {
     const skillEval = COMMANDS.find((c) => c.name === "skill-eval")!;
     const root = fakeRoot({ VERSION: "0.0.1\n", [skillEval.module]: "export async function main(argv) { console.error('args ' + argv.join(' ')); return argv.length; }\n" });
     expect((await call(["skill-eval", "--example", "--json"], root)).code).toBe(2);
-    expect((await call(["--help"], root)).out).not.toContain("skill-eval   Before/after skill eval (Lane A): did an edited skill lose anything? Also init, --lock and --example. [not built yet");
+    const lines = (await call(["--help"], root)).out.split("\n");
+    expect(lines.find((l) => l.startsWith("  skill-eval "))).not.toContain("not built yet");
+    expect(lines.find((l) => l.startsWith("  ledger "))).toContain("[not built yet: U4, M0]");
   });
 
   test("a module that throws or lacks main exits 2 with E_INTERNAL", async () => {
     const ledger = COMMANDS.find((c) => c.name === "ledger")!;
-    const root = fakeRoot({ [ledger.module]: "export const notMain = 1;\n" });
-    const r = await call(["ledger"], root);
-    expect(r.code).toBe(2);
-    for (const line of r.err.split("\n")) expect(line).toStartWith("E_INTERNAL ");
+    for (const source of ["export const notMain = 1;\n", "export async function main() { throw new Error('boom'); }\n"]) {
+      const r = await call(["ledger"], fakeRoot({ [ledger.module]: source }));
+      expect(r.code).toBe(2);
+      for (const line of r.err.split("\n")) expect(line).toStartWith("E_INTERNAL ");
+    }
   });
 
   test("bin/gstack-evals runs under Bun and prints the version", () => {
