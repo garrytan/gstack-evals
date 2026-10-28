@@ -2,7 +2,7 @@
 
 An outcome-graded eval rig for [gstack](https://github.com/garrytan/gstack), being built. It exists to steer gstack's research and development: which skills help, on which models, at what cost, and where gstack loses. It reports losses plainly, including a gstack skill that loses to no skill or to a placebo.
 
-Everything here describes the repository at `VERSION` (gstack-evals v0.0.1): the skeleton. No eval runs yet. The approved plan is plan v3.2 in [wiki/](wiki/INDEX.md), split into build units U1 to U18 by the v1.0 build breakdown.
+Everything here describes the repository at `VERSION` (gstack-evals v0.0.1): the skeleton. No eval runs yet. The approved plan is plan v3.2 in [wiki/](wiki/README.md), split into build units U1 to U18 by the v1.0 build breakdown.
 
 ## What v1.0 will answer
 
@@ -34,7 +34,7 @@ gstack-evals --help
 | [docs/](docs/) | The [budget ledger guide](docs/budget-ledger.md), reason codes and adapters |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
 | [quick/lanea-quick/](quick/lanea-quick/README.md) | GSTA-13's thin Lane A runner for Quick look 3, the office-hours diet check, with a fake upstream and keyless tests |
-| [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. Start with [wiki/INDEX.md](wiki/INDEX.md) |
+| [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. `bun run wiki:index` writes an index of them to wiki/INDEX.md |
 | [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push |
 | [NOTICE.md](NOTICE.md) | Every vendored or planned-vendored source and its licence |
 | [TODOS.md](TODOS.md) | Open items carried from the plan |
