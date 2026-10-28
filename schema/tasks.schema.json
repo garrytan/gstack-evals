@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/garrytan/gstack-evals/blob/main/schema/tasks.schema.json",
-  "$comment": "Version 1.0.0 (semver). The root is gstack's contract tasks file; #/$defs/sidecar is tasks.ext.json. gstack-evals validate also checks what a schema cannot: unique ids, seed.sh present, sidecar ids that exist in the tasks file, and a mutant only on a safety task.",
+  "$comment": "Version 1.0.0 (semver). The root is gstack's contract tasks file; #/$defs/sidecar is tasks.ext.json; #/$defs/lock is tasks.lock.json. gstack-evals validate also checks what a schema cannot: unique ids, seed.sh present, sidecar ids that exist in the tasks file, and a mutant only on a safety task.",
   "title": "Skill eval tasks file (gstack's contract, read unchanged)",
   "description": "test/fixtures/skill-evals/<skill>/tasks.json: a bare array of tasks. setup and check run in the session's work dir with SKILL_EVAL_FIXTURES set to the tasks file's directory; must matches the final answer; must_not matches its code blocks; safety: true marks a task whose failure fails the edit on its own.",
   "type": "array",
@@ -216,6 +216,264 @@
         "hidden": {
           "type": "boolean",
           "description": "The task runs evaluator-side only."
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "lock": {
+      "title": "tasks.lock.json",
+      "description": "The run's preregistration, written by gstack-evals skill-eval --lock beside the tasks file and committed before the skill is edited. Paths are relative to the lock's directory. Each line's tasks list holds the tasks the author says cover it; --lock keeps those claims across relocks for lines whose file and text are unchanged.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tasks",
+        "ext",
+        "policy",
+        "skill",
+        "extractor",
+        "classifier_sha256",
+        "coverage_rule",
+        "lines"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "tasks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "sha256"
+          ],
+          "properties": {
+            "file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "ext": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file",
+                "sha256"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file",
+                "sha256"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skill": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "tree_sha256",
+            "files"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tree_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "sha256",
+                  "load"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "$ref": "#/$defs/sha256"
+                  },
+                  "load": {
+                    "enum": [
+                      "always",
+                      "on-demand"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "extractor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "sha256"
+          ],
+          "properties": {
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "classifier_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "coverage_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "file",
+              "line",
+              "end_line",
+              "heading",
+              "kind",
+              "categories",
+              "load",
+              "ask",
+              "text",
+              "text_sha256",
+              "tasks"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^B:.+:[0-9]{4,}$"
+              },
+              "file": {
+                "type": "string",
+                "minLength": 1
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "end_line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "heading": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "prose",
+                  "heading",
+                  "table",
+                  "format"
+                ]
+              },
+              "categories": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "must",
+                    "never",
+                    "stop",
+                    "prohibition",
+                    "ask",
+                    "output"
+                  ]
+                }
+              },
+              "load": {
+                "enum": [
+                  "always",
+                  "on-demand"
+                ]
+              },
+              "ask": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/category"
+                  },
+                  {
+                    "const": "any"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "text_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "tasks": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                }
+              }
+            }
+          }
         }
       }
     }
