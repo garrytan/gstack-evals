@@ -3,8 +3,9 @@
 # Harbor (holding none). The ledger service is reached through the SSH reverse tunnel
 # on 127.0.0.1:9911; if it is missing, no session can open.
 # Every exit writes out/vm-run.exit with the exit code, after the sessions are closed; launch.sh
-# pulls only once it exists. A STOP file in the run dir (launch.sh writes it on an interrupt)
-# keeps the paid run from starting, or stops a running one with one SIGINT to Harbor.
+# pulls only once it exists. out/ and jobs/ exist from the start, so an early exit leaves both to
+# pull. A STOP file in the run dir (launch.sh writes it on an interrupt) keeps the paid run from
+# starting, or stops a running one with one SIGINT to Harbor.
 # Usage: vm-run.sh <run dir> <ledger prefix> <batch cap usd>
 set -euo pipefail
 run=$(cd "$1" && pwd)
@@ -12,7 +13,7 @@ prefix=$2
 cap=$3
 runner=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
-mkdir -p "$run/out"
+mkdir -p "$run/out" "$run/jobs"
 rm -f "$run/out/vm-run.exit"
 trap 'echo $? > "$run/out/vm-run.exit"' EXIT
 for gz in "$run"/arms/*.tar.gz; do

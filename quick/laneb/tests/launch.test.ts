@@ -12,7 +12,7 @@ function freePort() {
   return port;
 }
 
-function rig(opts: { failPull?: boolean; dropSsh?: boolean }) {
+function rig(opts: { failPull?: boolean; dropSsh?: boolean; finish?: number; failBootstrap?: boolean; slowBootstrap?: boolean }) {
   const root = mkdtempSync(join(tmpdir(), "laneb-launch-"));
   const vm = join(root, "vm");
   const bin = join(root, "bin");
@@ -30,7 +30,7 @@ function rig(opts: { failPull?: boolean; dropSsh?: boolean }) {
   const ledger = new Ledger(ledgerPath, "laneb-quick");
   ledger.approve(10, { quotes: ["test"] });
   ledger.reserve("p-s-1", toMicros(1));
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, UBI_RUNNER: join(bin, "ubi"), UBI_RUNNER_STATE: state, LEDGER: ledgerPath, LEDGER_PORT: String(port), EVENTS: events, VM: vm, STATE: state, PULL_RETRY_SEC: "0", FAIL_PULL: opts.failPull ? "1" : "", DROP_SSH: opts.dropSsh ? "1" : "", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, UBI_RUNNER: join(bin, "ubi"), UBI_RUNNER_STATE: state, LEDGER: ledgerPath, LEDGER_PORT: String(port), EVENTS: events, VM: vm, STATE: state, PULL_RETRY_SEC: "0", FAIL_PULL: opts.failPull ? "1" : "", DROP_SSH: opts.dropSsh ? "1" : "", FINISH: opts.finish === undefined ? "" : String(opts.finish), FAIL_BOOTSTRAP: opts.failBootstrap ? "1" : "", SLOW_BOOTSTRAP: opts.slowBootstrap ? "1" : "", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
   return { root, vm, run, events, ledgerPath, env };
 }
 
@@ -49,7 +49,58 @@ async function interruptDuringBatch(r: ReturnType<typeof rig>, cmd = ["bash", LA
   return { code, stderr, events: events(r) };
 }
 
+async function runToEnd(r: ReturnType<typeof rig>) {
+  const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+  const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
+  const code = await proc.exited;
+  clearTimeout(timer);
+  return { code, events: events(r) };
+}
+
+describe("launch.sh without an interrupt", () => {
+  test("pulled x no_interrupt: once vm-run.exit exists it pulls, counts, reconciles, destroys the VM and exits with the batch's code", async () => {
+    const r = rig({ finish: 3 });
+    const { code, events } = await runToEnd(r);
+    const at = (prefix: string) => events.findIndex((e) => e.startsWith(prefix));
+    expect(events.some((e) => e.includes("STOP"))).toBe(false);
+    expect(at("pull vm-1 work/run/out")).toBeGreaterThan(at("batch ended"));
+    expect(at("down vm-1")).toBeGreaterThan(at("pull vm-1 work/run/jobs"));
+    expect(existsSync(join(r.run, "pulled", "jobs", "j", "t__1", "reward.txt"))).toBe(true);
+    expect(readRows(r.ledgerPath).at(-1)).toMatchObject({ kind: "settle", id: "p-s-1", usd_micros: 1234, reconciled: true });
+    expect(code).toBe(3);
+  }, 60_000);
+
+  test("not_started x no_interrupt: a failure before the batch starts destroys the VM and stops the ledger service", async () => {
+    const r = rig({ failBootstrap: true });
+    const { code, events } = await runToEnd(r);
+    expect(events).not.toContain("batch started");
+    expect(events).toContain("down vm-1");
+    let serving = true;
+    for (let i = 0; i < 50 && serving; i++) {
+      serving = Bun.spawnSync(["pgrep", "-f", r.ledgerPath]).exitCode === 0;
+      if (serving) await Bun.sleep(20);
+    }
+    expect(serving).toBe(false);
+    expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
+    expect(code).toBe(1);
+  }, 60_000);
+});
+
 describe("launch.sh on interrupt", () => {
+  test("not_started x interrupt: an interrupt before the batch starts exits 130, writes no STOP and destroys the VM", async () => {
+    const r = rig({ slowBootstrap: true });
+    const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 300 && !existsSync(join(r.vm, "bootstrapping")); i++) await Bun.sleep(50);
+    proc.kill("SIGINT");
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    expect(events(r).some((e) => e.includes("STOP"))).toBe(false);
+    expect(events(r)).not.toContain("batch started");
+    expect(events(r)).toContain("down vm-1");
+    expect(code).toBe(130);
+  }, 60_000);
+
   test("stops the batch, keeps the ledger up until sessions close, pulls, reconciles, then destroys the VM", async () => {
     const r = rig({});
     const { code, events } = await interruptDuringBatch(r);

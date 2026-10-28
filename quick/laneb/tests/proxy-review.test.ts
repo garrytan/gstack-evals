@@ -389,6 +389,88 @@ describe("batch cap", () => {
     }
   });
 
+  // A proxy with a 1 USD batch cap in front of a ledger stub; answer() may replace the ledger's reply to the nth reserve.
+  const capRig = (name: string, answer: (n: number) => Promise<Response | undefined>) => {
+    const ledger = new Ledger(join(dir, `ledger-${name}.jsonl`), "laneb-quick");
+    ledger.approve(100, { quotes: ["test"] });
+    let reserves = 0;
+    const ledgerServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const b = (await req.json()) as any;
+        const isReserve = new URL(req.url).pathname === "/reserve";
+        const special = isReserve ? await answer(reserves++) : undefined;
+        if (special) return special;
+        const out = isReserve ? ledger.reserve(b.id, b.usd_micros, b.meta) : ledger.settle(b.id, b.usd_micros, b.meta);
+        return Response.json(out, { status: out.ok ? 200 : 409 });
+      },
+    });
+    const config: ProxyConfig = { routes: { up: { base_url: "http://127.0.0.1:1", key_env: "K", auth: "x-api-key", count_tokens: "estimate" } }, models: { m: { route: "up", upstream_model: "m", price_per_mtok: price } } };
+    const proxy = startProxy({ config, dataHost: "127.0.0.1", dataPort: 0, controlPort: 0, logPath: join(dir, `req-${name}.jsonl`), sessionsPath: join(dir, `sess-${name}.jsonl`), ledgerUrl: `http://127.0.0.1:${ledgerServer.port}`, env: { K: "k" }, globalCapMicros: toMicros(1), closeWaitMs: 50 });
+    const control = `http://127.0.0.1:${proxy.control.port}`;
+    return {
+      ledger,
+      open: (cap: number) => fetch(control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t", model: "m", cap_usd: cap }) }),
+      capStop: async () => ((await (await fetch(control + "/totals")).json()) as any).cap_stop,
+      stop: async () => { await proxy.stop(); ledgerServer.stop(true); },
+    };
+  };
+
+  test("reserve_ok x settle_open: a reserved open stops counting as pending, so two opens that fit the batch cap together both open", async () => {
+    const r = capRig("fit", async () => undefined);
+    try {
+      expect((await r.open(0.4)).status).toBe(200);
+      expect((await r.open(0.4)).status).toBe(200);
+      expect(r.ledger.status().openReservedMicros).toBe(toMicros(0.8));
+      expect(await r.capStop()).toBeNull();
+    } finally {
+      await r.stop();
+    }
+  });
+
+  test("reserve_throw x concurrent_open: an open refused beside a pending reserve latches the batch stop, and it stays latched when that reserve then fails", async () => {
+    let pending = false;
+    const r = capRig("throw-beside", async (n) => {
+      if (n > 0) return undefined;
+      pending = true;
+      await Bun.sleep(200);
+      return new Response("not json", { status: 502 });
+    });
+    try {
+      const first = r.open(0.6);
+      for (let i = 0; i < 100 && !pending; i++) await Bun.sleep(10);
+      expect((await r.open(0.6)).status).toBe(409);
+      expect((await first).status).toBe(502);
+      expect(r.ledger.status().openReservedMicros).toBe(0);
+      expect(await r.capStop()).toContain("batch cap");
+      expect((await r.open(0.1)).status).toBe(409);
+    } finally {
+      await r.stop();
+    }
+  });
+
+  test("reserve_refused x concurrent_open: a pending reserve the ledger refuses and the open refused beside it both answer 409 and latch the stop", async () => {
+    let pending = false;
+    const r = capRig("refused-beside", async (n) => {
+      if (n > 0) return undefined;
+      pending = true;
+      await Bun.sleep(200);
+      return Response.json({ ok: false, error: "line item cap reached" }, { status: 409 });
+    });
+    try {
+      const first = r.open(0.6);
+      for (let i = 0; i < 100 && !pending; i++) await Bun.sleep(10);
+      expect((await r.open(0.6)).status).toBe(409);
+      expect((await first).status).toBe(409);
+      expect(r.ledger.status().openReservedMicros).toBe(0);
+      expect(await r.capStop()).toContain("ledger refused");
+      expect((await r.open(0.1)).status).toBe(409);
+    } finally {
+      await r.stop();
+    }
+  });
+
   test("finding 6: the batch cap refuses at session open, never mid-session", async () => {
     const ledger = new Ledger(join(dir, "ledger-batch.jsonl"), "laneb-quick");
     ledger.approve(100, { quotes: ["test"] });

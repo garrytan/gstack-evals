@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -45,7 +45,7 @@ function setup(trials: Record<string, string | null> | null, healthy = false) {
   };
 }
 
-function rig(trials: Record<string, string | null>, opts: { healthy?: boolean; stop?: boolean } = {}) {
+function rig(trials: Record<string, string | null> | null, opts: { healthy?: boolean; stop?: boolean } = {}) {
   const s = setup(trials, opts.healthy);
   if (opts.stop) writeFileSync(join(s.run, "STOP"), "");
   const r = Bun.spawnSync(s.cmd, { env: s.env });
@@ -81,6 +81,13 @@ describe("vm-run.sh before the paid batch", () => {
     expect(r.sg).not.toContain("network inspect");
     expect(r.code).toBe(130);
     expect(r.exitFile).toBe("130");
+  });
+
+  test("a run with no oracle job that stops before the paid run still leaves an empty jobs dir for launch.sh to pull", () => {
+    const r = rig(null, { healthy: true, stop: true });
+    expect(r.code).toBe(130);
+    expect(r.exitFile).toBe("130");
+    expect(existsSync(join(r.run, "jobs")) && readdirSync(join(r.run, "jobs"))).toEqual([]);
   });
 });
 
