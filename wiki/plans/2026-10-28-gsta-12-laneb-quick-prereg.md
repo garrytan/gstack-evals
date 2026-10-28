@@ -115,3 +115,12 @@ The outcome is the task's verifier reward (1 or 0). Per cell, the pass rate is t
 - Every dropped task and infrastructure failure, with its reason.
 
 All 20 tasks are the primary set; tier A (ranks 1 to 10) is reported as a secondary set. With 20 tasks and 1 to 3 trials per cell these are exploratory estimates. No parity or non-inferiority claim is made.
+
+## Changes after the first paid call
+
+The route check (step 1) ran at cf3fda1. The text above last changed at 111829d (f3867fd holds the same text); replicate 1 ran on runner commit ba7a648. Changes recorded since then, each before the replicates it affects:
+
+- 2026-10-28, after replicate 1 and before replicate 2 (Captain GSTA-2). A run end is added to the stop rule: the run stops at the cap or at 12:00 PT on Friday 2026-10-30, whichever comes first, and is reported as it stands. Replicate 1 cost $17.05 metered against about $90 projected, so steps 3 and 4 cannot reach the cap. Replicates 2 and 3 therefore run as one Harbor job for all 9 cells on the same runner commit, and further replicates of all 9 cells follow while money and time remain.
+- 2026-10-28 (Captain GSTA-2). gstack /ship on this pull request found 12 blocking defects in the runner and analysis code. The run keeps that code as it ran, the defects are recorded as skipped with the Captain as accepted_by, and a fix pull request follows. The results check each replicate's logs for every defect that could change a number.
+- 2026-10-28, secondary analyses added after replicate 1. Opus 5.5's API safeguards refused two tasks in every arm (dna-insert as `[bio]`, break-filter-js-from-html as `[cyber]`), and DeepSeek's sessions on filter-js-from-html hit their session cap in every arm. These count as 0 as above; the results add a sensitivity that drops those tasks. A trial whose verifier timed out counts as 0, because a model response reached the agent; the results also show it dropped. The results flag any trial whose transcript or command log shows raw sockets, setsockopt or SO_MARK, iptables, nft or ip rule, or a connection outside the allowlist, and show totals with and without flagged trials.
+- The placebo generator hash above (e9c16c57) matches the generator at cf3fda1. 111829d changed two error-message prefixes in that file, so the hash at ba7a648 is 04b4c94f. The placebo bytes and the arm tar sha256 did not change.
