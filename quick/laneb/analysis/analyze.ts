@@ -188,9 +188,10 @@ export function analyze(trials: Trial[], opts: { models: string[]; arms: string[
     const ci = bootstrap(tasks, (s) => avg(A, s) - avg(B, s), bopts);
     return { model: m, contrast: `${a} - ${b}`, tasks: tasks.length, diff: ci.point, lo: ci.lo, hi: ci.hi };
   };
-  const contrasts = models.flatMap((m) => [diff(m, "gstack", "none"), diff(m, "gstack", "placebo"), diff(m, "placebo", "none")]);
+  const pairs = [["gstack", "none"], ["gstack", "placebo"], ["placebo", "none"]].filter(([a, b]) => arms.includes(a) && arms.includes(b));
+  const contrasts = models.flatMap((m) => pairs.map(([a, b]) => diff(m, a, b)));
 
-  const gap = models.filter((m) => m !== reference).map((m) => {
+  const gap = models.filter((m) => m !== reference && models.includes(reference) && arms.includes("none") && arms.includes("gstack")).map((m) => {
     const ref = cell(reference, "none"), mn = cell(m, "none"), mg = cell(m, "gstack");
     const tasks = tasksIn(ref, mn, mg);
     const share = (s: string[]) => {
@@ -228,9 +229,13 @@ export function markdown(rep: Report): string {
 
 if (import.meta.main) {
   const args = Bun.argv.slice(2);
-  const cfg = JSON.parse(readFileSync(args[0], "utf8")) as { models: string[]; arms: string[]; reference: string; jobs: string[] };
+  const cfg = JSON.parse(readFileSync(args[0], "utf8")) as { models: string[]; arms: string[]; reference: string; jobs: string[]; subsets?: Record<string, string[]> };
   const trials = loadJobs(cfg.jobs);
   const rep = analyze(trials, cfg);
   console.log(markdown(rep));
+  for (const [name, tasks] of Object.entries(cfg.subsets ?? {})) {
+    console.log(`\n## Subset: ${name} (${tasks.length} tasks)\n`);
+    console.log(markdown(analyze(trials.filter((t) => tasks.includes(t.task)), cfg)));
+  }
   console.log("\n" + JSON.stringify({ skillCounts: rep.skillCounts, infra: rep.infra, nTrials: rep.nTrials }, null, 2));
 }

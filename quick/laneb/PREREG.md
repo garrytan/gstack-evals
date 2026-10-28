@@ -34,7 +34,7 @@ DeepSeek is the newest snapshot of the top open-weight family in the 2026-10-26 
 
 ## Tasks
 
-20 Terminal-Bench 2.0 tasks from Harbor's registry (`terminal-bench@2.0`, laude-institute/terminal-bench-2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c), chosen before any of our runs by a fixed rule over published per-trial results (9 Opus 4.7 and GPT-5.5 submissions as frontier, 14 cheap ones). The rule, sources and scripts are in [tasks/selection.md](tasks/selection.md); [tasks/tasks.json](tasks/tasks.json) has every field. Tier A (ranks 1 to 10) is the target window: frontier pass rate at most 0.85, cheap at most 0.30. Ranks 11 to 20 are easier, and Opus 5.5 is expected near ceiling there. SWE-bench Verified was rejected: the frontier is at about 97% on it.
+20 Terminal-Bench 2.0 tasks from Harbor's registry (`terminal-bench@2.0`, laude-institute/terminal-bench-2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c), chosen before any of our runs by a fixed rule over published per-trial results (9 Opus 4.7 and GPT-5.5 submissions as frontier, 14 cheap ones). The rule, sources and scripts are in [tasks/selection.md](tasks/selection.md); [tasks/tasks.json](tasks/tasks.json) has every field. Tier A (ranks 1 to 10) is the target window: frontier pass rate at most 0.85, cheap at most 0.30. Ranks 11 to 20 are easier, and Opus 5.5 is expected near ceiling there. Rank 14, qemu-alpine-ssh, was replaced by reserve R1 before any paid run (below). SWE-bench Verified was rejected: the frontier is at about 97% on it.
 
 | Rank | Task | Tier | Frontier | Cheap | Agent timeout (min) | Digest (sha256, first 16) |
 |---|---|---|---|---|---|---|
@@ -65,7 +65,7 @@ DeepSeek is the newest snapshot of the top open-weight family in the 2026-10-26 
 | R5 | pytorch-model-recovery | reserve | 0.93 | 0.64 | 15 | 22c73f0905c98f0d |
 | R6 | sparql-university | reserve | 0.95 | 0.51 | 15 | c9030c1b06e85711 |
 
-Digest: sha256 over sorted `<relpath>\0<sha256(file)>\n` lines of the registry task directory (`tasks/digest_tasks.py`). Before the first paid call, every task runs once with Harbor's oracle agent on the run host under the trial network policy. __ORACLE_RESULT__ A task whose oracle fails there is replaced by the next reserve, in order. After the first paid call no task is swapped; a task that cannot be graded in any arm is dropped and reported.
+Digest: sha256 over sorted `<relpath>\0<sha256(file)>\n` lines of the registry task directory (`tasks/digest_tasks.py`). Before the first paid call, every task runs once with Harbor's oracle agent on the run host under the trial network policy. A first oracle pass ran on 2026-10-28 on a Capy machine with every phase public. 19 of the 20 main tasks scored 1. qemu-alpine-ssh scored 0 because its verifier's `apt-get install curl` now gets 404s for bullseye security packages, which fails on any host, so it was dropped and the first reserve, sanitize-git-repo, took its place; its oracle scored 1. The final list, in run order, is [tasks/final.json](tasks/final.json). A task whose oracle fails there is replaced by the next reserve, in order. After the first paid call no task is swapped; a task that cannot be graded in any arm is dropped and reported.
 
 ## Runner
 
