@@ -8,7 +8,7 @@ On real coding tasks graded by whether the result works, does gstack beat no ski
 
 ## Arms
 
-Every arm runs Claude Code 2.1.312 with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`. Two bundled skills, `doctor` and `plugin-authoring`, still load in every arm (GSTA-10's finding). The arm is a tarball extracted into `/root` at trial start.
+Every arm runs Claude Code 2.1.312 with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`. Two bundled skills, `doctor` and `plugin-authoring`, still load in every arm (GSTA-10's finding). The arm is a tarball extracted into `/root` during Harbor's agent setup, before the agent timer starts.
 
 | Arm | What it is | Tarball sha256 |
 |---|---|---|

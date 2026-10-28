@@ -14,6 +14,7 @@ Per trial it:
      /logs/artifacts/, and closes the session (which settles the ledger row).
 """
 
+import asyncio
 import hashlib
 import json
 import subprocess
@@ -62,12 +63,20 @@ ALIAS_ENV = (
 )
 
 
+_DIGESTS: dict[tuple[str, int, int], str] = {}
+
+
 def sha256_file(path: Path) -> str:
+    st = path.stat()
+    key = (str(path), st.st_size, st.st_mtime_ns)
+    if key in _DIGESTS:
+        return _DIGESTS[key]
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
-    return h.hexdigest()
+    _DIGESTS[key] = h.hexdigest()
+    return _DIGESTS[key]
 
 
 def post_json(url: str, body: dict, timeout: float = 30) -> dict:
@@ -95,6 +104,7 @@ class LanebOptions(ClaudeCodeOptions):
 
 class LanebAgent(ClaudeCode):
     options_model = LanebOptions
+    DEFAULT_SETUP_TIMEOUT_SEC = 900.0
 
     @staticmethod
     def name() -> str:
@@ -116,7 +126,12 @@ class LanebAgent(ClaudeCode):
     def _exec(self, container: str, script: str, stdin: bytes | None = None, timeout: float = 300) -> subprocess.CompletedProcess:
         return subprocess.run(["docker", "exec", "-i", container, "sh", "-c", script], input=stdin, capture_output=True, timeout=timeout)
 
-    def _inject_arm(self, container: str, log) -> dict:
+    async def setup(self, environment: BaseEnvironment) -> None:
+        await super().setup(environment)
+        container = self._container_id(environment)
+        self._arm_info = await asyncio.to_thread(self._inject_arm, container)
+
+    def _inject_arm(self, container: str) -> dict:
         tar = Path(self.options.arm_tar)
         digest = sha256_file(tar)
         with tar.open("rb") as f:
@@ -124,9 +139,7 @@ class LanebAgent(ClaudeCode):
         if res.returncode != 0:
             raise RuntimeError(f"arm extract failed: {res.stderr[-500:]!r}")
         listing = self._exec(container, "ls -1 /root/.claude/skills 2>/dev/null | sort").stdout.decode().split()
-        info = {"event": "arm", "arm": self.options.arm, "tar_sha256": digest, "skills_dirs": len(listing)}
-        log(info)
-        return info
+        return {"event": "arm", "arm": self.options.arm, "tar_sha256": digest, "skills_dirs": len(listing)}
 
     def _export_patch(self, container: str) -> dict:
         repo = self.options.repo_dir
@@ -147,7 +160,8 @@ class LanebAgent(ClaudeCode):
         log = sim.log
 
         container = self._container_id(environment)
-        arm_info = self._inject_arm(container, log)
+        arm_info = self._arm_info
+        log(arm_info)
 
         auth = self._resolve_auth_env()
         base_url = auth.get("ANTHROPIC_BASE_URL")
