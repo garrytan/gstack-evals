@@ -282,6 +282,28 @@ describe('providers against the fake upstream', () => {
     fs.writeFileSync(path.join(t1, 'baseline.json'), JSON.stringify({ prompt: rel, prompt_sha256: '0'.repeat(64), text: 'NO FINDINGS', usd: 0 }));
     expect(loadUnit(dir, { case: 'd1', kind: 'defect', specialists: [], diff_lines: 10 }, 'haiku', 'baseline', 1).complete).toBe(false);
   });
+  test('a stored reply the provider ended in error counts as missing', () => {
+    const dir = tmp();
+    const t1 = path.join(dir, 'deepseek/d1/baseline/t1');
+    fs.mkdirSync(t1, { recursive: true });
+    fs.writeFileSync(path.join(t1, 'baseline.json'), JSON.stringify({ text: '', stop: 'error', usd: 0, usage: { prompt_tokens: 10, completion_tokens: 8000, cost: 0 } }));
+    expect(loadUnit(dir, { case: 'd1', kind: 'defect', specialists: [], diff_lines: 10 }, 'deepseek', 'baseline', 1).complete).toBe(false);
+  });
+  test('an OpenRouter reply that ends in error settles at the worst case as a provider failure', async () => {
+    const srv = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => Response.json({ provider: 'DeepSeek', model: 'x', choices: [{ message: { content: '' }, finish_reason: 'error' }], usage: { prompt_tokens: 1000, completion_tokens: 2000, cost: 0 } }) });
+    const u = process.env.OPENROUTER_BASE_URL;
+    process.env.OPENROUTER_BASE_URL = 'http://127.0.0.1:' + srv.port;
+    try {
+      const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
+      l.approve(QUOTES, 'test');
+      const e = await meteredCall(l, 'z', MODELS.deepseek!, 'p').catch(x => x);
+      expect(e).toBeInstanceOf(ProviderError);
+      expect(e.http).toBe(true);
+      const s = l.rows().find(x => x.type === 'settle');
+      expect(s.outcome).toBe('error');
+      expect(s.usd).toBeCloseTo(worstUsd(MODELS.deepseek!, 1), 6);
+    } finally { process.env.OPENROUTER_BASE_URL = u; srv.stop(true); }
+  });
   test('a reply cut off before any answer is complete, empty and counted', () => {
     const dir = tmp();
     const t1 = path.join(dir, 'haiku/d1/baseline/t1');
