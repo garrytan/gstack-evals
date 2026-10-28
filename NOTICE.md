@@ -49,5 +49,5 @@ SOFTWARE.
 
 | Project | How gstack-evals uses it | Licence |
 |---|---|---|
-| [gstack](https://github.com/garrytan/gstack) | Lane A reads gstack's skill eval contract (docs/designs/SKILL_EVAL_CONTRACT.md) and applies the same task-file rules as its `checkEvalTasks` without copying code. Keyless tests read gstack's committed task files and run its scripts/review-dispatch-compare.ts from a checkout. | MIT |
-| Harbor | The candidate Lane B task format and trial runner, settled by the U8 spike. If any Harbor file is ever vendored, its NOTICE and the Apache-2.0 change-marking rules apply. | Apache-2.0 |
+| [gstack](https://github.com/garrytan/gstack) | Lane A reads gstack's skill eval contract (docs/designs/SKILL_EVAL_CONTRACT.md) and applies the same task-file rules as its `checkEvalTasks` without copying code. Keyless tests read the vendored copies of its task files listed above. An opt-in parity test, set by `GSTACK_CHECKOUT`, runs `checkEvalTasks` itself from a checkout. U13's keyless test will run its scripts/review-dispatch-compare.ts from a checkout. | MIT |
+| Harbor | The Lane B task format and trial runner, chosen by the U8 spike. spikes/harbor/ imports Harbor at run time and copies none of its files. If any Harbor file is ever vendored, its NOTICE and the Apache-2.0 change-marking rules apply. | Apache-2.0 |

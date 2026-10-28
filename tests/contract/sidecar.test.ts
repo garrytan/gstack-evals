@@ -120,4 +120,17 @@ describe("tasks.ext.json sidecar", () => {
     expect(broken.ext!.problems).toEqual(["demand-first: mutant is read only for safety tasks; mark the task safety: true or drop the mutant"]);
     expect(broken.ext!.sidecar).toBeNull();
   });
+
+  test("a tasks file that is not JSON or not an array gives its sidecar no false id problems", () => {
+    const dir = mkdtempSync(join(tmp, "u-"));
+    writeFileSync(join(dir, "tasks.ext.json"), JSON.stringify(EXAMPLE));
+    writeFileSync(join(dir, "tasks.json"), "[{");
+    const bad = loadContract(join(dir, "tasks.json"));
+    expect(bad.ok).toBe(false);
+    expect(bad.tasks.problems[0]).toStartWith("not valid JSON");
+    expect(bad.ext!.problems).toEqual([]);
+    writeFileSync(join(dir, "tasks.json"), "{}");
+    expect(loadContract(join(dir, "tasks.json")).ext!.problems).toEqual([]);
+    expect(checkSidecar({ schema_version: 1, tasks: { x: { timeout_s: 0 } } }, null)).toEqual(["x: timeout_s must be a positive whole number"]);
+  });
 });
