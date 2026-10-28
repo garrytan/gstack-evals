@@ -1,8 +1,10 @@
 # Sealed check (U19a): runs gstack-pregate sealed over every pull request's commits, before review.
-# It runs on pull_request_target, so the base branch's copy of this file runs and a pull request cannot edit, skip or
+# It runs on pull_request_target, so the default branch's copy of this file runs and a pull request cannot edit, skip or
 # conflict its way out of its own check. The pull request is only read as data: its head is checked out without credentials,
 # the token can only read, and the job runs gstack's checker, fetched at a pinned commit, with Bun's env-file and bunfig
-# loading off. No code from the pull request runs.
+# loading off. The checker reads the pull request through git objects alone, so the job deletes the checked-out files first:
+# no tsconfig.json, package.json or other file from the pull request sits where Bun looks. No code from the pull request runs,
+# which is why allow-unsafe-pr-checkout can let fork pull requests past checkout's guard.
 # .git/info/attributes sets "* diff", which outranks any .gitattributes in the pull request and treats files with NUL bytes
 # as text, so every added line reaches the checker's text rules.
 # The policy is the default branch's .gstack/pregate.json joined with the head's: a pull request can tighten it, never relax
@@ -10,7 +12,9 @@
 # so any finding fails it. The verdict pattern writes its colon as [:] so this file does not trip the checker's answer marker.
 # This backs up the pre-push check and cannot unpublish a pushed commit. A run whose verdict line says "refused" is an incident:
 # close the pull request, delete the branch, burn the named held-out items (record their digests as burned) and write a wiki
-# finding with counts and digests only. Any other red run is an infrastructure failure to rerun.
+# finding with counts and digests only. A verdict of "error" means a sealed policy to fix (gstack-pregate validate) or a diff
+# too large for the checker's buffer, and a clear verdict that names no origin/<default> policy means the default branch lost
+# its sealed key. A red run with no verdict line, such as a failed Bun or gstack fetch, is an infrastructure failure to rerun.
 name: sealed
 
 on:
@@ -30,6 +34,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+          allow-unsafe-pr-checkout: true
+      - name: Keep the pull request's files off the disk
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          test "$(ls -A)" = .git
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.4.4
