@@ -1,0 +1,21 @@
+{
+  "name": "gstack-evals",
+  "version": "0.0.0",
+  "description": "An outcome-graded eval rig for gstack.",
+  "type": "module",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/garrytan/gstack-evals.git"
+  },
+  "scripts": {
+    "test": "bun test test/",
+    "typecheck": "tsc --noEmit",
+    "wiki:index": "bun scripts/wiki.ts index",
+    "wiki:check": "bun scripts/wiki.ts check"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}
