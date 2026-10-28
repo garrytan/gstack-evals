@@ -244,7 +244,7 @@ The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE 
 
 Fix: Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/).
 
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+Exit 2. Side effects: None: refused before any spend. If the local ledger failed after a lease was recorded, that lease is closed at $0 in the record. Retry safe: yes. Resumable: no. Owner: U4.
 
 ### E_LEASE_UNSETTLED
 

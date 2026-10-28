@@ -12,6 +12,7 @@ import { isMicros, usd } from "./money.ts";
 import { isRecordFile, ITEM_NAME, LedgerError, listItems, readItem, slotPath, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
+export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
 const ESCALATE = "a human must approve a cap and record it with their exact words (docs/budget-ledger.md); on Capy, ask your Captain through a needs-you report";
 
 /** A stable id for this machine that does not publish /etc/machine-id itself. */
@@ -130,7 +131,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     throw new LedgerError("CAP_STOP", "line item " + req.item + " has " + usd(Math.max(left, 0)) + " left of its " + usd(cap) + " cap (" + usd(state.committed_micros) + " committed); this lease asks for " + (isMicros(amount) ? usd(amount) : String(amount)));
   }
   const ttl = req.ttl_ms ?? DEFAULT_LEASE_TTL_MS;
-  if (!Number.isSafeInteger(ttl) || ttl <= 0) throw new LedgerError("E_USAGE", "a lease's time to live must be a positive whole number of milliseconds, not " + ttl);
+  if (!Number.isSafeInteger(ttl) || ttl <= 0 || ttl > MAX_LEASE_TTL_MS) throw new LedgerError("E_USAGE", "a lease's time to live must be a whole number of milliseconds from 1 to " + MAX_LEASE_TTL_MS + " (7 days), not " + ttl);
   const now = req.now ?? new Date();
   const seq = state.leases.length + 1;
   const file: LeaseFile = {
@@ -152,7 +153,23 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     admit(record, read(record, req.item), req.run_id);
     throw new LedgerError("E_LEASE_UNSETTLED", "another lease on line item " + req.item + " was written at the same moment; read gstack-evals ledger status");
   }
-  local?.addLease(file);
+  try {
+    local?.addLease(file);
+  } catch (error) {
+    let held: ReturnType<LocalLedger["getLease"]> | undefined;
+    try {
+      held = local!.getLease(file.lease_id);
+    } catch {}
+    if (held === null) {
+      const zero: CloseFile = { schema: 1, kind: "close", item: file.item, seq: file.seq, lease_id: file.lease_id, how: "settled", spent_micros: 0, unknown_micros: 0, unknown_calls: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 }, closed_at: now.toISOString() };
+      if (typeof write(record, zero, "E_LEASE_UNSETTLED") !== "object") {
+        throw new LedgerError("E_LEDGER_PATH", "lease " + file.lease_id + " was recorded, but the local ledger " + local!.path + " could not hold it (" + (error as Error).message + "); no call can spend against it, so it is closed at $0. Fix the local ledger and lease again.");
+      }
+    }
+    if (!held || JSON.stringify(held.file) !== JSON.stringify(file)) {
+      throw new LedgerError("E_LEASE_UNSETTLED", "lease " + file.lease_id + " is in the approval record, but the local ledger " + local!.path + " failed while adding it (" + (error as Error).message + "); settle it on this machine once its ledger works, or the owner reconciles it after it expires at " + file.expires_at);
+    }
+  }
   return toLease(file, "open");
 }
 

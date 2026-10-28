@@ -17,8 +17,8 @@ export const HELP = `Usage: gstack-evals ledger <command> [options]
             --admission required makes every lease wait for a rig admission record; warn only warns. It never changes.
   raise     (the same flags but --admission) Record a higher cap for a line item.
   lease     --item <name> --run <id> [--amount <usd>] [--ttl <hours>] [--machine <id> --export <file>]
-            Lease a line item for a run. The first lease binds the item to that run. --export writes the lease for
-            a sealed workflow instead of holding it here.
+            Lease a line item for a run. The first lease binds the item to that run. --ttl is 24 by default, at most
+            168. --export writes the lease for a sealed workflow instead of holding it here.
   lease     --lease <id> --export <file> Write an open lease's export again.
   lease     --from <lease file>          In the sealed workflow: hold an exported lease in this machine's ledger.
   settle    --lease <id> [--artifact <file>]

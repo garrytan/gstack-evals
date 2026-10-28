@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem, slotPath, writeOnce } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
@@ -309,3 +309,35 @@ describe("the sealed workflow's lease round trip", () => {
     expect(JSON.parse(readFileSync(slotPath(record, { kind: "lease", item: "lanea", seq: 1 }), "utf8")).machine_id).toBe("workflow:sealed-repo");
   });
 });
+
+describe("lease guards from the /ship review", () => {
+  test("a lease the local ledger cannot hold is closed at $0, so its allowance is not stranded; if the ledger cannot even be read, the lease stays reserved", () => {
+    const { dir, record, local } = setup();
+    local.addLease = () => {
+      throw new Error("disk I/O error");
+    };
+    expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("E_LEDGER_PATH");
+    expect(readItem(record, "lanea").leases[0]!.close).toMatchObject({ how: "settled", spent_micros: 0, unknown_micros: 0, unknown_calls: 0 });
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 0, open_lease: null });
+    const healthy = LocalLedger.open(join(dir, "machine-b.sqlite"));
+    const second = openLease(record, healthy, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    settleLease(record, healthy, second.lease_id);
+    const broken = LocalLedger.open(join(dir, "machine-c.sqlite"));
+    broken.addLease = broken.getLease = () => {
+      throw new Error("disk I/O error");
+    };
+    expect(codeOf(() => openLease(record, broken, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("E_LEASE_UNSETTLED");
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: DOLLAR, leases: 3 });
+    local.close();
+    healthy.close();
+  });
+
+  test("a time to live past 7 days, including one past the Date range, is E_USAGE and writes no lease", () => {
+    const { record, local } = setup();
+    for (const ttl_ms of [9e15, MAX_LEASE_TTL_MS + 1]) expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", ttl_ms }))).toBe("E_USAGE");
+    expect(readItem(record, "lanea").leases).toEqual([]);
+    expect(openLease(record, local, { item: "lanea", run_id: "run-a", ttl_ms: MAX_LEASE_TTL_MS }).reserved_micros).toBe(10 * DOLLAR);
+    local.close();
+  });
+});
+
