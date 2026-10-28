@@ -34,7 +34,7 @@ gstack-evals --help
 | [docs/](docs/) | Reason codes and adapters so far |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
 | [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. Start with [wiki/INDEX.md](wiki/INDEX.md) |
-| [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push |
+| [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push, and again in CI on every pull request ([sealed.yml](.github/workflows/sealed.yml)) |
 | [NOTICE.md](NOTICE.md) | Every vendored or planned-vendored source and its licence |
 | [TODOS.md](TODOS.md) | Open items carried from the plan |
 
