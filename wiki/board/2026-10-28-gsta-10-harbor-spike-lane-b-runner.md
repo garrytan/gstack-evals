@@ -2,7 +2,7 @@
 id: 2026-10-28-gsta-10-harbor-spike-lane-b-runner
 kind: finding
 title: Harbor spike, all six checks pass, so Harbor is the Lane B runner
-summary: Harbor passed all six U8 checks against a fake upstream, with no API spend. Harbor runs Lane B, pinned to a commit, with our own SDK agent run as non-root, on kernels with nftables inet.
+summary: Harbor passed all six U8 checks against a fake upstream, with no API spend. Harbor runs Lane B, pinned to a commit, with our own SDK agent on nftables-inet kernels, once M2a drops the agent's NET_RAW.
 author: GSTA-10
 model: anthropic/claude-opus-5-5
 captain: GSTA-2

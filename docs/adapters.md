@@ -25,7 +25,7 @@ Owner of isolation and egress: **Harbor**, chosen by the U8 spike ([finding](../
 | Phase | Policy | Why |
 |---|---|---|
 | `[environment]` (setup) | `no-network` | Nothing installs during a trial |
-| `[agent]` | `allowlist` with no hosts listed | Harbor allowlists the proxy's base URL on its own; nothing else is reachable |
+| `[agent]` | `allowlist` with no hosts listed | Harbor allowlists the proxy's base URL on its own and refuses other TCP; DNS, ICMP and marked packets are the exceptions below |
 | `[verifier]` | separate environment | Grading never shares the agent's container |
 
 Harbor's Docker egress sidecar shares its network namespace with the agent container. Its nftables rules redirect TCP through a proxy that matches on SNI, Host or IP and reject other traffic, with three exceptions: DNS to the container's resolver, all ICMP, and any packet carrying the sidecar's own mark (114514). DNS and ICMP stay open as slow side channels; Lane B containers hold no answer keys, so that is accepted and stated. The mark is not: a root process with Docker's default capabilities can set it (`SO_MARK` needs only `CAP_NET_RAW` on Linux 5.17 and later) and bypass the allowlist. So the agent runs as a non-root user in a container that drops `NET_RAW` and `NET_ADMIN`, and preflight runs a marked-socket probe that must fail. WebSearch and WebFetch are removed under a restricted policy, and the metering proxy refuses requests that declare server-side tools.
