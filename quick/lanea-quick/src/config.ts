@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 export const WORK = process.env.LANEA_WORK ?? join(homedir(), ".capy/work/lanea-quick");
 export const GSTACK_REPO = process.env.LANEA_GSTACK ?? join(homedir(), ".capy/work/gstack");
-export const LEDGER_PATH = process.env.LANEA_LEDGER ?? "/home/user/.capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl";
+export const LEDGER_PATH = process.env.LANEA_LEDGER ?? join(homedir(), ".capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl");
 export const CAP_USD = 130;
 export const LINE_ITEM = "lanea-quick";
 

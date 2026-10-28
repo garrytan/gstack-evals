@@ -3,7 +3,7 @@ import { gradePatterns, loadedBytes, parseTranscript, skillUse, transcriptText }
 
 const msgs = [
   { type: "assistant", message: { content: [{ type: "tool_use", name: "Skill", input: { skill: "office-hours" } }] } },
-  { type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/home/agent/.claude/skills/gstack/office-hours/sections/preamble.md" } }] } },
+  { type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/work/.claude/skills/gstack/office-hours/sections/preamble.md" } }] } },
   { type: "assistant", message: { content: [{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ question: "What's your goal?", header: "Goal", options: [{ label: "Building a startup", description: "" }, { label: "Hackathon / demo", description: "" }] }] } }] } },
   { type: "assistant", message: { content: [{ type: "text", text: "PREMISES:\n1. x. Do you agree?" }] } },
   { type: "assistant", message: { content: [{ type: "text", text: "Done.\n```py\nimport os\n```" }] } },
