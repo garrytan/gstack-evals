@@ -1,0 +1,417 @@
+{
+  "gstack_repo": "garrytan/gstack",
+  "excluded": {
+    "297": "a feature (tier override), not a defect fix",
+    "2772": "fix makes a vague instruction literal (where to record UNAVAILABLE); no failing behaviour named",
+    "3074": "a timeout too short for arm64 Rails builds; not findable from the diff",
+    "3491": "the single-file fix is help text; the behaviour fixes sit in lib/restamp.ts, which the miner could not isolate",
+    "3527 scripts/resolvers/review-army.ts": "a size-pin wording change, not a defect",
+    "1916 scripts/resolvers/review.ts": "a refactor to fit a parity budget, not a defect",
+    "3515 other passes": "one case per PR (pass 2 kept)",
+    "3426 bin/gstack-browser-ensure": "one case per PR (the setup fallback kept; the other is a remediation hint)",
+    "3422 design-html/sections/craft.md.tmpl": "one case per PR",
+    "3475 bin/gstack-capy-install": "one case per PR"
+  },
+  "cases": [
+    {
+      "id": "d01",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3515,
+      "title": "v1.91.279.0 eval:select exemptions and ETHOS.md registration (#3499), below-floor review rulings (#3504, #3485), Windows curation, GSTA-121 follow-ups",
+      "base": "e08612e50d7c8905e6d1c4b0a5f5a7b9da0d58f1",
+      "head": "1f77181596c490cb26b72ce8e617d07e7c7ba8a6",
+      "scope": "fix-range",
+      "file": "scripts/ubicloud/ubi-runner.sh",
+      "lines": [
+        [
+          610,
+          610
+        ]
+      ],
+      "fix": "f1635d0f6311ee7760249c615fb5a0923dd1e371",
+      "fix_pr": 3515,
+      "defect": "cmd_pack sets its EXIT trap in single quotes on a function-local $tmp. When a set -e failure unwinds the function, the trap runs after the local is gone, $tmp expands empty, and the temporary snapshot directory leaks.",
+      "diff_lines": 38,
+      "diff_sha256": "7f3d2ac8c60ec19f07a9a3d6d72981ee9c7e67104e667336bee2156dfa226eda",
+      "fix_diff_sha256": "90a0770e5d5fd2ef1d94f4321b3b70d9663e827bebdc23550b8982bb16d3b226"
+    },
+    {
+      "id": "d02",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3540,
+      "title": "v1.91.294.0 fix(doctor): cut Git Bash process starts so the doctor tests fit Windows CI (GSTA-138)",
+      "base": "9e3308f65adf547b7e4776e5ed22467a2649d2ee",
+      "head": "115355a38bd60322d9452d9f9ac9c58d2709470a",
+      "scope": "full",
+      "file": "bin/gstack-doctor",
+      "lines": [
+        [
+          96,
+          96
+        ],
+        [
+          103,
+          103
+        ]
+      ],
+      "fix": "0e2e112182f79c424d789bdc988de8408643058b",
+      "fix_pr": 3540,
+      "defect": "cfg() calls gstack_config_select, which reselects the state root and overwrites _gstack_sr_var. After the doctor has set GSTACK_STATE_ROOT, the --check and --json state-root row therefore always says the root was selected by GSTACK_STATE_ROOT, whatever really selected it.",
+      "diff_lines": 65,
+      "diff_sha256": "1a8993c9e2d11ffa2fdb436b1a7e837370b94f6c5cff4396b5db97c24ac6b8d6",
+      "fix_diff_sha256": "f2632ced803066a22876885c104fc27d7fdadc6c87b9f77bc1d30a38cbc0de1f"
+    },
+    {
+      "id": "d03",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3527,
+      "title": "feat(ship): /ship and /autoplan size their review to the diff (GSTA-131)",
+      "base": "c5e13f9167a7a2dd60a47d189214363110576e76",
+      "head": "243ca8ea21e1cf43a9b073fd6d6592c0bc2f3c91",
+      "scope": "fix-range",
+      "file": "ship/sections/adversarial.md.tmpl",
+      "lines": [
+        [
+          3,
+          4
+        ]
+      ],
+      "fix": "f659bd6d5ca76a82fb468a7f6bf93c18023b8e6c",
+      "fix_pr": 3527,
+      "defect": "The step prints ADVERSARIAL: skipped (review plan) only when the plan has neither DISPATCH line. On a plan with only the outside-voice line the native pass is skipped with no skip line printed, so the skip is silent.",
+      "diff_lines": 97,
+      "diff_sha256": "7c84b0ea5e2514f02b8019eddff6a49e56d22da62b9d4bf0660a51d0c4496c79",
+      "fix_diff_sha256": "69b69d7a065be79945b05807caf5f429906f6914f42d92cf8832f991b6c528fa"
+    },
+    {
+      "id": "d04",
+      "kind": "defect",
+      "source": "missed",
+      "pr": 339,
+      "title": "fix: add codex skill metadata for gstack discovery",
+      "base": "faff8a2f07eb5185e981e6057346589733e47315",
+      "head": "0bff8d66a2605aa602b6ccd6d6685b6695dd1905",
+      "scope": "full",
+      "file": "scripts/gen-skill-docs.ts",
+      "lines": [
+        [
+          2912,
+          2913
+        ]
+      ],
+      "fix": "ffd9ab29b932f6372d7d7746d7a2cddc993b4e75",
+      "fix_pr": 391,
+      "defect": "transformFrontmatter re-emits the Codex frontmatter with the full skill description and no length check. Codex rejects a skill description over 1024 characters, so a long description yields a Codex SKILL.md that fails to load, and the build does not catch it.",
+      "diff_lines": 111,
+      "diff_sha256": "94c0d1597eef64e91c9d7d88f7ca898e1e523e3c5a000818c8d85f93f4b31b55",
+      "fix_diff_sha256": "fd61b67c82cbf5e0257bdf90a9f139a330ac04ce089c220a79a8b8e874faa995"
+    },
+    {
+      "id": "d05",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 1916,
+      "title": "v1.57.7.0 feat: GSTACK REVIEW REPORT always declares unresolved decisions",
+      "base": "9cc41b7163685d748b8ba98d771ed7a48a7c23a4",
+      "head": "49035bdd88990402f38730f1de3309ce16f53f67",
+      "scope": "full",
+      "file": "plan-devex-review/sections/review-sections.md.tmpl",
+      "lines": [
+        [
+          346,
+          346
+        ]
+      ],
+      "fix": "7ffccb929c07359544d3a4819a71edb08f387ab6",
+      "fix_pr": 1916,
+      "defect": "The compressed review-log instruction says how to fill STATUS and COMMIT but no longer says how to fill TIMESTAMP, so the agent writes the literal \"timestamp\":\"TIMESTAMP\". The dashboard cannot parse that date, and its 7-day freshness window silently drops the plan-devex-review row.",
+      "diff_lines": 129,
+      "diff_sha256": "5e52791ef33eaff122502f6e3b93a36347aa2794e4983f58c78a044c9e7d5cbe",
+      "fix_diff_sha256": "1adcf2a192562b071f82093c87511064d7a8699e564c3d960239d65047a53a7e"
+    },
+    {
+      "id": "d06",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3422,
+      "title": "v1.91.230.0 feat(design-shotgun,design-html): archetype handoff and persisted craft exceptions (GSTA-92 phase 2)",
+      "base": "7bd3fb4a402c6e272338f2bd44c0ceab60438670",
+      "head": "3570a6e5153f3c84507cba5d8600b7e298e80270",
+      "scope": "full",
+      "file": "bin/gstack-design-craft",
+      "lines": [
+        [
+          10,
+          13
+        ],
+        [
+          39,
+          40
+        ],
+        [
+          44,
+          45
+        ],
+        [
+          50,
+          50
+        ]
+      ],
+      "fix": "1a1f2cebdc72808759fd4b4b92c0e8a43e76f7f0",
+      "fix_pr": 3422,
+      "defect": "When the --accepted exceptions file is missing or malformed, the tool prints an error and exits 2 with no CRAFT_RESULT line. The craft section reads a missing CRAFT_RESULT as check unavailable, so one bad finalized.json turns the craft gate off (fails open) instead of running the full check.",
+      "diff_lines": 201,
+      "diff_sha256": "1fc3d0ff61a8a9628b21a1e3a0716dae36183ee2d6191b07d50c24573e5394b6",
+      "fix_diff_sha256": "eff2eb1b37be589b7f9260c15adce9dae1b2b1b261bef5d8aaeb5970bbd9624e"
+    },
+    {
+      "id": "d07",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3426,
+      "title": "v1.91.231.0 fix(setup): install production dependencies only (~520 MB smaller install) (GSTA-97)",
+      "base": "c23d7d48fe273e54776192f23c4f272ce6ab4d2d",
+      "head": "748c45a4a48ed2b593f155d643caf23272b5be17",
+      "scope": "full",
+      "file": "setup",
+      "lines": [
+        [
+          1718,
+          1719
+        ],
+        [
+          1720,
+          1720
+        ]
+      ],
+      "fix": "a3d402d07e850f112ef422fd99e021e98bb8994c",
+      "fix_pr": 3426,
+      "defect": "install_runtime_deps falls back to bun install --production after the --frozen-lockfile install fails, but Bun's --production implies a frozen lockfile, so the fallback cannot recover a stale bun.lock: a fork or local edit that leaves the lockfile out of date makes the dependency install fail.",
+      "diff_lines": 216,
+      "diff_sha256": "6f209fd0b7b61327c0cce2039bac590fae0ebab221c5cc880cd917131abb63c6",
+      "fix_diff_sha256": "bb8aca751cff5f782cb67d5a0aedf41836c6e6f73706601722dc5082b2df307d"
+    },
+    {
+      "id": "d08",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 1296,
+      "title": "v1.25.1.0 fix: office-hours Phase 4 STOP gate + AskUserQuestion recommendation judge",
+      "base": "7658179879945f3b12c242a0f15405c243f57eb4",
+      "head": "9a424a9f5578ae0e2576c335060976af83b118fe",
+      "scope": "fix-range",
+      "file": "office-hours/SKILL.md.tmpl",
+      "lines": [
+        [
+          416,
+          416
+        ]
+      ],
+      "fix": "640b4e3597ae3b4ae4f82f14c6082d6214569c8f",
+      "fix_pr": 1296,
+      "defect": "The fallback for a session with no callable AskUserQuestion always writes ## Decisions to confirm into the plan file and calls ExitPlanMode, even outside plan mode, where there is no plan file or plan mode to exit. Outside plan mode it should output the decision brief as prose and stop.",
+      "diff_lines": 238,
+      "diff_sha256": "6f0e3689de27a7c8d77a74b9e79e29a668bb0ef09cde7ac32c95649c38102873",
+      "fix_diff_sha256": "cc7be810d4cc3af5efa94a7bf25299fd22edc25b528b8632174b31d71f57f97c"
+    },
+    {
+      "id": "d09",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3475,
+      "title": "v1.91.258.0 feat(capy-install): project floor, --for none, WARN for behind and Node-only pins, in-place review-voice upgrade, /cso env hygiene (GSTA-114 lane F, PR 1)",
+      "base": "5755601dac5d35ebd7dde181fdefe52a023c73d9",
+      "head": "761a22b38b5445c7a4cd3585819399cb5e3d629f",
+      "scope": "full",
+      "file": "bin/gstack-doctor-check.sh",
+      "lines": [
+        [
+          481,
+          481
+        ],
+        [
+          495,
+          496
+        ],
+        [
+          498,
+          499
+        ]
+      ],
+      "fix": "b01754469dd44f983e2f952d3f0b405acc566ddf",
+      "fix_pr": 3475,
+      "defect": "The project-floor reader pipes the whole policy file through tr (twice) before sed, with no size bound, so a very large .gstack/ship-policy.json is read and held whole (about 2 GB of memory for a 95 MB file).",
+      "diff_lines": 633,
+      "diff_sha256": "a321bbeeb016b89223ff8c5900d298f91407c710fcf287457bc65437e3ee07ac",
+      "fix_diff_sha256": "3d3b26bb508004675e0dc791a2d7f6b63821947a57d5c7740d62f5973bc34840"
+    },
+    {
+      "id": "d10",
+      "kind": "defect",
+      "source": "review-caught",
+      "pr": 3501,
+      "title": "v1.91.273.0 feat(ship): PR bodies open with the problem and a Blast radius line, and gstack-prose-lint catches autopilot phrasing before /ship publishes a CHANGELOG entry or PR body",
+      "base": "576839cb8ce73c08a05a71efa91e80ca19fa630b",
+      "head": "a681c00a2bec080306c651a64c32988a5822f86c",
+      "scope": "full",
+      "file": "lib/prose-lint.ts",
+      "lines": [
+        [
+          113,
+          116
+        ],
+        [
+          119,
+          120
+        ],
+        [
+          174,
+          175
+        ],
+        [
+          175,
+          176
+        ]
+      ],
+      "fix": "0a741933beb6a82989de2a9358af1f76a2b89ea4",
+      "fix_pr": 3501,
+      "defect": "maskProse looks for an unterminated <!-- before it masks inline code, so a <!-- inside a backtick code span opens a multi-line comment and blanks the following lines, hiding them from every lint rule. sectionsOnly likewise treats a ## line inside a fenced code block as a section heading.",
+      "diff_lines": 743,
+      "diff_sha256": "07cb535f30caa03efb6b4e179d39768612be5a2d52de5321e054214ed9df9713",
+      "fix_diff_sha256": "8d71891810db6c8296e9c295d9537729f3910fb566de2e2fca4fc37cfa5e932f"
+    },
+    {
+      "id": "y01",
+      "kind": "decoy",
+      "pr": 3517,
+      "title": "v1.91.280.0 fix(flaky): ubi-runner quota wait counts down; pregate TERM teardown and design-lint linearity measure what they mean (GSTA-128)",
+      "base": "b3e94a3f8d1cbaceb9103e9ce777e622fdc75906",
+      "head": "703b0049ebbef6be23e687a2ae9b18d24c5798fc",
+      "receipt": "REVIEW_LOOP blocking_found=0",
+      "matched_to": "d01",
+      "later_fixes_checked": 6,
+      "diff_lines": 60,
+      "diff_sha256": "33e8bce3ec3fbd109a48221c9cc6a769ef878ece7d56840fd7f50922081e7a4c"
+    },
+    {
+      "id": "y02",
+      "kind": "decoy",
+      "pr": 3520,
+      "title": "v1.91.283.0 fix(benchmark): reconcile the collection, comparison, budget and trend phases with the vet-the-number section (GSTA-128)",
+      "base": "9ccb5233f309293d238c6f8e609ae6dc07ece03d",
+      "head": "215c76e334a071441f98a36e1806f45526751663",
+      "receipt": "REVIEW_LOOP blocking_found=0",
+      "matched_to": "d02",
+      "later_fixes_checked": 3,
+      "diff_lines": 71,
+      "diff_sha256": "a12067fe960160fa5131831fa7890d300edf1fa52bf8a05ec799797c5e7f1751"
+    },
+    {
+      "id": "y03",
+      "kind": "decoy",
+      "pr": 1475,
+      "title": "v1.34.1.0 fix: gstack-update-check resists stale GitHub raw CDN + adds semver-order guard",
+      "base": "0c88517a0fc96f9776542b0cafe29e7982b87e30",
+      "head": "386fe518f9ac5902997815712f208155c7d891dd",
+      "receipt": "Pre-Landing Review: No issues found. Manual adversarial pass on my own diff caught one real concern before commit: `git ls-remote` has no bui",
+      "matched_to": "d03",
+      "later_fixes_checked": 17,
+      "diff_lines": 79,
+      "diff_sha256": "58308f4a0858f68a6ea411f56697841e93f6b5cc1619dc263c9e7a34471445a8"
+    },
+    {
+      "id": "y04",
+      "kind": "decoy",
+      "pr": 3474,
+      "title": "v1.91.250.0 fix(tests): remove three free-tier fixture races (GSTA-107 daily flaky pass)",
+      "base": "3ab7b149c908ceeeef97c9c68704e71569effcc0",
+      "head": "39b06e22afeabe25d73f5b7617427cc3f7dc2b68",
+      "receipt": "Review loop: 3 passes (CREW rule 23 cap; pass 1 whole diff, passes 2 and 3 delta only; pass 3 found nothing new). Pass 1 (whole diff; 3 speci",
+      "matched_to": "d04",
+      "later_fixes_checked": 10,
+      "diff_lines": 75,
+      "diff_sha256": "113728da90873324451485f58ce790bf2824e5982b527c8476ecda360e54bdf4"
+    },
+    {
+      "id": "y05",
+      "kind": "decoy",
+      "pr": 3509,
+      "title": "v1.91.271.0 fix(evals): run train-bisect steps under bash; lint sh-run workflow steps for bash-isms",
+      "base": "f27a7605d4b2f21cb4a9dcfbc938ddf6f83da87d",
+      "head": "584e9c15352de1f1c42d237dd3c268d6284bfdee",
+      "receipt": "REVIEW_LOOP blocking_found=0",
+      "matched_to": "d05",
+      "later_fixes_checked": 9,
+      "diff_lines": 188,
+      "diff_sha256": "5c074f81400a304addbf831193aae49f0759fbf85afe1572f4e833c6965b67c6"
+    },
+    {
+      "id": "y06",
+      "kind": "decoy",
+      "pr": 1284,
+      "title": "v1.23.0.0 feat: always prefix PR titles with v<VERSION>",
+      "base": "454423aeb3d3dafa88d5b57bfbe0ead05569d21e",
+      "head": "7efa85cb4f1e726b13c7ae1974331f7963aa2728",
+      "receipt": "No issues found. Diff is template prose, workflow YAML, helper script, and a unit test — no SQL, no LLM calls, no auth, no migrations, no fro",
+      "matched_to": "d06",
+      "later_fixes_checked": 22,
+      "diff_lines": 259,
+      "diff_sha256": "1eba96e9e7976af0efb90332159afb48a5d71cf6d7683c8e853d5985c983a995"
+    },
+    {
+      "id": "y07",
+      "kind": "decoy",
+      "pr": 3397,
+      "title": "v1.91.233.0 fix(plan-tune): bound each UTC day's pull on a dimension, record contributing_events (GSTA-79)",
+      "base": "0c6398f8e6c072aeceeb8d684a99e0fd32f597c5",
+      "head": "4216bbb223431be9f1bfd739eba49b71c610d78b",
+      "receipt": "Review (via ship, 2 cycles, converged): quality 9/10, 0 critical, 5 informational. Specialists: testing, maintainability, security, performan",
+      "matched_to": "d07",
+      "later_fixes_checked": 16,
+      "diff_lines": 333,
+      "diff_sha256": "5d72fa5f7d56e26bd362f47e4e18efb99d506b18698d4f8f3349f4b5f9ffccaa"
+    },
+    {
+      "id": "y08",
+      "kind": "decoy",
+      "pr": 3533,
+      "title": "v1.91.292.0 Stable channel: a regression exception beside the security one, and the stale weekly wording",
+      "base": "6f27f0c269cb33ad60b300ec10df63c2b9f296ba",
+      "head": "219f7488bbbfc33e5199ea4a5f3d31f188a7369d",
+      "receipt": "REVIEW_LOOP blocking_found=0",
+      "matched_to": "d08",
+      "later_fixes_checked": 3,
+      "diff_lines": 425,
+      "diff_sha256": "52cd37585020a8ea5d197347dc28bea7cd600068b270c84d6a6d2a02e409047d"
+    },
+    {
+      "id": "y09",
+      "kind": "decoy",
+      "pr": 3461,
+      "title": "v1.91.244.0 fix(pregate): waive version-stamp-only manifests from the lanes check (GBRA-95)",
+      "base": "8018ba52feab92262087e7236dc10d1b10e8c355",
+      "head": "d62eb914dc2ea788280fc422f514a7be8841fb46",
+      "receipt": "/ship invocation 5, unattended: five-specialist review army plus the Claude adversarial pass (codex unavailable here), four passes over three",
+      "matched_to": "d09",
+      "later_fixes_checked": 15,
+      "diff_lines": 595,
+      "diff_sha256": "13a54aaacbdbefc52fc9d3cf7e6cd495a55d859635aec87d1590a74fd0b63c7d"
+    },
+    {
+      "id": "y10",
+      "kind": "decoy",
+      "pr": 3514,
+      "title": "v1.91.278.0 fix(ship-queue): readiness takes dispatched Free Tests, stamp paths accept tentative key versions, ready and train build read the base overlap, pr-wait --exclude, restamp prints the corrected order",
+      "base": "6ff98c661693bcb0839d575e3bbef355d46e07c6",
+      "head": "1f246e3505eac788abf570d1e3f552ef939bee7f",
+      "receipt": "REVIEW_LOOP blocking_found=0",
+      "matched_to": "d10",
+      "later_fixes_checked": 7,
+      "diff_lines": 715,
+      "diff_sha256": "445be5f24b6ccc9a3cc4dc5cc528a57ec5055bac0e7572e7ceb83bef9cf97f73"
+    }
+  ]
+}
