@@ -76,8 +76,14 @@ describe("analysis", () => {
       { name: "c__1", exc: "LanebInfraError" },
       { name: "d__1", exc: "RuntimeError", evaluator: { "sdk-messages.jsonl": msg([{ type: "text", text: "hi" }]) + "\n" } },
       { name: "e__1", exc: "RuntimeError" },
+      // Extended by gstack /ship Step 7 (test coverage audit) for #25, pass 1.
+      // Value: protects=a reward that is not a finite number counts as no reward, so the model-response rule decides;
+      //   fails_when=the Number.isFinite guard goes, and NaN grades as a plain fail (paid) or turns infra into a fail;
+      //   why_new=every other fixture has a numeric reward or none; seam=none; no_claim=none beyond protects
+      { name: "f__1", reward: "n/a" as any },
+      { name: "g__1", reward: "n/a" as any },
     ]);
-    const trials = loadJobs([dir], [row("a__1", "s-1", 2_000_000, 4), row("b__1", "s-2", 500_000, 1), row("c__1", "s-3", 0, 0)]);
+    const trials = loadJobs([dir], [row("a__1", "s-1", 2_000_000, 4), row("b__1", "s-2", 500_000, 1), row("c__1", "s-3", 0, 0), row("f__1", "s-4", 300_000, 1)]);
     const by = Object.fromEntries(trials.map((t) => [t.trialName, t]));
     expect(by["a__1"]).toMatchObject({ outcome: "fail", noReward: true, costUsd: 2 });
     expect(by["a__1"].reason).toContain("VerifierTimeoutError");
@@ -85,6 +91,8 @@ describe("analysis", () => {
     expect(by["c__1"]).toMatchObject({ outcome: "infra", noReward: false, costUsd: 0 });
     expect(by["d__1"]).toMatchObject({ outcome: "fail", noReward: true, costUsd: null });
     expect(by["e__1"]).toMatchObject({ outcome: "infra", costUsd: null });
+    expect(by["f__1"]).toMatchObject({ outcome: "fail", noReward: true, costUsd: 0.3 });
+    expect(by["g__1"]).toMatchObject({ outcome: "infra", noReward: false, reason: "no verifier reward and no model response" });
   });
 
   test("cost comes from the proxy's session rows, sums retried attempts, and is never read from agent/", () => {
