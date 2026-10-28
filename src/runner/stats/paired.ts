@@ -2,7 +2,9 @@
 // which took it from gbrain-evals v0.10.128 (6999ebc9), eval/runner/stats/. MIT License, Copyright (c) 2026 Garry Tan.
 // gstack-evals changes (U2), each marked "gstack-evals:": when every paired difference is zero the bootstrap is empty,
 // so nonInferiorityP and superiorityP return null instead of p = 0 (plan v3.2 cited paired.ts:159 and :306), and
-// neither p-value short-cuts a one-draw bootstrap to 0 or 1.
+// nonInferiorityP no longer short-cuts a one-draw bootstrap to 0 or 1. superiorityP returns the clustered sign-flip p
+// that plan v3.2 names for improvement claims, not the bootstrap share, which runs anti-conservative on few tasks. An
+// eligible observation with no value names its reason when it blocks pairing.
 /**
  * Paired, clustered comparison of two runs over the same items.
  *
@@ -80,7 +82,7 @@ export function pairObservations(a: readonly Observation[], b: readonly Observat
       if (typeof row.id !== 'string' || !row.id) { problems.push(`${side}: item without an id`); continue; }
       if (typeof row.cluster !== 'string' || !row.cluster) problems.push(`${side}: ${row.id} has no cluster id`);
       if (map.has(row.id)) problems.push(`${side}: duplicate id ${row.id}`);
-      if (row.eligible && !finite(row.value)) problems.push(`${side}: ${row.id} is eligible but has no finite value`);
+      if (row.eligible && !finite(row.value)) problems.push(`${side}: ${row.id} is eligible but has no finite value${row.reason ? ` (${row.reason})` : ''}`);
       map.set(row.id, row);
     }
     return map;
@@ -316,19 +318,18 @@ export function nonInferiorityP(stats: PairedDelta, tolerance: number, direction
 }
 
 /**
- * One-sided cluster-bootstrap p-value for superiority by at least `minEffect`
- * (in metric units, oriented so a larger value is better): the share of
- * bootstrap deltas at or below `minEffect`. Rejecting (p <= alpha) means the
- * lower bound of a (1 - 2 * alpha) interval sits above `minEffect`. With
- * `minEffect` 0 this is a plain one-sided superiority test.
+ * One-sided superiority p-value (gstack-evals, plan v3.2): the clustered
+ * sign-flip p in the better direction, exact up to EXACT_CLUSTER_LIMIT
+ * clusters. A claimed improvement also needs a point estimate of at least
+ * `minEffect` (in metric units, oriented so a larger value is better), so a
+ * smaller point estimate returns 1, and the sign-flip p itself stays in
+ * `p_greater` and `p_less`. With `minEffect` 0 this is a plain one-sided
+ * sign-flip test.
  */
 export function superiorityP(stats: PairedDelta, minEffect: number, direction: 'higher' | 'lower'): number | null {
   if (!finite(minEffect) || minEffect < 0) throw new Error('superiority minimum effect must be a finite number >= 0');
   if (!stats.bootstrap.length) return null;
   const sign = direction === 'higher' ? 1 : -1;
-  const draws = stats.bootstrap.length;
-  // gstack-evals: the one-draw shortcut is gone here too.
-  let atOrBelow = 0;
-  for (const d of stats.bootstrap) if (sign * d <= minEffect + 1e-12) atOrBelow++;
-  return (atOrBelow + 1) / (draws + 1);
+  if (sign * stats.delta < minEffect - 1e-12) return 1;
+  return direction === 'higher' ? stats.p_greater : stats.p_less;
 }

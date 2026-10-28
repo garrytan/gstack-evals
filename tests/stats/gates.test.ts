@@ -1,7 +1,8 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) at 70cb3d0197b70d24b4bd3344b8248e908d4710a8, tests/stats-gates.test.ts.
 // MIT License, Copyright (c) 2026 Garry Tan.
-// gstack-evals changes (U2): import paths, and two tests marked "gstack-evals:": one relied on the p = 0 bug, and one
-// used an exploratory comparison to show that a pairing problem blocks the family.
+// gstack-evals changes (U2): import paths, and three tests marked "gstack-evals:": one relied on the p = 0 bug, one
+// used an exploratory comparison to show that a pairing problem blocks the family, and one scored a system failure 0
+// without saying the metric improves upward.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -122,7 +123,8 @@ describe('row eligibility', () => {
   test('system failures stay in the denominator as zeros; infrastructure failures and abstention items are ineligible', () => {
     expect(toObservation({ question_id: 'q', recall_all: 1 }, sel)).toMatchObject({ eligible: true, value: 1 });
     expect(toObservation({ question_id: 'q', recall_all_hit: true }, { ...sel, metric: 'recall_all_hit' })).toMatchObject({ eligible: true, value: 1 });
-    expect(toObservation({ question_id: 'q', error: 'boom', error_origin: 'sut' }, sel)).toMatchObject({ eligible: true, value: 0 });
+    // gstack-evals: a system failure scores 0 only on a metric where higher is better.
+    expect(toObservation({ question_id: 'q', error: 'boom', error_origin: 'sut' }, { ...sel, direction: 'higher' })).toMatchObject({ eligible: true, value: 0 });
     expect(toObservation({ question_id: 'q', error: 'boom', error_origin: 'harness' }, sel)).toMatchObject({ eligible: false, reason: 'harness error' });
     expect(toObservation({ question_id: 'q', error: 'boom' }, sel)).toMatchObject({ eligible: false, reason: 'error without a known origin' });
     expect(toObservation({ question_id: 'q_abs', is_abs: true, abs_noise: 0 }, sel)).toMatchObject({ eligible: false, reason: 'excluded by is_abs=true' });
