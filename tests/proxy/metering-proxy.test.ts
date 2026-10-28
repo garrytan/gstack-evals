@@ -15,6 +15,7 @@ class FakeLedger implements ReservationLedger {
   reservations = new Map<string, Reservation>();
   settles: Array<[string, CallOutcome]> = [];
   failSettles = 0;
+  refuseSettles = 0;
   constructor(public capMicros = 100_000_000) {}
   committed() {
     return [...this.reservations.values()].reduce((n, r) => n + (r.state === "settled" ? r.spent_micros! : r.max_micros), 0);
@@ -29,6 +30,10 @@ class FakeLedger implements ReservationLedger {
     if (this.failSettles > 0) {
       this.failSettles--;
       throw new Error("lost acknowledgement");
+    }
+    if (this.refuseSettles > 0) {
+      this.refuseSettles--;
+      return { ok: false, code: "CAP_STOP", message: "settle refused" };
     }
     this.settles.push([id, outcome]);
     const r: Reservation = this.reservations.get(id) ?? { reservation_id: id, idempotency_key: id, lease_id: "l1", cell: { ...cell, meter_id: "m" }, max_micros: 0, state: "reserved", spent_micros: null, usage: null };
@@ -200,10 +205,13 @@ describe("allowlist and allowance", () => {
   });
 
   test("concurrent calls on one slot cannot both claim an allowance that holds one", async () => {
-    const t = setup(async () => {
-      await Bun.sleep(30);
-      return ok({ input_tokens: 10, output_tokens: 5 });
-    });
+    const ledger = new FakeLedger();
+    const reserve = ledger.reserve.bind(ledger);
+    ledger.reserve = async request => {
+      await Bun.sleep(10);
+      return reserve(request);
+    };
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { ledger });
     const a = t.bind({ allowance_micros: 30_000 });
     const statuses = (await Promise.all([t.call(a.slot, a.token), t.call(a.slot, a.token)])).map(r => r.status).sort();
     expect(statuses).toEqual([200, 402]);
@@ -216,6 +224,13 @@ describe("allowlist and allowance", () => {
     await expectProblem(await t.call(a.slot, a.token, "/openai/v1/chat/completions", { model: "gpt-6.1-sol", n: 50, max_completion_tokens: 1000, messages: [] }), 402, "E_ALLOWANCE");
     await expectProblem(await t.call(a.slot, a.token, "/openai/v1/responses", { model: "gpt-6.1-sol", service_tier: "priority", input: "hi" }), 402, "E_ALLOWANCE");
     expect(t.calls).toHaveLength(0);
+  });
+
+  test("long prompts are reserved and settled at the long-prompt rates", () => {
+    const p = priceRequest("openai", { model: "gpt-6.1-sol", input: "x".repeat(300_000) }, 1000);
+    expect(p.inputTokens).toBeGreaterThan(272_000);
+    expect(reservationMicros(p)).toBe(p.inputTokens * 5 + 1000 * 15);
+    expect(usageCost(p, { input_tokens: 300_000, output_tokens: 10 })!.micros).toBe(300_000 * 4 + 10 * 15);
   });
 
   test("Anthropic one-hour cache writes are reserved and settled at twice input", () => {
@@ -283,6 +298,23 @@ describe("streaming usage", () => {
     expect((await t.proxy.finalize(a.meter_id)).micros).toBe(10 * 2 + 4 * 10);
   });
 
+  test("a stream that breaks after its headers keeps its full reservation as unknown and leaks no key", async () => {
+    const start = `data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 100, output_tokens: 1 } } })}\n\n`;
+    const body = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(start));
+        setTimeout(() => c.error(new Error(`connection reset carrying ${KEY}`)), 5);
+      },
+    });
+    const t = setup(() => new Response(body, { headers: { "content-type": "text/event-stream" } }));
+    const a = t.bind();
+    await (await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] })).text().catch(() => "");
+    const meter = await t.proxy.finalize(a.meter_id);
+    expect(meter).toMatchObject({ unknown: 1, undrained: 0, requests: 1 });
+    expect(t.ledger.settles).toEqual([["res_1", { kind: "unknown" }]]);
+    expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(KEY);
+  });
+
   test("a stream cut before its final usage event keeps its full reservation as unknown", async () => {
     const t = setup(() => sse([{ type: "message_start", message: { usage: { input_tokens: 100, output_tokens: 1 } } }, { type: "content_block_delta", delta: { type: "text_delta", text: "partial" } }]));
     const a = t.bind();
@@ -332,15 +364,25 @@ describe("retries", () => {
     const ledger = new FakeLedger();
     const reserve = ledger.reserve.bind(ledger);
     ledger.reserve = async request => {
-      if (ledger.reservations.size === 1) await Bun.sleep(80);
+      if (ledger.reservations.size === 1) await Bun.sleep(600);
       return reserve(request);
     };
-    const t = setup(() => new Response("{}", { status: 503, headers: { "retry-after-ms": "1" } }), { ledger, retry: { attempts: 3, elapsed_ms: 60 } });
+    const t = setup(() => new Response("{}", { status: 503, headers: { "retry-after-ms": "1" } }), { ledger, retry: { attempts: 3, elapsed_ms: 500 } });
     const a = t.bind();
     const body = await expectProblem(await t.call(a.slot, a.token), 502, "UPSTREAM");
     expect(body.detail).toContain("not sent");
     expect(t.calls).toHaveLength(1);
     expect(ledger.settles[1]).toEqual(["res_2", { kind: "spent", spent_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }]);
+  });
+
+  test("one slot's 429 pauses another slot's call, which is refused when the pause outlasts its budget", async () => {
+    const t = setup(() => new Response("{}", { status: 429, headers: { "retry-after": "30" } }), { retry: { attempts: 1, elapsed_ms: 10_000 } });
+    const a = t.bind();
+    const b = t.bind();
+    await expectProblem(await t.call(a.slot, a.token), 502, "UPSTREAM");
+    await expectProblem(await t.call(b.slot, b.token), 502, "UPSTREAM");
+    expect(t.calls).toHaveLength(1);
+    expect((await t.proxy.finalize(b.meter_id)).refused).toBe(1);
   });
 
   test("a waiting call honours a pause that was extended while it slept", async () => {
@@ -429,6 +471,18 @@ describe("unknown sends and reconcile", () => {
     await t.call(a.slot, a.token);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ kind: "request", reservation_id: "res_1", lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, try: 1, source: "127.0.0.1" });
+  });
+
+  test("a settle the ledger refuses is counted as unsettled, and reconcile reports the refusal", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    t.ledger.refuseSettles = 1;
+    const a = t.bind();
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    expect((await t.proxy.finalize(a.meter_id)).unsettled).toBe(1);
+    const refusing = new FakeLedger();
+    refusing.refuseSettles = 1;
+    const result = await reconcileJournal(join(t.dir, "journal.ndjson"), refusing);
+    expect(result).toEqual({ settled: [], unknown: [], refused: [{ reservation_id: "res_1", code: "CAP_STOP", message: "settle refused" }] });
   });
 
   test("reconcile settles a call with no outcome as unknown and resends nothing; a lost acknowledgement is settled again", async () => {

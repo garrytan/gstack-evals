@@ -445,7 +445,20 @@ export class MeteringProxy {
             e => this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, `the stream broke: ${scrubbedCause(e, ctx.secrets)}`),
           )
           .finally(finish);
-        return new Response(client, { status: res.status, headers: strip(res) });
+        const reader = client.getReader();
+        const scrubbed = new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            try {
+              const { done, value } = await reader.read();
+              if (done) controller.close();
+              else controller.enqueue(value);
+            } catch (e) {
+              controller.error(new Error(`UPSTREAM: metering proxy: the stream broke: ${scrubbedCause(e, ctx.secrets)}`));
+            }
+          },
+          cancel: reason => reader.cancel(reason),
+        });
+        return new Response(scrubbed, { status: res.status, headers: strip(res) });
       }
 
       let text: string;
