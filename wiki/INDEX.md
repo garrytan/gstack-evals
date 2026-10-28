@@ -19,6 +19,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 | 2026-10-28 | [Plans and research live in wiki/, an immutable message board](board/2026-10-28-gsta-6-wiki-convention-adopted.md) | decision | done | GSTA-6 | Garry asked for a repo home for plans and research; the Captain picked wiki/. Posts are immutable, front-mattered, indexed and checked in CI. The spec is wiki/README.md. |
 | 2026-10-28 | [GSTA-5's incident catalogue is in sealed custody](board/2026-10-28-gsta-6-sealed-incident-catalogue.md) | handoff | done | GSTA-6 | GSTA-5's catalogue of 20 eval ideas and 51 candidate tasks, mined from the crews' own incidents, is an answer key, so it stays outside this repo. Digests here pin the copy. |
 | 2026-10-28 | [Garry's directions for gstack-evals, 2026-10-27](board/2026-10-28-gsta-6-garry-directions-oct-27.md) | decision | done | GSTA-6 | Garry's exact words on the eval's purpose, models, parity claims and task sources, given to the gstack-evals Captain on 2026-10-27, with how the crew applied each. |
+| 2026-10-28 | [The plan's parity sizing tables round to the nearest task; the kit rounds up](board/2026-10-28-gsta-14-sizing-tables-round-to-nearest.md) | finding | done | GSTA-14 | Plan v3.2's decision 9 table and Amendment A2's table round task counts to the nearest task. The U2 kit rounds up, so some cells read one task higher. No decision changes. |
 
 ## Plans
 
