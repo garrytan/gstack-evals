@@ -2,6 +2,8 @@
 
 Exploratory quick look (GSTA-11). The question, design and stop rule are in the preregistration, [wiki/plans/2026-10-28-gsta-11-review-replay-prereg.md](../../wiki/plans/2026-10-28-gsta-11-review-replay-prereg.md).
 
+This quick look ran before the program ledger ([docs/budget-ledger.md](../../docs/budget-ledger.md)) landed, and it does not use it. It spends through its own ledger in `llm.ts`: one JSONL file, line item `replay-quick`, a $60 cap, and no paid call until the file holds an approval row.
+
 ## Files
 
 - `mine.ts`: mines review-caught, escaped and decoy candidates from a full gstack clone and its PR bodies (needs `gh`).
