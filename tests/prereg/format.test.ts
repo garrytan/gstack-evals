@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admissionProblems, loadPreregistration, preregistrationProblems, type Preregistration } from "../../src/runner/prereg/format.ts";
 
-const FIXTURES = join(import.meta.dir, "fixtures");
-const fixture = (name: string): Preregistration => JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), "utf8"));
+const fixture = (path: string): Preregistration => JSON.parse(readFileSync(path, "utf8"));
+const LANEA_QUICK = join(import.meta.dir, "fixtures", "lanea-quick.json");
+const LANEB_QUICK = join(import.meta.dir, "fixtures", "laneb-quick.json");
+const REPLAY_QUICK = join(import.meta.dir, "fixtures", "replay-quick.json");
 
 // A Phase 3 style parity preregistration: Opus none and gstack at 3 trials, each cheap model's arms at 5.
 function parity(tasks: number, cheap: string[]): Preregistration {
@@ -42,12 +44,12 @@ function parity(tasks: number, cheap: string[]): Preregistration {
 
 describe("the quick-look preregistrations fit the format", () => {
   test("Lane A and the review replay pass as their posts wrote them", () => {
-    expect(preregistrationProblems(fixture("lanea-quick"))).toEqual([]);
-    expect(preregistrationProblems(fixture("replay-quick"))).toEqual([]);
+    expect(preregistrationProblems(fixture(LANEA_QUICK))).toEqual([]);
+    expect(preregistrationProblems(fixture(REPLAY_QUICK))).toEqual([]);
   });
 
   test("Lane B is refused until its placeholders are filled", () => {
-    const p = fixture("laneb-quick");
+    const p = fixture(LANEB_QUICK);
     expect(preregistrationProblems(p)).toEqual([
       "arms[0].pins.tarball has an unfilled placeholder: __NONE_TAR__",
       "arms[1].pins.tarball has an unfilled placeholder: __GSTACK_TAR__",
