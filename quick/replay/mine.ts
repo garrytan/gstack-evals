@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { diffLines, filterDiff, isReviewFix } from './lib.ts';
+import { diffLines, filterDiff, introducedRanges, isReviewFix } from './lib.ts';
 
 const G = process.env.GSTACK_DIR ?? '/workspace/gstack';
 const CACHE = process.env.CACHE ?? path.join(process.env.HOME!, '.capy/work/replay/cache');
@@ -67,6 +67,12 @@ function blameShas(rev: string, file: string, r: [number, number]): string[] {
   const t = tryGit('blame', '-l', '-s', '-L', r[0] + ',' + r[1], rev, '--', file);
   if (t === null) return [];
   return t.split('\n').filter(Boolean).map(l => l.replace(/^\^/, '').slice(0, 40));
+}
+
+// An escaped defect's site, moved from the fix parent's line numbers to the reviewed head's:
+// the lines the introducing commit added, where it added them.
+function headRanges(parent: string, file: string, ranges: [number, number][], commit: string): [number, number][] {
+  return introducedRanges(ranges.map(r => tryGit('blame', '--porcelain', '-L', r[0] + ',' + r[1], parent, '--', file) ?? '').join('\n'), commit);
 }
 
 const defects: any[] = [];
@@ -153,7 +159,7 @@ for (const f of prs) {
       if (!xBefore) continue;
       const kept = filterDiff(git('diff', xBefore, x.mergeCommit!.oid), (pp: string) => tryGit('show', x.mergeCommit!.oid + ':' + pp)?.slice(0, 400) ?? '');
       if (!kept.includes('diff --git a/' + file + ' ')) continue;
-      missed.push({ pr: n, title: x.title, fixPr: f.number, fixTitle: f.title, fix: fs2, reviewedHead: x.mergeCommit!.oid, base: xBefore, file, ranges, diffLines: diffLines(kept), fixLines: diffLines(git('diff', parent, fs2, '--', file)), introducerHasReview: (x.body ?? '').includes('Pre-Landing Review') });
+      missed.push({ pr: n, title: x.title, fixPr: f.number, fixTitle: f.title, fix: fs2, reviewedHead: x.mergeCommit!.oid, base: xBefore, file, ranges: headRanges(parent, file, ranges, x.mergeCommit!.oid), diffLines: diffLines(kept), fixLines: diffLines(git('diff', parent, fs2, '--', file)), introducerHasReview: (x.body ?? '').includes('Pre-Landing Review') });
     }
   }
 }
@@ -191,7 +197,7 @@ for (let i = 1; i < mainFp.length; i++) {
     seen.add(top + ' ' + file);
     const x = bySquash.get(top);
     const fp = bySquash.get(f.sha);
-    missed.push({ pr: x?.number ?? Number(/\(#(\d+)\)\s*$/.exec(mainFp[j]!.subject)?.[1] ?? 0), title: mainFp[j]!.subject, fixPr: fp?.number ?? Number(/\(#(\d+)\)\s*$/.exec(f.subject)?.[1] ?? 0), fixTitle: f.subject, fix: f.sha, reviewedHead: top, base: xBefore, file, ranges, diffLines: n, fixLines: diffLines(git('diff', parent, f.sha, '--', file)), distance: i - j, introducerHasReview: (x?.body ?? '').includes('Pre-Landing Review'), route: 'blame' });
+    missed.push({ pr: x?.number ?? Number(/\(#(\d+)\)\s*$/.exec(mainFp[j]!.subject)?.[1] ?? 0), title: mainFp[j]!.subject, fixPr: fp?.number ?? Number(/\(#(\d+)\)\s*$/.exec(f.subject)?.[1] ?? 0), fixTitle: f.subject, fix: f.sha, reviewedHead: top, base: xBefore, file, ranges: headRanges(parent, file, ranges, top), diffLines: n, fixLines: diffLines(git('diff', parent, f.sha, '--', file)), distance: i - j, introducerHasReview: (x?.body ?? '').includes('Pre-Landing Review'), route: 'blame' });
   }
 }
 fs.writeFileSync(path.join(OUT, 'missed-candidates.json'), JSON.stringify(missed, null, 2));

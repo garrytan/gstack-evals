@@ -151,3 +151,17 @@ export function bootstrap(perCase: number[][], stat: (rows: number[][]) => numbe
 export function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
 }
+
+// Line ranges in the introducing commit's own coordinates, from `git blame --porcelain` of the
+// fix's parent: each line the commit introduced, at the line number it had in that commit,
+// merged into ranges. Lines blamed to other commits drop out.
+export function introducedRanges(porcelain: string, commit: string): [number, number][] {
+  const lines = [...porcelain.matchAll(/^([0-9a-f]{40}) (\d+) \d+(?: \d+)?$/gm)].filter(m => m[1] === commit).map(m => Number(m[2])).sort((a, b) => a - b);
+  const out: [number, number][] = [];
+  for (const n of lines) {
+    const last = out[out.length - 1];
+    if (last && n <= last[1] + 1) last[1] = Math.max(last[1], n);
+    else out.push([n, n]);
+  }
+  return out;
+}

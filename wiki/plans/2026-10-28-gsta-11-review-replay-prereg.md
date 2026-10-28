@@ -23,7 +23,7 @@ Do gstack's reviewer prompts catch known, real bugs more often than a plain two-
 
 ## Cases
 
-Twenty-four diffs from public garrytan/gstack history, mined by `mine.ts` and picked by `select.ts`. `cases.json` holds each case's PR, base and head shas, the filtered diff's sha256, and for a defect the file, line ranges, fix commit, fixing PR and a one-paragraph statement of the defect. The filter drops CHANGELOG.md, VERSION, package.json, bun.lock, generated SKILL.md files, golden fixtures and agents-digest/.
+Twenty-four diffs from public garrytan/gstack history, mined by `mine.ts` and picked by `select.ts`. `cases.json` holds each case's PR, base and head shas, the filtered diff's sha256, and for a defect the file, line ranges in the reviewed head (for an escaped defect, the lines the introducing PR added that the fix rewrote, mapped back with git blame), fix commit, fixing PR and a one-paragraph statement of the defect. The filter drops CHANGELOG.md, VERSION, package.json, bun.lock, generated SKILL.md files, golden fixtures and agents-digest/.
 
 - **Escaped defects (6).** A later PR fixed lines this PR added. Two mining routes: a fix PR whose body names an earlier PR, and any fix or revert commit on main whose rewritten lines blame mostly to one earlier main commit within 150 commits. Kept: filtered diff 30 to 750 lines, the fix names a failure the old lines produce, one case per introducing PR and per fixing PR. `select.ts` lists every other candidate in range with its reason (features, design changes, environment-only failures, a dependency added later, a fix that sits in another file, and #346, whose fix PR #391 also fixed d04). Three of the six PRs carry a gstack Pre-Landing Review receipt that passed (`review_receipt` in cases.json); three carry none.
 - **Review-caught defects (6).** gstack's own review caught them on the PR branch: a review-fix commit rewrote lines that same PR had added. The case is the candidate that review saw. They are size-matched to the escaped set: for each escaped defect, smallest first, the unused caught defect nearest in diff size. The three unmatched caught candidates from the first version (d05, d06, d07) are listed in cases.json.
@@ -48,7 +48,7 @@ Twenty-four diffs from public garrytan/gstack history, mined by `mine.ts` and pi
 
 d12's defect spans two files: the unauthenticated route that serves the page and the page that inlines the token, so a finding at either file is a right-file finding.
 
-Digests: cases.json `fb0e386a3275`, plan.json `50e474c5fda9`, frozen.sha256 `72802811ab47` (sha256 of all 162 rendered prompts). Prompts render from gstack at 61e201ec08bc (v1.91.295.0) with `build.ts`, which re-checks every diff digest and runs the scope and state-machine detectors from a clean worktree at that sha.
+Digests: cases.json `0b5ee6f8d92b`, plan.json `50e474c5fda9`, frozen.sha256 `72802811ab47` (sha256 of all 162 rendered prompts). Prompts render from gstack at 61e201ec08bc (v1.91.295.0) with `build.ts`, which re-checks every diff digest and runs the scope and state-machine detectors from a clean worktree at that sha.
 
 ## Arms
 
@@ -88,4 +88,4 @@ Cap $60, line item `replay-quick`, inside the $500 first cap Garry approved at g
 
 ## Changes from the first version of this preregistration
 
-The first version (PR #5 at e9e4b6e, never run) had nine review-caught defects, one escaped defect and ten decoys. Before any spend the Captain asked for the escaped set ("fix it before any spend"), stratified reporting, and medium effort recorded as a limit. This version adds the blame mining route, the size-matched strata, decoys from any PR number with escaped introducers excluded, the Opus-high exploratory cell, the valid-unit rule, ledger-based cost per catch, terminal INFRA on resume, pinned detectors and the group run order, and moves the preregistration into wiki/.
+The first version (PR #5 at e9e4b6e, never run) had nine review-caught defects, one escaped defect and ten decoys. Before any spend the Captain asked for the escaped set ("fix it before any spend"), stratified reporting, and medium effort recorded as a limit. This version adds the blame mining route, escaped line ranges in reviewed-head coordinates, the size-matched strata, decoys from any PR number with escaped introducers excluded, the Opus-high exploratory cell, the valid-unit rule, ledger-based cost per catch, terminal INFRA on resume, pinned detectors and the group run order, and moves the preregistration into wiki/.

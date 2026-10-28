@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { diffLines, filterDiff, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
+import { diffLines, filterDiff, introducedRanges, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
 import { CapError, Ledger, MODELS, meteredCall, worstUsd } from './llm.ts';
 import { startFake } from './fake-upstream.ts';
 import { findingKey, summarize, type Unit } from './score.ts';
@@ -78,6 +78,12 @@ describe('diffs and mining helpers', () => {
     expect(isReviewFix('fix: pre-landing review fixes (pass 2)')).toBe(true);
     expect(isReviewFix('chore: stamp v1.2.3 for #1')).toBe(false);
     expect(isReviewFix("Merge remote-tracking branch 'origin/main'")).toBe(false);
+  });
+  test('escaped ranges use the introducing commit\'s line numbers', () => {
+    const a = 'a'.repeat(40), b = 'b'.repeat(40);
+    const porcelain = [a + ' 218 266 2', 'author x', '\tline', a + ' 219 267', '\tline', b + ' 10 268 1', 'author y', '\tline', a + ' 225 280 1', '\tline'].join('\n');
+    expect(introducedRanges(porcelain, a)).toEqual([[218, 219], [225, 225]]);
+    expect(introducedRanges(porcelain, 'c'.repeat(40))).toEqual([]);
   });
   test('bootstrap is seeded and brackets the mean', () => {
     const rows = [[1], [0], [1], [1], [0]];
