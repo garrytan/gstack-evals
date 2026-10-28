@@ -255,5 +255,17 @@ describe("gate coverage", () => {
     const both = claim(lock, { [plan!]: ["no-code"] });
     expect(uncoveredRemovals(both.lines, fates, lineCoverage(both.lines, run), () => true)).toEqual([]);
   });
+
+  test("copies in different files count as one line, so a claim in one file cannot clear an edit to a copy in another", () => {
+    const rule = "NEVER write code before the user approves the approach.\n";
+    const before = { "SKILL.md": FRONT + "Read sections/a.md and sections/b.md first.\n", "sections/a.md": "# A\n\n" + rule, "sections/b.md": "# B\n\n" + rule };
+    const after = { "SKILL.md": FRONT + "Read sections/a.md and sections/c.md first.\n", "sections/a.md": "# A\n\nNEVER write code before the user signs off.\n", "sections/c.md": "# B\n\n" + rule };
+    const lock = claim(lockFor(before).lock, { "B:b:0003": ["no-code"] });
+    expect(lock.lines.map((l) => [l.id, l.tasks])).toEqual([["B:a:0003", []], ["B:b:0003", ["no-code"]]]);
+    const fates = lineFates(contractLines(readSkillFiles(tree(before))), readSkillFiles(tree(after)));
+    const coverage = lineCoverage(lock.lines, [{ task: "no-code", passed: true, files_read: ["SKILL.md", "sections/b.md"], asked: ["approach"] }]);
+    expect(coverageGaps(lock.lines, fates, coverage)).toEqual([{ id: "B:a:0003", class: "rewritten", status: "unclaimed" }]);
+    expect(uncoveredRemovals(lock.lines, fates, coverage, () => true)).toEqual([{ id: "B:a:0003", class: "rewritten", why: "unclaimed", tasks: [] }]);
+  });
 });
 
