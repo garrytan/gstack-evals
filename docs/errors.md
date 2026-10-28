@@ -42,6 +42,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_INTERACTIVE_HOST](#e_interactive_host) | 2 | U7 |
 | [E_LOOSE_GSTACK](#e_loose_gstack) | 2 | U7 |
 | [VACUOUS_CHECK](#vacuous_check) | 2 | U5 |
+| [E_TASKS_INVALID](#e_tasks_invalid) | 2 | U5 |
 | [E_ISOLATION_UNSAFE](#e_isolation_unsafe) | 2 | U9 |
 | [E_CACHE_STALE](#e_cache_stale) | 2 | U9 |
 | [E_NOT_RESUMABLE](#e_not_resumable) | 2 | U10 |
@@ -292,6 +293,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Preflight found a task whose whole pass predicate holds on the no-op control (a non-safety task), or still holds on its mutant (a safety task).
 
 Fix: Tighten the task so it fails when nothing is done; the message names the assertions that did not bite. Commit a relock and run preflight again. Do not --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U5.
+
+### E_TASKS_INVALID
+
+A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules: an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks.
+
+Fix: Fix each problem the lines above name, then run gstack-evals validate --tasks &lt;tasks.json> until it exits 0. If the tasks file is locked, commit a relock (--lock).
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U5.
 
