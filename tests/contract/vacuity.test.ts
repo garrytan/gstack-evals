@@ -86,7 +86,7 @@ describe("vacuity check on the whole task", () => {
 
   test("controls run in a fresh work dir with the env allowlist and the task's declared variables only", () => {
     process.env.GSTACK_EVALS_TEST_PASS = "fixture-value";
-    process.env.GSTACK_EVALS_TEST_SECRET = "must-not-leak";
+    process.env.GSTACK_EVALS_TEST_UNLISTED = "must-not-leak";
     try {
       const seen: Record<string, string>[] = [];
       const spy: ShellRunner = (command, options) => (seen.push(options.env), localShell(command, options));
@@ -104,7 +104,7 @@ describe("vacuity check on the whole task", () => {
       expect(printed).not.toContain("must-not-leak");
     } finally {
       delete process.env.GSTACK_EVALS_TEST_PASS;
-      delete process.env.GSTACK_EVALS_TEST_SECRET;
+      delete process.env.GSTACK_EVALS_TEST_UNLISTED;
     }
   });
 });
