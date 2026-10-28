@@ -348,6 +348,13 @@ describe("allowlist and allowance", () => {
     expect(t.calls[1]!.body.service_tier).toBe("default");
   });
 
+  test("an Anthropic call that names no inference_geo is pinned to global", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    expect(t.calls[0]!.body.inference_geo).toBe("global");
+  });
+
   test("a cap named in a field the route's provider does not read still gets the cell's cap in the route's field", async () => {
     const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
     const a = t.bind();

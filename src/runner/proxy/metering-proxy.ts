@@ -423,6 +423,7 @@ export class MeteringProxy {
     if (allowed.free) return forwardFree(raw);
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
+    if (provider === "anthropic" && body.inference_geo === undefined) body.inference_geo = "global";
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const fields = outputFields(provider, route);
     const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");
