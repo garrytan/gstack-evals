@@ -36,8 +36,8 @@ U5 is the M1a unit that reads gstack's skill eval contract and fixes a run's inp
   It returns `stops` (VACUOUS_CHECK, E_TASKS_INVALID) and `warnings` for preflight to print.
 - **Contract lines** (`src/skill-eval/lock/contract-lines.ts`). GSTA-13's extractor, ported with its rules unchanged. On office-hours before and after the v1.91.289.0 diet it gives GSTA-13's numbers exactly: 371 lines, 95 kept, 273 moved (54 of them out of SKILL.md) and 3 rewritten.
 - **Lock** (`src/skill-eval/lock/lock.ts`):
-  - `buildLock`, `writeLock` and `readLock` handle tasks.lock.json;
-  - `lockDrift` lists the LOCK_DRIFT lines;
+  - `buildLock`, `writeLock` and `readLock` handle tasks.lock.json; `readLock` refuses a lock whose shape breaks `#/$defs/lock` and names the first bad field;
+  - `lockDrift` lists the LOCK_DRIFT lines, including a changed extractor or question classifier;
   - `lockCommit` checks that the lock and its pinned files are committed and clean at HEAD;
   - `lineCoverage`, `coverageGaps` and `uncoveredRemovals` implement the coverage rule and the gate-removal check.
 - **Commands.** `gstack-evals validate` is wired in bin/gstack-evals. `lockCommand` and `initCommand` in `src/skill-eval/lock/cli.ts` are the bodies of `skill-eval --lock` and `skill-eval init`.
@@ -52,7 +52,7 @@ U5 is the M1a unit that reads gstack's skill eval contract and fixes a run's inp
   - Preflight: `loadContract`, then `readLock` and `lockDrift` (LOCK_DRIFT), `lockCommit` (LOCK_MISSING when not ok; record its commit), and `checkVacuity` (print its stops and warnings).
   - The lock pins policy/models.json by sha256 when that file exists. U7 adds it, so locks written before then drift once it lands.
   - The learn preflight test needs a lock in the fixture. Build it with `buildLock` over a stand-in before copy, or vendor learn's SKILL.md.
-- **U9 (trial).** Pass your container runner to `checkVacuity` as `runner`. The default runs `sh -c` locally with the env allowlist. Report each old-arm run as an `OldArmRun` (`passed`, `files_read` relative to the skill dir, `asked` categories).
+- **U9 (trial).** Pass your container runner to `checkVacuity` as `runner`. The default runs `sh -c` locally with the env allowlist. Report each old-arm run as an `OldArmRun` (`passed`, `files_read` relative to the skill dir, and `asked` with one entry per question: its classifier category, or null when none applies). For lines other than ask lines, the claiming task's check is the observation of the gated event or required output, so `passed` carries it.
 - **U6 (verdict).**
   - `lineFates(contractLines(readSkillFiles(before)), readSkillFiles(after))`, then `uncoveredRemovals(fates, lineCoverage(lock.lines, oldRuns), passesInAfter)`: each result is an UNCOVERED_GATE_REMOVAL.
   - `coverageGaps` lists the touched lines no task covers, such as lines moved out of SKILL.md. Put them in the verdict even when no gate fails.

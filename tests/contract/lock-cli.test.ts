@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -6,7 +7,7 @@ import { REPO_ROOT } from "../../src/cli.ts";
 import { checkVacuity } from "../../src/skill-eval/contract/vacuity.ts";
 import { readTasks } from "../../src/skill-eval/contract/tasks.ts";
 import { initCommand, lockCommand, owningSkill } from "../../src/skill-eval/lock/cli.ts";
-import { readLock } from "../../src/skill-eval/lock/lock.ts";
+import { lockCommit, readLock } from "../../src/skill-eval/lock/lock.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "lock-cli-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -39,8 +40,15 @@ describe("skill-eval --lock", () => {
     const r = await call(lockCommand, ["--tasks", tasks]);
     expect(r).toMatchObject({ code: 0, err: "" });
     expect(r.out).toContain("3 contract lines from demo (1 files): 0 claimed by a task, 3 unclaimed and uncovered until a task claims them.");
-    expect(r.out).toContain("tasks.lock.json " + tasks + " && git commit -m \"Lock the demo eval tasks\"");
+    const step = "git -C " + dirname(tasks) + " add tasks.lock.json tasks.json && git -C " + dirname(tasks) + " commit -m \"Lock the demo eval tasks\"";
+    expect(r.out).toContain("\n  " + step);
     const lockPath = join(dirname(tasks), "tasks.lock.json");
+    const git = (...args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    git("config", "user.email", "eval@example.com");
+    git("config", "user.name", "eval");
+    expect(spawnSync("bash", ["-c", step], { cwd: tmp, encoding: "utf8" }).status).toBe(0);
+    expect(lockCommit(lockPath, [tasks])).toEqual({ ok: true, commit: git("rev-parse", "HEAD").stdout.trim() });
     const lock = readLock(lockPath).lock!;
     expect(lock.policy?.file ?? null).toBe(existsSync(join(REPO_ROOT, "policy", "models.json")) ? "models.json" : null);
     writeFileSync(lockPath, readFileSync(lockPath, "utf8").replace('"tasks":[]}', '"tasks":["no-code"]}'));
