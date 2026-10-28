@@ -37,10 +37,11 @@
   },
   "sealed": {
     "paths": [
-      "heldout/**",
-      "held-out/**",
-      "sealed/**",
-      "protected/**",
+      "**/heldout/**",
+      "**/held-out/**",
+      "**/holdout/**",
+      "**/sealed/**",
+      "**/protected/**",
       "**/*.sealed",
       "**/*.sealed.*"
     ],

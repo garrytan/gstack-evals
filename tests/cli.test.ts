@@ -70,21 +70,35 @@ describe("gstack-evals dispatcher", () => {
     expect(lines.find((l) => l.startsWith("  ledger "))).toContain("[not built yet: U4, M0]");
   });
 
-  test("a module that throws or lacks main exits 2 with E_INTERNAL", async () => {
+  test("a module that throws, lacks main or returns no exit code exits 2 with E_INTERNAL", async () => {
     const ledger = COMMANDS.find((c) => c.name === "ledger")!;
-    for (const source of ["export const notMain = 1;\n", "export async function main() { throw new Error('boom'); }\n"]) {
+    const sources = [
+      "export const notMain = 1;\n",
+      "export async function main() { throw new Error('boom'); }\n",
+      "export async function main() { throw new Error('first line\\nsecond line'); }\n",
+      "export async function main() {}\n",
+      "export async function main() { return 4; }\n",
+    ];
+    for (const source of sources) {
       const r = await call(["ledger"], fakeRoot({ [ledger.module]: source }));
       expect(r.code).toBe(2);
       for (const line of r.err.split("\n")) expect(line).toStartWith("E_INTERNAL ");
+      expect(r.err).toContain("E_INTERNAL fix: this is a defect in " + ledger.module);
     }
+    expect((await call(["ledger"], fakeRoot({ [ledger.module]: "export async function main() {}\n" }))).err).toContain("main returned undefined");
+  });
+
+  test("package.json carries the same version as VERSION", () => {
+    const read = (path: string) => require("node:fs").readFileSync(join(REPO_ROOT, path), "utf8");
+    expect(JSON.parse(read("package.json")).version).toBe(read("VERSION").trim());
   });
 
   test("bin/gstack-evals runs under Bun and prints the version", () => {
     const help = Bun.spawnSync([join(REPO_ROOT, "bin", "gstack-evals"), "--help"]);
     expect(help.exitCode).toBe(0);
     expect(help.stdout.toString()).toContain("gstack-evals " + require("node:fs").readFileSync(join(REPO_ROOT, "VERSION"), "utf8").trim());
-    const unbuilt = Bun.spawnSync([join(REPO_ROOT, "bin", "gstack-evals"), "seal"]);
-    expect(unbuilt.exitCode).toBe(2);
-    expect(unbuilt.stderr.toString()).toStartWith("E_USAGE ");
+    const unknown = Bun.spawnSync([join(REPO_ROOT, "bin", "gstack-evals"), "no-such-command"]);
+    expect(unknown.exitCode).toBe(2);
+    expect(unknown.stderr.toString()).toStartWith("E_USAGE ");
   });
 });

@@ -66,12 +66,20 @@ export function helpText(root = REPO_ROOT): string {
   return lines.join("\n");
 }
 
-function errorLines(code: "E_USAGE" | "E_INTERNAL", message: string): string {
-  return [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].map((line) => code + " " + line).join("\n");
+function errorLines(code: "E_USAGE" | "E_INTERNAL", message: string, fix: string = CODES[code].fix): string {
+  return [message, "fix: " + fix, "docs: " + docAnchor(code)]
+    .flatMap((text) => text.split("\n"))
+    .map((line) => code + " " + line)
+    .join("\n");
 }
 
 function usageError(io: Io, message: string): number {
   io.err(errorLines("E_USAGE", message));
+  return 2;
+}
+
+function internalError(io: Io, command: Command, message: string): number {
+  io.err(errorLines("E_INTERNAL", "gstack-evals " + command.name + ": " + message, "this is a defect in " + command.module + ", not in your input. File an issue with these lines."));
   return 2;
 }
 
@@ -89,12 +97,14 @@ export async function run(argv: string[], io: Io = { out: console.log, err: cons
   const command = COMMANDS.find((c) => c.name === name);
   if (!command) return usageError(io, "unknown command " + JSON.stringify(name) + "; gstack-evals --help lists the commands");
   if (!built(root, command)) return usageError(io, "gstack-evals " + command.name + " is not built yet (" + command.owner + "; it will live at " + command.module + ")");
+  let code: unknown;
   try {
     const mod = (await import(join(root, command.module))) as { main?: CommandMain };
     if (typeof mod.main !== "function") throw new Error(command.module + " does not export main");
-    return await mod.main(rest);
+    code = await mod.main(rest);
   } catch (error) {
-    io.err(errorLines("E_INTERNAL", "gstack-evals " + command.name + ": " + (error instanceof Error ? error.message : String(error))));
-    return 2;
+    return internalError(io, command, error instanceof Error ? error.message : String(error));
   }
+  if (code === 0 || code === 1 || code === 2 || code === 3) return code;
+  return internalError(io, command, "main returned " + String(code) + ", not an exit code from 0 to 3");
 }

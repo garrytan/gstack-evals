@@ -30,8 +30,8 @@ function globRegExp(glob: string): RegExp {
 const refused = (globs: string[], path: string) => globs.some((g) => globRegExp(g).test(path));
 
 describe("sealed publication rules", () => {
-  test("refuse held-out bodies anywhere under sealed/ and protected/, direct or nested", () => {
-    for (const path of ["sealed/s1/tasks.json", "sealed/s1/answers.md", "sealed/s1/tasks/t1/task.toml", "sealed/s1/MANIFEST.json", "protected/MANIFEST.json", "protected/cases/c1.json", "heldout/t1.json", "held-out/x/y.md", "tasks/dev/t1/answer.sealed", "tasks/dev/t1/key.sealed.json"]) {
+  test("refuse held-out bodies in any sealed, protected or held-out folder, at the root or nested", () => {
+    for (const path of ["sealed/s1/tasks.json", "sealed/s1/answers.md", "sealed/s1/tasks/t1/task.toml", "sealed/s1/MANIFEST.json", "protected/MANIFEST.json", "protected/cases/c1.json", "heldout/t1.json", "held-out/x/y.md", "holdout/a.json", "tasks/heldout/a.json", "tasks/holdout/t1/task.toml", "lanes/x/sealed/a.json", "lanes/x/protected/b.json", "lanes/x/held-out/c.md", "tasks/dev/t1/answer.sealed", "tasks/dev/t1/key.sealed.json"]) {
       expect(refused(sealed.paths, path)).toBe(true);
     }
   });
