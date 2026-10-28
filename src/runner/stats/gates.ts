@@ -1,6 +1,8 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) at 70cb3d0197b70d24b4bd3344b8248e908d4710a8, runner/stats/gates.ts,
 // which took it from gbrain-evals v0.10.128 (6999ebc9), eval/runner/stats/. MIT License, Copyright (c) 2026 Garry Tan.
-// gstack-evals changes (U2), each marked "gstack-evals:": an inconclusive comparison with no p-value says why (NO_VARIATION).
+// gstack-evals changes (U2), each marked "gstack-evals:": an inconclusive comparison with no p-value says why
+// (NO_VARIATION); an exploratory comparison that cannot pair is blocked alone instead of blocking the family; and the
+// cluster minimum is checked before an interval can fail a comparison, so too few clusters is always inconclusive.
 /**
  * Three-gate comparison policy over a preregistered family (plan amendment 4).
  *
@@ -58,7 +60,7 @@ export interface ComparisonFamily {
   alpha: number;
   seed: number;
   draws: number;
-  /** Fewer clusters than this makes a noninferiority result inconclusive. Default 10. */
+  /** Fewer clusters than this makes a noninferiority or superiority result inconclusive, never a pass or a fail. Default 10. */
   min_clusters?: number;
   id_field: string;
   exclude_when?: string[];
@@ -179,8 +181,10 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
     try { paired.set(spec.id, pair(spec)); }
     catch (error) {
       const problems = error instanceof PairingError ? error.problems : [String(error)];
-      blocked.push(`${spec.id}: ${problems[0]}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`);
       results.push({ id: spec.id, metric: spec.metric, gate: spec.gate, status: 'blocked', reasons: problems });
+      // gstack-evals: an exploratory comparison that cannot pair is blocked alone; it never blocks the family's verdict.
+      if (spec.gate === 'exploratory') continue;
+      blocked.push(`${spec.id}: ${problems[0]}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`);
     }
   }
   const holmFamily = family.comparisons.filter(c => c.gate === 'noninferiority' || c.gate === 'superiority').map(c => c.id);
@@ -203,7 +207,8 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
     results.push(result);
   }
   if (exactFailures.length) {
-    for (const spec of family.comparisons) if (spec.gate !== 'exact') {
+    // gstack-evals: a blocked exploratory comparison keeps its blocked status.
+    for (const spec of family.comparisons) if (spec.gate !== 'exact' && paired.has(spec.id)) {
       results.push({ id: spec.id, metric: spec.metric, gate: spec.gate, status: 'skipped', reasons: ['an exact correctness or safety gate failed first'] });
     }
     return { family_id: family.family_id, verdict: 'fail', reasons: exactFailures, alpha: family.alpha, holm_family: holmFamily, comparisons: order(results, family) };
@@ -211,7 +216,8 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
 
   const statistical: Array<{ spec: Extract<ComparisonSpec, { gate: 'noninferiority' | 'superiority' | 'exploratory' }>; stats: PairedDelta; result: ComparisonResult }> = [];
   for (const spec of family.comparisons) {
-    if (spec.gate === 'exact') continue;
+    // gstack-evals: skip a blocked exploratory comparison.
+    if (spec.gate === 'exact' || !paired.has(spec.id)) continue;
     const { pairs, excluded } = paired.get(spec.id)!;
     const stats = clusteredPairedDelta(pairs, { seed: family.seed, draws: family.draws });
     const binary = pairs.every(p => (p.a === 0 || p.a === 1) && (p.b === 0 || p.b === 1));
@@ -240,12 +246,13 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
       const spec = s.spec;
       r.tolerance = spec.tolerance;
       r.p_noninferiority = confirmP[i];
-      if (orientedUpper !== null && orientedUpper < -spec.tolerance) {
-        r.status = 'fail';
-        r.reasons.push(`the whole 95% interval is worse than the tolerance of ${spec.tolerance}`);
-      } else if (s.stats.n_clusters < minClusters) {
+      // gstack-evals: the cluster minimum comes first, so too few clusters can neither pass nor fail.
+      if (s.stats.n_clusters < minClusters) {
         r.status = 'inconclusive';
         r.reasons.push(`${s.stats.n_clusters} clusters is below the family minimum of ${minClusters}`);
+      } else if (orientedUpper !== null && orientedUpper < -spec.tolerance) {
+        r.status = 'fail';
+        r.reasons.push(`the whole 95% interval is worse than the tolerance of ${spec.tolerance}`);
       } else if (confirmP[i] !== null && adjusted[i] <= family.alpha) {
         r.status = 'pass';
       } else {
@@ -257,12 +264,13 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
       const spec = s.spec as Extract<ComparisonSpec, { gate: 'superiority' }>;
       r.min_effect = spec.min_effect;
       r.p_superiority = confirmP[i];
-      if (orientedUpper !== null && orientedUpper < 0) {
-        r.status = 'fail';
-        r.reasons.push('the whole 95% interval is on the losing side of zero');
-      } else if (s.stats.n_clusters < minClusters) {
+      // gstack-evals: the cluster minimum comes first here too.
+      if (s.stats.n_clusters < minClusters) {
         r.status = 'inconclusive';
         r.reasons.push(`${s.stats.n_clusters} clusters is below the family minimum of ${minClusters}`);
+      } else if (orientedUpper !== null && orientedUpper < 0) {
+        r.status = 'fail';
+        r.reasons.push('the whole 95% interval is on the losing side of zero');
       } else if (confirmP[i] !== null && adjusted[i] <= family.alpha) {
         r.status = 'pass';
       } else {

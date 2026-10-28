@@ -12,3 +12,10 @@ In gstack-evals the cluster is the task: the trials of one task are one cluster,
 ## Fix: no p-value when nothing varies
 
 Upstream, when every paired difference was zero, the bootstrap held the single draw 0 and `nonInferiorityP` returned p = 0 for any tolerance above 0. So two arms that both passed every task "showed" non-inferiority at any size, 3 tasks or 300. Now the bootstrap is empty in that case, `nonInferiorityP` and `superiorityP` return null, and `gates.ts` reports the comparison inconclusive with the reason. Identical results on every task usually mean a ceiling or a floor, which the plan treats as not attempted, never as shown. A one-draw bootstrap no longer short-cuts to p = 0 or 1. Tests: `tests/stats/fixes.test.ts`.
+
+## Two more changes to `gates.ts`
+
+Capy's review of this vendoring found two places where `gates.ts` broke its own documented rules, so they are fixed here too:
+
+- An exploratory comparison that cannot pair (for example, a dashboard metric missing from both runs) is marked blocked on its own. Upstream it blocked the whole family, which could hide an exact safety failure behind a dashboard.
+- The family's cluster minimum is checked before an interval can fail a comparison. Upstream, two clusters could fail a non-inferiority or superiority comparison although the minimum promises an inconclusive result.

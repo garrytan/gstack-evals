@@ -1,6 +1,7 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) at 70cb3d0197b70d24b4bd3344b8248e908d4710a8, tests/stats-gates.test.ts.
 // MIT License, Copyright (c) 2026 Garry Tan.
-// gstack-evals changes (U2): import paths, and one test marked "gstack-evals:" that relied on the p = 0 bug.
+// gstack-evals changes (U2): import paths, and two tests marked "gstack-evals:": one relied on the p = 0 bug, and one
+// used an exploratory comparison to show that a pairing problem blocks the family.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -103,12 +104,14 @@ describe('three gates', () => {
   });
 
   test('a missing pair or changed eligibility blocks the family', () => {
+    // gstack-evals: a gating comparison here, since an exploratory one that cannot pair no longer blocks the family.
+    const gate = family([{ id: 'recall', metric: 'recall', gate: 'exact', assertion: { kind: 'no_item_regression', direction: 'higher' } }]);
     const a = rows(100, () => ({ recall: 1 }));
-    const missing = evaluateFamily(a, a.slice(1), family([{ id: 'recall', metric: 'recall', gate: 'exploratory' }]));
+    const missing = evaluateFamily(a, a.slice(1), gate);
     expect(missing.verdict).toBe('blocked');
     expect(missing.reasons[0]).toContain('missing in B: q0');
     const b = a.map((r, i) => i === 5 ? { ...r, error: 'provider down', error_origin: 'dependency' } : r);
-    const changed = evaluateFamily(a, b, family([{ id: 'recall', metric: 'recall', gate: 'exploratory' }]));
+    const changed = evaluateFamily(a, b, gate);
     expect(changed.verdict).toBe('blocked');
     expect(changed.reasons[0]).toContain('eligibility differs for q5');
   });
