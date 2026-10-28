@@ -10,6 +10,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 - [gstack-evals v1.0 build breakdown into crew-thread units](plans/2026-10-28-gsta-3-v1-build-breakdown.md) (plan, GSTA-3, 2026-10-28): Units U1 to U18 for M0, M1a, M1b, M1c, the pilot report and Phase 2a, each with scope, done-means, dependencies, files and paid cap, plus a three-thread schedule and collision rules.
 - [Skill eval interface, draft v0.4, from approved plan v3.2](plans/2026-10-28-gsta-3-skill-eval-interface-v0-4.md) (design, GSTA-3, 2026-10-28): Draft CLI, tasks file and verdict contract for Lane A. v0.4 drops the staged ceiling stop and judges VACUOUS_CHECK on the whole predicate. Nothing is built yet.
 - [U3 handoff: the metering proxy, its slot model and what later units call](board/2026-10-28-gsta-15-u3-metering-proxy-handoff.md) (handoff, GSTA-15, 2026-10-28): The vendored proxy with slot bearers, meter ids, the management socket, micro-dollar allowances, the 429 limiter, the journal, retries and problem-details refusals, and what U4, U9 and U13 need.
+- [U8 handoff, the Harbor spike is done and Lane B's runner is chosen](board/2026-10-28-gsta-10-u8-harbor-spike-handoff.md) (handoff, GSTA-10, 2026-10-28): U8 is done. Harbor is the Lane B runner. The spike code, the Lane B contract in docs/adapters.md, and the open items for M2a, U3, U9 and U10 are listed here.
 
 ## Board
 
@@ -21,6 +22,8 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 | 2026-10-28 | [GSTA-5's incident catalogue is in sealed custody](board/2026-10-28-gsta-6-sealed-incident-catalogue.md) | handoff | done | GSTA-6 | GSTA-5's catalogue of 20 eval ideas and 51 candidate tasks, mined from the crews' own incidents, is an answer key, so it stays outside this repo. Digests here pin the copy. |
 | 2026-10-28 | [Garry's directions for gstack-evals, 2026-10-27](board/2026-10-28-gsta-6-garry-directions-oct-27.md) | decision | done | GSTA-6 | Garry's exact words on the eval's purpose, models, parity claims and task sources, given to the gstack-evals Captain on 2026-10-27, with how the crew applied each. |
 | 2026-10-28 | [U3 handoff: the metering proxy, its slot model and what later units call](board/2026-10-28-gsta-15-u3-metering-proxy-handoff.md) | handoff | open | GSTA-15 | The vendored proxy with slot bearers, meter ids, the management socket, micro-dollar allowances, the 429 limiter, the journal, retries and problem-details refusals, and what U4, U9 and U13 need. |
+| 2026-10-28 | [U8 handoff, the Harbor spike is done and Lane B's runner is chosen](board/2026-10-28-gsta-10-u8-harbor-spike-handoff.md) | handoff | open | GSTA-10 | U8 is done. Harbor is the Lane B runner. The spike code, the Lane B contract in docs/adapters.md, and the open items for M2a, U3, U9 and U10 are listed here. |
+| 2026-10-28 | [Harbor spike, all six checks pass (check 5 with a condition), so Harbor is the Lane B runner](board/2026-10-28-gsta-10-harbor-spike-lane-b-runner.md) | finding | done | GSTA-10 | Harbor passed the six U8 checks against a fake upstream with no API spend, check 5 only for an agent that does not evade it. Harbor runs Lane B, pinned, with our SDK agent, once M2a drops NET_RAW. |
 
 ## Plans
 
