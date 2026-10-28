@@ -1,0 +1,86 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { COMMANDS, REPO_ROOT, run } from "../src/cli.ts";
+
+// Every command plan v3.2 and interface v0.4 name. A row may move; none may disappear.
+const PLANNED = ["skill-eval", "validate", "doctor", "preflight", "explain", "ledger", "tokens", "plan", "run", "score", "report", "compare", "seal"];
+
+const roots: string[] = [];
+afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
+
+async function call(argv: string[], root = REPO_ROOT) {
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = await run(argv, { out: (t) => out.push(t), err: (t) => err.push(t) }, root);
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+
+function fakeRoot(files: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), "cli-test-"));
+  roots.push(root);
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), text);
+  }
+  return root;
+}
+
+describe("gstack-evals dispatcher", () => {
+  test("the table holds every planned command once, each at its own module", () => {
+    const names = COMMANDS.map((c) => c.name);
+    expect(names.toSorted()).toEqual(PLANNED.toSorted());
+    expect(new Set(COMMANDS.map((c) => c.module)).size).toBe(COMMANDS.length);
+    for (const c of COMMANDS) expect(c.module).toMatch(/^(src|lanes)\/[a-z0-9_/.-]+\.ts$/);
+  });
+
+  test("--help lists every planned command and exits 0", async () => {
+    const r = await call(["--help"]);
+    expect(r.code).toBe(0);
+    for (const name of PLANNED) expect(r.out).toContain("  " + name + " ");
+  });
+
+  test("an unbuilt command exits 2 with E_USAGE and not built yet", async () => {
+    const root = fakeRoot({ VERSION: "0.0.1\n" });
+    for (const c of COMMANDS) {
+      const r = await call([c.name, "--help"], root);
+      expect(r.code).toBe(2);
+      expect(r.err.split("\n")[0]).toStartWith("E_USAGE ");
+      expect(r.err).toContain("not built yet");
+      expect(r.err).toContain("docs: docs/errors.md#e_usage");
+    }
+  });
+
+  test("an unknown or missing command exits 2 with E_USAGE", async () => {
+    for (const argv of [["no-such-command"], []]) {
+      const r = await call(argv);
+      expect(r.code).toBe(2);
+      expect(r.err).toStartWith("E_USAGE ");
+    }
+  });
+
+  test("a built command's module gets the remaining arguments and sets the exit code", async () => {
+    const skillEval = COMMANDS.find((c) => c.name === "skill-eval")!;
+    const root = fakeRoot({ VERSION: "0.0.1\n", [skillEval.module]: "export async function main(argv) { console.error('args ' + argv.join(' ')); return argv.length; }\n" });
+    expect((await call(["skill-eval", "--example", "--json"], root)).code).toBe(2);
+    expect((await call(["--help"], root)).out).not.toContain("skill-eval   Before/after skill eval (Lane A): did an edited skill lose anything? Also init, --lock and --example. [not built yet");
+  });
+
+  test("a module that throws or lacks main exits 2 with E_INTERNAL", async () => {
+    const ledger = COMMANDS.find((c) => c.name === "ledger")!;
+    const root = fakeRoot({ [ledger.module]: "export const notMain = 1;\n" });
+    const r = await call(["ledger"], root);
+    expect(r.code).toBe(2);
+    expect(r.err).toStartWith("E_INTERNAL ");
+  });
+
+  test("bin/gstack-evals runs under Bun and prints the version", () => {
+    const help = Bun.spawnSync([join(REPO_ROOT, "bin", "gstack-evals"), "--help"]);
+    expect(help.exitCode).toBe(0);
+    expect(help.stdout.toString()).toContain("gstack-evals " + require("node:fs").readFileSync(join(REPO_ROOT, "VERSION"), "utf8").trim());
+    const unbuilt = Bun.spawnSync([join(REPO_ROOT, "bin", "gstack-evals"), "seal"]);
+    expect(unbuilt.exitCode).toBe(2);
+    expect(unbuilt.stderr.toString()).toStartWith("E_USAGE ");
+  });
+});

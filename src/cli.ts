@@ -1,0 +1,96 @@
+// The gstack-evals command table and dispatcher. bin/gstack-evals calls run().
+//
+// A command runs once its module exists at the path below and exports main (CommandMain in src/types.ts). Until
+// then it exits 2 with E_USAGE "not built yet". A unit that builds a command creates its module; it edits its row
+// here only to move the path or the summary.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { CODES, docAnchor } from "./errors/codes.ts";
+import type { CommandMain } from "./types.ts";
+
+export const REPO_ROOT = join(import.meta.dir, "..");
+
+export interface Command {
+  name: string;
+  summary: string;
+  /** Repo-relative path of the module that exports main. */
+  module: string;
+  /** The unit that builds it, and its milestone; v1.1 commands have no unit yet. */
+  owner: string;
+}
+
+export const COMMANDS: Command[] = [
+  { name: "skill-eval", summary: "Before/after skill eval (Lane A): did an edited skill lose anything? Also init, --lock and --example.", module: "src/skill-eval/cli/skill-eval.ts", owner: "U7, M1a" },
+  { name: "validate", summary: "Check a tasks file with the same rules as gstack's checkEvalTasks.", module: "src/skill-eval/contract/validate-cli.ts", owner: "U5, M1a" },
+  { name: "doctor", summary: "Check Bun, Docker, the trial image, the host CLI, keys by name and both ledger paths.", module: "src/skill-eval/cli/doctor.ts", owner: "U7, M1a" },
+  { name: "preflight", summary: "Run the free checks every paid command runs first: keys, host, policy, lock, ledger, vacuity.", module: "src/skill-eval/cli/preflight.ts", owner: "U7, M1a" },
+  { name: "explain", summary: "Print a reason code's meaning, fix, side effects, retry safety and resumability.", module: "src/skill-eval/cli/explain.ts", owner: "U7, M1a" },
+  { name: "ledger", summary: "Record approved caps and line items with the owner's words; settle and reconcile leases.", module: "src/runner/ledger/cli.ts", owner: "U4, M0" },
+  { name: "tokens", summary: "Export the review token table for gstack's review-dispatch-compare.", module: "lanes/review-replay/tokens-cli.ts", owner: "U13, M1c" },
+  { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
+  { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
+  { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },
+  { name: "report", summary: "Write a run's report from its receipts.", module: "src/runner/report.ts", owner: "v1.1" },
+  { name: "compare", summary: "Keep or revert a candidate for the factory loop.", module: "src/runner/compare.ts", owner: "later" },
+  { name: "seal", summary: "Seal a held-out set: digests and metadata into sealed/<set>/MANIFEST.json.", module: "src/runner/seal.ts", owner: "v1.1" },
+];
+
+export interface Io {
+  out: (text: string) => void;
+  err: (text: string) => void;
+}
+
+const built = (root: string, c: Command) => existsSync(join(root, c.module));
+
+function version(root: string): string {
+  try {
+    return readFileSync(join(root, "VERSION"), "utf8").trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+export function helpText(root = REPO_ROOT): string {
+  const width = Math.max(...COMMANDS.map((c) => c.name.length));
+  const lines = [
+    "gstack-evals " + version(root) + ": an outcome-graded eval rig for gstack",
+    "",
+    "Usage: gstack-evals <command> [options]",
+    "",
+    "Commands:",
+  ];
+  for (const c of COMMANDS) {
+    lines.push("  " + c.name.padEnd(width) + "  " + c.summary + (built(root, c) ? "" : " [not built yet: " + c.owner + "]"));
+  }
+  lines.push("", "Reason codes: docs/errors.md. Every error line on stderr starts with its code.");
+  return lines.join("\n");
+}
+
+function usageError(io: Io, message: string): number {
+  io.err(["E_USAGE " + message, "fix: " + CODES.E_USAGE.fix, "docs: " + docAnchor("E_USAGE")].join("\n"));
+  return 2;
+}
+
+export async function run(argv: string[], io: Io = { out: console.log, err: console.error }, root = REPO_ROOT): Promise<number> {
+  const [name, ...rest] = argv;
+  if (name === "--help" || name === "-h" || name === "help") {
+    io.out(helpText(root));
+    return 0;
+  }
+  if (name === "--version" || name === "-V") {
+    io.out(version(root));
+    return 0;
+  }
+  if (name === undefined) return usageError(io, "no command given; gstack-evals --help lists them");
+  const command = COMMANDS.find((c) => c.name === name);
+  if (!command) return usageError(io, "unknown command " + JSON.stringify(name) + "; gstack-evals --help lists the commands");
+  if (!built(root, command)) return usageError(io, "gstack-evals " + command.name + " is not built yet (" + command.owner + "; it will live at " + command.module + ")");
+  try {
+    const mod = (await import(join(root, command.module))) as { main?: CommandMain };
+    if (typeof mod.main !== "function") throw new Error(command.module + " does not export main");
+    return await mod.main(rest);
+  } catch (error) {
+    io.err(["E_INTERNAL gstack-evals " + command.name + ": " + (error instanceof Error ? error.message : String(error)), "fix: " + CODES.E_INTERNAL.fix, "docs: " + docAnchor("E_INTERNAL")].join("\n"));
+    return 2;
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
+  "runner": "bun test {files}",
+  "dependencies": {
+    "bin/gstack-evals": [
+      "tests/cli.test.ts"
+    ],
+    "VERSION": [
+      "tests/cli.test.ts"
+    ],
+    "docs/errors.md": [
+      "tests/errors.test.ts"
+    ],
+    ".gstack/pregate.json": [
+      "tests/wiki.test.ts"
+    ],
+    "wiki/**": [
+      "tests/wiki.test.ts"
+    ]
+  },
+  "sealed": {
+    "paths": [
+      "heldout/**",
+      "held-out/**",
+      "sealed/*/*/**",
+      "protected/*/**",
+      "**/*.sealed",
+      "**/*.sealed.*"
+    ],
+    "transcripts": [
+      "**/runs/**"
+    ],
+    "answer_markers": [
+      "\\bSEALED(?: [A-Z]+)*:"
+    ],
+    "seed_patterns": [
+      "\\b(?:sealed|holdout|rotation)_seed\\s*[=:]\\s*[\"']?[0-9A-Za-z]{4,}"
+    ],
+    "local_paths": true,
+    "visibility": "public"
+  }
+}

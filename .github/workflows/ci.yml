@@ -1,5 +1,6 @@
-# Keyless CI: typecheck, unit tests and the wiki check. Nothing here needs a secret.
+# Keyless CI: typecheck, unit tests, the reason-code doc and the wiki check. Nothing here needs a secret.
 # Actions are pinned to commit SHAs; Bun is pinned by bun-version.
+# Later units add tests under tests/; `bun test` picks them up without a change here.
 name: ci
 
 on:
@@ -23,7 +24,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
       - name: Tests
-        run: bun test test/
+        run: bun test
+      - name: Reason-code doc is fresh (docs/errors.md from src/errors/codes.ts)
+        run: bun run errors:check
       - name: Wiki check (front matter, links, attachments, secrets, sealed markers, index, merged posts unchanged)
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}

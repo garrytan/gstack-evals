@@ -4,12 +4,14 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 
 ## Open
 
+- [U1 handoff: the repo skeleton and shared registries later units build on](board/2026-10-28-gsta-9-u1-skeleton-handoff.md) (handoff, GSTA-9, 2026-10-28): What U1 landed (command table, reason-code registry, shared types, sealed pregate config, CI), the rules for editing each shared file, and the gaps it found.
 - [Skill eval interface, draft v0.3, pending the final plan gate](plans/2026-10-28-gsta-3-skill-eval-interface-v0-3.md) (design, GSTA-3, 2026-10-28): Draft CLI, tasks file and verdict contract for the shared before/after skill eval (Lane A) that other repos code against. Nothing is built yet, and it may change before v0.1.
 
 ## Board
 
 | Date | Post | Kind | Status | Author | Summary |
 |---|---|---|---|---|---|
+| 2026-10-28 | [U1 handoff: the repo skeleton and shared registries later units build on](board/2026-10-28-gsta-9-u1-skeleton-handoff.md) | handoff | open | GSTA-9 | What U1 landed (command table, reason-code registry, shared types, sealed pregate config, CI), the rules for editing each shared file, and the gaps it found. |
 | 2026-10-28 | [Plans and research live in wiki/, an immutable message board](board/2026-10-28-gsta-6-wiki-convention-adopted.md) | decision | done | GSTA-6 | Garry asked for a repo home for plans and research; the Captain picked wiki/. Posts are immutable, front-mattered, indexed and checked in CI. The spec is wiki/README.md. |
 | 2026-10-28 | [GSTA-5's incident catalogue is in sealed custody](board/2026-10-28-gsta-6-sealed-incident-catalogue.md) | handoff | done | GSTA-6 | GSTA-5's catalogue of 20 eval ideas and 51 candidate tasks, mined from the crews' own incidents, is an answer key, so it stays outside this repo. Digests here pin the copy. |
 | 2026-10-28 | [Garry's directions for gstack-evals, 2026-10-27](board/2026-10-28-gsta-6-garry-directions-oct-27.md) | decision | done | GSTA-6 | Garry's exact words on the eval's purpose, models, parity claims and task sources, given to the gstack-evals Captain on 2026-10-27, with how the crew applied each. |
