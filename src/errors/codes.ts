@@ -291,6 +291,15 @@ export const CODES = {
     resumable: false,
     owner: "U5",
   },
+  E_TASKS_INVALID: {
+    exit: 2,
+    meaning: "A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules: an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks.",
+    fix: "Fix each problem the lines above name, then run gstack-evals validate --tasks <tasks.json> until it exits 0. If the tasks file is locked, commit a relock (--lock).",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U5",
+  },
   E_ISOLATION_UNSAFE: {
     exit: 2,
     meaning: "No Docker daemon is reachable and --isolation process was not given.",
