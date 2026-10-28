@@ -18,7 +18,55 @@ bun src/analyze.ts --out ~/.capy/work/lanea-quick/runs   # verdict.json and verd
 bun test test/ && bunx tsc --noEmit -p .                 # keyless checks
 ```
 
-Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes.
+The keyless `--fake` run still needs Docker and the arm images: only the Messages API is faked. The tests under `test/` need neither; they stub `docker` and `git` and mock the Agent SDK where they need them.
+
+Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes. `--fake` runs default to `~/.capy/work/lanea-quick/runs-fake/` and keep their own ledger there, `ledger-fake.jsonl`.
+
+Each run also writes `stages/<stage>.json`: `status: "running"` with the stage's models, arms and trials before the first session, and `status: "done"` with the finished count and any cap stop at the end. analyze marks a stage INCOMPLETE (UNFINISHED) when its file still says running, or when results exist for a stage with no file.
+
+### Environment
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `LANEA_WORK` | `~/.capy/work/lanea-quick` | Work root: `prepared.json`, task copies, Docker build contexts, `runs/` and `runs-fake/` |
+| `LANEA_GSTACK` | `~/.capy/work/gstack` | The gstack clone that `prepare` reads task files from |
+| `LANEA_LEDGER` | `~/.capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl` | The paid ledger. Its lock is the same path plus `.lock` |
+| `LANEA_FAKE_CEILING` | unset | A `--fake` run's per-session spend ceiling in dollars, to exercise the budget refusal |
+
+### run.ts flags
+
+| Flag | Commands | Default | What it does |
+|---|---|---|---|
+| `--stage` | run, project | S1 for run, S2 for project | S0, S1, S2 or S3, as the prereg orders them |
+| `--prereg <sha>` | run | none | Full sha of the pushed prereg commit; every paid run needs it |
+| `--fake` | run | off | Fake upstream, no key, zero reservations, its own ledger under `--out` |
+| `--models a,b` | run | the stage's models | Only these models |
+| `--tasks a,b` | run | every task in the suite | Only these task ids |
+| `--arms a,b` | run | the stage's arms | Only these arms |
+| `--trials 1,2,3` | run | 1,2,3 | Trial numbers to run |
+| `--parallel n` | run | 6 | Sessions at once |
+| `--ledger <path>` | run, project, approve | `LANEA_LEDGER`; for `--fake`, `<out>/ledger-fake.jsonl` | Ledger file. A `--fake` run refuses a ledger outside `--out` |
+| `--out <dir>` | run, project | `<LANEA_WORK>/runs`, or `runs-fake` with `--fake` | Run root that results and stage files go under, and that project reads costs from |
+
+`analyze.ts` takes `--out <dir>` (the run root, default `<LANEA_WORK>/runs`) and `--dest <dir>` (where `verdict.json` and `verdict.md` go, default the run root).
+
+### Approve the cap
+
+A paid run reserves only against a ledger whose approval row has the owner's words, who gave them, a source, and `cap_usd` equal to the runner's cap ($130). Record the approval once, with each quoted reply as its own `--words`:
+
+```
+bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
+```
+
+Pass the words as separate arguments, not through a shell string with `$` in it (see the last item below). `approve` does nothing when a valid approval row is already there.
+
+### One runner per ledger
+
+A run takes `<ledger>.lock` with an exclusive create before it reads the ledger. A lock left by a dead process on the same host is replaced; a lock from another host is refused with that host and pid, so remove it by hand only once that runner is gone. At start the runner settles any open reserve left by a stopped runner at its full amount. When parallel sessions hold enough open reserves that the next one would pass the cap, the runner waits for one to settle; it stops (CAP_STOP) only when settled spend plus the next reservation passes the cap.
+
+### Images
+
+A paid run resolves every image tag to its id and refuses one that `images.json` does not pin. After a rebuild, run `prepare`, copy its image ids into `images.json` and commit them before a paid run. `build-arms.sh` leaves `test/` out of every arm, so no arm can read graded task files.
 
 ## Layout
 
@@ -28,9 +76,9 @@ Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial
 | `src/proxy.ts` | Metering proxy on the Docker bridge: a per-session token, one allowed model, one paid request at a time, a spend ceiling and a per-request bound under the reservation, usage parsed from the SSE stream, per-request price |
 | `src/usersim.ts`, `usersim/categories.json` | The scripted user: keyword classifier, sidecar replies, a non-approving fallback, prose-question replies |
 | `src/grade.ts` | `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
-| `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop |
+| `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop; the ledger lock; the in-order reserver |
 | `src/run.ts` | prepare, approve, run (stages, trial-major order, a worker pool), project |
-| `src/analyze.ts` | Contract gates, Wilson intervals, task-clustered bootstrap, sign-flip test, cost and loaded-bytes tables |
+| `src/analyze.ts` | Contract gates, Wilson intervals, task-clustered bootstrap, sign-flip test, loss signal and noise check, stage stops, uncovered contract lines, cost and loaded-bytes tables |
 | `src/fake-upstream.ts` | A scripted fake Messages API for keyless runs |
 | `contract-lines/` | The diet's contract lines and the tasks that cover them |
 

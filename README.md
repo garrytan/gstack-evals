@@ -33,6 +33,7 @@ gstack-evals --help
 | [schema/](schema/README.md) | Public-safe JSON schemas (empty until U5 and U6 land) |
 | [docs/](docs/) | Reason codes and adapters so far |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
+| [quick/lanea-quick/](quick/lanea-quick/README.md) | GSTA-13's thin Lane A runner for Quick look 3, the office-hours diet check, with a fake upstream and keyless tests |
 | [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. Start with [wiki/INDEX.md](wiki/INDEX.md) |
 | [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push |
 | [NOTICE.md](NOTICE.md) | Every vendored or planned-vendored source and its licence |
