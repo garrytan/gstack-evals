@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/garrytan/gstack-evals/blob/main/schema/tasks.schema.json",
+  "$comment": "Version 1.0.0 (semver). The root is gstack's contract tasks file; #/$defs/sidecar is tasks.ext.json. gstack-evals validate also checks what a schema cannot: unique ids, seed.sh present, sidecar ids that exist in the tasks file, and a mutant only on a safety task.",
+  "title": "Skill eval tasks file (gstack's contract, read unchanged)",
+  "description": "test/fixtures/skill-evals/<skill>/tasks.json: a bare array of tasks. setup and check run in the session's work dir with SKILL_EVAL_FIXTURES set to the tasks file's directory; must matches the final answer; must_not matches its code blocks; safety: true marks a task whose failure fails the edit on its own.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/task"
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "prompt"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "must"
+          ]
+        },
+        {
+          "required": [
+            "check"
+          ]
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "Kebab-case, unique in the file."
+        },
+        "prompt": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The one-line request the agent gets."
+        },
+        "setup": {
+          "type": "string",
+          "description": "Shell step run in the work dir before the session."
+        },
+        "must": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Regular expressions that must all match the final answer."
+        },
+        "must_not": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Regular expressions that must not match the final answer's code blocks."
+        },
+        "check": {
+          "type": "string",
+          "description": "Shell command run in the work dir after the session; it must exit 0."
+        },
+        "safety": {
+          "type": "boolean",
+          "description": "A failed after trial of this task fails the edit on its own."
+        }
+      }
+    },
+    "category": {
+      "description": "A question category from src/usersim/classifier.ts. Adding a category is a minor version; renaming or removing one is a major version.",
+      "enum": [
+        "second_opinion",
+        "landscape_search",
+        "visual",
+        "design_doc",
+        "approach",
+        "premises",
+        "mode",
+        "stage",
+        "specificity",
+        "status_quo",
+        "demand"
+      ]
+    },
+    "sidecar": {
+      "title": "tasks.ext.json",
+      "description": "Everything gstack-evals adds to a contract task, keyed by task id and kept beside the tasks file. No part of it enters the agent container.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tasks"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "tasks": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sidecarTask"
+          }
+        }
+      }
+    },
+    "sidecarTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "dependentSchemas": {
+        "user": {
+          "properties": {
+            "interactive": {
+              "const": true
+            }
+          }
+        }
+      },
+      "properties": {
+        "user": {
+          "description": "Scripted replies keyed by question category, plus a persona line for free-form questions. Implies interactive.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "persona": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "replies": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/category"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "\\S"
+              }
+            }
+          }
+        },
+        "interactive": {
+          "type": "boolean",
+          "description": "The task expects questions. Declared here, never inferred from the skill text."
+        },
+        "judge": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "A rubric that sends the task's runs to blinded adjudication."
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "env": {
+          "description": "Names of fixture variables passed through to the trial. Names the trial sets itself, credentials and host or provider settings stay with the harness. The schema matches those names in upper or lower case; gstack-evals validate matches any case.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "allOf": [
+              {
+                "not": {
+                  "enum": [
+                    "PATH",
+                    "HOME",
+                    "LANG",
+                    "TERM",
+                    "GSTACK_STATE_ROOT",
+                    "GSTACK_HOME",
+                    "SKILL_EVAL_FIXTURES"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "pattern": "API_?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|api_?key|token|secret|password|credential|^(ANTHROPIC|OPENAI|OPENROUTER|CLAUDE|CODEX)_|^(anthropic|openai|openrouter|claude|codex)_"
+                }
+              }
+            ]
+          }
+        },
+        "paths": {
+          "description": "Relative paths that narrow the grader's import of the agent's filesystem delta.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "^/|(^|[\\\\/])\\.\\.([\\\\/]|$)"
+            }
+          }
+        },
+        "mutant": {
+          "description": "A violating control for a safety task: setup runs after the task's setup and commits the violation; answer is a violating final answer, empty when absent.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "setup"
+          ],
+          "properties": {
+            "setup": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "answer": {
+              "type": "string"
+            }
+          }
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "The task runs evaluator-side only."
+        }
+      }
+    }
+  }
+}
