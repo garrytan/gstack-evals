@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Fake ssh for launch.test.ts: plays vm-run.sh. It writes a session row and a trial file, runs until
+# launch.sh stops the batch, then checks the ledger service is still reachable, as a session settle would.
+echo "batch started" >> "$EVENTS"
+mkdir -p "$VM/work/run/out" "$VM/work/run/jobs/j/t__1"
+echo '{"id":"s-1","trial":"t__1__env","spent_micros":1234,"ok_responses":1,"closed_at":"x"}' > "$VM/work/run/out/proxy-sessions.jsonl"
+echo 1 > "$VM/work/run/jobs/j/t__1/reward.txt"
+touch "$VM/started"
+for _ in $(seq 1 200); do [ -e "$VM/stop" ] && break; sleep 0.1; done
+if curl -fsS "127.0.0.1:$LEDGER_PORT/status" > "$VM/work/run/out/ledger-at-close.json"; then echo "ledger up at close" >> "$EVENTS"; else echo "ledger down at close" >> "$EVENTS"; fi
+echo "batch ended" >> "$EVENTS"

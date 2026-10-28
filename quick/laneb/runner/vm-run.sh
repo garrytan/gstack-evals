@@ -21,11 +21,13 @@ done
 curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-start.json" || { echo "ledger tunnel not reachable" >&2; exit 4; }
 if [ -f "$run/oracle.json" ]; then
   (cd "$run" && sg docker -c "harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
-  : > "$run/out/oracle-fails.txt"
-  for d in "$run"/jobs/*-oracle/*/; do
+  # Every task in the oracle job needs a trial with reward 1; a task with no trial directory fails too.
+  passed=$(for d in "$run"/jobs/*-oracle/*/; do
+    [ -f "$d/config.json" ] || continue
     r=$(cat "$d/verifier/reward.txt" 2>/dev/null || echo none)
-    awk -v r="$r" 'BEGIN { exit !(r + 0 == 1) }' || echo "$(basename "$d") $r" >> "$run/out/oracle-fails.txt"
-  done
+    if awk -v r="$r" 'BEGIN { exit !(r + 0 == 1) }'; then jq -r '.task.path | split("/") | last' "$d/config.json"; fi
+  done | sort -u)
+  jq -r '.tasks[].path | split("/") | last' "$run/oracle.json" | sort -u | comm -23 - <(printf '%s\n' "$passed") > "$run/out/oracle-fails.txt"
   if [ -s "$run/out/oracle-fails.txt" ]; then echo "oracle failed, no paid trial started:" >&2; cat "$run/out/oracle-fails.txt" >&2; exit 6; fi
   echo "oracle: every task passed on this host"
 fi
@@ -39,6 +41,7 @@ gw=$(sg docker -c "docker network inspect bridge --format '{{(index .IPAM.Config
 proxy=$!
 trap 'curl -fsS -X POST 127.0.0.1:8788/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true' EXIT
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && break; sleep 0.5; done
+curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
 sed "s#__GATEWAY__#$gw#g" "$run/job.json" > "$run/out/job.resolved.json"
 cd "$run"
 set +e

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Fake ubi-runner for launch.test.ts: the "VM" is the directory $VM, and every call is logged to $EVENTS.
+set -u
+cmd=$1; shift
+echo "$cmd $*" >> "$EVENTS"
+case "$cmd" in
+  up) mkdir -p "$STATE/vm-1"; echo "IP=127.0.0.1" > "$STATE/vm-1/env"; touch "$STATE/vm-1/key"; echo vm-1 ;;
+  sync) mkdir -p "$VM/$3"; cp -r "$2/." "$VM/$3/" ;;
+  ssh) case "$2" in
+         *pkill*) touch "$VM/stop" ;;
+         *"find out jobs"*) cd "$VM/work/run" && find out jobs -type f | wc -l ;;
+         *) cat > /dev/null ;;
+       esac ;;
+  pull) [ -z "${FAIL_PULL:-}" ] || exit 1; cp -r "$VM/$2" "$3/" ;;
+  down) ;;
+esac
