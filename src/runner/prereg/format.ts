@@ -172,6 +172,7 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const text = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
 const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 const list = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []);
+const show = (x: unknown): string => (typeof x === 'string' ? x : String(JSON.stringify(x)));
 
 function placeholders(value: unknown, path: string, out: string[]): void {
   if (typeof value === 'string') { if (PLACEHOLDER.test(value)) out.push(`${path} has an unfilled placeholder: ${value.match(PLACEHOLDER)![0]}`); return; }
@@ -230,19 +231,19 @@ export function preregistrationProblems(value: unknown): string[] {
     if (!text(t.digest) || !SHA256.test(t.digest)) problems.push(`task set ${id}: digest must be a full sha256 in lowercase hex`);
     if (typeof t.sealed !== 'boolean') problems.push(`task set ${id}: sealed must be true or false`);
     if (t.sealed && t.ids !== undefined) problems.push(`task set ${id}: a sealed set lists counts and digests only, never task ids`);
-    if (t.ids !== undefined && (!Array.isArray(t.ids) || !t.ids.every(text) || new Set(t.ids).size !== t.ids.length || t.ids.length !== t.count)) problems.push(`task set ${id}: ids must be ${t.count} distinct task ids`);
+    if (t.ids !== undefined && (!Array.isArray(t.ids) || !t.ids.every(text) || new Set(t.ids).size !== t.ids.length || t.ids.length !== t.count)) problems.push(`task set ${id}: ids must be ${show(t.count)} distinct task ids`);
   }
 
   const cells = unique(list<PreregCell>(p.cells), 'cell', 'id', problems);
   if (!cells.size) problems.push('cells must list at least one model, arm and task set');
   const seen = new Set<string>();
   for (const [id, c] of cells) {
-    if (!models.has(c.model)) problems.push(`cell ${id}: model ${c.model} is not listed`);
+    if (!models.has(c.model)) problems.push(`cell ${id}: model ${show(c.model)} is not listed`);
     else if (models.get(c.model)!.role !== 'agent') problems.push(`cell ${id}: model ${c.model} is not an agent model`);
-    if (!arms.has(c.arm)) problems.push(`cell ${id}: arm ${c.arm} is not listed`);
-    if (!taskSets.has(c.tasks)) problems.push(`cell ${id}: task set ${c.tasks} is not listed`);
+    if (!arms.has(c.arm)) problems.push(`cell ${id}: arm ${show(c.arm)} is not listed`);
+    if (!taskSets.has(c.tasks)) problems.push(`cell ${id}: task set ${show(c.tasks)} is not listed`);
     if (!Number.isSafeInteger(c.trials) || c.trials < 1) problems.push(`cell ${id}: trials must be an integer >= 1`);
-    const key = `${c.model} ${c.arm} ${c.tasks}`;
+    const key = `${show(c.model)} ${show(c.arm)} ${show(c.tasks)}`;
     if (seen.has(key)) problems.push(`cell ${id} repeats model, arm and task set ${key}`);
     seen.add(key);
   }
@@ -271,19 +272,23 @@ export function preregistrationProblems(value: unknown): string[] {
 
   const comparisons = unique(list<PreregComparison>(a?.comparisons), 'comparison', 'id', problems);
   const holmOf = new Map<string, number>();
+  if (a?.holm !== undefined && !Array.isArray(a.holm)) problems.push('analysis.holm must be a list of families');
   for (const family of list<{ id: string; comparisons: string[] }>(a?.holm)) {
-    for (const id of list<string>(family?.comparisons)) {
+    if (!family || typeof family !== 'object' || !text(family.id) || !Array.isArray(family.comparisons) || !family.comparisons.length) { problems.push('every Holm family needs an id and a nonempty list of comparisons'); continue; }
+    const members = new Set(family.comparisons);
+    if (members.size !== family.comparisons.length) problems.push(`Holm family ${family.id} lists a comparison twice`);
+    for (const id of members) {
       const c = comparisons.get(id);
-      if (!c) problems.push(`Holm family ${family.id}: comparison ${id} is not listed`);
+      if (!c) problems.push(`Holm family ${family.id}: comparison ${show(id)} is not listed`);
       else if (c.gate !== 'noninferiority' && c.gate !== 'superiority') problems.push(`Holm family ${family.id}: ${id} is not a noninferiority or superiority comparison`);
-      if (holmOf.has(id)) problems.push(`comparison ${id} is in two Holm families`);
-      holmOf.set(id, list(family.comparisons).length);
+      if (holmOf.has(id)) problems.push(`comparison ${show(id)} is in two Holm families`);
+      holmOf.set(id, members.size);
     }
   }
   const power = new Map<string, PowerCheck>();
   for (const c of list<PowerCheck>(p.power)) {
-    if (!comparisons.has(c?.comparison)) problems.push(`power check for ${c?.comparison}: no such comparison`);
-    if (power.has(c?.comparison)) problems.push(`power check for ${c?.comparison} is listed twice`);
+    if (!comparisons.has(c?.comparison)) problems.push(`power check for ${show(c?.comparison)}: no such comparison`);
+    if (power.has(c?.comparison)) problems.push(`power check for ${show(c?.comparison)} is listed twice`);
     power.set(c?.comparison, c);
   }
   const decided = [...comparisons.values()].filter((c) => c.gate === 'noninferiority' || c.gate === 'superiority');
@@ -293,10 +298,10 @@ export function preregistrationProblems(value: unknown): string[] {
     if (!ca || !cb) { problems.push(`comparison ${id}: a and b must be listed cells`); continue; }
     if (c.a === c.b) problems.push(`comparison ${id}: a and b are the same cell`);
     if (ca.tasks !== cb.tasks) problems.push(`comparison ${id}: cells ${c.a} and ${c.b} run different task sets, so they cannot pair by task`);
-    if (a?.pairing === 'trial' && ca.trials !== cb.trials) problems.push(`comparison ${id}: trial-level pairing needs equal trials (${ca.trials} and ${cb.trials}); use task_mean pairing`);
+    if (a?.pairing === 'trial' && ca.trials !== cb.trials) problems.push(`comparison ${id}: trial-level pairing needs equal trials (${show(ca.trials)} and ${show(cb.trials)}); use task_mean pairing`);
     const minTrials = a?.missing_cells?.min_trials;
-    if (a?.pairing === 'task_mean' && Number.isSafeInteger(minTrials) && minTrials > Math.min(ca.trials, cb.trials)) problems.push(`comparison ${id}: missing_cells.min_trials ${minTrials} is above the trials scheduled (${ca.trials} and ${cb.trials}), so every task would count as missing`);
-    if (!metrics.has(c.metric)) problems.push(`comparison ${id}: metric ${c.metric} is not listed`);
+    if (a?.pairing === 'task_mean' && Number.isSafeInteger(minTrials) && Number.isSafeInteger(ca.trials) && Number.isSafeInteger(cb.trials) && minTrials > Math.min(ca.trials, cb.trials)) problems.push(`comparison ${id}: missing_cells.min_trials ${minTrials} is above the trials scheduled (${ca.trials} and ${cb.trials}), so every task would count as missing`);
+    if (!metrics.has(c.metric)) problems.push(`comparison ${id}: metric ${show(c.metric)} is not listed`);
     if (!['exact', 'noninferiority', 'superiority', 'exploratory'].includes(c.gate)) { problems.push(`comparison ${id}: gate must be exact, noninferiority, superiority or exploratory`); continue; }
     if (c.gate === 'exact' && !text(c.assertion)) problems.push(`comparison ${id}: an exact gate needs its assertion`);
     const decides = c.gate === 'noninferiority' || c.gate === 'superiority';
@@ -314,12 +319,12 @@ export function preregistrationProblems(value: unknown): string[] {
     const check = power.get(id);
     if (!check) { problems.push(`comparison ${id}: a confirmatory gate needs a power check`); continue; }
     if (!(finite(check.sd) && check.sd > 0) || !text(check.sd_source)) problems.push(`power check for ${id}: sd must be positive and sd_source must say where it came from`);
-    if (!(finite(check.effect) && check.effect > 0) || (c.gate === 'noninferiority' && check.effect > c.margin!)) problems.push(`power check for ${id}: effect must be positive and, for noninferiority, at most the margin`);
+    if (!(finite(check.effect) && check.effect > 0) || (c.gate === 'noninferiority' && finite(c.margin) && check.effect > c.margin)) problems.push(`power check for ${id}: effect must be positive and, for noninferiority, at most the margin`);
     if (!(finite(check.alpha) && check.alpha > 0 && check.alpha < 0.5) || !(finite(check.power) && check.power >= 0.5 && check.power < 1)) { problems.push(`power check for ${id}: alpha must be in (0, 0.5) and power in [0.5, 1)`); continue; }
     const split = holmOf.get(id) ?? 1;
     if (finite(a?.alpha) && check.alpha > a.alpha / split + 1e-12) problems.push(`power check for ${id}: alpha ${check.alpha} is above the family's ${a.alpha} split ${split} ways by Holm`);
     const count = taskSets.get(ca.tasks)?.count;
-    if (!finite(check.sd) || !(check.sd > 0) || !(check.effect > 0) || !count) continue;
+    if (!finite(check.sd) || !(check.sd > 0) || !finite(check.effect) || !(check.effect > 0) || !finite(count) || count < 1) continue;
     const needed = requiredTasks(check.sd, check.effect, { alpha: check.alpha, power: check.power });
     if (needed > count) problems.push(`comparison ${id} is underpowered: ${needed} tasks needed at SD ${check.sd}, ${count} preregistered; preregister it as exploratory${c.parity ? ', or parity as not attempted' : ''}`);
   }
