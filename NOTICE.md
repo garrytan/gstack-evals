@@ -15,11 +15,35 @@ A unit that vendors a file records the exact source commit in its row, keeps the
 | harness-evals `runner/stats/` (from gbrain-evals v0.10.128, 6999ebc9, `eval/runner/stats/`) and `scripts/paired-mdd.ts` | The statistics kit, with two fixes: `nonInferiorityP` on all-zero differences, and per-task means | src/runner/stats/ | MIT, Copyright (c) 2026 Garry Tan | U2 | planned |
 | harness-evals `scripts/` | Held-out sealing (adapted so bodies live outside the repo), the receipts manifest, the publish audit, Ubicloud fanout | scripts/ | MIT, Copyright (c) 2026 Garry Tan | v1.1 | planned |
 | gbrain-evals `eval/registry.ts`, `eval/runner/mutation-kit.ts`, CONTRIBUTING "Add a category" | Promotion rules, the scorer mutation kit, the bug ledger, hermetic env and document shapes | not placed yet | MIT, Copyright (c) 2026 Garry Tan | v1.1 | planned; plan read 566c16f8 |
-| [skill-diet](https://github.com/nicobailon/skill-diet) `scripts/eval.mjs` | The tasks.json format, the adapter contract, the three-run calibration and the MISS, WORSE and WARN gates, adapted for Lane A | src/skill-eval/ | MIT, Copyright (c) 2026 Nico Bailon | U5, U6, U7, U10 | planned; plan read 5f41df1 |
+| [skill-diet](https://github.com/nicobailon/skill-diet) `scripts/eval.mjs` | The tasks.json format, the adapter contract, the three-run calibration and the MISS, WORSE and WARN gates, adapted for Lane A | src/skill-eval/ | MIT, Copyright (c) 2026 Nico Bailon | U5, U6, U7, U10 | adapted by U5 from 5f41df1: the answer-scoring rules in src/skill-eval/contract/predicate.ts; the rest planned |
 | [gstack](https://github.com/garrytan/gstack) `test/fixtures/skill-evals/{learn,write-skill}/` | gstack's committed contract task files and their seed scripts, byte for byte, so the contract tests run with no checkout | tests/contract/fixtures/gstack/ | MIT, Copyright (c) 2026 Garry Tan | U5 | vendored unchanged from 61e201ec (v1.91.295.0); digests in that folder's README |
 | GSTA-131's review replay panel (a Capy crew thread working for this repo's owner) | Panel cases, build scripts, the runner, two evals and measured tokens; public cases only | lanes/review-replay/ | Joins under this repo's MIT licence; credited in the lane README and each file header | U13 | planned |
 
-When the first skill-diet file lands, its unit adds skill-diet's MIT licence text below with its copyright line. harness-evals and gbrain-evals carry the same licence text and copyright holder as [LICENSE](LICENSE).
+harness-evals and gbrain-evals carry the same licence text and copyright holder as [LICENSE](LICENSE). skill-diet's licence:
+
+```
+MIT License
+
+Copyright (c) 2026 Nico Bailon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Read or run, not vendored
 
