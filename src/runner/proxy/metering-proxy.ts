@@ -107,7 +107,7 @@ export interface Meter {
   unknown: number;
   /** Requests from this slot's bearer that the proxy refused. */
   refused: number;
-  /** Outcomes journaled but not acknowledged by the ledger; reconcileJournal settles them. */
+  /** Outcomes the journal failed to record or the ledger did not acknowledge; reconcileJournal settles them. */
   unsettled: number;
   by_model: Record<string, { micros: number; requests: number }>;
   upstream: { statuses: Record<string, number>; failed: number };
@@ -317,9 +317,11 @@ export class MeteringProxy {
       for (const wake of this.waiters.get(meterId) ?? []) wake();
       this.waiters.delete(meterId);
     };
+    const ctx: CallContext = { slot, provider: match[2] as Provider, route: match[3]!, model: "", source, secrets: [credential!] };
     try {
-      const ctx: CallContext = { slot, provider: match[2] as Provider, route: match[3]!, model: "", source, secrets: [credential!] };
       return await this.forward(req, ctx, () => ((streaming = true), done));
+    } catch (e) {
+      return problem("E_INTERNAL", 500, scrubbedCause(e, ctx.secrets).replace(/^[A-Z_]+: metering proxy: /, ""));
     } finally {
       if (!streaming) done();
     }
@@ -354,13 +356,22 @@ export class MeteringProxy {
       return out;
     };
     const forwardFree = async (body?: string) => {
-      const res = await send(target, { method: req.method, headers, body });
-      this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model || null, status: res.status, source: ctx.source });
-      return new Response(await res.text(), { status: res.status, headers: strip(res) });
+      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model || null, source: ctx.source };
+      let res: Response;
+      let text: string;
+      try {
+        res = await send(target, { method: req.method, headers, body });
+        text = await res.text();
+      } catch (e) {
+        const reason = `the free route failed upstream and is not resent: ${scrubbedCause(e, ctx.secrets)}`;
+        this.journal({ ...free, status: null, reason });
+        return problem("UPSTREAM", 502, reason);
+      }
+      this.journal({ ...free, status: res.status });
+      return new Response(text, { status: res.status, headers: strip(res) });
     };
-    if (req.method === "GET") return forwardFree();
 
-    const raw = await req.text();
+    const raw = req.method === "GET" ? "" : await req.text();
     let parsed: unknown;
     let isJson = true;
     try {
@@ -368,8 +379,10 @@ export class MeteringProxy {
     } catch {
       isJson = false;
     }
-    const leaks = findLeaks(`${raw}\n${decodedStrings(parsed).join("\n")}`, o.forbiddenMarkers ?? []);
-    if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request body carries ${leaks.length} forbidden marker(s); the cell is invalid`);
+    const query = [...new URL(req.url).searchParams].flat().join("\n");
+    const leaks = findLeaks(`${query}\n${raw}\n${decodedStrings(parsed).join("\n")}`, o.forbiddenMarkers ?? []);
+    if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
+    if (req.method === "GET") return forwardFree();
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body must be a JSON object");
     const body = parsed as Record<string, any>;
@@ -499,11 +512,20 @@ export class MeteringProxy {
     }
   }
 
-  /** Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter. */
+  /**
+   * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
+   * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
+   */
   private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
-    this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}) });
+    let journaled = true;
+    try {
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}) });
+    } catch (e) {
+      journaled = false;
+      console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);
+    }
     ctx.slot.committedMicros += micros - maxMicros;
     meter.micros += micros;
     if (outcome.kind === "unknown") meter.unknown++;
@@ -515,7 +537,7 @@ export class MeteringProxy {
     try {
       reply = await this.options.ledger.settle(rid, outcome);
     } catch {}
-    if (!reply?.ok) meter.unsettled++;
+    if (!journaled || !reply?.ok) meter.unsettled++;
   }
 }
 

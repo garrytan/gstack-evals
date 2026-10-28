@@ -56,7 +56,7 @@ export interface RequestPrice extends TokenPrices {
   /** The prompt-cache write the request may pay for: none, a cache_write-rate write, or Anthropic's one-hour write. */
   cacheWrite: "none" | "5m" | "1h";
   long?: ChatPrice["long"];
-  /** Input-token bound: one token per byte of the outgoing body, plus the context a previous_response_id carries. */
+  /** Input-token bound: one token per byte of the outgoing body, plus the stored context a previous_response_id, conversation or item_reference pulls in. */
   inputTokens: number;
   maxOutputTokens: number;
 }
@@ -105,8 +105,11 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   if (unbounded) throw new PriceError(`the request uses ${unbounded}, whose cost the proxy cannot bound from the request`);
   if (body.n !== undefined && body.n !== 1) throw new PriceError(`n=${JSON.stringify(body.n)} asks for several completions, each billed in full`);
   if (provider === "openai" && body.service_tier !== undefined && body.service_tier !== "default") throw new PriceError(`service_tier ${JSON.stringify(body.service_tier)} may bill above the standard rates in the price table`);
+  if (provider === "anthropic" && body.speed !== undefined && body.speed !== "standard") throw new PriceError(`speed ${JSON.stringify(body.speed)} bills above the standard rates in the price table`);
+  if (provider === "anthropic" && body.inference_geo !== undefined) throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
+  if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
   const json = JSON.stringify(body);
-  const chained = typeof body.previous_response_id === "string" ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
+  const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
   // OpenAI caches automatically; Anthropic writes its cache only where a request sets cache_control.
   const cacheWrite = provider === "openai" ? "5m" : !json.includes('"cache_control"') ? "none" : /"ttl"\s*:\s*"1h"/.test(json) ? "1h" : "5m";
   return { provider, model, ...price, cacheWrite, inputTokens: Buffer.byteLength(json) + 64 + chained, maxOutputTokens };
@@ -123,10 +126,11 @@ export function reservationMicros(price: RequestPrice): number {
   return Math.ceil(price.inputTokens * Math.max(rates.input, write) + price.maxOutputTokens * rates.output);
 }
 
-/** Cost in integer micro-dollars (rounded up) and tokens from provider-reported usage, or null when it reports none. */
+/** Cost in integer micro-dollars (rounded up) and tokens from provider-reported usage, or null when it reports none or reports fast mode, which the table does not price. */
 export function usageCost(price: RequestPrice, usage: unknown): { micros: number; usage: TokenUsage } | null {
   if (!usage || typeof usage !== "object") return null;
   const u = usage as Record<string, unknown>;
+  if (u.speed === "fast") return null;
   const n = (v: unknown) => (typeof v === "number" ? v : 0);
   const sub = (key: string, field: string) => n((u[key] as Record<string, unknown> | undefined)?.[field]);
   // Anthropic reports cache reads and writes beside input_tokens; OpenAI counts them inside input_tokens or prompt_tokens.

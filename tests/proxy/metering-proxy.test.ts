@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { priceRequest, reservationMicros, usageCost } from "../../src/runner/pricing/prices.ts";
+import { priceRequest, reservationMicros, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -193,6 +193,54 @@ describe("allowlist and allowance", () => {
     expect(t.calls).toHaveLength(0);
   });
 
+  // Added by /ship coverage audit, pass 2.
+  // Value: protects=a call with no provider key gets 503 E_KEY_MISSING and never reaches upstream or the ledger;
+  // fails_when=the key guard is removed; why_new=no test sets env without the key; seam=none; no_claim=real env loading
+  test("a provider with no key in the proxy's environment is refused before the ledger and the provider", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { env: { OPENAI_API_KEY: OPENAI_KEY } });
+    const a = t.bind();
+    const body = await expectProblem(await t.call(a.slot, a.token), 503, "E_KEY_MISSING");
+    expect(body.detail).toContain("ANTHROPIC_API_KEY");
+    expect(t.calls).toHaveLength(0);
+    expect(t.ledger.reservations.size).toBe(0);
+    expect((await t.proxy.finalize(a.meter_id)).refused).toBe(1);
+  });
+
+  // Added by /ship coverage audit, pass 2.
+  // Value: protects=400 E_ALLOWANCE for non-JSON and non-object bodies; fails_when=a parse guard is dropped and the
+  // request crashes or is forwarded; why_new=untested; seam=none; no_claim=none beyond protects
+  test("a body that is not a JSON object is refused before the ledger and the provider", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    for (const raw of ["not json", "[]", '"claude-opus-5-5"', "null"]) {
+      const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/anthropic/v1/messages`, { method: "POST", headers: { "x-api-key": a.token }, body: raw });
+      await expectProblem(res, 400, "E_ALLOWANCE");
+    }
+    expect(t.calls).toHaveLength(0);
+    expect(t.ledger.reservations.size).toBe(0);
+  });
+
+  // Added by /ship coverage audit, pass 2.
+  // Value: protects=a request naming no output cap is sent with its route's cap field and reserved at that cap;
+  // fails_when=injection is removed or uses the wrong field; why_new=only the refusal is tested; seam=none;
+  // no_claim=provider acceptance of the field (fake upstream)
+  test("a request naming no output cap gets the cell's cap in its route's field and is reserved at it", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { maxOutputTokens: 2000 });
+    const a = t.bind();
+    const rows = [
+      ["/anthropic/v1/messages", "anthropic", { model: "claude-opus-5-5", messages: [{ role: "user", content: "hi" }] }, "max_tokens"],
+      ["/openai/v1/chat/completions", "openai", { model: "gpt-6.1-sol", messages: [{ role: "user", content: "hi" }] }, "max_completion_tokens"],
+      ["/openai/v1/responses", "openai", { model: "gpt-6.1-sol", input: "hi" }, "max_output_tokens"],
+    ] as const;
+    for (const [i, [path, provider, body, field]] of rows.entries()) {
+      expect((await t.call(a.slot, a.token, path, body)).status).toBe(200);
+      const sent = t.calls[i]!.body;
+      expect(sent[field]).toBe(2000);
+      for (const other of ["max_tokens", "max_completion_tokens", "max_output_tokens"].filter(f => f !== field)) expect(sent[other]).toBeUndefined();
+      expect(t.ledger.reservations.get(`res_${i + 1}`)!.max_micros).toBe(reservationMicros(priceRequest(provider, sent, 2000)));
+    }
+  });
+
   test("a body carrying a forbidden marker is refused without printing the marker", async () => {
     const t = setup(() => ok({}), { forbiddenMarkers: ["HIDDEN-FACT-42"] });
     const a = t.bind();
@@ -254,6 +302,25 @@ describe("allowlist and allowance", () => {
     expect(t.calls).toHaveLength(0);
   });
 
+  test("Anthropic fast mode and inference_geo, and OpenAI stored prompts, are refused; fast-mode usage is not priced", async () => {
+    const t = setup(() => ok({}));
+    const a = t.bind();
+    const msg = { model: "claude-opus-5-5", max_tokens: 1000, messages: [] };
+    await expectProblem(await t.call(a.slot, a.token, undefined, { ...msg, speed: "fast" }), 402, "E_ALLOWANCE");
+    await expectProblem(await t.call(a.slot, a.token, undefined, { ...msg, inference_geo: "us" }), 402, "E_ALLOWANCE");
+    await expectProblem(await t.call(a.slot, a.token, "/openai/v1/responses", { model: "gpt-6.1-sol", prompt: { id: "pmpt_1" }, input: "hi" }), 402, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(0);
+    expect(usageCost(priceRequest("anthropic", msg, 1000), { input_tokens: 10, output_tokens: 5, speed: "fast" })).toBeNull();
+  });
+
+  test("stored context from previous_response_id, a conversation or an item reference is reserved at the context bound", () => {
+    const base = { model: "gpt-6.1-sol", input: "hi" };
+    const plain = priceRequest("openai", base, 1000).inputTokens;
+    for (const extra of [{ previous_response_id: "resp_1" }, { conversation: "conv_1" }, { input: [{ type: "item_reference", id: "msg_1" }] }]) {
+      expect(priceRequest("openai", { ...base, ...extra }, 1000).inputTokens).toBeGreaterThanOrEqual(plain + UNKNOWN_CHAIN_CONTEXT_TOKENS - 64);
+    }
+  });
+
   test("long prompts are reserved and settled at the long-prompt rates", () => {
     const p = priceRequest("openai", { model: "gpt-6.1-sol", input: "x".repeat(300_000) }, 1000);
     expect(p.inputTokens).toBeGreaterThan(272_000);
@@ -299,6 +366,40 @@ describe("streaming usage", () => {
     const meter = await t.proxy.finalize(a.meter_id);
     expect(meter.micros).toBe(100 * 4 + 2000 * 0.2 + 50 * 20);
     expect(t.ledger.settles[0]![1]).toEqual({ kind: "spent", spent_micros: meter.micros, usage: { input: 100, output: 50, reasoning: 0, cache_read: 2000, cache_write: 0 } });
+  });
+
+  test("a journal write that fails while a stream settles is counted, and the call is still metered and settled", async () => {
+    const enc = new TextEncoder();
+    let release!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    const upstream = () =>
+      new Response(
+        new ReadableStream({
+          async start(c) {
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1 } } })}\n\n`));
+            await gate;
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ type: "message_delta", usage: { output_tokens: 5 } })}\n\n`));
+            c.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const t = setup(upstream);
+    const a = t.bind();
+    const res = await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] });
+    const proxy = t.proxy as unknown as { journalFd: number | null };
+    const fd = proxy.journalFd;
+    proxy.journalFd = 2 ** 30;
+    const err = spyOn(console, "error").mockImplementation(() => {});
+    release();
+    expect(await res.text()).toContain("message_delta");
+    const meter = await t.proxy.finalize(a.meter_id);
+    proxy.journalFd = fd;
+    expect(String(err.mock.calls[0]?.[0])).toStartWith("E_INTERNAL: metering proxy: the outcome of reservation ");
+    err.mockRestore();
+    expect(meter.unsettled).toBe(1);
+    expect(meter.micros).toBe(10 * 4 + 5 * 20);
+    expect(t.ledger.settles).toHaveLength(1);
   });
 
   test("OpenAI Responses: response.completed, with reasoning split from output", async () => {
@@ -437,6 +538,26 @@ describe("retries", () => {
     await expectProblem(await t.call(a.slot, a.token), 502, "E_KEY_REJECTED");
     expect(t.calls).toHaveLength(1);
   });
+
+  // Added by /ship coverage audit, pass 2.
+  // Value: protects=a non-retryable 4xx goes back verbatim, is sent once and spends 0; fails_when=a 4xx gets retried
+  // or charged; why_new=only 401/429/5xx are tested; seam=none; no_claim=none beyond protects
+  test("a non-retryable 4xx is passed back verbatim, sent once, and settled at zero spend", async () => {
+    const error = '{"type":"error","error":{"type":"invalid_request_error","message":"bad"}}';
+    const t = setup(() => new Response(error, { status: 400, headers: { "content-type": "application/json" } }));
+    const a = t.bind({ allowance_micros: 30_000 });
+    const res = await t.call(a.slot, a.token);
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe(error);
+    expect(t.calls).toHaveLength(1);
+    expect(t.sleeps).toHaveLength(0);
+    expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }]]);
+    const meter = await t.proxy.finalize(a.meter_id);
+    expect(meter).toMatchObject({ micros: 0, requests: 1, unknown: 0, upstream: { statuses: { "400": 1 } } });
+    t.calls.length = 0;
+    expect((await t.call(a.slot, a.token)).status).toBe(400);
+    expect(t.calls).toHaveLength(1);
+  });
 });
 
 describe("unknown sends and reconcile", () => {
@@ -478,6 +599,38 @@ describe("unknown sends and reconcile", () => {
     const journal = t.journal();
     expect(journal.map(l => l.kind)).toEqual(["free", "refusal"]);
     for (const line of journal) expect(line.source).toBe("127.0.0.1");
+  });
+
+  test("a free route that fails upstream is journaled and answered with a coded problem that leaks no key", async () => {
+    const t = setup(() => {
+      throw new Error(`connection reset sending ${KEY}`);
+    });
+    const a = t.bind();
+    const body = await expectProblem(await t.call(a.slot, a.token, "/anthropic/v1/messages/count_tokens", { model: "claude-opus-5-5", messages: [] }), 502, "UPSTREAM");
+    expect(body.detail).not.toContain(KEY);
+    expect(body.detail).toContain("[redacted]");
+    expect(t.journal().map(l => [l.kind, l.status])).toEqual([["free", null]]);
+  });
+
+  test("a forbidden marker in the query string is refused on free GET routes too", async () => {
+    const t = setup(() => Response.json({ data: [] }), { forbiddenMarkers: ["HIDDEN-FACT-42"] });
+    const a = t.bind();
+    const get = (query: string) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openai/v1/models?${query}`, { headers: { authorization: `Bearer ${a.token}` } });
+    for (const query of ["q=HIDDEN-FACT-42", "q=HIDDEN%2DFACT%2D42"]) expect((await expectProblem(await get(query), 403, "E_TRIPWIRE")).detail).not.toContain("HIDDEN-FACT-42");
+    expect((await get("q=fine")).status).toBe(200);
+    expect(t.calls).toHaveLength(1);
+  });
+
+  test("a journal that cannot be written stops the call with E_INTERNAL, before the send and with no key", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    const proxy = t.proxy as unknown as { journalFd: number | null };
+    const fd = proxy.journalFd;
+    proxy.journalFd = 2 ** 30;
+    const body = await expectProblem(await t.call(a.slot, a.token), 500, "E_INTERNAL");
+    proxy.journalFd = fd;
+    expect(body.detail).not.toContain(KEY);
+    expect(t.calls).toHaveLength(0);
   });
 
   test("each attempt reserves under its own idempotency key", async () => {
@@ -527,6 +680,34 @@ describe("unknown sends and reconcile", () => {
     expect(fresh.settles[0]![1]).toMatchObject({ kind: "spent" });
     expect(fresh.settles[1]).toEqual(["res_crashed", { kind: "unknown" }]);
     expect(t.calls).toHaveLength(1);
+  });
+
+  // Added by /ship coverage audit, pass 2.
+  // Value: protects=finalize timeout returns undrained>0 and keeps the meter, so the late call is still metered;
+  // fails_when=the meter is deleted while calls are still in flight; why_new=only the drained case is tested;
+  // seam=none; no_claim=real clock (50 ms timeout)
+  test("finalize that times out reports the call still in flight and keeps the meter for it", async () => {
+    let release!: () => void;
+    let sent!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    const reached = new Promise<void>(r => (sent = r));
+    const t = setup(async () => {
+      sent();
+      await gate;
+      return ok({ input_tokens: 10, output_tokens: 5 });
+    });
+    const a = t.bind();
+    const pending = t.call(a.slot, a.token);
+    await reached;
+    const early = await t.proxy.finalize(a.meter_id, 50);
+    expect(early.undrained).toBe(1);
+    expect(early.requests).toBe(1);
+    release();
+    expect((await pending).status).toBe(200);
+    const late = await t.proxy.finalize(a.meter_id, 50);
+    expect(late).toMatchObject({ undrained: 0, requests: 1 });
+    expect(late.micros).toBeGreaterThan(0);
+    expect(late.by_model["anthropic:claude-opus-5-5"]).toEqual({ micros: late.micros, requests: 1 });
   });
 });
 
