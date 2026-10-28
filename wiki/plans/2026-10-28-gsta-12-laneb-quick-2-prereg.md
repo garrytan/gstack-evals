@@ -136,6 +136,27 @@ In prereg 1's replicate 1:
 - 8 DeepSeek trials searched for answers, and every off-list fetch failed at the egress sidecar;
 - 9 trials read PyPI directly (7 DeepSeek, 1 Opus, 1 Haiku). One DeepSeek trial downloaded the terminal-bench harness sdist; it holds no TB2 tasks, and the trial scored 0.
 
+## Placebo behavior coding (frozen before the pilot)
+
+The Captain asked for these categories and their assignment rule to be fixed before any paid call, so the coding cannot be shaped by the data. The script lands with the results; it must implement exactly this.
+
+Unit: the first skill open in each trial, by message order, where an open is defined as in the manipulation check above. Placebo-arm trials are coded, and gstack-arm trials are coded the same way as a contrast. The window runs from the tool result of that open to the third tool call after it, inclusive, and covers every assistant text block in between.
+
+Each unit gets the first category that matches, in this order:
+
+1. `ends`: no tool call follows the open in the session.
+2. `opens_another`: one of the next three tool calls opens a skill, the same one or another.
+3. `dismisses`: assistant text in the window matches, case-insensitively, `not (very )?(helpful|useful|relevant|applicable)|(does ?n[o']t|did ?n[o']t|won'?t) (help|apply)|is ?n[o']t (helpful|useful|relevant|applicable)|no (actionable|concrete|specific|useful) (steps|guidance|instructions|procedure|content)|too (vague|generic)|nothing (useful|actionable)|(generic|general) (advice|guidance|prose)`.
+4. `cites`: assistant text in the window matches, case-insensitively, `(the|this) skill (says|suggests|recommends|advises)|(following|per|according to) the skill|as the skill (says|suggests)`.
+5. `continues`: anything else.
+
+The results give counts per category for each model and arm. For each category they quote the first 200 characters of the matching text from up to three trials, taken as the first in trial-name order, not picked by hand.
+
+## Pinned code
+
+- Runner: 44c2a06e9db3e8789a805a0bff8203a895b8a357, which is ba7a648's runner plus the WRAPPER and TASKS options and the wrapper field in the job config. Every paid job runs from a worktree pinned at that commit, and its manifest records the commit.
+- Approved by GSTA-2 (gstack-evals Captain) on 2026-10-28, with three conditions: pin the runner and analysis commits, freeze these categories, and record prereg 1's stop in #15. The analysis commit is recorded below before the pilot starts.
+
 ## What would change a decision
 
 If gstack minus placebo is clearly positive on a model with a passing open rate, gstack's bodies help on these tasks, and the next step is a per-skill eval. If it is near zero with a passing open rate, the bodies do not help here: that sends skills to the track for harder tasks with headroom, or for cutting the lines that do not help. If open rates fail, TB2 one-shot tasks cannot test skill bodies, and the next design needs tasks or a harness where skills are the natural tool.
