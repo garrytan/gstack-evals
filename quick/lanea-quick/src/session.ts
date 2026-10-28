@@ -1,4 +1,3 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -117,6 +116,7 @@ class Inbox {
 const userMessage = (text: string) => ({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, session_id: "" });
 
 export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promise<SessionResult> {
+  const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const t0 = Date.now();
   mkdirSync(spec.outDir, { recursive: true });
   const errors: string[] = [];
