@@ -13,7 +13,11 @@ import { filterDiff } from './lib.ts';
 
 const G = process.env.GSTACK_DIR ?? '/workspace/gstack';
 const OUT = process.env.OUT ?? path.join(process.env.HOME!, '.capy/work/replay/candidates');
-const git = (...a: string[]) => spawnSync('git', a, { cwd: G, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 }).stdout;
+const git = (...a: string[]) => {
+  const r = spawnSync('git', a, { cwd: G, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error('git ' + a.join(' ') + ' exit ' + r.status + ': ' + (r.stderr ?? '').slice(0, 300));
+  return r.stdout;
+};
 
 const DEFECTS: { id: string; pr: number; fix: string; file: string; also_files?: string[]; source: 'review-caught' | 'escaped'; defect: string }[] = [
   { id: 'd01', pr: 3515, fix: 'f1635d0f6', file: 'scripts/ubicloud/ubi-runner.sh', source: 'review-caught',
@@ -87,7 +91,7 @@ const defects = DEFECTS.map(d => {
   const c = all.find((x: any) => x.pr === d.pr && x.fix.startsWith(d.fix) && x.file === d.file);
   if (!c) throw new Error('no candidate for ' + d.id);
   const diff = diffOf(c.base, c.reviewedHead);
-  const fixDiff = git('diff', c.fix + '^', c.fix, '--', d.file, ...(d.also_files ?? []));
+  const fixDiff = git('-c', 'core.abbrev=9', 'diff', c.fix + '^', c.fix, '--', d.file, ...(d.also_files ?? []));
   return { id: d.id, kind: 'defect', source: d.source, pr: d.pr, title: c.title, base: c.base, head: c.reviewedHead, scope: c.scope, file: d.file, ...(d.also_files ? { also_files: d.also_files } : {}), lines: c.ranges, fix: c.fix, fix_pr: c.fixPr ?? d.pr, defect: d.defect, diff_lines: c.diffLines, diff_sha256: sha(diff), fix_diff_sha256: sha(fixDiff), ...(d.source === 'escaped' ? { review_receipt: !!c.introducerHasReview } : {}) } as any;
 });
 const logGap = (a: number, b: number) => Math.abs(Math.log(a / b));

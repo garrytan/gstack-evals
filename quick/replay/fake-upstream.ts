@@ -12,6 +12,7 @@ export function startFake() {
     return m ? JSON.stringify({ severity: 'CRITICAL', confidence: 8, path: m[1], line: 3, summary: 'fake finding in ' + m[1], specialist: 'fake' }) : 'NO FINDINGS';
   };
   const server = Bun.serve({
+    hostname: '127.0.0.1',
     port: 0,
     async fetch(req) {
       const url = new URL(req.url);

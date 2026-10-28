@@ -64,8 +64,7 @@ export class Ledger {
   }
 
   // Settled spend plus open reservations, in USD.
-  committed(): number {
-    const rows = this.rows();
+  committed(rows = this.rows()): number {
     const settled = new Set(rows.filter(r => r.type === 'settle').map(r => r.reserve_id));
     let usd = 0;
     for (const r of rows) {
@@ -77,10 +76,11 @@ export class Ledger {
 
   // limit lets a phase stop below the cap (the review runs keep the judge's share).
   reserve(callId: string, spec: ModelSpec, usdWorst: number, limit = this.cap): string {
-    if (!this.rows().some(r => r.type === 'approval')) throw new CapError('no approval row in ' + this.file);
+    const rows = this.rows();
+    if (!rows.some(r => r.type === 'approval')) throw new CapError('no approval row in ' + this.file);
     const max = Math.min(limit, this.cap);
     if (!Number.isFinite(max) || !Number.isFinite(usdWorst)) throw new CapError('CAP: limit ' + limit + ' or worst case ' + usdWorst + ' is not a number');
-    const c = this.committed();
+    const c = this.committed(rows);
     if (c + usdWorst > max) throw new CapError('CAP: ' + c.toFixed(4) + ' committed + ' + usdWorst.toFixed(4) + ' worst case > ' + max);
     const id = crypto.randomUUID();
     this.append({ type: 'reserve', id, item: this.item, call_id: callId, provider: spec.provider, model: spec.model, effort: spec.effort, usd_worst: round(usdWorst), at: new Date().toISOString() });
@@ -103,7 +103,7 @@ const BASE = {
 };
 
 class HttpError extends Error {
-  constructor(readonly status: number, msg: string) { super(msg); }
+  constructor(readonly status: number, msg: string, readonly retryAfterS = 0) { super(msg); }
 }
 
 // timeout: false turns off Bun's idle timeout, which would cut a silent non-streaming reply at
@@ -113,7 +113,7 @@ async function post(url: string, headers: Record<string, string>, body: any): Pr
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 300) }; }
-  if (!res.ok || json?.error) throw new HttpError(res.status, res.status + ' ' + JSON.stringify(json?.error ?? json).slice(0, 300));
+  if (!res.ok || json?.error) throw new HttpError(res.status, res.status + ' ' + JSON.stringify(json?.error ?? json).slice(0, 300), Number(res.headers.get('retry-after')) || 0);
   return json;
 }
 
@@ -139,7 +139,8 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
     if (served && !/deepseek/i.test(served)) throw new Error('served by ' + served + ', not DeepSeek');
     const u = j.usage ?? {};
     if (typeof u.cost !== 'number') throw new Error('OpenRouter response carried no usage.cost');
-    return { text: j.choices?.[0]?.message?.content ?? '', usage: u, usd: u.cost, stop: j.choices?.[0]?.finish_reason ?? null, provider_served: served, model_served: j.model ?? null, ms: Date.now() - t0 };
+    const usd = u.cost > 0 ? u.cost : ((u.prompt_tokens ?? 0) * spec.inPerM + (u.completion_tokens ?? 0) * spec.outPerM) / 1e6;
+    return { text: j.choices?.[0]?.message?.content ?? '', usage: u, usd, stop: j.choices?.[0]?.finish_reason ?? null, provider_served: served, model_served: j.model ?? null, ms: Date.now() - t0 };
   }
   const j = await post(BASE.openai() + '/v1/responses', { authorization: 'Bearer ' + key('OPENAI_API_KEY') },
     { model: spec.model, input: prompt, reasoning: { effort: spec.effort }, max_output_tokens: spec.maxTokens, ...(schema ? { text: { format: { type: 'json_schema', name: 'verdict', strict: true, schema } } } : {}) });
@@ -149,13 +150,6 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
   return { text, usage: u, usd: ((u.input_tokens ?? 0) * spec.inPerM + (u.output_tokens ?? 0) * spec.outPerM) / 1e6, stop: j.status ?? null, provider_served: 'openai', model_served: j.model ?? null, ms: Date.now() - t0 };
 }
 
-// One metered call. Only a 429 or 5xx status retries (up to three times, with backoff). A
-// failure with an HTTP error status (400 and up) settles at $0, since the provider bills
-// nothing for it; any other failure (a 200 with an error body, a timeout, a dropped
-// connection, a body without usage) settles at the worst case, since the request may still
-// have been billed. Failures are recorded, never retried.
-// cache: false sends an Anthropic prompt without cache_control, for a prompt no later call
-// repeats (a Red Team prompt carries its own trial's findings).
 // A provider failure, settled in the ledger: the call's terminal INFRA outcome. http says
 // whether the provider answered with a status. Any other error from here (a missing key, a
 // ledger read or write) is not a provider outcome and should stop the run.
@@ -177,6 +171,13 @@ export function writeAtomic(file: string, rec: any) {
 
 const KEY_NAME = { anthropic: 'ANTHROPIC_API_KEY', openrouter: 'OPENROUTER_API_KEY', openai: 'OPENAI_API_KEY' } as const;
 
+// One metered call. Only a 429 or 5xx status retries (up to three times, with backoff that
+// honors retry-after up to a minute). A failure with an HTTP error status (400 and up) settles
+// at $0, since the provider bills nothing for it; any other failure (a 200 with an error body,
+// a timeout, a dropped connection, a body without usage) settles at the worst case, since the
+// request may still have been billed. Failures are recorded, never retried.
+// cache: false sends an Anthropic prompt without cache_control, for a prompt no later call
+// repeats (a Red Team prompt carries its own trial's findings).
 export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpec, prompt: string, opts: { limit?: number; schema?: any; cache?: boolean } = {}): Promise<CallResult> {
   key(KEY_NAME[spec.provider]);
   const rid = ledger.reserve(callId, spec, worstUsd(spec, Buffer.byteLength(prompt)), opts.limit);
@@ -189,7 +190,7 @@ export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpe
       last = e;
       const retryable = e instanceof HttpError && (e.status === 429 || e.status >= 500);
       if (!retryable || attempt === 3) break;
-      await new Promise(res => setTimeout(res, 2000 * 2 ** attempt));
+      await new Promise(res => setTimeout(res, Math.max(2000 * 2 ** attempt, Math.min(60, e.retryAfterS) * 1000)));
       continue;
     }
     ledger.settle(rid, callId, 'ok', r.usd, { ...r.usage, attempts: attempt + 1 });

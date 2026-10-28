@@ -25,12 +25,26 @@ export const ARMS = ['baseline', 'gstack'] as const;
 
 export type Unit = { model: string; arm: string; case: string; kind: string; trial: number; complete: boolean; usd: number; input_tokens: number; output_tokens: number; calls: number; findings: Finding[]; unparsed: number; truncated?: number; cut_empty?: number };
 
+const FROZEN_FILE = process.env.FROZEN_FILE ?? path.join(HERE, 'frozen.sha256');
+let frozen: Record<string, string> | null = null;
+const frozenSha = (rel: string): string | undefined =>
+  (frozen ??= fs.existsSync(FROZEN_FILE) ? Object.fromEntries(fs.readFileSync(FROZEN_FILE, 'utf8').trim().split('\n').map(l => { const [h, f] = l.split(/\s+/); return [f, h]; })) : {})[rel];
+
 // Reads one case x arm x model x trial. A gstack unit is complete when the core reviewer,
-// every dispatched specialist and (when it activates) the Red Team returned.
+// every dispatched specialist and (when it activates) the Red Team returned. A result whose
+// prompt hash differs from its frozen prompt, or from its saved Red Team prompt, counts as
+// missing.
 export function loadUnit(resultsDir: string, planCase: any, model: string, arm: string, trial: number): Unit {
   const dir = path.join(resultsDir, model, planCase.case, arm, 't' + trial);
   const names = arm === 'baseline' ? ['baseline'] : ['core', ...planCase.specialists];
-  const read = (n: string) => { const f = path.join(dir, n + '.json'); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; };
+  const read = (n: string) => {
+    const f = path.join(dir, n + '.json');
+    if (!fs.existsSync(f)) return null;
+    const rec = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const rtPrompt = path.join(dir, 'red-team.prompt.md');
+    const want = n === 'red-team' ? (fs.existsSync(rtPrompt) ? sha(fs.readFileSync(rtPrompt, 'utf8')) : undefined) : frozenSha(rec.prompt);
+    return rec.prompt_sha256 && want && rec.prompt_sha256 !== want ? null : rec;
+  };
   const recs = names.map(read);
   let complete = recs.every(Boolean);
   if (complete && arm === 'gstack') {
@@ -93,7 +107,7 @@ export async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cac
   const todo = new Map<string, Finding>();
   for (const f of findings) { const k = findingKey(f); if (!cache[k] && !failed[k] && !todo.has(k)) todo.set(k, f); }
   if (!todo.size) return;
-  const fixDiff = c.fix_diff ?? git('diff', c.fix + '^', c.fix, '--', ...defectFiles(c));
+  const fixDiff = c.fix_diff ?? git('-c', 'core.abbrev=9', 'diff', c.fix + '^', c.fix, '--', ...defectFiles(c));
   if (c.fix_diff_sha256 && sha(fixDiff) !== c.fix_diff_sha256) throw new Error(c.id + ': fix diff digest moved');
   const r = rng(parseInt(sha(c.id).slice(0, 8), 16));
   const list = [...todo.entries()].map(([k, f]) => ({ k, f, id: Math.floor(r() * 0xffffff).toString(16).padStart(6, '0') + k.slice(0, 2), o: r() })).sort((a, b) => a.o - b.o);
@@ -132,16 +146,17 @@ export function stratumOf(c: any, cases: any[]): string {
   return c.kind === 'defect' ? c.source : cases.find(d => d.id === c.matched_to)?.source;
 }
 
-// Tables over the given cases. A unit is valid when every reviewer call returned and, for a
-// defect, every right-file finding (gated or not) has a judge verdict; only valid units count
-// toward rates and catches. Spend counts every unit of the cell, valid or not, including what
-// the ledger charged for failed calls (usd on each unit, set from the ledger by the caller).
 type Cell = [string, string];
 export const MAIN_PAIRS: [Cell, Cell][] = [
   ...MODEL_KEYS.map(m => [[m, 'gstack'], [m, 'baseline']] as [Cell, Cell]),
   [['haiku', 'gstack'], ['opus', 'baseline']], [['haiku', 'gstack'], ['opus', 'gstack']],
   [['deepseek', 'gstack'], ['opus', 'baseline']], [['deepseek', 'gstack'], ['opus', 'gstack']],
 ];
+
+// Tables over the given cases. A unit is valid when every reviewer call returned and, for a
+// defect, every right-file finding (gated or not) has a judge verdict; only valid units count
+// toward rates and catches. Spend counts every unit of the cell, valid or not, including what
+// the ledger charged for failed calls (usd on each unit, set from the ledger by the caller).
 
 export function summarize(allUnits: Unit[], cases: any[], verdicts: Record<string, any>, gated = true, models = MODEL_KEYS, pairs = MAIN_PAIRS) {
   const byCase = new Map(cases.map(c => [c.id, c]));

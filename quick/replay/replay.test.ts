@@ -21,6 +21,13 @@ async function bun(args: string[], env: Record<string, string | undefined>) {
 const QUOTES = [{ words: 'Rec', by: 'Garry', context: 'test' }];
 
 describe('findings', () => {
+  test('a null confidence or line is absent, and findings inside a wrapper are read', () => {
+    const r = parseFindings('{"findings":[{"severity":"CRITICAL","confidence":null,"path":"a.ts","line":null,"summary":"x"}]}');
+    expect(r.findings.length).toBe(1);
+    expect(r.findings[0]!.confidence).toBeNull();
+    expect(r.findings[0]!.line).toBeNull();
+    expect(shown(r.findings[0]!)).toBe(true);
+  });
   test('reads JSON lines, fenced objects and NO FINDINGS', () => {
     const a = parseFindings('{"severity":"CRITICAL","confidence":8,"path":"a.ts","line":3,"summary":"x breaks","specialist":"testing"}\n{"severity":"INFORMATIONAL","path":"b.ts","summary":"nit"}');
     expect(a.findings.length).toBe(2);
@@ -237,6 +244,14 @@ describe('providers against the fake upstream', () => {
     await expect(judgeCase(l, c, [f1], {}, path.join(dir, 'd1.json'), failedFile)).rejects.toThrow('STOP: judge account failure');
     expect(fs.existsSync(failedFile)).toBe(false);
   });
+  test('a result whose prompt hash moved counts as missing', () => {
+    const dir = tmp();
+    const rel = fs.readFileSync(path.join(HERE, 'frozen.sha256'), 'utf8').split('\n')[0]!.split(/\s+/)[1]!;
+    const t1 = path.join(dir, 'haiku/d1/baseline/t1');
+    fs.mkdirSync(t1, { recursive: true });
+    fs.writeFileSync(path.join(t1, 'baseline.json'), JSON.stringify({ prompt: rel, prompt_sha256: '0'.repeat(64), text: 'NO FINDINGS', usd: 0 }));
+    expect(loadUnit(dir, { case: 'd1', kind: 'defect', specialists: [], diff_lines: 10 }, 'haiku', 'baseline', 1).complete).toBe(false);
+  });
   test('a reply cut off before any answer is complete, empty and counted', () => {
     const dir = tmp();
     const t1 = path.join(dir, 'haiku/d1/baseline/t1');
@@ -384,7 +399,7 @@ describe('providers against the fake upstream', () => {
   };
   test('refused calls near the limit wait for settles and the run finishes', async () => {
     const p = capPlan(12);
-    const two = 2 * worstUsd(MODELS.haiku!, Buffer.byteLength('FAKE_SLOW 10 diff --git a/lib/a.ts b/lib/a.ts')) + 1e-4;
+    const two = 2 * worstUsd(MODELS.haiku!, Buffer.byteLength('FAKE_SLOW 10 diff --git a/lib/a.ts b/lib/a.ts')) + 0.01;
     const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], p.env(two));
     expect(r.status).toBe(0);
     const rows = fs.readFileSync(p.ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));

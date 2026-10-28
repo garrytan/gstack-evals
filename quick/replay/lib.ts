@@ -50,9 +50,6 @@ export type Finding = {
   specialist: string | null;
 };
 
-// Reads a reviewer's output: one JSON object per line, or NO FINDINGS. Objects inside code
-// fences or spread over several lines are found by brace matching. Matrix records
-// (state-machines) carry no summary and are skipped.
 // The span from the brace at s to its matching close, or -1. Braces inside strings do not count.
 function braceEnd(text: string, s: number): number {
   let depth = 0, inStr = false, esc = false;
@@ -66,6 +63,10 @@ function braceEnd(text: string, s: number): number {
   return -1;
 }
 
+// Reads a reviewer's output: one JSON object per line, or NO FINDINGS. Objects inside code
+// fences or spread over several lines are found by brace matching. An object that is not a
+// finding (a matrix record from state-machines, or a wrapper) is searched for findings inside
+// it. A null confidence or line counts as absent.
 export function parseFindings(text: string): { findings: Finding[]; clean: boolean; unparsed: boolean } {
   const findings: Finding[] = [];
   const objs: any[] = [];
@@ -77,20 +78,23 @@ export function parseFindings(text: string): { findings: Finding[]; clean: boole
     if (e >= 0) { try { j = JSON.parse(text.slice(s, e + 1)); } catch { j = undefined; } }
     if (j !== undefined) { objs.push(j); s = text.indexOf('{', e + 1); } else s = text.indexOf('{', s + 1);
   }
-  for (const j of objs) {
-    if (!j || typeof j !== 'object' || typeof j.path !== 'string' || typeof j.summary !== 'string') continue;
-    const conf = Number(j.confidence);
+  const num = (x: any) => (x === null || x === undefined || x === '' ? NaN : Number(x));
+  const visit = (j: any) => {
+    if (!j || typeof j !== 'object') return;
+    if (typeof j.path !== 'string' || typeof j.summary !== 'string') { for (const v of Object.values(j)) visit(v); return; }
+    const conf = num(j.confidence), line = num(j.line);
     findings.push({
       severity: String(j.severity ?? '').toUpperCase(),
       confidence: Number.isFinite(conf) ? conf : null,
       path: j.path,
-      line: Number.isFinite(Number(j.line)) ? Number(j.line) : null,
+      line: Number.isFinite(line) ? line : null,
       summary: j.summary,
       advisory: j.advisory === true,
       cause_path: j.cause && typeof j.cause.path === 'string' ? j.cause.path : null,
       specialist: typeof j.specialist === 'string' ? j.specialist : null,
     });
-  }
+  };
+  objs.forEach(visit);
   const clean = findings.length === 0 && /NO FINDINGS/.test(text);
   return { findings, clean, unparsed: findings.length === 0 && !clean };
 }

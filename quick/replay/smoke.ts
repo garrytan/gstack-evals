@@ -9,12 +9,12 @@ const RESULTS = process.env.RESULTS ?? path.join(process.env.HOME!, '.capy/work/
 const LEDGER = process.env.LEDGER ?? path.join(process.env.HOME!, '.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl');
 fs.mkdirSync(path.join(RESULTS, 'smoke'), { recursive: true });
 const ledger = new Ledger(LEDGER, 'replay-quick', 60);
-const or = (p: string): Promise<{ status: number; json: any }> => fetch('https://openrouter.ai' + p, { headers: { authorization: 'Bearer ' + process.env.OPENROUTER_API_KEY } }).then(async r => ({ status: r.status, json: await r.json().catch(() => null) }));
+const or = (p: string): Promise<{ status: number; json: any }> => fetch((process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai') + p, { headers: { authorization: 'Bearer ' + process.env.OPENROUTER_API_KEY } }).then(async r => ({ status: r.status, json: await r.json().catch(() => null) }));
 
 const manifest: any = { prereg_sha: process.env.PREREG_SHA ?? null, at: new Date().toISOString() };
 const key = await or('/api/v1/key');
 manifest.openrouter_key = { status: key.status, limit: key.json?.data?.limit ?? null, limit_remaining: key.json?.data?.limit_remaining ?? null };
-const ep = await or('/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints');
+const ep = await or('/api/v1/models/' + MODELS.deepseek!.model + '/endpoints');
 manifest.deepseek_endpoints = (ep.json?.data?.endpoints ?? []).filter((e: any) => /deepseek/i.test(e.provider_name)).map((e: any) => ({ provider: e.provider_name, tag: e.tag, pricing: e.pricing }));
 const end = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 const start = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
