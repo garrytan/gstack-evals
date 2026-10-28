@@ -42,7 +42,7 @@ U2 is milestone M0's statistics and preregistration unit. It landed as three sta
 
 ## Changes to vendored behaviour
 
-Fix 1; an exploratory comparison that cannot pair no longer blocks its family; the cluster minimum is checked before an interval can fail a comparison; and prereg.ts lost its command-line block, whose stderr lines had no reason code. The first three came from Capy's review of #8. harness-evals and gbrain-evals still carry the original code.
+Fix 1; an exploratory comparison that cannot pair no longer blocks its family; the cluster minimum is checked before an interval can fail a comparison; and prereg.ts lost its command-line block, whose stderr lines had no reason code. The first three came from Capy's review of #8. The /ship review of the third PR added one more: `attestPreregistration` compares the file's content with its commit, so a file Git is told to skip (assume-unchanged) cannot be attested while it differs. harness-evals and gbrain-evals still carry the original code.
 
 ## Open
 
