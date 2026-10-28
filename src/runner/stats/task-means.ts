@@ -69,6 +69,7 @@ function byTask(side: 'A' | 'B', rows: readonly TrialValue[], problems: string[]
  */
 export function pairTaskMeans(a: readonly TrialValue[], b: readonly TrialValue[], rule: MissingCellRule, tasks?: readonly string[]): TaskPairing {
   const problems = missingCellRuleProblems(rule);
+  if (problems.length) throw new PairingError(problems);
   const left = byTask('A', a, problems), right = byTask('B', b, problems);
   const list = tasks ? [...tasks] : [...new Set([...left.keys(), ...right.keys()])];
   if (tasks && new Set(tasks).size !== tasks.length) problems.push('the task list repeats a task');
@@ -81,7 +82,7 @@ export function pairTaskMeans(a: readonly TrialValue[], b: readonly TrialValue[]
   list.sort((p, q) => (p < q ? -1 : p > q ? 1 : 0));
   const pairs: PairedItem[] = [];
   const dropped: TaskPairing['dropped'] = [];
-  const valid: TaskPairing['valid'] = { a: {}, b: {} };
+  const valid: TaskPairing['valid'] = { a: Object.create(null), b: Object.create(null) };
   for (const task of list) {
     const x = left.get(task), y = right.get(task);
     const va = x?.valid ?? 0, vb = y?.valid ?? 0;
