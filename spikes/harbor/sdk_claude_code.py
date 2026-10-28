@@ -73,7 +73,7 @@ class SdkClaudeCode(ClaudeCode):
         if model:
             env["ANTHROPIC_MODEL"] = model
             if "ANTHROPIC_BASE_URL" in env:
-                env.update(self._model_alias_env(model, all_aliases=True))
+                env.update(dict.fromkeys(self._model_alias_env(model, all_aliases=True), model))
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         env["DISABLE_AUTOUPDATER"] = "1"
         env["CLAUDE_CONFIG_DIR"] = self.options.config_dir

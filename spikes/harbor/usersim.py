@@ -24,7 +24,8 @@ class Simulator:
             [question.get("question", ""), question.get("header", "")]
             + [o.get("label", "") for o in question.get("options", [])]
         ).lower()
-        for category, keywords in self.persona["categories"].items():
+        categories = sorted(self.persona["categories"].items(), key=lambda item: item[0] != "approval")
+        for category, keywords in categories:
             if any(k in text for k in keywords):
                 return category
         return None

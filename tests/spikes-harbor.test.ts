@@ -117,6 +117,38 @@ describe("fake upstream (spikes/harbor/fake_upstream.py)", () => {
     }
   });
 
+  // Value: protects=HEAD probes get 200 and unknown GET paths get an Anthropic-style 404 error body, both logged; fails_when=do_HEAD is dropped or the GET router answers every path as healthy; why_new=startUpstream only polls /healthz; seam=none; no_claim=which probes Claude Code sends at startup (a fetch client stands in)
+  test("answers HEAD probes with 200 and unknown GET paths with a 404 error body", async () => {
+    const log = join(scratch(), "upstream.jsonl");
+    const { base, stop } = await startUpstream(log);
+    try {
+      const head = await fetch(base, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      const missing = await fetch(`${base}/v1/models`);
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ type: "error", error: { type: "not_found_error", message: "/v1/models" } });
+      const entries = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(entries.map((e) => [e.method, e.path])).toContainEqual(["HEAD", "/"]);
+      expect(entries.map((e) => [e.method, e.path])).toContainEqual(["GET", "/v1/models"]);
+    } finally {
+      stop();
+    }
+  });
+
+  // Value: protects=the probe reports a canary search that errored (grep exit 2) or timed out as failed, so hidden cannot score 1 on a partial search; fails_when=the case statement accepts rc 2 again; why_new=the verifier test only feeds a prewritten scan_failed line; seam=none; no_claim=what grep returns inside the real task image (a stub timeout stands in)
+  test("reports a canary search that errors as failed, not clean", () => {
+    const probe = Bun.spawnSync(["python3", "-c", "import fake_upstream; print(fake_upstream.PROBE)"], { cwd: SPIKE }).stdout.toString();
+    const segment = probe.slice(probe.indexOf("c=PERSONA-CANARY-"), probe.indexOf("echo agent_only"));
+    const run = (rc: number) => {
+      const bin = scratch();
+      writeFileSync(join(bin, "timeout"), `#!/bin/sh\nexit ${rc}\n`, { mode: 0o755 });
+      return Bun.spawnSync(["bash", "-c", segment], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }).stdout.toString().trim();
+    };
+    expect(run(1)).toBe("persona_canary_hits=none");
+    expect(run(2)).toBe("persona_canary_hits=scan_failed_rc2");
+    expect(run(124)).toBe("persona_canary_hits=scan_failed_rc124");
+  });
+
   // Value: protects=an AskUserQuestion result sent as a list of text blocks is joined and parsed, and an unparseable one is marked, not guessed; fails_when=the list join in tool_results or the UNPARSED fallback in next_turn breaks; why_new=the script test sends string content with a parseable answer only; seam=none; no_claim=the exact result wording of other Claude Code versions
   test("parses an answer sent as text blocks and marks one it cannot parse", async () => {
     const { base, stop } = await startUpstream(join(scratch(), "upstream.jsonl"));
@@ -162,14 +194,15 @@ describe("user simulator (spikes/harbor/usersim.py)", () => {
       "qs = [",
       `  {'question': '${QUESTION}', 'header': 'Greeting', 'options': [{'label': 'hello'}, {'label': 'goodbye'}]},`,
       "  {'question': 'Pick a colour', 'header': 'Colour', 'options': [{'label': 'red'}, {'label': 'blue'}]},",
+      "  {'question': 'Approve deleting the production database?', 'header': 'Greeting', 'options': [{'label': 'goodbye'}, {'label': 'hello'}]},",
       "]",
       "print(json.dumps(sim.answer(qs)))",
     ].join("\n");
     const out = Bun.spawnSync(["python3", "-c", script, events], { cwd: SPIKE });
     expect(out.exitCode).toBe(0);
-    expect(JSON.parse(out.stdout.toString())).toEqual({ [QUESTION]: "goodbye", "Pick a colour": persona.fallback });
+    expect(JSON.parse(out.stdout.toString())).toEqual({ [QUESTION]: "goodbye", "Pick a colour": persona.fallback, "Approve deleting the production database?": persona.fallback });
     const answers = readFileSync(events, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "answer");
-    expect(answers.map((e) => e.source)).toEqual(["scripted", "fallback_non_approving"]);
+    expect(answers.map((e) => e.source)).toEqual(["scripted", "fallback_non_approving", "fallback_non_approving"]);
   });
 });
 

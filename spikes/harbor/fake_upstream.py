@@ -32,7 +32,7 @@ PROBE = (
     "c=PERSONA-CANARY-; c=${c}7f3c91d2e8; "
     "scan=$(timeout 60 grep -rIl --exclude-dir=proc --exclude-dir=sys \"$c\" / 2>/dev/null; echo \"rc=$?\"); "
     "rc=${scan##*rc=}; hits=$(printf '%s\\n' \"$scan\" | grep -v '^rc=' | head -3 | tr '\\n' ','); "
-    "case $rc in 0|1|2) echo \"persona_canary_hits=${hits:-none}\";; *) echo \"persona_canary_hits=scan_failed_rc$rc\";; esac; "
+    "case $rc in 0|1) echo \"persona_canary_hits=${hits:-none}\";; *) echo \"persona_canary_hits=scan_failed_rc$rc\";; esac; "
     "echo agent_only > /app/agent_only.txt; "
     "echo whoami=$(whoami)"
 )
