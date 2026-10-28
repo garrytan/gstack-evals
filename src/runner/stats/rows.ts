@@ -1,6 +1,7 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) at 70cb3d0197b70d24b4bd3344b8248e908d4710a8, runner/stats/rows.ts,
 // which took it from gbrain-evals v0.10.128 (6999ebc9), eval/runner/stats/. MIT License, Copyright (c) 2026 Garry Tan.
-// Unchanged.
+// gstack-evals changes (U2), marked "gstack-evals:": a system failure with no metric value scores 0 only on a
+// higher-is-better metric, where 0 is a miss; elsewhere it takes the preregistered failure value or blocks pairing.
 /**
  * Turn per-item result rows (NDJSON or a JSON array) into paired-comparison
  * observations under one eligibility rule, applied identically to both runs.
@@ -14,9 +15,11 @@
  *      row with a reader or judge failure (`qa_error`) when the metric is a
  *      reading-lane metric (`qa_*`); the multi-system join in
  *      memory-qa/outcomes.ts then excludes that id from every system.
- *   3. A row whose error origin is `sut` is eligible and scores 0 when the
- *      metric is missing, following the probe-accounting rule that a system
- *      failure is a miss that stays in the denominator.
+ *   3. A row whose error origin is `sut` is eligible and, when the metric is
+ *      missing, scores the preregistered failure value, or 0 on a metric where
+ *      higher is better, following the probe-accounting rule that a system
+ *      failure is a miss that stays in the denominator. With neither, the row
+ *      has no value and blocks pairing: 0 would be the best latency or cost.
  *   4. A row without a finite (or boolean) metric value is ineligible.
  */
 import { readFileSync } from 'node:fs';
@@ -31,6 +34,10 @@ export interface RowSelection {
   clusterBy?: string;
   /** `field=value` rules; a matching row is ineligible. */
   excludeWhen?: string[];
+  /** Which way the metric improves; a system failure scores 0 only when higher is better. */
+  direction?: 'higher' | 'lower';
+  /** The preregistered score of a system failure that left no metric value. */
+  failureValue?: number;
 }
 
 export function getPath(row: unknown, path: string): unknown {
@@ -73,7 +80,10 @@ export function toObservation(row: Row, selection: RowSelection): Observation {
   const raw = getPath(row, selection.metric);
   const value = typeof raw === 'boolean' ? Number(raw) : raw;
   if (typeof value === 'number' && Number.isFinite(value)) return { id, cluster, value, eligible: true };
-  if (failed) return { id, cluster, value: 0, eligible: true };
+  // gstack-evals: 0 is a miss only when higher is better; otherwise the failure needs a preregistered score.
+  if (failed && selection.failureValue !== undefined) return { id, cluster, value: selection.failureValue, eligible: true };
+  if (failed && selection.direction === 'higher') return { id, cluster, value: 0, eligible: true };
+  if (failed) return { id, cluster, value: null, eligible: true, reason: `a system failure left no ${selection.metric} value and the comparison preregisters no failure_value` };
   return ineligible(`no ${selection.metric} value`);
 }
 
