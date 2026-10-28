@@ -5,7 +5,7 @@ Open items carried from plan v3.2 ("Open items" and "Owner actions") and from bu
 ## From the plan
 
 - [ ] **OpenRouter's Anthropic-compatible endpoint with author-pinned providers in Claude Code.** Verified in the M2 feasibility smoke.
-- [ ] **Harbor with our base URL, baked arms, the separate verifier and the SDK-driven Claude Code agent.** Settled by the U8 spike, which also writes the Lane B section of docs/adapters.md.
+- [x] **Harbor with our base URL, baked arms, the separate verifier and the SDK-driven Claude Code agent.** Settled by the U8 spike: all pass, check 5 only under condition 4 of [its finding](wiki/board/2026-10-28-gsta-10-harbor-spike-lane-b-runner.md) and the Lane B section of docs/adapters.md.
 - [ ] **A SWE-rebench slice newer than 2026-10-17.** Checked in Phase 2b; if none exists, mint instead.
 - [ ] **Open weights for Step 5 Preview, Muse Spark 1.3 and Hy4 Preview.** Unverified; matters only if the ladder grows past two open-weight rungs.
 - [ ] **Offers to gstack, through the Captain (U12).** The state-root convention (`GSTACK_STATE_ROOT` and `GSTACK_HOME`), a `resumable` field, the lock step in /write-skill's diet.md step 6, and office-hours' contract tasks.
