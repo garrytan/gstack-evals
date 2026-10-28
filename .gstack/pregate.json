@@ -11,6 +11,15 @@
     "docs/errors.md": [
       "tests/errors.test.ts"
     ],
+    "src/errors/codes.ts": [
+      "tests/errors.test.ts"
+    ],
+    "src/runner/proxy/**": [
+      "tests/proxy/metering-proxy.test.ts"
+    ],
+    "src/runner/pricing/**": [
+      "tests/proxy/metering-proxy.test.ts"
+    ],
     ".gstack/pregate.json": [
       "tests/wiki.test.ts",
       "tests/sealed.test.ts"

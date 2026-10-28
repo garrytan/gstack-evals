@@ -18,7 +18,7 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | runner/ledger/ | The budget ledger, rewritten on vendoring | U4 |
 | runner/prereg/ | The preregistration checker, vendored | U2 |
 | runner/stats/ | The statistics kit, vendored, with two fixes | U2 |
-| runner/pricing/ | The price table the proxy and preflight read | not assigned; vendored with the proxy |
+| runner/pricing/ | The price table the proxy and preflight read, vendored with the proxy | U3 |
 | trial/ | The trial module: isolation, images, network, env allowlist, state root, grading delta, cache | U9 |
 
 Vendored files keep their upstream copyright line in the file header and get an entry in [NOTICE.md](../NOTICE.md).

@@ -329,11 +329,20 @@ export const CODES = {
   },
   E_ALLOWANCE: {
     exit: 2,
-    meaning: "The metering proxy refused a request for a model outside the slot's allowlist, or because the slot spent its allowance.",
-    fix: "A model outside the allowlist means the host called a model the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume <out>.",
+    meaning: "The metering proxy refused a request the slot does not allow: a model, route or output cap outside the slot's allowlist, a body it cannot price (unknown model, not JSON), or a call whose worst case the slot's remaining allowance cannot hold.",
+    fix: "A model, route or output cap outside the allowlist means the host called something the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume <out>.",
     side_effects: "None for the refused request: it never reached the provider.",
     retry_safe: true,
     resumable: true,
+    owner: "U3",
+  },
+  E_TRIPWIRE: {
+    exit: 2,
+    meaning: "The metering proxy refused a request whose body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), so the cell is invalid.",
+    fix: "Find how the marker reached the agent (task setup, fixtures, arm files or env) and remove it, then run the cell again as a new run. The message counts markers and never prints them.",
+    side_effects: "None for the refused request: it never reached the provider. Calls the cell made before it are charged.",
+    retry_safe: true,
+    resumable: false,
     owner: "U3",
   },
   E_IMAGE_BUILD: {
