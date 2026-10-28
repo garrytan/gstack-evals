@@ -90,7 +90,19 @@ interface RunOpts {
   prereg: string;
 }
 
+// Sessions run on image ids, not mutable tags. A paid run refuses an id that images.json does not pin.
+export async function resolveImages(tags: string[], fake: boolean): Promise<Record<string, string>> {
+  const pinned = JSON.parse(readFileSync(join(import.meta.dir, "..", "images.json"), "utf8")).images as Record<string, string>;
+  const ids: Record<string, string> = {};
+  for (const tag of tags) {
+    ids[tag] = (await sh(`docker image inspect --format '{{.Id}}' ${tag}`)).trim();
+    if (!fake && ids[tag] !== pinned[tag]) throw new Error(`E_IMAGE: ${tag} is ${ids[tag]}, images.json pins ${pinned[tag] ?? "nothing"}`);
+  }
+  return ids;
+}
+
 async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ results: SessionResult[]; capStop: string | null }> {
+  const images = await resolveImages([BASE_IMAGE, ...new Set(cells.map((c) => imageTag(c.suite, c.arm)))], opts.fake);
   const releaseLock = lockLedger(opts.ledgerPath);
   const prep = loadPrepared();
   const hostname = "172.17.0.1";
@@ -154,7 +166,8 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
           arm: c.arm,
           model: c.model,
           trial: c.trial,
-          image: tag,
+          image: images[tag]!,
+          checkImage: images[BASE_IMAGE]!,
           seedDir: ps.seed,
           fixturesDir: ps.full,
           outDir: dir,

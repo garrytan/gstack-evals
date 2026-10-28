@@ -56,6 +56,7 @@ const spec = (id: string) => ({
   model: "claude-haiku-5-5",
   trial: 1,
   image: "img",
+  checkImage: "base",
   seedDir: dir,
   fixturesDir: dir,
   outDir: join(dir, id),

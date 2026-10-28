@@ -2,7 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BASE_IMAGE, LIMITS, type ArmName } from "./config.ts";
+import { LIMITS, type ArmName } from "./config.ts";
 import { gradePatterns, loadedBytes, parseTranscript, resultOutcome, skillUse, transcriptText, type PatternGrade, type Task } from "./grade.ts";
 import type { MeteringProxy } from "./proxy.ts";
 import { UserSim, type UserScript } from "./usersim.ts";
@@ -18,6 +18,7 @@ export interface SessionSpec {
   model: string;
   trial: number;
   image: string;
+  checkImage: string;
   seedDir: string;
   fixturesDir: string;
   outDir: string;
@@ -266,7 +267,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
   if (spec.task.check && status !== "infra_error") {
     const env = { ...STATE_ENV, SKILL_EVAL_FIXTURES: "/fx", HOME: "/tmp", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "safe.directory", GIT_CONFIG_VALUE_0: "*" };
     const r = await run(
-      ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "-v", `${spec.fixturesDir}:/fx:ro`, "-w", "/work", BASE_IMAGE, "sh", "-c", spec.task.check],
+      ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "-v", `${spec.fixturesDir}:/fx:ro`, "-w", "/work", spec.checkImage, "sh", "-c", spec.task.check],
       { env, timeoutMs: 120_000 },
     );
     check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };

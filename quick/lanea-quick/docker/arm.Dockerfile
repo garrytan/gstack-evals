@@ -1,4 +1,4 @@
-# One arm: a gstack tree at a pinned sha, installed for Claude Code by its own ./setup.
+# One arm: a gstack tree at a pinned sha, without its test/ folder, installed for Claude Code by its own ./setup.
 # DROP_SKILL removes one skill (the none arm: the base minus the target skill).
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
