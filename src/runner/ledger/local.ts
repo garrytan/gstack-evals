@@ -1,5 +1,6 @@
 // The local ledger, the machine-local tier: a SQLite file that holds one lease's calls against its amount. Every reserve
-// and settle is one BEGIN IMMEDIATE transaction, so processes that share the file serialize on SQLite's lock.
+// and settle is one BEGIN IMMEDIATE transaction, so processes that share the file serialize on SQLite's lock. It is
+// refused on a network or FUSE mount (E_LEDGER_PATH), where that lock does not hold.
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -7,6 +8,7 @@ import { dirname } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger, TokenUsage } from "../../types.ts";
 import { isMicros, usd } from "./money.ts";
+import { ledgerPath, readMounts, remoteMount, type Mount, type Resolved } from "./paths.ts";
 import { isTime, LedgerError, type CloseFile, type LeaseFile } from "./record.ts";
 
 const FORMAT = "gstack-evals-ledger/1";
@@ -184,3 +186,14 @@ export class LocalLedger implements ReservationLedger {
   }
 }
 
+/** Opens the local ledger, refusing a network or FUSE mount or a file SQLite cannot use with E_LEDGER_PATH. */
+export function openLocalLedger(at: Resolved, mounts: Mount[] = readMounts()): LocalLedger {
+  const fix = "point --ledger at a local disk; the default here is " + ledgerPath(undefined).path;
+  const type = remoteMount(at.path, mounts);
+  if (type) throw new LedgerError("E_LEDGER_PATH", "the local ledger " + at.path + " (from " + at.rule + ") is on a " + type + " mount, where SQLite's lock does not hold; " + fix);
+  try {
+    return LocalLedger.open(at.path);
+  } catch (error) {
+    throw new LedgerError("E_LEDGER_PATH", "the local ledger " + at.path + " (from " + at.rule + ") cannot be used: " + (error as Error).message + "; " + fix);
+  }
+}
