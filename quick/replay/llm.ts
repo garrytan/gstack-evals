@@ -120,11 +120,11 @@ function key(name: string): string {
   return v;
 }
 
-async function once(spec: ModelSpec, prompt: string, schema?: any): Promise<CallResult> {
+async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true): Promise<CallResult> {
   const t0 = Date.now();
   if (spec.provider === 'anthropic') {
     const j = await post(BASE.anthropic() + '/v1/messages', { 'x-api-key': key('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
-      { model: spec.model, max_tokens: spec.maxTokens, messages: [{ role: 'user', content: [{ type: 'text', text: prompt, cache_control: { type: 'ephemeral' } }] }], output_config: { effort: spec.effort } });
+      { model: spec.model, max_tokens: spec.maxTokens, messages: [{ role: 'user', content: [{ type: 'text', text: prompt, ...(cache ? { cache_control: { type: 'ephemeral' } } : {}) }] }], output_config: { effort: spec.effort } });
     const text = (j.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
     return { text, usage: j.usage ?? {}, usd: anthropicUsd(spec, j.usage ?? {}), stop: j.stop_reason ?? null, provider_served: 'anthropic', model_served: j.model ?? null, ms: Date.now() - t0 };
   }
@@ -149,12 +149,14 @@ async function once(spec: ModelSpec, prompt: string, schema?: any): Promise<Call
 // nothing for it; any other failure (a 200 with an error body, a timeout, a dropped
 // connection, a body without usage) settles at the worst case, since the request may still
 // have been billed. Failures are recorded, never retried.
-export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpec, prompt: string, opts: { limit?: number; schema?: any } = {}): Promise<CallResult> {
+// cache: false sends an Anthropic prompt without cache_control, for a prompt no later call
+// repeats (a Red Team prompt carries its own trial's findings).
+export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpec, prompt: string, opts: { limit?: number; schema?: any; cache?: boolean } = {}): Promise<CallResult> {
   const rid = ledger.reserve(callId, spec, worstUsd(spec, Buffer.byteLength(prompt)), opts.limit);
   let last: any;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const r = await once(spec, prompt, opts.schema);
+      const r = await once(spec, prompt, opts.schema, opts.cache ?? true);
       ledger.settle(rid, callId, 'ok', r.usd, { ...r.usage, attempts: attempt + 1 });
       return r;
     } catch (e: any) {

@@ -28,13 +28,14 @@ function prompt(rel: string): string {
   return text;
 }
 
+// A concurrency limit with two queues; a waiting high-priority call goes first.
 class Gate {
-  private n = 0; private q: (() => void)[] = [];
+  private n = 0; private q: (() => void)[] = []; private hi: (() => void)[] = [];
   constructor(private max: number) {}
-  async run<T>(f: () => Promise<T>): Promise<T> {
-    if (this.n >= this.max) await new Promise<void>(r => this.q.push(r));
+  async run<T>(f: () => Promise<T>, high = false): Promise<T> {
+    if (this.n >= this.max) await new Promise<void>(r => (high ? this.hi : this.q).push(r));
     this.n++;
-    try { return await f(); } finally { this.n--; this.q.shift()?.(); }
+    try { return await f(); } finally { this.n--; (this.hi.shift() ?? this.q.shift())?.(); }
   }
 }
 const gates: Record<string, Gate> = { anthropic: new Gate(8), openrouter: new Gate(8), openai: new Gate(4) };
@@ -51,7 +52,7 @@ const wake = () => { for (const w of settled.splice(0)) w(); };
 // record is a terminal INFRA failure that a rerun leaves incomplete. A cap refusal while
 // other calls are open waits for one to settle and tries again; with nothing open it is the
 // hard stop, and every later call is skipped.
-async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, out: string, meta: any): Promise<any> {
+async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, out: string, meta: any, opts: { high?: boolean; cache?: boolean } = {}): Promise<any> {
   if (fs.existsSync(out)) return JSON.parse(fs.readFileSync(out, 'utf8'));
   if (fs.existsSync(out.replace(/\.json$/, '.error.json'))) return null;
   if (capStopped) return null;
@@ -65,7 +66,7 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
       inFlight++;
       let r;
       try {
-        r = await meteredCall(ledger, meta.call_id, spec, text, { limit: RUN_LIMIT });
+        r = await meteredCall(ledger, meta.call_id, spec, text, { limit: RUN_LIMIT, cache: opts.cache });
       } catch (e: any) {
         inFlight--;
         if (e instanceof CapError) {
@@ -89,7 +90,7 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
       fs.writeFileSync(out, JSON.stringify(rec, null, 2));
       return rec;
     }
-  });
+  }, opts.high);
 }
 
 // The one-line form /review's Step 4.6 prints for each merged specialist finding.
@@ -97,26 +98,35 @@ function summaryLine(f: Finding): string {
   return '[' + (f.severity || 'INFORMATIONAL') + '] (confidence: ' + (f.confidence ?? '?') + '/10, specialist: ' + (f.specialist ?? '?') + ') ' + f.path + (f.line ? ':' + f.line : '') + ' — ' + f.summary;
 }
 
-async function unit(ledger: Ledger, spec: ModelSpec, c: any, arm: 'baseline' | 'gstack', trial: number) {
-  const dir = path.join(RESULTS, spec.key, c.case, arm, 't' + trial);
-  const meta = (reviewer: string) => ({ call_id: [spec.key, c.case, arm, 't' + trial, reviewer].join('/'), case: c.case, kind: c.kind, arm, trial, reviewer });
-  if (arm === 'baseline') {
-    await call(ledger, spec, c.prompts.baseline, prompt(c.prompts.baseline), path.join(dir, 'baseline.json'), meta('baseline'));
-    return;
-  }
-  const first = ['core', ...c.specialists];
-  const recs = await Promise.all(first.map((r: string) => call(ledger, spec, c.prompts[r], prompt(c.prompts[r]), path.join(dir, r + '.json'), meta(r))));
-  if (recs.some(r => r === null || r?.dry_run)) {
-    if (DRY && c.red_team_by_size) await call(ledger, spec, c.prompts.red_team_template, prompt(c.prompts.red_team_template), path.join(dir, 'red-team.json'), meta('red-team'));
-    return;
-  }
-  const specFindings = recs.slice(1).flatMap((r: any) => parseFindings(r.text).findings.filter(shown));
-  if (!redTeamActive(c.diff_lines, specFindings)) return;
-  const template = prompt(c.prompts.red_team_template);
-  const text = fillRedTeam(template, c.specialists.length, specFindings.map(summaryLine).join('\n'));
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'red-team.prompt.md'), text);
-  await call(ledger, spec, c.prompts.red_team_template, text, path.join(dir, 'red-team.json'), meta('red-team'));
+// One case and arm, all trials. Each reviewer prompt runs trial 1, then its later trials at
+// once as soon as trial 1 returns, ahead of other waiting calls, so they read the prompt cache
+// trial 1 wrote while it is live. Each trial's Red Team follows that trial's first-stage
+// reviewers and is sent without cache_control.
+async function group(ledger: Ledger, spec: ModelSpec, c: any, arm: 'baseline' | 'gstack', trials: number) {
+  const dir = (t: number) => path.join(RESULTS, spec.key, c.case, arm, 't' + t);
+  const meta = (t: number, reviewer: string) => ({ call_id: [spec.key, c.case, arm, 't' + t, reviewer].join('/'), case: c.case, kind: c.kind, arm, trial: t, reviewer });
+  const reviewers = arm === 'baseline' ? ['baseline'] : ['core', ...c.specialists];
+  const ts = Array.from({ length: trials }, (_, i) => i + 1);
+  const runs = reviewers.map((r: string) => {
+    const text = prompt(c.prompts[r]);
+    const one = (t: number) => call(ledger, spec, c.prompts[r], text, path.join(dir(t), r + '.json'), meta(t, r), { high: t > 1 });
+    const first = one(1);
+    return [first, ...ts.slice(1).map(t => first.then(() => one(t)))];
+  });
+  if (arm === 'baseline') { await Promise.all(runs.flat()); return; }
+  await Promise.all(ts.map(async t => {
+    const recs = await Promise.all(runs.map(x => x[t - 1]!));
+    if (recs.some(r => r === null || r?.dry_run)) {
+      if (DRY && c.red_team_by_size) await call(ledger, spec, c.prompts.red_team_template, prompt(c.prompts.red_team_template), path.join(dir(t), 'red-team.json'), meta(t, 'red-team'));
+      return;
+    }
+    const specFindings = recs.slice(1).flatMap((r: any) => parseFindings(r.text).findings.filter(shown));
+    if (!redTeamActive(c.diff_lines, specFindings)) return;
+    const text = fillRedTeam(prompt(c.prompts.red_team_template), c.specialists.length, specFindings.map(summaryLine).join('\n'));
+    fs.mkdirSync(dir(t), { recursive: true });
+    fs.writeFileSync(path.join(dir(t), 'red-team.prompt.md'), text);
+    await call(ledger, spec, c.prompts.red_team_template, text, path.join(dir(t), 'red-team.json'), meta(t, 'red-team'), { cache: false });
+  }));
 }
 
 if (import.meta.main) {
@@ -131,14 +141,10 @@ if (import.meta.main) {
   let worst = 0;
   for (const m of models) {
     const spec = MODELS[m]!;
-    // Case-arm groups run four at a time in plan order: trial 1, then trials 2 and 3 at once, so
-    // the later trials read the prompt cache trial 1 wrote while it is still live, and a cap
-    // stop cuts the tail of the plan rather than scattered units.
+    // Case-arm groups run four at a time in plan order, so a cap stop cuts the tail of the plan
+    // rather than scattered units.
     const groups = new Gate(4);
-    await Promise.all(cases.flatMap((c: any) => arms.map(arm => groups.run(async () => {
-      await unit(ledger, spec, c, arm, 1);
-      await Promise.all(Array.from({ length: trials - 1 }, (_, i) => unit(ledger, spec, c, arm, i + 2)));
-    }))));
+    await Promise.all(cases.flatMap((c: any) => arms.map(arm => groups.run(() => group(ledger, spec, c, arm, trials)))));
     if (DRY) {
       for (const c of cases) for (const r of [...(arms.includes('baseline') ? ['baseline'] : []), ...(arms.includes('gstack') ? ['core', ...c.specialists, ...(c.red_team_by_size ? ['red_team_template'] : [])] : [])]) worst += worstUsd(spec, fs.statSync(path.join(PROMPTS, c.prompts[r])).size) * trials;
     }

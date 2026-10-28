@@ -278,6 +278,33 @@ describe('providers against the fake upstream', () => {
     expect(fs.readFileSync(p.ledger, 'utf8').trim().split('\n').length).toBe(1);
   }, 30000);
 
+  test('later trials follow their own reviewer\'s trial 1; Red Team skips the cache', async () => {
+    const dir = tmp();
+    const files: Record<string, string> = {
+      'd1/core.md': 'core diff --git a/lib/a.ts b/lib/a.ts\n+x',
+      'd1/testing.md': 'FAKE_SLOW testing diff --git a/lib/a.ts b/lib/a.ts\n+x',
+      'd1/red-team.template.md': 'red {N} {merged findings summary} diff --git a/lib/a.ts b/lib/a.ts',
+      'd1/baseline.md': 'base diff --git a/lib/a.ts b/lib/a.ts\n+x',
+    };
+    for (const [k, v] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, 'prompts', k)), { recursive: true }); fs.writeFileSync(path.join(dir, 'prompts', k), v); }
+    fs.writeFileSync(path.join(dir, 'frozen.sha256'), Object.entries(files).map(([k, v]) => sha(v) + '  ' + k).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'plan.json'), JSON.stringify({ cases: [{ case: 'd1', kind: 'defect', diff_lines: 60, specialists: ['testing'], red_team_by_size: false, prompts: { baseline: 'd1/baseline.md', core: 'd1/core.md', testing: 'd1/testing.md', red_team_template: 'd1/red-team.template.md' } }] }));
+    const ledger = path.join(dir, 'ledger.jsonl');
+    new Ledger(ledger, 'replay-quick', 60).approve(QUOTES, 'test');
+    const from = fake.calls.length;
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'gstack'], { ...process.env, ...fake.env, PLAN_FILE: path.join(dir, 'plan.json'), FROZEN_FILE: path.join(dir, 'frozen.sha256'), PROMPTS: path.join(dir, 'prompts'), RESULTS: path.join(dir, 'results'), LEDGER: ledger, PREREG_SHA: 'x' });
+    expect(r.status).toBe(0);
+    const mine = fake.calls.slice(from).filter(c => c.route === '/v1/messages').map(c => ({ at: c.at, block: c.body.messages[0].content[0] }));
+    const core = mine.filter(c => c.block.text.startsWith('core')), testing = mine.filter(c => c.block.text.startsWith('FAKE_SLOW')), red = mine.filter(c => c.block.text.startsWith('red'));
+    expect(core.length).toBe(3);
+    expect(testing.length).toBe(3);
+    expect(red.length).toBe(3);
+    expect(core[1]!.at - testing[0]!.at).toBeLessThan(250);
+    expect(core[2]!.at - testing[0]!.at).toBeLessThan(250);
+    expect(core.every(c => c.block.cache_control?.type === 'ephemeral')).toBe(true);
+    expect(red.every(c => c.block.cache_control === undefined)).toBe(true);
+  }, 30000);
+
   test('a prompt that moved after freezing is refused', async () => {
     const dir = tmp();
     fs.mkdirSync(path.join(dir, 'prompts/d1'), { recursive: true });

@@ -5,7 +5,7 @@
 // fails mid-output; FAKE_400 answers 400.
 export function startFake() {
   const seen = new Set<string>();
-  const calls: { route: string; body: any }[] = [];
+  const calls: { route: string; body: any; at: number }[] = [];
   const review = (prompt: string) => {
     const m = /diff --git a\/(\S+) b\//.exec(prompt);
     return m ? JSON.stringify({ severity: 'CRITICAL', confidence: 8, path: m[1], line: 3, summary: 'fake finding in ' + m[1], specialist: 'fake' }) : 'NO FINDINGS';
@@ -15,7 +15,7 @@ export function startFake() {
     async fetch(req) {
       const url = new URL(req.url);
       const body: any = await req.json();
-      calls.push({ route: url.pathname, body });
+      calls.push({ route: url.pathname, body, at: Date.now() });
       const text = url.pathname === '/v1/messages' ? body.messages[0].content[0].text : url.pathname === '/api/v1/chat/completions' ? body.messages[0].content : body.input;
       if (text.includes('FAKE_SLOW')) await Bun.sleep(300);
       if (text.includes('FAKE_200_ERROR')) return Response.json({ error: { message: 'model failed mid-output', code: 502 } });
