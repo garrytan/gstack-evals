@@ -88,6 +88,8 @@ class HttpStatusError(RuntimeError):
 # the egress sidecar's own mark; CAP_NET_RAW also opens AF_PACKET sockets below its rules.
 NET_CAPS = {"CAP_NET_ADMIN": 12, "CAP_NET_RAW": 13}
 
+PROBE_TIMEOUT_S = 60
+
 KILL_CLAUDE = "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = claude ] && kill -9 ${p##*/} 2>/dev/null; done; true"
 LIST_PROCESSES = "for p in /proc/[0-9]*; do printf '%s\\t%s\\t' \"${p##*/}\" \"$(cat $p/comm 2>/dev/null)\"; tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done"
 
@@ -178,7 +180,7 @@ class LanebAgent(ClaudeCode):
             out = subprocess.check_output(
                 ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}", "--filter", "label=com.docker.compose.service=main"],
                 text=True,
-                timeout=60,
+                timeout=PROBE_TIMEOUT_S,
             ).split()
         except (subprocess.SubprocessError, OSError) as e:
             raise LanebInfraError(f"docker ps failed for {project}: {e}") from None
@@ -199,11 +201,11 @@ class LanebAgent(ClaudeCode):
         """Before any model call: the agent's container holds no network capability, and the processes running now are recorded."""
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
-        res = self._exec(container, "cat /proc/self/status", timeout=60)
+        res = self._exec(container, "cat /proc/self/status", timeout=PROBE_TIMEOUT_S)
         held = net_caps_held(res.stdout.decode(errors="replace"))
         if res.returncode != 0 or held:
             raise RuntimeError(f"preflight: the agent container must drop NET_RAW and NET_ADMIN (cap_drop in the job's extra compose file); still held: {held or res.stderr[-300:]!r}")
-        (evdir / "processes-before.tsv").write_bytes(self._exec(container, LIST_PROCESSES, timeout=60).stdout)
+        (evdir / "processes-before.tsv").write_bytes(self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S).stdout)
 
     def _inject_arm(self, container: str) -> dict:
         tar = Path(self.options.arm_tar)
@@ -363,7 +365,7 @@ class LanebAgent(ClaudeCode):
         except Exception as e:
             errors["kill"] = f"{type(e).__name__}: {e}"[:300]
         try:
-            after = self._exec(container, LIST_PROCESSES, timeout=60).stdout
+            after = self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S).stdout
             (evdir / "processes-after.tsv").write_bytes(after)
             before = parse_processes((evdir / "processes-before.tsv").read_text(errors="replace")) if (evdir / "processes-before.tsv").exists() else {}
             survivors = {pid: cmd for pid, cmd in parse_processes(after.decode(errors="replace")).items() if pid not in before and "/proc/[0-9]*" not in cmd}
