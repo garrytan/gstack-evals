@@ -15,7 +15,7 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | usersim/ | The user simulator; classifier.ts is U5's | U10 |
 | grade/ | Scoring and blinded adjudication | U10 |
 | runner/proxy/ | The metering proxy, vendored from harness-evals | U3 |
-| runner/ledger/ | The budget ledger, rewritten on vendoring | U4 |
+| runner/ledger/ | The budget ledger, written new: write-once approvals and leases, local SQLite reservations, settle and reconcile | U4 |
 | runner/prereg/ | The preregistration checker, vendored | U2 |
 | runner/stats/ | The statistics kit, vendored, with two fixes | U2 |
 | runner/pricing/ | The price table the proxy and preflight read, vendored with the proxy | U3 |

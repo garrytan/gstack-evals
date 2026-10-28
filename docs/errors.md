@@ -37,6 +37,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_LEDGER_PATH](#e_ledger_path) | 2 | U4 |
 | [E_LEASE_UNSETTLED](#e_lease_unsettled) | 2 | U4 |
 | [E_APPROVAL_RECORD](#e_approval_record) | 2 | U4 |
+| [E_LEDGER_RECORD](#e_ledger_record) | 2 | U4 |
+| [E_ITEM_BOUND](#e_item_bound) | 2 | U4 |
+| [E_LEASE_CLOSED](#e_lease_closed) | 2 | U4 |
+| [E_RESERVE_CONFLICT](#e_reserve_conflict) | 2 | U4 |
+| [E_SETTLE_CONFLICT](#e_settle_conflict) | 2 | U4 |
 | [E_CAP_TOO_LOW](#e_cap_too_low) | 2 | U7 |
 | [E_USER_TURNS_MISSING](#e_user_turns_missing) | 2 | U10 |
 | [E_INTERACTIVE_HOST](#e_interactive_host) | 2 | U7 |
@@ -157,7 +162,7 @@ Exit 2. Side effects: The run finished and its spend is settled in the ledger. R
 
 The spend cap ran out. Complete paired cells are kept, and the run prints STOP: reason=budget_exhausted spent=&lt;usd> reserved=&lt;usd> unknown=&lt;n> cap=&lt;usd>.
 
-Fix: Ask the owner for a higher cap, record it with gstack-evals ledger raise and their exact words, then --resume &lt;out>. Never rerun to change a verdict.
+Fix: Ask the owner for a higher cap and record it with gstack-evals ledger raise and their exact words. Settle the run's lease (gstack-evals ledger settle --lease &lt;id>), then --resume &lt;out>, which leases the rest of the same line item. Never rerun to change a verdict.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U4.
 
@@ -227,9 +232,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_LEDGER_MISSING
 
-No approved cap is on record for this run. The CLI never implies a cap.
+No approved cap is on record for this run's line item, or this machine's local ledger holds no lease for the call. The CLI never implies a cap.
 
-Fix: Escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.
+Fix: With no cap on record, escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report. With no local lease, lease the line item on this machine before the run spends.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
 
@@ -243,19 +248,59 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_LEASE_UNSETTLED
 
-A lease could not be settled into the approval record.
+A lease could not be settled into the approval record, or a new lease was asked for while an earlier lease on the same line item is still open.
 
-Fix: Run gstack-evals ledger settle --lease &lt;id>; settle is idempotent by lease id. A lease whose machine or journal is gone stays reserved until gstack-evals ledger reconcile records the owner's settlement.
+Fix: Run gstack-evals ledger settle --lease &lt;id> on the lease's machine; settle is idempotent by lease id. A lease whose machine or local ledger is gone stays reserved until it expires and the owner settles it with gstack-evals ledger reconcile, their words and the provider usage export.
 
 Exit 2. Side effects: Partial: the run's cells are recorded and the lease stays reserved until it is settled or reconciled. Retry safe: yes. Resumable: yes. Owner: U4.
 
 ### E_APPROVAL_RECORD
 
-gstack-approvals is missing or failed while an approval was recorded or mirrored.
+gstack-approvals is missing or failed while an approval was mirrored, so the approval was not written to the approval record.
 
 Fix: Read the binary path, its exit and its APPROVAL_RECORD_* code in the message. Add the missing flag, pass --branch on a detached checkout, or install gstack.
 
 Exit 2. Side effects: None: no approval is recorded until the mirror succeeds. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_LEDGER_RECORD
+
+The approval record (--ledger-record, GSTACK_EVALS_LEDGER_RECORD) could not be read or written: a file in it does not parse, or a write or its read-back failed.
+
+Fix: Read the path in the message and check that the record directory is reachable and writable (on Capy, that the drive is mounted), then run the command again; record files are write-once, so a retry rewrites nothing. A file that does not parse is repaired by a human, never deleted.
+
+Exit 2. Side effects: Partial when a write failed: the file can land before the directory sync or the read-back fails, so that approval or lease may already be in the record. None when a read failed. A gstack-approvals mirror row may already exist; a retry skips it. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_ITEM_BOUND
+
+The line item is bound to another run. Each line item of an approved cap admits one run, so the same money cannot fund a second run to change a verdict.
+
+Fix: This run cannot spend from that item. Continue the run the message names with its own --resume &lt;out>, or ask the owner for a new line item for this run and record it with gstack-evals ledger init and their words.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_LEASE_CLOSED
+
+A reserve named a lease that is past its expiry or already settled or reconciled, so it admits no new charge.
+
+Fix: Settle the lease with gstack-evals ledger settle --lease &lt;id>, then --resume &lt;out>, which takes a new lease on the same line item for the same run.
+
+Exit 2. Side effects: Partial: charges already held under the lease are kept; the refused call was not sent. Retry safe: yes. Resumable: yes. Owner: U4.
+
+### E_RESERVE_CONFLICT
+
+A reserve reused an idempotency key with a different lease, cell or amount than the first reserve under that key.
+
+Fix: An idempotency key names one call, so this is a defect in the caller. File an issue with the message, which names the key and both requests. Do not --resume.
+
+Exit 2. Side effects: None: the first reservation under the key is kept and nothing new is held. Retry safe: no. Resumable: no. Owner: U4.
+
+### E_SETTLE_CONFLICT
+
+A second settle of a reservation or a lease carried a different outcome than the first. The first stands: a settled lease cannot be reconciled differently, nor the reverse.
+
+Fix: Read both outcomes in the message and tell the owner which is right. The ledger is append-only, so the first outcome is never rewritten. Do not --resume.
+
+Exit 2. Side effects: None: the first outcome is kept and nothing is rewritten. Retry safe: no. Resumable: no. Owner: U4.
 
 ### E_CAP_TOO_LOW
 
