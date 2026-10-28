@@ -37,16 +37,25 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_LEDGER_PATH](#e_ledger_path) | 2 | U4 |
 | [E_LEASE_UNSETTLED](#e_lease_unsettled) | 2 | U4 |
 | [E_APPROVAL_RECORD](#e_approval_record) | 2 | U4 |
+| [E_LEDGER_RECORD](#e_ledger_record) | 2 | U4 |
+| [E_RIG_UNPROVEN](#e_rig_unproven) | 2 | U4 |
+| [E_ITEM_BOUND](#e_item_bound) | 2 | U4 |
+| [E_LEASE_CLOSED](#e_lease_closed) | 2 | U4 |
+| [E_RESERVE_CONFLICT](#e_reserve_conflict) | 2 | U4 |
+| [E_SETTLE_CONFLICT](#e_settle_conflict) | 2 | U4 |
 | [E_CAP_TOO_LOW](#e_cap_too_low) | 2 | U7 |
 | [E_USER_TURNS_MISSING](#e_user_turns_missing) | 2 | U10 |
 | [E_INTERACTIVE_HOST](#e_interactive_host) | 2 | U7 |
 | [E_LOOSE_GSTACK](#e_loose_gstack) | 2 | U7 |
 | [VACUOUS_CHECK](#vacuous_check) | 2 | U5 |
+| [E_TASKS_INVALID](#e_tasks_invalid) | 2 | U5 |
 | [E_ISOLATION_UNSAFE](#e_isolation_unsafe) | 2 | U9 |
 | [E_CACHE_STALE](#e_cache_stale) | 2 | U9 |
 | [E_NOT_RESUMABLE](#e_not_resumable) | 2 | U10 |
 | [E_SLOT_DENIED](#e_slot_denied) | 2 | U3 |
 | [E_ALLOWANCE](#e_allowance) | 2 | U3 |
+| [E_TRIPWIRE](#e_tripwire) | 2 | U3 |
+| [E_LEDGER_UNAVAILABLE](#e_ledger_unavailable) | 2 | U3 |
 | [E_IMAGE_BUILD](#e_image_build) | 2 | U9 |
 | [E_USERSIM](#e_usersim) | 2 | U10 |
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
@@ -66,6 +75,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [BROKEN_TASK](#broken_task) | warning | U6 |
 | [REPLY_MISALIGNED](#reply_misaligned) | warning | U10 |
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
+| [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -155,7 +165,7 @@ Exit 2. Side effects: The run finished and its spend is settled in the ledger. R
 
 The spend cap ran out. Complete paired cells are kept, and the run prints STOP: reason=budget_exhausted spent=&lt;usd> reserved=&lt;usd> unknown=&lt;n> cap=&lt;usd>.
 
-Fix: Ask the owner for a higher cap, record it with gstack-evals ledger raise and their exact words, then --resume &lt;out>. Never rerun to change a verdict.
+Fix: Ask the owner for a higher cap and record it with gstack-evals ledger raise and their exact words. Settle the run's lease (gstack-evals ledger settle --lease &lt;id>), then --resume &lt;out>, which leases the rest of the same line item. Never rerun to change a verdict.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U4.
 
@@ -225,9 +235,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_LEDGER_MISSING
 
-No approved cap is on record for this run. The CLI never implies a cap.
+No approved cap is on record for this run's line item, or this machine's local ledger holds no lease for the call. The CLI never implies a cap.
 
-Fix: Escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.
+Fix: With no cap on record, escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report. With no local lease, lease the line item on this machine before the run spends.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
 
@@ -235,25 +245,73 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE mount, or cannot be used. The approval record is not held to this rule.
 
-Fix: Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/).
+Fix: Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/). If a lease was closed at $0 because the local ledger failed while taking it (a busy lock, a full disk), fix that and lease again; the new lease takes the next slot.
 
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+Exit 2. Side effects: None: refused before any spend. If the local ledger failed after a lease was recorded, that lease is closed at $0 in the record. Retry safe: yes. Resumable: no. Owner: U4.
 
 ### E_LEASE_UNSETTLED
 
-A lease could not be settled into the approval record.
+A lease could not be settled into the approval record, or a new lease was asked for while an earlier lease on the same line item is still open.
 
-Fix: Run gstack-evals ledger settle --lease &lt;id>; settle is idempotent by lease id. A lease whose machine or journal is gone stays reserved until gstack-evals ledger reconcile records the owner's settlement.
+Fix: Run gstack-evals ledger settle --lease &lt;id> on the lease's machine; settle is idempotent by lease id. A lease whose machine or local ledger is gone stays reserved until it expires and the owner settles it with gstack-evals ledger reconcile, their words and the provider usage export.
 
 Exit 2. Side effects: Partial: the run's cells are recorded and the lease stays reserved until it is settled or reconciled. Retry safe: yes. Resumable: yes. Owner: U4.
 
 ### E_APPROVAL_RECORD
 
-gstack-approvals is missing or failed while an approval was recorded or mirrored.
+gstack-approvals is missing or failed while an approval was mirrored, so the approval was not written to the approval record.
 
 Fix: Read the binary path, its exit and its APPROVAL_RECORD_* code in the message. Add the missing flag, pass --branch on a detached checkout, or install gstack.
 
 Exit 2. Side effects: None: no approval is recorded until the mirror succeeds. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_LEDGER_RECORD
+
+The approval record (--ledger-record, GSTACK_EVALS_LEDGER_RECORD) could not be read or written: a file in it does not parse, or a write or its read-back failed.
+
+Fix: Read the path in the message and check that the record directory is reachable and writable (on Capy, that the drive is mounted), then run the command again; record files are write-once, so a retry rewrites nothing. A file that does not parse is repaired by a human, never deleted.
+
+Exit 2. Side effects: Partial when a write failed: the file can land before the directory sync or the read-back fails, so that approval or lease may already be in the record. None when a read failed. A gstack-approvals mirror row may already exist; a retry skips it. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_RIG_UNPROVEN
+
+A line item recorded with --admission required was asked for a lease, and no matching admission record exists for the lease's slot, so nothing was leased. The rig is proven before money is spent (GSTA-8, decision 3).
+
+Fix: Write the admission record the message names on the machine that will spend (U20's rig admission), then lease again. A new lease after a reconcile needs its own record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_ITEM_BOUND
+
+The line item is bound to another run. Each line item of an approved cap admits one run, so the same money cannot fund a second run to change a verdict.
+
+Fix: This run cannot spend from that item. Continue the run the message names with its own --resume &lt;out>, or ask the owner for a new line item for this run and record it with gstack-evals ledger init and their words.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_LEASE_CLOSED
+
+A reserve named a lease that is past its expiry or already settled or reconciled, so it admits no new charge.
+
+Fix: Settle the lease with gstack-evals ledger settle --lease &lt;id>, then --resume &lt;out>, which takes a new lease on the same line item for the same run.
+
+Exit 2. Side effects: Partial: charges already held under the lease are kept; the refused call was not sent. Retry safe: yes. Resumable: yes. Owner: U4.
+
+### E_RESERVE_CONFLICT
+
+A reserve reused an idempotency key with a different lease, cell or amount than the first reserve under that key.
+
+Fix: An idempotency key names one call, so this is a defect in the caller. File an issue with the message, which names the key and both requests. Do not --resume.
+
+Exit 2. Side effects: None: the first reservation under the key is kept and nothing new is held. Retry safe: no. Resumable: no. Owner: U4.
+
+### E_SETTLE_CONFLICT
+
+A second settle of a reservation or a lease carried a different outcome than the first. The first stands: a settled lease cannot be reconciled differently, nor the reverse.
+
+Fix: Read both outcomes in the message and tell the owner which is right. The ledger is append-only, so the first outcome is never rewritten. Do not --resume.
+
+Exit 2. Side effects: None: the first outcome is kept and nothing is rewritten. Retry safe: no. Resumable: no. Owner: U4.
 
 ### E_CAP_TOO_LOW
 
@@ -295,6 +353,14 @@ Fix: Tighten the task so it fails when nothing is done; the message names the as
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U5.
 
+### E_TASKS_INVALID
+
+A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules: an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks.
+
+Fix: Fix each problem the lines above name, then run gstack-evals validate --tasks &lt;tasks.json> until it exits 0. If the tasks file is locked, commit a relock (--lock).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U5.
+
 ### E_ISOLATION_UNSAFE
 
 No Docker daemon is reachable and --isolation process was not given.
@@ -329,11 +395,27 @@ Exit 2. Side effects: None for the refused request: it never reached the provide
 
 ### E_ALLOWANCE
 
-The metering proxy refused a request for a model outside the slot's allowlist, or because the slot spent its allowance.
+The metering proxy refused a request the slot does not allow: a model, route or output cap outside the slot's allowlist, a body it cannot price (unknown model, not JSON), or a call whose worst case the slot's remaining allowance cannot hold.
 
-Fix: A model outside the allowlist means the host called a model the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume &lt;out>.
+Fix: A model, route or output cap outside the allowlist means the host called something the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume &lt;out>.
 
 Exit 2. Side effects: None for the refused request: it never reached the provider. Retry safe: yes. Resumable: yes. Owner: U3.
+
+### E_TRIPWIRE
+
+The metering proxy refused a request whose path, query string, headers or body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), raw or percent-decoded, so the cell is invalid.
+
+Fix: Find how the marker reached the agent (task setup, fixtures, arm files or env) and remove it, then run the cell again as a new run. The message counts markers and never prints them.
+
+Exit 2. Side effects: None for the refused request: it never reached the provider. Calls the cell made before it are charged. Retry safe: yes. Resumable: no. Owner: U3.
+
+### E_LEDGER_UNAVAILABLE
+
+The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.
+
+Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume &lt;out>.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U3.
 
 ### E_IMAGE_BUILD
 
@@ -490,3 +572,11 @@ A safety task has no mutant in tasks.ext.json, so preflight could not check that
 Fix: Add a mutant {setup, answer} for the task in tasks.ext.json and commit a relock.
 
 Warning. Owner: U5.
+
+### RIG_UNPROVEN
+
+A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.
+
+Fix: Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).
+
+Warning. Owner: U4.

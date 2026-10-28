@@ -1,6 +1,16 @@
 {
   "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
   "runner": "bun test {files}",
+  "allowlist": [
+    {
+      "finding": "env.kv",
+      "paths": [
+        "quick/laneb/runner/agent/laneb_agent.py"
+      ],
+      "pattern": "\\(str\\(path\\), st\\.st_size, st\\.st_mtime_ns\\)\\s*$",
+      "reason": "a file-digest cache key tuple in sha256_file, not a credential"
+    }
+  ],
   "dependencies": {
     "bin/gstack-evals": [
       "tests/cli.test.ts"
@@ -10,6 +20,15 @@
     ],
     "docs/errors.md": [
       "tests/errors.test.ts"
+    ],
+    "src/errors/codes.ts": [
+      "tests/errors.test.ts"
+    ],
+    "src/runner/proxy/**": [
+      "tests/proxy/metering-proxy.test.ts"
+    ],
+    "src/runner/pricing/**": [
+      "tests/proxy/metering-proxy.test.ts"
     ],
     ".gstack/pregate.json": [
       "tests/wiki.test.ts",
@@ -22,7 +41,26 @@
     "package.json": [],
     "bun.lock": [],
     "tsconfig.json": [],
-    "src/**/.gitkeep": []
+    "src/**/.gitkeep": [],
+    "quick/laneb/**": [
+      "quick/laneb/tests/analysis-load.test.ts",
+      "quick/laneb/tests/analysis.test.ts",
+      "quick/laneb/tests/grid.test.ts",
+      "quick/laneb/tests/ledger-serve.test.ts",
+      "quick/laneb/tests/placebo.test.ts",
+      "quick/laneb/tests/proxy-accounting.test.ts",
+      "quick/laneb/tests/proxy-paths.test.ts",
+      "quick/laneb/tests/proxy-states.test.ts",
+      "quick/laneb/tests/runner.test.ts"
+    ],
+    "quick/lanea-quick/**": [
+      "quick/lanea-quick/test/grade.test.ts",
+      "quick/lanea-quick/test/ledger-usage.test.ts",
+      "quick/lanea-quick/test/plan.test.ts",
+      "quick/lanea-quick/test/proxy.test.ts",
+      "quick/lanea-quick/test/runrules.test.ts",
+      "quick/lanea-quick/test/usersim.test.ts"
+    ]
   },
   "strays": {
     "allow": [
