@@ -122,7 +122,12 @@ The only change from prereg 1 is the unit and its window: from "the first open a
 
 The outcome is the verifier reward (1 or 0). A trial with no reward after a model response reached the agent counts as 0, with the alternative of dropping it also shown. Pass rates, paired contrasts and intervals follow prereg 1: per-task means, and 95% percentile intervals from a task-clustered bootstrap (10,000 resamples, seed 20261028).
 
-- Primary: gstack minus placebo, per model, paired by task.
+The analysis groups the 20 tasks by whether `/investigate` is the native workflow for the task, from the skill map's `branch` field, and the grouping is fixed here before any paid call. The native group is 5 tasks: db-wal-recovery, overfull-hbox and sanitize-git-repo (fix), and query-optimize and tune-mjcf (optimize). The other 15 are the closest-fit group.
+
+- Primary: pooled across all 20 tasks, gstack minus placebo, paired by task, per model and pooled over models. This measures an explicitly invoked `/investigate` body against a length-matched placebo body on 20 TB2 tasks. It is not "gstack as used": 15 of the 20 tasks have no native gstack workflow, so a null here does not show that gstack fails on tasks it does have a native workflow for.
+- Preregistered secondary, thin and exploratory: gstack minus placebo on the native group of 5, where `/investigate` is the native workflow. At 5 tasks this is below the 8-task floor for a readable primary, so it is reported with wide intervals and no claim. The classification stands as written; no task is reclassified to enlarge it.
+- Headline finding for the results post: gstack has no native autonomous workflow for 15 of the 20 TB2 tasks, and the post states this plainly.
+- Next-prereg note: a Lane B task set for this rig must include enough tasks where a gstack skill is the native tool (fix, investigate, review or QA on existing code) for the native-workflow result to be readable.
 - Secondary: gstack minus none and placebo minus none per model, pass rate per cell, cost per success, and the share of the Opus gap closed for Haiku and DeepSeek (prereg 1's definition).
 - Manipulation check: body-load rate per arm and model, the pilot's beside the grid's, and the median first-request prompt tokens per arm.
 - Placebo-behavior coding: counts per category for each model and arm, with up to three quoted windows per category in trial-name order. No model judges.
