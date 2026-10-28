@@ -8,7 +8,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { materializeTb2 } from "./materialize.ts";
-import { jobConfig } from "./grid.ts";
+import { jobConfig, invokesArm } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -28,6 +28,9 @@ if (import.meta.main) {
   for (const id of final) if (!finalAll.includes(id)) throw new Error(`E_USAGE task ${id} is not in tasks/final.json`);
   const wrapper = process.env.WRAPPER ?? "prompt-wrapper.md";
   if (!/^prompt-wrapper[\w-]*\.md$/.test(wrapper) || !existsSync(join(here, wrapper))) throw new Error(`E_USAGE WRAPPER ${wrapper} is not a prompt-wrapper*.md file in ${here}`);
+  const skillMapRaw = JSON.parse(readFileSync(join(here, "skill-map.json"), "utf8")) as Record<string, { skill: string; branch: string }>;
+  for (const id of final) if (!skillMapRaw[id]) throw new Error(`E_USAGE task ${id} has no entry in runner/skill-map.json`);
+  const skillMap = Object.fromEntries(final.map((id) => [id, skillMapRaw[id].skill]));
   const expected = new Map<string, string>([...selection.main, ...selection.reserves].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
@@ -69,6 +72,7 @@ if (import.meta.main) {
     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256 }) => ({ name, tar, sha256 })),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`, wrapper,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
+    skill_map: skillMap,
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
   if (process.env.ORACLE === "1") {
@@ -80,6 +84,7 @@ if (import.meta.main) {
     job_name: jobName, created_at: new Date().toISOString(), network,
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
     wrapper, wrapper_sha256: sha256(join(here, wrapper)), persona_sha256: sha256(join(here, "agent/persona.json")),
+    skill_map_sha256: sha256(join(here, "skill-map.json")), invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invokesArm(name)])),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells, arms, tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");

@@ -119,6 +119,8 @@ type Session = {
   closedAt?: string;
   meta: Record<string, unknown>;
   ledgerReserved: boolean;
+  cmdExpanded?: boolean;
+  firstReqPromptTokens?: number;
 };
 
 export type ProxyOptions = {
@@ -158,6 +160,7 @@ export function startProxy(opts: ProxyOptions) {
   const summary = (s: Session) => ({
     id: s.id, trial: s.trial, model: s.model, cap_micros: s.capMicros, spent_micros: s.spentMicros, usage: s.usage,
     requests: s.requests, ok_responses: s.okResponses, refused: s.refused, refused_budget: s.refusedBudget, requested_models: s.requestedModels, open: s.open, opened_at: s.openedAt, closed_at: s.closedAt, meta: s.meta,
+    cmd_expanded: s.cmdExpanded ?? null, first_req_prompt_tokens: s.firstReqPromptTokens ?? null,
   });
 
   // Stop admission, let in-flight requests finish for closeWaitMs, then abort the rest and charge each its worst case,
@@ -294,7 +297,21 @@ export function startProxy(opts: ProxyOptions) {
         }
       }
       if (!s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      // Body-load probe: on the session's first forwarded request, record whether the CLI expanded a
+      // slash command (the outgoing body carries "<command-name>", so a skill body was injected) and the
+      // token bound for that first request. Both land in the session summary; cost accounting is untouched.
+      if (s.cmdExpanded === undefined) {
+        s.cmdExpanded = outBody.includes("<command-name>");
+        s.firstReqPromptTokens = inputTokens;
+        log({ event: "body_load_probe", session: s.id, cmd_expanded: s.cmdExpanded, first_req_prompt_tokens: inputTokens });
+      }
       const worst = worstCaseMicros(inputTokens, Number(body.max_tokens ?? 32000), maxPrice(model), asksLongTtl(outBody));
+      if (!Number.isFinite(worst) || worst <= 0) {
+        s.refused++;
+        s.refusedBudget++;
+        log({ event: "refused", session: s.id, reason: "worst_case", max_tokens: body.max_tokens });
+        return anthropicError(400, "invalid_request_error", "laneb proxy: worst-case cost is not a positive number");
+      }
       const inflight = [...s.pending.values()].reduce((x, p) => x + p.worst, 0);
       if (s.spentMicros + inflight + worst > s.capMicros) {
         s.refused++;

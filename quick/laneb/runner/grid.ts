@@ -17,7 +17,13 @@ export type BatchSpec = {
   base_url: string;
   max_output_tokens: number;
   verifier_timeout_multiplier: number;
+  invoke?: boolean;
+  skill_map?: Record<string, string>;
 };
+
+// The invoked arms open the prompt with a slash command so the CLI injects a skill body. invoke
+// defaults on and is a per-batch off switch; none never invokes.
+export const invokesArm = (name: string) => name === "gstack" || name === "placebo";
 
 // Harbor's default no-retry list at f3a5a92, plus our ledger cap stop. A trial that fails for any
 // other reason before it is graded (image build, container start, proxy unreachable) gets two reruns.
@@ -44,6 +50,8 @@ export function jobConfig(b: BatchSpec) {
         persona_path: `${b.agent_dir}/persona.json`,
         wrapper_path: `${b.runner_dir}/${b.wrapper ?? "prompt-wrapper.md"}`,
         max_output_tokens: b.max_output_tokens,
+        invoke: (b.invoke ?? true) && invokesArm(a.name),
+        skill_map: b.skill_map ?? {},
       },
     })),
   );

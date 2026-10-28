@@ -25,6 +25,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 from claude_agent_sdk.types import HookMatcher, PermissionResultAllow
+from prompt_builder import build_prompt
 from harbor.agents.installed.claude_code import ClaudeCode, ClaudeCodeOptions
 from harbor.environments.base import BaseEnvironment
 from harbor.environments.docker.docker import _sanitize_docker_compose_project_name
@@ -105,6 +106,9 @@ class LanebOptions(ClaudeCodeOptions):
     workdir: str = Field(default="", description="Claude Code working directory in the container; empty means the image's WORKDIR.")
     max_output_tokens: int = Field(default=32000, description="CLAUDE_CODE_MAX_OUTPUT_TOKENS; Claude Code otherwise asks for 128k, whose worst case exceeds the cheap cells' caps.")
     sdk_max_turns: int = Field(default=200, description="Hard turn ceiling; the session cap and agent timeout bind first.")
+    invoke: bool = Field(default=False, description="When true the prompt opens with a slash command '/<skill> ' so the CLI expands it and injects that skill's SKILL.md body. The gstack and placebo arms set it; none does not.")
+    skill_map: dict[str, str] = Field(default_factory=dict, description="Task id to the preregistered gstack skill name invoked for it; read only when invoke is true.")
+    invocation_sep: str = Field(default=" ", description="Separator between the slash command and the wrapper text; the CLI needs one space to parse the slash command.")
 
 
 class LanebAgent(ClaudeCode):
@@ -206,8 +210,15 @@ class LanebAgent(ClaudeCode):
         }
 
         wrapper_text = Path(self.options.wrapper_path).read_text()
-        prompt_text = wrapper_text.replace("{instruction}", instruction)
-        log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest()})
+        task_id = environment.session_id.split("__")[0]
+        skill = None
+        if self.options.invoke:
+            skill = self.options.skill_map.get(task_id)
+            if not skill:
+                raise RuntimeError(f"laneb agent: task {task_id} has no skill in the skill map, but this arm is invoked")
+        prompt_text = build_prompt(wrapper_text, instruction, self.options.invoke, skill, self.options.invocation_sep)
+        log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
+             "invoke": self.options.invoke, "skill": skill, "invocation_line_present": bool(self.options.invoke and skill)})
 
         host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
         wrapper = host_dir / "claude-in-container"
