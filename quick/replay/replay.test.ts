@@ -244,6 +244,36 @@ describe('providers against the fake upstream', () => {
     await expect(judgeCase(l, c, [f1], {}, path.join(dir, 'd1.json'), failedFile)).rejects.toThrow('STOP: judge account failure');
     expect(fs.existsSync(failedFile)).toBe(false);
   });
+  test('the judge network stop records the batch that tripped it before it stops', async () => {
+    const dir = tmp();
+    const l = new Ledger(path.join(dir, 'l.jsonl'), 'x', 50);
+    l.approve(QUOTES, 'test');
+    const c = { id: 'd1', file: 'lib/a.ts', lines: [[2, 4]], fix: 'f', fix_diff: '-x\n+y', defect: 'x breaks' };
+    const f40 = Array.from({ length: 40 }, (_, i) => ({ severity: 'CRITICAL', confidence: 8, path: 'lib/a.ts', line: i + 1, summary: 'n' + i, cause_path: null, specialist: null }) as any);
+    const failedFile = path.join(dir, 'd1.failed.json');
+    const u = process.env.OPENAI_BASE_URL;
+    process.env.OPENAI_BASE_URL = 'http://127.0.0.1:1';
+    try {
+      await expect(judgeCase(l, c, f40, {}, path.join(dir, 'd1.json'), failedFile)).rejects.toThrow('STOP: three judge failures');
+    } finally { process.env.OPENAI_BASE_URL = u; }
+    expect(Object.keys(JSON.parse(fs.readFileSync(failedFile, 'utf8'))).length).toBe(36);
+    expect(l.rows().filter(r => r.type === 'reserve').length).toBe(3);
+    expect(l.rows().filter(r => r.type === 'settle').length).toBe(3);
+  });
+  test('an OpenRouter cost of 0 settles at token pricing', async () => {
+    const srv = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => Response.json({ provider: 'DeepSeek', model: 'x', choices: [{ message: { content: 'NO FINDINGS' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 2000, cost: 0 } }) });
+    const u = process.env.OPENROUTER_BASE_URL;
+    process.env.OPENROUTER_BASE_URL = 'http://127.0.0.1:' + srv.port;
+    try {
+      const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
+      l.approve(QUOTES, 'test');
+      const r = await meteredCall(l, 'z', MODELS.deepseek!, 'p');
+      const want = (1000 * MODELS.deepseek!.inPerM + 2000 * MODELS.deepseek!.outPerM) / 1e6;
+      expect(want).toBeGreaterThan(0);
+      expect(r.usd).toBeCloseTo(want, 9);
+      expect(l.rows().find(x => x.type === 'settle').usd).toBeCloseTo(want, 6);
+    } finally { process.env.OPENROUTER_BASE_URL = u; srv.stop(true); }
+  });
   test('a result whose prompt hash moved counts as missing', () => {
     const dir = tmp();
     const rel = fs.readFileSync(path.join(HERE, 'frozen.sha256'), 'utf8').split('\n')[0]!.split(/\s+/)[1]!;
