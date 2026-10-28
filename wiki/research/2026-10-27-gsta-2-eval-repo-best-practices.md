@@ -7,7 +7,7 @@ author: GSTA-2
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-27
-status: done
+status: superseded
 source: Captain drive handoffs/research/best-practices.md (sha256 218b2497802770b24021f9ee22b91537b965370897ae93b7f50171c673d6d521), written by a GSTA-2 research subagent, copied by GSTA-6 on 2026-10-28
 ---
 # Eval-repo best practices for agent optimization loops
