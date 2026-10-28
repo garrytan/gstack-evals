@@ -212,8 +212,8 @@ export const CODES = {
   },
   E_LEDGER_MISSING: {
     exit: 2,
-    meaning: "No approved cap is on record for this run's line item. The CLI never implies a cap.",
-    fix: "Escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.",
+    meaning: "No approved cap is on record for this run's line item, or this machine's local ledger holds no lease for the call. The CLI never implies a cap.",
+    fix: "With no cap on record, escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report. With no local lease, lease the line item on this machine before the run spends.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,

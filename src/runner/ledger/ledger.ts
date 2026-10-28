@@ -52,7 +52,6 @@ const closeText = (c: CloseFile) => c.how + " at " + usd(c.spent_micros) + " spe
 
 /** Records a line item's first cap (init) or a higher one (raise). Retrying the same approval returns the recorded one. */
 export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; now?: Date }): ApprovalFile {
-  if (!ITEM_NAME.test(a.item)) throw new LedgerError("E_USAGE", "line item " + JSON.stringify(a.item) + " must match " + ITEM_NAME);
   if (!isMicros(a.cap_micros) || a.cap_micros === 0) throw new LedgerError("E_USAGE", "a cap must be a positive amount of dollars");
   checkQuotes(a.quotes);
   const state = read(record, a.item);
@@ -103,6 +102,8 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
   if (!isMicros(amount) || amount === 0 || amount > left) {
     throw new LedgerError("CAP_STOP", "line item " + req.item + " has " + usd(Math.max(left, 0)) + " left of its " + usd(cap) + " cap (" + usd(state.committed_micros) + " committed); this lease asks for " + (isMicros(amount) ? usd(amount) : String(amount)));
   }
+  const ttl = req.ttl_ms ?? DEFAULT_LEASE_TTL_MS;
+  if (!Number.isSafeInteger(ttl) || ttl <= 0) throw new LedgerError("E_USAGE", "a lease's time to live must be a positive whole number of milliseconds, not " + ttl);
   const now = req.now ?? new Date();
   const seq = state.leases.length + 1;
   const file: LeaseFile = {
@@ -114,7 +115,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     run_id: req.run_id,
     machine_id: req.machine_id ?? machineId(),
     reserved_micros: amount,
-    expires_at: new Date(now.getTime() + (req.ttl_ms ?? DEFAULT_LEASE_TTL_MS)).toISOString(),
+    expires_at: new Date(now.getTime() + ttl).toISOString(),
     created_at: now.toISOString(),
   };
   const refusal = req.admission?.(file, state);
@@ -138,7 +139,8 @@ function findLease(record: string, lease_id: string): { state: ItemState; lease:
 
 /** Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same bytes. */
 export function settleLease(record: string, local: LocalLedger, lease_id: string): CloseFile {
-  findLease(record, lease_id);
+  const { close: prior } = findLease(record, lease_id);
+  if (prior && !local.getLease(lease_id)) return prior;
   const close = local.stageClose(lease_id);
   const result = write(record, close, "E_LEASE_UNSETTLED");
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + lease_id + " is already " + closeText(result.conflict as CloseFile) + " in the approval record; this settle says " + closeText(close));
@@ -161,7 +163,7 @@ export function reconcileLease(record: string, r: { lease_id: string; spent_micr
     throw new LedgerError("E_USAGE", "--source must be the provider usage export file the owner settled from: " + (error as Error).message);
   }
   const { lease, close: prior } = findLease(record, r.lease_id);
-  if (prior?.how === "reconciled" && prior.spent_micros === r.spent_micros && prior.source === r.source && prior.source_sha256 === source_sha256 && sameQuotes(prior.quotes, r.quotes)) return prior;
+  if (prior?.how === "reconciled" && prior.spent_micros === r.spent_micros && prior.source_sha256 === source_sha256 && sameQuotes(prior.quotes, r.quotes)) return prior;
   const now = r.now ?? new Date();
   if (!prior && now < new Date(lease.expires_at)) {
     throw new LedgerError("E_LEASE_UNSETTLED", "lease " + r.lease_id + " can still admit calls on machine " + lease.machine_id + " until " + lease.expires_at + "; settle it there, or reconcile it after it expires");

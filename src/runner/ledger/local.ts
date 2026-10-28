@@ -7,7 +7,7 @@ import { dirname } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger, TokenUsage } from "../../types.ts";
 import { isMicros, usd } from "./money.ts";
-import { LedgerError, type CloseFile, type LeaseFile } from "./record.ts";
+import { isTime, LedgerError, type CloseFile, type LeaseFile } from "./record.ts";
 
 const FORMAT = "gstack-evals-ledger/1";
 const SCHEMA = `
@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS leases (lease_id TEXT PRIMARY KEY, file TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS reservations (
   reservation_id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, lease_id TEXT NOT NULL REFERENCES leases (lease_id),
   cell TEXT NOT NULL, max_micros INTEGER NOT NULL, state TEXT NOT NULL, spent_micros INTEGER, usage TEXT, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS reservations_lease ON reservations (lease_id, state);
 `;
 
 interface Row {
@@ -38,6 +39,8 @@ export interface LocalLease {
 /** JSON with sorted keys, so equal cells and usages compare equal as text. */
 const flat = (value: object) => JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))));
 const refuse = (code: ReasonCode, message: string): LedgerReply => ({ ok: false, code, message });
+const USAGE_KEYS = ["input", "output", "reasoning", "cache_read", "cache_write"] as const;
+const isCount = (n: unknown) => Number.isSafeInteger(n) && (n as number) >= 0;
 const outcomeText = (r: Pick<Row, "state" | "spent_micros">) => (r.state === "settled" ? "spent " + usd(r.spent_micros ?? 0) : r.state);
 
 function toReservation(r: Row): Reservation {
@@ -57,12 +60,17 @@ export class LocalLedger implements ReservationLedger {
     const db = new Database(path, { create: true, strict: true });
     try {
       db.exec("PRAGMA busy_timeout = 20000");
+      db.transaction(() => {
+        const tables = (db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name);
+        if (tables.length > 0) {
+          const format = tables.includes("meta") ? (db.query("SELECT value FROM meta WHERE key = 'format'").get() as { value: string } | null)?.value : undefined;
+          if (format !== FORMAT) throw new Error("it is " + (format ? "a " + format : "another program's") + " file, not " + FORMAT + "; it was left unchanged");
+        }
+        db.exec(SCHEMA);
+        db.run("INSERT OR IGNORE INTO meta (key, value) VALUES ('format', ?)", [FORMAT]);
+      }).immediate();
       db.exec("PRAGMA journal_mode = WAL");
       db.exec("PRAGMA synchronous = FULL");
-      db.exec(SCHEMA);
-      db.run("INSERT OR IGNORE INTO meta (key, value) VALUES ('format', ?)", [FORMAT]);
-      const format = db.query("SELECT value FROM meta WHERE key = 'format'").get() as { value: string };
-      if (format.value !== FORMAT) throw new Error("it is a " + format.value + " file, not " + FORMAT);
     } catch (error) {
       db.close();
       throw error;
@@ -79,6 +87,7 @@ export class LocalLedger implements ReservationLedger {
   }
 
   addLease(file: LeaseFile): void {
+    if (!isMicros(file.reserved_micros) || !isTime(file.expires_at)) throw new LedgerError("E_USAGE", "lease " + file.lease_id + " needs a whole reserved_micros and a valid expires_at");
     const text = JSON.stringify(file);
     this.db.run("INSERT OR IGNORE INTO leases (lease_id, file, state) VALUES (?, ?, 'open')", [file.lease_id, text]);
     if (JSON.stringify(this.getLease(file.lease_id)!.file) !== text) {
@@ -123,7 +132,8 @@ export class LocalLedger implements ReservationLedger {
 
   async settle(reservation_id: string, outcome: CallOutcome): Promise<LedgerReply> {
     if (outcome.kind === "spent" && !isMicros(outcome.spent_micros)) return refuse("E_INTERNAL", "spent_micros must be a whole number of micro-dollars, not " + outcome.spent_micros);
-    const next = outcome.kind === "spent" ? { state: "settled" as const, spent_micros: outcome.spent_micros, usage: flat(outcome.usage) } : { state: "unknown" as const, spent_micros: null, usage: null };
+    if (outcome.kind === "spent" && !USAGE_KEYS.every((k) => isCount(outcome.usage?.[k]))) return refuse("E_INTERNAL", "usage must give whole token counts for " + USAGE_KEYS.join(", ") + ", not " + JSON.stringify(outcome.usage));
+    const next = outcome.kind === "spent" ? { state: "settled" as const, spent_micros: outcome.spent_micros, usage: flat(Object.fromEntries(USAGE_KEYS.map((k) => [k, outcome.usage[k]]))) } : { state: "unknown" as const, spent_micros: null, usage: null };
     return this.tx(() => {
       const row = this.db.query("SELECT * FROM reservations WHERE reservation_id = ?").get(reservation_id) as Row | null;
       if (!row) return refuse("E_INTERNAL", "no reservation " + reservation_id + " in the local ledger " + this.path);
@@ -143,7 +153,7 @@ export class LocalLedger implements ReservationLedger {
   stageClose(lease_id: string): CloseFile {
     return this.tx(() => {
       const lease = this.getLease(lease_id);
-      if (!lease) throw new LedgerError("E_LEASE_UNSETTLED", "no lease " + lease_id + " in the local ledger " + this.path + "; settle it on its own machine, or, if that machine or its local ledger is gone, the owner reconciles it");
+      if (!lease) throw new LedgerError("E_LEASE_UNSETTLED", "no lease " + lease_id + " in the local ledger " + this.path + "; settle it on the machine whose local ledger holds it, or, if that machine or its local ledger is gone, the owner reconciles it after it expires");
       if (lease.close) return lease.close;
       this.db.run("UPDATE reservations SET state = 'unknown' WHERE lease_id = ? AND state = 'reserved'", [lease_id]);
       const rows = this.db.query("SELECT * FROM reservations WHERE lease_id = ?").all(lease_id) as Row[];

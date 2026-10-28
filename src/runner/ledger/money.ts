@@ -13,6 +13,7 @@ export function parseUsd(text: string): number | null {
 
 /** Formats micros as dollars with two decimals, or up to six when cents do not hold the amount: $130.00, $0.000125. */
 export function usd(micros: number): string {
+  if (micros < 0) return "-" + usd(-micros);
   const cents = String(micros % MICROS_PER_USD).padStart(6, "0").replace(/0{1,4}$/, "");
   return "$" + Math.floor(micros / MICROS_PER_USD) + "." + cents;
 }

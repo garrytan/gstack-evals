@@ -31,7 +31,7 @@ describe("money in integer micro-dollars", () => {
     expect(parseUsd("0.000125")).toBe(125);
     expect(parseUsd("0.1")! + parseUsd("0.2")!).toBe(parseUsd("0.3")!);
     for (const bad of ["", "-1", "1.0000001", "1e3", "abc", "1234567890"]) expect(parseUsd(bad)).toBeNull();
-    expect([usd(130_000_000), usd(12_500_000), usd(125), usd(0)]).toEqual(["$130.00", "$12.50", "$0.000125", "$0.00"]);
+    expect([usd(130_000_000), usd(12_500_000), usd(125), usd(0), usd(-500_000)]).toEqual(["$130.00", "$12.50", "$0.000125", "$0.00", "-$0.50"]);
   });
 });
 
