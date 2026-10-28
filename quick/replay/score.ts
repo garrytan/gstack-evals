@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { CapError, Ledger, MODELS, meteredCall } from './llm.ts';
+import { CapError, Ledger, MODELS, ProviderError, meteredCall } from './llm.ts';
 import { bootstrap, mean, parseFindings, redTeamActive, rng, sameFile, shown, type Finding } from './lib.ts';
 
 const HERE = import.meta.dir;
@@ -23,7 +23,7 @@ function git(...a: string[]): string {
 export const MODEL_KEYS = ['opus', 'haiku', 'deepseek'];
 export const ARMS = ['baseline', 'gstack'] as const;
 
-export type Unit = { model: string; arm: string; case: string; kind: string; trial: number; complete: boolean; usd: number; input_tokens: number; output_tokens: number; calls: number; findings: Finding[]; unparsed: number; truncated?: number };
+export type Unit = { model: string; arm: string; case: string; kind: string; trial: number; complete: boolean; usd: number; input_tokens: number; output_tokens: number; calls: number; findings: Finding[]; unparsed: number; truncated?: number; cut_empty?: number };
 
 // Reads one case x arm x model x trial. A gstack unit is complete when the core reviewer,
 // every dispatched specialist and (when it activates) the Red Team returned.
@@ -48,6 +48,7 @@ export function loadUnit(resultsDir: string, planCase: any, model: string, arm: 
     findings: parsed.flatMap(p => p.findings),
     unparsed: parsed.filter(p => p.unparsed).length,
     truncated: got.filter((r: any) => r.stop === 'max_tokens' || r.stop === 'length').length,
+    cut_empty: got.filter((r: any) => (r.stop === 'max_tokens' || r.stop === 'length') && !String(r.text ?? '').trim()).length,
   };
 }
 
@@ -79,6 +80,8 @@ export function judgePrompt(c: any, fixDiff: string, items: { id: string; f: Fin
   ].join('\n');
 }
 
+let judgeNoStatus = 0;
+
 // Judges every not-yet-judged finding of one case in batches of 12. A batch whose call fails
 // (other than the retried 429 and 5xx) is recorded in failedFile and never sent again, so its
 // findings stay unjudged and their units count as incomplete.
@@ -98,8 +101,12 @@ async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Rec
     try {
       res = await meteredCall(ledger, 'judge/' + c.id + '/' + i, MODELS.judge!, p, { schema: JUDGE_SCHEMA, limit: CAP });
       v = JSON.parse(res.text).verdicts;
+      if (!Array.isArray(v)) throw new SyntaxError('judge reply has no verdicts array');
+      judgeNoStatus = 0;
     } catch (e: any) {
-      if (e instanceof CapError) throw e;
+      if (!(e instanceof ProviderError) && !(e instanceof SyntaxError)) throw e;
+      judgeNoStatus = e instanceof ProviderError && !e.http ? judgeNoStatus + 1 : 0;
+      if (judgeNoStatus >= 3) throw new Error('STOP: three judge failures in a row with no HTTP status (network?)');
       for (const x of batch) failed[x.k] = String(e.message ?? e).slice(0, 300);
       fs.writeFileSync(failedFile, JSON.stringify(failed, null, 2));
       console.error('JUDGE INFRA ' + c.id + '/' + i + ': ' + String(e.message ?? e).slice(0, 200));
@@ -163,6 +170,7 @@ export function summarize(allUnits: Unit[], cases: any[], verdicts: Record<strin
       usd_defects: usdD, usd_all: usdAll, usd_per_catch: catches ? usdD / catches : null, usd_all_per_catch: catches ? usdAll / catches : null,
       calls: mine.reduce((a, u) => a + u.calls, 0), in_tokens_per_unit: mean(mine.map(u => u.input_tokens)), out_tokens_per_unit: mean(mine.map(u => u.output_tokens)),
       unparsed_outputs: mine.reduce((a, u) => a + u.unparsed, 0), truncated_outputs: mine.reduce((a, u) => a + (u.truncated ?? 0), 0),
+      cut_off_empty_calls: cell.reduce((a, u) => a + (u.cut_empty ?? 0), 0), units_with_cut_off_empty_call: cell.filter(u => (u.cut_empty ?? 0) > 0).length,
     });
   }
   const paired = (a: Cell, b: Cell) => {
@@ -205,7 +213,9 @@ if (import.meta.main) {
     Object.assign(verdicts, cache);
   }
   const strata: Record<string, any[]> = { all: cases, 'review-caught': cases.filter((c: any) => stratumOf(c, cases) === 'review-caught'), escaped: cases.filter((c: any) => stratumOf(c, cases) === 'escaped') };
-  const tables = Object.fromEntries(Object.entries(strata).map(([k, cs]) => [k, { primary: summarize(units, cs, verdicts, true), ungated: summarize(units, cs, verdicts, false) }]));
+  // Sensitivity, not primary: drop every unit with a call cut off at max_tokens before any answer.
+  const answered = units.map(u => ((u.cut_empty ?? 0) > 0 ? { ...u, complete: false } : u));
+  const tables = Object.fromEntries(Object.entries(strata).map(([k, cs]) => [k, { primary: summarize(units, cs, verdicts, true), ungated: summarize(units, cs, verdicts, false), answered_only: summarize(answered, cs, verdicts, true) }]));
   const hiCases = new Set(units.filter(u => u.model === 'opus-high').map(u => u.case));
   const exploratory = hiCases.size ? summarize(units.filter(u => u.model === 'opus-high' || (u.model === 'opus' && u.arm === 'gstack' && u.trial === 1)), cases.filter((c: any) => hiCases.has(c.id)), verdicts, true, ['opus-high', 'opus'], [[['opus-high', 'gstack'], ['opus', 'gstack']]]) : null;
   const out = { strata: tables, exploratory_opus_high_vs_opus_t1: exploratory, judged_findings: Object.keys(verdicts).length, judge_cap_stop: judgeStopped, ledger_committed_usd: ledger.committed() };

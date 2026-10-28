@@ -223,6 +223,23 @@ describe('providers against the fake upstream', () => {
     expect(r.status).not.toBe(2);
     expect(fs.existsSync(path.join(dir, 'results/haiku/d1/baseline/t1/baseline.error.json'))).toBe(false);
   });
+  test('a missing key stops the run before any reservation', async () => {
+    const p = capPlan(2);
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], { ...p.env(55), ANTHROPIC_API_KEY: '' });
+    expect(r.status).not.toBe(0);
+    expect(r.status).not.toBe(2);
+    expect(fs.readFileSync(p.ledger, 'utf8').trim().split('\n').length).toBe(1);
+    expect(fs.existsSync(path.join(p.dir, 'results'))).toBe(false);
+  });
+  test('three failures with no HTTP status in a row stop the run', async () => {
+    const p = capPlan(6);
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], { ...p.env(55), ANTHROPIC_BASE_URL: 'http://127.0.0.1:1' });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('STOP: three provider failures');
+    const errs = fs.readdirSync(path.join(p.dir, 'results/haiku'), { recursive: true }).filter(f => String(f).endsWith('.error.json')).length;
+    expect(errs).toBeGreaterThanOrEqual(3);
+    expect(errs).toBeLessThan(18);
+  });
   test('a 500 retries once and settles once', async () => {
     const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
     l.approve(QUOTES, 'test');

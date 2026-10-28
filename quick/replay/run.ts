@@ -48,6 +48,10 @@ const settled: (() => void)[] = [];
 // or the cap stop, wakes them, so refused waiters never wake each other.
 const wake = () => { for (const w of settled.splice(0)) w(); };
 
+// Provider failures with no HTTP status in a row. Three stop the run, so a network outage marks
+// a handful of calls INFRA instead of every call left in the plan.
+let noStatusStreak = 0;
+
 function writeAtomic(file: string, rec: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file + '.tmp', JSON.stringify(rec, null, 2));
@@ -87,10 +91,13 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
         const rec = { ...meta, prompt: rel, model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, error: String(e.message ?? e).slice(0, 500), at: new Date().toISOString() };
         writeAtomic(out.replace(/\.json$/, '.error.json'), rec);
         console.error('INFRA ' + meta.call_id + ': ' + rec.error);
+        noStatusStreak = e.http ? 0 : noStatusStreak + 1;
+        if (noStatusStreak >= 3) throw new Error('STOP: three provider failures in a row with no HTTP status (network?); calls not yet sent stay unsent');
         return null;
       }
       inFlight--;
       wake();
+      noStatusStreak = 0;
       const rec = { ...meta, prompt: rel, prompt_sha256: sha(text), model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, ...r, at: new Date().toISOString() };
       writeAtomic(out, rec);
       return rec;

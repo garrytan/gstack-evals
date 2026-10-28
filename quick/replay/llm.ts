@@ -155,11 +155,17 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
 // have been billed. Failures are recorded, never retried.
 // cache: false sends an Anthropic prompt without cache_control, for a prompt no later call
 // repeats (a Red Team prompt carries its own trial's findings).
-// A provider failure, settled in the ledger: the call's terminal INFRA outcome. Any other error
-// from here (a ledger read or write) is not a provider outcome and should stop the run.
-export class ProviderError extends Error {}
+// A provider failure, settled in the ledger: the call's terminal INFRA outcome. http says
+// whether the provider answered with a status. Any other error from here (a missing key, a
+// ledger read or write) is not a provider outcome and should stop the run.
+export class ProviderError extends Error {
+  constructor(msg: string, readonly http: boolean) { super(msg); }
+}
+
+const KEY_NAME = { anthropic: 'ANTHROPIC_API_KEY', openrouter: 'OPENROUTER_API_KEY', openai: 'OPENAI_API_KEY' } as const;
 
 export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpec, prompt: string, opts: { limit?: number; schema?: any; cache?: boolean } = {}): Promise<CallResult> {
+  key(KEY_NAME[spec.provider]);
   const rid = ledger.reserve(callId, spec, worstUsd(spec, Buffer.byteLength(prompt)), opts.limit);
   let last: any;
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -178,5 +184,5 @@ export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpe
   }
   const billed = last instanceof HttpError && last.status >= 400 ? 0 : worstUsd(spec, Buffer.byteLength(prompt));
   ledger.settle(rid, callId, 'error', billed, { error: String(last?.message ?? last).slice(0, 300) });
-  throw new ProviderError(String(last?.message ?? last));
+  throw new ProviderError(String(last?.message ?? last), last instanceof HttpError);
 }
