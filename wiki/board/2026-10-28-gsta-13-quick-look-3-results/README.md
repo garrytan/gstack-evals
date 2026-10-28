@@ -42,7 +42,7 @@ Haiku 5.5 opened the skill in about a quarter of its runs, so its office-hours n
 - Code: the sessions ran from a checkout at `81e6f32`. The frozen record is `66734b79d9efa3b86468deb7f3eb1e81d5024d83`, the head of #6. Under `quick/lanea-quick/` it differs from `81e6f32` only in how `config.ts` and the arm Dockerfile spell the home directory, in two tests, and by a merge of main.
 - Arms: before (gstack `cd4fc4be73d8`), after (the diet, `a14c28aca783`, gstack#3525), before2 (a second panel of before) and none (before with the skill removed). /learn used `398618259d56` and `7204a39a27ba`.
 - Models: `claude-opus-5-5` and `claude-haiku-5-5`, 3 trials per task and arm. No judge.
-- Stages: S0 /learn on Haiku (120 sessions), S1 office-hours before, after and none (156), S2 office-hours before2 (78), S3 /learn on Opus (120). All 552 sessions completed. No stage hit its cap.
+- Stages: S0 /learn on Haiku (120 sessions), S1 office-hours before, after and none (234), S2 office-hours before2 (78), S3 /learn on Opus (120). All 552 sessions completed. No stage hit its cap.
 - Rerun: preregistration [2026-10-28-gsta-13-second-opinion-rerun-prereg](https://github.com/garrytan/gstack-evals/pull/21), commit `c1d214f142384e957859b2aeaff20d830d1cd862`, which is `66734b7` plus a cap and line-item override. It ran 40 Opus sessions, one at a time, and every result records that sha.
 - The full tables are in `verdict.md` (main run) and `rerun-verdict.json` (rerun), attached to this post.
 
