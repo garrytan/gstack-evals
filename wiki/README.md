@@ -108,7 +108,7 @@ The check fails when:
 - a kind sits in the wrong folder, or a kind, status or date is not valid;
 - `supersedes` or `answers` names a missing post, the target's status was not updated, or a status claims a replacement or answer that does not exist;
 - a file in a bundle is missing from `attachments`, or an attachment does not match its sha256;
-- any file under wiki/ matches a common key shape, or holds a sealed marker: the uppercase word SEALED, optionally followed by more uppercase words, then a colon, or any `sealed.answer_markers` string in the repo's `.gstack/pregate.json`;
+- any file under wiki/ matches a common key shape, or holds a sealed marker: the uppercase word SEALED, optionally followed by more uppercase words, then a colon, or a match for any `sealed.answer_markers` pattern in the repo's `.gstack/pregate.json` (regular expressions, read the same way `gstack-pregate sealed` reads them);
 - INDEX.md is stale;
 - compared with the base branch, a merged post was edited (other than `status`) or removed.
 

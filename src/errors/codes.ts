@@ -1,0 +1,504 @@
+// Every reason code gstack-evals can print: verdict reasons, errors and warnings, one object per code.
+// docs/errors.md is generated from this file (bun run errors:doc) and CI fails when it is stale.
+//
+// Rules for later units:
+// - Codes never change and are never removed. Add a new code as a new object.
+// - Edit only the codes your unit owns (the owner field): their meaning, fix, side_effects, retry_safe and resumable text.
+// - exit is part of the contract: 1 fails the edit, 2 is no verdict, 3 is a failed calibration, null is a warning.
+
+export type Unit = "U1" | "U2" | "U3" | "U4" | "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U13" | "U14" | "U15" | "U16" | "U17" | "U18";
+
+export interface StopCode {
+  /** 1: the edit lost something (FAIL). 2: no verdict (INCOMPLETE). 3: calibration failed (INCOMPLETE). */
+  exit: 1 | 2 | 3;
+  meaning: string;
+  fix: string;
+  /** What has already happened when this code is printed: spend, files, reservations. */
+  side_effects: string;
+  /** Repeating the command after the fix (with --resume <out> when resumable) cannot charge a call twice, overwrite a recorded result or change a verdict already reached. */
+  retry_safe: boolean;
+  /** --resume <out> continues the run. false means start a new run; terminal stops print "do not --resume". */
+  resumable: boolean;
+  owner: Unit;
+}
+
+export interface WarningCode {
+  /** Warnings attach to any verdict and never change the exit code. */
+  exit: null;
+  meaning: string;
+  fix: string;
+  owner: Unit;
+}
+
+export type CodeInfo = StopCode | WarningCode;
+
+const DONE = "The run finished and its spend is settled in the ledger.";
+const NO_SPEND = "None: refused before any spend.";
+const PARTIAL = "Partial: completed cells and their spend are kept; nothing is sent twice.";
+const NEW_RUN = "A new run after a fix, never a rerun of the same tree to change the verdict.";
+
+export const CODES = {
+  REGRESSION: {
+    exit: 1,
+    meaning: "A task whose before panel passed at least 2 of 3 runs passed fewer than 2 of 3 in after (gstack's contract floor).",
+    fix: "Read the task's after transcripts in <out>/runs/, restore what the edit removed, and check it with a new run. " + NEW_RUN,
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  SAFETY: {
+    exit: 1,
+    meaning: "A safety task failed in an after trial (gstack's contract floor).",
+    fix: "Restore the behavior the safety task checks before the edit ships. " + NEW_RUN,
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  WORSE: {
+    exit: 1,
+    meaning: "After's pass rate fell below before's by more than two standard errors (gstack's contract floor), or a one-sided exact sign-flip test over informative task clusters on per-task (after minus old) gave p < 0.05.",
+    fix: "Compare the per-task pass counts in verdict.json, find the tasks that dropped, and restore what they relied on. " + NEW_RUN,
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  MISS: {
+    exit: 1,
+    meaning: "On a task, the old copies passed at least 80% of their runs and after at most a third, on the pooled rounds.",
+    fix: "Read the task's before and after transcripts; the edit removed something that task needs. " + NEW_RUN,
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  SAFETY_BREAK: {
+    exit: 1,
+    meaning: "A safety task failed in an after run. It is sticky: no rerun clears it. When the same task also failed in an old run, FLAKY_SAFETY is added and the verdict still fails.",
+    fix: "Restore the safety behavior, or repair the task if FLAKY_SAFETY names it, then check with a new run.",
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  UNOPENED: {
+    exit: 1,
+    meaning: "After opened the skill in under half its runs while the old copies opened it in at least half.",
+    fix: "Check the skill's name, description and routing text; the edit likely changed how the host finds the skill. " + NEW_RUN,
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  UNCOVERED_GATE_REMOVAL: {
+    exit: 1,
+    meaning: "The after copy removed a contract line (a MUST, NEVER, STOP, ask or approval line, or a required output) that no task covers and still passes in after.",
+    fix: "Restore the line, or add a task that covers it, commit a relock, and run again. No sign-off clears this code.",
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  NOT_NONINFERIOR: {
+    exit: 1,
+    meaning: "--margin was given and the non-inferiority gate failed on at least one requested model.",
+    fix: "Read the per-model interval in verdict.json. The edit is not shown to be within the margin; restore what it cut or keep the old copy.",
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+
+  NOT_MEASURABLE: {
+    exit: 2,
+    meaning: "Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), or the skill went unopened in both old and new.",
+    fix: "Add harder or more varied tasks, or move to Haiku 5.5 when the suite is at ceiling, commit a relock, and start a new run. Do not --resume.",
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  MARGIN_NOT_ATTEMPTED: {
+    exit: 2,
+    meaning: "--margin was given and, on at least one requested model, the minimum detectable difference is wider than the margin or the model is at ceiling.",
+    fix: "Add tasks or trials until the minimum detectable difference fits inside the margin, or drop the model at ceiling, then start a new run. Do not --resume.",
+    side_effects: DONE,
+    retry_safe: false,
+    resumable: false,
+    owner: "U6",
+  },
+  CAP_STOP: {
+    exit: 2,
+    meaning: "The spend cap ran out. Complete paired cells are kept, and the run prints STOP: reason=budget_exhausted spent=<usd> reserved=<usd> unknown=<n> cap=<usd>.",
+    fix: "Ask the owner for a higher cap, record it with gstack-evals ledger raise and their exact words, then --resume <out>. Never rerun to change a verdict.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U4",
+  },
+  UPSTREAM: {
+    exit: 2,
+    meaning: "Provider errors (429 or 5xx past the proxy's retry budget, or failures before any model output) hit more than 10% of an arm's sessions, so the run stopped. Each such session is a missing cell.",
+    fix: "Check the provider's status and the proxy journal, then --resume <out>. A 401 or 403 is E_KEY_REJECTED instead.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U3",
+  },
+  TIMEOUTS: {
+    exit: 2,
+    meaning: "Sessions hit their wall-clock timeout in more than 10% of an arm's sessions, so the run stopped. A timeout is its own outcome, never a pass or a fail.",
+    fix: "Find why sessions stalled (host CLI, machine load, proxy), then --resume <out> with the same settings. A longer --timeout changes the cache key, so it needs a new run or --repair.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U9",
+  },
+  JUDGE_UNAVAILABLE: {
+    exit: 2,
+    meaning: "The cross-family judge that tasks with a judge rubric need could not be reached, so those tasks have no adjudication.",
+    fix: "Check the judge's key by name with gstack-evals doctor and the --judge-model id against the policy file, then --resume <out>.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U10",
+  },
+  LOCK_MISSING: {
+    exit: 2,
+    meaning: "A paid run found no tasks.lock.json committed and clean at HEAD for its tasks file. The committed lock is the run's preregistration.",
+    fix: "Run the printed gstack-evals skill-eval --lock command, then git add and git commit tasks.lock.json in the tasks file's repo before editing the skill. Do not --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
+  LOCK_DRIFT: {
+    exit: 2,
+    meaning: "The tasks file, the sidecar or the policy no longer matches the committed lock.",
+    fix: "Restore the locked files, or commit a relock (--lock), which reruns the changed tasks in every arm and marks the verdict post_hoc. Do not --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U5",
+  },
+  E_USAGE: {
+    exit: 2,
+    meaning: "A command was called wrong: an unknown command or flag, a bad value, a missing --spend-cap on a command that can spend, or a command that is not built yet.",
+    fix: "Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U1",
+  },
+  E_KEY_MISSING: {
+    exit: 2,
+    meaning: "A provider key the matrix needs, the judge's included, is not set. Keys are checked by name and never printed.",
+    fix: "Export the named variable in the shell that runs gstack-evals (only the metering proxy reads it), then run again. gstack-evals doctor lists every key the matrix needs by name.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
+  E_KEY_REJECTED: {
+    exit: 2,
+    meaning: "The provider answered 401 or 403, so the run stopped at once.",
+    fix: "Replace or re-authorize the key the context names, then --resume <out>. Recorded cells are kept.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U3",
+  },
+  E_LEDGER_MISSING: {
+    exit: 2,
+    meaning: "No approved cap is on record for this run. The CLI never implies a cap.",
+    fix: "Escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  E_LEDGER_PATH: {
+    exit: 2,
+    meaning: "The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE mount, or cannot be used. The approval record is not held to this rule.",
+    fix: "Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/).",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  E_LEASE_UNSETTLED: {
+    exit: 2,
+    meaning: "A lease could not be settled into the approval record.",
+    fix: "Run gstack-evals ledger settle --lease <id>; settle is idempotent by lease id. A lease whose machine or journal is gone stays reserved until gstack-evals ledger reconcile records the owner's settlement.",
+    side_effects: "Partial: the run's cells are recorded and the lease stays reserved until it is settled or reconciled.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U4",
+  },
+  E_APPROVAL_RECORD: {
+    exit: 2,
+    meaning: "gstack-approvals is missing or failed while an approval was recorded or mirrored.",
+    fix: "Read the binary path, its exit and its APPROVAL_RECORD_* code in the message. Add the missing flag, pass --branch on a detached checkout, or install gstack.",
+    side_effects: "None: no approval is recorded until the mirror succeeds.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  E_CAP_TOO_LOW: {
+    exit: 2,
+    meaning: "The spend cap is below one arm-balanced round, so preflight refused.",
+    fix: "Read the worst case in parts from --dry-run, then ask for a cap that covers at least one round, or shrink the matrix.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
+  E_USER_TURNS_MISSING: {
+    exit: 2,
+    meaning: "The agent asked a question (AskUserQuestion) in a task with no scripted replies, so that trial ended as a missing cell. The message names the task and the question.",
+    fix: "Declare the task interactive in tasks.ext.json (user replies, or interactive: true), commit a relock, and start a new run. Do not --resume.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  E_INTERACTIVE_HOST: {
+    exit: 2,
+    meaning: "A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.",
+    fix: "Use --host claude, or --tasks-only with the other ids. The message names the interactive task ids. Do not --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
+  E_LOOSE_GSTACK: {
+    exit: 2,
+    meaning: "An arm is a loose folder that calls gstack bins, but its gstack root cannot be resolved, so it would measure gstack's degraded mode.",
+    fix: "Pass --base gstack@<sha> --skill <name> with the values the message prints, or point the arm at a rendered gstack skill folder. Do not --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
+  VACUOUS_CHECK: {
+    exit: 2,
+    meaning: "Preflight found a task whose whole pass predicate holds on the no-op control (a non-safety task), or still holds on its mutant (a safety task).",
+    fix: "Tighten the task so it fails when nothing is done; the message names the assertions that did not bite. Commit a relock and run preflight again. Do not --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U5",
+  },
+  E_TASKS_INVALID: {
+    exit: 2,
+    meaning: "A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules: an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks.",
+    fix: "Fix each problem the lines above name, then run gstack-evals validate --tasks <tasks.json> until it exits 0. If the tasks file is locked, commit a relock (--lock).",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U5",
+  },
+  E_ISOLATION_UNSAFE: {
+    exit: 2,
+    meaning: "No Docker daemon is reachable and --isolation process was not given.",
+    fix: "Start Docker, or pass --isolation process on purpose; it runs the agent under a separate uid or bubblewrap and is recorded in the verdict.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U9",
+  },
+  E_CACHE_STALE: {
+    exit: 2,
+    meaning: "A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).",
+    fix: "Read which key parts changed, then rerun the affected cells with --repair \"<named repair>\", which writes a new verdict id.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U9",
+  },
+  E_NOT_RESUMABLE: {
+    exit: 2,
+    meaning: "--resume was given for a run that ended on a terminal stop: NOT_MEASURABLE, MARGIN_NOT_ATTEMPTED, VACUOUS_CHECK, LOCK_MISSING, LOCK_DRIFT, E_USER_TURNS_MISSING, E_INTERACTIVE_HOST or E_LOOSE_GSTACK.",
+    fix: "Follow the next step on the original run's last stderr line and start a new run.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  E_SLOT_DENIED: {
+    exit: 2,
+    meaning: "The metering proxy refused a request: the bearer does not belong to the slot, the slot is unbound or closed, or a trial token reached the management socket.",
+    fix: "This is a trial-service fault: --resume <out> reruns the missing cell under a fresh slot. Report it if it repeats.",
+    side_effects: "None for the refused request: it never reached the provider.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U3",
+  },
+  E_ALLOWANCE: {
+    exit: 2,
+    meaning: "The metering proxy refused a request for a model outside the slot's allowlist, or because the slot spent its allowance.",
+    fix: "A model outside the allowlist means the host called a model the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume <out>.",
+    side_effects: "None for the refused request: it never reached the provider.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U3",
+  },
+  E_IMAGE_BUILD: {
+    exit: 2,
+    meaning: "gstack-evals doctor could not build the trial image from the repo's Dockerfile.",
+    fix: "Read the build log the message names, check Docker and the build's network (installs need egress at build time, never in a trial), then run doctor again.",
+    side_effects: "Partial: layers already built stay in the Docker cache.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U9",
+  },
+  E_USERSIM: {
+    exit: 2,
+    meaning: "The user simulator failed while answering an agent's question.",
+    fix: "Read the trace file, check the free-form answer model's key by name with gstack-evals doctor, then --resume <out>.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U10",
+  },
+  E_VERIFIER: {
+    exit: 2,
+    meaning: "The verifier refused to grade a trial: the read-only check runner (Lane A) or Harbor's separate verifier (Lane B) could not start or rejected its inputs.",
+    fix: "Read the trace file and the check it names. If nothing changed, --resume <out>; after fixing a check or fixture, use --repair, since the cache key changed.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U9",
+  },
+  E_INTERNAL: {
+    exit: 2,
+    meaning: "An unexpected error. The error record carries a correlation id that its trace file repeats.",
+    fix: "Run the resume command the message prints. If it repeats, file an issue with the trace file, which holds no secret values.",
+    side_effects: "Unknown until reconciled: --resume reconciles by reservation id and never resends a call whose outcome is unknown.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U1",
+  },
+  E_TOKENS_COVERAGE: {
+    exit: 2,
+    meaning: "gstack-evals tokens export was asked for a model, role or effort the token table does not cover. It never fills defaults and never makes a paid call.",
+    fix: "Add the measured rows the message names from a metered run, or ask for an approved measuring run.",
+    side_effects: "None: no export is written and no call is made.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U13",
+  },
+
+  CALIBRATION_SKILL: {
+    exit: 3,
+    meaning: "A skill arm did not quote the sentinel line only its copy holds, or its calls did not show the read of that copy.",
+    fix: "Check that the arm's skill is installed where the host looks (the message names the arm, host, model and path read), fix the arm or its install command, and run again.",
+    side_effects: "Calibration sessions are charged; no task cell ran.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  CALIBRATION_NONE_LEAK: {
+    exit: 3,
+    meaning: "The none arm did not answer NO-SKILL, or it read a skill copy, so something leaks into the trial HOME.",
+    fix: "Remove the leak the message names (user memory, a global CLAUDE.md or AGENTS.md, an MCP config or a mounted path) from the trial HOME and run again.",
+    side_effects: "Calibration sessions are charged; no task cell ran.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  CALIBRATION_SHELL: {
+    exit: 3,
+    meaning: "A shell command did not return its output, or did not appear in the host's calls.",
+    fix: "Check the host CLI version and its tool permissions in the trial configuration, then run again.",
+    side_effects: "Calibration sessions are charged; no task cell ran.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  CALIBRATION_CONFIG: {
+    exit: 3,
+    meaning: "A gstack base did not print its pinned proactive and session-kind values.",
+    fix: "Check the pre-seeded onboarding markers and the state root (GSTACK_STATE_ROOT and GSTACK_HOME pointing at the work dir's .gstack-home), then run again.",
+    side_effects: "Calibration sessions are charged; no task cell ran.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  CALIBRATION_USERSIM: {
+    exit: 3,
+    meaning: "A task with scripted user replies did not complete one question and answer round trip.",
+    fix: "Check that the host exposes AskUserQuestion (the SDK-driven adapter, not plain claude -p) and that the task's replies cover the question's category.",
+    side_effects: "Calibration sessions are charged; no task cell ran.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  CALIBRATION_EGRESS: {
+    exit: 3,
+    meaning: "An egress probe to a non-model host succeeded, so the trial network is not locked to the metering proxy.",
+    fix: "Fix the trial network so its only exit is the proxy, and run no trials until this passes.",
+    side_effects: "Calibration sessions are charged; no task cell ran.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+
+  DEGRADED: {
+    exit: null,
+    meaning: "On a task, the old copies passed at least 80% of their runs and after at most two thirds: a drop short of MISS.",
+    fix: "Read the task's after transcripts; the edit weakened something that task uses.",
+    owner: "U6",
+  },
+  FLAKY: {
+    exit: null,
+    meaning: "On a task, the old copies disagreed with themselves across the rounds of the rerun stage.",
+    fix: "Make the task's check deterministic, or give it more trials, before it decides anything.",
+    owner: "U6",
+  },
+  FLAKY_SAFETY: {
+    exit: null,
+    meaning: "A safety task that failed in after also failed in an old run. The verdict still fails; this names the task for repair.",
+    fix: "Repair the safety task so the old copy passes it reliably, then check the edit with a new run.",
+    owner: "U6",
+  },
+  CEILING: {
+    exit: null,
+    meaning: "An arm passed every run on this model, so it cannot show a loss there. It is decided only after every compared arm has run.",
+    fix: "Try Haiku 5.5 or harder tasks. With --margin, a model at ceiling makes the run MARGIN_NOT_ATTEMPTED.",
+    owner: "U6",
+  },
+  NONE_MATCHES: {
+    exit: null,
+    meaning: "The none arm passed a task as often as before did, so the skill's lines for that task are candidates to cut.",
+    fix: "Consider cutting those lines, then check the cut with a new before/after run.",
+    owner: "U6",
+  },
+  BROKEN_TASK: {
+    exit: null,
+    meaning: "A task failed in every run of every arm. It counts as broken until it is repaired or dropped through a committed relock.",
+    fix: "Repair the task's setup, prompt or check, or drop it, and commit a relock.",
+    owner: "U6",
+  },
+  REPLY_MISALIGNED: {
+    exit: null,
+    meaning: "A scripted reply matched a question ambiguously and got a non-approving answer, or after's question sequence differed from before's.",
+    fix: "Read the event log's reply sources and give the question's category its own reply in tasks.ext.json.",
+    owner: "U10",
+  },
+  NEGATIVE_UNVALIDATED: {
+    exit: null,
+    meaning: "A safety task has no mutant in tasks.ext.json, so preflight could not check that the task fails on a violation.",
+    fix: "Add a mutant {setup, answer} for the task in tasks.ext.json and commit a relock.",
+    owner: "U5",
+  },
+} as const satisfies Record<string, CodeInfo>;
+
+export type ReasonCode = keyof typeof CODES;
+
+export const isReasonCode = (value: string): value is ReasonCode => Object.hasOwn(CODES, value);
+
+/** The docs/errors.md anchor for a code, as an error record's doc field. */
+export const docAnchor = (code: ReasonCode): string => "docs/errors.md#" + code.toLowerCase();

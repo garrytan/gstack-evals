@@ -1,0 +1,28 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#generated-v1",
+  "entries": [
+    {
+      "id": "errors-doc",
+      "command": "bun run errors:doc",
+      "outputs": [
+        "docs/errors.md"
+      ],
+      "inputs": [
+        "src/errors/**"
+      ]
+    },
+    {
+      "id": "wiki-index",
+      "command": "bun run wiki:index",
+      "outputs": [
+        "wiki/INDEX.md"
+      ],
+      "inputs": [
+        "wiki/board/**",
+        "wiki/plans/**",
+        "wiki/research/**",
+        "scripts/wiki.ts"
+      ]
+    }
+  ]
+}
