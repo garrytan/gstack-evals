@@ -100,16 +100,16 @@ function checkNames(where: string, key: "env" | "paths", value: unknown): string
   return problems;
 }
 
-/** Problems in a parsed sidecar, checked against the entries of the tasks file it extends. */
-export function checkSidecar(parsed: unknown, tasks: readonly Record<string, unknown>[]): string[] {
+/** Problems in a parsed sidecar, checked against the entries of the tasks file it extends; null entries (a tasks file that could not be read or is not an array) skip the rules that need them. */
+export function checkSidecar(parsed: unknown, tasks: readonly Record<string, unknown>[] | null): string[] {
   if (!isObject(parsed)) return ["must be a JSON object {schema_version, tasks}"];
   const problems = unknownKeys("sidecar", parsed, ["schema_version", "tasks"]);
   if (parsed.schema_version !== SIDECAR_SCHEMA_VERSION) problems.push("schema_version must be " + SIDECAR_SCHEMA_VERSION);
   if (!isObject(parsed.tasks)) return [...problems, "tasks must be an object keyed by task id"];
-  const byId = new Map(tasks.flatMap((t) => (typeof t.id === "string" ? [[t.id, t] as const] : [])));
+  const byId = new Map((tasks ?? []).flatMap((t) => (typeof t.id === "string" ? [[t.id, t] as const] : [])));
   for (const [id, entry] of Object.entries(parsed.tasks)) {
     const task = byId.get(id);
-    if (!task) problems.push(id + ": no task with this id in the tasks file");
+    if (!task && tasks !== null) problems.push(id + ": no task with this id in the tasks file");
     if (!isObject(entry)) {
       problems.push(id + ": entry must be an object");
       continue;
@@ -137,7 +137,7 @@ export function checkSidecar(parsed: unknown, tasks: readonly Record<string, unk
   return problems;
 }
 
-export function readSidecar(file: string, tasks: readonly Record<string, unknown>[]): SidecarFile {
+export function readSidecar(file: string, tasks: readonly Record<string, unknown>[] | null): SidecarFile {
   const path = resolve(file);
   let bytes: Buffer;
   try {
@@ -165,7 +165,8 @@ export interface Contract {
 
 /**
  * Reads a tasks file and its sidecar: the one extFile names, or tasks.ext.json beside the tasks file when it exists.
- * The sidecar is checked against every entry of the tasks file, so a broken tasks file still gets its sidecar checked.
+ * The sidecar is checked against every entry of the tasks file, so a broken tasks file still gets its sidecar checked; when
+ * the tasks file cannot be read or is not an array, only the sidecar's own shape is checked.
  */
 export function loadContract(tasksFile: string, extFile?: string): Contract {
   const tasks = readTasks(tasksFile);

@@ -61,7 +61,7 @@ describe("contract reader", () => {
     expect(r.problems).toEqual(MALFORMED_PROBLEMS);
     expect(r.count).toBe(5);
     expect(r.tasks).toEqual([]);
-    expect(r.entries.map((e) => e.id)).toEqual(["Bad Id", "dup", "dup"]);
+    expect(r.entries?.map((e) => e.id)).toEqual(["Bad Id", "dup", "dup"]);
   });
 
   test("bad JSON, a non-array and a missing file are refused", () => {
@@ -72,6 +72,12 @@ describe("contract reader", () => {
     const missing = readTasks(join(tmp, "nope.json"));
     expect(missing.sha256).toBeNull();
     expect(missing.problems[0]).toStartWith("cannot read the tasks file");
+  });
+
+  test("an id that cannot become a string is a problem, not a crash", () => {
+    const file = join(tmp, "tostring.json");
+    writeFileSync(file, '[{"id":{"toString":1},"prompt":"p","must":["x"]}]');
+    expect(readTasks(file).problems).toEqual(["?: id must be kebab-case"]);
   });
 
   // Runs only with GSTACK_CHECKOUT=<a gstack checkout>: compares every case above with gstack's own checkEvalTasks.

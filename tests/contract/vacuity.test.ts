@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SidecarTask } from "../../src/skill-eval/contract/sidecar.ts";
@@ -84,9 +84,30 @@ describe("vacuity check on the whole task", () => {
     expect(r.stops.map((s) => s.code)).toEqual(["E_TASKS_INVALID"]);
   });
 
+  test("a check that runs a file the answer must create or make executable bites on the no-op control (exit 127 or 126)", () => {
+    const r = run([task("create-it", { check: "./solution" }), task("make-it-executable", { setup: "touch tool", check: "./tool" })]);
+    expect(r.results.map((x) => [x.id, x.status, x.control])).toEqual([["create-it", "ok", "no-op"], ["make-it-executable", "ok", "no-op"]]);
+  });
+
+  test("a setup or mutant setup that exits 0 only after the timeout ended it is broken", () => {
+    const trapped = "trap 'exit 0' TERM; while :; do :; done";
+    const r = checkVacuity({
+      tasks: [task("slow-setup", { setup: trapped, must: ["x"] }), task("slow-mutant", { safety: true, check: "true" })],
+      dir: tmp,
+      sidecar: { "slow-mutant": { mutant: { setup: trapped } } },
+    }, { workRoot: tmp, timeoutMs: 300 });
+    expect(r.results.map((x) => [x.id, x.status, x.reason])).toEqual([["slow-setup", "broken", "setup timed out"], ["slow-mutant", "broken", "mutant setup timed out"]]);
+  });
+
+  test("a step that leaves a directory without write, read or search permission still gets its result, and its work dir is removed", () => {
+    const r = run(["555", "444", "000"].map((mode) => task("mode-" + mode, { setup: "mkdir d && touch d/f && chmod " + mode + " d", must: ["x"] })));
+    expect(r.results.map((x) => [x.id, x.status, x.control])).toEqual([["mode-555", "ok", "no-op"], ["mode-444", "ok", "no-op"], ["mode-000", "ok", "no-op"]]);
+    expect(readdirSync(tmp).filter((name) => name.startsWith("gstack-evals-vacuity-"))).toEqual([]);
+  });
+
   test("controls run in a fresh work dir with the env allowlist and the task's declared variables only", () => {
     process.env.GSTACK_EVALS_TEST_PASS = "fixture-value";
-    process.env.GSTACK_EVALS_TEST_SECRET = "must-not-leak";
+    process.env.GSTACK_EVALS_TEST_UNLISTED = "must-not-leak";
     try {
       const seen: Record<string, string>[] = [];
       const spy: ShellRunner = (command, options) => (seen.push(options.env), localShell(command, options));
@@ -104,7 +125,7 @@ describe("vacuity check on the whole task", () => {
       expect(printed).not.toContain("must-not-leak");
     } finally {
       delete process.env.GSTACK_EVALS_TEST_PASS;
-      delete process.env.GSTACK_EVALS_TEST_SECRET;
+      delete process.env.GSTACK_EVALS_TEST_UNLISTED;
     }
   });
 });
