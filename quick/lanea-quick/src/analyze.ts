@@ -74,31 +74,39 @@ export function loadResults(root: string): SessionResult[] {
   return out;
 }
 
-// Stage files keyed by suite and model: a stage that hit CAP_STOP, did not finish, or left results but no finished
-// file makes its blocks INCOMPLETE. Planned trials come from the stage files, not from the results on disk.
+// Stage files, one per run of a stage, keyed by suite and model. A cap stop or reservation_exceeded stop in any run
+// sticks. Otherwise the latest run that covered a model decides: one still running, or short of its plan, is UNFINISHED.
+// Results for a stage and model with no file are UNFINISHED too. Planned trials are the most that any run planned.
 export function readStages(root: string, results: SessionResult[]) {
   const stops: Record<string, string[]> = {};
   const trials: Record<string, number> = {};
-  const seen = new Set<string>();
+  const latest = new Map<string, any>();
+  const push = (k: string, label: string) => {
+    if (!(stops[k] ??= []).includes(label)) stops[k].push(label);
+  };
   const dir = join(root, "stages");
   for (const f of existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")) : []) {
     const st = JSON.parse(readFileSync(join(dir, f), "utf8"));
     const plan = STAGES[st.stage];
     const arms: string[] = st.arms ?? plan?.arms ?? [];
-    const finished = st.status === undefined || st.status === "done";
-    const label = !finished ? `UNFINISHED ${st.stage}` : st.cap_stop ? `CAP_STOP ${st.stage}` : st.finished < st.planned ? `UNFINISHED ${st.stage} ${st.finished}/${st.planned}` : null;
-    seen.add(st.stage);
+    const when = String(st.started ?? st.ended ?? "");
     for (const m of (st.models ?? plan?.models ?? []) as string[]) {
       const k = `${st.suite ?? plan?.suite}|${m}`;
-      if (label) (stops[k] ??= []).push(label);
+      if (st.fake) push(k, `FAKE ${st.stage}`);
+      if (st.cap_stop) push(k, `${String(st.cap_stop).includes("reservation_exceeded") ? "RESERVATION_EXCEEDED" : "CAP_STOP"} ${st.stage}`);
       if (Array.isArray(st.trials) && arms.some((a) => a === "before" || a === "after")) trials[k] = Math.max(trials[k] ?? 0, st.trials.length);
+      const prev = latest.get(`${st.stage}|${k}`);
+      if (!prev || when >= String(prev.started ?? prev.ended ?? "")) latest.set(`${st.stage}|${k}`, st);
     }
   }
-  for (const [stage, plan] of Object.entries(STAGES)) {
-    if (seen.has(stage)) continue;
-    for (const m of plan.models)
-      if (results.some((r) => r.suite === plan.suite && r.model === m && (plan.arms as string[]).includes(r.arm))) (stops[`${plan.suite}|${m}`] ??= []).push(`UNFINISHED ${stage} no stage file`);
+  for (const [key, st] of latest) {
+    const k = key.slice(key.indexOf("|") + 1);
+    if (st.status !== undefined && st.status !== "done") push(k, `UNFINISHED ${st.stage}`);
+    else if (!st.cap_stop && st.finished < st.planned) push(k, `UNFINISHED ${st.stage} ${st.finished}/${st.planned}`);
   }
+  for (const [stage, plan] of Object.entries(STAGES))
+    for (const m of plan.models)
+      if (!latest.has(`${stage}|${plan.suite}|${m}`) && results.some((r) => r.suite === plan.suite && r.model === m && (plan.arms as string[]).includes(r.arm))) push(`${plan.suite}|${m}`, `UNFINISHED ${stage} no stage file`);
   return { stops, trials };
 }
 
@@ -233,7 +241,7 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
       verdict: reasons.length ? "FAIL" : incomplete.length ? "INCOMPLETE" : informative.length < 5 ? "NOT_MEASURABLE" : "PASS",
       reasons,
       loss_signal: reasons.length > 0 || (afterBefore !== null && afterBefore.ci95_pp[1]! < 0),
-      within_noise: afterBefore && noise ? afterBefore.mean_pp >= noise.ci95_pp[0]! && afterBefore.mean_pp <= noise.ci95_pp[1]! : null,
+      within_noise: afterBefore?.tasks && noise?.tasks ? afterBefore.mean_pp >= noise.ci95_pp[0]! && afterBefore.mean_pp <= noise.ci95_pp[1]! : null,
       incomplete,
       trials_planned: trialsPlanned,
       warnings,

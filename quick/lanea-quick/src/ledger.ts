@@ -1,4 +1,5 @@
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
 
@@ -19,32 +20,67 @@ const amount = (usd: number) => {
   if (!Number.isFinite(usd) || usd < 0) throw new Error(`E_LEDGER_AMOUNT: ${usd} is not a finite, non-negative amount`);
 };
 
-// One runner per ledger: an exclusive lock file beside it, taken before the ledger is read. A lock left by a dead
-// process on this host is replaced; one from another host is refused, since its pid cannot be checked from here.
+const bootId = (): string => {
+  try {
+    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  } catch {
+    return "";
+  }
+};
+
+const readLock = (lock: string): { pid?: number; host?: string; boot?: string; token?: string } | null => {
+  try {
+    return JSON.parse(readFileSync(lock, "utf8"));
+  } catch {
+    return null;
+  }
+};
+
+const pidAlive = (pid: unknown): boolean => {
+  try {
+    process.kill(pid as number, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+};
+
+// One runner per path: an exclusive lock file beside it, taken before the path is read. Machines are told apart by
+// boot id, since every cloud machine can share one hostname. A lock left by a dead process from this boot is replaced
+// under a second exclusive file, so two starters cannot both replace it; any other lock is refused. The release removes
+// the lock only while it is still this runner's.
 export function lockLedger(path: string): () => void {
   const lock = `${path}.lock`;
+  const me = { pid: process.pid, host: hostname(), boot: bootId(), token: randomBytes(12).toString("hex") };
   mkdirSync(dirname(lock), { recursive: true });
   for (let tries = 0; tries < 2; tries++) {
     try {
       const fd = openSync(lock, "wx");
-      writeSync(fd, JSON.stringify({ pid: process.pid, host: hostname() }));
+      writeSync(fd, JSON.stringify(me));
       closeSync(fd);
-      return () => rmSync(lock, { force: true });
+      return () => {
+        if (readLock(lock)?.token === me.token) rmSync(lock, { force: true });
+      };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     }
-    let held: { pid?: number; host?: string } = {};
+    const held = readLock(lock) ?? {};
+    if (!me.boot || held.boot !== me.boot) throw new Error(`E_LOCK: ${lock} is held by pid ${held.pid} from another machine or boot (${held.host ?? "unknown host"}); remove it only once that runner is gone`);
+    if (pidAlive(held.pid)) throw new Error(`E_LOCK: runner ${held.pid} is still running; one runner at a time, since a start settles open reserves as stale`);
+    const takeover = `${lock}.takeover`;
+    let fd: number;
     try {
-      held = JSON.parse(readFileSync(lock, "utf8"));
-    } catch {}
-    if (held.host !== hostname()) throw new Error(`E_LOCK: ${lock} is held by pid ${held.pid} on ${held.host ?? "an unknown host"}; remove it only once that runner is gone`);
-    let alive = false;
+      fd = openSync(takeover, "wx");
+    } catch {
+      throw new Error(`E_LOCK: another runner is replacing ${lock}; retry, or remove ${takeover} if no runner is starting`);
+    }
     try {
-      process.kill(held.pid!, 0);
-      alive = true;
-    } catch {}
-    if (alive) throw new Error(`E_LOCK: runner ${held.pid} is still running; one runner per ledger, since a start settles open reserves as stale`);
-    rmSync(lock, { force: true });
+      const now = readLock(lock);
+      if (now && now.token === held.token && now.pid === held.pid && now.boot === held.boot) rmSync(lock, { force: true });
+    } finally {
+      closeSync(fd);
+      rmSync(takeover, { force: true });
+    }
   }
   throw new Error(`E_LOCK: could not take ${lock}`);
 }
@@ -66,10 +102,12 @@ export class Ledger {
     this.settledIds.clear();
     this.approved = false;
     if (!existsSync(this.path)) return;
+    let first = true;
     for (const line of readFileSync(this.path, "utf8").split("\n")) {
       if (!line.trim()) continue;
       const row = JSON.parse(line);
-      if (row.type === "approval" && this.valid(row)) this.approved = true;
+      if (first && row.type === "approval" && this.valid(row)) this.approved = true;
+      first = false;
       if (this.settledIds.has(row.reservation_id)) continue;
       if (row.type === "reserve") this.open.set(row.reservation_id, row.usd);
       if (row.type === "settle") {
@@ -81,7 +119,7 @@ export class Ledger {
   }
 
   private valid(row: any): boolean {
-    return Array.isArray(row.words) && row.words.length > 0 && row.words.every(text) && text(row.by) && text(row.source) && row.cap_usd === this.cap && (this.fake || !row.fake);
+    return Array.isArray(row.words) && row.words.length > 0 && row.words.every(text) && text(row.by) && text(row.source) && row.cap_usd === this.cap && (this.fake || (!row.fake && row.source !== "none"));
   }
 
   private append(row: Record<string, unknown>) {
@@ -99,6 +137,7 @@ export class Ledger {
     const row = { type: "approval", cap_usd: this.cap, words: a.words, by: a.by, source: a.source, ...(this.fake ? { fake: true } : {}) };
     if (!this.valid(row)) throw new Error("E_APPROVAL: approve needs --words (one or more), --by and --source");
     if (this.hasApproval()) return;
+    if (existsSync(this.path) && readFileSync(this.path, "utf8").trim()) throw new Error(`E_APPROVAL: the approval must be the first row of ${this.path}, which already has rows`);
     this.append(row);
   }
 
@@ -174,6 +213,12 @@ export class Reserver {
     this.ledger.settle(id, usd, meta);
     this.open.delete(id);
     this.wake();
+  }
+
+  // Settles every reservation still open at its full amount; one already settled in the ledger gets no second row.
+  settleOpen(note: string) {
+    for (const [id, usd] of this.open) this.ledger.settle(id, usd, { stale: true, note });
+    this.open.clear();
   }
 
   stop(reason: string) {

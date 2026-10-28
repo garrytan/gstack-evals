@@ -40,6 +40,9 @@ export function fromApiUsage(u: any): Usage {
 
 export const finiteUsage = (u: Usage): boolean => Object.values(u).every((x) => Number.isFinite(x) && x >= 0);
 
+// A usage block counts as read only when it carries both token counts; anything less is charged at the bound.
+export const hasUsage = (u: any): boolean => typeof u === "object" && u !== null && Number.isFinite(u.input_tokens) && Number.isFinite(u.output_tokens);
+
 export function mergeStreamUsage(start: Usage, delta: Usage): Usage {
   const written = Math.max(start.cacheWrite5m + start.cacheWrite1h, delta.cacheWrite5m + delta.cacheWrite1h);
   const w1h = Math.max(start.cacheWrite1h, delta.cacheWrite1h);

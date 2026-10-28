@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { MODELS, WEB_SEARCH_USD } from "./config.ts";
-import { addUsage, costUsd, finiteUsage, fromApiUsage, mergeStreamUsage, zeroUsage, type Usage } from "./usage.ts";
+import { addUsage, costUsd, finiteUsage, fromApiUsage, hasUsage, mergeStreamUsage, zeroUsage, type Usage } from "./usage.ts";
 
 export interface ProxySession {
   id: string;
@@ -17,6 +17,7 @@ export interface ProxySession {
   budgetHit: boolean;
   closed: boolean;
   pendingUsd: number;
+  drainedUsd: number;
 }
 
 export interface ProxyOptions {
@@ -81,7 +82,7 @@ export class MeteringProxy {
 
   register(id: string, model: string, ceilingUsd: number, hardLimitUsd: number, logPath: string): { token: string; session: ProxySession } {
     const token = "lanea-" + randomBytes(24).toString("hex");
-    const session: ProxySession = { id, model, ceilingUsd, hardLimitUsd, tail: Promise.resolve(), logPath, spentUsd: 0, usage: zeroUsage(), requests: 0, refusals: [], budgetHit: false, closed: false, pendingUsd: 0 };
+    const session: ProxySession = { id, model, ceilingUsd, hardLimitUsd, tail: Promise.resolve(), logPath, spentUsd: 0, usage: zeroUsage(), requests: 0, refusals: [], budgetHit: false, closed: false, pendingUsd: 0, drainedUsd: 0 };
     this.sessions.set(token, session);
     return { token, session };
   }
@@ -92,7 +93,8 @@ export class MeteringProxy {
     this.sessions.delete(token);
   }
 
-  // Waits for the request in flight to settle. One still running after ms is charged at its bound now.
+  // Waits for the request in flight to settle. One still running after ms is charged at its bound now; if it settles
+  // later, it adds only what it cost beyond that bound.
   async drain(s: ProxySession, ms: number): Promise<void> {
     let timer!: ReturnType<typeof setTimeout>;
     const drained = await Promise.race([s.tail.then(() => true), new Promise<boolean>((r) => (timer = setTimeout(() => r(false), ms)))]);
@@ -100,6 +102,7 @@ export class MeteringProxy {
     if (drained || !s.pendingUsd) return;
     this.log(s, { event: "drain_timeout", cost_usd: s.pendingUsd });
     s.spentUsd += s.pendingUsd;
+    s.drainedUsd = s.pendingUsd;
     s.pendingUsd = 0;
   }
 
@@ -172,7 +175,8 @@ export class MeteringProxy {
     const charged = incomplete || !Number.isFinite(measured);
     const cost = charged ? Math.max(Number.isFinite(measured) ? measured : 0, bound) : measured;
     if (finiteUsage(u)) s.usage = addUsage(s.usage, u);
-    s.spentUsd += cost;
+    s.spentUsd += Math.max(0, cost - s.drainedUsd);
+    s.drainedUsd = 0;
     s.pendingUsd = 0;
     s.requests++;
     this.log(s, { event: "request", model, status, ms: Date.now() - started, usage: u, cost_usd: cost, request_id: requestId, ...(charged ? { incomplete: true } : {}) });
@@ -220,7 +224,7 @@ export class MeteringProxy {
         try {
           usage = JSON.parse(text).usage;
         } catch {}
-        const known = typeof usage === "object" && usage !== null;
+        const known = hasUsage(usage);
         this.settle(s, model, upstream.status, started, fromApiUsage(usage), requestId, bound, upstream.status < 400 && !known);
         return new Response(text, { status: upstream.status, headers: resHeaders });
       } finally {
@@ -239,7 +243,7 @@ export class MeteringProxy {
         const ev = JSON.parse(line.slice(5).trim());
         if (ev.type === "message_start") {
           start = fromApiUsage(ev.message?.usage);
-          known = typeof ev.message?.usage === "object" && ev.message.usage !== null;
+          known = hasUsage(ev.message?.usage);
         }
         else if (ev.type === "message_delta") delta = mergeStreamUsage(delta, fromApiUsage(ev.usage));
         else if (ev.type === "message_stop") ended = true;
@@ -249,9 +253,12 @@ export class MeteringProxy {
     const finish = () => {
       if (settled) return;
       settled = true;
-      if (buf) take(buf);
-      this.settle(s, model, upstream.status, started, mergeStreamUsage(start, delta), requestId, bound, upstream.status < 400 && !(ended && known));
-      release();
+      try {
+        if (buf) take(buf);
+        this.settle(s, model, upstream.status, started, mergeStreamUsage(start, delta), requestId, bound, upstream.status < 400 && !(ended && known));
+      } finally {
+        release();
+      }
     };
     const meter = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {

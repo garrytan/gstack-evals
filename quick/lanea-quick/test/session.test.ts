@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, mock, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MeteringProxy } from "../src/proxy.ts";
@@ -7,11 +7,12 @@ import { MeteringProxy } from "../src/proxy.ts";
 const dir = mkdtempSync(join(tmpdir(), "session-"));
 const bin = join(dir, "bin");
 const cpFails = join(dir, "cp-fails");
+const dockerLog = join(dir, "docker.log");
 mkdirSync(join(dir, "tree", "work"), { recursive: true });
 mkdirSync(bin);
 writeFileSync(
   join(bin, "docker"),
-  `#!/bin/sh\nif [ "$1" = cp ] && [ "$3" = - ]; then\n  [ -e "${cpFails}" ] && exit 1\n  tar -c -C "${join(dir, "tree")}" work\nfi\nexit 0\n`,
+  `#!/bin/sh\necho "$*" >> "${dockerLog}"\nif [ "$1" = cp ] && [ "$3" = - ]; then\n  [ -e "${cpFails}" ] && exit 1\n  tar -c -C "${join(dir, "tree")}" work\nfi\nexit 0\n`,
 );
 chmodSync(join(bin, "docker"), 0o755);
 const path = process.env.PATH;
@@ -89,5 +90,13 @@ describe("runSession", () => {
     expect(r.check).toBeNull();
     expect(r.errors.join(" ")).toContain("E_COPY");
     expect(existsSync(join(dir, "copy", "result.json"))).toBe(true);
+  });
+  test("two runners on one machine never remove each other's container", async () => {
+    rmSync(cpFails, { force: true });
+    rmSync(dockerLog, { force: true });
+    await runSession({ ...spec("same-cell"), outDir: join(dir, "a", "same-cell") }, proxy);
+    await runSession({ ...spec("same-cell"), outDir: join(dir, "b", "same-cell") }, proxy);
+    const removed = readFileSync(dockerLog, "utf8").split("\n").filter((l) => l.startsWith("rm -f")).map((l) => l.split(" ").pop());
+    expect(new Set(removed).size).toBe(2);
   });
 });

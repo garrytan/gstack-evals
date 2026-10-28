@@ -6,7 +6,7 @@ import { MODELS } from "../src/config.ts";
 import { MeteringProxy, requestCeilingUsd } from "../src/proxy.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "proxy-"));
-let mode: "ok" | "drop" | "json-drop" | "json-nousage" | "json-nan" | "slow" = "ok";
+let mode: "ok" | "drop" | "json-drop" | "json-nousage" | "json-nan" | "json-empty" | "slow" = "ok";
 let inflight = 0;
 let maxInflight = 0;
 let hits = 0;
@@ -24,6 +24,7 @@ const upstream = Bun.serve({
     inflight--;
     if (mode === "json-nousage") return Response.json({ type: "message", content: [] });
     if (mode === "json-nan") return Response.json({ type: "message", usage: { input_tokens: "many", output_tokens: 10 } });
+    if (mode === "json-empty") return Response.json({ type: "message", usage: {} });
     if (mode === "json-drop") {
       let sent = false;
       return new Response(
@@ -137,7 +138,7 @@ describe("metering proxy", () => {
 describe("metering proxy accounting", () => {
   const haiku = { model: "claude-haiku-5-5", max_tokens: 1000, messages: [{ role: "user", content: "hi" }] };
   const bound = requestCeilingUsd("claude-haiku-5-5", JSON.stringify(haiku).length, 1000);
-  for (const m of ["json-drop", "json-nousage", "json-nan"] as const)
+  for (const m of ["json-drop", "json-nousage", "json-nan", "json-empty"] as const)
     test(`a non-stream reply (${m}) is charged at its bound and frees the session`, async () => {
       mode = m;
       const { token, session } = proxy.register(m, "claude-haiku-5-5", 1, 1, join(dir, `${m}.jsonl`));
@@ -176,7 +177,27 @@ describe("metering proxy accounting", () => {
     await proxy.drain(session, 10);
     expect(session.spentUsd).toBeCloseTo(bound, 9);
     await first;
+    await Bun.sleep(20);
     mode = "ok";
+    expect(session.requests).toBe(1);
+    expect(session.spentUsd).toBeCloseTo(bound, 9);
+  });
+  test("a parked request whose client left never goes upstream", async () => {
+    mode = "slow";
+    hits = 0;
+    const { token, session } = proxy.register("s9", "claude-haiku-5-5", 1, 1, join(dir, "s9.jsonl"));
+    const first = call(token, haiku);
+    await Bun.sleep(50);
+    const ac = new AbortController();
+    const second = fetch(`${proxy.url}/v1/messages`, { method: "POST", headers: { "x-api-key": token }, body: JSON.stringify(haiku), signal: ac.signal }).catch(() => 0);
+    await Bun.sleep(50);
+    ac.abort();
+    await first;
+    await second;
+    await session.tail;
+    mode = "ok";
+    expect(hits).toBe(1);
+    expect(session.refusals).toEqual([{ reason: "closed", detail: "client gone" }]);
   });
   test("admission refuses what the bound cannot price and forwards the parsed body", async () => {
     const { token, session } = proxy.register("s8", "claude-haiku-5-5", 1, 1, join(dir, "s8.jsonl"));

@@ -22,7 +22,7 @@ The keyless `--fake` run still needs Docker and the arm images: only the Message
 
 Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes. `--fake` runs default to `~/.capy/work/lanea-quick/runs-fake/` and keep their own ledger there, `ledger-fake.jsonl`.
 
-Each run also writes `stages/<stage>.json`: `status: "running"` with the stage's models, arms and trials before the first session, and `status: "done"` with the finished count and any cap stop at the end. analyze marks a stage INCOMPLETE (UNFINISHED) when its file still says running, or when results exist for a stage with no file.
+Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running"` with the stage's models, arms and trials before the first session, and `status: "done"` with the finished count and any cap stop at the end. analyze reads every file of a stage. A cap stop (CAP_STOP, or RESERVATION_EXCEEDED when one session spent past its reservation) or a `--fake` run marks the block INCOMPLETE for good; a later run never clears it. For each model, the latest run of the stage decides UNFINISHED: its file still says running or it finished fewer cells than it planned. Results for a stage with no file are UNFINISHED too. A run with an unknown model or no matching cells stops before it writes a file.
 
 ### Environment
 
@@ -52,17 +52,17 @@ Each run also writes `stages/<stage>.json`: `status: "running"` with the stage's
 
 ### Approve the cap
 
-A paid run reserves only against a ledger whose approval row has the owner's words, who gave them, a source, and `cap_usd` equal to the runner's cap ($130). Record the approval once, with each quoted reply as its own `--words`:
+A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` equal to the runner's cap ($130). Record the approval once, with each quoted reply as its own `--words`:
 
 ```
 bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
 ```
 
-Pass the words as separate arguments, not through a shell string with `$` in it (see the last item below). `approve` does nothing when a valid approval row is already there.
+Pass the words as separate arguments, not through a shell string with `$` in it (see the last item below). `approve` does nothing when a valid approval row is already there, and refuses a ledger that already has other rows.
 
-### One runner per ledger
+### One runner per ledger, per WORK and per results tree
 
-A run takes `<ledger>.lock` with an exclusive create before it reads the ledger. A lock left by a dead process on the same host is replaced; a lock from another host is refused with that host and pid, so remove it by hand only once that runner is gone. At start the runner settles any open reserve left by a stopped runner at its full amount. When parallel sessions hold enough open reserves that the next one would pass the cap, the runner waits for one to settle; it stops (CAP_STOP) only when settled spend plus the next reservation passes the cap.
+A run takes three locks with an exclusive create before it reads the ledger: `<ledger>.lock`, `<LANEA_WORK>/runner.lock` and `<out>/runner.lock`. `prepare` takes the WORK lock too, since it rewrites the task copies that sessions read. Each lock records the pid, the kernel boot id and a random token. A lock left by a dead process from this boot is replaced under a `.takeover` file, so two starters cannot both replace it; a lock from another boot or machine, or one in an older format, is refused with its pid, so remove it by hand only once that runner is gone. A release removes the lock only while it still holds this runner's token. Container names carry a hash of the cell's output dir, so runners on one machine never remove each other's containers. At start the runner settles any open reserve left by a stopped runner at its full amount. When parallel sessions hold enough open reserves that the next one would pass the cap, the runner waits for one to settle; it stops (CAP_STOP) only when settled spend plus the next reservation passes the cap.
 
 ### Images
 

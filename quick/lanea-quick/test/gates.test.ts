@@ -66,8 +66,14 @@ describe("analysis matches the preregistration", () => {
     const quiet = analyze(grid({ ...base, before2: (_, n) => n !== 3 }))[0];
     expect(quiet).toMatchObject({ loss_signal: false, within_noise: true });
     expect(analyze(grid(base))[0].within_noise).toBeNull();
+    expect(analyze(grid({ ...base, before2: () => true }, (_, a) => (a === "before2" ? { status: "timeout" } : {})))[0].within_noise).toBeNull();
     const loud = analyze(grid({ ...base, before: () => true, after: (_, n) => n === 1, before2: () => true }))[0];
     expect(loud).toMatchObject({ loss_signal: true, within_noise: false });
+  });
+  test("a loss signal from the interval alone, with no reason code", () => {
+    const [b] = analyze(grid({ ...base, before: (_, n) => n === 1, after: (t, n) => "de".includes(t) && n === 1 }));
+    expect(b.reasons).toEqual([]);
+    expect(b.loss_signal).toBe(true);
   });
   test("lists the diet-changed lines no task covers on must and check", () => {
     const coverage = JSON.parse(readFileSync(join(import.meta.dir, "..", "contract-lines", "coverage.json"), "utf8"));
@@ -85,9 +91,9 @@ describe("stage files", () => {
       writeFileSync(join(d, "result.json"), JSON.stringify(r));
     }
   };
-  const stage = (root: string, name: string, st: Record<string, unknown>) => {
+  const stage = (root: string, name: string, st: Record<string, unknown>, file = name) => {
     mkdirSync(join(root, "stages"), { recursive: true });
-    writeFileSync(join(root, "stages", `${name}.json`), JSON.stringify({ stage: name, ...st }));
+    writeFileSync(join(root, "stages", `${file}.json`), JSON.stringify({ stage: name, ...st }));
   };
   const verdict = (root: string) => {
     const p = Bun.spawnSync([process.execPath, "src/analyze.ts", "--out", root], { cwd: join(import.meta.dir, ".."), env: { PATH: process.env.PATH ?? "", HOME: root } });
@@ -126,5 +132,36 @@ describe("stage files", () => {
     const v = verdict(root);
     expect(v.primary[0]).toMatchObject({ suite: "learn", model: "claude-haiku-5-5", verdict: "PASS", incomplete: [] });
     expect(v.stage_stops["learn|claude-opus-5-5"]).toEqual(["CAP_STOP S3"]);
+  });
+  const oh = { suite: "office-hours", arms: ["before", "after", "none"] };
+  test("a later run of the stage for another model leaves this model's unfinished run in place", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    s1(root);
+    stage(root, "S1", { ...oh, status: "running", models: ["claude-haiku-5-5"], trials: [1, 2, 3], planned: 45, started: "2026-10-28T10:00:00.000Z" }, "S1.1");
+    stage(root, "S1", { ...oh, status: "done", models: ["claude-opus-5-5"], trials: [1, 2, 3], planned: 45, finished: 45, cap_stop: null, started: "2026-10-28T11:00:00.000Z" }, "S1.2");
+    expect(verdict(root).primary[0]).toMatchObject({ model: "claude-haiku-5-5", verdict: "INCOMPLETE", incomplete: ["UNFINISHED S1"] });
+  });
+  test("a cap stop sticks when a later run plans fewer trials, and a later run that finishes clears an unfinished one", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    s1(root);
+    const haiku = { ...oh, models: ["claude-haiku-5-5"] };
+    stage(root, "S1", { ...haiku, status: "running", trials: [1, 2, 3], planned: 45, started: "2026-10-28T10:00:00.000Z" }, "S1.1");
+    stage(root, "S1", { ...haiku, status: "done", trials: [1, 2, 3], planned: 45, finished: 45, cap_stop: null, started: "2026-10-28T11:00:00.000Z" }, "S1.2");
+    expect(verdict(root).primary[0]).toMatchObject({ verdict: "PASS", incomplete: [] });
+    stage(root, "S1", { ...haiku, status: "done", trials: [1, 2, 3], planned: 45, finished: 30, cap_stop: "STOP: reason=budget_exhausted", started: "2026-10-28T12:00:00.000Z" }, "S1.3");
+    stage(root, "S1", { ...haiku, status: "done", trials: [1, 2], planned: 30, finished: 30, cap_stop: null, started: "2026-10-28T13:00:00.000Z" }, "S1.4");
+    expect(verdict(root).primary[0]).toMatchObject({ verdict: "INCOMPLETE", incomplete: ["CAP_STOP S1"], trials_planned: 3 });
+  });
+  test("a fake run's stage file keeps the block from passing", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    s1(root);
+    stage(root, "S1", { ...oh, status: "done", models: ["claude-haiku-5-5"], trials: [1, 2, 3], planned: 45, finished: 45, cap_stop: null, fake: true });
+    expect(verdict(root).primary[0]).toMatchObject({ verdict: "INCOMPLETE", incomplete: ["FAKE S1"] });
+  });
+  test("a reservation_exceeded stop is labeled as such", () => {
+    const root = mkdtempSync(join(tmpdir(), "stages-"));
+    s1(root);
+    stage(root, "S1", { ...oh, status: "done", models: ["claude-haiku-5-5"], trials: [1, 2, 3], planned: 45, finished: 45, cap_stop: "STOP: reason=reservation_exceeded session=x spent=8 reserved=7.25" });
+    expect(verdict(root).primary[0].incomplete).toEqual(["RESERVATION_EXCEEDED S1"]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,5 +25,26 @@ describe("run.ts arguments", () => {
     const r = cli("run", "--stage", "S1", "--fake", "--out", join(work, "runs-fake"), "--ledger", join(work, "ledger.jsonl"));
     expect(r.code).not.toBe(0);
     expect(r.err).toContain("E_LEDGER_FAKE");
+  });
+  test("a run with an unknown model or no matching cells stops before it writes anything", () => {
+    const out = join(work, "runs-plan");
+    const model = cli("run", "--stage", "S1", "--fake", "--out", out, "--models", "claude-nope");
+    expect(model.code).not.toBe(0);
+    expect(model.err).toContain("E_TASKS: unknown model claude-nope");
+    const none = cli("run", "--stage", "S1", "--fake", "--out", out, "--tasks", "no-such-task");
+    expect(none.code).not.toBe(0);
+    expect(none.err).toContain("E_TASKS: no cells");
+    expect(existsSync(join(out, "stages"))).toBe(false);
+  });
+  test("prepare refuses while a runner holds WORK", () => {
+    const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    writeFileSync(join(work, "runner.lock"), JSON.stringify({ pid: process.pid, boot, token: "t" }));
+    try {
+      const r = cli("prepare");
+      expect(r.code).not.toBe(0);
+      expect(r.err).toContain("E_LOCK");
+    } finally {
+      rmSync(join(work, "runner.lock"), { force: true });
+    }
   });
 });

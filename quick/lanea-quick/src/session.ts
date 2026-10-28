@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { LIMITS, type ArmName } from "./config.ts";
 import { gradePatterns, loadedBytes, parseTranscript, resultOutcome, skillUse, transcriptText, type PatternGrade, type Task } from "./grade.ts";
 import type { MeteringProxy } from "./proxy.ts";
@@ -120,7 +121,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
   const t0 = Date.now();
   mkdirSync(spec.outDir, { recursive: true });
   const errors: string[] = [];
-  const container = `lanea-${spec.id}`.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 120);
+  const container = `lanea-${createHash("sha256").update(resolve(spec.outDir)).digest("hex").slice(0, 8)}-${spec.id}`.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 120);
   const transcriptPath = join(spec.outDir, "transcript.jsonl");
   const stderrPath = join(spec.outDir, "cli-stderr.log");
   const { token, session } = proxy.register(spec.id, spec.model, spec.ceilingUsd, spec.hardLimitUsd, join(spec.outDir, "proxy.jsonl"));
@@ -248,7 +249,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
     }
     const copied = await run(["bash", "-c", `set -o pipefail; rm -rf "${spec.outDir}/work" && docker cp ${container}:/work - | tar -x -C "${spec.outDir}"`], { timeoutMs: 120_000 });
     if (copied.code !== 0) {
-      status = "infra_error";
+      if (status === "complete") status = "infra_error";
       errors.push(`E_COPY: ${copied.out}`);
     }
   } catch (e) {
@@ -267,7 +268,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
   if (spec.task.check && status !== "infra_error") {
     const env = { ...STATE_ENV, SKILL_EVAL_FIXTURES: "/fx", HOME: "/tmp", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "safe.directory", GIT_CONFIG_VALUE_0: "*" };
     const r = await run(
-      ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "-v", `${spec.fixturesDir}:/fx:ro`, "-w", "/work", spec.checkImage, "sh", "-c", spec.task.check],
+      ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "--mount", `type=bind,src=${spec.fixturesDir},dst=/fx,readonly`, "-w", "/work", spec.checkImage, "sh", "-c", spec.task.check],
       { env, timeoutMs: 120_000 },
     );
     check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };

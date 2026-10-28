@@ -101,17 +101,30 @@ export async function resolveImages(tags: string[], fake: boolean): Promise<Reco
   return ids;
 }
 
+// Everything that can fail without spending runs before the locks. The locks cover the ledger, WORK (task copies and
+// container names) and the results tree, and are released however the run ends.
 async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ results: SessionResult[]; capStop: string | null }> {
-  const images = await resolveImages([BASE_IMAGE, ...new Set(cells.map((c) => imageTag(c.suite, c.arm)))], opts.fake);
-  const releaseLock = lockLedger(opts.ledgerPath);
+  await import("@anthropic-ai/claude-agent-sdk");
+  if (!opts.fake && !process.env.ANTHROPIC_API_KEY) throw new Error("E_KEY_MISSING: ANTHROPIC_API_KEY is not set");
   const prep = loadPrepared();
+  const images = await resolveImages([BASE_IMAGE, ...new Set(cells.map((c) => imageTag(c.suite, c.arm)))], opts.fake);
+  const releases: (() => void)[] = [];
+  try {
+    for (const path of new Set([resolve(opts.ledgerPath), resolve(WORK, "runner"), resolve(opts.out, "runner")])) releases.push(lockLedger(path));
+    return await runCells(cells, opts, stage, prep, images);
+  } finally {
+    for (const release of releases.reverse()) release();
+  }
+}
+
+async function runCells(cells: Cell[], opts: RunOpts, stage: string, prep: Prepared, images: Record<string, string>): Promise<{ results: SessionResult[]; capStop: string | null }> {
   const hostname = "172.17.0.1";
   let fake: ReturnType<typeof serveFake> | null = null;
   let upstream = "https://api.anthropic.com";
   if (opts.fake) {
     fake = serveFake(hostname, 0, () => "office-hours", join(opts.out, "fake-upstream.jsonl"));
     upstream = `http://${hostname}:${fake.port}`;
-  } else if (!process.env.ANTHROPIC_API_KEY) throw new Error("E_KEY_MISSING: ANTHROPIC_API_KEY is not set");
+  }
   const key = opts.fake ? () => "fake-key" : () => process.env.ANTHROPIC_API_KEY ?? "";
   const proxy = new MeteringProxy({ hostname, port: 0, upstream, upstreamKey: key });
   const ledger = new Ledger(opts.ledgerPath, CAP_USD, LINE_ITEM, join(opts.out, "ledger-mirror.jsonl"), opts.fake);
@@ -123,9 +136,10 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
   chmodSync(fakeExe, 0o755);
   const uid = (await sh("id -u")).trim() + ":" + (await sh("id -g")).trim();
   const results: SessionResult[] = [];
-  const stageFile = join(opts.out, "stages", `${stage}.json`);
+  const started = new Date();
+  const stageFile = join(opts.out, "stages", `${stage}.${started.getTime()}.json`);
   const unique = <T>(xs: T[]) => [...new Set(xs)];
-  const planned = { stage, suite: STAGES[stage]!.suite, models: unique(cells.map((c) => c.model)), arms: unique(cells.map((c) => c.arm)), trials: unique(cells.map((c) => c.trial)), planned: cells.length, prereg: opts.prereg, started: new Date().toISOString() };
+  const planned = { stage, suite: STAGES[stage]!.suite, models: unique(cells.map((c) => c.model)), arms: unique(cells.map((c) => c.arm)), trials: unique(cells.map((c) => c.trial)), planned: cells.length, prereg: opts.prereg, fake: opts.fake, started: started.toISOString() };
   mkdirSync(join(opts.out, "stages"), { recursive: true });
   writeFileSync(stageFile, JSON.stringify({ ...planned, status: "running" }, null, 2) + "\n");
   const reserver = new Reserver(ledger);
@@ -199,8 +213,11 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
   );
   proxy.stop();
   fake?.stop(true);
-  for (const [id, usd] of reserver.open) ledger.settle(id, usd, { stale: true, note: "runner error before settling; charged at the full reservation" });
-  releaseLock();
+  try {
+    reserver.settleOpen("runner error before settling; charged at the full reservation");
+  } catch (e) {
+    failure ??= e;
+  }
   if (failure) throw failure;
   const capStop = reserver.stopped;
   if (capStop) console.log(capStop);
@@ -246,8 +263,13 @@ async function main() {
   });
   const cmd = positionals[0];
   if (cmd === "prepare") {
-    const p = await prepare();
-    console.log(JSON.stringify({ digests: Object.fromEntries(Object.entries(p.suites).map(([k, v]) => [k, v.digests])), images: p.images }, null, 2));
+    const release = lockLedger(join(WORK, "runner"));
+    try {
+      const p = await prepare();
+      console.log(JSON.stringify({ digests: Object.fromEntries(Object.entries(p.suites).map(([k, v]) => [k, v.digests])), images: p.images }, null, 2));
+    } finally {
+      release();
+    }
     return;
   }
   if (cmd === "approve") {
@@ -272,10 +294,13 @@ async function main() {
   if (cmd === "run") {
     if (!opts.fake && !/^[0-9a-f]{40}$/.test(opts.prereg)) throw new Error("E_PREREG: pass --prereg <full sha of the pushed prereg commit>");
     const stage = values.stage ?? "S1";
+    const unknown = (models ?? []).filter((m) => !MODELS[m]);
+    if (unknown.length) throw new Error(`E_TASKS: unknown model ${unknown.join(", ")}`);
     let tasks = prep.suites[STAGES[stage]!.suite]!.tasks;
     if (values.tasks) tasks = tasks.filter((t) => values.tasks!.split(",").includes(t.id));
     let cells = planStage(stage, tasks, trials, models);
     if (values.arms) cells = cells.filter((c) => values.arms!.split(",").includes(c.arm));
+    if (!cells.length) throw new Error(`E_TASKS: no cells in ${stage} match --models, --tasks, --trials and --arms`);
     const r = await execute(cells, opts, stage);
     process.exit(r.capStop ? 2 : 0);
   }
