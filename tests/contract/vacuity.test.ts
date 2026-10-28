@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SidecarTask } from "../../src/skill-eval/contract/sidecar.ts";
@@ -82,6 +82,12 @@ describe("vacuity check on the whole task", () => {
     const r = run([gate], { gate: { mutant: { setup: "touch x" } } }, noShell);
     expect(r.results[0]).toMatchObject({ status: "broken", control: "mutant", reason: "check did not run to an exit code: spawnSync sh ENOENT" });
     expect(r.stops.map((s) => s.code)).toEqual(["E_TASKS_INVALID"]);
+  });
+
+  test("a step that leaves a read-only directory still gets its result, and its work dir is removed", () => {
+    const r = run([task("read-only", { setup: "mkdir d && touch d/f && chmod 555 d", must: ["x"] })]);
+    expect(r.results[0]).toMatchObject({ id: "read-only", status: "ok", control: "no-op" });
+    expect(readdirSync(tmp).filter((name) => name.startsWith("gstack-evals-vacuity-"))).toEqual([]);
   });
 
   test("controls run in a fresh work dir with the env allowlist and the task's declared variables only", () => {

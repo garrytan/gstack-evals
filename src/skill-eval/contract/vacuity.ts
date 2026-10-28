@@ -128,6 +128,7 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     const holds = predicateHolds(score, check);
     return { id: task.id, safety, status: holds ? "vacuous" : "ok", control, held: heldAssertions(score, check) };
   } finally {
+    spawnSync("chmod", ["-R", "u+w", root]);
     rmSync(root, { recursive: true, force: true });
   }
 }
