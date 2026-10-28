@@ -8,11 +8,12 @@ const dir = mkdtempSync(join(tmpdir(), "session-"));
 const bin = join(dir, "bin");
 const cpFails = join(dir, "cp-fails");
 const dockerLog = join(dir, "docker.log");
+const runFails = join(dir, "run-fails");
 mkdirSync(join(dir, "tree", "work"), { recursive: true });
 mkdirSync(bin);
 writeFileSync(
   join(bin, "docker"),
-  `#!/bin/sh\necho "$*" >> "${dockerLog}"\nif [ "$1" = cp ] && [ "$3" = - ]; then\n  [ -e "${cpFails}" ] && exit 1\n  tar -c -C "${join(dir, "tree")}" work\nfi\nexit 0\n`,
+  `#!/bin/sh\necho "$*" >> "${dockerLog}"\nif [ -e "${runFails}" ]; then case "$*" in *dst=/fx*) exit 125;; esac; fi\nif [ "$1" = cp ] && [ "$3" = - ]; then\n  [ -e "${cpFails}" ] && exit 1\n  tar -c -C "${join(dir, "tree")}" work\nfi\nexit 0\n`,
 );
 chmodSync(join(bin, "docker"), 0o755);
 const path = process.env.PATH;
@@ -90,6 +91,18 @@ describe("runSession", () => {
     expect(r.check).toBeNull();
     expect(r.errors.join(" ")).toContain("E_COPY");
     expect(existsSync(join(dir, "copy", "result.json"))).toBe(true);
+  });
+  test("a check docker cannot start is an infra error, not a failed check", async () => {
+    rmSync(cpFails, { force: true });
+    writeFileSync(runFails, "");
+    try {
+      const r = await runSession({ ...spec("check-start"), task: { id: "t", prompt: "p", check: "true" } }, proxy);
+      expect(r.status).toBe("infra_error");
+      expect(r.check).toBeNull();
+      expect(r.errors.join(" ")).toContain("E_CHECK");
+    } finally {
+      rmSync(runFails, { force: true });
+    }
   });
   test("two runners on one machine never remove each other's container", async () => {
     rmSync(cpFails, { force: true });

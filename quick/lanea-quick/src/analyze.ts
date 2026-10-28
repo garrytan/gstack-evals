@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { WORK } from "./config.ts";
+import { MODELS, WORK } from "./config.ts";
 import { STAGES } from "./plan.ts";
 import type { SessionResult } from "./session.ts";
 
@@ -80,7 +80,7 @@ export function loadResults(root: string): SessionResult[] {
 export function readStages(root: string, results: SessionResult[]) {
   const stops: Record<string, string[]> = {};
   const trials: Record<string, number> = {};
-  const latest = new Map<string, any>();
+  const runs = new Map<string, any[]>();
   const push = (k: string, label: string) => {
     if (!(stops[k] ??= []).includes(label)) stops[k].push(label);
   };
@@ -89,24 +89,32 @@ export function readStages(root: string, results: SessionResult[]) {
     const st = JSON.parse(readFileSync(join(dir, f), "utf8"));
     const plan = STAGES[st.stage];
     const arms: string[] = st.arms ?? plan?.arms ?? [];
-    const when = String(st.started ?? st.ended ?? "");
     for (const m of (st.models ?? plan?.models ?? []) as string[]) {
       const k = `${st.suite ?? plan?.suite}|${m}`;
       if (st.fake) push(k, `FAKE ${st.stage}`);
       if (st.cap_stop) push(k, `${String(st.cap_stop).includes("reservation_exceeded") ? "RESERVATION_EXCEEDED" : "CAP_STOP"} ${st.stage}`);
       if (Array.isArray(st.trials) && arms.some((a) => a === "before" || a === "after")) trials[k] = Math.max(trials[k] ?? 0, st.trials.length);
-      const prev = latest.get(`${st.stage}|${k}`);
-      if (!prev || when >= String(prev.started ?? prev.ended ?? "")) latest.set(`${st.stage}|${k}`, st);
+      runs.set(`${st.stage}|${k}`, [...(runs.get(`${st.stage}|${k}`) ?? []), st]);
     }
   }
-  for (const [key, st] of latest) {
+  const when = (st: any) => String(st.started ?? st.ended ?? "");
+  const covers = (later: unknown, earlier: unknown) => Array.isArray(later) && Array.isArray(earlier) && earlier.every((x) => later.includes(x));
+  const complete = (st: any) => st.status === "done" && !st.cap_stop && st.finished >= st.planned;
+  for (const [key, list] of runs) {
     const k = key.slice(key.indexOf("|") + 1);
-    if (st.status !== undefined && st.status !== "done") push(k, `UNFINISHED ${st.stage}`);
-    else if (!st.cap_stop && st.finished < st.planned) push(k, `UNFINISHED ${st.stage} ${st.finished}/${st.planned}`);
+    for (const st of list) {
+      const label = st.status !== undefined && st.status !== "done" ? `UNFINISHED ${st.stage}` : !st.cap_stop && st.finished < st.planned ? `UNFINISHED ${st.stage} ${st.finished}/${st.planned}` : null;
+      const cleared = list.some((o) => when(o) > when(st) && complete(o) && covers(o.tasks, st.tasks) && covers(o.arms, st.arms) && covers(o.trials, st.trials));
+      if (label && !cleared) push(k, label);
+    }
+  }
+  for (const r of results) {
+    const stage = Object.entries(STAGES).find(([, p]) => p.suite === r.suite && (p.models as string[]).includes(r.model) && (p.arms as string[]).includes(r.arm))?.[0];
+    if (stage && r.cost_usd > (MODELS[r.model]?.reserveUsd ?? Infinity) + 1e-9) push(`${r.suite}|${r.model}`, `RESERVATION_EXCEEDED ${stage}`);
   }
   for (const [stage, plan] of Object.entries(STAGES))
     for (const m of plan.models)
-      if (!latest.has(`${stage}|${plan.suite}|${m}`) && results.some((r) => r.suite === plan.suite && r.model === m && (plan.arms as string[]).includes(r.arm))) push(`${plan.suite}|${m}`, `UNFINISHED ${stage} no stage file`);
+      if (!runs.has(`${stage}|${plan.suite}|${m}`) && results.some((r) => r.suite === plan.suite && r.model === m && (plan.arms as string[]).includes(r.arm))) push(`${plan.suite}|${m}`, `UNFINISHED ${stage} no stage file`);
   return { stops, trials };
 }
 
@@ -269,7 +277,7 @@ export function markdown(blocks: any[]): string {
     const arms = Object.keys(b.pooled);
     lines.push(`### ${b.suite} on ${b.model} (${b.grading}${b.opened_only ? ", opened-only" : ""})`, "");
     lines.push(`Verdict: ${b.verdict}${b.reasons.length ? ` (${b.reasons.join("; ")})` : ""}${b.incomplete.length ? ` [${b.incomplete.join("; ")}]` : ""}. Informative tasks: ${b.informative_tasks} of ${b.tasks}. Sign-flip p: ${Number.isNaN(b.sign_flip_p) ? "-" : b.sign_flip_p.toFixed(3)}.${b.warnings.length ? ` Warnings: ${b.warnings.join("; ")}.` : ""}`, "");
-    lines.push(`Loss signal: ${b.loss_signal ? "yes" : "no"}. Within noise: ${b.within_noise === null ? "- (no before2)" : b.within_noise ? "yes" : "no"}.`, "");
+    lines.push(`Loss signal: ${b.loss_signal ? "yes" : "no"}. Within noise: ${b.within_noise === null ? "-" : b.within_noise ? "yes" : "no"}.`, "");
     lines.push(`| task | ${arms.join(" | ")} |`, `|---|${arms.map(() => "---").join("|")}|`);
     for (const [t, row] of Object.entries<any>(b.cells)) lines.push(`| ${t}${b.safety_tasks.includes(t) ? " (safety)" : ""} | ${arms.map((a) => `${row[a].k}/${row[a].n}${row[a].opened < row[a].n && a !== "none" ? ` (opened ${row[a].opened})` : ""}${row[a].missing ? ` (+${row[a].missing} missing)` : ""}`).join(" | ")} |`);
     lines.push(`| pooled | ${arms.map((a) => `${pct(b.pooled[a].rate)} [${pct(b.pooled[a].ci95[0])}, ${pct(b.pooled[a].ci95[1])}]`).join(" | ")} |`, "");
@@ -312,6 +320,10 @@ if (import.meta.main) {
     "## Opened-only",
     "",
     markdown(verdict.opened_only),
+    "## Stage stops",
+    "",
+    ...(Object.keys(stops).length ? Object.entries(stops).map(([k, labels]) => `- ${k.replace("|", " on ")}: ${labels.join("; ")}`) : ["none"]),
+    "",
     "## office-hours contract lines the diet changed that no task covers on must and check",
     "",
     `${uncovered.length} lines: ${uncovered.map((l) => l.id).join(", ")}`,

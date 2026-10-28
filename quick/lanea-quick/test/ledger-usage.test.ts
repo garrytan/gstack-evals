@@ -6,8 +6,6 @@ import { CapStop, Ledger, lockLedger, Reserver } from "../src/ledger.ts";
 import { costUsd, fromApiUsage, mergeStreamUsage } from "../src/usage.ts";
 import { bootstrapMeanCI, signFlipP, wilson } from "../src/analyze.ts";
 
-const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-
 describe("ledger", () => {
   test("approval first, reserve before spend, cap stop never overspends", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
@@ -75,6 +73,20 @@ describe("ledger", () => {
     expect(new Ledger(q, 10, "t").hasApproval()).toBe(false);
     expect(new Ledger(q, 20, "t").hasApproval()).toBe(true);
   });
+  test("approve on an approved ledger with rows adds nothing and keeps it authorized", () => {
+    for (const fake of [false, true]) {
+      const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+      const a = fake ? { words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" } : { words: ["Rec"], by: "x", source: "y" };
+      const l = new Ledger(p, 10, "t", undefined, fake);
+      l.approve(a);
+      l.reserve("a", 1, {});
+      l.settle("a", 1, {});
+      const before = readFileSync(p, "utf8");
+      new Ledger(p, 10, "t", undefined, fake).approve(a);
+      expect(readFileSync(p, "utf8")).toBe(before);
+      expect(new Ledger(p, 10, "t", undefined, fake).hasApproval()).toBe(true);
+    }
+  });
   test("only the first row can approve, and the old fake runner's approval never authorizes a paid ledger", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     writeFileSync(p, JSON.stringify({ type: "approval", cap_usd: 10, words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" }) + "\n");
@@ -90,27 +102,17 @@ describe("ledger", () => {
     expect(() => lockLedger(p)).toThrow("E_LOCK");
     release();
     lockLedger(p)();
-    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 2 ** 22 + 1, host: hostname(), boot }));
-    lockLedger(p)();
     writeFileSync(`${p}.lock`, JSON.stringify({ pid: 1, host: "other-machine" }));
     expect(() => lockLedger(p)).toThrow("other-machine");
   });
-  test("a lock from another boot is refused even with this hostname, and a pid this runner cannot signal counts as alive", () => {
+  test("a lock is never replaced, even one whose pid is dead on this machine, and a release keeps a lock it no longer owns", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 2 ** 22 + 1, host: hostname(), boot: "00000000-0000-0000-0000-000000000000" }));
-    expect(() => lockLedger(p)).toThrow("another machine or boot");
-    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 1, host: hostname(), boot }));
-    expect(() => lockLedger(p)).toThrow("still running");
-  });
-  test("a stale lock is replaced only under the takeover file, and a release keeps a lock it no longer owns", () => {
-    const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 2 ** 22 + 1, host: hostname(), boot }));
-    writeFileSync(`${p}.lock.takeover`, "");
-    expect(() => lockLedger(p)).toThrow("replacing");
-    expect(existsSync(`${p}.lock`)).toBe(true);
-    rmSync(`${p}.lock.takeover`);
+    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 2 ** 22 + 1, host: hostname(), token: "dead" }));
+    expect(() => lockLedger(p)).toThrow("remove it by hand");
+    expect(JSON.parse(readFileSync(`${p}.lock`, "utf8")).token).toBe("dead");
+    rmSync(`${p}.lock`);
     const release = lockLedger(p);
-    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 1, host: hostname(), boot, token: "someone-else" }));
+    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 1, host: hostname(), token: "someone-else" }));
     release();
     expect(existsSync(`${p}.lock`)).toBe(true);
   });
@@ -166,7 +168,7 @@ describe("reserver", () => {
     r.halt();
     expect(await Promise.race([waiting, Bun.sleep(1000).then(() => "stuck")])).toBe(false);
   });
-  test("settleOpen charges each open reserve once in full and skips one already settled", async () => {
+  test("a runner error settles each reserve still open once in full and leaves settled ones alone", async () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
     const l = new Ledger(p, 10, "t");
     l.approve({ words: ["Rec"], by: "x", source: "y" });
@@ -177,12 +179,11 @@ describe("reserver", () => {
     r.settle("b", 1, {});
     l.settle("c", 1, {});
     r.halt();
-    r.settleOpen("error");
+    l.settleStale("error");
     const settles = readFileSync(p, "utf8").trim().split("\n").map((x) => JSON.parse(x)).filter((x) => x.type === "settle");
     expect(settles.filter((x) => x.reservation_id === "a")).toEqual([expect.objectContaining({ usd: 4, stale: true })]);
     expect(settles.filter((x) => x.reservation_id === "c")).toHaveLength(1);
     expect(new Ledger(p, 10, "t").totals()).toMatchObject({ settled: 6, open: 0 });
-    expect(r.open.size).toBe(0);
   });
 });
 

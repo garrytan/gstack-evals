@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,9 +36,17 @@ describe("run.ts arguments", () => {
     expect(none.err).toContain("E_TASKS: no cells");
     expect(existsSync(join(out, "stages"))).toBe(false);
   });
+  test("a stage that stopped is never resumed for a model it stopped", () => {
+    const out = join(work, "runs-stopped");
+    mkdirSync(join(out, "stages"), { recursive: true });
+    writeFileSync(join(out, "stages", "S1.1.json"), JSON.stringify({ stage: "S1", models: ["claude-haiku-5-5"], status: "done", cap_stop: "STOP: reason=budget_exhausted" }));
+    const r = cli("run", "--stage", "S1", "--fake", "--out", out, "--models", "claude-haiku-5-5");
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("E_STAGE_STOPPED");
+    expect(readdirSync(join(out, "stages"))).toEqual(["S1.1.json"]);
+  });
   test("prepare refuses while a runner holds WORK", () => {
-    const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-    writeFileSync(join(work, "runner.lock"), JSON.stringify({ pid: process.pid, boot, token: "t" }));
+    writeFileSync(join(work, "runner.lock"), JSON.stringify({ pid: process.pid, token: "t" }));
     try {
       const r = cli("prepare");
       expect(r.code).not.toBe(0);

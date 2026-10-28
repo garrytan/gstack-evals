@@ -20,15 +20,7 @@ const amount = (usd: number) => {
   if (!Number.isFinite(usd) || usd < 0) throw new Error(`E_LEDGER_AMOUNT: ${usd} is not a finite, non-negative amount`);
 };
 
-const bootId = (): string => {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    return "";
-  }
-};
-
-const readLock = (lock: string): { pid?: number; host?: string; boot?: string; token?: string } | null => {
+const readLock = (lock: string): { pid?: number; host?: string; started?: string; token?: string } | null => {
   try {
     return JSON.parse(readFileSync(lock, "utf8"));
   } catch {
@@ -36,53 +28,26 @@ const readLock = (lock: string): { pid?: number; host?: string; boot?: string; t
   }
 };
 
-const pidAlive = (pid: unknown): boolean => {
-  try {
-    process.kill(pid as number, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-};
-
-// One runner per path: an exclusive lock file beside it, taken before the path is read. Machines are told apart by
-// boot id, since every cloud machine can share one hostname. A lock left by a dead process from this boot is replaced
-// under a second exclusive file, so two starters cannot both replace it; any other lock is refused. The release removes
-// the lock only while it is still this runner's.
+// One runner per path: an exclusive lock file beside it, taken before the path is read. A held lock is never replaced,
+// even when its pid looks dead here: the ledger sits on a drive that several machines mount, machines restored from one
+// snapshot share hostname and boot id, and a pid dead here may be alive on the machine that wrote the lock. Remove a
+// lock by hand once its runner has ended. The release removes the lock only while it is still this runner's.
 export function lockLedger(path: string): () => void {
   const lock = `${path}.lock`;
-  const me = { pid: process.pid, host: hostname(), boot: bootId(), token: randomBytes(12).toString("hex") };
+  const me = { pid: process.pid, host: hostname(), started: new Date().toISOString(), token: randomBytes(12).toString("hex") };
   mkdirSync(dirname(lock), { recursive: true });
-  for (let tries = 0; tries < 2; tries++) {
-    try {
-      const fd = openSync(lock, "wx");
-      writeSync(fd, JSON.stringify(me));
-      closeSync(fd);
-      return () => {
-        if (readLock(lock)?.token === me.token) rmSync(lock, { force: true });
-      };
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
+  try {
+    const fd = openSync(lock, "wx");
+    writeSync(fd, JSON.stringify(me));
+    closeSync(fd);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     const held = readLock(lock) ?? {};
-    if (!me.boot || held.boot !== me.boot) throw new Error(`E_LOCK: ${lock} is held by pid ${held.pid} from another machine or boot (${held.host ?? "unknown host"}); remove it only once that runner is gone`);
-    if (pidAlive(held.pid)) throw new Error(`E_LOCK: runner ${held.pid} is still running; one runner at a time, since a start settles open reserves as stale`);
-    const takeover = `${lock}.takeover`;
-    let fd: number;
-    try {
-      fd = openSync(takeover, "wx");
-    } catch {
-      throw new Error(`E_LOCK: another runner is replacing ${lock}; retry, or remove ${takeover} if no runner is starting`);
-    }
-    try {
-      const now = readLock(lock);
-      if (now && now.token === held.token && now.pid === held.pid && now.boot === held.boot) rmSync(lock, { force: true });
-    } finally {
-      closeSync(fd);
-      rmSync(takeover, { force: true });
-    }
+    throw new Error(`E_LOCK: ${lock} is held by pid ${held.pid ?? "unknown"} on ${held.host ?? "an unknown host"} since ${held.started ?? "an unknown time"}; remove it by hand only once that runner has ended`);
   }
-  throw new Error(`E_LOCK: could not take ${lock}`);
+  return () => {
+    if (readLock(lock)?.token === me.token) rmSync(lock, { force: true });
+  };
 }
 
 export class Ledger {
@@ -213,12 +178,6 @@ export class Reserver {
     this.ledger.settle(id, usd, meta);
     this.open.delete(id);
     this.wake();
-  }
-
-  // Settles every reservation still open at its full amount; one already settled in the ledger gets no second row.
-  settleOpen(note: string) {
-    for (const [id, usd] of this.open) this.ledger.settle(id, usd, { stale: true, note });
-    this.open.clear();
   }
 
   stop(reason: string) {
