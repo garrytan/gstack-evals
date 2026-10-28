@@ -392,11 +392,20 @@ export const CODES = {
   },
   E_TRIPWIRE: {
     exit: 2,
-    meaning: "The metering proxy refused a request whose body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), so the cell is invalid.",
+    meaning: "The metering proxy refused a request whose path, query string, headers or body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), raw or percent-decoded, so the cell is invalid.",
     fix: "Find how the marker reached the agent (task setup, fixtures, arm files or env) and remove it, then run the cell again as a new run. The message counts markers and never prints them.",
     side_effects: "None for the refused request: it never reached the provider. Calls the cell made before it are charged.",
     retry_safe: true,
     resumable: false,
+    owner: "U3",
+  },
+  E_LEDGER_UNAVAILABLE: {
+    exit: 2,
+    meaning: "The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.",
+    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume <out>.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
     owner: "U3",
   },
   E_IMAGE_BUILD: {

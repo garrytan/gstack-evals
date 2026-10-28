@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { priceRequest, reservationMicros, sseUsage, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
+import { priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -287,7 +287,7 @@ describe("allowlist and allowance", () => {
     };
     const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { ledger });
     const a = t.bind({ allowance_micros: 30_000 });
-    const body = await expectProblem(await t.call(a.slot, a.token), 503, "UPSTREAM");
+    const body = await expectProblem(await t.call(a.slot, a.token), 503, "E_LEDGER_UNAVAILABLE");
     expect(body.detail).toContain("nothing was sent");
     expect(t.calls).toHaveLength(0);
     expect((await t.call(a.slot, a.token)).status).toBe(200);
@@ -321,6 +321,36 @@ describe("allowlist and allowance", () => {
     for (const extra of [{ previous_response_id: "resp_1" }, { conversation: "conv_1" }, { input: [{ type: "item_reference", id: "msg_1" }] }, { input: [{ id: "msg_1" }] }]) {
       expect(priceRequest("openai", { ...base, ...extra }, 1000).inputTokens).toBeGreaterThanOrEqual(plain + UNKNOWN_CHAIN_CONTEXT_TOKENS - 64);
     }
+  });
+
+  test("an assistant replay with an id and a role is priced by its bytes; a type: null reference is reserved at the context bound", () => {
+    const base = { model: "gpt-6.1-sol", input: "hi" };
+    const plain = priceRequest("openai", base, 1000).inputTokens;
+    expect(priceRequest("openai", { ...base, input: [{ id: "msg_1", type: null }] }, 1000).inputTokens).toBeGreaterThanOrEqual(plain + UNKNOWN_CHAIN_CONTEXT_TOKENS - 64);
+    const replay = { ...base, input: [{ role: "assistant", id: "msg_1", content: [{ type: "output_text", text: "hello" }] }] };
+    expect(priceRequest("openai", replay, 1000).inputTokens).toBeLessThan(10_000);
+  });
+
+  test("a request with tools reserves the tool-use system prompt", () => {
+    const msg = { model: "claude-opus-5-5", max_tokens: 1000, messages: [] };
+    const plain = priceRequest("anthropic", msg, 1000).inputTokens;
+    const tools = [{ name: "t", input_schema: { type: "object" } }];
+    expect(priceRequest("anthropic", { ...msg, tools }, 1000).inputTokens - plain).toBeGreaterThanOrEqual(TOOL_USE_SYSTEM_TOKENS);
+  });
+
+  test("inference_geo global is forwarded, and an OpenAI call that names no service_tier is pinned to default", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    expect((await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", inference_geo: "global", max_tokens: 1000, messages: [] })).status).toBe(200);
+    expect((await t.call(a.slot, a.token, "/openai/v1/responses", { model: "gpt-6.1-sol", input: "hi" })).status).toBe(200);
+    expect(t.calls[1]!.body.service_tier).toBe("default");
+  });
+
+  test("a cap named in a field the route's provider does not read still gets the cell's cap in the route's field", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    expect((await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", max_output_tokens: 10, messages: [] })).status).toBe(200);
+    expect(t.calls[0]!.body.max_tokens).toBe(32_768);
   });
 
   test("long prompts are reserved and settled at the long-prompt rates", () => {
@@ -618,7 +648,7 @@ describe("unknown sends and reconcile", () => {
     const t = setup(() => Response.json({ data: [] }), { forbiddenMarkers: ["HIDDEN-FACT-42", "K=V&W+X"] });
     const a = t.bind();
     const get = (path: string, extra: Record<string, string> = {}) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openai/v1/models${path}`, { headers: { authorization: `Bearer ${a.token}`, ...extra } });
-    const leaking = [get("?q=HIDDEN-FACT-42"), get("?q=HIDDEN%2DFACT%2D42"), get("?q=K=V&W+X"), get("?q=K%3DV%26W%2BX"), get("/HIDDEN-FACT-42"), get("/HIDDEN%2DFACT%2D42"), get("", { "x-note": "HIDDEN-FACT-42" }), get("", { "x-note": "HIDDEN%2DFACT%2D42" })];
+    const leaking = [get("?q=HIDDEN-FACT-42"), get("?q=HIDDEN%2DFACT%2D42"), get("?q=K=V&W+X"), get("?q=K%3DV%26W%2BX"), get("/HIDDEN-FACT-42"), get("/HIDDEN%2DFACT%2D42"), get("", { "x-note": "HIDDEN-FACT-42" }), get("", { "x-note": "HIDDEN%2DFACT%2D42" }), get("/%ZZHIDDEN%2DFACT%2D42"), get("", { "x-note": "%ZZ HIDDEN%2DFACT%2D42" })];
     for (const res of await Promise.all(leaking)) expect((await expectProblem(res, 403, "E_TRIPWIRE")).detail).not.toContain("HIDDEN-FACT-42");
     expect((await get("?q=fine")).status).toBe(200);
     expect(t.calls).toHaveLength(1);
@@ -634,6 +664,57 @@ describe("unknown sends and reconcile", () => {
     proxy.journalFd = fd;
     expect(body.detail).not.toContain(KEY);
     expect(t.calls).toHaveLength(0);
+  });
+
+  test("a request-journal failure after reserve gives back the slot's claim and settles the reservation at zero", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    const proxy = t.proxy as unknown as { journalFd: number | null; slots: Map<string, { committedMicros: number }> };
+    const fd = proxy.journalFd;
+    proxy.journalFd = 2 ** 30;
+    await expectProblem(await t.call(a.slot, a.token), 500, "E_INTERNAL");
+    proxy.journalFd = fd;
+    expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }]]);
+    expect(proxy.slots.get(a.slot)!.committedMicros).toBe(0);
+  });
+
+  test("a failure before the slot check answers E_INTERNAL, not a stack page", async () => {
+    const t = setup(() => ok({}));
+    const a = t.bind();
+    const proxy = t.proxy as unknown as { journalFd: number | null };
+    const fd = proxy.journalFd;
+    proxy.journalFd = 2 ** 30;
+    await expectProblem(await t.call(a.slot, "wrong"), 500, "E_INTERNAL");
+    proxy.journalFd = fd;
+  });
+
+  test("after a torn journal write the next line starts on its own line, and reconcile skips only the torn one", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    const proxy = t.proxy as unknown as { journalFd: number | null };
+    const fd = proxy.journalFd;
+    appendFileSync(join(t.dir, "journal.ndjson"), '{"kind":"requ');
+    proxy.journalFd = 2 ** 30;
+    await t.call(a.slot, "wrong");
+    proxy.journalFd = fd;
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    const result = await reconcileJournal(join(t.dir, "journal.ndjson"), new FakeLedger());
+    expect(result).toEqual({ settled: ["res_1"], unknown: [], refused: [], unreadable: 1 });
+  });
+
+  test("reconcile skips a truncated last line and settles the rest", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-journal-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    appendFileSync(path, `${JSON.stringify({ kind: "request", reservation_id: "res_9" })}\n{"kind":"outcome","reserv`);
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_9"], refused: [], unreadable: 1 });
+  });
+
+  test("finalize over the socket refuses a timeout_ms that is not a non-negative integer", async () => {
+    const t = setup(() => ok({}));
+    const a = t.bind();
+    const res = await fetch("http://localhost/finalize", { unix: join(t.dir, "management.sock"), method: "POST", headers: { "x-gstack-evals-management": MANAGEMENT }, body: JSON.stringify({ meter_id: a.meter_id, timeout_ms: "soon" }) });
+    await expectProblem(res, 400, "E_USAGE");
   });
 
   test("each attempt reserves under its own idempotency key", async () => {
@@ -666,7 +747,7 @@ describe("unknown sends and reconcile", () => {
     const refusing = new FakeLedger();
     refusing.refuseSettles = 1;
     const result = await reconcileJournal(join(t.dir, "journal.ndjson"), refusing);
-    expect(result).toEqual({ settled: [], unknown: [], refused: [{ reservation_id: "res_1", code: "CAP_STOP", message: "settle refused" }] });
+    expect(result).toEqual({ settled: [], unknown: [], refused: [{ reservation_id: "res_1", code: "CAP_STOP", message: "settle refused" }], unreadable: 0 });
   });
 
   test("reconcile settles a call with no outcome as unknown and resends nothing; a lost acknowledgement is settled again", async () => {
@@ -679,7 +760,7 @@ describe("unknown sends and reconcile", () => {
     appendFileSync(path, JSON.stringify({ kind: "request", reservation_id: "res_crashed", lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, try: 1, max_micros: 500_000 }) + "\n");
     const fresh = new FakeLedger();
     const result = await reconcileJournal(path, fresh);
-    expect(result).toEqual({ settled: ["res_1"], unknown: ["res_crashed"], refused: [] });
+    expect(result).toEqual({ settled: ["res_1"], unknown: ["res_crashed"], refused: [], unreadable: 0 });
     expect(fresh.settles[0]![1]).toMatchObject({ kind: "spent" });
     expect(fresh.settles[1]).toEqual(["res_crashed", { kind: "unknown" }]);
     expect(t.calls).toHaveLength(1);
