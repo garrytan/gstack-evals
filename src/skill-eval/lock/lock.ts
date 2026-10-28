@@ -10,6 +10,10 @@
 // file, and, for an ask line, it asked a question of the line's category (any question when the line names none). A
 // claimed line that no run reached is unreached, a line nobody claimed is unclaimed, and both count as uncovered. So a
 // line a diet moved into an on-demand section that no task's run read shows up uncovered.
+//
+// The transcript shows only the questions a run asked. For every other line, the claiming task's check observes the
+// gated event or required output: a claim says that check tests the line, so a passing run is that observation. A claim
+// whose check does not test its line is a wrong claim, the same as a guessed one.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -22,7 +26,7 @@ import { contractLines, EXTRACTOR_SHA256, EXTRACTOR_VERSION, type LineCategory, 
 export const LOCK_FILE = "tasks.lock.json";
 
 export const COVERAGE_RULE =
-  "A line counts as covered only when an old-arm run of a task in its tasks list reached it: the run passed, read the line's file, and, for an ask line, asked a question of the line's category (any question when it is \"any\"). Claimed lines no run reached, and unclaimed lines, are uncovered.";
+  "A line counts as covered only when an old-arm run of a task in its tasks list reached it: the run passed, read the line's file, and, for an ask line, asked a question of the line's category (any question when it is \"any\"). For other lines the claiming task's check observes the line's gated event or required output, so a passing run is that observation. Claimed lines no run reached, and unclaimed lines, are uncovered.";
 
 export interface LockLine {
   id: string;
@@ -48,6 +52,7 @@ export interface Lock {
   /** Paths are relative to the lock's directory. */
   tasks: { file: string; sha256: string };
   ext: { file: string; sha256: string } | null;
+  /** The policy's file name, never a path: the default policy lives in the gstack-evals package, outside the tasks repo. Its sha256 pins it. */
   policy: { file: string; sha256: string } | null;
   skill: { name: string; tree_sha256: string; files: { path: string; sha256: string; load: Load }[] };
   extractor: { version: number; sha256: string };
@@ -142,15 +147,40 @@ export function writeLock(path: string, lock: Lock): void {
   renameSync(tmp, path);
 }
 
+/** The first field of a parsed lock that breaks the lock's shape (schema #/$defs/lock), or null when it has none. */
+export function lockShapeProblem(v: any): string | null {
+  const sha = (x: unknown) => typeof x === "string" && /^[0-9a-f]{64}$/.test(x);
+  const str = (x: unknown) => typeof x === "string" && x.length > 0;
+  const int = (x: unknown) => Number.isInteger(x) && (x as number) >= 1;
+  const pin = (x: any) => str(x?.file) && sha(x?.sha256);
+  const strings = (x: unknown) => Array.isArray(x) && x.every(str);
+  const load = (x: unknown) => x === "always" || x === "on-demand";
+  const fields: [string, boolean][] = [
+    ["schema_version", v?.schema_version === 1],
+    ["tasks", pin(v?.tasks)],
+    ["ext", v?.ext === null || pin(v?.ext)],
+    ["policy", v?.policy === null || pin(v?.policy)],
+    ["skill", str(v?.skill?.name) && sha(v?.skill?.tree_sha256) && Array.isArray(v?.skill?.files) && v.skill.files.every((f: any) => str(f?.path) && sha(f?.sha256) && load(f?.load))],
+    ["extractor", int(v?.extractor?.version) && sha(v?.extractor?.sha256)],
+    ["classifier_sha256", sha(v?.classifier_sha256)],
+    ["coverage_rule", str(v?.coverage_rule)],
+    ["lines", Array.isArray(v?.lines)],
+  ];
+  const bad = fields.find(([, ok]) => !ok);
+  if (bad) return bad[0] + " is missing or malformed";
+  const i = v.lines.findIndex((l: any) => !(str(l?.id) && str(l?.file) && int(l?.line) && int(l?.end_line) && typeof l?.heading === "string" && str(l?.kind) && strings(l?.categories) && load(l?.load) && (l?.ask === null || str(l?.ask)) && typeof l?.text === "string" && sha(l?.text_sha256) && strings(l?.tasks)));
+  return i < 0 ? null : "lines[" + i + "] is missing a field or has a malformed one";
+}
+
 export function readLock(path: string): { lock: Lock | null; problem: string | null } {
-  let parsed: Lock;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     return { lock: null, problem: "cannot read the lock " + path + ": " + (error as Error).message };
   }
-  const ok = parsed?.schema_version === 1 && typeof parsed.tasks?.sha256 === "string" && Array.isArray(parsed.lines) && parsed.lines.every((l) => typeof l?.id === "string" && typeof l.text_sha256 === "string" && Array.isArray(l.tasks));
-  return ok ? { lock: parsed, problem: null } : { lock: null, problem: "the lock " + path + " is not a schema_version 1 tasks lock" };
+  const problem = lockShapeProblem(parsed);
+  return problem ? { lock: null, problem: "the lock " + path + " is not a schema_version 1 tasks lock: " + problem } : { lock: parsed as Lock, problem: null };
 }
 
 export interface LockState {
@@ -169,6 +199,7 @@ export function lockDrift(lock: Lock, now: LockState): string[] {
   if ((lock.ext?.sha256 ?? null) !== (now.ext?.sha256 ?? null)) drift.push("tasks.ext.json changed: sha256 " + short(lock.ext?.sha256) + " in the lock, " + short(now.ext?.sha256) + " now");
   if ((lock.policy?.sha256 ?? null) !== now.policySha256) drift.push("policy changed: sha256 " + short(lock.policy?.sha256) + " in the lock, " + short(now.policySha256) + " now");
   if (lock.extractor.version !== EXTRACTOR_VERSION || lock.extractor.sha256 !== EXTRACTOR_SHA256) drift.push("the contract-line rules changed since the lock (extractor " + lock.extractor.version + ", " + short(lock.extractor.sha256) + ")");
+  if (lock.classifier_sha256 !== CLASSIFIER_SHA256) drift.push("the question classifier changed since the lock (" + short(lock.classifier_sha256) + " in the lock, " + short(CLASSIFIER_SHA256) + " now)");
   if (now.before && treeSha256(now.before) !== lock.skill.tree_sha256) {
     const was = new Map(lock.skill.files.map((f) => [f.path, f.sha256]));
     const changed = now.before.filter((f) => was.get(f.path) !== f.sha256).map((f) => f.path);
@@ -199,8 +230,8 @@ export interface OldArmRun {
   passed: boolean;
   /** Skill files the run read, relative to the skill directory; SKILL.md when the run opened the skill. */
   files_read: string[];
-  /** The categories of the questions the run asked. */
-  asked: Category[];
+  /** One entry per question the run asked: its classifier category, or null when the classifier names none. */
+  asked: (Category | null)[];
 }
 
 export type LineStatus = "covered" | "unreached" | "unclaimed";

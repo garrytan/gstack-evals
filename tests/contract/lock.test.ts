@@ -83,7 +83,22 @@ describe("tasks.lock.json", () => {
     const ajv = new Ajv2020({ strict: true, strictRequired: false, allowUnionTypes: true }).addSchema(schema);
     expect(ajv.validate(schema.$id + "#/$defs/lock", lock)).toBe(true);
     writeFileSync(path, "{}");
-    expect(readLock(path).problem).toContain("is not a schema_version 1 tasks lock");
+    expect(readLock(path).problem).toContain("is not a schema_version 1 tasks lock: schema_version is missing or malformed");
+  });
+
+  test("a lock missing a field or holding a malformed line is refused before any reader uses it", () => {
+    const { dir, lock } = lockFor(V1);
+    const path = join(dir, "tasks.lock.json");
+    const { extractor, skill, ...partial } = lock;
+    writeFileSync(path, JSON.stringify(partial));
+    expect(readLock(path)).toEqual({ lock: null, problem: "the lock " + path + " is not a schema_version 1 tasks lock: skill is missing or malformed" });
+    writeFileSync(path, JSON.stringify({ ...lock, extractor: { version: 1 } }));
+    expect(readLock(path).problem).toEndWith("extractor is missing or malformed");
+    const { tasks, ...unclaimable } = lock.lines[1]!;
+    writeFileSync(path, JSON.stringify({ ...lock, lines: [lock.lines[0], unclaimable] }));
+    expect(readLock(path).problem).toEndWith("lines[1] is missing a field or has a malformed one");
+    writeFileSync(path, JSON.stringify({ ...lock, lines: [{ ...lock.lines[0], tasks: ["no-code", 7] }] }));
+    expect(readLock(path).problem).toEndWith("lines[0] is missing a field or has a malformed one");
   });
 
   test("a relock keeps claims for unchanged lines and drops claims whose task is gone", () => {
@@ -104,6 +119,7 @@ describe("tasks.lock.json", () => {
     expect(drift.map((d) => d.split(":")[0])).toEqual(["tasks file changed", "tasks.ext.json changed", "policy changed", "the before copy differs from the locked one"]);
     expect(drift[3]).toBe("the before copy differs from the locked one: SKILL.md changed or added, sections/rules.md changed or added, sections/visual.md changed or added");
     expect(lockDrift({ ...lock, extractor: { version: 0, sha256: "c".repeat(64) } }, { tasks: contract.tasks, ext: null, policySha256: null })).toEqual([expect.stringMatching(/^the contract-line rules changed/)]);
+    expect(lockDrift({ ...lock, classifier_sha256: "d".repeat(64) }, { tasks: contract.tasks, ext: null, policySha256: null })).toEqual([expect.stringMatching(/^the question classifier changed since the lock \(dddddddddddd in the lock, [0-9a-f]{12} now\)$/)]);
   });
 
   test("a paid run needs the lock and its pinned files committed and clean at HEAD", () => {
@@ -148,6 +164,14 @@ describe("gate coverage", () => {
     expect(lineCoverage([visual], runs)[0]!.status).toBe("unreached");
     expect(lineCoverage([visual], [{ task: "no-code", passed: true, files_read: ["SKILL.md", "sections/visual.md"], asked: ["approach"] }])[0]!.status).toBe("unreached");
     expect(lineCoverage([visual], [{ task: "no-code", passed: true, files_read: ["SKILL.md", "sections/visual.md"], asked: ["visual"] }])[0]!.status).toBe("covered");
+  });
+
+  test("an ask line naming no category is reached by any question, a question no category names included", () => {
+    const { lock } = lockFor({ "SKILL.md": FRONT + "Ask the user their favorite color.\n" });
+    const line = { ...lock.lines[0]!, tasks: ["no-code"] };
+    expect(line.ask).toBe("any");
+    expect(lineCoverage([line], [{ task: "no-code", passed: true, files_read: ["SKILL.md"], asked: [null] }])[0]!.status).toBe("covered");
+    expect(lineCoverage([line], [{ task: "no-code", passed: true, files_read: ["SKILL.md"], asked: [] }])[0]!.status).toBe("unreached");
   });
 
   test("a line the diet moved out of SKILL.md that no task covers shows as a gap", () => {
