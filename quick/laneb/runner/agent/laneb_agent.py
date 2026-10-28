@@ -44,6 +44,7 @@ FORWARDED_ENV = (
     "CLAUDE_CONFIG_DIR",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
     "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
     "DISABLE_AUTOUPDATER",
     "DISABLE_TELEMETRY",
     "DISABLE_ERROR_REPORTING",
@@ -88,6 +89,7 @@ class LanebOptions(ClaudeCodeOptions):
     upstream_model: str = Field(description="Model id the proxy serves for this cell, as named in the proxy config.")
     repo_dir: str = Field(default="", description="Repository whose diff is published as /logs/artifacts/model.patch; empty for tasks graded on container state.")
     workdir: str = Field(default="", description="Claude Code working directory in the container; empty means the image's WORKDIR.")
+    max_output_tokens: int = Field(default=32000, description="CLAUDE_CODE_MAX_OUTPUT_TOKENS; Claude Code otherwise asks for 128k, whose worst case exceeds the cheap cells' caps.")
     sdk_max_turns: int = Field(default=200, description="Hard turn ceiling; the session cap and agent timeout bind first.")
 
 
@@ -169,6 +171,7 @@ class LanebAgent(ClaudeCode):
             "HOME": "/root",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
             "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+            "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(self.options.max_output_tokens),
             "DISABLE_AUTOUPDATER": "1",
             "DISABLE_TELEMETRY": "1",
             "DISABLE_ERROR_REPORTING": "1",

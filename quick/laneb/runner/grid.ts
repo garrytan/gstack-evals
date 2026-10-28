@@ -33,8 +33,8 @@ export function jobConfig(b: BatchSpec) {
         session_cap_usd: m.session_cap_usd,
         persona_path: `${b.agent_dir}/persona.json`,
         wrapper_path: `${b.runner_dir}/prompt-wrapper.md`,
+        max_output_tokens: b.max_output_tokens,
       },
-      env: { CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(b.max_output_tokens) },
     })),
   );
   return {

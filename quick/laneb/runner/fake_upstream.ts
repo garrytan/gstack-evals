@@ -62,7 +62,7 @@ export function startFakeUpstream(port = PORT, logPath = LOG) {
       if (req.method !== "POST") return Response.json({ ok: true });
       const body = (await req.json()) as any;
       const tools = Array.isArray(body.tools) ? body.tools.map((t: any) => t.name) : [];
-      const entry = { path: url.pathname, model: body.model, auth: req.headers.get("x-api-key") ? "x-api-key" : req.headers.get("authorization") ? "bearer" : "none", stream: Boolean(body.stream), n_tools: tools.length, has_skill_tool: tools.includes("Skill") };
+      const entry = { path: url.pathname, model: body.model, auth: req.headers.get("x-api-key") ? "x-api-key" : req.headers.get("authorization") ? "bearer" : "none", stream: Boolean(body.stream), n_tools: tools.length, has_skill_tool: tools.includes("Skill"), cache_ttls: [...new Set([...JSON.stringify(body).matchAll(/"cache_control":\{[^}]*\}/g)].map((m) => m[0]))] };
       if (url.pathname.endsWith("/count_tokens")) {
         appendFileSync(logPath, JSON.stringify(entry) + "\n");
         return Response.json({ input_tokens: 10 });

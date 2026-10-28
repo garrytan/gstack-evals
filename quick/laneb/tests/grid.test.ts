@@ -11,7 +11,7 @@ describe("grid", () => {
     });
     expect(job.agents.map((a) => a.kwargs.arm)).toEqual(["none", "gstack"]);
     expect(job.agents[1].kwargs).toMatchObject({ upstream_model: "claude-haiku-5-5", session_cap_usd: 1, skip_install: true, arm_tar: "/run/arms/gstack.tar" });
-    expect(job.agents[0].env).toEqual({ CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000" });
+    expect(job.agents[0].kwargs.max_output_tokens).toBe(32000);
     expect(job.tasks).toEqual([{ path: "/run/tasks/a" }, { path: "/run/tasks/b" }]);
     expect(job.verifier_timeout_multiplier).toBe(2);
   });

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { startProxy, costMicros, priceFor, maxPrice, SseUsage, serverTools, worstCaseMicros, type ProxyConfig } from "../runner/proxy.ts";
+import { startProxy, costMicros, priceFor, maxPrice, SseUsage, serverTools, worstCaseMicros, asksLongTtl, type ProxyConfig } from "../runner/proxy.ts";
 import { startFakeUpstream } from "../runner/fake_upstream.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "laneb-test-"));
@@ -48,6 +48,12 @@ describe("proxy helpers", () => {
   });
   test("worst case bounds a request by body size and max_tokens", () => {
     expect(worstCaseMicros(3000, 1000, price)).toBe(toMicros((1000 * 10 + 1000 * 25) / 1e6));
+    expect(worstCaseMicros(3000, 1000, price, false)).toBe(toMicros((1000 * 6.25 + 1000 * 25) / 1e6));
+  });
+  test("only a ttl other than 5m counts as a 1-hour cache write", () => {
+    expect(asksLongTtl(JSON.stringify({ system: [{ cache_control: { type: "ephemeral" } }] }))).toBe(false);
+    expect(asksLongTtl(JSON.stringify({ system: [{ cache_control: { type: "ephemeral", ttl: "5m" } }] }))).toBe(false);
+    expect(asksLongTtl(JSON.stringify({ system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] }))).toBe(true);
   });
   test("SSE parser takes usage from message_start and message_delta across chunk splits", () => {
     const p = new SseUsage();

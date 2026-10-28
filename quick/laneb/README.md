@@ -34,11 +34,13 @@ sequenceDiagram
 | `runner/agent/laneb_agent.py` | Harbor agent. Claude Code runs inside the container over `docker exec -i`, driven by the Agent SDK outside it. Extracts the arm, opens and closes the metered session, wraps the instruction in the arm-neutral prompt, answers AskUserQuestion from `usersim.py`, and on any exit kills Claude Code and settles. An error after at least one metered request still gets graded; an error before any is an infrastructure failure. |
 | `runner/prompt-wrapper.md` | The one prompt wrapper, identical across arms. |
 | `runner/materialize.ts` | Turns registry task directories into runnable ones: the task image plus a runtime layer (Claude Code 2.1.312, Node, Bun) that is identical across arms, and the per-phase network policy. Also converts SWE-bench Verified tasks to a separate verifier that grades the exported patch (not used in this run). |
+| `runner/prepare-run.ts` | Builds one batch's run directory: the tasks in `tasks/final.json` materialized and checked against their pinned digests, the arm tarballs, the proxy config, the JobConfig with VM paths, and a manifest with the git head and every digest. |
+| `runner/route-check.sh` | The first paid step: the smoke task once per model through the real proxy and ledger, arm none. |
 | `runner/grid.ts` | Writes a Harbor JobConfig: every task by every (model, arm). Harbor orders trials task by task, so a cap stop leaves complete, paired task blocks. |
 | `runner/launch.sh`, `vm-bootstrap.sh`, `vm-run.sh` | One batch on a fresh Ubicloud VM: bootstrap, keys to a 0600 file over stdin, proxy plus Harbor on the VM, ledger service here through a reverse tunnel, results pulled back, VM destroyed on any exit. |
 | `runner/smoke.sh`, `fake_upstream.ts`, `smoke-task/` | Keyless end-to-end test: fake upstream, proxy, scratch ledger, Harbor, agent, real Claude Code, separate verifier. |
 | `arms/` | The gstack arm build and the seeded placebo generator. |
-| `tasks/` | The task pre-screen: sources, rule, scripts and the fixed list with digests. |
+| `tasks/` | The task pre-screen: sources, rule, scripts and the fixed list with digests. `final.json` is the list after oracle checks, with each dropped task and why. |
 | `analysis/analyze.ts` | Pass rates with task-clustered bootstrap intervals, paired contrasts, cost per success, share of the Opus gap closed, skill-open rates. |
 | `config/` | Proxy routes and prices, and the cells with their session caps. |
 
@@ -50,4 +52,4 @@ Keyless: `bun test quick/laneb` and `npx tsc --noEmit -p quick/laneb/tsconfig.js
 
 - Keep: the proxy's session tokens and worst-case refusal, the ledger's integer money and idempotent reserves, the agent's always-settle exit path, the task-major job order, the runtime layer appended to PATH.
 - Replace: the hand-written batch specs with the plan's prereg plumbing, and the Python usersim with the shared simulator.
-- Known gaps: no non-root agent user; arms are extracted at trial start rather than baked; DeepSeek is metered at peak price; Claude Code's own `max_tokens` of 128k forces a large per-request worst case, so every cell sets `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32000`.
+- Known gaps: no non-root agent user; arms are extracted at trial start rather than baked; DeepSeek is metered at peak price; Claude Code's own `max_tokens` of 128k forces a large per-request worst case, so the agent sets `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (32000) in the container; the worst case still counts every third request byte as an uncached token, so long sessions stop short of their cap.

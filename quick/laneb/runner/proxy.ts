@@ -49,11 +49,15 @@ export function costMicros(u: Usage, p: Price): number {
   return Math.ceil(usd * 1_000_000);
 }
 
-// Worst case for one request: every input byte third is a token billed at the uncached rate, plus max_tokens of output.
-export function worstCaseMicros(bodyBytes: number, maxTokens: number, p: Price): number {
+// Worst case for one request: every third input byte is a token billed at the highest rate the body can incur
+// (uncached or a 5-minute cache write; a 1-hour write only when the body asks for a ttl other than 5m), plus max_tokens of output.
+export function worstCaseMicros(bodyBytes: number, maxTokens: number, p: Price, longTtl = true): number {
   const inputTokens = Math.ceil(bodyBytes / 3);
-  return Math.ceil(((inputTokens * Math.max(p.input, p.cache_write_1h) + maxTokens * p.output) / 1_000_000) * 1_000_000);
+  const inputPrice = Math.max(p.input, p.cache_write_5m, longTtl ? p.cache_write_1h : 0);
+  return Math.ceil(((inputTokens * inputPrice + maxTokens * p.output) / 1_000_000) * 1_000_000);
 }
+
+export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
 
 // Refuse provider-side tools (web search, web fetch, code execution): they run outside any sandbox.
 export function serverTools(body: any): string[] {
@@ -244,7 +248,7 @@ export function startProxy(opts: ProxyOptions) {
         return new Response(res.body, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/json" } });
       }
 
-      const worst = worstCaseMicros(outBody.length, Number(body.max_tokens ?? 32000), maxPrice(model));
+      const worst = worstCaseMicros(outBody.length, Number(body.max_tokens ?? 32000), maxPrice(model), asksLongTtl(outBody));
       if (s.spentMicros + worst > s.capMicros) {
         s.refused++;
         log({ event: "refused", session: s.id, reason: "session_cap", spent_micros: s.spentMicros, worst_micros: worst, cap_micros: s.capMicros, body_bytes: outBody.length, max_tokens: body.max_tokens });
