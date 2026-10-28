@@ -1,0 +1,40 @@
+# Sealed check (U19a): runs gstack-pregate sealed over every pull request's commits, before review.
+# gstack is fetched at a pinned commit and run by Bun with env-file and bunfig loading off, so no code from this repository runs.
+# The policy is the base branch's .gstack/pregate.json joined with the head's: a pull request can tighten it, never relax it.
+# U1's sealed config sets visibility public, so any finding exits 1.
+# This backs up the pre-push check and cannot unpublish a pushed commit. A red run is an incident: close the pull request,
+# delete the branch, burn the named held-out items (record their digests as burned) and write a wiki finding with counts and digests only.
+name: sealed
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sealed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+      - name: Fetch gstack at the pinned commit
+        env:
+          GSTACK_SHA: 61e201ec08bcf59163ef2d3a69a26e334a536c04 # gstack v1.91.295.0
+        run: |
+          git init -q "$RUNNER_TEMP/gstack"
+          git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
+          git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
+      - name: gstack-pregate sealed over the pull request's commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: bun --no-env-file --config=/dev/null "$RUNNER_TEMP/gstack/bin/gstack-pregate" sealed --range "$BASE_SHA..$HEAD_SHA" --base "$BASE_REF"
