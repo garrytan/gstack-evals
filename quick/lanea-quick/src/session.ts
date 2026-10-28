@@ -45,6 +45,7 @@ export interface SessionResult {
   opened: boolean;
   open_how: string[];
   files_loaded: Record<string, number>;
+  subagent_files_loaded: Record<string, number>;
   loaded_bytes_unique: number;
   loaded_bytes_total: number;
   usage: Usage;
@@ -205,7 +206,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
         appendFileSync(transcriptPath, JSON.stringify(m) + "\n");
         if (m.type === "system" && m.subtype === "init") {
           init = { model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, skills: m.skills, tools: m.tools, cwd: m.cwd };
-        } else if (m.type === "assistant") {
+        } else if (m.type === "assistant" && !m.parent_tool_use_id) {
           for (const b of m.message?.content ?? []) if (b.type === "text" && b.text?.trim()) turnText = b.text;
         } else if (m.type === "result") {
           subtypes.push(m.subtype);
@@ -291,6 +292,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
     opened: use.opened,
     open_how: use.how,
     files_loaded: use.files,
+    subagent_files_loaded: skillUse({ toolUses: t.subagentToolUses }, spec.skill).files,
     loaded_bytes_unique: bytes.unique,
     loaded_bytes_total: bytes.total,
     usage: session.usage,

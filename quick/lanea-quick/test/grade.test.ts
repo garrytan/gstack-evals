@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { gradePatterns, loadedBytes, parseTranscript, skillUse, transcriptText } from "../src/grade.ts";
 
 const msgs = [
-  { type: "assistant", message: { content: [{ type: "tool_use", name: "Skill", input: { skill: "office-hours" } }] } },
-  { type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/work/.claude/skills/gstack/office-hours/sections/preamble.md" } }] } },
+  { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Skill", input: { skill: "office-hours" } }] } },
+  { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "Launching skill" }] } },
+  { type: "assistant", message: { content: [{ type: "tool_use", id: "t2", name: "Read", input: { file_path: "/work/.claude/skills/gstack/office-hours/sections/preamble.md" } }] } },
+  { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t2", content: "..." }] } },
   { type: "assistant", message: { content: [{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ question: "What's your goal?", header: "Goal", options: [{ label: "Building a startup", description: "" }, { label: "Hackathon / demo", description: "" }] }] } }] } },
   { type: "assistant", message: { content: [{ type: "text", text: "PREMISES:\n1. x. Do you agree?" }] } },
   { type: "assistant", message: { content: [{ type: "text", text: "Done.\n```py\nimport os\n```" }] } },
@@ -34,5 +36,23 @@ describe("grading", () => {
       { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "x1", is_error: true, content: "Unknown skill" }] } },
     ]);
     expect(skillUse(failed, "office-hours").opened).toBe(false);
+  });
+  test("a tool call with no result is not an open and loads nothing", () => {
+    const pending = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/SKILL.md" } }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "s1", name: "Skill", input: { skill: "office-hours" } }] } },
+    ]);
+    expect(skillUse(pending, "office-hours")).toEqual({ opened: false, how: [], files: {} });
+  });
+  test("a subagent's reads are also counted apart", () => {
+    const sub = { parent_tool_use_id: "toolu_task" };
+    const t = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "r0", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/sections/preamble.md" } }] } },
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "r0", content: "..." }] } },
+      { type: "assistant", ...sub, message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/SKILL.md" } }] } },
+      { type: "user", ...sub, message: { content: [{ type: "tool_result", tool_use_id: "r1", content: "..." }] } },
+    ]);
+    expect(skillUse(t, "office-hours").files).toEqual({ "office-hours/sections/preamble.md": 1, "office-hours/SKILL.md": 1 });
+    expect(skillUse({ toolUses: t.subagentToolUses }, "office-hours").files).toEqual({ "office-hours/SKILL.md": 1 });
   });
 });

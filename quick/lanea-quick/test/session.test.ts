@@ -40,6 +40,7 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
     }).catch(() => {});
     await Bun.sleep(50);
     yield { type: "system", subtype: "init", model: options.model };
+    yield { type: "assistant", parent_tool_use_id: "toolu_task", message: { content: [{ type: "text", text: "What's the strongest evidence that someone actually wants this?" }] } };
     yield { type: "result", subtype: "success", num_turns: 2, total_cost_usd: 0.1, duration_ms: 10 };
     yield { type: "result", subtype: "success", num_turns: 1, total_cost_usd: 0.3, duration_ms: 10 };
   },
@@ -73,6 +74,12 @@ describe("runSession", () => {
     expect(r.requests).toBe(1);
     expect(r.cost_usd).toBeCloseTo((1000 * 0.1 + 1000 * 0.5) / 1e6, 9);
     expect(r.sdk.total_cost_usd).toBe(0.3);
+  });
+  test("the scripted user answers the main agent's turn, not a subagent's text", async () => {
+    rmSync(cpFails, { force: true });
+    const r = await runSession({ ...spec("usersim"), script: { replies: { demand: "Dana pays a VA $40 a month." } } }, proxy);
+    expect(r.usersim.sequence).toEqual([]);
+    expect(r.usersim.prose_replies).toBe(0);
   });
   test("a failed work-dir copy is an infra error, so no check runs on an empty dir", async () => {
     writeFileSync(cpFails, "");
