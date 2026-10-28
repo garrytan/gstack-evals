@@ -45,6 +45,26 @@ function scalar(raw: string): string | null {
   return v;
 }
 
+function splitFlowList(inner: string): string[] | null {
+  const parts: string[] = [];
+  let quote = "";
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (quote) {
+      if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ",") {
+      parts.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  if (quote) return null;
+  parts.push(inner.slice(start));
+  return parts;
+}
+
 export function parseFrontMatter(text: string): { fm: FrontMatter } | { error: string; line?: number } {
   if (text.includes("\r")) return { error: "use LF line endings" };
   const lines = text.split("\n");
@@ -76,11 +96,13 @@ export function parseFrontMatter(text: string): { fm: FrontMatter } | { error: s
       listKey = key;
     } else if (value.startsWith("[")) {
       if (!value.endsWith("]")) return { error: "inline list must end with ]", line: i + 1 };
+      const parts = splitFlowList(value.slice(1, -1));
+      if (!parts) return { error: "inline list has an unclosed quote", line: i + 1 };
       const items: string[] = [];
-      for (const part of value.slice(1, -1).split(",")) {
+      for (const part of parts) {
         if (part.trim() === "") continue;
         const v = scalar(part);
-        if (v === null) return unquotable;
+        if (v === null || (!/^\s*["']/.test(part) && /[[\]{}]/.test(v))) return unquotable;
         items.push(v);
       }
       fm[key] = items;

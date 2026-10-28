@@ -69,6 +69,13 @@ describe("front matter", () => {
     expect(ok).toEqual({ fm: { title: "It's fine", summary: "Quoted: with a colon", links: ["a", "b c"], attachments: ["one", "two"] } });
   });
 
+  test("keeps commas inside quoted inline list items", () => {
+    const parsed = parseFrontMatter("---\nlinks: [\"https://example.org/?ids=a,b\", 'x, it''s y', plain]\n---\n");
+    expect(parsed).toEqual({ fm: { links: ["https://example.org/?ids=a,b", "x, it's y", "plain"] } });
+    expect(parseFrontMatter("---\nlinks: [\"a, b]\n---\n")).toMatchObject({ error: expect.stringContaining("unclosed quote"), line: 2 });
+    expect(parseFrontMatter("---\nlinks: [https://x.org/?q[0]=1]\n---\n")).toMatchObject({ line: 2 });
+  });
+
   test("refuses a file with no front matter, an unclosed block, CRLF and duplicate fields", () => {
     expect(parseFrontMatter("# just markdown\n")).toMatchObject({ error: expect.stringContaining("no front matter") });
     expect(parseFrontMatter("---\ntitle: x\n")).toMatchObject({ error: expect.stringContaining("not closed") });
