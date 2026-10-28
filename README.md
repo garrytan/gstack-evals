@@ -30,7 +30,7 @@ gstack-evals --help
 | [src/](src/README.md) | The code, one folder per part of the plan, each naming its build unit |
 | [src/errors/codes.ts](src/errors/codes.ts) | Every reason code, one object per code; [docs/errors.md](docs/errors.md) is generated from it |
 | [src/types.ts](src/types.ts) | Interfaces that more than one unit codes against: arms, leases, reservations, outcomes, the error record |
-| [schema/](schema/README.md) | Public-safe JSON schemas (empty until U5 and U6 land) |
+| [schema/](schema/README.md) | Public-safe JSON schemas: tasks and arms (U5) so far, the verdict schema with U6 |
 | [docs/](docs/) | Reason codes and adapters so far |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
 | [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. Start with [wiki/INDEX.md](wiki/INDEX.md) |
