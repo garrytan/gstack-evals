@@ -192,6 +192,10 @@ describe("the check", () => {
     expect(problems(marked)).toContainEqual(DECISION + ":11: sealed marker: sealed material never goes in wiki/");
     const custom = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision"), "\nCANARY" + "-7f3a\n"), ".gstack/pregate.json": JSON.stringify({ sealed: { answer_markers: ["CANARY" + "-7f3a"] } }) });
     expect(problems(custom, {})).toContainEqual(expect.stringContaining("sealed marker"));
+    const pattern = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision"), "\ncanary-" + "0042\n"), ".gstack/pregate.json": JSON.stringify({ sealed: { answer_markers: ["canary-\\d{4}"] } }) });
+    expect(problems(pattern, {})).toContainEqual(expect.stringContaining("sealed marker"));
+    const broken = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")), ".gstack/pregate.json": JSON.stringify({ sealed: { answer_markers: ["("] } }) });
+    expect(problems(broken, {})).toContainEqual(expect.stringContaining("does not compile"));
     expect(problems(makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision"), "\nThe catalogue stays in sealed custody.\n") }))).toEqual([]);
   });
 
