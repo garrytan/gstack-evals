@@ -156,6 +156,7 @@ The results give counts per category for each model and arm. For each category t
 
 - Runner: 44c2a06e9db3e8789a805a0bff8203a895b8a357, which is ba7a648's runner plus the WRAPPER and TASKS options and the wrapper field in the job config. Every paid job runs from a worktree pinned at that commit, and its manifest records the commit.
 - Approved by GSTA-2 (gstack-evals Captain) on 2026-10-28, with three conditions: pin the runner and analysis commits, freeze these categories, and record prereg 1's stop in #15. The analysis commit is recorded below before the pilot starts.
+- Analysis: quick/laneb/analysis/analyze.ts at 09f69e99fa47850a9ff82f4cf12716510fa71e5c, pushed on the fix PR branch gsta-12/laneb-fixes. In that version a paid trial without a reward scores 0, a dropped alternative is kept, and cost comes from the proxy's session rows. quick/laneb/analysis/audit.py is pinned at da29f6be848194b2bd9f36340807e5ab52f4192e. The runner pin above does not change.
 
 ## What would change a decision
 
