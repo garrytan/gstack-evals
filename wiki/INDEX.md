@@ -9,6 +9,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 - [Amendment A2 to plan v3.2, sealed releases, parity alpha and the factory keep rule](plans/2026-10-28-gsta-3-v1-plan-amendment-a2.md) (plan, GSTA-3, 2026-10-28): Unreviewed. Prices the d1 release budget against d6 parity sizing for the pilot report, makes sealed releases one bit for one frozen champion, and sets the v1.1 factory keep rule.
 - [gstack-evals v1.0 build breakdown into crew-thread units](plans/2026-10-28-gsta-3-v1-build-breakdown.md) (plan, GSTA-3, 2026-10-28): Units U1 to U18 for M0, M1a, M1b, M1c, the pilot report and Phase 2a, each with scope, done-means, dependencies, files and paid cap, plus a three-thread schedule and collision rules.
 - [Skill eval interface, draft v0.4, from approved plan v3.2](plans/2026-10-28-gsta-3-skill-eval-interface-v0-4.md) (design, GSTA-3, 2026-10-28): Draft CLI, tasks file and verdict contract for Lane A. v0.4 drops the staged ceiling stop and judges VACUOUS_CHECK on the whole predicate. Nothing is built yet.
+- [The bootstrap non-inferiority bound runs high on few tasks; parity sizes are fine](board/2026-10-28-gsta-14-noninferiority-bootstrap-few-tasks.md) (finding, GSTA-14, 2026-10-28): The bootstrap non-inferiority bound of decision 9 falsely passed 6.7% of runs at 12 tasks, against 5%, and held its level at 30 and 200. Parity is safe; Lane A's --margin needs a rule.
 
 ## Board
 
@@ -19,6 +20,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 | 2026-10-28 | [Plans and research live in wiki/, an immutable message board](board/2026-10-28-gsta-6-wiki-convention-adopted.md) | decision | done | GSTA-6 | Garry asked for a repo home for plans and research; the Captain picked wiki/. Posts are immutable, front-mattered, indexed and checked in CI. The spec is wiki/README.md. |
 | 2026-10-28 | [GSTA-5's incident catalogue is in sealed custody](board/2026-10-28-gsta-6-sealed-incident-catalogue.md) | handoff | done | GSTA-6 | GSTA-5's catalogue of 20 eval ideas and 51 candidate tasks, mined from the crews' own incidents, is an answer key, so it stays outside this repo. Digests here pin the copy. |
 | 2026-10-28 | [Garry's directions for gstack-evals, 2026-10-27](board/2026-10-28-gsta-6-garry-directions-oct-27.md) | decision | done | GSTA-6 | Garry's exact words on the eval's purpose, models, parity claims and task sources, given to the gstack-evals Captain on 2026-10-27, with how the crew applied each. |
+| 2026-10-28 | [The bootstrap non-inferiority bound runs high on few tasks; parity sizes are fine](board/2026-10-28-gsta-14-noninferiority-bootstrap-few-tasks.md) | finding | open | GSTA-14 | The bootstrap non-inferiority bound of decision 9 falsely passed 6.7% of runs at 12 tasks, against 5%, and held its level at 30 and 200. Parity is safe; Lane A's --margin needs a rule. |
 
 ## Plans
 
