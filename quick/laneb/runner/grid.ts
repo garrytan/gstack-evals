@@ -18,6 +18,14 @@ export type BatchSpec = {
   verifier_timeout_multiplier: number;
 };
 
+// Harbor's default no-retry list at f3a5a92, plus our ledger cap stop. A trial that fails for any
+// other reason before it is graded (image build, container start, proxy unreachable) gets two reruns.
+export const NO_RETRY = [
+  "AgentTimeoutError", "VerifierTimeoutError", "RewardFileNotFoundError", "RewardFileEmptyError", "VerifierOutputParseError",
+  "ApiUsageLimitError", "AgentSafetyRefusalError", "AgentAuthenticationError", "ModelNotFoundError", "UnsupportedModelParametersError",
+  "LedgerCapStop",
+];
+
 export function jobConfig(b: BatchSpec) {
   const agents = b.models.flatMap((m) =>
     b.arms.map((a) => ({
@@ -44,7 +52,7 @@ export function jobConfig(b: BatchSpec) {
     n_concurrent_trials: b.n_concurrent,
     verifier_timeout_multiplier: b.verifier_timeout_multiplier,
     quiet: true,
-    retry: { max_retries: 0 },
+    retry: { max_retries: 2, exclude_exceptions: NO_RETRY },
     environment: { type: "docker", delete: true },
     agents,
     tasks: b.tasks.map((t) => ({ path: `${b.tasks_dir}/${t}` })),

@@ -12,6 +12,7 @@ for arm in none skill; do
   [ "$arm" = skill ] && cp -r "$here/smoke-arm/investigate" "$out/arms/$arm/.claude/skills/"
   tar -C "$out/arms/$arm" -cf "$out/arms/$arm.tar" .claude
 done
+armdir=${ARM_DIR:-$out/arms}
 task="${TASK:-$here/smoke-task}"
 if [ "${NETWORK:-}" = public ]; then
   rm -rf "$out/smoke-task-public" && cp -r "$task" "$out/smoke-task-public"
@@ -36,7 +37,7 @@ for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && cur
 for arm in ${ARMS:-none skill}; do
   PYTHONPATH="$here/agent" ANTHROPIC_API_KEY=placeholder-not-a-key harbor run -y -p "$task" \
     -a laneb_agent:LanebAgent -m anthropic/claude-opus-5-5 --base-url "http://$gateway:8787" \
-    --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$out/arms/$arm.tar" \
+    --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$armdir/$arm.tar" \
     --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=${REPO_DIR-/testbed} --ak workdir=${WORKDIR-/testbed} \
     -e docker -o "$out/jobs" --job-name "smoke-$arm-${NETWORK:-allowlist}-$(date +%s)"
 done

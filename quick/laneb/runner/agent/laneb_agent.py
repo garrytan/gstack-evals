@@ -63,6 +63,10 @@ ALIAS_ENV = (
 )
 
 
+class LedgerCapStop(Exception):
+    """The ledger refused this session's reserve: the line item's cap is reached. Never retried."""
+
+
 _DIGESTS: dict[tuple[str, int, int], str] = {}
 
 
@@ -168,11 +172,17 @@ class LanebAgent(ClaudeCode):
         if not base_url:
             raise RuntimeError("laneb agent needs --base-url pointing at the metering proxy")
 
-        session = post_json(
-            self.options.control_url + "/sessions",
-            {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
-             "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}},
-        )
+        try:
+            session = post_json(
+                self.options.control_url + "/sessions",
+                {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
+                 "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}},
+            )
+        except RuntimeError as e:
+            if "-> 409" in str(e):
+                log({"event": "ledger_cap_stop", "message": str(e)[:300]})
+                raise LedgerCapStop(str(e)) from None
+            raise
         log({"event": "session_open", "session": session["id"], "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd})
 
         model = self._resolved_model_name() or self.options.upstream_model

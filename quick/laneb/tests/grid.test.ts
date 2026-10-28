@@ -14,6 +14,9 @@ describe("grid", () => {
     expect(job.agents[0].kwargs.max_output_tokens).toBe(32000);
     expect(job.tasks).toEqual([{ path: "/run/tasks/a" }, { path: "/run/tasks/b" }]);
     expect(job.verifier_timeout_multiplier).toBe(2);
+    expect(job.retry.max_retries).toBe(2);
+    expect(job.retry.exclude_exceptions).toContain("LedgerCapStop");
+    expect(job.retry.exclude_exceptions).toContain("AgentTimeoutError");
   });
 });
 

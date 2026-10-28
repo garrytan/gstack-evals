@@ -1,4 +1,15 @@
 {
-  "extends": "../../tsconfig.json",
-  "include": ["**/*.ts"]
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["bun"]
+  },
+  "include": ["runner/**/*.ts", "analysis/**/*.ts", "tests/**/*.ts", "arms/**/*.ts"]
 }
