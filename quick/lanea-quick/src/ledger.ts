@@ -61,6 +61,10 @@ export class Ledger {
     this.append({ type: "reserve", reservation_id: id, usd, ...meta });
   }
 
+  settleStale(note: string) {
+    for (const [id, usd] of [...this.open.entries()]) this.settle(id, usd, { stale: true, note });
+  }
+
   settle(id: string, usd: number, meta: Record<string, unknown>) {
     if (this.settledIds.has(id)) return;
     this.open.delete(id);

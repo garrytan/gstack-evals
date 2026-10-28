@@ -120,3 +120,12 @@ export function loadedBytes(files: Record<string, number>, sizes: Record<string,
   }
   return { unique, total, unknown };
 }
+
+// How one SDK result message ends a session: a budget refusal and the agent-turn limit are intended stops and keep the
+// cell; any other error result is an infrastructure failure and makes the cell missing.
+export function resultOutcome(m: { subtype?: string; is_error?: boolean }, budgetHit: boolean): { stop: boolean; infra: boolean; reason: string } {
+  if (budgetHit) return { stop: true, infra: false, reason: "budget" };
+  if (m.subtype === "error_max_turns") return { stop: true, infra: false, reason: "max_turns" };
+  if (m.subtype !== "success" || m.is_error) return { stop: true, infra: true, reason: `result_${m.subtype}` };
+  return { stop: false, infra: false, reason: "" };
+}

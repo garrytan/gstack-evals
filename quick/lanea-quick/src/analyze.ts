@@ -65,7 +65,7 @@ export function loadResults(root: string): SessionResult[] {
     if (!existsSync(d)) return;
     for (const e of readdirSync(d, { withFileTypes: true })) {
       if (e.isDirectory()) {
-        if (e.name !== "work") walk(join(d, e.name));
+        if (e.name !== "work" && e.name !== "stages" && !e.name.includes(".failed-")) walk(join(d, e.name));
       } else if (e.name === "result.json") out.push(JSON.parse(readFileSync(join(d, e.name), "utf8")));
     }
   };
@@ -83,7 +83,7 @@ interface Cell {
   runs: boolean[];
 }
 
-export function analyze(results: SessionResult[], key: Key = "pass", openedOnly = false) {
+export function analyze(results: SessionResult[], key: Key = "pass", openedOnly = false, stageStops: Record<string, string[]> = {}) {
   const valid = (r: SessionResult) => r.status === "complete";
   const bySuiteModel = new Map<string, SessionResult[]>();
   for (const r of results) {
@@ -110,10 +110,18 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
     const skillArms = arms.filter((a) => a !== "none");
     const unopenedTasks = tasks.filter((t) => skillArms.some((a) => cells[t]![a] && cells[t]![a]!.n && cells[t]![a]!.opened / cells[t]![a]!.n < 0.5));
     const useTasks = openedOnly ? tasks.filter((t) => !unopenedTasks.includes(t)) : tasks;
+    const trialsPlanned = Math.max(0, ...tasks.flatMap((t) => arms.map((a) => cells[t]![a]!.n + cells[t]![a]!.missing)));
+    const paired = (t: string) => ["before", "after"].every((a) => (cells[t]![a]?.n ?? 0) >= 2);
     const informative = useTasks.filter((t) => {
+      if (!paired(t)) return false;
       const all = arms.flatMap((a) => cells[t]![a]!.runs);
       return all.some(Boolean) && !all.every(Boolean);
     });
+    const unpaired = useTasks.filter((t) => !paired(t));
+    const short = useTasks.filter((t) => paired(t) && ["before", "after"].some((a) => (cells[t]![a]?.n ?? 0) < trialsPlanned));
+    const incomplete: string[] = [...(stageStops[suite!] ?? [])];
+    if (!arms.includes("after") || !arms.includes("before")) incomplete.push("NO_PAIRED_ARMS");
+    else if (unpaired.length) incomplete.push(`UNPAIRED ${unpaired.join(",")}`);
     const pooled: Record<string, any> = {};
     for (const a of arms) {
       const n = useTasks.reduce((s, t) => s + cells[t]![a]!.n, 0);
@@ -128,7 +136,7 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
       return { mean_pp: 100 * mean(ds), ci95_pp: bootstrapMeanCI(ds).map((x) => 100 * x), tasks: ds.length, per_task: Object.fromEntries(useTasks.map((t) => [t, rate(cells[t]![a]) - rate(cells[t]![b])])) };
     };
     const reasons: string[] = [];
-    const warnings: string[] = [];
+    const warnings: string[] = short.length ? [`MISSING_CELLS ${short.join(",")}`] : [];
     for (const t of useTasks) {
       const b = cells[t]!.before;
       const af = cells[t]!.after;
@@ -183,8 +191,10 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
       model,
       grading: key,
       opened_only: openedOnly,
-      verdict: reasons.length ? "FAIL" : informative.length < 5 ? "NOT_MEASURABLE" : "PASS",
+      verdict: reasons.length ? "FAIL" : incomplete.length ? "INCOMPLETE" : informative.length < 5 ? "NOT_MEASURABLE" : "PASS",
       reasons,
+      incomplete,
+      trials_planned: trialsPlanned,
       warnings,
       informative_tasks: informative.length,
       tasks: useTasks.length,
@@ -209,7 +219,7 @@ export function markdown(blocks: any[]): string {
   for (const b of blocks) {
     const arms = Object.keys(b.pooled);
     lines.push(`### ${b.suite} on ${b.model} (${b.grading}${b.opened_only ? ", opened-only" : ""})`, "");
-    lines.push(`Verdict: ${b.verdict}${b.reasons.length ? ` (${b.reasons.join("; ")})` : ""}. Informative tasks: ${b.informative_tasks} of ${b.tasks}. Sign-flip p: ${Number.isNaN(b.sign_flip_p) ? "-" : b.sign_flip_p.toFixed(3)}.${b.warnings.length ? ` Warnings: ${b.warnings.join("; ")}.` : ""}`, "");
+    lines.push(`Verdict: ${b.verdict}${b.reasons.length ? ` (${b.reasons.join("; ")})` : ""}${b.incomplete.length ? ` [${b.incomplete.join("; ")}]` : ""}. Informative tasks: ${b.informative_tasks} of ${b.tasks}. Sign-flip p: ${Number.isNaN(b.sign_flip_p) ? "-" : b.sign_flip_p.toFixed(3)}.${b.warnings.length ? ` Warnings: ${b.warnings.join("; ")}.` : ""}`, "");
     lines.push(`| task | ${arms.join(" | ")} |`, `|---|${arms.map(() => "---").join("|")}|`);
     for (const [t, row] of Object.entries<any>(b.cells)) lines.push(`| ${t}${b.safety_tasks.includes(t) ? " (safety)" : ""} | ${arms.map((a) => `${row[a].k}/${row[a].n}${row[a].opened < row[a].n && a !== "none" ? ` (opened ${row[a].opened})` : ""}${row[a].missing ? ` (+${row[a].missing} missing)` : ""}`).join(" | ")} |`);
     lines.push(`| pooled | ${arms.map((a) => `${pct(b.pooled[a].rate)} [${pct(b.pooled[a].ci95[0])}, ${pct(b.pooled[a].ci95[1])}]`).join(" | ")} |`, "");
@@ -229,12 +239,22 @@ if (import.meta.main) {
   const { values } = parseArgs({ args: Bun.argv.slice(2), options: { out: { type: "string" }, dest: { type: "string" } } });
   const root = values.out ?? join(WORK, "runs");
   const results = loadResults(root);
+  const stageStops: Record<string, string[]> = {};
+  const stageSuite: Record<string, string> = { S0: "learn", S1: "office-hours", S2: "office-hours", S3: "learn" };
+  const stagesDir = join(root, "stages");
+  if (existsSync(stagesDir))
+    for (const f of readdirSync(stagesDir)) {
+      const st = JSON.parse(readFileSync(join(stagesDir, f), "utf8"));
+      const label = st.cap_stop ? `CAP_STOP ${st.stage}` : st.finished < st.planned ? `UNFINISHED ${st.stage} ${st.finished}/${st.planned}` : null;
+      if (label) (stageStops[stageSuite[st.stage] ?? "?"] ??= []).push(label);
+    }
   const verdict = {
     generated: new Date().toISOString(),
     sessions: results.length,
-    primary: analyze(results, "pass"),
-    final_answer_grading: analyze(results, "pass_final"),
-    opened_only: analyze(results, "pass", true),
+    stage_stops: stageStops,
+    primary: analyze(results, "pass", false, stageStops),
+    final_answer_grading: analyze(results, "pass_final", false, stageStops),
+    opened_only: analyze(results, "pass", true, stageStops),
   };
   const dest = values.dest ?? root;
   writeFileSync(join(dest, "verdict.json"), JSON.stringify(verdict, null, 2) + "\n");

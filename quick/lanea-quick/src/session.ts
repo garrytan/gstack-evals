@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BASE_IMAGE, LIMITS, type ArmName } from "./config.ts";
-import { gradePatterns, loadedBytes, parseTranscript, skillUse, transcriptText, type PatternGrade, type Task } from "./grade.ts";
+import { gradePatterns, loadedBytes, parseTranscript, resultOutcome, skillUse, transcriptText, type PatternGrade, type Task } from "./grade.ts";
 import type { MeteringProxy } from "./proxy.ts";
 import { UserSim, type UserScript } from "./usersim.ts";
 import type { Usage } from "./usage.ts";
@@ -23,6 +23,7 @@ export interface SessionSpec {
   outDir: string;
   sizes: Record<string, number>;
   ceilingUsd: number;
+  hardLimitUsd: number;
   fakeExecutable: string;
   agentUid: string;
 }
@@ -120,7 +121,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
   const container = `lanea-${spec.id}`.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 120);
   const transcriptPath = join(spec.outDir, "transcript.jsonl");
   const stderrPath = join(spec.outDir, "cli-stderr.log");
-  const { token, session } = proxy.register(spec.id, spec.model, spec.ceilingUsd, join(spec.outDir, "proxy.jsonl"));
+  const { token, session } = proxy.register(spec.id, spec.model, spec.ceilingUsd, spec.hardLimitUsd, join(spec.outDir, "proxy.jsonl"));
   const sim = new UserSim(spec.script, join(spec.outDir, "usersim.jsonl"));
   const messages: any[] = [];
   let init: Record<string, unknown> | null = null;
@@ -211,8 +212,13 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
           numTurns += m.num_turns ?? 0;
           sdkCost += m.total_cost_usd ?? 0;
           sdkMs += m.duration_ms ?? 0;
-          if (m.subtype !== "success" || m.is_error || session.budgetHit) {
-            endReason = session.budgetHit ? "budget" : `result_${m.subtype}`;
+          const outcome = resultOutcome(m, session.budgetHit);
+          if (outcome.stop) {
+            endReason = outcome.reason;
+            if (outcome.infra) {
+              status = "infra_error";
+              errors.push(`E_RESULT: ${m.subtype} ${String(m.result ?? JSON.stringify(m.errors ?? "")).slice(0, 300)}`);
+            }
             inbox.close();
           } else {
             const d = sim.afterTurn(turnText);

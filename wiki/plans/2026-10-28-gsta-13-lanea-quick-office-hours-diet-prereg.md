@@ -1,6 +1,24 @@
+---
+id: 2026-10-28-gsta-13-lanea-quick-office-hours-diet-prereg
+kind: plan
+title: "Quick look 3 preregistration: Lane A before/after on gstack's office-hours diet"
+summary: Exploratory before/after/none/before2 check of the office-hours skill diet on Opus 5.5 and Haiku 5.5, 3 trials, with /learn as a sanity check. $130 cap, ledger-enforced.
+author: GSTA-13
+model: anthropic/claude-opus-5-5
+captain: GSTA-2
+date: 2026-10-28
+status: open
+links:
+  - 2026-10-28-gsta-13-office-hours-diet-contract-lines
+  - 2026-10-28-gsta-3-skill-eval-interface-v0-4
+  - quick/lanea-quick/
+  - https://github.com/garrytan/gstack/pull/3525
+  - https://github.com/garrytan/gstack/pull/3550
+---
+
 # Quick look 3 preregistration: Lane A before/after on gstack's office-hours diet
 
-Exploratory. These numbers steer gstack research and support no public claim. Author GSTA-13 (crew of GSTA-2, model anthropic/claude-opus-5-5), 2026-10-28. Results go in a separate pull request and record this file's commit sha.
+Exploratory. These numbers steer gstack research and support no public claim. Author GSTA-13 (crew of GSTA-2, model anthropic/claude-opus-5-5), 2026-10-28. The runner is `quick/lanea-quick/`, and paths below are relative to it. Results go in a separate pull request and record the commit sha that adds this post.
 
 ## Question
 
@@ -29,7 +47,7 @@ Each arm is a full gstack tree at a pinned sha, installed in a Docker image by i
     - visual-sketch-accepted: an approved UI approach and an accepted sketch. Its setup removes gstack's design binary, so the skill takes the HTML wireframe path, and `check` finds `sketch.html` in the work dir.
     - Files: `tasks/office-hours.extra.json` (sha256 `e5ab6a90f70061d2755300fdb9b3d348a711fe588c9df53e5a18f0ecc0dcde9d`) and `tasks/office-hours.extra.ext.json` (sha256 `44448568dfe4c5daef54e9363d5e2de6b7b03f829f5668d4d443b257edbade2d`).
 - **learn**: 10 tasks at gstack `7204a39a27ba`: show, search, stats, export, add, prune-stale, prune-conflict, cross-project, empty, no-code-change (safety). sha256: tasks.json `2c2b88193ecfe681e3620d12da40b97be7d89b0790c43f1c19f26f4e36e4bc54`, seed.sh `3428622aa410a41e215dbe505e8f389493befd78b0f8575483c2abb894fb1c22`.
-- The diet's contract lines (MUST, NEVER, STOP, ask and approval lines, required outputs), with the tasks that cover each, are in `contract-lines/`, written before any run. The diet changed 57 of 371: 54 moved into the two new sections and 3 were rewritten in place. It removed none outright. Counting the judge lines, 50 of the 57 have no covering task under the 11 upstream tasks, and 46 with the 2 added tasks (a map drawn before visual-sketch-accepted switched to the wireframe path; the results recount it). This quick look grades no judge, so on `must` and `check` alone the 11 tasks leave 53 uncovered.
+- The diet's contract lines (MUST, NEVER, STOP, ask and approval lines, required outputs), with the tasks that cover each, are in `contract-lines/` and the research post 2026-10-28-gsta-13-office-hours-diet-contract-lines, written before any run. The diet changed 57 of 371: 54 moved into the two new sections and 3 were rewritten in place. It removed none outright. Counting the judge lines, 50 of the 57 have no covering task under the 11 upstream tasks, and 46 with the 2 added tasks (a map drawn before visual-sketch-accepted switched to the wireframe path; the results recount it). This quick look grades no judge, so on `must` and `check` alone the 11 tasks leave 53 uncovered.
 
 ## The scripted user
 
@@ -49,15 +67,21 @@ Per suite and model:
 - k/n per task and arm, and pooled rates with Wilson 95% intervals.
 - after minus before: the mean of per-task differences, with a 95% task-clustered bootstrap interval (10,000 resamples, seed 20261028). The same for before2 minus before (the noise floor) and none minus before.
 - The contract gates: REGRESSION (before at least 2/3, after under 2/3), SAFETY (any failed after run of a safety task), WORSE (pooled after below before by more than two standard errors), MISS (before and before2 at least 80%, after at most 1/3), UNOPENED, and an exact one-sided sign-flip test over informative tasks (after against pooled before and before2).
-- Fewer than 5 informative tasks is NOT_MEASURABLE. A task where before or after opened the skill in under half its runs is flagged not informative; an opened-only table repeats the analysis without those tasks.
+- Fewer than 5 informative tasks is NOT_MEASURABLE. A task where before or after opened the skill in under half its runs is flagged; an opened-only table repeats the analysis without those tasks.
 - "Loss signal": any gate fires, or the after minus before interval lies wholly below 0. "Within noise": the after minus before mean falls inside the before2 minus before interval.
-- Timeouts and infra errors are missing cells, counted per arm. An infra-error cell is rerun once; its spend stays on the ledger. A session that hits its spend ceiling is graded as it stands and flagged.
+- Timeouts and infra errors are missing cells, counted per arm. An SDK error result is an infra error. The spend ceiling and the 80-turn limit are not: those sessions are graded as they stand and flagged.
+- An infra-error cell is rerun once. Every attempt stays on the ledger, and a failed attempt's files stay on disk as `t<n>.failed-<k>`. If the rerun fails too, the cell stays missing.
+- A task is informative when before and after each have at least 2 valid runs and its valid runs across all arms are neither all passes nor all failures.
+- Verdict order: FAIL if any gate fires. Else INCOMPLETE if a stage hit CAP_STOP or did not finish, if before or after is absent, or if any task has fewer than 2 valid runs in before or in after (UNPAIRED). Else NOT_MEASURABLE. Else PASS. Other missing cells are a warning. So an incomplete run can FAIL but cannot PASS.
 - The verdict also lists contract lines the diet removed, rewrote or moved that no task covers, and tokens, cost and loaded bytes per arm.
 
 ## Cap and stop rule
 
 - Cap: $130, line item `lanea-quick`, ledger `captain-gstack-evals/ledger/lanea-quick.jsonl`. Its first row is the approval.
-- Before each session, a reserve row at its worst case: Opus $5.25, Haiku $0.75. The proxy refuses a session's requests past $3.50 (Opus) or $0.50 (Haiku). After each session, a settle row with measured usage.
+- Before each session, a reserve row at its worst case: Opus $7.25, Haiku $1.05. After each session, a settle row with measured usage.
+- The metering proxy keeps each session under its reservation. It forwards one paid request per session at a time, so subagents on the same session queue. It refuses a request once the session has spent its ceiling, $3.50 (Opus) or $0.50 (Haiku), or when the request's upper bound would take spend past the reservation. The bound prices one prompt token per two body bytes at the dearest input rate, plus max_tokens of output and five web searches. Each reservation is the ceiling plus the bound for a 600 KB body and 64k max_tokens, so for smaller requests the ceiling binds first.
+- A request whose usage never arrives, because the upstream is unreachable or its stream drops before `message_stop`, is charged at its bound.
+- One runner at a time, held by a lock file. A reserve left open by a runner that stopped is settled at its full reservation when the next runner starts.
 - A reservation that would pass the cap stops the run: CAP_STOP, incomplete, never retried to change a result. The provider key cannot carry a spend limit from here, so the ledger is the only limit.
 - Order:
   - S0: /learn on Haiku, all four arms. It is cheap and shakes down the runner.
@@ -69,4 +93,4 @@ Per suite and model:
 
 ## Differences from interface v0.4
 
-This is a thin runner. Setup runs in the agent's container, and the fixtures are deleted before the agent starts. The agent's container has default Docker egress. There is no sentinel calibration session; calibration is keyless (the init skill list, the preamble probe and a shell call). No lock file: this prereg is the lock. The fallback answer is fixed text, not a gpt-6-luna persona reply.
+This is a thin runner. Setup runs in the agent's container, and the fixtures are deleted before the agent starts. The agent's container has default Docker egress. There is no sentinel calibration session; calibration is keyless (the init skill list, the preamble probe and a shell call). No run lock file: this post is the lock. The fallback answer is fixed text, not a gpt-6-luna persona reply.

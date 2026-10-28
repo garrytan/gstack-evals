@@ -1,6 +1,6 @@
 # quick/lanea-quick: a thin Lane A runner (Quick look 3)
 
-A throwaway before/after skill check for gstack's office-hours diet, with /learn as a sanity check. [PREREG.md](PREREG.md) fixes the question, arms, tasks, metrics and stop rule. The real CLI comes in units U5 to U7; this folder is evidence for them, not a product.
+A throwaway before/after skill check for gstack's office-hours diet, with /learn as a sanity check. The preregistration, [2026-10-28-gsta-13-lanea-quick-office-hours-diet-prereg](../../wiki/plans/2026-10-28-gsta-13-lanea-quick-office-hours-diet-prereg.md), fixes the question, arms, tasks, metrics and stop rule. The real CLI comes in units U5 to U7; this folder is evidence for them, not a product.
 
 ## Run it
 
@@ -25,7 +25,7 @@ Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial
 | Path | What it does |
 |---|---|
 | `src/session.ts` | One session: container, setup, seeded state root, the Agent SDK driving `claude` over `docker exec -i`, the scripted user, the work dir copy, the check in a fresh container, grading |
-| `src/proxy.ts` | Metering proxy on the Docker bridge: a per-session token, one allowed model, a spend ceiling, usage parsed from the SSE stream, per-request price |
+| `src/proxy.ts` | Metering proxy on the Docker bridge: a per-session token, one allowed model, one paid request at a time, a spend ceiling and a per-request bound under the reservation, usage parsed from the SSE stream, per-request price |
 | `src/usersim.ts`, `usersim/categories.json` | The scripted user: keyword classifier, sidecar replies, a non-approving fallback, prose-question replies |
 | `src/grade.ts` | `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
 | `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop |

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, chmodSync, cpSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { BASE_IMAGE, CAP_USD, GSTACK_REPO, LEDGER_PATH, LIMITS, LINE_ITEM, MODELS, SUITES, WORK, imageTag, type ArmName } from "./config.ts";
@@ -8,7 +8,7 @@ import type { Task } from "./grade.ts";
 import { CapStop, Ledger } from "./ledger.ts";
 import { MeteringProxy } from "./proxy.ts";
 import { runSession, type SessionResult } from "./session.ts";
-import { planStage, STAGES, type Cell } from "./plan.ts";
+import { failedAttempts, planStage, STAGES, type Cell } from "./plan.ts";
 
 const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 
@@ -90,7 +90,7 @@ interface RunOpts {
   prereg: string;
 }
 
-async function execute(cells: Cell[], opts: RunOpts): Promise<{ results: SessionResult[]; capStop: string | null }> {
+async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ results: SessionResult[]; capStop: string | null }> {
   const prep = loadPrepared();
   const hostname = "172.17.0.1";
   let fake: ReturnType<typeof serveFake> | null = null;
@@ -101,8 +101,20 @@ async function execute(cells: Cell[], opts: RunOpts): Promise<{ results: Session
   } else if (!process.env.ANTHROPIC_API_KEY) throw new Error("E_KEY_MISSING: ANTHROPIC_API_KEY is not set");
   const key = opts.fake ? () => "fake-key" : () => process.env.ANTHROPIC_API_KEY ?? "";
   const proxy = new MeteringProxy({ hostname, port: 0, upstream, upstreamKey: key });
+  const lock = join(WORK, "runner.lock");
+  if (existsSync(lock)) {
+    const pid = Number(readFileSync(lock, "utf8"));
+    let alive = false;
+    try {
+      process.kill(pid, 0);
+      alive = true;
+    } catch {}
+    if (alive) throw new Error(`E_LOCK: runner ${pid} is still running; one runner at a time, since a start settles open reserves as stale`);
+  }
+  writeFileSync(lock, String(process.pid));
   const ledger = new Ledger(opts.ledgerPath, CAP_USD, LINE_ITEM, join(opts.out, "ledger-mirror.jsonl"));
   if (opts.fake) ledger.approve({ words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" });
+  ledger.settleStale("reserved by a runner that stopped before settling; charged at the full reservation");
   const fakeExe = join(WORK, "bin", "claude");
   mkdirSync(join(WORK, "bin"), { recursive: true });
   writeFileSync(fakeExe, "#!/bin/sh\necho 'placeholder: sessions run claude inside docker' >&2\nexit 1\n");
@@ -111,18 +123,23 @@ async function execute(cells: Cell[], opts: RunOpts): Promise<{ results: Session
   const results: SessionResult[] = [];
   let capStop: string | null = null;
   let next = 0;
+  const queue = [...cells];
   const worker = async () => {
-    while (!capStop && next < cells.length) {
-      const c = cells[next++]!;
+    while (!capStop && next < queue.length) {
+      const c = queue[next++]!;
       const dir = cellDir(opts.out, c);
       const done = join(dir, "result.json");
       if (existsSync(done)) {
         const prev = JSON.parse(readFileSync(done, "utf8")) as SessionResult;
-        if (prev.status !== "infra_error") {
+        if (prev.status !== "infra_error" || failedAttempts(dir) >= 1) {
           results.push(prev);
           continue;
         }
-        rmSync(dir, { recursive: true, force: true });
+        renameSync(dir, `${dir}.failed-${failedAttempts(dir) + 1}`);
+      } else if (existsSync(dir)) {
+        const prior = failedAttempts(dir);
+        renameSync(dir, `${dir}.failed-${prior + 1}`);
+        if (prior >= 1) continue;
       }
       const id = cellId(c);
       const spec = MODELS[c.model]!;
@@ -155,13 +172,17 @@ async function execute(cells: Cell[], opts: RunOpts): Promise<{ results: Session
           outDir: dir,
           sizes: prep.sizes[tag] ?? {},
           ceilingUsd: opts.fake && process.env.LANEA_FAKE_CEILING ? Number(process.env.LANEA_FAKE_CEILING) : spec.sessionCeilingUsd,
+          hardLimitUsd: spec.reserveUsd,
           fakeExecutable: fakeExe,
           agentUid: uid,
         },
         proxy,
       );
       ledger.settle(reservation, opts.fake ? 0 : r.cost_usd, { session: id, usage: r.usage, measured_usd: r.cost_usd, requests: r.requests, sdk_reported_usd: r.sdk.total_cost_usd, status: r.status, fake: opts.fake });
-      results.push(r);
+      if (r.status === "infra_error" && failedAttempts(dir) === 0) {
+        queue.push(c);
+        console.log(`${new Date().toISOString()} ${id} infra_error, rerun queued once: ${r.errors.join(" | ").slice(0, 200)}`);
+      } else results.push(r);
       const t = ledger.totals();
       console.log(`${new Date().toISOString()} ${id} ${r.status} pass=${r.pass} opened=${r.opened} $${r.cost_usd.toFixed(4)} spent=$${t.settled.toFixed(2)} open=$${t.open.toFixed(2)} [${results.length}/${cells.length}]`);
     }
@@ -169,7 +190,13 @@ async function execute(cells: Cell[], opts: RunOpts): Promise<{ results: Session
   await Promise.all(Array.from({ length: opts.parallel }, worker));
   proxy.stop();
   fake?.stop(true);
+  rmSync(lock, { force: true });
   if (capStop) console.log(capStop);
+  mkdirSync(join(opts.out, "stages"), { recursive: true });
+  writeFileSync(
+    join(opts.out, "stages", `${stage}.json`),
+    JSON.stringify({ stage, planned: cells.length, finished: results.length, cap_stop: capStop, prereg: opts.prereg, ended: new Date().toISOString() }, null, 2) + "\n",
+  );
   return { results, capStop };
 }
 
@@ -178,7 +205,7 @@ function meanCost(out: string, model: string, suite: string): number | null {
   const walk = (d: string) => {
     if (!existsSync(d)) return;
     for (const e of readdirSync(d, { withFileTypes: true })) {
-      if (e.isDirectory() && e.name !== "work") walk(join(d, e.name));
+      if (e.isDirectory() && e.name !== "work" && !e.name.includes(".failed-")) walk(join(d, e.name));
       else if (e.name === "result.json") {
         const r = JSON.parse(readFileSync(join(d, e.name), "utf8")) as SessionResult;
         if (r.model === model) costs.push(r.cost_usd);
@@ -240,7 +267,7 @@ async function main() {
     if (values.tasks) tasks = tasks.filter((t) => values.tasks!.split(",").includes(t.id));
     let cells = planStage(stage, tasks, trials, models);
     if (values.arms) cells = cells.filter((c) => values.arms!.split(",").includes(c.arm));
-    const r = await execute(cells, opts);
+    const r = await execute(cells, opts, stage);
     process.exit(r.capStop ? 2 : 0);
   }
   if (cmd === "project") {

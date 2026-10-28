@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import type { ArmName } from "./config.ts";
 import type { Task } from "./grade.ts";
 
@@ -48,3 +50,10 @@ export function planStage(stage: string, tasks: Task[], trials: number[], models
   return cells;
 }
 
+
+// An infra-error cell is rerun once (the preregistration). Each failed attempt is kept beside the cell as t<n>.failed-<k>.
+export function failedAttempts(dir: string): number {
+  const parent = dirname(dir);
+  if (!existsSync(parent)) return 0;
+  return readdirSync(parent).filter((n) => n.startsWith(`${basename(dir)}.failed-`)).length;
+}

@@ -1,11 +1,14 @@
 import { appendFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { MODELS, WEB_SEARCH_USD } from "./config.ts";
 import { addUsage, costUsd, fromApiUsage, mergeStreamUsage, zeroUsage, type Usage } from "./usage.ts";
 
 export interface ProxySession {
   id: string;
   model: string;
   ceilingUsd: number;
+  hardLimitUsd: number;
+  tail: Promise<void>;
   logPath: string;
   spentUsd: number;
   usage: Usage;
@@ -25,6 +28,15 @@ export interface ProxyOptions {
 const DROP_REQ = new Set(["host", "x-api-key", "authorization", "content-length", "connection", "accept-encoding"]);
 const DROP_RES = new Set(["content-encoding", "content-length", "transfer-encoding", "connection"]);
 
+// An upper bound on one request's cost: every prompt token at the dearest input rate (1-hour cache write, long-prompt tier),
+// at most one token per two body bytes, plus max_tokens of output and a small web-search allowance.
+export function requestCeilingUsd(model: string, bodyBytes: number, maxTokens: number): number {
+  const spec = MODELS[model]!;
+  const promptTokens = Math.ceil(bodyBytes / 2);
+  const p = spec.longPrice && promptTokens > spec.longPrice.threshold ? spec.longPrice.price : spec.price;
+  return (promptTokens * Math.max(p.input, p.cacheWrite1h, p.cacheWrite5m) + maxTokens * p.output) / 1e6 + 5 * WEB_SEARCH_USD;
+}
+
 function apiError(status: number, type: string, message: string): Response {
   return new Response(JSON.stringify({ type: "error", error: { type, message } }), { status, headers: { "content-type": "application/json" } });
 }
@@ -41,9 +53,9 @@ export class MeteringProxy {
     return `http://${this.opts.hostname}:${this.server.port}`;
   }
 
-  register(id: string, model: string, ceilingUsd: number, logPath: string): { token: string; session: ProxySession } {
+  register(id: string, model: string, ceilingUsd: number, hardLimitUsd: number, logPath: string): { token: string; session: ProxySession } {
     const token = "lanea-" + randomBytes(24).toString("hex");
-    const session: ProxySession = { id, model, ceilingUsd, logPath, spentUsd: 0, usage: zeroUsage(), requests: 0, refusals: [], errors: 0, budgetHit: false };
+    const session: ProxySession = { id, model, ceilingUsd, hardLimitUsd, tail: Promise.resolve(), logPath, spentUsd: 0, usage: zeroUsage(), requests: 0, refusals: [], errors: 0, budgetHit: false };
     this.sessions.set(token, session);
     return { token, session };
   }
@@ -77,32 +89,48 @@ export class MeteringProxy {
     return this.refuse(s, "path", `${req.method} ${url.pathname}`, apiError(404, "not_found_error", "path not proxied"));
   }
 
+  // One paid request per session at a time, admitted only if its upper bound fits under the session's hard limit
+  // (the ledger reservation), so a session's spend can never pass what the ledger reserved for it.
+  private async acquire(s: ProxySession): Promise<() => void> {
+    const prev = s.tail;
+    let release!: () => void;
+    s.tail = new Promise<void>((r) => (release = r));
+    await prev;
+    return release;
+  }
+
   private async messages(req: Request, s: ProxySession, url: URL): Promise<Response> {
     const body = await req.text();
     let model = "";
+    let maxTokens = 0;
     try {
-      model = JSON.parse(body).model ?? "";
+      const parsed = JSON.parse(body);
+      model = parsed.model ?? "";
+      maxTokens = Number(parsed.max_tokens ?? 0);
     } catch {
       return this.refuse(s, "body", "unparseable JSON", apiError(400, "invalid_request_error", "unparseable body"));
     }
     if (model !== s.model) return this.refuse(s, "model", model, apiError(403, "permission_error", `model ${model} is not allowed in this session`));
-    if (s.spentUsd >= s.ceilingUsd) {
+    const bound = requestCeilingUsd(model, Buffer.byteLength(body), maxTokens || 128_000);
+    const release = await this.acquire(s);
+    if (s.spentUsd >= s.ceilingUsd || s.spentUsd + bound > s.hardLimitUsd) {
       s.budgetHit = true;
-      return this.refuse(s, "budget", s.spentUsd.toFixed(4), apiError(400, "invalid_request_error", "session budget exhausted"));
+      release();
+      return this.refuse(s, "budget", `spent=${s.spentUsd.toFixed(4)} bound=${bound.toFixed(4)}`, apiError(400, "invalid_request_error", "session budget exhausted"));
     }
-    return this.forward(req, s, url, body, model);
+    return this.forward(req, s, url, body, model, bound, release);
   }
 
-  private settle(s: ProxySession, model: string, status: number, started: number, u: Usage, requestId: string | null) {
-    const cost = costUsd(model, u);
+  private settle(s: ProxySession, model: string, status: number, started: number, u: Usage, requestId: string | null, chargeAtLeast = 0) {
+    const cost = Math.max(costUsd(model, u), chargeAtLeast);
     s.usage = addUsage(s.usage, u);
     s.spentUsd += cost;
     s.requests++;
     if (status >= 400) s.errors++;
-    this.log(s, { event: "request", model, status, ms: Date.now() - started, usage: u, cost_usd: cost, request_id: requestId });
+    this.log(s, { event: "request", model, status, ms: Date.now() - started, usage: u, cost_usd: cost, request_id: requestId, ...(chargeAtLeast ? { incomplete: true } : {}) });
   }
 
-  private async forward(req: Request, s: ProxySession, url: URL, body: string | undefined, model?: string): Promise<Response> {
+  private async forward(req: Request, s: ProxySession, url: URL, body: string | undefined, model?: string, bound = 0, release: () => void = () => {}): Promise<Response> {
     const headers = new Headers();
     req.headers.forEach((v, k) => {
       if (!DROP_REQ.has(k.toLowerCase())) headers.set(k, v);
@@ -114,8 +142,10 @@ export class MeteringProxy {
     try {
       upstream = await fetch(this.opts.upstream + url.pathname + url.search, { method: req.method, headers, body });
     } catch (e) {
-      s.errors++;
       this.log(s, { event: "upstream_error", detail: String((e as Error)?.message ?? e).slice(0, 200) });
+      if (model) this.settle(s, model, 502, started, zeroUsage(), null, bound);
+      else s.errors++;
+      release();
       return apiError(502, "api_error", "upstream unreachable");
     }
     const resHeaders = new Headers();
@@ -135,18 +165,21 @@ export class MeteringProxy {
         u = fromApiUsage(JSON.parse(text).usage);
       } catch {}
       this.settle(s, model, upstream.status, started, u, requestId);
+      release();
       return new Response(text, { status: upstream.status, headers: resHeaders });
     }
     const decoder = new TextDecoder();
     let buf = "";
     let start = zeroUsage();
     let delta = zeroUsage();
+    let ended = false;
     const take = (line: string) => {
       if (!line.startsWith("data:")) return;
       try {
         const ev = JSON.parse(line.slice(5).trim());
         if (ev.type === "message_start") start = fromApiUsage(ev.message?.usage);
         else if (ev.type === "message_delta") delta = mergeStreamUsage(delta, fromApiUsage(ev.usage));
+        else if (ev.type === "message_stop") ended = true;
       } catch {}
     };
     let settled = false;
@@ -154,7 +187,8 @@ export class MeteringProxy {
       if (settled) return;
       settled = true;
       if (buf) take(buf);
-      this.settle(s, model, upstream.status, started, mergeStreamUsage(start, delta), requestId);
+      this.settle(s, model, upstream.status, started, mergeStreamUsage(start, delta), requestId, ended || upstream.status >= 400 ? 0 : bound);
+      release();
     };
     const meter = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
@@ -174,9 +208,16 @@ export class MeteringProxy {
     const reader = piped.getReader();
     const out = new ReadableStream<Uint8Array>({
       async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) controller.close();
-        else controller.enqueue(value);
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            finish();
+            controller.close();
+          } else controller.enqueue(value);
+        } catch (e) {
+          finish();
+          controller.error(e);
+        }
       },
       cancel() {
         reader.cancel().catch(() => {});

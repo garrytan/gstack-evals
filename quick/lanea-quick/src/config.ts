@@ -76,14 +76,14 @@ export const MODELS: Record<string, ModelSpec> = {
     id: "claude-opus-5-5",
     price: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 },
     sessionCeilingUsd: 3.5,
-    reserveUsd: 5.25,
+    reserveUsd: 7.25,
   },
   "claude-haiku-5-5": {
     id: "claude-haiku-5-5",
     price: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite5m: 0.125, cacheWrite1h: 0.2 },
     longPrice: { threshold: 100_000, price: { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite5m: 0.625, cacheWrite1h: 1 } },
     sessionCeilingUsd: 0.5,
-    reserveUsd: 0.75,
+    reserveUsd: 1.05,
   },
 };
 
