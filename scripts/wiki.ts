@@ -316,7 +316,7 @@ export function renderIndex(entries: Entry[]): string {
   const out = [
     "# Wiki index",
     "",
-    "Generated from each post's front matter by \x60bun run wiki:index\x60. Do not edit it by hand: \x60bun run wiki:check\x60 fails when it is stale. The rules are in [README.md](README.md).",
+    "Generated from each post's front matter by \x60bun run wiki:index\x60. It is not committed: run the command again to refresh it. The rules are in [README.md](README.md).",
     "",
     "## Open",
     "",
@@ -343,9 +343,8 @@ export function checkWiki(root: string, opts: { baseFiles?: Map<string, Buffer> 
   for (const e of entries) checkEntry(root, e, problems);
   checkLinks(entries, problems);
   if (existsSync(join(root, "wiki"))) scanText(root, opts.markers ?? sealedMarkers(root), problems);
-  const indexPath = join(root, "wiki", "INDEX.md");
-  if (!existsSync(indexPath) || readFileSync(indexPath, "utf8") !== renderIndex(entries)) {
-    problems.push({ file: "wiki/INDEX.md", message: "stale; run bun run wiki:index and commit the result" });
+  if (git(root, ["ls-files", "--", "wiki/INDEX.md"]).out.toString().trim()) {
+    problems.push({ file: "wiki/INDEX.md", message: "generated, so it must not be committed; run git rm --cached wiki/INDEX.md" });
   }
   if (opts.baseFiles) checkImmutable(root, opts.baseFiles, problems);
   return { entries, problems };

@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -199,11 +200,14 @@ describe("the check", () => {
     expect(problems(makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision"), "\nThe catalogue stays in sealed custody.\n") }))).toEqual([]);
   });
 
-  test("fails when INDEX.md is stale", () => {
+  test("passes with no INDEX.md or a stale one, and fails when INDEX.md is committed", () => {
+    expect(problems(makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) }, { index: false }))).toEqual([]);
     const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
     write(root, QUESTION, post(fields(QUESTION_ID, "question", { status: "open" })));
-    expect(problems(root)).toContainEqual("wiki/INDEX.md: stale; run bun run wiki:index and commit the result");
-    expect(problems(makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) }, { index: false }))).toContainEqual(expect.stringContaining("wiki/INDEX.md: stale"));
+    expect(problems(root)).toEqual([]);
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki/INDEX.md"], { cwd: root });
+    expect(problems(root)).toEqual(["wiki/INDEX.md: generated, so it must not be committed; run git rm --cached wiki/INDEX.md"]);
   });
 
   test("allows only status to change in a merged post", () => {
@@ -213,14 +217,12 @@ describe("the check", () => {
     expect(problems(root, { markers: [], baseFiles: merged() })).toEqual([]);
 
     write(root, DECISION, text.replace("status: open", "status: done"));
-    write(root, "wiki/INDEX.md", renderIndex(loadWiki(root).entries));
     expect(problems(root, { markers: [], baseFiles: merged() })).toEqual([]);
 
     write(root, DECISION, text.replace("Body.", "Edited body."));
     expect(problems(root, { markers: [], baseFiles: merged() })).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
 
     write(root, DECISION, text.replace("title: A title", "title: Another title"));
-    write(root, "wiki/INDEX.md", renderIndex(loadWiki(root).entries));
     expect(problems(root, { markers: [], baseFiles: merged() })).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
 
     unlinkSync(join(root, DECISION));
