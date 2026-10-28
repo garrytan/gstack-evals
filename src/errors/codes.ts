@@ -250,7 +250,7 @@ export const CODES = {
     exit: 2,
     meaning: "The approval record (--ledger-record, GSTACK_EVALS_LEDGER_RECORD) could not be read or written: a file in it does not parse, or a write or its read-back failed.",
     fix: "Read the path in the message and check that the record directory is reachable and writable (on Capy, that the drive is mounted), then run the command again; record files are write-once, so a retry rewrites nothing. A file that does not parse is repaired by a human, never deleted.",
-    side_effects: "None: no approval or lease is recorded. A gstack-approvals mirror row may already exist; a retry skips it.",
+    side_effects: "Partial when a write failed: the file can land before the directory sync or the read-back fails, so that approval or lease may already be in the record. None when a read failed. A gstack-approvals mirror row may already exist; a retry skips it.",
     retry_safe: true,
     resumable: false,
     owner: "U4",

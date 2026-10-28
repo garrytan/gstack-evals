@@ -268,7 +268,7 @@ The approval record (--ledger-record, GSTACK_EVALS_LEDGER_RECORD) could not be r
 
 Fix: Read the path in the message and check that the record directory is reachable and writable (on Capy, that the drive is mounted), then run the command again; record files are write-once, so a retry rewrites nothing. A file that does not parse is repaired by a human, never deleted.
 
-Exit 2. Side effects: None: no approval or lease is recorded. A gstack-approvals mirror row may already exist; a retry skips it. Retry safe: yes. Resumable: no. Owner: U4.
+Exit 2. Side effects: Partial when a write failed: the file can land before the directory sync or the read-back fails, so that approval or lease may already be in the record. None when a read failed. A gstack-approvals mirror row may already exist; a retry skips it. Retry safe: yes. Resumable: no. Owner: U4.
 
 ### E_RIG_UNPROVEN
 
