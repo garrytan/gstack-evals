@@ -8,7 +8,7 @@ model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-28
 status: done
-source: Captain drive handoffs/GSTA-3/plan-v3.2.md (sha256 f790588d547894a20cf62103de5a1e34a1d792b681937ee8e68657a4f8bb0e3c), with private repo and session names replaced by neutral labels; gate briefs with run paths replaced by <run-dir>; em dashes in attachments replaced by hyphens. Before publication GSTA-6 capitalised three sentences that began with a replaced label, withheld the details of one security finding in owner-brief-gate1.md, stated the parity SD in the Statistics sizing sentence as a square root, and added a marked note on the $300 option's total.
+source: Captain drive handoffs/GSTA-3/plan-v3.2.md (sha256 f790588d547894a20cf62103de5a1e34a1d792b681937ee8e68657a4f8bb0e3c), with private repo and session names replaced by neutral labels; gate briefs with run paths replaced by <run-dir>; em dashes in attachments replaced by hyphens. Before publication GSTA-6 capitalised three sentences that began with a replaced label, withheld the details of one security finding in owner-brief-gate1.md, stated the parity SD in the Statistics sizing sentence as a square root, and added marked notes on the repository layout and the $300 option's total.
 attachments:
   - a7613424709074edd32fa185cece078fb91bc7a6535ca0e1a33fbd47f83a2c60  review-record.md
   - fd25b7db9f06940e432bef2a3c9636f71c548d75b1cd7664e086907f2ab9209d  owner-brief-gate1.md
@@ -140,6 +140,8 @@ docs/{methodology,skill-eval,errors,adapters,tasks,decisions,comparing-runs,budg
 docs/plans/2026-10-27-gstack-evals-v1/   docs/benchmarks/<run>/{PREREGISTRATION.md,prereg.json,report.md,results/}
 tests/   .github/workflows/ci.yml (keyless)   .gstack/pregate.json (sealed config)
 ```
+
+Note added by GSTA-6 before publication: the wiki/ convention that PR #1 adopted replaces `docs/plans/` and `docs/decisions.md`. Plans and designs go in wiki/plans/, and decisions go in wiki/board/.
 
 | Component | Source | Use and changes |
 |---|---|---|
