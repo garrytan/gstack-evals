@@ -96,9 +96,40 @@ describe("tasks.lock.json", () => {
     expect(readLock(path).problem).toEndWith("extractor is missing or malformed");
     const { tasks, ...unclaimable } = lock.lines[1]!;
     writeFileSync(path, JSON.stringify({ ...lock, lines: [lock.lines[0], unclaimable] }));
-    expect(readLock(path).problem).toEndWith("lines[1] is missing a field or has a malformed one");
+    expect(readLock(path).problem).toEndWith("lines[1] (B:SKILL:0011) has a missing, unknown or malformed field");
     writeFileSync(path, JSON.stringify({ ...lock, lines: [{ ...lock.lines[0], tasks: ["no-code", 7] }] }));
-    expect(readLock(path).problem).toEndWith("lines[0] is missing a field or has a malformed one");
+    expect(readLock(path).problem).toEndWith("lines[0] (B:SKILL:0010) has a missing, unknown or malformed field");
+  });
+
+  test("readLock refuses exactly the hand edits the lock schema refuses", () => {
+    const { dir, lock } = lockFor(V1);
+    const path = join(dir, "tasks.lock.json");
+    const schema = JSON.parse(readFileSync(join(REPO_ROOT, "schema", "tasks.schema.json"), "utf8"));
+    const ajv = new Ajv2020({ strict: true, strictRequired: false, allowUnionTypes: true }).addSchema(schema);
+    const line = (edit: object) => ({ ...lock, lines: [{ ...lock.lines[0], ...edit }] });
+    const edits: Record<string, unknown> = {
+      valid: claim(lock, { "B:SKILL:0010": ["no-code", "summary"] }),
+      "unknown top-level key": { ...lock, note: "x" },
+      "unknown pin key": { ...lock, tasks: { ...lock.tasks, path: "tasks.json" } },
+      "unknown skill file key": { ...lock, skill: { ...lock.skill, files: [{ ...lock.skill.files[0], size: 1 }] } },
+      "empty policy file": { ...lock, policy: { file: "", sha256: "a".repeat(64) } },
+      "extractor version 0": { ...lock, extractor: { ...lock.extractor, version: 0 } },
+      "unknown line key": line({ note: "x" }),
+      "line id pattern": line({ id: "SKILL:10" }),
+      "kind enum": line({ kind: "paragraph" }),
+      "category enum": line({ categories: ["should"] }),
+      "no categories": line({ categories: [] }),
+      "repeated category": line({ categories: ["never", "never"] }),
+      "ask category typo": line({ ask: "Goal" }),
+      "task id pattern": line({ tasks: ["No-Code"] }),
+      "repeated task": line({ tasks: ["no-code", "no-code"] }),
+    };
+    for (const [name, value] of Object.entries(edits)) {
+      writeFileSync(path, JSON.stringify(value));
+      const schemaOk = ajv.validate(schema.$id + "#/$defs/lock", value);
+      expect([name, readLock(path).problem === null]).toEqual([name, schemaOk]);
+      expect([name, schemaOk]).toEqual([name, name === "valid"]);
+    }
   });
 
   test("a relock keeps claims for unchanged lines and drops claims whose task is gone", () => {
