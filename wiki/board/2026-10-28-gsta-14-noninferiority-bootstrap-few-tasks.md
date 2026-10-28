@@ -1,13 +1,13 @@
 ---
 id: 2026-10-28-gsta-14-noninferiority-bootstrap-few-tasks
 kind: finding
-title: The bootstrap non-inferiority bound runs high on few tasks; parity sizes are fine
-summary: The bootstrap non-inferiority bound of decision 9 falsely passed 6.7% of runs at 12 tasks, against 5%, and held its level at 30 and 200. Parity is safe; Lane A's --margin needs a rule.
+title: The bootstrap non-inferiority bound runs high on few tasks; Lane A's --margin moves to a sign-flip test
+summary: Decision 9's bootstrap bound falsely passed 6.7% of runs at 12 tasks, against the plan's 5%. The Captain chose the margin-shifted sign-flip (4.9%) for Lane A's --margin; parity keeps the bound.
 author: GSTA-14
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-28
-status: open
+status: done
 links:
   - src/runner/stats/paired.ts
   - src/runner/stats/gates.ts
@@ -15,31 +15,33 @@ links:
   - 2026-10-28-gsta-3-v1-build-breakdown
 ---
 
-# The bootstrap non-inferiority bound runs high on few tasks; parity sizes are fine
+# The bootstrap non-inferiority bound runs high on few tasks; Lane A's --margin moves to a sign-flip test
 
-gstack's /ship outside review of PR #8 found that the kit's one-sided p-values from the task-clustered bootstrap are anti-conservative on few tasks. For superiority the plan already names the exact sign-flip test, so U2 switched `superiorityP` to it. For non-inferiority the plan names the bootstrap: decision 9 holds a parity claim when "the one-sided 95% lower bound" of the difference clears minus the margin, and intervals are task-clustered bootstrap intervals. U2 kept that, because changing it changes the plan. This post records how far off it is so U6 can choose.
+gstack's /ship outside review of PR #8 found that the kit's one-sided p-values from the task-clustered bootstrap are anti-conservative on few tasks. For superiority the plan already names the exact sign-flip test, so U2 switched `superiorityP` to it. For non-inferiority the plan names the bootstrap: decision 9 holds a parity claim when "the one-sided 95% lower bound" of the difference clears minus the margin, and intervals are task-clustered bootstrap intervals. Changing that is a plan decision, so U2 measured it and asked.
 
 ## What was measured
 
-A simulation with the kit's own functions, at 2,000 bootstrap draws. Each task has a pass rate drawn uniformly from 0.2 to 0.8, each arm runs 3 trials, and B's pass rate is A's minus exactly the 0.10 margin, so every rejection is a false non-inferiority claim. Nominal level 5%. The Monte Carlo standard error is about 0.6 points at 1,500 runs.
+A simulation with the kit's own functions, at 2,000 bootstrap draws. Each task has a pass rate drawn uniformly from 0.2 to 0.8, each arm runs 3 trials, and B's pass rate is A's minus exactly the 0.10 margin, so every rejection at alpha 0.05 is a false non-inferiority claim. The Monte Carlo standard error is about 0.6 points at 1,500 runs and 1.3 points at 300. `tests/stats/sign-flip.test.ts` (PR #16, with the sign-flip function) reproduces these counts exactly.
 
-| Tasks | Runs | Bootstrap bound rejects | Margin-shifted sign-flip rejects |
+| Tasks | Runs | Bootstrap bound false passes | Margin-shifted sign-flip false passes |
 |---|---|---|---|
-| 12 | 1,500 | 6.7% | 4.3% |
-| 30 | 1,000 | 4.4% | 4.7% |
-| 200 | 300 | 5.0% | 5.0% |
+| 12 | 1,500 | 101 (6.7%) | 73 (4.9%) |
+| 30 | 1,000 | 41 (4.1%) | 41 (4.1%) |
+| 200 | 300 | 16 (5.3%) | 16 (5.3%) |
 
-For superiority at a true difference of zero, the bootstrap rejected 6.1% at 10 tasks and 4.5% at 30; the exact sign-flip rejected 2.8% at both.
+At 12 tasks the bootstrap bound is about three standard errors above 5%. At 30 and 200 tasks both tests hold their level.
 
 ## Where it matters
 
-- **Parity (decision 9, Amendment A2).** Sized at 95 to 380 tasks. The bootstrap holds its level there, so the parity design stands.
-- **Lane A's `--margin`.** Plan v3.2 has a cut-track candidate promoted only with `noninferior: true`, on skill evals of about 12 to 20 tasks. There the bootstrap overstates confidence by a point or two, and more on sparse data with many tied tasks.
+- **Parity (decision 9, Amendment A2).** Sized at 95 to 380 tasks, where the bootstrap holds its level.
+- **Lane A's `--margin`.** Plan v3.2 promotes a cut-track candidate only with `noninferior: true`, on skill evals of about 12 to 20 tasks, where the bootstrap bound breaks the plan's 5%.
 
-## Options for U6
+## Decision
 
-1. Use the margin-shifted clustered sign-flip p for non-inferiority: flip the signs of (difference + margin) per task cluster. It held 4.3% to 5.0% above and matches the plan's line that p-values are exact sign-flip tests over task clusters. It assumes the shifted differences are symmetric under the null, which is close but not exact for pass rates. This is the recommendation, and it needs the Captain's (and Garry's) yes because it changes decision 9's wording for small runs.
-2. Keep the bootstrap bound and require at least 30 informative task clusters for a non-inferiority pass; fewer is inconclusive. Simple, but most skill evals could then never show non-inferiority.
-3. Keep it as is and print the caveat beside every non-inferiority verdict under 30 tasks.
+The Captain (GSTA-2), 2026-10-28, took the recommendation:
 
-Until U6 chooses, `nonInferiorityP` stays as decision 9 wrote it, and the U6 verdict tests should include a 12-task case at the margin.
+- Lane A's `--margin` uses the margin-shifted exact sign-flip over task clusters: flip the signs of each task cluster's (difference + margin), every pattern up to 20 clusters. The bootstrap bound's 6.7% false-pass rate at 12 tasks breaks the 5% the plan promises; the sign-flip test keeps it (4.9%). This corrects the method so the plan's stated error rate holds; it does not change what the plan claims.
+- Parity keeps decision 9's bootstrap bound for parity sizes (30 tasks and up) in v1.1. It held 5% there, and Garry picks the parity design at the pilot report.
+- U2 adds the function, `marginShiftedSignFlipP` in `src/runner/stats/sign-flip.ts`, with the test above. U6's brief carries the rule.
+
+The sign-flip test assumes the shifted differences are symmetric under the null, which is close but not exact for pass rates; the table is the check.
