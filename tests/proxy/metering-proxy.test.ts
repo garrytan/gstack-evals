@@ -218,6 +218,34 @@ describe("allowlist and allowance", () => {
     expect(t.calls).toHaveLength(1);
   });
 
+  test("replayed hosted-tool calls and results are priced by their bytes; enabling a hosted tool is refused", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    const replay = { model: "gpt-6.1-sol", input: [{ type: "web_search_call", id: "ws_1", status: "completed" }, { role: "user", content: "hi" }] };
+    expect((await t.call(a.slot, a.token, "/openai/v1/responses", replay)).status).toBe(200);
+    const anthropic = { model: "claude-opus-5-5", messages: [{ role: "assistant", content: [{ type: "web_search_tool_result", tool_use_id: "t1", content: [] }] }, { role: "user", content: "next" }] };
+    expect((await t.call(a.slot, a.token, undefined, anthropic)).status).toBe(200);
+    await expectProblem(await t.call(a.slot, a.token, undefined, { ...anthropic, tools: [{ type: "web_search_20250305", name: "web_search" }] }), 402, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(2);
+  });
+
+  test("a reservation the ledger fails to answer is refused and gives back the slot's claim", async () => {
+    const ledger = new FakeLedger();
+    const reserve = ledger.reserve.bind(ledger);
+    let failures = 1;
+    ledger.reserve = async request => {
+      if (failures-- > 0) throw new Error("ledger restarted");
+      return reserve(request);
+    };
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { ledger });
+    const a = t.bind({ allowance_micros: 30_000 });
+    const body = await expectProblem(await t.call(a.slot, a.token), 503, "UPSTREAM");
+    expect(body.detail).toContain("nothing was sent");
+    expect(t.calls).toHaveLength(0);
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    expect(t.calls).toHaveLength(1);
+  });
+
   test("rate multipliers the reservation cannot see are refused", async () => {
     const t = setup(() => ok({}));
     const a = t.bind();

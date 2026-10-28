@@ -68,7 +68,8 @@ const HOSTED_TOOL = /web_search|web_fetch|file_search|code_interpreter|code_exec
 
 /**
  * The first part of a request that the provider bills beyond its bytes: a remote or stored file or image (fetched and
- * tokenized by the provider), or a hosted tool (billed per call). Inline base64 media is counted by its bytes.
+ * tokenized by the provider), or a hosted tool enabled under tools (billed per call). Inline base64 media, and replayed
+ * hosted-tool calls and results, are counted by their bytes.
  */
 function unboundedInput(value: unknown, key = ""): string | null {
   if (typeof value === "string") {
@@ -85,7 +86,7 @@ function unboundedInput(value: unknown, key = ""): string | null {
   }
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
-  if (typeof v.type === "string" && HOSTED_TOOL.test(v.type)) return `the hosted tool ${v.type}`;
+  if (key === "tools" && typeof v.type === "string" && HOSTED_TOOL.test(v.type)) return `the hosted tool ${v.type}`;
   if (key === "source" && (v.type === "url" || v.type === "file")) return `a ${v.type} source`;
   for (const [k, child] of Object.entries(v)) {
     const found = unboundedInput(child, k);

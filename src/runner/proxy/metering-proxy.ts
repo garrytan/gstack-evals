@@ -408,7 +408,13 @@ export class MeteringProxy {
       }
       slot.committedMicros += maxMicros;
       const idempotencyKey = `${slot.cell.meter_id}:${call}:${attempt}`;
-      const held = await o.ledger.reserve({ idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros });
+      let held: LedgerReply;
+      try {
+        held = await o.ledger.reserve({ idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros });
+      } catch (e) {
+        slot.committedMicros -= maxMicros;
+        return this.refuse(ctx, "UPSTREAM", 503, `the ledger did not answer reservation ${idempotencyKey}, so nothing was sent: ${scrubbedCause(e, ctx.secrets)}`);
+      }
       if (!held.ok) {
         slot.committedMicros -= maxMicros;
         return this.refuse(ctx, held.code, 402, held.message);
