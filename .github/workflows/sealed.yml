@@ -1,13 +1,21 @@
 # Sealed check (U19a): runs gstack-pregate sealed over every pull request's commits, before review.
-# gstack is fetched at a pinned commit and run by Bun with env-file and bunfig loading off, so no code from this repository runs.
-# The policy is the base branch's .gstack/pregate.json joined with the head's: a pull request can tighten it, never relax it.
-# U1's sealed config sets visibility public, so any finding exits 1.
-# This backs up the pre-push check and cannot unpublish a pushed commit. A red run is an incident: close the pull request,
-# delete the branch, burn the named held-out items (record their digests as burned) and write a wiki finding with counts and digests only.
+# It runs on pull_request_target, so the base branch's copy of this file runs and a pull request cannot edit, skip or
+# conflict its way out of its own check. The pull request is only read as data: its head is checked out without credentials,
+# the token can only read, and the job runs gstack's checker, fetched at a pinned commit, with Bun's env-file and bunfig
+# loading off. No code from the pull request runs.
+# .git/info/attributes sets "* diff", which outranks any .gitattributes in the pull request and treats files with NUL bytes
+# as text, so every added line reaches the checker's text rules.
+# The policy is the default branch's .gstack/pregate.json joined with the head's: a pull request can tighten it, never relax
+# it. The job passes only on a clear verdict under the default branch's policy, and U1's sealed config sets visibility public,
+# so any finding fails it. The verdict pattern writes its colon as [:] so this file does not trip the checker's answer marker.
+# This backs up the pre-push check and cannot unpublish a pushed commit. A run whose verdict line says "refused" is an incident:
+# close the pull request, delete the branch, burn the named held-out items (record their digests as burned) and write a wiki
+# finding with counts and digests only. Any other red run is an infrastructure failure to rerun.
 name: sealed
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -19,6 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -32,9 +41,17 @@ jobs:
           git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
           git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
+      - name: Diff every added line as text
+        run: |
+          attributes="$(git rev-parse --git-path info/attributes)"
+          mkdir -p "$(dirname "$attributes")"
+          printf '* diff\n' > "$attributes"
       - name: gstack-pregate sealed over the pull request's commits
+        shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: bun --no-env-file --config=/dev/null "$RUNNER_TEMP/gstack/bin/gstack-pregate" sealed --range "$BASE_SHA..$HEAD_SHA" --base "$BASE_REF"
+          POLICY_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          bun --no-env-file --config=/dev/null "$RUNNER_TEMP/gstack/bin/gstack-pregate" sealed --range "$BASE_SHA..$HEAD_SHA" --base "$POLICY_BRANCH" | tee "$RUNNER_TEMP/sealed.txt"
+          grep -Eq "^SEALED[:] clear .*policy=origin/$POLICY_BRANCH( |\$)" "$RUNNER_TEMP/sealed.txt" || { echo "sealed: no clear verdict under origin/$POLICY_BRANCH's policy" >&2; exit 1; }
