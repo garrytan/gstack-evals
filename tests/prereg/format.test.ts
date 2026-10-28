@@ -102,6 +102,16 @@ describe("power and parity", () => {
     expect(preregistrationProblems(p)).toEqual(["comparison parity-haiku: trial-level pairing needs equal trials (3 and 5); use task_mean pairing"]);
   });
 
+  test("a gate on a lower-is-better metric needs the metric's failure_value", () => {
+    const p = parity(300, ["haiku"]);
+    p.analysis.comparisons[0]!.direction = "lower";
+    expect(preregistrationProblems(p)).toEqual(["comparison parity-haiku: metric pass improves downward, so it needs failure_value, the score of a system failure that left no value"]);
+    p.metrics.primary[0]!.failure_value = 1;
+    expect(preregistrationProblems(p)).toEqual([]);
+    p.metrics.primary[0]!.failure_value = "worst" as never;
+    expect(preregistrationProblems(p)).toEqual(["metric pass: failure_value must be a finite number"]);
+  });
+
   test("the missing-cell minimum cannot exceed either cell's scheduled trials", () => {
     const p = parity(300, ["haiku"]);
     p.analysis.missing_cells.min_trials = 3;

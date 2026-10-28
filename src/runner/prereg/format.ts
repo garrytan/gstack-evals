@@ -62,6 +62,8 @@ export interface PreregMetric {
   id: string;
   definition: string;
   direction?: Direction;
+  /** The score of a system failure that left no value (gates.ts failure_value). A lower-is-better metric that a gate decides on needs one, since 0 would be its best score. */
+  failure_value?: number;
 }
 
 export interface PreregComparison {
@@ -74,7 +76,7 @@ export interface PreregComparison {
   direction?: Direction;
   /** Non-inferiority margin in metric units (gates.ts calls it tolerance). */
   margin?: number;
-  /** Superiority: the improvement the test must show, in metric units. */
+  /** Superiority: the point estimate a claimed improvement must reach, in metric units, beside a one-sided sign-flip p at or below alpha (plan v3.2). */
   min_effect?: number;
   /** The exact gate's assertion, in words. */
   assertion?: string;
@@ -250,6 +252,7 @@ export function preregistrationProblems(value: unknown): string[] {
   for (const m of [...list<PreregMetric>(p.metrics?.primary), ...list<PreregMetric>(p.metrics?.secondary)]) {
     if (!text(m?.id) || !text(m.definition)) { problems.push('every metric needs an id and a definition'); continue; }
     if (metrics.has(m.id)) problems.push(`metric ${m.id} is listed twice`);
+    if (m.failure_value !== undefined && !finite(m.failure_value)) problems.push(`metric ${m.id}: failure_value must be a finite number`);
     metrics.set(m.id, m);
   }
 
@@ -293,6 +296,7 @@ export function preregistrationProblems(value: unknown): string[] {
     if (c.gate === 'exact' && !text(c.assertion)) problems.push(`comparison ${id}: an exact gate needs its assertion`);
     const decides = c.gate === 'noninferiority' || c.gate === 'superiority';
     if (decides && c.direction !== 'higher' && c.direction !== 'lower') problems.push(`comparison ${id}: direction must be higher or lower`);
+    if (decides && c.direction === 'lower' && metrics.has(c.metric) && metrics.get(c.metric)!.failure_value === undefined) problems.push(`comparison ${id}: metric ${c.metric} improves downward, so it needs failure_value, the score of a system failure that left no value`);
     if (c.gate === 'noninferiority' && !(finite(c.margin) && c.margin > 0)) problems.push(`comparison ${id}: a noninferiority gate needs a margin > 0`);
     if (c.gate === 'superiority' && !(finite(c.min_effect) && c.min_effect >= 0)) problems.push(`comparison ${id}: a superiority gate needs min_effect >= 0`);
     if (c.parity) {
