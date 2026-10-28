@@ -81,7 +81,7 @@ The sealed repo's workflow belongs to the second principal and cannot reach a Ca
 2. The workflow holds the lease in its own local ledger with `ledger lease --from lease.json`, spends against it with provider keys from its protected environment, and writes a settle artifact with `ledger settle --lease <id> --artifact settle.json`.
 3. The thread copies the artifact into the record with `ledger settle --from settle.json`.
 
-If the export file is lost before dispatch, `ledger lease --lease <id> --export <file>` writes it again. A failed `--export` write records no lease.
+If the export file is lost before dispatch, `ledger lease --lease <id> --export <file>` writes it again. If the export file cannot be created, no lease is recorded. If writing the lease into it fails after the lease is recorded, for example on a full disk, the lease stands and that same command writes the file again.
 
 The workflow's local ledger is the lease's journal, and the ledger cannot see across workflow attempts. So the workflow must keep that file across attempts of the same dispatch, for example as an artifact keyed by the lease id. It must not start an attempt on a fresh runner with the old lease file. A fresh runner needs a new lease, exported after the old one is settled or reconciled. Otherwise a rerun could spend the same allowance twice, and the record would see the second settle only as E_SETTLE_CONFLICT, after the money is gone. `ledger lease --from` refuses a lease that its own ledger has already settled.
 

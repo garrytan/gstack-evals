@@ -115,7 +115,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
     } else if (cmd === "lease") {
       const exportTo = one("--export");
       if (flags.has("--machine") && !exportTo) throw new Usage("--machine names the holder of an exported lease; add --export <file>");
-      const ttl = one("--ttl") === undefined ? undefined : Number(one("--ttl")) * 3_600_000;
+      const ttl = one("--ttl") === undefined ? undefined : Math.round(Number(one("--ttl")) * 3_600_000);
       if (ttl !== undefined && !(ttl > 0)) throw new Usage("--ttl must be a positive number of hours");
       const amount = one("--amount") === undefined ? undefined : dollars("--amount");
       const warnings: string[] = [];
