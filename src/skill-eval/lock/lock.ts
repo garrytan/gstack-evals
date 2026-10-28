@@ -289,15 +289,32 @@ export function lineCoverage(lines: readonly LockLine[], runs: readonly OldArmRu
 /** A line the edit touched (GSTA-13's diet change): rewritten, removed, or moved out of SKILL.md into an on-demand file. */
 export const touched = (line: Pick<LockLine, "file">, fate: LineFate) => fate.class === "rewritten" || fate.class === "removed" || (fate.class === "moved" && line.file === "SKILL.md");
 
+/**
+ * Each line's id mapped to the ids of every copy of its text in its file. lineFates pairs a file's copies of one line
+ * by position, so it cannot tell which copy an edit touched: an edit to any copy counts against them all.
+ */
+function copiesOf(lines: readonly LockLine[]): Map<string, string[]> {
+  const text = (l: LockLine) => l.file + "\n" + l.text_sha256;
+  const byText = new Map<string, string[]>();
+  for (const l of lines) byText.set(text(l), [...(byText.get(text(l)) ?? []), l.id]);
+  return new Map(lines.map((l) => [l.id, byText.get(text(l))!]));
+}
+
 /** The lines the edit touched that no task covers: the gap the verdict lists, whatever the gates decide. */
 export function coverageGaps(lines: readonly LockLine[], fates: readonly LineFate[], coverage: readonly LineCoverage[]): { id: string; class: LineFate["class"]; status: LineStatus }[] {
   const lineById = new Map(lines.map((l) => [l.id, l]));
   const covById = new Map(coverage.map((c) => [c.id, c.status]));
-  return fates.flatMap((f) => {
+  const copies = copiesOf(lines);
+  const gaps = new Map<string, { id: string; class: LineFate["class"]; status: LineStatus }>();
+  for (const f of fates) {
     const line = lineById.get(f.id);
-    const status = covById.get(f.id) ?? "unclaimed";
-    return line && touched(line, f) && status !== "covered" ? [{ id: f.id, class: f.class, status }] : [];
-  });
+    if (!line || !touched(line, f)) continue;
+    for (const id of copies.get(f.id)!) {
+      const status = covById.get(id) ?? "unclaimed";
+      if (status !== "covered" && !gaps.has(id)) gaps.set(id, { id, class: f.class, status });
+    }
+  }
+  return [...gaps.values()];
 }
 
 export interface GateRemoval {
@@ -310,14 +327,21 @@ export interface GateRemoval {
 
 /**
  * The contract lines an after copy rewrote or removed that no covering task still passes in after: each one is an
- * UNCOVERED_GATE_REMOVAL. A moved line is not a removal; its coverage still shows whether any run read its new file.
+ * UNCOVERED_GATE_REMOVAL. A rewrite or removal of one copy of a repeated line counts against every copy, so it clears
+ * only when each copy has such a task. A moved line is not a removal; its coverage still shows whether any run read
+ * its new file.
  */
-export function uncoveredRemovals(fates: readonly LineFate[], coverage: readonly LineCoverage[], passesInAfter: (task: string) => boolean): GateRemoval[] {
+export function uncoveredRemovals(lines: readonly LockLine[], fates: readonly LineFate[], coverage: readonly LineCoverage[], passesInAfter: (task: string) => boolean): GateRemoval[] {
   const byId = new Map(coverage.map((c) => [c.id, c]));
-  return fates.flatMap((f): GateRemoval[] => {
-    if (f.class !== "rewritten" && f.class !== "removed") return [];
-    const c = byId.get(f.id) ?? { status: "unclaimed" as const, tasks: [], reached_by: [] };
-    if (c.status === "covered" && c.reached_by.some(passesInAfter)) return [];
-    return [{ id: f.id, class: f.class, why: c.status === "covered" ? "fails-in-after" : c.status, tasks: c.tasks }];
-  });
+  const copies = copiesOf(lines);
+  const removals = new Map<string, GateRemoval>();
+  for (const f of fates) {
+    if (f.class !== "rewritten" && f.class !== "removed") continue;
+    for (const id of copies.get(f.id) ?? [f.id]) {
+      const c = byId.get(id) ?? { status: "unclaimed" as const, tasks: [], reached_by: [] };
+      if (removals.has(id) || (c.status === "covered" && c.reached_by.some(passesInAfter))) continue;
+      removals.set(id, { id, class: f.class, why: c.status === "covered" ? "fails-in-after" : c.status, tasks: c.tasks });
+    }
+  }
+  return [...removals.values()];
 }
