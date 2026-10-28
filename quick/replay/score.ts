@@ -33,7 +33,7 @@ const frozenSha = (rel: string): string | undefined =>
 // Reads one case x arm x model x trial. A gstack unit is complete when the core reviewer,
 // every dispatched specialist and (when it activates) the Red Team returned. A result whose
 // prompt hash differs from its frozen prompt, or from its saved Red Team prompt, counts as
-// missing.
+// missing, and so does a reply the provider ended in error.
 export function loadUnit(resultsDir: string, planCase: any, model: string, arm: string, trial: number): Unit {
   const dir = path.join(resultsDir, model, planCase.case, arm, 't' + trial);
   const names = arm === 'baseline' ? ['baseline'] : ['core', ...planCase.specialists];
@@ -43,6 +43,7 @@ export function loadUnit(resultsDir: string, planCase: any, model: string, arm: 
     const rec = JSON.parse(fs.readFileSync(f, 'utf8'));
     const rtPrompt = path.join(dir, 'red-team.prompt.md');
     const want = n === 'red-team' ? (fs.existsSync(rtPrompt) ? sha(fs.readFileSync(rtPrompt, 'utf8')) : undefined) : frozenSha(rec.prompt);
+    if (rec.stop === 'error') return null;
     return rec.prompt_sha256 && want && rec.prompt_sha256 !== want ? null : rec;
   };
   const recs = names.map(read);

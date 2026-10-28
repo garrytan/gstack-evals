@@ -137,6 +137,7 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
       { model: spec.model, messages: [{ role: 'user', content: prompt }], max_tokens: spec.maxTokens, reasoning: { effort: spec.effort }, provider: { order: ['deepseek'], allow_fallbacks: false }, usage: { include: true } });
     const served = j.provider ?? null;
     if (served && !/deepseek/i.test(served)) throw new Error('served by ' + served + ', not DeepSeek');
+    if (j.choices?.[0]?.finish_reason === 'error') throw new HttpError(200, '200 reply ended in error: ' + JSON.stringify(j.choices[0].error ?? null).slice(0, 200));
     const u = j.usage ?? {};
     if (typeof u.cost !== 'number') throw new Error('OpenRouter response carried no usage.cost');
     const usd = u.cost > 0 ? u.cost : ((u.prompt_tokens ?? 0) * spec.inPerM + (u.completion_tokens ?? 0) * spec.outPerM) / 1e6;
