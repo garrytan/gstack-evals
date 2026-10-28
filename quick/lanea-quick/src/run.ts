@@ -111,6 +111,11 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
   chmodSync(fakeExe, 0o755);
   const uid = (await sh("id -u")).trim() + ":" + (await sh("id -g")).trim();
   const results: SessionResult[] = [];
+  const stageFile = join(opts.out, "stages", `${stage}.json`);
+  const unique = <T>(xs: T[]) => [...new Set(xs)];
+  const planned = { stage, suite: STAGES[stage]!.suite, models: unique(cells.map((c) => c.model)), arms: unique(cells.map((c) => c.arm)), trials: unique(cells.map((c) => c.trial)), planned: cells.length, prereg: opts.prereg, started: new Date().toISOString() };
+  mkdirSync(join(opts.out, "stages"), { recursive: true });
+  writeFileSync(stageFile, JSON.stringify({ ...planned, status: "running" }, null, 2) + "\n");
   const reserver = new Reserver(ledger);
   let failure: unknown = null;
   let next = 0;
@@ -186,11 +191,7 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
   if (failure) throw failure;
   const capStop = reserver.stopped;
   if (capStop) console.log(capStop);
-  mkdirSync(join(opts.out, "stages"), { recursive: true });
-  writeFileSync(
-    join(opts.out, "stages", `${stage}.json`),
-    JSON.stringify({ stage, planned: cells.length, finished: results.length, cap_stop: capStop, prereg: opts.prereg, ended: new Date().toISOString() }, null, 2) + "\n",
-  );
+  writeFileSync(stageFile, JSON.stringify({ ...planned, status: "done", finished: results.length, cap_stop: capStop, ended: new Date().toISOString() }, null, 2) + "\n");
   return { results, capStop };
 }
 

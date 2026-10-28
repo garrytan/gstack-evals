@@ -21,16 +21,24 @@ describe("verdict rules", () => {
   });
   test("one missing cell is a warning while every task keeps two paired runs", () => {
     const rs = [];
-    for (const t of ["a", "b", "c", "d", "e"]) for (const trial of [1, 2, 3]) rs.push(r(t, "before", trial, trial !== 3), r(t, "after", trial, trial !== 3, t === "a" && trial === 1 ? "timeout" : "complete"), r(t, "none", trial, false));
+    for (const t of ["a", "b", "c", "d", "e"]) for (const trial of [1, 2, 3]) rs.push(r(t, "before", trial, trial !== 3), r(t, "after", trial, trial !== 3, t === "a" && trial === 3 ? "timeout" : "complete"), r(t, "none", trial, false));
     const [b] = analyze(rs);
     expect(b.verdict).toBe("PASS");
+    expect(b.warnings).toContain("MISSING_CELLS a");
+  });
+  test("a timeout does not switch off REGRESSION: before 2/3, after 1/2 is under 2/3", () => {
+    const rs = [];
+    for (const t of ["a", "b", "c", "d", "e"]) for (const trial of [1, 2, 3]) rs.push(r(t, "before", trial, trial !== 3), r(t, "after", trial, trial !== 3, t === "a" && trial === 1 ? "timeout" : "complete"), r(t, "none", trial, false));
+    const [b] = analyze(rs);
+    expect(b.verdict).toBe("FAIL");
+    expect(b.reasons).toEqual(["REGRESSION a"]);
     expect(b.warnings).toContain("MISSING_CELLS a");
   });
   test("a cap stop makes the block INCOMPLETE", () => {
     const rs = [];
     for (const t of ["a", "b", "c", "d", "e"]) for (const trial of [1, 2, 3]) rs.push(r(t, "before", trial, trial !== 3), r(t, "after", trial, trial !== 3), r(t, "none", trial, false));
     expect(analyze(rs)[0].verdict).toBe("PASS");
-    expect(analyze(rs, "pass", false, { s: ["CAP_STOP S1"] })[0].verdict).toBe("INCOMPLETE");
+    expect(analyze(rs, "pass", false, { "s|m": ["CAP_STOP S1"] })[0].verdict).toBe("INCOMPLETE");
   });
   test("a regression still FAILs when cells are missing", () => {
     const rs = [];
