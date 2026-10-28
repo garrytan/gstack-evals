@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "note": "Deterministic question classifier for the scripted user. An AskUserQuestion is classified on its header first, then its question text, then its option labels; a prose question on the last 600 characters of the turn's final text. Within a tier, categories are tried in this order and the first whose keyword (lowercase substring) appears wins. Every match is logged. Fixed before any paid run.",
+  "order": [
+    {
+      "category": "second_opinion",
+      "keywords": [
+        "second opinion",
+        "independent ai",
+        "outside voice",
+        "cold read",
+        "cold-read"
+      ]
+    },
+    {
+      "category": "landscape_search",
+      "keywords": [
+        "search for what the world",
+        "search engine",
+        "landscape",
+        "search away",
+        "keep this session private",
+        "ok to search",
+        "web search"
+      ]
+    },
+    {
+      "category": "visual",
+      "keywords": [
+        "mockup",
+        "mock-up",
+        "wireframe",
+        "sketch",
+        "visual",
+        "variant"
+      ]
+    },
+    {
+      "category": "design_doc",
+      "keywords": [
+        "design doc",
+        "status: approved",
+        "start over",
+        "the doc look",
+        "this doc"
+      ]
+    },
+    {
+      "category": "approach",
+      "keywords": [
+        "approach a",
+        "approach b",
+        "which approach",
+        "approaches",
+        "alternative",
+        "which option should",
+        "go with",
+        "approach"
+      ]
+    },
+    {
+      "category": "premises",
+      "keywords": [
+        "premise",
+        "agree or disagree",
+        "agree/disagree",
+        "do you agree"
+      ]
+    },
+    {
+      "category": "mode",
+      "keywords": [
+        "your goal with this",
+        "what's your goal",
+        "what is your goal",
+        "building a startup",
+        "intrapreneurship",
+        "hackathon",
+        "having fun",
+        "side project"
+      ]
+    },
+    {
+      "category": "stage",
+      "keywords": [
+        "pre-product",
+        "product stage",
+        "has users",
+        "paying customers",
+        "what stage",
+        "which stage",
+        "where are you with"
+      ]
+    },
+    {
+      "category": "specificity",
+      "keywords": [
+        "name the actual",
+        "actual human",
+        "who needs this most",
+        "specific person",
+        "name one",
+        "desperate specificity",
+        "who exactly"
+      ]
+    },
+    {
+      "category": "status_quo",
+      "keywords": [
+        "status quo",
+        "right now to solve",
+        "doing right now",
+        "doing today",
+        "workaround",
+        "solve this today",
+        "currently solve",
+        "currently do"
+      ]
+    },
+    {
+      "category": "demand",
+      "keywords": [
+        "evidence",
+        "demand",
+        "actually wants",
+        "actually want",
+        "would be upset",
+        "disappear",
+        "pay for",
+        "paid for",
+        "willing to pay"
+      ]
+    }
+  ],
+  "fallback": "No strong view on that. Please don't write any files or code yet.",
+  "limits": {
+    "max_prose_replies": 8,
+    "max_ask_answers": 12,
+    "max_replies_per_category": 2,
+    "prose_window_chars": 600
+  }
+}

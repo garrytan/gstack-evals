@@ -1,0 +1,20 @@
+[
+  {
+    "id": "second-opinion-accepted",
+    "prompt": "Office hours. The idea is in README.md. Here is my plan, so skip the diagnostic questions: a Python CLI that reads the Stripe and Shopify CSV exports, matches rows by customer email and writes one merged CSV. My first customer is Dana, who runs a two-person candle shop and pays a virtual assistant $40 a month to do this by hand; she has said she would pay me that instead. I agree with all of your premises. What's next?",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\"",
+    "must": [
+      "SECOND OPINION \\((Claude subagent|Codex)\\)"
+    ],
+    "check": "test ! -d docs/designs && test -z \"$(find .gstack-home -name '*-design-*.md' 2>/dev/null)\""
+  },
+  {
+    "id": "visual-sketch-accepted",
+    "prompt": "Office hours. The idea is in README.md. Here is my plan, so skip the diagnostic questions: a Python CLI that reads the Stripe and Shopify CSV exports, matches rows by customer email and writes one merged CSV. My first customer is Dana, who runs a two-person candle shop and pays a virtual assistant $40 a month to do this by hand; she has said she would pay me that instead. I agree with all of your premises. No second opinion, thanks. I approve the approach where shop owners drag their CSVs into a web page and map the columns on screen. Continue.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" && rm -f \"$HOME/.claude/skills/gstack/design/dist/design\"",
+    "must": [
+      "[Ss]ketch|[Ww]ireframe"
+    ],
+    "check": "test -n \"$(find . -name sketch.html -not -path './.git/*' 2>/dev/null | head -1)\""
+  }
+]
