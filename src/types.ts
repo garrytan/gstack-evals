@@ -111,10 +111,14 @@ export interface ReservationLedger {
   /**
    * Holds max_micros against the lease, or refuses with the code to print (CAP_STOP, E_LEDGER_MISSING, E_LEASE_CLOSED).
    * Idempotent by idempotency_key: the same key with the same request returns the first reservation, and with a
-   * different lease, cell or amount refuses with E_RESERVE_CONFLICT.
+   * different lease, cell or amount refuses with E_RESERVE_CONFLICT. A malformed request (an amount that is not whole
+   * micro-dollars) is a caller defect, refused with E_INTERNAL.
    */
   reserve(request: { idempotency_key: string; lease_id: string; cell: CellAttempt; max_micros: number }): Promise<LedgerReply>;
-  /** Idempotent by reservation_id: the same outcome again returns the same reservation; a different one refuses with E_SETTLE_CONFLICT. */
+  /**
+   * Idempotent by reservation_id: the same outcome again returns the same reservation; a different one refuses with
+   * E_SETTLE_CONFLICT. An unknown reservation, or a spend or usage that is not whole numbers, is refused with E_INTERNAL.
+   */
   settle(reservation_id: string, outcome: CallOutcome): Promise<LedgerReply>;
 }
 

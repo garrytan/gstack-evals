@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
-import { LedgerError, readItem, recordHooks, slotPath } from "../../src/runner/ledger/record.ts";
+import { LedgerError, readItem, slotPath, writeOnce } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
 
 const LEDGER = join(import.meta.dir, "../../src/runner/ledger");
@@ -115,8 +115,7 @@ describe("reserve and settle", () => {
     expect(close).toMatchObject({ how: "settled", spent_micros: 250_000, unknown_micros: 1_500_000, unknown_calls: 2, usage });
     expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 1_750_000, left_micros: 8_250_000, open_lease: null });
     expect(await local.reserve({ idempotency_key: "k4", lease_id: lease.lease_id, cell: cell(4), max_micros: 1 })).toMatchObject({ ok: false, code: "E_LEASE_CLOSED" });
-    const next = openLease(record, local, { item: "lanea", run_id: "run-a", ttl_ms: 1 });
-    await Bun.sleep(5);
+    const next = openLease(record, local, { item: "lanea", run_id: "run-a", ttl_ms: 1, now: new Date(Date.now() - 60_000) });
     expect(await local.reserve({ idempotency_key: "k5", lease_id: next.lease_id, cell: cell(5), max_micros: 1 })).toMatchObject({ ok: false, code: "E_LEASE_CLOSED" });
   });
 
@@ -243,14 +242,8 @@ describe("settle failures and recovery", () => {
     const lease = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: 2 * DOLLAR });
     const r = reservation(await local.reserve({ idempotency_key: "k1", lease_id: lease.lease_id, cell: cell(1), max_micros: DOLLAR }));
     await local.settle(r.reservation_id, { kind: "spent", spent_micros: 700_000, usage });
-    recordHooks.afterWrite = () => {
-      throw new Error("connection reset after the write");
-    };
-    try {
-      expect(codeOf(() => settleLease(record, local, lease.lease_id))).toBe("E_LEASE_UNSETTLED");
-    } finally {
-      recordHooks.afterWrite = undefined;
-    }
+    expect(writeOnce(record, local.stageClose(lease.lease_id))).toBe("written");
+    expect(local.getLease(lease.lease_id)?.state).toBe("closing");
     const path = slotPath(record, { kind: "close", item: "lanea", seq: 1 });
     const landed = readFileSync(path, "utf8");
     expect(settleLease(record, local, lease.lease_id).spent_micros).toBe(700_000);
@@ -280,6 +273,9 @@ describe("settle failures and recovery", () => {
     const close = reconcileLease(record, owner);
     expect(close).toMatchObject({ how: "reconciled", spent_micros: 810_000, source_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(reconcileLease(record, owner)).toEqual(close);
+    const files = readdirSync(join(record, "items", "lanea")).sort();
+    expect(settleLease(record, machineB, lease.lease_id)).toEqual(close);
+    expect(readdirSync(join(record, "items", "lanea")).sort()).toEqual(files);
     expect(codeOf(() => reconcileLease(record, { ...owner, spent_micros: 1 }))).toBe("E_SETTLE_CONFLICT");
     expect(openLease(record, machineB, { item: "lanea", run_id: "run-a" }).reserved_micros).toBe(10 * DOLLAR - 810_000);
     const revived = LocalLedger.open(join(dir, "machine-a-restored.sqlite"));

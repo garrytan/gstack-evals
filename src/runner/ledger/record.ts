@@ -1,7 +1,10 @@
 // The approval record, the ledger's append-only tier (plan v3.2, "Where the ledger lives"). Each approval, lease and
 // lease close is a write-once JSON file at <record>/items/<item>/<kind>-<slot>.json, read back after it is written, and
 // totals are sums over the files. The record may sit on a Capy drive, which has no atomic write, so each line item
-// admits one run, and each slot has one winner: a second writer of the same slot finds the first file and refuses.
+// admits one run. Within one host each slot has one winner: a second writer of the same slot finds the first file and
+// refuses. Across hosts that holds only where the file system gives exclusive create to every host; on a drive that
+// syncs files between machines, two hosts writing one slot at the same moment can both succeed, which is why an item
+// belongs to one run and a replacement worker waits for the previous lease to close.
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -74,21 +77,28 @@ export type RecordFile = ApprovalFile | LeaseFile | CloseFile;
 
 export const ITEM_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const FILE = /^(approval|lease|close)-(\d{4})\.json$/;
+const MAX_SLOT = 9999;
 const LINK_UNSUPPORTED = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV", "EMLINK"]);
 const DIR_SYNC_UNSUPPORTED = new Set(["EINVAL", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EBADF"]);
 
-export const slotPath = (record: string, f: { kind: string; item: string; seq: number }) => join(record, "items", f.item, f.kind + "-" + String(f.seq).padStart(4, "0") + ".json");
+function checkItem(item: string): void {
+  if (!ITEM_NAME.test(item)) throw new LedgerError("E_USAGE", "line item " + JSON.stringify(item) + " must match " + ITEM_NAME);
+}
 
-/** Test seam: runs after a record file is written and before it is read back. Production code never sets it. */
-export const recordHooks: { afterWrite?: (path: string) => void } = {};
+export const isTime = (text: unknown): boolean => typeof text === "string" && !Number.isNaN(Date.parse(text));
+
+export const slotPath = (record: string, f: { kind: string; item: string; seq: number }) => join(record, "items", f.item, f.kind + "-" + String(f.seq).padStart(4, "0") + ".json");
 
 /**
  * Writes a record file once. A file already in the slot with the same bytes is "present", so a retried write is
  * idempotent; one with other bytes is a conflict. The file appears whole: it is written and fsynced aside, then linked
  * into place, which fails when the slot is taken. Where links are unsupported it is created exclusively instead. The
- * directory entries are fsynced before the write is acknowledged, new directories included.
+ * directory entries are fsynced before the write is acknowledged, new directories included, and again when a retry
+ * finds its own bytes already there.
  */
 export function writeOnce(record: string, file: RecordFile): "written" | "present" | { conflict: RecordFile } {
+  checkItem(file.item);
+  if (file.seq > MAX_SLOT) throw new LedgerError("E_LEDGER_RECORD", "line item " + file.item + " has used all " + MAX_SLOT + " " + file.kind + " slots in " + record);
   const path = slotPath(record, file);
   const text = JSON.stringify(file, null, 2) + "\n";
   const dir = dirname(path);
@@ -112,8 +122,8 @@ export function writeOnce(record: string, file: RecordFile): "written" | "presen
   } finally {
     rmSync(tmp, { force: true });
   }
-  if (created) syncDir(dir);
-  recordHooks.afterWrite?.(path);
+  syncDir(dir);
+  syncDir(dirname(dir));
   const back = readFileSync(path, "utf8");
   if (back === text) return created ? "written" : "present";
   if (created) throw new Error("the read-back of " + path + " does not match what was written");
@@ -189,6 +199,7 @@ export interface ItemState {
 
 /** Reads one line item from the record. A missing slot in a sequence or a close that names another lease is an unreadable record. */
 export function readItem(record: string, item: string): ItemState {
+  checkItem(item);
   const dir = join(record, "items", item);
   const names = existsSync(dir) ? readdirSync(dir).filter((n) => FILE.test(n)).sort() : [];
   const files = names.map((n) => parseFile(join(dir, n), readFileSync(join(dir, n), "utf8")));

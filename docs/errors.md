@@ -232,9 +232,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_LEDGER_MISSING
 
-No approved cap is on record for this run's line item. The CLI never implies a cap.
+No approved cap is on record for this run's line item, or this machine's local ledger holds no lease for the call. The CLI never implies a cap.
 
-Fix: Escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.
+Fix: With no cap on record, escalate: a human approves a cap and records it with their exact words (the command is in docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report. With no local lease, lease the line item on this machine before the run spends.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
 
