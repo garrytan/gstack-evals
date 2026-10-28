@@ -13,7 +13,7 @@ const sha256 = (path: string) => createHash("sha256").update(readFileSync(path))
 
 if (import.meta.main) {
   const [runArg, jobName, modelsCsv, armsCsv, armDir, attempts, concurrent] = Bun.argv.slice(2);
-  if (!concurrent) throw new Error("usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>");
+  if (!concurrent) throw new Error("E_USAGE usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>");
   const here = import.meta.dir;
   const root = resolve(here, "..");
   const run = resolve(runArg);
@@ -35,16 +35,24 @@ if (import.meta.main) {
     if (m.sourceDigest !== expected.get(id)) throw new Error(`${id}: source digest ${m.sourceDigest} differs from tasks.json ${expected.get(id)}`);
     tasks[id] = m;
   }
+  // Every arm must be the preregistered bytes: its tar sha256 must equal the committed manifest's.
   const arms = armsCsv.split(",").map((name) => {
     const tar = `${vm}/run/arms/${name}.tar`;
+    const manifestPath = join(here, "../arms/manifests", `${name}.json`);
+    const want = process.env.ALLOW_UNREGISTERED_ARMS === "1" && !existsSync(manifestPath) ? null : JSON.parse(readFileSync(manifestPath, "utf8")).tar.sha256;
     const gz = join(armDir, `${name}.tar.gz`);
-    if (!existsSync(gz)) {
+    let got: string;
+    let extra = {};
+    if (existsSync(gz)) {
+      copyFileSync(gz, join(run, "arms", `${name}.tar.gz`));
+      got = Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" | sha256sum', "sh", gz]).stdout.toString().split(" ")[0];
+      extra = { gz_sha256: sha256(gz) };
+    } else {
       copyFileSync(join(armDir, `${name}.tar`), join(run, "arms", `${name}.tar`));
-      return { name, tar, sha256: sha256(join(run, "arms", `${name}.tar`)) };
+      got = sha256(join(run, "arms", `${name}.tar`));
     }
-    copyFileSync(gz, join(run, "arms", `${name}.tar.gz`));
-    const out = Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" | sha256sum', "sh", gz]).stdout.toString().split(" ")[0];
-    return { name, tar, sha256: out, gz_sha256: sha256(gz) };
+    if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (arms/manifests/${name}.json)`);
+    return { name, tar, sha256: got, ...extra };
   });
   const models = modelsCsv.split(",").map((id) => {
     const m = cells.models.find((c: any) => c.id === id);
@@ -53,11 +61,15 @@ if (import.meta.main) {
   });
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
   const job = jobConfig({
-    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar }) => ({ name, tar })),
+    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256 }) => ({ name, tar, sha256 })),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
+  if (process.env.ORACLE === "1") {
+    const oracle = { ...job, job_name: `${jobName}-oracle`, n_attempts: 1, agents: [{ name: "oracle" }] };
+    writeFileSync(join(run, "oracle.json"), JSON.stringify(oracle, null, 2) + "\n");
+  }
   const git = (args: string[]) => Bun.spawnSync(["git", "-C", root, ...args]).stdout.toString().trim();
   const manifest = {
     job_name: jobName, created_at: new Date().toISOString(), network,

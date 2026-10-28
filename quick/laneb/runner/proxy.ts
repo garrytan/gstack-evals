@@ -49,15 +49,22 @@ export function costMicros(u: Usage, p: Price): number {
   return Math.ceil(usd * 1_000_000);
 }
 
-// Worst case for one request: every third input byte is a token billed at the highest rate the body can incur
+// Worst case for one request: every input token billed at the highest rate the body can incur
 // (uncached or a 5-minute cache write; a 1-hour write only when the body asks for a ttl other than 5m), plus max_tokens of output.
-export function worstCaseMicros(bodyBytes: number, maxTokens: number, p: Price, longTtl = true): number {
-  const inputTokens = Math.ceil(bodyBytes / 3);
+export function worstCaseMicros(inputTokens: number, maxTokens: number, p: Price, longTtl = true): number {
   const inputPrice = Math.max(p.input, p.cache_write_5m, longTtl ? p.cache_write_1h : 0);
   return Math.ceil(((inputTokens * inputPrice + maxTokens * p.output) / 1_000_000) * 1_000_000);
 }
 
 export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
+
+// Input tokens for the worst case. Anthropic routes use count_tokens. Otherwise, and when counting fails, one token per
+// UTF-8 byte: a byte-level tokenizer never emits more tokens than bytes, and Opus 5.5 counts random base64 at 1.05 bytes
+// per token. The slack covers tokens the provider adds around tools and system text.
+export const COUNT_SLACK_TOKENS = 64;
+export const BYTE_SLACK_TOKENS = 1024;
+export const COUNT_FIELDS = ["model", "messages", "system", "tools", "tool_choice", "thinking"];
+export const byteBoundTokens = (body: string) => Buffer.byteLength(body) + BYTE_SLACK_TOKENS;
 
 // Refuse provider-side tools (web search, web fetch, code execution): they run outside any sandbox.
 export function serverTools(body: any): string[] {
@@ -102,7 +109,10 @@ type Session = {
   spentMicros: number;
   usage: Usage;
   requests: number;
+  okResponses: number;
   refused: number;
+  refusedBudget: number;
+  pending: Map<number, { worst: number; abort: AbortController }>;
   requestedModels: Record<string, number>;
   open: boolean;
   openedAt: string;
@@ -122,6 +132,7 @@ export type ProxyOptions = {
   ledgerPrefix?: string;
   globalCapMicros?: number;
   env?: Record<string, string | undefined>;
+  closeWaitMs?: number;
 };
 
 export function startProxy(opts: ProxyOptions) {
@@ -130,6 +141,10 @@ export function startProxy(opts: ProxyOptions) {
   const byToken = new Map<string, Session>();
   let globalSpent = 0;
   let inflightWorst = 0;
+  let reqSeq = 0;
+  let capStop: string | null = null;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const closeWaitMs = opts.closeWaitMs ?? 30_000;
   const log = (entry: Record<string, unknown>) => appendFileSync(opts.logPath, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
 
   const ledgerCall = async (path: "/reserve" | "/settle", body: Record<string, unknown>) => {
@@ -142,14 +157,26 @@ export function startProxy(opts: ProxyOptions) {
 
   const summary = (s: Session) => ({
     id: s.id, trial: s.trial, model: s.model, cap_micros: s.capMicros, spent_micros: s.spentMicros, usage: s.usage,
-    requests: s.requests, refused: s.refused, requested_models: s.requestedModels, open: s.open, opened_at: s.openedAt, closed_at: s.closedAt, meta: s.meta,
+    requests: s.requests, ok_responses: s.okResponses, refused: s.refused, refused_budget: s.refusedBudget, requested_models: s.requestedModels, open: s.open, opened_at: s.openedAt, closed_at: s.closedAt, meta: s.meta,
   });
 
+  // Stop admission, let in-flight requests finish for closeWaitMs, then abort the rest and charge each its worst case,
+  // so the settle never undercounts. Usage that arrives after that is logged, not added.
   const closeSession = async (s: Session, reason: string) => {
     if (!s.open) return summary(s);
     s.open = false;
-    s.closedAt = new Date().toISOString();
     byToken.delete(s.token);
+    const deadline = Date.now() + closeWaitMs;
+    while (s.pending.size && Date.now() < deadline) await sleep(100);
+    for (const [rid, p] of s.pending) {
+      s.pending.delete(rid);
+      p.abort.abort();
+      inflightWorst -= p.worst;
+      s.spentMicros += p.worst;
+      globalSpent += p.worst;
+      log({ event: "charged_at_worst", session: s.id, request: rid, worst_micros: p.worst, reason: "still in flight at close" });
+    }
+    s.closedAt = new Date().toISOString();
     const out = summary(s);
     if (s.ledgerReserved) {
       const settle = await ledgerCall("/settle", { id: (opts.ledgerPrefix ?? "") + s.id, usd_micros: s.spentMicros, meta: { trial: s.trial, model: s.model, usage: s.usage, requests: s.requests, refused: s.refused, close_reason: reason, ...s.meta } });
@@ -167,17 +194,22 @@ export function startProxy(opts: ProxyOptions) {
       const parts = url.pathname.split("/").filter(Boolean);
       if (req.method === "GET" && url.pathname === "/healthz") return Response.json({ ok: true });
       if (req.method === "GET" && url.pathname === "/totals") {
-        return Response.json({ global_spent_micros: globalSpent, open_sessions: [...sessions.values()].filter((s) => s.open).length, sessions: sessions.size });
+        return Response.json({ global_spent_micros: globalSpent, cap_stop: capStop, open_sessions: [...sessions.values()].filter((s) => s.open).length, sessions: sessions.size });
       }
       if (req.method === "POST" && url.pathname === "/sessions") {
         const body = (await req.json()) as { trial: string; model: string; cap_usd: number; meta?: Record<string, unknown> };
         if (!opts.config.models[body.model]) return Response.json({ error: "unknown model " + body.model }, { status: 400 });
         const capMicros = Math.round(body.cap_usd * 1_000_000);
         if (!(capMicros > 0)) return Response.json({ error: "cap_usd must be positive" }, { status: 400 });
+        if (capStop) return Response.json({ error: "budget stop latched: " + capStop }, { status: 409 });
         const id = "s-" + randomBytes(6).toString("hex");
-        const s: Session = { id, token: "laneb-" + randomBytes(24).toString("hex"), trial: body.trial, model: body.model, capMicros, spentMicros: 0, usage: emptyUsage(), requests: 0, refused: 0, requestedModels: {}, open: true, openedAt: new Date().toISOString(), meta: body.meta ?? {}, ledgerReserved: false };
+        const s: Session = { id, token: "laneb-" + randomBytes(24).toString("hex"), trial: body.trial, model: body.model, capMicros, spentMicros: 0, usage: emptyUsage(), requests: 0, okResponses: 0, refused: 0, refusedBudget: 0, pending: new Map(), requestedModels: {}, open: true, openedAt: new Date().toISOString(), meta: body.meta ?? {}, ledgerReserved: false };
         const reserve = await ledgerCall("/reserve", { id: (opts.ledgerPrefix ?? "") + id, usd_micros: capMicros, meta: { trial: body.trial, model: body.model, worst_case: "session cap enforced by the proxy", ...s.meta } });
-        if (!reserve.ok) return Response.json({ error: "ledger refused the reserve", ledger: reserve }, { status: 409 });
+        if (!reserve.ok) {
+          capStop = `ledger refused a reserve for ${body.trial} at ${new Date().toISOString()}`;
+          log({ event: "cap_stop", reason: capStop, ledger: reserve });
+          return Response.json({ error: "ledger refused the reserve", ledger: reserve }, { status: 409 });
+        }
         s.ledgerReserved = Boolean(opts.ledgerUrl);
         sessions.set(id, s);
         byToken.set(s.token, s);
@@ -248,36 +280,61 @@ export function startProxy(opts: ProxyOptions) {
         return new Response(res.body, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/json" } });
       }
 
-      const worst = worstCaseMicros(outBody.length, Number(body.max_tokens ?? 32000), maxPrice(model), asksLongTtl(outBody));
-      if (s.spentMicros + worst > s.capMicros) {
+      let inputTokens = byteBoundTokens(outBody);
+      let counted = false;
+      if (route.count_tokens === "forward") {
+        try {
+          const countBody = JSON.stringify(Object.fromEntries(COUNT_FIELDS.filter((f) => body[f] !== undefined).map((f) => [f, body[f]])));
+          const res = await fetch(route.base_url + "/v1/messages/count_tokens", { method: "POST", headers, body: countBody });
+          const j = (await res.json()) as any;
+          if (res.ok && typeof j.input_tokens === "number") { inputTokens = j.input_tokens + COUNT_SLACK_TOKENS; counted = true; }
+          else log({ event: "count_failed", session: s.id, status: res.status, message: String(j?.error?.message ?? "").slice(0, 200) });
+        } catch (e) {
+          log({ event: "count_failed", session: s.id, error: String(e).slice(0, 200) });
+        }
+      }
+      if (!s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      const worst = worstCaseMicros(inputTokens, Number(body.max_tokens ?? 32000), maxPrice(model), asksLongTtl(outBody));
+      const inflight = [...s.pending.values()].reduce((x, p) => x + p.worst, 0);
+      if (s.spentMicros + inflight + worst > s.capMicros) {
         s.refused++;
-        log({ event: "refused", session: s.id, reason: "session_cap", spent_micros: s.spentMicros, worst_micros: worst, cap_micros: s.capMicros, body_bytes: outBody.length, max_tokens: body.max_tokens });
+        s.refusedBudget++;
+        log({ event: "refused", session: s.id, reason: "session_cap", spent_micros: s.spentMicros, inflight_micros: inflight, worst_micros: worst, cap_micros: s.capMicros, input_tokens_bound: inputTokens, counted, max_tokens: body.max_tokens });
         return anthropicError(400, "invalid_request_error", "laneb proxy: session budget exhausted");
       }
       if (opts.globalCapMicros !== undefined && globalSpent + inflightWorst + worst > opts.globalCapMicros) {
         s.refused++;
+        s.refusedBudget++;
+        capStop ??= `batch cap reached at ${new Date().toISOString()}`;
         log({ event: "refused", session: s.id, reason: "global_cap" });
         return anthropicError(400, "invalid_request_error", "laneb proxy: global budget exhausted");
       }
+      const rid = ++reqSeq;
+      const abort = new AbortController();
       s.requests++;
+      s.pending.set(rid, { worst, abort });
       inflightWorst += worst;
       const started = Date.now();
-      let upstream: Response;
-      try {
-        upstream = await fetch(route.base_url + "/v1/messages", { method: "POST", headers, body: outBody });
-      } catch (e) {
+      // complete=false (a stream cut off before its final usage) charges the worst case.
+      const account = (usage: Usage, providerCost: number | null, status: number, stream: boolean, stopReason: string | null, complete = true) => {
+        const micros = complete ? costMicros(usage, priceFor(usage, model)) : worst;
+        const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started };
+        if (!s.pending.delete(rid)) { log({ event: "late_usage", ...entry }); return; }
         inflightWorst -= worst;
-        log({ event: "upstream_error", session: s.id, error: String(e) });
-        return anthropicError(529, "overloaded_error", "laneb proxy: upstream unreachable");
-      }
-      const account = (usage: Usage, providerCost: number | null, status: number, stream: boolean, stopReason: string | null) => {
-        inflightWorst -= worst;
-        const micros = costMicros(usage, priceFor(usage, model));
+        if (status === 200) s.okResponses++;
         s.spentMicros += micros;
         globalSpent += micros;
         for (const k of Object.keys(usage) as (keyof Usage)[]) s.usage[k] += usage[k];
-        log({ event: "request", session: s.id, trial: s.trial, model: s.model, requested_model: requested, upstream_model: model.upstream_model, status, stream, usage, cost_micros: micros, worst_micros: worst, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started });
+        log({ event: "request", ...entry });
       };
+      let upstream: Response;
+      try {
+        upstream = await fetch(route.base_url + "/v1/messages", { method: "POST", headers, body: outBody, signal: abort.signal });
+      } catch (e) {
+        if (s.pending.delete(rid)) inflightWorst -= worst;
+        log({ event: "upstream_error", session: s.id, request: rid, error: String(e) });
+        return anthropicError(529, "overloaded_error", "laneb proxy: upstream unreachable");
+      }
       const contentType = upstream.headers.get("content-type") ?? "";
       if (!upstream.body || !contentType.includes("text/event-stream")) {
         const text = await upstream.text();
@@ -297,29 +354,35 @@ export function startProxy(opts: ProxyOptions) {
       const parser = new SseUsage();
       const decoder = new TextDecoder();
       let done = false;
-      const finish = () => {
+      const finish = (complete: boolean) => {
         if (done) return;
         done = true;
-        account(parser.usage, parser.providerCost, upstream.status, true, parser.stopReason);
+        account(parser.usage, parser.providerCost, upstream.status, true, parser.stopReason, complete && parser.stopReason !== null);
       };
-      const tee = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, ctrl) {
-          parser.feed(decoder.decode(chunk, { stream: true }));
-          ctrl.enqueue(chunk);
-        },
-        flush() { finish(); },
-      });
-      const piped = upstream.body.pipeThrough(tee);
-      const reader = piped.getReader();
+      const reader = upstream.body.getReader();
+      const read = async () => {
+        const r = await reader.read();
+        if (r.value) parser.feed(decoder.decode(r.value, { stream: true }));
+        return r;
+      };
+      // If the client goes away mid-stream, keep reading so the final usage still arrives; close aborts it if it runs long.
+      const drain = async () => {
+        try { while (!(await read()).done); finish(true); } catch { finish(false); }
+      };
+      let cancelled = false;
       const out = new ReadableStream<Uint8Array>({
         async pull(ctrl) {
           try {
-            const { value, done: d } = await reader.read();
-            if (d) { finish(); ctrl.close(); return; }
-            ctrl.enqueue(value);
-          } catch (e) { finish(); ctrl.error(e); }
+            const { value, done: d } = await read();
+            if (d) { finish(true); if (!cancelled) ctrl.close(); return; }
+            if (!cancelled) ctrl.enqueue(value);
+          } catch (e) {
+            if (cancelled) return;
+            finish(false);
+            ctrl.error(e);
+          }
         },
-        cancel() { finish(); reader.cancel().catch(() => {}); },
+        cancel() { cancelled = true; void drain(); },
       });
       return new Response(out, { status: upstream.status, headers: { "content-type": contentType, "cache-control": "no-cache" } });
     },

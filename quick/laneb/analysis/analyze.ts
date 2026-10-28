@@ -65,7 +65,7 @@ export function loadTrial(dir: string): Trial | null {
   const rewards = result.verifier_result?.rewards ?? null;
   const reward = rewards ? Number(rewards.reward ?? Object.values(rewards)[0]) : null;
   const session = summary?.session ?? {};
-  const budgetStop = (session.refused ?? 0) > 0;
+  const budgetStop = (session.refused_budget ?? 0) > 0;
   const agentTimeout = exc === "AgentTimeoutError";
   let outcome: Trial["outcome"];
   let reason: string;

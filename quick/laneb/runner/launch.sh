@@ -43,9 +43,21 @@ ssh -i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Log
   "bash -lc 'umask 022; bash work/runner/vm-run.sh work/run $prefix $cap'"
 rc=$?
 set -e
-mkdir -p "$run/pulled"
-"$S" pull "$name" work/run/out "$run/pulled" || true
-"$S" pull "$name" work/run/jobs "$run/pulled" || true
 "$S" ssh "$name" 'rm -f ~/.laneb-keys' || true
+# The VM holds the only copy of the trial artifacts and proxy logs: pull with retries, check them, and keep the VM if that fails.
+mkdir -p "$run/pulled"
+pulled=no
+for attempt in 1 2 3; do
+  if "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
+    && [ "$("$S" ssh "$name" 'cd work/run && find out jobs -type f | wc -l')" = "$(cd "$run/pulled" && find out jobs -type f | wc -l)" ]; then
+    pulled=yes; break
+  fi
+  echo "pull attempt $attempt failed" >&2; sleep 20
+done
+if [ "$pulled" != yes ]; then
+  echo "WARNING: results not fully pulled; VM $name is kept. Pull with: $S pull $name work/run/out $run/pulled; $S pull $name work/run/jobs $run/pulled; then: $S down $name" >&2
+  name=""
+  rc=7
+fi
 bun "$here/ledger.ts" status --path "$LEDGER" --item "$ITEM"
 exit $rc

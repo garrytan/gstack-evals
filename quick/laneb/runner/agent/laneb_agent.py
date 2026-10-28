@@ -96,6 +96,7 @@ class LanebOptions(ClaudeCodeOptions):
     persona_path: str = Field(description="Host path of the simulator persona; never uploaded.")
     arm: str = Field(description="Arm name: none, gstack or placebo.")
     arm_tar: str = Field(description="Host path of the arm tarball, extracted into /root.")
+    arm_sha256: str = Field(default="", description="Preregistered sha256 of the arm tarball; a mismatch fails the trial before any model call.")
     control_url: str = Field(default="http://127.0.0.1:8788", description="Proxy control plane.")
     session_cap_usd: float = Field(description="Per-session spend cap, reserved in the ledger.")
     wrapper_path: str = Field(description="Host path of the arm-neutral prompt wrapper with {instruction}.")
@@ -138,6 +139,8 @@ class LanebAgent(ClaudeCode):
     def _inject_arm(self, container: str) -> dict:
         tar = Path(self.options.arm_tar)
         digest = sha256_file(tar)
+        if self.options.arm_sha256 and digest != self.options.arm_sha256:
+            raise RuntimeError(f"arm {self.options.arm}: tar sha256 {digest} is not the preregistered {self.options.arm_sha256}")
         with tar.open("rb") as f:
             res = subprocess.run(["docker", "exec", "-i", container, "sh", "-c", "mkdir -p /root && tar -x -C /root"], stdin=f, capture_output=True, timeout=600)
         if res.returncode != 0:
@@ -271,6 +274,6 @@ class LanebAgent(ClaudeCode):
             context.n_cache_tokens = cached
             context.n_output_tokens = usage.get("output_tokens", 0)
             context.cost_usd = closed.get("spent_micros", 0) / 1_000_000
-            context.metadata = {"laneb": {"arm": self.options.arm, "session": closed.get("id"), "refused": closed.get("refused"), "requests": closed.get("requests"), "result": result}}
-        if error is not None and not closed.get("requests"):
-            raise RuntimeError(f"no metered request succeeded, so this is an infrastructure failure: {error}") from error
+            context.metadata = {"laneb": {"arm": self.options.arm, "session": closed.get("id"), "refused": closed.get("refused"), "requests": closed.get("requests"), "ok_responses": closed.get("ok_responses"), "result": result}}
+        if not closed.get("ok_responses"):
+            raise RuntimeError(f"no model response reached the agent, so this is an infrastructure failure: {error or result}") from error

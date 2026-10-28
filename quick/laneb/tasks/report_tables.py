@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print the markdown tables used in selection.md from the prescreen outputs."""
+"""Print the markdown tables used in wiki/research/2026-10-28-gsta-12-tb2-task-selection.md from the prescreen outputs."""
 import json, importlib.util
 from pathlib import Path
 import pandas as pd

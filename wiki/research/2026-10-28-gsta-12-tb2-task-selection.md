@@ -1,3 +1,15 @@
+---
+id: 2026-10-28-gsta-12-tb2-task-selection
+kind: research
+title: "Lane B task list: a pre-screen of Terminal-Bench 2.0 from published results"
+summary: 20 TB2 tasks plus 6 reserves chosen by a fixed rule over published per-trial results, with sources, funnel and cost estimates. SWE-bench Verified rejected.
+author: GSTA-12
+model: anthropic/claude-opus-5-5
+captain: GSTA-2
+date: 2026-10-28
+status: done
+links: [quick/laneb/tasks/tasks.json, quick/laneb/tasks/prescreen_tb2.py, wiki/plans/2026-10-28-gsta-12-laneb-quick-prereg.md]
+---
 # Lane B task list: pre-screen from published results
 
 GSTA-12 subagent, 2026-10-28. Research and selection only. No paid model calls were made.

@@ -7,10 +7,10 @@ describe("grid", () => {
     const job = jobConfig({
       job_name: "r1", tasks_dir: "/run/tasks", tasks: ["a", "b"], attempts: 1, n_concurrent: 4, agent_dir: "/r/agent", runner_dir: "/r", base_url: "http://__GATEWAY__:8787", max_output_tokens: 32000, verifier_timeout_multiplier: 2,
       models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }],
-      arms: [{ name: "none", tar: "/run/arms/none.tar" }, { name: "gstack", tar: "/run/arms/gstack.tar" }],
+      arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }, { name: "gstack", tar: "/run/arms/gstack.tar", sha256: "b" }],
     });
     expect(job.agents.map((a) => a.kwargs.arm)).toEqual(["none", "gstack"]);
-    expect(job.agents[1].kwargs).toMatchObject({ upstream_model: "claude-haiku-5-5", session_cap_usd: 1, skip_install: true, arm_tar: "/run/arms/gstack.tar" });
+    expect(job.agents[1].kwargs).toMatchObject({ upstream_model: "claude-haiku-5-5", session_cap_usd: 1, skip_install: true, arm_tar: "/run/arms/gstack.tar", arm_sha256: "b" });
     expect(job.agents[0].kwargs.max_output_tokens).toBe(32000);
     expect(job.tasks).toEqual([{ path: "/run/tasks/a" }, { path: "/run/tasks/b" }]);
     expect(job.verifier_timeout_multiplier).toBe(2);

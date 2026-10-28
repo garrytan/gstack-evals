@@ -19,6 +19,16 @@ for gz in "$run"/arms/*.tar.gz; do
   [ "$got" = "$want" ] || { echo "arm $name: tar sha256 $got, manifest says $want" >&2; exit 5; }
 done
 curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-start.json" || { echo "ledger tunnel not reachable" >&2; exit 4; }
+if [ -f "$run/oracle.json" ]; then
+  (cd "$run" && sg docker -c "harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
+  : > "$run/out/oracle-fails.txt"
+  for d in "$run"/jobs/*-oracle/*/; do
+    r=$(cat "$d/verifier/reward.txt" 2>/dev/null || echo none)
+    awk -v r="$r" 'BEGIN { exit !(r + 0 == 1) }' || echo "$(basename "$d") $r" >> "$run/out/oracle-fails.txt"
+  done
+  if [ -s "$run/out/oracle-fails.txt" ]; then echo "oracle failed, no paid trial started:" >&2; cat "$run/out/oracle-fails.txt" >&2; exit 6; fi
+  echo "oracle: every task passed on this host"
+fi
 gw=$(sg docker -c "docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'")
 (
   set -a; . "$HOME/.laneb-keys"; set +a

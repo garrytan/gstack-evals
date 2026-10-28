@@ -39,7 +39,7 @@ if (import.meta.main) {
   const gstackDir = flag("--gstack");
   const placeboDir = flag("--placebo");
   if (!gstackDir || !placeboDir) {
-    console.error("usage: verify-tokens.ts --gstack <gstack skills dir> --placebo <placebo skills dir>");
+    console.error("E_USAGE usage: verify-tokens.ts --gstack <gstack skills dir> --placebo <placebo skills dir>");
     process.exit(2);
   }
   const key = process.env.ANTHROPIC_API_KEY;

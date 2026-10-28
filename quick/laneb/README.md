@@ -40,7 +40,7 @@ sequenceDiagram
 | `runner/launch.sh`, `vm-bootstrap.sh`, `vm-run.sh` | One batch on a fresh Ubicloud VM: bootstrap, keys to a 0600 file over stdin, proxy plus Harbor on the VM, ledger service here through a reverse tunnel, results pulled back, VM destroyed on any exit. |
 | `runner/smoke.sh`, `fake_upstream.ts`, `smoke-task/` | Keyless end-to-end test: fake upstream, proxy, scratch ledger, Harbor, agent, real Claude Code, separate verifier. |
 | `arms/` | The gstack arm build and the seeded placebo generator. |
-| `tasks/` | The task pre-screen: sources, rule, scripts and the fixed list with digests. `final.json` is the list after oracle checks, with each dropped task and why. |
+| `tasks/` | The task pre-screen scripts and the fixed list with digests; the write-up is the wiki post [2026-10-28-gsta-12-tb2-task-selection](../../wiki/research/2026-10-28-gsta-12-tb2-task-selection.md). `final.json` is the list after oracle checks, with each dropped task and why. |
 | `analysis/analyze.ts` | Pass rates with task-clustered bootstrap intervals, paired contrasts, cost per success, share of the Opus gap closed, skill-open rates. |
 | `config/` | Proxy routes and prices, and the cells with their session caps. |
 

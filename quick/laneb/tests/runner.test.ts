@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { startProxy, costMicros, priceFor, maxPrice, SseUsage, serverTools, worstCaseMicros, asksLongTtl, type ProxyConfig } from "../runner/proxy.ts";
+import { startProxy, costMicros, priceFor, maxPrice, SseUsage, serverTools, worstCaseMicros, asksLongTtl, byteBoundTokens, BYTE_SLACK_TOKENS, type ProxyConfig } from "../runner/proxy.ts";
 import { startFakeUpstream } from "../runner/fake_upstream.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "laneb-test-"));
@@ -46,9 +46,13 @@ describe("proxy helpers", () => {
     expect(priceFor(big, m)).toBe(high);
     expect(maxPrice(m)).toEqual(high);
   });
-  test("worst case bounds a request by body size and max_tokens", () => {
-    expect(worstCaseMicros(3000, 1000, price)).toBe(toMicros((1000 * 10 + 1000 * 25) / 1e6));
-    expect(worstCaseMicros(3000, 1000, price, false)).toBe(toMicros((1000 * 6.25 + 1000 * 25) / 1e6));
+  test("worst case bounds a request by its input tokens and max_tokens", () => {
+    expect(worstCaseMicros(1000, 1000, price)).toBe(toMicros((1000 * 10 + 1000 * 25) / 1e6));
+    expect(worstCaseMicros(1000, 1000, price, false)).toBe(toMicros((1000 * 6.25 + 1000 * 25) / 1e6));
+  });
+  test("without a provider count, every UTF-8 byte counts as a token", () => {
+    expect(byteBoundTokens("abc")).toBe(3 + BYTE_SLACK_TOKENS);
+    expect(byteBoundTokens("\u4e00")).toBe(3 + BYTE_SLACK_TOKENS);
   });
   test("only a ttl other than 5m counts as a 1-hour cache write", () => {
     expect(asksLongTtl(JSON.stringify({ system: [{ cache_control: { type: "ephemeral" } }] }))).toBe(false);
@@ -140,5 +144,125 @@ describe("proxy end to end against the fake upstream", () => {
   test("the ledger refuses a session whose cap would pass the line item", async () => {
     const res = await fetch(controlUrl + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t", model: "claude-opus-5-5", cap_usd: 5 }) });
     expect(res.status).toBe(409);
+  });
+});
+
+// An upstream that holds each stream open after message_start until release() is called,
+// or fails with a 500 when the request asks for model "fail".
+describe("proxy accounting under concurrency, early close and cancel", () => {
+  const ledgerPath = join(dir, "ledger-slow.jsonl");
+  const ledger = new Ledger(ledgerPath, "laneb-quick");
+  ledger.approve(0.2, { quotes: ["test"] });
+  const waiting: (() => void)[] = [];
+  const release = () => { while (waiting.length) waiting.shift()!(); };
+  const enc = new TextEncoder();
+  const ev = (type: string, data: unknown) => enc.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+  let slow: ReturnType<typeof Bun.serve>;
+  let ledgerServer: ReturnType<typeof Bun.serve>;
+  let proxy: ReturnType<typeof startProxy>;
+  let dataUrl = "";
+  let controlUrl = "";
+
+  beforeAll(() => {
+    slow = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const body = (await req.json()) as any;
+        if (body.metadata?.fail) return Response.json({ type: "error", error: { type: "api_error", message: "boom" } }, { status: 500 });
+        const stream = new ReadableStream<Uint8Array>({
+          async start(ctrl) {
+            ctrl.enqueue(ev("message_start", { type: "message_start", message: { usage: { input_tokens: 100, output_tokens: 1 } } }));
+            await new Promise<void>((r) => waiting.push(r));
+            ctrl.enqueue(ev("message_delta", { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 500 } }));
+            ctrl.enqueue(ev("message_stop", { type: "message_stop" }));
+            ctrl.close();
+          },
+        });
+        return new Response(stream, { headers: { "content-type": "text/event-stream" } });
+      },
+    });
+    ledgerServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        const b = (await req.json()) as any;
+        const out = url.pathname === "/reserve" ? ledger.reserve(b.id, b.usd_micros, b.meta) : ledger.settle(b.id, b.usd_micros, b.meta);
+        return Response.json(out, { status: out.ok ? 200 : 409 });
+      },
+    });
+    const config: ProxyConfig = {
+      routes: { slow: { base_url: `http://127.0.0.1:${slow.port}`, key_env: "FAKE_KEY", auth: "x-api-key", count_tokens: "estimate" } },
+      models: { "claude-opus-5-5": { route: "slow", upstream_model: "claude-opus-5-5", price_per_mtok: price } },
+    };
+    proxy = startProxy({ config, dataHost: "127.0.0.1", dataPort: 0, controlPort: 0, logPath: join(dir, "req-slow.jsonl"), sessionsPath: join(dir, "sess-slow.jsonl"), ledgerUrl: `http://127.0.0.1:${ledgerServer.port}`, ledgerPrefix: "s-", env: { FAKE_KEY: "fake" }, closeWaitMs: 300 });
+    dataUrl = `http://127.0.0.1:${proxy.data.port}`;
+    controlUrl = `http://127.0.0.1:${proxy.control.port}`;
+  });
+  afterAll(async () => {
+    release();
+    await proxy.stop();
+    slow.stop(true);
+    ledgerServer.stop(true);
+  });
+
+  const open = (cap: number) => fetch(controlUrl + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t", model: "claude-opus-5-5", cap_usd: cap }) });
+  const message = (token: string, extra: Record<string, unknown> = {}) =>
+    fetch(dataUrl + "/v1/messages", { method: "POST", headers: { "x-api-key": token, "content-type": "application/json" }, body: JSON.stringify({ model: "m", max_tokens: 1000, stream: true, messages: [{ role: "user", content: "hi" }], ...extra }) });
+  const close = async (id: string) => (await (await fetch(controlUrl + `/sessions/${id}/close`, { method: "POST", body: "{}" })).json()) as any;
+  const full = costMicros({ input_tokens: 100, output_tokens: 500, cache_creation_input_tokens: 0, cache_creation_1h_input_tokens: 0, cache_read_input_tokens: 0 }, price);
+
+  test("a request in flight holds its worst case against the session cap", async () => {
+    const s = (await (await open(0.05)).json()) as any;
+    const a = await message(s.token);
+    expect(a.status).toBe(200);
+    const b = await message(s.token);
+    expect(b.status).toBe(400);
+    expect(await b.text()).toContain("session budget exhausted");
+    release();
+    await a.text();
+    const closed = await close(s.id);
+    expect(closed.spent_micros).toBe(full);
+    expect(closed.ok_responses).toBe(1);
+    expect(closed.refused_budget).toBe(1);
+  });
+
+  test("a client that cancels mid-stream is still billed from the final usage", async () => {
+    const s = (await (await open(0.05)).json()) as any;
+    const res = await message(s.token);
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    setTimeout(release, 50);
+    const closed = await close(s.id);
+    expect(closed.spent_micros).toBe(full);
+  });
+
+  test("close charges the worst case for a request that is still running", async () => {
+    const s = (await (await open(0.05)).json()) as any;
+    const res = await message(s.token);
+    expect(res.status).toBe(200);
+    const closed = await close(s.id);
+    const charged = readFileSync(join(dir, "req-slow.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "charged_at_worst" && e.session === s.id);
+    expect(charged.length).toBe(1);
+    expect(closed.spent_micros).toBe(charged[0].worst_micros);
+    expect(readRows(ledgerPath).at(-1)).toMatchObject({ kind: "settle", id: "s-" + s.id, usd_micros: charged[0].worst_micros });
+    release();
+  });
+
+  test("an upstream error is a request but not a model response", async () => {
+    const s = (await (await open(0.05)).json()) as any;
+    expect((await message(s.token, { metadata: { fail: true } })).status).toBe(500);
+    const closed = await close(s.id);
+    expect(closed.requests).toBe(1);
+    expect(closed.ok_responses).toBe(0);
+  });
+
+  test("after the ledger refuses one reserve, no session opens again", async () => {
+    expect((await open(1)).status).toBe(409);
+    expect((await open(0.001)).status).toBe(409);
+    const totals = (await (await fetch(controlUrl + "/totals")).json()) as any;
+    expect(totals.cap_stop).toContain("ledger refused");
   });
 });

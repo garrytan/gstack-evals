@@ -77,7 +77,7 @@ if (import.meta.main) {
   const outDir = flag("--out");
   const seed = flag("--seed") ?? DEFAULT_SEED;
   if (!inDir || !outDir) {
-    console.error("usage: generate.ts --in <gstack skills dir> --out <placebo skills dir> [--seed <seed>] [--report <tsv>]");
+    console.error("E_USAGE usage: generate.ts --in <gstack skills dir> --out <placebo skills dir> [--seed <seed>] [--report <tsv>]");
     process.exit(2);
   }
   const results = generatePlacebo(inDir, outDir, seed);
@@ -92,7 +92,7 @@ if (import.meta.main) {
   console.log("ratio_min " + Math.min(...ratios).toFixed(4) + " ratio_max " + Math.max(...ratios).toFixed(4));
   for (const r of results) if (r.routingKept) console.log("routing_kept " + r.folder + " bytes=" + Buffer.byteLength(r.routingKept) + " sha256=" + sha256(r.routingKept));
   if (ratios.some((x) => x < 0.95 || x > 1.05)) {
-    console.error("a skill is outside the +-5% token bound");
+    console.error("E_INTERNAL a skill is outside the +-5% token bound");
     process.exit(1);
   }
 }

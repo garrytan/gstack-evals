@@ -40,10 +40,10 @@ COUNTED_EXCEPTION = "AgentTimeoutError"
 
 # Opus 5.5 list prices, USD per MTok (platform.claude.com/docs/en/about-claude/pricing, read 2026-10-28)
 P_CACHE_WRITE_5M, P_CACHE_READ, P_OUT = 5.00, 0.20, 20.00
-CACHE_WRITE_SHARE = 0.05  # assumed share of cached prompt tokens written (5m) rather than read; see selection.md
+CACHE_WRITE_SHARE = 0.05  # assumed share of cached prompt tokens written (5m) rather than read; see wiki/research/2026-10-28-gsta-12-tb2-task-selection.md
 OPUS46_TO_55 = 0.85       # Opus 4.6 billed cost -> Opus 5.5 list prices, with the newer tokenizer's ~1.3x token count
 
-# The rule (see selection.md). Fixed before any of our runs.
+# The rule (see wiki/research/2026-10-28-gsta-12-tb2-task-selection.md). Fixed before any of our runs.
 R = dict(
     # hard filters
     max_agent_timeout_min=30, max_cpus=4, max_mem_gb=8,

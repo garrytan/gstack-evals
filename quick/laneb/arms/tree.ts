@@ -92,7 +92,7 @@ if (import.meta.main) {
   const tarPath = flag("--tar");
   const outDir = flag("--out");
   if (cmd !== "manifest" || !arm || !root || !tarPath || !outDir) {
-    console.error("usage: tree.ts manifest --arm <name> --tree <dir> --tar <file> --out <dir> [--meta k=v ...]");
+    console.error("E_USAGE usage: tree.ts manifest --arm <name> --tree <dir> --tar <file> --out <dir> [--meta k=v ...]");
     process.exit(2);
   }
   const meta: Record<string, string> = {};

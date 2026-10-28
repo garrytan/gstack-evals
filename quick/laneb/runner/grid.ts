@@ -8,7 +8,7 @@ export type BatchSpec = {
   tasks_dir: string;
   tasks: string[];
   models: { id: string; harbor_model: string; session_cap_usd: number }[];
-  arms: { name: string; tar: string }[];
+  arms: { name: string; tar: string; sha256: string }[];
   attempts: number;
   n_concurrent: number;
   agent_dir: string;
@@ -37,6 +37,7 @@ export function jobConfig(b: BatchSpec) {
         skip_install: true,
         arm: a.name,
         arm_tar: a.tar,
+        arm_sha256: a.sha256,
         upstream_model: m.id,
         session_cap_usd: m.session_cap_usd,
         persona_path: `${b.agent_dir}/persona.json`,

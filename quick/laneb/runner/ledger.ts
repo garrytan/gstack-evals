@@ -137,7 +137,7 @@ if (import.meta.main) {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("usage: bun ledger.ts serve|status --path <jsonl> --item <name> [--port N]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status --path <jsonl> --item <name> [--port N]");
     process.exit(2);
   }
 }
