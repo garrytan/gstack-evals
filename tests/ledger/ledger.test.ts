@@ -255,7 +255,12 @@ describe("settle failures and recovery", () => {
     expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 6 * DOLLAR, left_micros: 4 * DOLLAR });
     const exportFile = join(dir, "anthropic-usage-2026-10-28.csv");
     writeFileSync(exportFile, "date,cost\n2026-10-28,0.81\n");
-    const owner = { lease_id: lease.lease_id, spent_micros: 810_000, quotes: [{ words: "settle it at 81 cents", by: "Garry Tan", source: "GSTA-2 relay" }], source: exportFile };
+    const early = { lease_id: lease.lease_id, spent_micros: 810_000, quotes: [{ words: "settle it at 81 cents", by: "Garry Tan", source: "GSTA-2 relay" }], source: exportFile };
+    expect(codeOf(() => reconcileLease(record, early))).toBe("E_LEASE_UNSETTLED");
+    const owner = { ...early, now: new Date(Date.parse(lease.expires_at) + 1) };
+    expect(codeOf(() => reconcileLease(record, { ...owner, source: "" }))).toBe("E_USAGE");
+    expect(codeOf(() => reconcileLease(record, { ...owner, source: join(dir, "no-such-export.csv") }))).toBe("E_USAGE");
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 6 * DOLLAR });
     const close = reconcileLease(record, owner);
     expect(close).toMatchObject({ how: "reconciled", spent_micros: 810_000, source_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(reconcileLease(record, owner)).toEqual(close);

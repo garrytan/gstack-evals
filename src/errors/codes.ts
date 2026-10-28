@@ -231,7 +231,7 @@ export const CODES = {
   E_LEASE_UNSETTLED: {
     exit: 2,
     meaning: "A lease could not be settled into the approval record, or a new lease was asked for while an earlier lease on the same line item is still open.",
-    fix: "Run gstack-evals ledger settle --lease <id> on the lease's machine; settle is idempotent by lease id. A lease whose machine or local ledger is gone stays reserved until the owner settles it with gstack-evals ledger reconcile and their words.",
+    fix: "Run gstack-evals ledger settle --lease <id> on the lease's machine; settle is idempotent by lease id. A lease whose machine or local ledger is gone stays reserved until it expires and the owner settles it with gstack-evals ledger reconcile, their words and the provider usage export.",
     side_effects: "Partial: the run's cells are recorded and the lease stays reserved until it is settled or reconciled.",
     retry_safe: true,
     resumable: true,

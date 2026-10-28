@@ -248,7 +248,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 A lease could not be settled into the approval record, or a new lease was asked for while an earlier lease on the same line item is still open.
 
-Fix: Run gstack-evals ledger settle --lease &lt;id> on the lease's machine; settle is idempotent by lease id. A lease whose machine or local ledger is gone stays reserved until the owner settles it with gstack-evals ledger reconcile and their words.
+Fix: Run gstack-evals ledger settle --lease &lt;id> on the lease's machine; settle is idempotent by lease id. A lease whose machine or local ledger is gone stays reserved until it expires and the owner settles it with gstack-evals ledger reconcile, their words and the provider usage export.
 
 Exit 2. Side effects: Partial: the run's cells are recorded and the lease stays reserved until it is settled or reconciled. Retry safe: yes. Resumable: yes. Owner: U4.
 
