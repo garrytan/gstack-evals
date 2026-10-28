@@ -2,7 +2,8 @@
 // tasks/tasks.json), arm tarballs, the proxy config and a Harbor JobConfig whose paths point
 // at the VM layout launch.sh syncs (runner at <vm>/runner, run dir at <vm>/run).
 // Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>
-// Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (default /home/ubi/work), NETWORK (default allowlist).
+// Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM's work directory, default below),
+// NETWORK (default allowlist), WRAPPER (a prompt-wrapper*.md file in this directory, default prompt-wrapper.md), TASKS (comma list from tasks/final.json, default all).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
@@ -22,7 +23,11 @@ if (import.meta.main) {
   const network = (process.env.NETWORK ?? "allowlist") as "allowlist" | "public";
   const cells = JSON.parse(readFileSync(join(root, "config/cells.json"), "utf8"));
   const selection = JSON.parse(readFileSync(join(root, "tasks/tasks.json"), "utf8"));
-  const final: string[] = JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
+  const finalAll: string[] = JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
+  const final = process.env.TASKS ? process.env.TASKS.split(",") : finalAll;
+  for (const id of final) if (!finalAll.includes(id)) throw new Error(`E_USAGE task ${id} is not in tasks/final.json`);
+  const wrapper = process.env.WRAPPER ?? "prompt-wrapper.md";
+  if (!/^prompt-wrapper[\w-]*\.md$/.test(wrapper) || !existsSync(join(here, wrapper))) throw new Error(`E_USAGE WRAPPER ${wrapper} is not a prompt-wrapper*.md file in ${here}`);
   const expected = new Map<string, string>([...selection.main, ...selection.reserves].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
@@ -62,7 +67,7 @@ if (import.meta.main) {
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
   const job = jobConfig({
     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256 }) => ({ name, tar, sha256 })),
-    attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
+    attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`, wrapper,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
@@ -74,7 +79,7 @@ if (import.meta.main) {
   const manifest = {
     job_name: jobName, created_at: new Date().toISOString(), network,
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
-    wrapper_sha256: sha256(join(here, "prompt-wrapper.md")), persona_sha256: sha256(join(here, "agent/persona.json")),
+    wrapper, wrapper_sha256: sha256(join(here, wrapper)), persona_sha256: sha256(join(here, "agent/persona.json")),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells, arms, tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");

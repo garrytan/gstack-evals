@@ -13,6 +13,7 @@ export type BatchSpec = {
   n_concurrent: number;
   agent_dir: string;
   runner_dir: string;
+  wrapper?: string;
   base_url: string;
   max_output_tokens: number;
   verifier_timeout_multiplier: number;
@@ -41,7 +42,7 @@ export function jobConfig(b: BatchSpec) {
         upstream_model: m.id,
         session_cap_usd: m.session_cap_usd,
         persona_path: `${b.agent_dir}/persona.json`,
-        wrapper_path: `${b.runner_dir}/prompt-wrapper.md`,
+        wrapper_path: `${b.runner_dir}/${b.wrapper ?? "prompt-wrapper.md"}`,
         max_output_tokens: b.max_output_tokens,
       },
     })),
