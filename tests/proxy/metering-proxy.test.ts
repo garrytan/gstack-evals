@@ -35,6 +35,8 @@ class FakeLedger implements ReservationLedger {
       this.refuseSettles--;
       return { ok: false, code: "CAP_STOP", message: "settle refused" };
     }
+    const prior = this.reservations.get(id);
+    if (prior && prior.state !== "reserved" && (outcome.kind === "spent" ? prior.state !== "settled" || prior.spent_micros !== outcome.spent_micros || JSON.stringify(prior.usage) !== JSON.stringify(outcome.usage) : prior.state !== "unknown")) return { ok: false, code: "E_SETTLE_CONFLICT", message: `reservation ${id} was already ${prior.state}` };
     this.settles.push([id, outcome]);
     const r: Reservation = this.reservations.get(id) ?? { reservation_id: id, idempotency_key: id, lease_id: "l1", cell: { ...cell, meter_id: "m" }, max_micros: 0, state: "reserved", spent_micros: null, usage: null };
     Object.assign(r, outcome.kind === "spent" ? { state: "settled", spent_micros: outcome.spent_micros, usage: outcome.usage } : { state: "unknown" });
@@ -676,6 +678,32 @@ describe("unknown sends and reconcile", () => {
     proxy.journalFd = fd;
     expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }]]);
     expect(proxy.slots.get(a.slot)!.committedMicros).toBe(0);
+  });
+
+  test("a request line that is written but not synced reconciles to the spent-0 outcome the call was settled with", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    const proxy = t.proxy as unknown as { journal: (line: Record<string, unknown>) => void };
+    const journal = proxy.journal.bind(t.proxy);
+    proxy.journal = line => {
+      journal(line);
+      if (line.kind === "request") throw new Error("EIO: fsync failed");
+    };
+    await expectProblem(await t.call(a.slot, a.token), 500, "E_INTERNAL");
+    expect(t.calls).toHaveLength(0);
+    expect(await reconcileJournal(join(t.dir, "journal.ndjson"), t.ledger)).toEqual({ settled: ["res_1"], unknown: [], refused: [], unreadable: 0 });
+    expect(t.ledger.reservations.get("res_1")).toMatchObject({ state: "settled", spent_micros: 0 });
+  });
+
+  test("a proxy started on a journal torn by a crash starts its first line on a fresh line", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-journal-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    appendFileSync(path, '{"kind":"outcome","reserv');
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { journal: path });
+    const a = t.bind();
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: ["res_1"], unknown: [], refused: [], unreadable: 1 });
   });
 
   test("a failure before the slot check answers E_INTERNAL, not a stack page", async () => {

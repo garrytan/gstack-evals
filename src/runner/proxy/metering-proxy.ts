@@ -22,7 +22,7 @@
 //   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -236,7 +236,10 @@ export class MeteringProxy {
   }
 
   start(): void {
-    this.journalFd = openSync(this.options.journal, "a", 0o600);
+    this.journalFd = openSync(this.options.journal, "a+", 0o600);
+    const { size } = fstatSync(this.journalFd);
+    const last = Buffer.alloc(1);
+    this.journalTorn = size > 0 && readSync(this.journalFd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
     if (existsSync(this.options.managementSocket)) rmSync(this.options.managementSocket);
     this.management = Bun.serve({ unix: this.options.managementSocket, fetch: req => this.manage(req) });
     chmodSync(this.options.managementSocket, 0o600);
@@ -467,8 +470,7 @@ export class MeteringProxy {
       try {
         this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source });
       } catch (e) {
-        slot.committedMicros -= maxMicros;
-        await o.ledger.settle(rid, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }).catch(() => null);
+        await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, "not sent: the request line could not be journaled");
         throw e;
       }
       if (attempt > 1 && Date.now() - started > o.retry.elapsed_ms) {
