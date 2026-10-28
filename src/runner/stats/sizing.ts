@@ -36,7 +36,7 @@ export function exactTasks(sd: number, effect: number, design: PowerDesign): num
 
 /** Whole tasks needed: exactTasks rounded up. */
 export function requiredTasks(sd: number, effect: number, design: PowerDesign): number {
-  return Math.ceil(exactTasks(sd, effect, design) - 1e-9);
+  return Math.max(1, Math.ceil(exactTasks(sd, effect, design) * (1 - 1e-12)));
 }
 
 /** The largest per-task SD that this many tasks cover at the design. */
