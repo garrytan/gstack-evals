@@ -19,9 +19,9 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { SidecarFile } from "../contract/sidecar.ts";
-import type { TasksFile } from "../contract/tasks.ts";
-import { CLASSIFIER_SHA256, classifyText, type Category } from "../../usersim/classifier.ts";
-import { contractLines, EXTRACTOR_SHA256, EXTRACTOR_VERSION, type LineCategory, type LineFate, type Load, type SkillFile, type UnitKind } from "./contract-lines.ts";
+import { KEBAB_ID, type TasksFile } from "../contract/tasks.ts";
+import { CATEGORY_NAMES, CLASSIFIER_SHA256, classifyText, type Category } from "../../usersim/classifier.ts";
+import { CATEGORY_RULES, contractLines, EXTRACTOR_SHA256, EXTRACTOR_VERSION, type LineCategory, type LineFate, type Load, type SkillFile, type UnitKind } from "./contract-lines.ts";
 
 export const LOCK_FILE = "tasks.lock.json";
 
@@ -147,29 +147,48 @@ export function writeLock(path: string, lock: Lock): void {
   renameSync(tmp, path);
 }
 
-/** The first field of a parsed lock that breaks the lock's shape (schema #/$defs/lock), or null when it has none. */
+const LOCK_KEYS = ["schema_version", "tasks", "ext", "policy", "skill", "extractor", "classifier_sha256", "coverage_rule", "lines"];
+const LINE_KEYS = ["id", "file", "line", "end_line", "heading", "kind", "categories", "load", "ask", "text", "text_sha256", "tasks"];
+const UNIT_KINDS: readonly string[] = ["prose", "heading", "table", "format"] satisfies UnitKind[];
+
+/** The first part of a parsed lock that breaks the lock schema (#/$defs/lock), or null when the lock fits it. */
 export function lockShapeProblem(v: any): string | null {
+  const object = (x: any, keys: string[]) => typeof x === "object" && x !== null && !Array.isArray(x) && Object.keys(x).every((k) => keys.includes(k));
   const sha = (x: unknown) => typeof x === "string" && /^[0-9a-f]{64}$/.test(x);
   const str = (x: unknown) => typeof x === "string" && x.length > 0;
   const int = (x: unknown) => Number.isInteger(x) && (x as number) >= 1;
-  const pin = (x: any) => str(x?.file) && sha(x?.sha256);
-  const strings = (x: unknown) => Array.isArray(x) && x.every(str);
+  const pin = (x: any) => object(x, ["file", "sha256"]) && str(x.file) && sha(x.sha256);
+  const set = (x: unknown, ok: (s: any) => boolean) => Array.isArray(x) && new Set(x).size === x.length && x.every(ok);
   const load = (x: unknown) => x === "always" || x === "on-demand";
+  if (!object(v, LOCK_KEYS)) return "it is not an object holding only " + LOCK_KEYS.join(", ");
   const fields: [string, boolean][] = [
-    ["schema_version", v?.schema_version === 1],
-    ["tasks", pin(v?.tasks)],
-    ["ext", v?.ext === null || pin(v?.ext)],
-    ["policy", v?.policy === null || pin(v?.policy)],
-    ["skill", str(v?.skill?.name) && sha(v?.skill?.tree_sha256) && Array.isArray(v?.skill?.files) && v.skill.files.every((f: any) => str(f?.path) && sha(f?.sha256) && load(f?.load))],
-    ["extractor", int(v?.extractor?.version) && sha(v?.extractor?.sha256)],
-    ["classifier_sha256", sha(v?.classifier_sha256)],
-    ["coverage_rule", str(v?.coverage_rule)],
-    ["lines", Array.isArray(v?.lines)],
+    ["schema_version", v.schema_version === 1],
+    ["tasks", pin(v.tasks)],
+    ["ext", v.ext === null || pin(v.ext)],
+    ["policy", v.policy === null || pin(v.policy)],
+    ["skill", object(v.skill, ["name", "tree_sha256", "files"]) && str(v.skill.name) && sha(v.skill.tree_sha256) && Array.isArray(v.skill.files) && v.skill.files.every((f: any) => object(f, ["path", "sha256", "load"]) && str(f.path) && sha(f.sha256) && load(f.load))],
+    ["extractor", object(v.extractor, ["version", "sha256"]) && int(v.extractor.version) && sha(v.extractor.sha256)],
+    ["classifier_sha256", sha(v.classifier_sha256)],
+    ["coverage_rule", str(v.coverage_rule)],
+    ["lines", Array.isArray(v.lines)],
   ];
   const bad = fields.find(([, ok]) => !ok);
   if (bad) return bad[0] + " is missing or malformed";
-  const i = v.lines.findIndex((l: any) => !(str(l?.id) && str(l?.file) && int(l?.line) && int(l?.end_line) && typeof l?.heading === "string" && str(l?.kind) && strings(l?.categories) && load(l?.load) && (l?.ask === null || str(l?.ask)) && typeof l?.text === "string" && sha(l?.text_sha256) && strings(l?.tasks)));
-  return i < 0 ? null : "lines[" + i + "] is missing a field or has a malformed one";
+  const i = v.lines.findIndex(
+    (l: any) =>
+      !(
+        object(l, LINE_KEYS) &&
+        typeof l.id === "string" && /^B:.+:[0-9]{4,}$/.test(l.id) &&
+        str(l.file) && int(l.line) && int(l.end_line) && typeof l.heading === "string" &&
+        UNIT_KINDS.includes(l.kind) &&
+        set(l.categories, (c) => Object.hasOwn(CATEGORY_RULES, c)) && l.categories.length > 0 &&
+        load(l.load) &&
+        (l.ask === null || l.ask === "any" || CATEGORY_NAMES.includes(l.ask)) &&
+        typeof l.text === "string" && sha(l.text_sha256) &&
+        set(l.tasks, (t) => typeof t === "string" && KEBAB_ID.test(t))
+      ),
+  );
+  return i < 0 ? null : "lines[" + i + "] (" + (v.lines[i]?.id ?? "no id") + ") has a missing, unknown or malformed field";
 }
 
 export function readLock(path: string): { lock: Lock | null; problem: string | null } {
