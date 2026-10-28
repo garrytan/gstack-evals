@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { CapError, Ledger, MODELS, ProviderError, meteredCall, worstUsd, type ModelSpec } from './llm.ts';
+import { CapError, Ledger, MODELS, ProviderError, accountFailure, meteredCall, worstUsd, writeAtomic, type ModelSpec } from './llm.ts';
 import { fillRedTeam, parseFindings, redTeamActive, shown, type Finding } from './lib.ts';
 
 const HERE = import.meta.dir;
@@ -49,16 +49,13 @@ const settled: (() => void)[] = [];
 const wake = () => { for (const w of settled.splice(0)) w(); };
 
 // Provider failures with no HTTP status in a row. Three stop the run, so a network outage marks
-// a handful of calls INFRA instead of every call left in the plan. No call is sent after the
-// stop, calls in flight finish and are recorded, and the run exits 3 so a resume sends the rest.
+// a handful of calls INFRA instead of every call left in the plan. An account failure (a
+// rejected key, no credit, a spent quota) stops it at once and is not recorded. No call is sent
+// after a stop, calls in flight finish and are recorded, and the run exits 3 so a resume sends
+// the rest.
 let noStatusStreak = 0;
-let netStopped = false;
-
-function writeAtomic(file: string, rec: any) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file + '.tmp', JSON.stringify(rec, null, 2));
-  fs.renameSync(file + '.tmp', file);
-}
+let halted = false;
+const halt = (why: string) => { if (!halted) console.error('STOP: ' + why + '; calls not yet sent stay unsent'); halted = true; };
 
 // One reviewer call, resumable: an existing result file is the answer, and an existing error
 // record is a terminal INFRA failure that a rerun leaves incomplete. A cap refusal while
@@ -67,14 +64,14 @@ function writeAtomic(file: string, rec: any) {
 async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, out: string, meta: any, opts: { high?: boolean; cache?: boolean } = {}): Promise<any> {
   if (fs.existsSync(out)) return JSON.parse(fs.readFileSync(out, 'utf8'));
   if (fs.existsSync(out.replace(/\.json$/, '.error.json'))) return null;
-  if (capStopped || netStopped) return null;
+  if (capStopped || halted) return null;
   if (DRY) {
     const rec = { ...meta, dry_run: true, worst_usd: worstUsd(spec, Buffer.byteLength(text)) };
     return rec;
   }
   return gates[spec.provider]!.run(async () => {
     for (;;) {
-      if (capStopped || netStopped) return null;
+      if (capStopped || halted) return null;
       inFlight++;
       let r;
       try {
@@ -90,14 +87,12 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
         }
         wake();
         if (!(e instanceof ProviderError)) throw e;
+        if (accountFailure(e)) { halt('account failure: ' + String(e.message).slice(0, 200)); return null; }
         const rec = { ...meta, prompt: rel, model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, error: String(e.message ?? e).slice(0, 500), at: new Date().toISOString() };
         writeAtomic(out.replace(/\.json$/, '.error.json'), rec);
         console.error('INFRA ' + meta.call_id + ': ' + rec.error);
         noStatusStreak = e.http ? 0 : noStatusStreak + 1;
-        if (noStatusStreak >= 3 && !netStopped) {
-          netStopped = true;
-          console.error('STOP: three provider failures in a row with no HTTP status (network?); calls not yet sent stay unsent');
-        }
+        if (noStatusStreak >= 3) halt('three provider failures in a row with no HTTP status (network?)');
         return null;
       }
       inFlight--;
@@ -165,11 +160,11 @@ if (import.meta.main) {
     if (DRY) {
       for (const c of cases) for (const r of [...(arms.includes('baseline') ? ['baseline'] : []), ...(arms.includes('gstack') ? ['core', ...c.specialists, ...(c.red_team_by_size ? ['red_team_template'] : [])] : [])]) worst += worstUsd(spec, fs.statSync(path.join(PROMPTS, c.prompts[r])).size) * trials;
     }
-    console.log(m + ' done' + (capStopped ? ' (cap stop)' : netStopped ? ' (network stop)' : ''));
-    if (netStopped) break;
+    console.log(m + ' done' + (capStopped ? ' (cap stop)' : halted ? ' (stopped)' : ''));
+    if (halted) break;
   }
   if (DRY) console.log('dry run: worst case of the static calls ' + worst.toFixed(2) + ' USD');
   else console.log('ledger committed ' + ledger.committed().toFixed(4) + ' USD of ' + CAP);
   if (capStopped) process.exit(2);
-  if (netStopped) process.exit(3);
+  if (halted) process.exit(3);
 }

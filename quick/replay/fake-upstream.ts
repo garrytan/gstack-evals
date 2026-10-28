@@ -2,7 +2,8 @@
 // OpenAI Responses, with usage fields shaped like the real ones.
 // A prompt containing FAKE_500_ONCE fails once with a 500, then succeeds; FAKE_SLOW answers
 // after 300 ms; FAKE_200_ERROR answers 200 with an error body, as OpenRouter does when a model
-// fails mid-output; FAKE_400 answers 400; FAKE_NO_USAGE answers 200 with no usage.
+// fails mid-output; FAKE_400 answers 400; FAKE_NO_USAGE answers 200 with no usage and
+// FAKE_EMPTY_USAGE with an empty one; FAKE_CREDIT answers 400 for an account out of credit.
 export function startFake() {
   const seen = new Set<string>();
   const calls: { route: string; body: any; at: number }[] = [];
@@ -20,6 +21,8 @@ export function startFake() {
       if (text.includes('FAKE_SLOW')) await Bun.sleep(300);
       if (text.includes('FAKE_200_ERROR')) return Response.json({ error: { message: 'model failed mid-output', code: 502 } });
       if (text.includes('FAKE_400')) return Response.json({ error: { message: 'bad request' } }, { status: 400 });
+      if (text.includes('FAKE_CREDIT')) return Response.json({ error: { message: 'Your credit balance is too low to access the API.' } }, { status: 400 });
+      if (text.includes('FAKE_EMPTY_USAGE')) return Response.json({ model: body.model, content: [{ type: 'text', text: 'NO FINDINGS' }], usage: {}, stop_reason: 'end_turn' });
       if (text.includes('FAKE_NO_USAGE')) return Response.json({ model: body.model, content: [{ type: 'text', text: 'NO FINDINGS' }], stop_reason: 'end_turn' });
       if (text.includes('FAKE_500_ONCE') && !seen.has(text)) { seen.add(text); return Response.json({ error: { message: 'overloaded' } }, { status: 500 }); }
       const inTok = Math.ceil(text.length / 3);

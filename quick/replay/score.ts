@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { CapError, Ledger, MODELS, ProviderError, meteredCall } from './llm.ts';
+import { CapError, Ledger, MODELS, ProviderError, accountFailure, meteredCall, writeAtomic } from './llm.ts';
 import { bootstrap, mean, parseFindings, redTeamActive, rng, sameFile, shown, type Finding } from './lib.ts';
 
 const HERE = import.meta.dir;
@@ -53,6 +53,8 @@ export function loadUnit(resultsDir: string, planCase: any, model: string, arm: 
 }
 
 export const findingKey = (f: Finding) => sha([f.path, f.line ?? '', f.summary].join('\u0000')).slice(0, 16);
+// Verdicts are per case: the same finding text can name one case's defect and not another's.
+export const verdictKey = (caseId: string, f: Finding) => caseId + '/' + findingKey(f);
 
 // A defect's files: the file the fix rewrote, plus also_files when the defect spans files.
 const defectFiles = (c: any): string[] => [c.file, ...(c.also_files ?? [])];
@@ -84,8 +86,9 @@ let judgeNoStatus = 0;
 
 // Judges every not-yet-judged finding of one case in batches of 12. A batch whose call fails
 // (other than the retried 429 and 5xx) is recorded in failedFile and never sent again, so its
-// findings stay unjudged and their units count as incomplete.
-async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Record<string, any>, cacheFile: string, failedFile: string) {
+// findings stay unjudged and their units count as incomplete. An account failure stops judging
+// before its batch is recorded, so a later run sends it.
+export async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Record<string, any>, cacheFile: string, failedFile: string) {
   const failed: Record<string, string> = fs.existsSync(failedFile) ? JSON.parse(fs.readFileSync(failedFile, 'utf8')) : {};
   const todo = new Map<string, Finding>();
   for (const f of findings) { const k = findingKey(f); if (!cache[k] && !failed[k] && !todo.has(k)) todo.set(k, f); }
@@ -105,9 +108,10 @@ async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Rec
       judgeNoStatus = 0;
     } catch (e: any) {
       if (!(e instanceof ProviderError) && !(e instanceof SyntaxError)) throw e;
+      if (e instanceof ProviderError && accountFailure(e)) throw new Error('STOP: judge account failure: ' + String(e.message).slice(0, 200));
       judgeNoStatus = e instanceof ProviderError && !e.http ? judgeNoStatus + 1 : 0;
       for (const x of batch) failed[x.k] = String(e.message ?? e).slice(0, 300);
-      fs.writeFileSync(failedFile, JSON.stringify(failed, null, 2));
+      writeAtomic(failedFile, failed);
       console.error('JUDGE INFRA ' + c.id + '/' + i + ': ' + String(e.message ?? e).slice(0, 200));
       if (judgeNoStatus >= 3) throw new Error('STOP: three judge failures in a row with no HTTP status (network?)');
       continue;
@@ -117,8 +121,8 @@ async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Rec
       if (hit) cache[x.k] = { case: c.id, path: x.f.path, line: x.f.line, summary: x.f.summary, names_defect: hit.names_defect, reason: hit.reason, judge_call: 'judge/' + c.id + '/' + i, usd: res.usd / batch.length };
       else failed[x.k] = 'the judge returned no verdict for this id';
     }
-    fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
-    fs.writeFileSync(failedFile, JSON.stringify(failed, null, 2));
+    writeAtomic(cacheFile, cache);
+    writeAtomic(failedFile, failed);
   }
 }
 
@@ -142,13 +146,13 @@ export const MAIN_PAIRS: [Cell, Cell][] = [
 export function summarize(allUnits: Unit[], cases: any[], verdicts: Record<string, any>, gated = true, models = MODEL_KEYS, pairs = MAIN_PAIRS) {
   const byCase = new Map(cases.map(c => [c.id, c]));
   const units = allUnits.filter(u => byCase.has(u.case));
-  const judged = (u: Unit) => u.kind !== 'defect' || candidates(u, byCase.get(u.case), false).every(f => verdicts[findingKey(f)] !== undefined);
+  const judged = (u: Unit) => u.kind !== 'defect' || candidates(u, byCase.get(u.case), false).every(f => verdicts[verdictKey(u.case, f)] !== undefined);
   const valid = (u: Unit) => u.complete && judged(u);
   const rows: any[] = [];
   const perCaseRate = (model: string, arm: string, kind: string, hit: (u: Unit) => boolean) =>
     cases.filter(c => c.kind === kind).map(c => units.filter(u => u.model === model && u.arm === arm && u.case === c.id && valid(u)).map(u => (hit(u) ? 1 : 0)));
-  const catchOf = (u: Unit) => candidates(u, byCase.get(u.case), gated).some(f => verdicts[findingKey(f)]?.names_defect === true);
-  const critCatch = (u: Unit) => candidates(u, byCase.get(u.case), gated).some(f => f.severity === 'CRITICAL' && verdicts[findingKey(f)]?.names_defect === true);
+  const catchOf = (u: Unit) => candidates(u, byCase.get(u.case), gated).some(f => verdicts[verdictKey(u.case, f)]?.names_defect === true);
+  const critCatch = (u: Unit) => candidates(u, byCase.get(u.case), gated).some(f => f.severity === 'CRITICAL' && verdicts[verdictKey(u.case, f)]?.names_defect === true);
   const fileLine = (u: Unit) => candidates(u, byCase.get(u.case), gated).some(f => sameFile(f.path, byCase.get(u.case).file) && nearLine(f, byCase.get(u.case)));
   const falseAlarm = (u: Unit) => u.findings.some(f => (!gated || shown(f)) && f.severity === 'CRITICAL');
   const anyFinding = (u: Unit) => u.findings.some(f => !gated || shown(f));
@@ -210,7 +214,7 @@ if (import.meta.main) {
     if (!process.argv.includes('--no-judge') && !judgeStopped) {
       try { await judgeCase(ledger, c, all, cache, file, path.join(judgeDir, c.id + '.failed.json')); } catch (e: any) { if (!(e instanceof CapError)) throw e; judgeStopped = true; console.error('CAP STOP in judging: ' + e.message); }
     }
-    Object.assign(verdicts, cache);
+    for (const [k, v] of Object.entries(cache)) verdicts[c.id + '/' + k] = v;
   }
   const strata: Record<string, any[]> = { all: cases, 'review-caught': cases.filter((c: any) => stratumOf(c, cases) === 'review-caught'), escaped: cases.filter((c: any) => stratumOf(c, cases) === 'escaped') };
   // Sensitivity, not primary: drop every unit with a call cut off at max_tokens before any answer.
@@ -224,7 +228,7 @@ if (import.meta.main) {
   const ci = (c: [number, number]) => '[' + pct(c[0]) + ', ' + pct(c[1]) + ']';
   for (const [k, t] of Object.entries(tables)) {
     console.log('## ' + k + ' (' + strata[k]!.filter(c => c.kind === 'defect').length + ' defects, ' + strata[k]!.filter(c => c.kind === 'decoy').length + ' decoys)');
-    console.log('| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | cost per catch | out tokens per case | incomplete | unjudged |');
+    console.log('| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | cost per catch | out tokens per unit | incomplete | unjudged |');
     console.log('|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of t.primary.rows) console.log('| ' + [r.model, r.arm, pct(r.recall), ci(r.recall_ci), pct(r.recall_critical), pct(r.false_alarm), ci(r.false_alarm_ci), r.usd_per_catch === null ? '-' : '$' + r.usd_per_catch.toFixed(3), Math.round(r.out_tokens_per_unit), r.incomplete, r.unjudged].join(' | ') + ' |');
     console.log();

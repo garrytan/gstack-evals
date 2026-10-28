@@ -7,7 +7,7 @@ import * as crypto from 'node:crypto';
 import { diffLines, fillRedTeam, filterDiff, introducedRanges, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
 import { CapError, Ledger, MODELS, ProviderError, meteredCall, worstUsd } from './llm.ts';
 import { startFake } from './fake-upstream.ts';
-import { findingKey, summarize, type Unit } from './score.ts';
+import { judgeCase, loadUnit, summarize, verdictKey, type Unit } from './score.ts';
 
 const HERE = import.meta.dir;
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
@@ -111,7 +111,7 @@ describe('scoring', () => {
   const u = (trial: number, findings: any[], complete = true, usd = 1): Unit => ({ model: 'haiku', arm: 'gstack', case: 'd1', kind: 'defect', trial, complete, usd, input_tokens: 0, output_tokens: 0, calls: 1, findings, unparsed: 0 });
   test('an unjudged right-file finding makes its unit incomplete, not a miss', () => {
     const hit = f('x breaks'), open = f('never judged');
-    const s = summarize([u(1, [hit]), u(2, [open])], cases, { [findingKey(hit)]: { names_defect: true } });
+    const s = summarize([u(1, [hit]), u(2, [open])], cases, { [verdictKey('d1', hit)]: { names_defect: true } });
     const row = s.rows[0];
     expect(row.recall).toBe(1);
     expect(row.defect_units).toBe(1);
@@ -126,7 +126,7 @@ describe('scoring', () => {
   });
   test('cost per catch counts the spend of incomplete units', () => {
     const hit = f('x breaks');
-    const s = summarize([u(1, [hit], true, 1), u(2, [], false, 3)], cases, { [findingKey(hit)]: { names_defect: true } });
+    const s = summarize([u(1, [hit], true, 1), u(2, [], false, 3)], cases, { [verdictKey('d1', hit)]: { names_defect: true } });
     const row = s.rows[0];
     expect(row.incomplete).toBe(1);
     expect(row.catches).toBe(1);
@@ -183,6 +183,8 @@ describe('providers against the fake upstream', () => {
     expect(d.provider_served).toBe('DeepSeek');
     const j = await meteredCall(l, 'j', MODELS.judge!, '{"id":"abc123"}', { schema: { type: 'object' } });
     expect(JSON.parse(j.text).verdicts[0].id).toBe('abc123');
+    expect(j.usd).toBeCloseTo((Math.ceil('{"id":"abc123"}'.length / 3) * 2 + 50 * 10) / 1e6, 9);
+    expect(l.rows().find(r => r.type === 'settle' && r.call_id === 'j').usd).toBe(j.usd);
     const body = fake.calls.find(c => c.route === '/api/v1/chat/completions')!.body;
     expect(body.provider).toEqual({ order: ['deepseek'], allow_fallbacks: false });
     expect(fake.calls.find(c => c.route === '/v1/messages')!.body.output_config).toEqual({ effort: 'medium' });
@@ -200,6 +202,51 @@ describe('providers against the fake upstream', () => {
     expect(s.find(x => x.call_id === 'e200').usd).toBeCloseTo(worstUsd(MODELS.deepseek!, Buffer.byteLength(p)), 6);
     expect(s.find(x => x.call_id === 'e400').usd).toBe(0);
     expect(s.length).toBe(2);
+  });
+  test('a 200 with an empty usage settles at the worst case as a provider failure', async () => {
+    const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
+    l.approve(QUOTES, 'test');
+    const p = 'FAKE_EMPTY_USAGE diff --git a/q.ts b/q.ts';
+    await expect(meteredCall(l, 'eu', MODELS.haiku!, p)).rejects.toBeInstanceOf(ProviderError);
+    const s = l.rows().filter(x => x.type === 'settle');
+    expect(s[0].outcome).toBe('error');
+    expect(s[0].usd).toBeCloseTo(worstUsd(MODELS.haiku!, Buffer.byteLength(p)), 6);
+  });
+  test('a failed judge batch is recorded and never sent again', async () => {
+    const dir = tmp();
+    const l = new Ledger(path.join(dir, 'l.jsonl'), 'x', 5);
+    l.approve(QUOTES, 'test');
+    const c = { id: 'd1', file: 'lib/a.ts', lines: [[2, 4]], fix: 'f', fix_diff: '-x\n+y', defect: 'x breaks' };
+    const fs2 = [1, 2].map(i => ({ severity: 'CRITICAL', confidence: 8, path: 'lib/a.ts', line: i, summary: 'FAKE_400 ' + i, cause_path: null, specialist: null }) as any);
+    const cache: Record<string, any> = {}, cacheFile = path.join(dir, 'd1.json'), failedFile = path.join(dir, 'd1.failed.json');
+    await judgeCase(l, c, fs2, cache, cacheFile, failedFile);
+    expect(Object.keys(JSON.parse(fs.readFileSync(failedFile, 'utf8'))).length).toBe(2);
+    expect(Object.keys(cache).length).toBe(0);
+    const n = l.rows().length;
+    expect(l.rows().filter(r => r.type === 'settle')[0].usd).toBe(0);
+    await judgeCase(l, c, fs2, cache, cacheFile, failedFile);
+    expect(l.rows().length).toBe(n);
+  });
+  test('a judge account failure stops judging without recording the batch', async () => {
+    const dir = tmp();
+    const l = new Ledger(path.join(dir, 'l.jsonl'), 'x', 5);
+    l.approve(QUOTES, 'test');
+    const c = { id: 'd1', file: 'lib/a.ts', lines: [[2, 4]], fix: 'f', fix_diff: '-x\n+y', defect: 'x breaks' };
+    const f1 = { severity: 'CRITICAL', confidence: 8, path: 'lib/a.ts', line: 3, summary: 'FAKE_CREDIT', cause_path: null, specialist: null } as any;
+    const failedFile = path.join(dir, 'd1.failed.json');
+    await expect(judgeCase(l, c, [f1], {}, path.join(dir, 'd1.json'), failedFile)).rejects.toThrow('STOP: judge account failure');
+    expect(fs.existsSync(failedFile)).toBe(false);
+  });
+  test('a reply cut off before any answer is complete, empty and counted', () => {
+    const dir = tmp();
+    const t1 = path.join(dir, 'haiku/d1/baseline/t1');
+    fs.mkdirSync(t1, { recursive: true });
+    fs.writeFileSync(path.join(t1, 'baseline.json'), JSON.stringify({ text: '', stop: 'max_tokens', usd: 0.1, usage: { input_tokens: 10, output_tokens: 32000 } }));
+    const u = loadUnit(dir, { case: 'd1', kind: 'defect', specialists: [], diff_lines: 10 }, 'haiku', 'baseline', 1);
+    expect(u.complete).toBe(true);
+    expect(u.findings.length).toBe(0);
+    expect(u.truncated).toBe(1);
+    expect(u.cut_empty).toBe(1);
   });
   test('a 200 without usage settles at the worst case as a provider failure', async () => {
     const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
@@ -242,6 +289,18 @@ describe('providers against the fake upstream', () => {
     const rows = fs.readFileSync(p.ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
     expect(rows.filter(x => x.type === 'reserve').length).toBe(errs);
     expect(rows.filter(x => x.type === 'settle').length).toBe(errs);
+  });
+  test('an account failure stops the run at once and records no INFRA', async () => {
+    const p = capPlan(6, i => (i === 0 ? 'FAKE_CREDIT' : 'FAKE_SLOW'));
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], p.env(55));
+    expect(r.status).toBe(3);
+    expect(r.stderr).toContain('STOP: account failure');
+    const files = fs.readdirSync(path.join(p.dir, 'results/haiku'), { recursive: true }).map(String);
+    expect(files.filter(f => f.endsWith('.error.json')).length).toBe(0);
+    expect(files.filter(f => f.endsWith('baseline.json')).sort()).toEqual(['c1/baseline/t1/baseline.json', 'c2/baseline/t1/baseline.json', 'c3/baseline/t1/baseline.json']);
+    const rows = fs.readFileSync(p.ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    expect(rows.filter(x => x.type === 'reserve').length).toBe(4);
+    expect(rows.filter(x => x.type === 'settle').length).toBe(4);
   });
   test('the network stop lets calls in flight finish and sends nothing after it', async () => {
     const p = capPlan(4, i => (i < 3 ? 'FAKE_NO_USAGE' : 'FAKE_SLOW'));

@@ -2,6 +2,7 @@
 // Every call reserves its worst case in the ledger before it is sent and settles with the
 // measured usage after. The cap counts settled spend plus every open reservation.
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 
 export type ModelSpec = {
@@ -127,7 +128,7 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
   if (spec.provider === 'anthropic') {
     const j = await post(BASE.anthropic() + '/v1/messages', { 'x-api-key': key('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
       { model: spec.model, max_tokens: spec.maxTokens, messages: [{ role: 'user', content: [{ type: 'text', text: prompt, ...(cache ? { cache_control: { type: 'ephemeral' } } : {}) }] }], output_config: { effort: spec.effort } });
-    if (!j.usage) throw new Error('Anthropic response carried no usage');
+    if (typeof j.usage?.input_tokens !== 'number' || typeof j.usage?.output_tokens !== 'number') throw new Error('Anthropic response carried no usage');
     const text = (j.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
     return { text, usage: j.usage, usd: anthropicUsd(spec, j.usage), stop: j.stop_reason ?? null, provider_served: 'anthropic', model_served: j.model ?? null, ms: Date.now() - t0 };
   }
@@ -142,7 +143,7 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
   }
   const j = await post(BASE.openai() + '/v1/responses', { authorization: 'Bearer ' + key('OPENAI_API_KEY') },
     { model: spec.model, input: prompt, reasoning: { effort: spec.effort }, max_output_tokens: spec.maxTokens, ...(schema ? { text: { format: { type: 'json_schema', name: 'verdict', strict: true, schema } } } : {}) });
-  if (!j.usage) throw new Error('OpenAI response carried no usage');
+  if (typeof j.usage?.input_tokens !== 'number' || typeof j.usage?.output_tokens !== 'number') throw new Error('OpenAI response carried no usage');
   const text = (j.output ?? []).filter((o: any) => o.type === 'message').flatMap((o: any) => o.content ?? []).filter((c: any) => c.type === 'output_text').map((c: any) => c.text).join('\n');
   const u = j.usage;
   return { text, usage: u, usd: ((u.input_tokens ?? 0) * spec.inPerM + (u.output_tokens ?? 0) * spec.outPerM) / 1e6, stop: j.status ?? null, provider_served: 'openai', model_served: j.model ?? null, ms: Date.now() - t0 };
@@ -159,7 +160,19 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
 // whether the provider answered with a status. Any other error from here (a missing key, a
 // ledger read or write) is not a provider outcome and should stop the run.
 export class ProviderError extends Error {
-  constructor(msg: string, readonly http: boolean) { super(msg); }
+  constructor(msg: string, readonly http: boolean, readonly status: number | null = null) { super(msg); }
+}
+
+// A failure of the account rather than the call: a rejected key, no credit, or a spent quota.
+// Every later call would fail the same way, so the caller stops instead of recording it.
+export function accountFailure(e: ProviderError): boolean {
+  return [401, 402, 403].includes(e.status ?? 0) || /credit balance|insufficient.?credits|insufficient_quota|exceeded your current quota|billing/i.test(e.message);
+}
+
+export function writeAtomic(file: string, rec: any) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file + '.tmp', JSON.stringify(rec, null, 2));
+  fs.renameSync(file + '.tmp', file);
 }
 
 const KEY_NAME = { anthropic: 'ANTHROPIC_API_KEY', openrouter: 'OPENROUTER_API_KEY', openai: 'OPENAI_API_KEY' } as const;
@@ -184,5 +197,5 @@ export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpe
   }
   const billed = last instanceof HttpError && last.status >= 400 ? 0 : worstUsd(spec, Buffer.byteLength(prompt));
   ledger.settle(rid, callId, 'error', billed, { error: String(last?.message ?? last).slice(0, 300) });
-  throw new ProviderError(String(last?.message ?? last), last instanceof HttpError);
+  throw new ProviderError(String(last?.message ?? last), last instanceof HttpError, last instanceof HttpError ? last.status : null);
 }
