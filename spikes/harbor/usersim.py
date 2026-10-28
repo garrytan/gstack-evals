@@ -31,14 +31,15 @@ class Simulator:
         return None
 
     def answer(self, questions: list[dict]) -> dict:
+        texts = [q.get("question", "") for q in questions]
         answers = {}
-        for q in questions:
+        for q, text in zip(questions, texts):
             category = self.classify(q)
-            reply = self.persona["replies"].get(category) if category else None
+            reply = self.persona["replies"].get(category) if category and texts.count(text) == 1 else None
             source = "scripted" if reply is not None else "fallback_non_approving"
             if reply is None:
                 reply = self.persona["fallback"]
             self.log({"event": "question", "question": q.get("question"), "options": [o.get("label") for o in q.get("options", [])], "category": category})
             self.log({"event": "answer", "question": q.get("question"), "answer": reply, "source": source})
-            answers[q["question"]] = reply
+            answers[text] = reply
         return answers

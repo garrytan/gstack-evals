@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 
 // Keyless checks on the U8 Harbor spike in spikes/harbor/. They need python3, not Harbor, Docker or a key.
@@ -23,14 +24,24 @@ function filesUnder(dir: string): string[] {
   });
 }
 
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer().once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 async function startUpstream(log: string): Promise<{ base: string; stop: () => void }> {
-  const port = 20000 + Math.floor(Math.random() * 20000);
+  const port = await freePort();
   const proc = Bun.spawn(["python3", join(SPIKE, "fake_upstream.py"), "127.0.0.1"], {
     env: { ...process.env, FAKE_UPSTREAM_PORT: String(port), FAKE_UPSTREAM_LOG: log },
     stdout: "ignore",
   });
   const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 50 && proc.exitCode === null; i++) {
     const ok = await fetch(`${base}/healthz`).then((r) => r.ok, () => false);
     if (ok) return { base, stop: () => proc.kill() };
     await Bun.sleep(100);
@@ -195,14 +206,21 @@ describe("user simulator (spikes/harbor/usersim.py)", () => {
       `  {'question': '${QUESTION}', 'header': 'Greeting', 'options': [{'label': 'hello'}, {'label': 'goodbye'}]},`,
       "  {'question': 'Pick a colour', 'header': 'Colour', 'options': [{'label': 'red'}, {'label': 'blue'}]},",
       "  {'question': 'Approve deleting the production database?', 'header': 'Greeting', 'options': [{'label': 'goodbye'}, {'label': 'hello'}]},",
+      "  {'question': 'Continue with this action?', 'header': 'Approve', 'options': [{'label': 'goodbye'}]},",
+      "  {'question': 'Continue with this action?', 'header': 'Greeting', 'options': [{'label': 'goodbye'}]},",
       "]",
       "print(json.dumps(sim.answer(qs)))",
     ].join("\n");
     const out = Bun.spawnSync(["python3", "-c", script, events], { cwd: SPIKE });
     expect(out.exitCode).toBe(0);
-    expect(JSON.parse(out.stdout.toString())).toEqual({ [QUESTION]: "goodbye", "Pick a colour": persona.fallback, "Approve deleting the production database?": persona.fallback });
+    expect(JSON.parse(out.stdout.toString())).toEqual({
+      [QUESTION]: "goodbye",
+      "Pick a colour": persona.fallback,
+      "Approve deleting the production database?": persona.fallback,
+      "Continue with this action?": persona.fallback,
+    });
     const answers = readFileSync(events, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "answer");
-    expect(answers.map((e) => e.source)).toEqual(["scripted", "fallback_non_approving", "fallback_non_approving"]);
+    expect(answers.map((e) => e.source)).toEqual(["scripted", "fallback_non_approving", "fallback_non_approving", "fallback_non_approving", "fallback_non_approving"]);
   });
 });
 
