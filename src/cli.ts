@@ -66,8 +66,12 @@ export function helpText(root = REPO_ROOT): string {
   return lines.join("\n");
 }
 
+function errorLines(code: "E_USAGE" | "E_INTERNAL", message: string): string {
+  return [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].map((line) => code + " " + line).join("\n");
+}
+
 function usageError(io: Io, message: string): number {
-  io.err(["E_USAGE " + message, "fix: " + CODES.E_USAGE.fix, "docs: " + docAnchor("E_USAGE")].join("\n"));
+  io.err(errorLines("E_USAGE", message));
   return 2;
 }
 
@@ -90,7 +94,7 @@ export async function run(argv: string[], io: Io = { out: console.log, err: cons
     if (typeof mod.main !== "function") throw new Error(command.module + " does not export main");
     return await mod.main(rest);
   } catch (error) {
-    io.err(["E_INTERNAL gstack-evals " + command.name + ": " + (error instanceof Error ? error.message : String(error)), "fix: " + CODES.E_INTERNAL.fix, "docs: " + docAnchor("E_INTERNAL")].join("\n"));
+    io.err(errorLines("E_INTERNAL", "gstack-evals " + command.name + ": " + (error instanceof Error ? error.message : String(error))));
     return 2;
   }
 }

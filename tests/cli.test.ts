@@ -46,9 +46,9 @@ describe("gstack-evals dispatcher", () => {
     for (const c of COMMANDS) {
       const r = await call([c.name, "--help"], root);
       expect(r.code).toBe(2);
-      expect(r.err.split("\n")[0]).toStartWith("E_USAGE ");
+      for (const line of r.err.split("\n")) expect(line).toStartWith("E_USAGE ");
       expect(r.err).toContain("not built yet");
-      expect(r.err).toContain("docs: docs/errors.md#e_usage");
+      expect(r.err).toContain("E_USAGE docs: docs/errors.md#e_usage");
     }
   });
 
@@ -56,7 +56,7 @@ describe("gstack-evals dispatcher", () => {
     for (const argv of [["no-such-command"], []]) {
       const r = await call(argv);
       expect(r.code).toBe(2);
-      expect(r.err).toStartWith("E_USAGE ");
+      for (const line of r.err.split("\n")) expect(line).toStartWith("E_USAGE ");
     }
   });
 
@@ -72,7 +72,7 @@ describe("gstack-evals dispatcher", () => {
     const root = fakeRoot({ [ledger.module]: "export const notMain = 1;\n" });
     const r = await call(["ledger"], root);
     expect(r.code).toBe(2);
-    expect(r.err).toStartWith("E_INTERNAL ");
+    for (const line of r.err.split("\n")) expect(line).toStartWith("E_INTERNAL ");
   });
 
   test("bin/gstack-evals runs under Bun and prints the version", () => {

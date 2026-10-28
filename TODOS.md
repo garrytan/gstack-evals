@@ -14,6 +14,8 @@ Open items carried from plan v3.2 ("Open items" and "Owner actions") and from bu
 
 ## From U1
 
+- [ ] **Sealed manifests under the sealed guard.** `.gstack/pregate.json` refuses all of `sealed/` and `protected/`, the plan's manifests included, because gstack-pregate's globs cannot exempt one file. Before the first seal (M2b), gstack adds an exception list or the manifests move. See the wiki finding `2026-10-28-gsta-9-sealed-manifest-glob-gap`.
+
 - [ ] **The skill-eval flag that names a run's line item.** Interface v0.4 leaves it open; U4 and U7 settle it.
 - [ ] **Owners for src/arms/ and src/runner/pricing/.** The breakdown lists them in no unit's files. The arm-spec grammar (U7) and the proxy (U3) are their first users.
 - [ ] **Commands with no unit yet.** `plan`, `run`, `score`, `report` and `seal` are v1.1; `compare` waits for the factory loop's keep rule. Their module paths in src/cli.ts are placeholders.

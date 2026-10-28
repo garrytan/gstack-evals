@@ -14,6 +14,7 @@ links:
   - src/types.ts
   - .gstack/pregate.json
   - .github/workflows/ci.yml
+  - wiki/board/2026-10-28-gsta-9-sealed-manifest-glob-gap.md
 ---
 
 # U1 handoff: the repo skeleton and shared registries
@@ -40,12 +41,13 @@ U1 is the first unit of the v1.0 build breakdown (milestone M0). Every other gst
 
 ## The sealed config
 
-- Paths that may never be published: `heldout/**`, `held-out/**`, anything below a set folder in `sealed/<set>/` (only its MANIFEST.json may sit there), anything below a folder in `protected/`, and `*.sealed` or `*.sealed.*` files.
+- Paths that may never be published: `heldout/**`, `held-out/**`, everything under `sealed/` and `protected/`, and `*.sealed` or `*.sealed.*` files. The plan's manifests (`sealed/<set>/MANIFEST.json`, `protected/MANIFEST.json`) are refused too until the gap in [the sealed-manifest finding](2026-10-28-gsta-9-sealed-manifest-glob-gap.md) is closed, because the guard's globs cannot exempt one file.
 - Transcripts: any `runs/` folder, since a run's transcripts stay in `<out>/runs/`. Fake transcripts for tests belong in a fixtures folder, not one named runs.
 - Text rules: the sealed answer marker pattern, seed assignments named `sealed_seed`, `holdout_seed` or `rotation_seed`, and local home paths.
 - `visibility` is `public`, so a finding refuses the push instead of warning, while the repo is still private. The repo will be public, and this keeps it public-safe now.
 - Later units may add globs. The guard takes the union of the base branch's rules and the pushed ones, so a push can tighten them but never loosen them.
 - The patterns are written so that none matches its own line in the config. gstack-pregate scans every added line, the config's own lines included.
+- `tests/sealed.test.ts` checks the rules against sample paths and lines, using gstack-pregate's glob rules, since CI has no gstack install.
 
 ## Changes to existing behavior
 
@@ -57,5 +59,6 @@ U1 is the first unit of the v1.0 build breakdown (milestone M0). Every other gst
 - **src/arms/ and src/runner/pricing/** are in the plan's layout but in no unit's file list. The arm-spec grammar (U7) and the proxy (U3) are their first users.
 - **`plan`, `run`, `score`, `report` and `seal`** have no unit, which matches the plan: they are v1.1. `compare` waits for the factory loop's keep rule. Their module paths are placeholders.
 - **The skill-eval flag that names a run's line item** is still open in interface v0.4, for U4 and U7 to settle.
+- **Sealed manifests** need gstack to add an exception list, or the manifests need to move, before the first seal in M2b. The [finding](2026-10-28-gsta-9-sealed-manifest-glob-gap.md) has both options.
 
-None of these changes the design. They are listed in TODOS.md.
+Only the sealed-manifest gap touches the design, and it is written up as a finding for the Captain. All four are listed in TODOS.md.

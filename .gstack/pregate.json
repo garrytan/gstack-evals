@@ -12,7 +12,8 @@
       "tests/errors.test.ts"
     ],
     ".gstack/pregate.json": [
-      "tests/wiki.test.ts"
+      "tests/wiki.test.ts",
+      "tests/sealed.test.ts"
     ],
     "wiki/**": [
       "tests/wiki.test.ts"
@@ -22,8 +23,8 @@
     "paths": [
       "heldout/**",
       "held-out/**",
-      "sealed/*/*/**",
-      "protected/*/**",
+      "sealed/**",
+      "protected/**",
       "**/*.sealed",
       "**/*.sealed.*"
     ],
