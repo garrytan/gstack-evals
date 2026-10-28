@@ -17,6 +17,22 @@
     ],
     "wiki/**": [
       "tests/wiki.test.ts"
+    ],
+    ".github/workflows/**": [],
+    "package.json": [],
+    "bun.lock": [],
+    "tsconfig.json": [],
+    "src/**/.gitkeep": []
+  },
+  "strays": {
+    "allow": [
+      "lanes",
+      "policy",
+      "tables",
+      "tasks",
+      "coverage",
+      "spikes",
+      "docker"
     ]
   },
   "sealed": {
