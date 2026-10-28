@@ -19,12 +19,22 @@ Plans, designs, research, decisions, findings, handoffs and reports worth keepin
 
 The repo will be public, so commit only what is safe to publish.
 
+## Shared registries
+
+Several build units share these files. Edit only the lines your unit owns.
+
+- `src/cli.ts` holds the command table behind `bin/gstack-evals`. A command runs once its module exists at the path in its row and exports `main(argv)`; until then it exits 2 with E_USAGE "not built yet".
+- `src/errors/codes.ts` holds every reason code, one object per code. Add new codes there; never rename or remove one. Edit only the codes your unit owns, then run `bun run errors:doc`. Every error line on stderr starts with its code.
+- `src/types.ts` holds the interfaces more than one unit codes against. Change one only with the units that use it.
+- Vendored code keeps its upstream copyright line in each file header and gets its row in NOTICE.md marked vendored, with the source commit.
+- `.gstack/pregate.json` has a sealed config. Run `gstack-pregate sealed` (from gstack) before every push.
+
 ## Write plainly
 
 Short paragraphs, active verbs, no marketing words, no em dashes.
 
 ## Checks
 
-`bun test`, `bun run typecheck` and `bun run wiki:check` run without keys, and CI runs them on every pull request.
+`bun test`, `bun run typecheck`, `bun run errors:check` and `bun run wiki:check` run without keys, and CI runs them on every pull request. Tests live under tests/.
 
 This guide does not authorise pushing, merging, spending or publishing; follow the current task's instructions for those.

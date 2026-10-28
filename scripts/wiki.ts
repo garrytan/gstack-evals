@@ -258,11 +258,19 @@ export function sealedMarkers(root: string): string[] {
 }
 
 function scanText(root: string, markers: string[], problems: Problem[]) {
+  const patterns: RegExp[] = [];
+  for (const m of markers) {
+    try {
+      patterns.push(new RegExp(m));
+    } catch {
+      problems.push({ file: ".gstack/pregate.json", message: "sealed.answer_markers holds a pattern that does not compile: " + JSON.stringify(m) });
+    }
+  }
   for (const rel of filesUnder(join(root, "wiki"), "wiki")) {
     const lines = readFileSync(join(root, rel), "utf8").split("\n");
     lines.forEach((line, i) => {
       for (const [rule, re] of SECRET_RULES) if (re.test(line)) problems.push({ file: rel, line: i + 1, message: "possible secret (" + rule + "); remove it and rotate the key if it was real" });
-      if (SEALED_MARKER.test(line) || markers.some((m) => line.includes(m))) problems.push({ file: rel, line: i + 1, message: "sealed marker: sealed material never goes in wiki/" });
+      if (SEALED_MARKER.test(line) || patterns.some((re) => re.test(line))) problems.push({ file: rel, line: i + 1, message: "sealed marker: sealed material never goes in wiki/" });
     });
   }
 }
