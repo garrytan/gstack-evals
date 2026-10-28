@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, chmodSync, cpSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { BASE_IMAGE, CAP_USD, GSTACK_REPO, LEDGER_PATH, LIMITS, LINE_ITEM, MODELS, SUITES, WORK, imageTag, type ArmName } from "./config.ts";
 import { serveFake } from "./fake-upstream.ts";
 import type { Task } from "./grade.ts";
-import { CapStop, Ledger } from "./ledger.ts";
+import { Ledger, lockLedger, Reserver } from "./ledger.ts";
 import { MeteringProxy } from "./proxy.ts";
 import { runSession, type SessionResult } from "./session.ts";
 import { failedAttempts, planStage, STAGES, type Cell } from "./plan.ts";
@@ -91,6 +91,7 @@ interface RunOpts {
 }
 
 async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ results: SessionResult[]; capStop: string | null }> {
+  const releaseLock = lockLedger(opts.ledgerPath);
   const prep = loadPrepared();
   const hostname = "172.17.0.1";
   let fake: ReturnType<typeof serveFake> | null = null;
@@ -101,18 +102,7 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
   } else if (!process.env.ANTHROPIC_API_KEY) throw new Error("E_KEY_MISSING: ANTHROPIC_API_KEY is not set");
   const key = opts.fake ? () => "fake-key" : () => process.env.ANTHROPIC_API_KEY ?? "";
   const proxy = new MeteringProxy({ hostname, port: 0, upstream, upstreamKey: key });
-  const lock = join(WORK, "runner.lock");
-  if (existsSync(lock)) {
-    const pid = Number(readFileSync(lock, "utf8"));
-    let alive = false;
-    try {
-      process.kill(pid, 0);
-      alive = true;
-    } catch {}
-    if (alive) throw new Error(`E_LOCK: runner ${pid} is still running; one runner at a time, since a start settles open reserves as stale`);
-  }
-  writeFileSync(lock, String(process.pid));
-  const ledger = new Ledger(opts.ledgerPath, CAP_USD, LINE_ITEM, join(opts.out, "ledger-mirror.jsonl"));
+  const ledger = new Ledger(opts.ledgerPath, CAP_USD, LINE_ITEM, join(opts.out, "ledger-mirror.jsonl"), opts.fake);
   if (opts.fake) ledger.approve({ words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" });
   ledger.settleStale("reserved by a runner that stopped before settling; charged at the full reservation");
   const fakeExe = join(WORK, "bin", "claude");
@@ -121,11 +111,12 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
   chmodSync(fakeExe, 0o755);
   const uid = (await sh("id -u")).trim() + ":" + (await sh("id -g")).trim();
   const results: SessionResult[] = [];
-  let capStop: string | null = null;
+  const reserver = new Reserver(ledger);
+  let failure: unknown = null;
   let next = 0;
   const queue = [...cells];
   const worker = async () => {
-    while (!capStop && next < queue.length) {
+    while (!reserver.stopped && !failure && next < queue.length) {
       const c = queue[next++]!;
       const dir = cellDir(opts.out, c);
       const done = join(dir, "result.json");
@@ -144,15 +135,7 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
       const id = cellId(c);
       const spec = MODELS[c.model]!;
       const reservation = `${id}.${Date.now()}`;
-      try {
-        ledger.reserve(reservation, opts.fake ? 0 : spec.reserveUsd, { session: id, model: c.model, prereg: opts.prereg, fake: opts.fake });
-      } catch (e) {
-        if (e instanceof CapStop) {
-          capStop = e.message;
-          return;
-        }
-        throw e;
-      }
+      if (!(await reserver.reserve(reservation, opts.fake ? 0 : spec.reserveUsd, { session: id, model: c.model, prereg: opts.prereg, fake: opts.fake }))) return;
       const s = SUITES[c.suite]!;
       const tag = imageTag(c.suite, c.arm);
       const ps = prep.suites[c.suite]!;
@@ -178,19 +161,30 @@ async function execute(cells: Cell[], opts: RunOpts, stage: string): Promise<{ r
         },
         proxy,
       );
-      ledger.settle(reservation, opts.fake ? 0 : r.cost_usd, { session: id, usage: r.usage, measured_usd: r.cost_usd, requests: r.requests, sdk_reported_usd: r.sdk.total_cost_usd, status: r.status, fake: opts.fake });
+      reserver.settle(reservation, opts.fake ? 0 : r.cost_usd, { session: id, usage: r.usage, measured_usd: r.cost_usd, requests: r.requests, sdk_reported_usd: r.sdk.total_cost_usd, status: r.status, fake: opts.fake });
+      if (r.cost_usd > spec.reserveUsd + 1e-9) reserver.stop(`STOP: reason=reservation_exceeded session=${id} spent=${r.cost_usd.toFixed(4)} reserved=${spec.reserveUsd}`);
       if (r.status === "infra_error" && failedAttempts(dir) === 0) {
-        queue.push(c);
+        queue.splice(next, 0, c);
         console.log(`${new Date().toISOString()} ${id} infra_error, rerun queued once: ${r.errors.join(" | ").slice(0, 200)}`);
       } else results.push(r);
       const t = ledger.totals();
       console.log(`${new Date().toISOString()} ${id} ${r.status} pass=${r.pass} opened=${r.opened} $${r.cost_usd.toFixed(4)} spent=$${t.settled.toFixed(2)} open=$${t.open.toFixed(2)} [${results.length}/${cells.length}]`);
     }
   };
-  await Promise.all(Array.from({ length: opts.parallel }, worker));
+  await Promise.all(
+    Array.from({ length: opts.parallel }, () =>
+      worker().catch((e) => {
+        failure ??= e;
+        reserver.halt();
+      }),
+    ),
+  );
   proxy.stop();
   fake?.stop(true);
-  rmSync(lock, { force: true });
+  for (const [id, usd] of reserver.open) ledger.settle(id, usd, { stale: true, note: "runner error before settling; charged at the full reservation" });
+  releaseLock();
+  if (failure) throw failure;
+  const capStop = reserver.stopped;
   if (capStop) console.log(capStop);
   mkdirSync(join(opts.out, "stages"), { recursive: true });
   writeFileSync(
@@ -257,11 +251,12 @@ async function main() {
     parallel: Number(values.parallel ?? LIMITS.parallel),
     prereg: values.prereg!,
   };
-  if (!opts.fake && !/^[0-9a-f]{40}$/.test(opts.prereg)) throw new Error("E_PREREG: pass --prereg <full sha of the pushed prereg commit>");
+  if (opts.fake && relative(resolve(out), resolve(opts.ledgerPath)).startsWith("..")) throw new Error("E_LEDGER_FAKE: a --fake run keeps its ledger under --out, never on a paid ledger");
   const prep = loadPrepared();
   const models = values.models?.split(",");
   const trials = (values.trials ?? "1,2,3").split(",").map(Number);
   if (cmd === "run") {
+    if (!opts.fake && !/^[0-9a-f]{40}$/.test(opts.prereg)) throw new Error("E_PREREG: pass --prereg <full sha of the pushed prereg commit>");
     const stage = values.stage ?? "S1";
     let tasks = prep.suites[STAGES[stage]!.suite]!.tasks;
     if (values.tasks) tasks = tasks.filter((t) => values.tasks!.split(",").includes(t.id));

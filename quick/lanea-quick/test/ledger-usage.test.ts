@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { CapStop, Ledger } from "../src/ledger.ts";
+import { CapStop, Ledger, lockLedger, Reserver } from "../src/ledger.ts";
 import { costUsd, fromApiUsage, mergeStreamUsage } from "../src/usage.ts";
 import { bootstrapMeanCI, signFlipP, wilson } from "../src/analyze.ts";
 
@@ -22,6 +22,97 @@ describe("ledger", () => {
     const again = new Ledger(p, 10, "t");
     expect(again.totals()).toMatchObject({ settled: 1.5, open: 8 });
     expect(readFileSync(p, "utf8").split("\n")[0]).toContain('"type":"approval"');
+  });
+  const approved = (cap = 10) => {
+    const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+    new Ledger(p, cap, "t").approve({ words: ["Rec"], by: "x", source: "y" });
+    return p;
+  };
+  test("settleStale charges a stopped runner's open reserve in full, once", () => {
+    const p = approved();
+    const stopped = new Ledger(p, 10, "t");
+    stopped.reserve("a", 4, {});
+    const next = new Ledger(p, 10, "t");
+    next.settleStale("stale");
+    expect(next.totals()).toMatchObject({ settled: 4, open: 0 });
+    stopped.settle("a", 1, {});
+    expect(new Ledger(p, 10, "t").totals()).toMatchObject({ settled: 4, open: 0 });
+  });
+  test("a second runner on the same ledger sees the first one's reserves", () => {
+    const p = approved();
+    const a = new Ledger(p, 10, "t");
+    const b = new Ledger(p, 10, "t");
+    a.reserve("a1", 4, {});
+    b.reserve("b1", 4, {});
+    expect(() => a.reserve("a2", 4, {})).toThrow(CapStop);
+    expect(new Ledger(p, 10, "t").totals().open).toBe(8);
+  });
+  test("replay counts one settle row per reservation", () => {
+    const p = approved();
+    new Ledger(p, 10, "t").reserve("a", 4, {});
+    appendFileSync(p, JSON.stringify({ type: "settle", reservation_id: "a", usd: 4 }) + "\n" + JSON.stringify({ type: "settle", reservation_id: "a", usd: 1 }) + "\n");
+    expect(new Ledger(p, 10, "t").totals()).toMatchObject({ settled: 4, open: 0 });
+  });
+  test("refuses amounts that are not finite and non-negative", () => {
+    const l = new Ledger(approved(), 10, "t");
+    expect(() => l.reserve("a", NaN, {})).toThrow("E_LEDGER_AMOUNT");
+    expect(() => l.reserve("a", -1, {})).toThrow("E_LEDGER_AMOUNT");
+    l.reserve("a", 1, {});
+    expect(() => l.settle("a", NaN, {})).toThrow("E_LEDGER_AMOUNT");
+    expect(l.totals()).toMatchObject({ settled: 0, open: 1 });
+  });
+  test("only a complete approval for this cap, not a fake one, authorizes a paid ledger", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+    expect(() => new Ledger(p, 10, "t").approve({ words: [], by: "x", source: "y" })).toThrow("E_APPROVAL");
+    expect(() => new Ledger(p, 10, "t").approve({ words: ["Rec"], by: "", source: "y" })).toThrow("E_APPROVAL");
+    new Ledger(p, 10, "t", undefined, true).approve({ words: ["fake"], by: "test", source: "none" });
+    expect(new Ledger(p, 10, "t", undefined, true).hasApproval()).toBe(true);
+    expect(new Ledger(p, 10, "t").hasApproval()).toBe(false);
+    new Ledger(p, 20, "t").approve({ words: ["Rec"], by: "x", source: "y" });
+    expect(new Ledger(p, 10, "t").hasApproval()).toBe(false);
+    expect(new Ledger(p, 20, "t").hasApproval()).toBe(true);
+  });
+  test("the lock sits beside the ledger and admits one runner", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+    const release = lockLedger(p);
+    expect(() => lockLedger(p)).toThrow("E_LOCK");
+    release();
+    lockLedger(p)();
+    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 2 ** 22 + 1, host: hostname() }));
+    lockLedger(p)();
+    writeFileSync(`${p}.lock`, JSON.stringify({ pid: 1, host: "other-machine" }));
+    expect(() => lockLedger(p)).toThrow("other-machine");
+  });
+});
+
+describe("reserver", () => {
+  test("waits for its own open reserves to settle instead of stopping, and stops only on settled spend", async () => {
+    const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+    const l = new Ledger(p, 130, "t");
+    l.approve({ words: ["Rec"], by: "x", source: "y" });
+    for (let i = 0; i < 90; i++) {
+      l.reserve(`s${i}`, 1, {});
+      l.settle(`s${i}`, 1, {});
+    }
+    const r = new Reserver(l);
+    for (let i = 0; i < 5; i++) expect(await r.reserve(`o${i}`, 7.25, {})).toBe(true);
+    const sixth = r.reserve("o5", 7.25, {});
+    const seventh = r.reserve("o6", 7.25, {});
+    await Bun.sleep(10);
+    expect(r.open.size).toBe(5);
+    r.settle("o0", 3, {});
+    expect(await sixth).toBe(true);
+    expect(r.stopped).toBeNull();
+    for (const id of ["o1", "o2", "o3", "o4", "o5"]) r.settle(id, 3, {});
+    expect(await seventh).toBe(true);
+    r.settle("o6", 3, {});
+    expect(l.totals().settled).toBeCloseTo(111, 9);
+    expect(await r.reserve("o7", 7.25, {})).toBe(true);
+    expect(await r.reserve("o8", 7.25, {})).toBe(true);
+    r.settle("o7", 7.25, {});
+    r.settle("o8", 7.25, {});
+    expect(await r.reserve("o9", 7.25, {})).toBe(false);
+    expect(r.stopped).toContain("budget_exhausted");
   });
 });
 
