@@ -141,6 +141,16 @@ describe("tasks.lock.json", () => {
     expect(again.dropped).toEqual(["B:SKILL:0014 summary"]);
   });
 
+  test("a relock keeps each copy of a repeated line to its own claims", () => {
+    const skill = { "SKILL.md": FRONT + "STOP and wait for the user.\n\n## Later\n\nSTOP and wait for the user.\n" };
+    const base = lockFor(skill).lock;
+    const again = lockFor(skill, TASKS, claim(base, { [base.lines[0]!.id]: ["no-code"] }));
+    expect(again.lock.lines.map((l) => [l.id, l.tasks])).toEqual([[base.lines[0]!.id, ["no-code"]], [base.lines[1]!.id, []]]);
+    expect(again.carried).toBe(1);
+    const third = { "SKILL.md": skill["SKILL.md"] + "\n## Last\n\nSTOP and wait for the user.\n" };
+    expect(lockFor(third, TASKS, again.lock).lock.lines.map((l) => l.tasks)).toEqual([[], [], []]);
+  });
+
   test("drift names what changed since the lock", () => {
     const { lock, contract } = lockFor(V1);
     const before = readSkillFiles(tree(V1));
@@ -223,10 +233,27 @@ describe("gate coverage", () => {
     const fates = lineFates(contractLines(readSkillFiles(tree(V1))), readSkillFiles(tree(V2)));
     const reach: OldArmRun[] = [...runs, { task: "no-code", passed: true, files_read: ["SKILL.md", "sections/visual.md"], asked: ["visual"] }];
     const coverage = lineCoverage(lock.lines, reach);
-    expect(uncoveredRemovals(fates, coverage, () => true)).toEqual([{ id: "B:SKILL:0012", class: "removed", why: "unreached", tasks: ["summary"] }]);
-    expect(uncoveredRemovals(fates, coverage, (t) => t !== "no-code")).toEqual([
+    expect(uncoveredRemovals(lock.lines, fates, coverage, () => true)).toEqual([{ id: "B:SKILL:0012", class: "removed", why: "unreached", tasks: ["summary"] }]);
+    expect(uncoveredRemovals(lock.lines, fates, coverage, (t) => t !== "no-code")).toEqual([
       { id: "B:SKILL:0012", class: "removed", why: "unreached", tasks: ["summary"] },
       { id: "B:visual:0003", class: "rewritten", why: "fails-in-after", tasks: ["no-code"] },
     ]);
   });
+
+  test("a rewrite of one copy of a repeated line counts against every copy, so a claim on one copy cannot clear another", () => {
+    const stop = "STOP and wait for the user.";
+    const before = { "SKILL.md": FRONT + "## Plan review\n\n" + stop + "\n\n## Code review\n\n" + stop + "\n" };
+    const after = { "SKILL.md": FRONT + "## Plan review\n\nReview the plan.\n\n## Code review\n\n" + stop + "\n" };
+    const base = lockFor(before).lock;
+    const [plan, code] = base.lines.map((l) => l.id);
+    const run: OldArmRun[] = [{ task: "no-code", passed: true, files_read: ["SKILL.md"], asked: [null] }];
+    const fates = lineFates(contractLines(readSkillFiles(tree(before))), readSkillFiles(tree(after)));
+    const lock = claim(base, { [code!]: ["no-code"] });
+    const coverage = lineCoverage(lock.lines, run);
+    expect(coverageGaps(lock.lines, fates, coverage)).toEqual([{ id: plan!, class: "rewritten", status: "unclaimed" }]);
+    expect(uncoveredRemovals(lock.lines, fates, coverage, () => true)).toEqual([{ id: plan!, class: "rewritten", why: "unclaimed", tasks: [] }]);
+    const both = claim(lock, { [plan!]: ["no-code"] });
+    expect(uncoveredRemovals(both.lines, fates, lineCoverage(both.lines, run), () => true)).toEqual([]);
+  });
 });
+
