@@ -23,7 +23,7 @@ Each arm ships as a tar whose paths are relative to `/root` (`.claude/...`, and 
 | `manifests/<arm>.files.tsv` | Every entry: sha256, bytes, mode, type, path. |
 | `manifests/placebo-tokens.tsv` | Per skill: original and placebo body tokens, ratio, routing bytes kept. |
 | `../tests/placebo.test.ts` | Keyless tests. |
-| `../package.json`, `../bun.lock`, `../tsconfig.json` | The quick/laneb package: js-tiktoken 1.0.21, @types/bun and TypeScript, locked apart from the repo root. |
+| `../tsconfig.json` | Typecheck config for quick/laneb. js-tiktoken 1.0.21 is a pinned dev dependency of the repo root, so root CI runs these tests too. |
 
 ## The trial runtime these trees expect
 
@@ -64,7 +64,7 @@ The prose is on-topic: its topic terms come only from the skill's name and the p
 
 The seed is `gstack-evals/laneb/placebo/v1` unless `--seed` says otherwise. Each skill gets its own sfc32 stream seeded from sha256(seed, folder name), so output does not depend on processing order. Nothing reads a clock or `Math.random`.
 
-The generator hash is sha256 over the lines `<sha256 of file>  placebo/<file>` for `generate.ts` and `placebo.ts`, then `js-tiktoken <version>` and `seed <seed>`, each ending in a newline. js-tiktoken is locked in `quick/laneb/bun.lock`.
+The generator hash is sha256 over the lines `<sha256 of file>  placebo/<file>` for `generate.ts` and `placebo.ts`, then `js-tiktoken <version>` and `seed <seed>`, each ending in a newline. js-tiktoken is pinned in the root `package.json` and locked in the root `bun.lock`.
 
 A tree digest is sha256 over one line per entry, sorted by path: `<sha256 of file>  <path>` for a file and `link:<target>  <path>` for a symlink. Directories and modes are left out; the tar sha256 covers them.
 

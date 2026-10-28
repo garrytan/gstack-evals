@@ -23,7 +23,7 @@ BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$HERE/Dockerfile")
 in_builder() { docker run --rm --network none -u "$(id -u):$(id -g)" -v "$OUT:/out" -w /out "$BUILDER" "$@"; }
 canonical_tar() { in_builder tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu "$@"; }
 mkdir -p "$HERE/manifests"
-(cd "$LANEB" && bun install --frozen-lockfile > /dev/null)
+(cd "$LANEB/../.." && bun install --frozen-lockfile > /dev/null)
 
 echo "== gstack checkout at $GSTACK_SHA"
 rm -rf "$OUT/gstack-src"

@@ -20,7 +20,7 @@ On real coding tasks graded by whether the result works, does gstack beat no ski
 
 ## Arms
 
-Every arm runs Claude Code 2.1.312 with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`, which leaves one built-in skill, `plugin-authoring`, in every arm. The arm is a tarball extracted into `/root` during Harbor's agent setup, before the agent timer starts.
+Every arm runs Claude Code 2.1.312 with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`. Two built-in skills survive it in every arm: the session's init message lists `doctor` and `plugin-authoring` (as GSTA-10 found), and the skill listing sent to the model holds `plugin-authoring`. The arm is a tarball extracted into `/root` during Harbor's agent setup, before the agent timer starts.
 
 | Arm | What it is | Tarball sha256 |
 |---|---|---|
@@ -30,7 +30,7 @@ Every arm runs Claude Code 2.1.312 with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`, 
 
 Placebo generator: [arms/placebo/](../../quick/laneb/arms/placebo/generate.ts), hash `e9c16c577df6e3da474f093665b559584f74857be84403452cb0526df7655d1c` (sha256 over its source files, the js-tiktoken version and the seed), seed `gstack-evals/laneb/placebo/v1`. Input digest (the 64 installed SKILL.md files) `eec9fe901002f80a8a8abaa6c5b825f34f7164de60423fb9ae198f366ac2caee`, output tree digest `95e40ddffcbbe9ca52a90e5ae47c10b547ceacfff24f82f17bf454f5ba2941c9`. Body token ratios (o200k_base) run from 0.9996 to 1.0000. The router's `## Route first` section is kept byte for byte in both copies setup installs (`gstack` and `_gstack-command`). One frontmatter change: the `hooks:` key is removed from the six skills that carry it, because those hooks would call gstack scripts the placebo lacks and would deny or break tool calls while the skill is active. Every other frontmatter byte is kept.
 
-How the arms were built and checked is in [arms/README.md](../../quick/laneb/arms/README.md). Two builds from fresh fetches gave byte-identical tars. Because of `plugin-authoring`, the none arm lists 1 skill and the other two list 65, with identical listing text in gstack and placebo. The gstack arm models a long-time user: each trial starts from a fresh extract, and without the markers every preamble would print first-run prompts (telemetry, proactive mode, an offer to commit routing rules to the task repo) that a real user sees once.
+How the arms were built and checked is in [arms/README.md](../../quick/laneb/arms/README.md). Two builds from fresh fetches gave byte-identical tars. The model-facing listing holds 1 skill in the none arm and 65 in the other two, with identical listing text in gstack and placebo. The keyless smoke on cancel-async-tasks confirmed the arms land as built: the init message listed 2, 66 and 66 skills, and each trial logged its tar's sha256 above. The gstack arm models a long-time user: each trial starts from a fresh extract, and without the markers every preamble would print first-run prompts (telemetry, proactive mode, an offer to commit routing rules to the task repo) that a real user sees once.
 
 One prompt wrapper, identical across arms: [runner/prompt-wrapper.md](../../quick/laneb/runner/prompt-wrapper.md), sha256 2e0674a8e1d65dfd7e511e7f7255235410d75a65fe49d7ce03c9d54202089d00. AskUserQuestion is answered by the same evaluator-side simulator in every arm ([persona](../../quick/laneb/runner/agent/persona.json), sha256 af0312bd87ed08534a111d61689537cc55743a3020c0f44cf4df186417e90e8d): it picks an option the agent marked recommended, otherwise tells the agent to decide and finish.
 
