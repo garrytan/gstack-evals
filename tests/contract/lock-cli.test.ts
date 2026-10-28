@@ -57,6 +57,20 @@ describe("skill-eval --lock", () => {
     expect(again.out).toContain("Kept 1 claims from the previous lock.");
   });
 
+  test("the printed commit step quotes paths the shell would split", async () => {
+    const root = repo({ "skill/SKILL.md": SKILL, "my evals/it's/tasks.json": TASKS });
+    const dir = join(root, "my evals/it's");
+    const r = await call(lockCommand, ["--tasks", join(dir, "tasks.json"), "--before", join(root, "skill")]);
+    const step = r.out.split("\n").find((l) => l.startsWith("  git -C "))!.trim();
+    expect(step).toStartWith("git -C '" + root + "/my evals/it'\\''s' add tasks.lock.json tasks.json && ");
+    const git = (...args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    git("config", "user.email", "eval@example.com");
+    git("config", "user.name", "eval");
+    expect(spawnSync("bash", ["-c", step], { cwd: tmp, encoding: "utf8" }).status).toBe(0);
+    expect(lockCommit(join(dir, "tasks.lock.json"), [join(dir, "tasks.json")]).ok).toBe(true);
+  });
+
   test("--before names the skill outside gstack's layout; without it the call is refused", async () => {
     const root = repo({ "skill/SKILL.md": SKILL, "evals/tasks.json": TASKS });
     const refused = await call(lockCommand, ["--tasks", join(root, "evals/tasks.json")]);

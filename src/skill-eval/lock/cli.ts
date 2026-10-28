@@ -64,8 +64,9 @@ export async function lockCommand(argv: string[], io: Io = consoleIo): Promise<n
   writeLock(lockPath, lock);
   const claimed = lock.lines.filter((l) => l.tasks.length).length;
   const short = (s: string | undefined) => (s ? s.slice(0, 12) : "none");
-  const git = "git -C " + show(contract.tasks.dir);
-  const files = [lockPath, contract.tasks.path, ...(contract.ext ? [contract.ext.path] : [])].map((p) => relative(contract.tasks.dir, p).split(sep).join("/"));
+  const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'");
+  const git = "git -C " + quote(show(contract.tasks.dir));
+  const files = [lockPath, contract.tasks.path, ...(contract.ext ? [contract.ext.path] : [])].map((p) => quote(relative(contract.tasks.dir, p).split(sep).join("/")));
   io.out(
     [
       "LOCKED " + show(lockPath) + ": tasks " + short(lock.tasks.sha256) + ", ext " + short(lock.ext?.sha256) + ", policy " + short(lock.policy?.sha256),
