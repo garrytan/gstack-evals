@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { Ledger, MODELS, meteredCall } from './llm.ts';
 
 const RESULTS = process.env.RESULTS ?? path.join(process.env.HOME!, '.capy/work/replay/results');
-const LEDGER = process.env.LEDGER ?? '/home/user/.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl';
+const LEDGER = process.env.LEDGER ?? path.join(process.env.HOME!, '.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl');
 fs.mkdirSync(path.join(RESULTS, 'smoke'), { recursive: true });
 const ledger = new Ledger(LEDGER, 'replay-quick', 60);
 const or = (p: string): Promise<{ status: number; json: any }> => fetch('https://openrouter.ai' + p, { headers: { authorization: 'Bearer ' + process.env.OPENROUTER_API_KEY } }).then(async r => ({ status: r.status, json: await r.json().catch(() => null) }));

@@ -11,7 +11,7 @@ import { bootstrap, mean, parseFindings, redTeamActive, rng, sameFile, shown, ty
 const HERE = import.meta.dir;
 const G = process.env.GSTACK_DIR ?? '/workspace/gstack';
 const RESULTS = process.env.RESULTS ?? path.join(process.env.HOME!, '.capy/work/replay/results');
-const LEDGER = process.env.LEDGER ?? '/home/user/.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl';
+const LEDGER = process.env.LEDGER ?? path.join(process.env.HOME!, '.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl');
 const CAP = 60;
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 const git = (...a: string[]) => spawnSync('git', a, { cwd: G, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).stdout;

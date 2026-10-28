@@ -96,10 +96,8 @@ function specialist(name: string, diff: string, stack: string, testFw: string): 
   return [FRAMING, '', FIXTURE_TEXT, '', body, '', '## Checklist', checklist.trim(), '', '## Diff (non-fixture source)', fence(code), '', '## Fixture and test files (summary mode)', stat].join('\n');
 }
 
-// The Red Team prompt is completed at run time with the trial's merged specialist findings.
-export function redTeam(template: string, n: number, merged: string): string {
-  return must(must(template, '{N}', String(n)), '{merged findings summary}', merged || 'none');
-}
+// The Red Team prompt is completed at run time (fillRedTeam) with the trial's merged
+// specialist findings.
 function redTeamTemplate(diff: string, nameStatus: string): string {
   const { code, stat } = nonFixture(diff);
   return [FRAMING, '', FIXTURE_TEXT, '', RED, '', '## Checklist', at('review/specialists/red-team.md').trim(), '', '## Changed files', nameStatus.trim(), '', '## Diff (non-fixture source)', fence(code), '', '## Fixture and test files (summary mode)', stat].join('\n');

@@ -165,3 +165,10 @@ export function introducedRanges(porcelain: string, commit: string): [number, nu
   }
   return out;
 }
+
+// Completes a Red Team template with the specialist count and the merged findings. Replacer
+// functions keep a $ in model-written text literal ($', $& and $$ are patterns in a string
+// replacement).
+export function fillRedTeam(template: string, n: number, merged: string): string {
+  return template.replace('{N}', () => String(n)).replace('{merged findings summary}', () => merged || 'none');
+}

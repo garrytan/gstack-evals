@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { diffLines, filterDiff, introducedRanges, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
+import { diffLines, fillRedTeam, filterDiff, introducedRanges, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
 import { CapError, Ledger, MODELS, meteredCall, worstUsd } from './llm.ts';
 import { startFake } from './fake-upstream.ts';
 import { findingKey, summarize, type Unit } from './score.ts';
@@ -57,6 +57,11 @@ describe('dispatch', () => {
     expect(selectSpecialists(80, none)).toEqual(['testing', 'maintainability']);
     expect(selectSpecialists(150, { ...none, BACKEND: true })).toEqual(['testing', 'maintainability', 'security', 'performance', 'simplification']);
     expect(selectSpecialists(60, { ...none, AUTH: true, FRONTEND: true, STATE_MACHINE: 'true' })).toEqual(['testing', 'maintainability', 'security', 'performance', 'design', 'state-machines']);
+  });
+  test('the Red Team fill keeps a $ in findings literal', () => {
+    const t = 'reviewed by {N} specialists\n{merged findings summary}\n## Diff\nTAIL';
+    expect(fillRedTeam(t, 3, "uses $' and $& and $$ in a shell line")).toBe("reviewed by 3 specialists\nuses $' and $& and $$ in a shell line\n## Diff\nTAIL");
+    expect(fillRedTeam(t, 0, '')).toContain('\nnone\n');
   });
   test('Red Team activates on size or a specialist CRITICAL', () => {
     expect(redTeamActive(201, [])).toBe(true);
@@ -139,6 +144,12 @@ describe('ledger', () => {
     expect(rows.filter(r => r.type === 'approval').length).toBe(1);
     expect(rows.map(r => r.type)).toEqual(['approval', 'reserve', 'settle', 'reserve']);
   });
+  test('a limit that is not a number refuses', () => {
+    const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 60);
+    l.approve(QUOTES, 'test');
+    expect(() => l.reserve('a', MODELS.opus!, 0.1, Number('55usd'))).toThrow(CapError);
+    expect(l.rows().length).toBe(1);
+  });
   test('worst case covers max_tokens and a cache write', () => {
     expect(worstUsd(MODELS.opus!, 20000)).toBeCloseTo((10000 * 5 + 32000 * 20) / 1e6, 9);
   });
@@ -168,6 +179,17 @@ describe('providers against the fake upstream', () => {
     const rows = l.rows();
     expect(rows.filter(r => r.type === 'reserve').length).toBe(3);
     expect(rows.filter(r => r.type === 'settle').length).toBe(3);
+  });
+  test('an HTTP error status settles at $0, a 200 error body at the worst case', async () => {
+    const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
+    l.approve(QUOTES, 'test');
+    const p = 'FAKE_200_ERROR diff --git a/q.ts b/q.ts';
+    await expect(meteredCall(l, 'e200', MODELS.deepseek!, p)).rejects.toThrow();
+    await expect(meteredCall(l, 'e400', MODELS.haiku!, 'FAKE_400 diff --git a/q.ts b/q.ts')).rejects.toThrow();
+    const s = l.rows().filter(x => x.type === 'settle');
+    expect(s.find(x => x.call_id === 'e200').usd).toBeCloseTo(worstUsd(MODELS.deepseek!, Buffer.byteLength(p)), 6);
+    expect(s.find(x => x.call_id === 'e400').usd).toBe(0);
+    expect(s.length).toBe(2);
   });
   test('a 500 retries once and settles once', async () => {
     const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
@@ -225,6 +247,36 @@ describe('providers against the fake upstream', () => {
     expect(fs.readFileSync(ledger, 'utf8').trim().split('\n').length).toBe(before);
     expect(fs.existsSync(t1)).toBe(false);
   }, 60000);
+
+  // Two slow calls' worst case fits under the limit, so four groups queue refused calls that
+  // must wait for real settles, not wake each other forever.
+  const capPlan = (n: number) => {
+    const dir = tmp();
+    const files: Record<string, string> = {};
+    for (let i = 0; i < n; i++) files['c' + i + '/baseline.md'] = 'FAKE_SLOW ' + i + ' diff --git a/lib/a.ts b/lib/a.ts';
+    for (const [k, v] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, 'prompts', k)), { recursive: true }); fs.writeFileSync(path.join(dir, 'prompts', k), v); }
+    fs.writeFileSync(path.join(dir, 'frozen.sha256'), Object.entries(files).map(([k, v]) => sha(v) + '  ' + k).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'plan.json'), JSON.stringify({ cases: Array.from({ length: n }, (_, i) => ({ case: 'c' + i, kind: 'defect', diff_lines: 10, specialists: [], red_team_by_size: false, prompts: { baseline: 'c' + i + '/baseline.md', core: 'c' + i + '/baseline.md', red_team_template: 'c' + i + '/baseline.md' } })) }));
+    const ledger = path.join(dir, 'ledger.jsonl');
+    new Ledger(ledger, 'replay-quick', 60).approve(QUOTES, 'test');
+    return { dir, ledger, env: (limit: number) => ({ ...process.env, ...fake.env, PLAN_FILE: path.join(dir, 'plan.json'), FROZEN_FILE: path.join(dir, 'frozen.sha256'), PROMPTS: path.join(dir, 'prompts'), RESULTS: path.join(dir, 'results'), LEDGER: ledger, PREREG_SHA: 'x', RUN_LIMIT: String(limit) }) };
+  };
+  test('refused calls near the limit wait for settles and the run finishes', async () => {
+    const p = capPlan(12);
+    const two = 2 * worstUsd(MODELS.haiku!, Buffer.byteLength('FAKE_SLOW 10 diff --git a/lib/a.ts b/lib/a.ts')) + 1e-4;
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], p.env(two));
+    expect(r.status).toBe(0);
+    const rows = fs.readFileSync(p.ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    expect(rows.filter(x => x.type === 'reserve').length).toBe(36);
+    expect(rows.filter(x => x.type === 'settle').length).toBe(36);
+  }, 30000);
+  test('a refusal with nothing in flight is the cap stop', async () => {
+    const p = capPlan(2);
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], p.env(0.001));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('CAP STOP');
+    expect(fs.readFileSync(p.ledger, 'utf8').trim().split('\n').length).toBe(1);
+  }, 30000);
 
   test('a prompt that moved after freezing is refused', async () => {
     const dir = tmp();

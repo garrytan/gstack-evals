@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { CapError, Ledger, MODELS, meteredCall, worstUsd, type ModelSpec } from './llm.ts';
-import { parseFindings, redTeamActive, shown, type Finding } from './lib.ts';
+import { fillRedTeam, parseFindings, redTeamActive, shown, type Finding } from './lib.ts';
 
 const HERE = import.meta.dir;
 const arg = (k: string, d?: string) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
@@ -14,7 +14,7 @@ const PROMPTS = process.env.PROMPTS ?? path.join(process.env.HOME!, '.capy/work/
 const RESULTS = process.env.RESULTS ?? path.join(process.env.HOME!, '.capy/work/replay/results');
 export const CAP = 60;
 const RUN_LIMIT = Number(process.env.RUN_LIMIT ?? '55');
-const LEDGER = process.env.LEDGER ?? '/home/user/.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl';
+const LEDGER = process.env.LEDGER ?? path.join(process.env.HOME!, '.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl');
 const PREREG_SHA = process.env.PREREG_SHA ?? '';
 const DRY = process.argv.includes('--dry-run');
 
@@ -43,6 +43,10 @@ let inFlight = 0;
 let capStopped = false;
 const settled: (() => void)[] = [];
 
+// Wakes every call waiting on a cap refusal. Only a call that held a reservation and settled,
+// or the cap stop, wakes them, so refused waiters never wake each other.
+const wake = () => { for (const w of settled.splice(0)) w(); };
+
 // One reviewer call, resumable: an existing result file is the answer, and an existing error
 // record is a terminal INFRA failure that a rerun leaves incomplete. A cap refusal while
 // other calls are open waits for one to settle and tries again; with nothing open it is the
@@ -59,28 +63,31 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
     for (;;) {
       if (capStopped) return null;
       inFlight++;
+      let r;
       try {
-        const r = await meteredCall(ledger, meta.call_id, spec, text, { limit: RUN_LIMIT });
-        const rec = { ...meta, prompt: rel, prompt_sha256: sha(text), model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, ...r, at: new Date().toISOString() };
-        fs.mkdirSync(path.dirname(out), { recursive: true });
-        fs.writeFileSync(out, JSON.stringify(rec, null, 2));
-        return rec;
+        r = await meteredCall(ledger, meta.call_id, spec, text, { limit: RUN_LIMIT });
       } catch (e: any) {
+        inFlight--;
         if (e instanceof CapError) {
-          if (inFlight > 1) { inFlight--; await new Promise<void>(r => settled.push(r)); inFlight++; continue; }
+          if (inFlight > 0) { await new Promise<void>(res => settled.push(res)); continue; }
           capStopped = true;
           console.error('CAP STOP: ' + e.message);
+          wake();
           return null;
         }
+        wake();
         const rec = { ...meta, prompt: rel, model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, error: String(e.message ?? e).slice(0, 500), at: new Date().toISOString() };
         fs.mkdirSync(path.dirname(out), { recursive: true });
         fs.writeFileSync(out.replace(/\.json$/, '.error.json'), JSON.stringify(rec, null, 2));
         console.error('INFRA ' + meta.call_id + ': ' + rec.error);
         return null;
-      } finally {
-        inFlight--;
-        settled.shift()?.();
       }
+      inFlight--;
+      wake();
+      const rec = { ...meta, prompt: rel, prompt_sha256: sha(text), model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, ...r, at: new Date().toISOString() };
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(out, JSON.stringify(rec, null, 2));
+      return rec;
     }
   });
 }
@@ -106,7 +113,7 @@ async function unit(ledger: Ledger, spec: ModelSpec, c: any, arm: 'baseline' | '
   const specFindings = recs.slice(1).flatMap((r: any) => parseFindings(r.text).findings.filter(shown));
   if (!redTeamActive(c.diff_lines, specFindings)) return;
   const template = prompt(c.prompts.red_team_template);
-  const text = template.replace('{N}', String(c.specialists.length)).replace('{merged findings summary}', specFindings.map(summaryLine).join('\n') || 'none');
+  const text = fillRedTeam(template, c.specialists.length, specFindings.map(summaryLine).join('\n'));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'red-team.prompt.md'), text);
   await call(ledger, spec, c.prompts.red_team_template, text, path.join(dir, 'red-team.json'), meta('red-team'));

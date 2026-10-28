@@ -77,8 +77,10 @@ export class Ledger {
   // limit lets a phase stop below the cap (the review runs keep the judge's share).
   reserve(callId: string, spec: ModelSpec, usdWorst: number, limit = this.cap): string {
     if (!this.rows().some(r => r.type === 'approval')) throw new CapError('no approval row in ' + this.file);
+    const max = Math.min(limit, this.cap);
+    if (!Number.isFinite(max) || !Number.isFinite(usdWorst)) throw new CapError('CAP: limit ' + limit + ' or worst case ' + usdWorst + ' is not a number');
     const c = this.committed();
-    if (c + usdWorst > Math.min(limit, this.cap)) throw new CapError('CAP: ' + c.toFixed(4) + ' committed + ' + usdWorst.toFixed(4) + ' worst case > ' + Math.min(limit, this.cap));
+    if (c + usdWorst > max) throw new CapError('CAP: ' + c.toFixed(4) + ' committed + ' + usdWorst.toFixed(4) + ' worst case > ' + max);
     const id = crypto.randomUUID();
     this.append({ type: 'reserve', id, item: this.item, call_id: callId, provider: spec.provider, model: spec.model, effort: spec.effort, usd_worst: round(usdWorst), at: new Date().toISOString() });
     return id;
@@ -142,9 +144,11 @@ async function once(spec: ModelSpec, prompt: string, schema?: any): Promise<Call
   return { text, usage: u, usd: ((u.input_tokens ?? 0) * spec.inPerM + (u.output_tokens ?? 0) * spec.outPerM) / 1e6, stop: j.status ?? null, provider_served: 'openai', model_served: j.model ?? null, ms: Date.now() - t0 };
 }
 
-// One metered call. Only a 429 or 5xx status retries (up to three times, with backoff): the
-// provider billed nothing for it. Any other failure settles at the worst case, since a
-// timed-out request may still have been billed, and is recorded, never retried.
+// One metered call. Only a 429 or 5xx status retries (up to three times, with backoff). A
+// failure with an HTTP error status (400 and up) settles at $0, since the provider bills
+// nothing for it; any other failure (a 200 with an error body, a timeout, a dropped
+// connection, a body without usage) settles at the worst case, since the request may still
+// have been billed. Failures are recorded, never retried.
 export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpec, prompt: string, opts: { limit?: number; schema?: any } = {}): Promise<CallResult> {
   const rid = ledger.reserve(callId, spec, worstUsd(spec, Buffer.byteLength(prompt)), opts.limit);
   let last: any;
@@ -160,7 +164,7 @@ export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpe
       await new Promise(r => setTimeout(r, 2000 * 2 ** attempt));
     }
   }
-  const billed = last instanceof HttpError ? 0 : worstUsd(spec, Buffer.byteLength(prompt));
+  const billed = last instanceof HttpError && last.status >= 400 ? 0 : worstUsd(spec, Buffer.byteLength(prompt));
   ledger.settle(rid, callId, 'error', billed, { error: String(last?.message ?? last).slice(0, 300) });
   throw last;
 }

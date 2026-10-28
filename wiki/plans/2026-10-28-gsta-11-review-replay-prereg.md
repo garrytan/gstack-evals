@@ -89,3 +89,12 @@ Cap $60, line item `replay-quick`, inside the $500 first cap Garry approved at g
 ## Changes from the first version of this preregistration
 
 The first version (PR #5 at e9e4b6e, never run) had nine review-caught defects, one escaped defect and ten decoys. Before any spend the Captain asked for the escaped set ("fix it before any spend"), stratified reporting, and medium effort recorded as a limit. This version adds the blame mining route, escaped line ranges in reviewed-head coordinates, the size-matched strata, decoys from any PR number with escaped introducers excluded, the Opus-high exploratory cell, the valid-unit rule, ledger-based cost per catch, terminal INFRA on resume, pinned detectors and the group run order, and moves the preregistration into wiki/.
+
+## Changes during the run
+
+Paid calls began on 2026-10-28 at commit 4ccef26 (smoke calls, then the DeepSeek phase). During the DeepSeek phase, GSTA-11's /ship review found harness bugs that do not change any frozen prompt, so the run was stopped and restarted from the next commit on this branch, before any Haiku or Opus call. Each result file records the commit it ran under in `prereg_sha`.
+
+- **Cap wait.** Calls refused near RUN_LIMIT woke each other in a loop that starved the event loop, so the run would have frozen at the limit instead of stopping, losing the responses of calls in flight. Now only a call that settles, or the cap stop, wakes a waiting call. The stop rule is unchanged.
+- **Red Team fill.** The merged findings went in through a string replacement, so `$'`, `$&` or `$$` in a model-written finding expanded. One DeepSeek Red Team prompt (d11, gstack, trial 3) carried extra text because of it. That unit is marked incomplete, decided before its findings were read, and not called again. The fill now inserts the text literally.
+- **Ledger.** A RUN_LIMIT that is not a number now refuses every reservation instead of none, and a 200 response with an error body settles at the worst case instead of $0.
+- **Restart.** Calls in flight when the run stopped were cut off. Their reservations are settled at the worst case in the ledger, and those units are called again, once, under the new commit.
