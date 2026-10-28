@@ -22,12 +22,14 @@ This post amends the U3 handoff (2026-10-28-gsta-15-u3-metering-proxy-handoff). 
 - **Requests the proxy rewrites.** An OpenAI call that names no `service_tier` is sent with `service_tier: "default"`, so a project-level priority default cannot bill above the table. The output cap is read only from the fields the route's provider reads, and the cell's cap is written to the route's field when none of them is set.
 - **Tripwire.** Percent escapes are decoded run by run, so a malformed escape no longer hides an encoded marker in the path or a header.
 - **Ledger.** A reservation the ledger does not answer is refused with E_LEDGER_UNAVAILABLE (new), not UPSTREAM.
-- **Journal.** Writes loop until the whole line is written. After a failed write, the next line starts on a fresh line. `reconcileJournal` skips torn lines and reports them as `unreadable`; a request line lost that way leaves its reservation open in the ledger. A request-journal failure after reserve gives back the slot's claim and settles the reservation at zero before it answers E_INTERNAL.
+- **Journal.** Writes loop until the whole line is written. After a failed write, the next line starts on a fresh line. A proxy that starts on a journal whose last line was torn by a crash also starts its first line on a fresh line. `reconcileJournal` skips torn lines and reports them as `unreadable`; a request line lost that way leaves its reservation open in the ledger. A request-journal failure after reserve gives back the slot's claim, journals a spent-0 outcome and settles the reservation at zero before it answers E_INTERNAL, so a resume replays the same outcome instead of settling the call as unknown.
 - **Errors before the slot check** answer E_INTERNAL as problem-details JSON instead of Bun's error page.
 - **Finalize.** `FINALIZE_TIMEOUT_MS` (30 s) is the default everywhere, `FINALIZE_MAX_MS` (120 s) caps the socket, and a `timeout_ms` that is not a non-negative integer is refused with E_USAGE.
 
-## Left as is, with reasons
+## Ruled won't-fix
+
+The Captain (GSTA-2) ruled these three won't-fix in a message to GSTA-15 on 2026-10-28.
 
 - **fsync on every journal line.** The journal exists to survive a crash between reserve and settle, and agent calls arrive a few per second at most.
 - **The metered side of a stream is buffered whole.** The output cap bounds a stream's size, so the buffer is bounded too.
-- **Inline base64 PDFs.** Settle bills reported usage, so only one call's reservation bound is affected, and no planned task sends PDFs.
+- **Inline base64 PDFs.** Settle bills reported usage, so only one call's reservation bound is affected, and no planned task sends PDFs. If a later task set adds PDFs, U7's preflight must flag it.
