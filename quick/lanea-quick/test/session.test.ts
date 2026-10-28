@@ -2,6 +2,7 @@ import { afterAll, describe, expect, mock, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LIMITS } from "../src/config.ts";
 import { MeteringProxy } from "../src/proxy.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "session-"));
@@ -101,6 +102,21 @@ describe("runSession", () => {
       expect(r.check).toBeNull();
       expect(r.errors.join(" ")).toContain("E_CHECK");
     } finally {
+      rmSync(runFails, { force: true });
+    }
+  });
+  test("a timed-out session whose check docker cannot start stays a timeout, so it is never rerun", async () => {
+    rmSync(cpFails, { force: true });
+    writeFileSync(runFails, "");
+    const wall = LIMITS.sessionWallSeconds;
+    LIMITS.sessionWallSeconds = 0.01;
+    try {
+      const r = await runSession({ ...spec("check-timeout"), task: { id: "t", prompt: "p", check: "true" } }, proxy);
+      expect(r.status).toBe("timeout");
+      expect(r.check).toBeNull();
+      expect(r.errors.join(" ")).toContain("E_CHECK");
+    } finally {
+      LIMITS.sessionWallSeconds = wall;
       rmSync(runFails, { force: true });
     }
   });

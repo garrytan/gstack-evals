@@ -272,7 +272,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
       { env, timeoutMs: 120_000 },
     );
     if (r.code === 125) {
-      status = "infra_error";
+      if (status === "complete") status = "infra_error";
       errors.push(`E_CHECK: docker could not start the check: ${r.out.slice(-500)}`);
     } else check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };
   }

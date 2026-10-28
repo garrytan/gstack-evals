@@ -20,7 +20,7 @@ bun test test/ && bunx tsc --noEmit -p .                 # keyless checks
 
 The keyless `--fake` run still needs Docker and the arm images: only the Messages API is faked. The tests under `test/` need neither; they stub `docker` and `git` and mock the Agent SDK where they need them.
 
-Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes; a stage that recorded a cap stop for a model is never resumed for it (E_STAGE_STOPPED). `--fake` runs default to `~/.capy/work/lanea-quick/runs-fake/` and keep their own ledger there, `ledger-fake.jsonl`.
+Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes; after a CAP_STOP or reservation_exceeded stop in any stage, or a result that cost more than its reservation, every later `run` into that `--out` refuses to start (E_STAGE_STOPPED), since a stop ends the run. `--fake` runs default to `~/.capy/work/lanea-quick/runs-fake/` and keep their own ledger there, `ledger-fake.jsonl`.
 
 Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running"` with the stage's models, tasks, arms and trials before the first session, the cap stop as soon as one fires, and `status: "done"` with the finished count at the end. analyze reads every file of a stage. A cap stop (CAP_STOP, or RESERVATION_EXCEEDED when one session spent past its reservation, which analyze also reads from any result whose cost passes its model's reservation) or a `--fake` run marks the block INCOMPLETE for good; a later run never clears it. A run that did not finish (its file still says running, or it finished fewer cells than it planned) stays UNFINISHED until a later run that finishes covers all of its tasks, arms and trials. Results for a stage with no file are UNFINISHED too. verdict.md lists every stage stop, including those of a model with no results. A run with an unknown model or no matching cells stops before it writes a file.
 
@@ -66,7 +66,7 @@ A run takes three locks with an exclusive create before it reads the ledger: `<l
 
 ### Images
 
-A paid run resolves every image tag to its id and refuses one that `images.json` does not pin. After a rebuild, run `prepare`, copy its image ids into `images.json` and commit them before a paid run. `build-arms.sh` leaves `test/` out of every arm, so no arm can read graded task files.
+A paid run resolves every image tag to its id and refuses one that `images.json` does not pin. `images.json` pins the images the paid runs used. They were built from full gstack trees, `test/` included, so the learn images hold the learn task files (the learn after tree is the learn tasks commit). `build-arms.sh` now leaves `test/` out of every arm, which covers only images built from here on: the next prereg rebuilds and re-pins the learn images. After a rebuild, run `prepare`, copy its image ids into `images.json` and commit them before a paid run.
 
 ## Layout
 
@@ -75,7 +75,7 @@ A paid run resolves every image tag to its id and refuses one that `images.json`
 | `src/session.ts` | One session: container, setup, seeded state root, the Agent SDK driving `claude` over `docker exec -i`, the scripted user, the work dir copy, the check in a fresh container, grading |
 | `src/proxy.ts` | Metering proxy on the Docker bridge: a per-session token, one allowed model, one paid request at a time, a spend ceiling and a per-request bound under the reservation, usage parsed from the SSE stream, per-request price |
 | `src/usersim.ts`, `usersim/categories.json` | The scripted user: keyword classifier, sidecar replies, a non-approving fallback, prose-question replies |
-| `src/grade.ts` | The main agent only (a subagent's tool calls are counted apart): `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
+| `src/grade.ts` | The main agent only, which is narrower than the prereg's "the session's assistant text" (a subagent's tool calls are counted apart): `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
 | `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop; the ledger lock; the in-order reserver |
 | `src/run.ts` | prepare, approve, run (stages, trial-major order, a worker pool), project |
 | `src/analyze.ts` | Contract gates, Wilson intervals, task-clustered bootstrap, sign-flip test, loss signal and noise check, stage stops, uncovered contract lines, cost and loaded-bytes tables |

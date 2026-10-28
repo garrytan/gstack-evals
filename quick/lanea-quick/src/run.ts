@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { BASE_IMAGE, CAP_USD, GSTACK_REPO, LEDGER_PATH, LIMITS, LINE_ITEM, MODELS, SUITES, WORK, imageTag, type ArmName } from "./config.ts";
+import { loadResults, readStages } from "./analyze.ts";
 import { serveFake } from "./fake-upstream.ts";
 import type { Task } from "./grade.ts";
 import { Ledger, lockLedger, Reserver } from "./ledger.ts";
@@ -308,12 +309,8 @@ async function main() {
     let cells = planStage(stage, tasks, trials, models);
     if (values.arms) cells = cells.filter((c) => values.arms!.split(",").includes(c.arm));
     if (!cells.length) throw new Error(`E_TASKS: no cells in ${stage} match --models, --tasks, --trials and --arms`);
-    const stages = join(opts.out, "stages");
-    const stopped = (existsSync(stages) ? readdirSync(stages) : [])
-      .filter((f) => f.startsWith(`${stage}.`) && f.endsWith(".json"))
-      .map((f) => JSON.parse(readFileSync(join(stages, f), "utf8")))
-      .find((st) => st.stage === stage && st.cap_stop && ((st.models ?? STAGES[stage]!.models) as string[]).some((m) => cells.some((c) => c.model === m)));
-    if (stopped) throw new Error(`E_STAGE_STOPPED: ${stage} stopped (${stopped.cap_stop}) for ${(stopped.models ?? STAGES[stage]!.models).join(", ")}; a stopped stage is never resumed`);
+    const stops = Object.entries(readStages(opts.out, loadResults(opts.out)).stops).flatMap(([k, labels]) => labels.filter((l) => /^(CAP_STOP|RESERVATION_EXCEEDED) /.test(l)).map((l) => `${l} (${k})`));
+    if (stops.length) throw new Error(`E_STAGE_STOPPED: ${stops.join(", ")}; a stop ends the run, so nothing more runs into ${opts.out}`);
     const r = await execute(cells, opts, stage);
     process.exit(r.capStop ? 2 : 0);
   }
