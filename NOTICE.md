@@ -2,7 +2,7 @@
 
 gstack-evals is MIT licensed ([LICENSE](LICENSE)). This file lists every outside project whose code is, or is planned to be, vendored here, and the projects it reads or runs without copying code.
 
-A unit that vendors a file records the exact source commit in its row, keeps the upstream copyright line in each file's header, and marks every change it makes. Until a row says vendored, no code from that source is in this repo.
+A unit that vendors a file records the exact source commit in its row, keeps the upstream copyright line in each file's header, and marks every change it makes. Until a row says vendored or adapted, no code from that source is in this repo.
 
 ## Vendored or planned
 

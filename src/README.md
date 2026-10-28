@@ -7,7 +7,7 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | cli.ts | The command table and dispatcher behind `bin/gstack-evals` | U1 |
 | types.ts | Interfaces that more than one unit codes against | U1 |
 | errors/ | The reason-code registry and the docs/errors.md generator | U1; each code's text belongs to its owner |
-| skill-eval/ | Lane A: contract reader and `validate` (contract/, U5), the lock (lock/, U5), the verdict engine (verdict/, U6), the CLI, `doctor`, preflight and `explain` (cli/, U7) | U5, U6, U7 |
+| skill-eval/ | Lane A: contract reader, `validate`, the answer predicate and preflight's vacuity check (contract/, U5), the lock (lock/, U5), the verdict engine (verdict/, U6), the CLI, `doctor`, preflight and `explain` (cli/, U7) | U5, U6, U7 |
 | adapters/claude-code/ | Claude Code on the Agent SDK | U10 |
 | adapters/codex/ | Codex through `codex exec --json`, non-interactive tasks only | U10 |
 | adapters/_fake/ | The keyless fake host | U7 |
