@@ -3,7 +3,7 @@
 // and a new lease waits until the previous one is settled or reconciled. The local ledger holds a lease's calls against
 // its amount, and the lease closes into the approval record. Nothing here releases an allowance whose spend is unknown.
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { Lease } from "../../types.ts";
@@ -176,13 +176,24 @@ export function importSettlement(record: string, close: unknown): CloseFile {
 
 /**
  * The owner's settlement of a lease whose machine or local ledger is gone: their figure, their words and the provider
- * usage export it came from. Until it is recorded the lease's whole amount stays committed.
+ * usage export it came from, with its sha256. Until it is recorded the lease's whole amount stays committed. It waits
+ * until the lease has expired, so a machine that comes back cannot spend beside a replacement worker.
  */
 export function reconcileLease(record: string, r: { lease_id: string; spent_micros: number; quotes: Quote[]; source: string; now?: Date }): CloseFile {
   checkQuotes(r.quotes);
   if (!isMicros(r.spent_micros)) throw new LedgerError("E_USAGE", "--spent must be an amount of dollars");
+  let source_sha256: string;
+  try {
+    source_sha256 = createHash("sha256").update(readFileSync(r.source)).digest("hex");
+  } catch (error) {
+    throw new LedgerError("E_USAGE", "--source must be the provider usage export file the owner settled from: " + (error as Error).message);
+  }
   const { lease, close: prior } = findLease(record, r.lease_id);
-  if (prior?.how === "reconciled" && prior.spent_micros === r.spent_micros && prior.source === r.source && sameQuotes(prior.quotes, r.quotes)) return prior;
+  if (prior?.how === "reconciled" && prior.spent_micros === r.spent_micros && prior.source === r.source && prior.source_sha256 === source_sha256 && sameQuotes(prior.quotes, r.quotes)) return prior;
+  const now = r.now ?? new Date();
+  if (!prior && now < new Date(lease.expires_at)) {
+    throw new LedgerError("E_LEASE_UNSETTLED", "lease " + r.lease_id + " can still admit calls on machine " + lease.machine_id + " until " + lease.expires_at + "; settle it there, or reconcile it after it expires");
+  }
   const close: CloseFile = {
     schema: 1,
     kind: "close",
@@ -194,10 +205,10 @@ export function reconcileLease(record: string, r: { lease_id: string; spent_micr
     unknown_micros: 0,
     unknown_calls: 0,
     usage: null,
-    closed_at: (r.now ?? new Date()).toISOString(),
+    closed_at: now.toISOString(),
     quotes: r.quotes,
     source: r.source,
-    source_sha256: existsSync(r.source) ? createHash("sha256").update(readFileSync(r.source)).digest("hex") : null,
+    source_sha256,
   };
   const result = prior ? { conflict: prior } : write(record, close);
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + r.lease_id + " is already " + closeText(result.conflict as CloseFile) + "; this reconcile says " + closeText(close));

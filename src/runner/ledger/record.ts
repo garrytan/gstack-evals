@@ -3,7 +3,7 @@
 // totals are sums over the files. The record may sit on a Capy drive, which has no atomic write, so each line item
 // admits one run, and each slot has one winner: a second writer of the same slot finds the first file and refuses.
 import { randomBytes } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { TokenUsage } from "../../types.ts";
@@ -63,7 +63,7 @@ export interface CloseFile extends Slot {
   /** Reconciled only: the owner's words and the provider usage export they settled from. */
   quotes?: Quote[];
   source?: string;
-  source_sha256?: string | null;
+  source_sha256?: string;
 }
 
 export type RecordFile = ApprovalFile | LeaseFile | CloseFile;
@@ -71,6 +71,7 @@ export type RecordFile = ApprovalFile | LeaseFile | CloseFile;
 export const ITEM_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const FILE = /^(approval|lease|close)-(\d{4})\.json$/;
 const LINK_UNSUPPORTED = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV", "EMLINK"]);
+const DIR_SYNC_UNSUPPORTED = new Set(["EINVAL", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EBADF"]);
 
 export const slotPath = (record: string, f: { kind: string; item: string; seq: number }) => join(record, "items", f.item, f.kind + "-" + String(f.seq).padStart(4, "0") + ".json");
 
@@ -80,22 +81,22 @@ export const recordHooks: { afterWrite?: (path: string) => void } = {};
 /**
  * Writes a record file once. A file already in the slot with the same bytes is "present", so a retried write is
  * idempotent; one with other bytes is a conflict. The file appears whole: it is written and fsynced aside, then linked
- * into place, which fails when the slot is taken. Where links are unsupported it is created exclusively instead.
+ * into place, which fails when the slot is taken. Where links are unsupported it is created exclusively instead. The
+ * directory entries are fsynced before the write is acknowledged, new directories included.
  */
 export function writeOnce(record: string, file: RecordFile): "written" | "present" | { conflict: RecordFile } {
   const path = slotPath(record, file);
   const text = JSON.stringify(file, null, 2) + "\n";
-  mkdirSync(dirname(path), { recursive: true });
+  const dir = dirname(path);
+  const firstNew = mkdirSync(dir, { recursive: true });
+  for (let d = dir; firstNew !== undefined; d = dirname(d)) {
+    syncDir(dirname(d));
+    if (d === firstNew) break;
+  }
   const tmp = path + ".tmp-" + process.pid + "-" + randomBytes(4).toString("hex");
   let created = false;
   try {
-    const fd = openSync(tmp, "wx");
-    try {
-      writeSync(fd, text);
-      fsyncSync(fd);
-    } finally {
-      closeSync(fd);
-    }
+    writeDurably(tmp, text);
     try {
       linkSync(tmp, path);
       created = true;
@@ -107,6 +108,7 @@ export function writeOnce(record: string, file: RecordFile): "written" | "presen
   } finally {
     rmSync(tmp, { force: true });
   }
+  if (created) syncDir(dir);
   recordHooks.afterWrite?.(path);
   const back = readFileSync(path, "utf8");
   if (back === text) return created ? "written" : "present";
@@ -114,13 +116,35 @@ export function writeOnce(record: string, file: RecordFile): "written" | "presen
   return { conflict: parseFile(path, back) };
 }
 
+function writeDurably(path: string, text: string): void {
+  const fd = openSync(path, "wx");
+  try {
+    writeSync(fd, text);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function createExclusive(path: string, text: string): boolean {
   try {
-    writeFileSync(path, text, { flag: "wx" });
+    writeDurably(path, text);
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
     throw error;
+  }
+}
+
+/** fsyncs a directory so a new entry in it survives a crash. File systems that cannot fsync a directory (some FUSE mounts) are skipped. */
+function syncDir(dir: string): void {
+  const fd = openSync(dir, "r");
+  try {
+    fsyncSync(fd);
+  } catch (error) {
+    if (!DIR_SYNC_UNSUPPORTED.has((error as NodeJS.ErrnoException).code ?? "")) throw error;
+  } finally {
+    closeSync(fd);
   }
 }
 
