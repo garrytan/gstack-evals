@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem, recordHooks, slotPath } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
@@ -267,3 +267,28 @@ describe("settle failures and recovery", () => {
   });
 });
 
+
+describe("the sealed workflow's lease round trip", () => {
+  test("the thread exports a lease, a fake workflow spends it in its own ledger, and its settle artifact closes the lease in the record", async () => {
+    const { record } = setup();
+    const lease = openLease(record, null, { item: "lanea", run_id: "sealed-1", machine_id: "workflow:sealed-repo", amount_micros: 3 * DOLLAR });
+    const dispatchInput = JSON.stringify(exportLease(record, lease.lease_id));
+
+    const workflow = LocalLedger.open(join(scratch(), "workflow.sqlite"));
+    workflow.addLease(JSON.parse(dispatchInput));
+    for (const trial of [1, 2]) {
+      const r = reservation(await workflow.reserve({ idempotency_key: "w" + trial, lease_id: lease.lease_id, cell: cell(trial), max_micros: DOLLAR }));
+      await workflow.settle(r.reservation_id, { kind: "spent", spent_micros: 450_000, usage });
+    }
+    expect(await workflow.reserve({ idempotency_key: "w3", lease_id: lease.lease_id, cell: cell(3), max_micros: 2_100_001 })).toMatchObject({ ok: false, code: "CAP_STOP" });
+    const artifact = JSON.stringify(settleLease(null, workflow, lease.lease_id));
+    expect(settleLease(null, workflow, lease.lease_id)).toEqual(JSON.parse(artifact));
+
+    expect(importSettlement(record, JSON.parse(artifact))).toMatchObject({ spent_micros: 900_000 });
+    expect(importSettlement(record, JSON.parse(artifact))).toMatchObject({ spent_micros: 900_000 });
+    expect(codeOf(() => importSettlement(record, { ...JSON.parse(artifact), spent_micros: 1 }))).toBe("E_SETTLE_CONFLICT");
+    expect(codeOf(() => exportLease(record, lease.lease_id))).toBe("E_LEASE_CLOSED");
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 900_000, run_id: "sealed-1", open_lease: null });
+    expect(JSON.parse(readFileSync(slotPath(record, { kind: "lease", item: "lanea", seq: 1 }), "utf8")).machine_id).toBe("workflow:sealed-repo");
+  });
+});

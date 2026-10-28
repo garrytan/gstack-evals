@@ -9,7 +9,7 @@ import type { ReasonCode } from "../../errors/codes.ts";
 import type { Lease } from "../../types.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { isRecordFile, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 const ESCALATE = "a human must approve a cap and record it with their exact words (docs/budget-ledger.md); on Capy, ask your Captain through a needs-you report";
@@ -50,8 +50,11 @@ function checkQuotes(quotes: Quote[]): void {
 const sameQuotes = (a: Quote[] | undefined, b: Quote[]) => JSON.stringify(a) === JSON.stringify(b);
 const closeText = (c: CloseFile) => c.how + " at " + usd(c.spent_micros) + " spent and " + usd(c.unknown_micros) + " unknown";
 
-/** Records a line item's first cap (init) or a higher one (raise). Retrying the same approval returns the recorded one. */
-export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; now?: Date }): ApprovalFile {
+/**
+ * Records a line item's first cap (init) or a higher one (raise). Retrying the same approval returns the recorded one.
+ * mirror runs after every check and before the write, so no approval is recorded until the mirror succeeds.
+ */
+export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; now?: Date }, mirror?: () => void): ApprovalFile {
   if (!ITEM_NAME.test(a.item)) throw new LedgerError("E_USAGE", "line item " + JSON.stringify(a.item) + " must match " + ITEM_NAME);
   if (!isMicros(a.cap_micros) || a.cap_micros === 0) throw new LedgerError("E_USAGE", "a cap must be a positive amount of dollars");
   checkQuotes(a.quotes);
@@ -62,6 +65,7 @@ export function recordApproval(record: string, a: { action: "init" | "raise"; it
   if (a.action === "raise" && !last) throw new LedgerError("E_LEDGER_MISSING", "line item " + a.item + " has no approved cap to raise in " + record + "; " + ESCALATE);
   if (last && a.cap_micros <= last.cap_micros) throw new LedgerError("E_USAGE", "raise records a higher cap; line item " + a.item + " is already at " + usd(last.cap_micros));
   const file: ApprovalFile = { schema: 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, recorded_at: (a.now ?? new Date()).toISOString() };
+  mirror?.();
   if (typeof write(record, file) === "object") throw new LedgerError("E_LEDGER_RECORD", "another approval for line item " + a.item + " was recorded at the same moment; read gstack-evals ledger status, then record again if it is still needed");
   return file;
 }
@@ -83,7 +87,7 @@ const toLease = (f: LeaseFile, state: Lease["state"]): Lease => ({ lease_id: f.l
 export interface LeaseRequest {
   item: string;
   run_id: string;
-  /** The holder: this machine by default. */
+  /** The holder: this machine by default, or the sealed workflow a lease is exported to. */
   machine_id?: string;
   /** Defaults to everything the line item has left. */
   amount_micros?: number;
@@ -136,13 +140,37 @@ function findLease(record: string, lease_id: string): { state: ItemState; lease:
   return { state, ...entry };
 }
 
-/** Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same bytes. */
-export function settleLease(record: string, local: LocalLedger, lease_id: string): CloseFile {
-  findLease(record, lease_id);
+/** The lease export for a sealed workflow that cannot reach the record: the open lease's file, passed as a dispatch input. */
+export function exportLease(record: string, lease_id: string): LeaseFile {
+  const { lease, close } = findLease(record, lease_id);
+  if (close) throw new LedgerError("E_LEASE_CLOSED", "lease " + lease_id + " is already " + closeText(close));
+  return lease;
+}
+
+/**
+ * Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same
+ * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
+ */
+export function settleLease(record: string | null, local: LocalLedger, lease_id: string): CloseFile {
+  if (record !== null) findLease(record, lease_id);
   const close = local.stageClose(lease_id);
+  if (record === null) return close;
   const result = write(record, close, "E_LEASE_UNSETTLED");
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + lease_id + " is already " + closeText(result.conflict as CloseFile) + " in the approval record; this settle says " + closeText(close));
   local.markClosed(lease_id, "settled");
+  return close;
+}
+
+/** Copies a sealed workflow's settle artifact into the record. Idempotent: the same artifact again is present. */
+export function importSettlement(record: string, close: unknown): CloseFile {
+  if (!isRecordFile(close) || close.kind !== "close") throw new LedgerError("E_USAGE", "the settle artifact is not a lease close");
+  const { lease, close: prior } = findLease(record, close.lease_id);
+  if (close.how !== "settled" || close.item !== lease.item || close.seq !== lease.seq) {
+    throw new LedgerError("E_USAGE", "the settle artifact for " + close.lease_id + " does not match the lease in the approval record " + record);
+  }
+  if (prior && JSON.stringify(prior) !== JSON.stringify(close)) throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(prior) + "; the artifact says " + closeText(close));
+  const result = write(record, close, "E_LEASE_UNSETTLED");
+  if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(result.conflict as CloseFile) + "; the artifact says " + closeText(close));
   return close;
 }
 

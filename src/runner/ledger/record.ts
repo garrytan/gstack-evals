@@ -124,26 +124,25 @@ function createExclusive(path: string, text: string): boolean {
   }
 }
 
+/** The shape checks every record file passes, also applied to a lease export or settle artifact before it is used. */
+export function isRecordFile(f: unknown): f is RecordFile {
+  const r = f as RecordFile | null;
+  if (typeof r !== "object" || r === null || r.schema !== 1 || typeof r.item !== "string" || !ITEM_NAME.test(r.item) || !Number.isSafeInteger(r.seq)) return false;
+  if (r.kind === "approval") return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0;
+  if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && !Number.isNaN(Date.parse(r.expires_at));
+  return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
+}
+
 function parseFile(path: string, text: string): RecordFile {
   const name = FILE.exec(basename(path));
-  let f: RecordFile | null = null;
+  let f: unknown = null;
   try {
     f = JSON.parse(text);
   } catch {}
-  const valid =
-    name !== null &&
-    f !== null &&
-    f.schema === 1 &&
-    f.kind === name[1] &&
-    f.seq === Number(name[2]) &&
-    f.item === basename(dirname(path)) &&
-    (f.kind === "approval"
-      ? isMicros(f.cap_micros) && Array.isArray(f.quotes) && f.quotes.length > 0
-      : f.kind === "lease"
-        ? isMicros(f.reserved_micros) && typeof f.lease_id === "string" && typeof f.run_id === "string"
-        : isMicros(f.spent_micros) && isMicros(f.unknown_micros) && typeof f.lease_id === "string");
-  if (!valid) throw new LedgerError("E_LEDGER_RECORD", "the approval record file " + path + " does not parse as a ledger file; repair it by hand, never delete it");
-  return f!;
+  if (name === null || !isRecordFile(f) || f.kind !== name[1] || f.seq !== Number(name[2]) || f.item !== basename(dirname(path))) {
+    throw new LedgerError("E_LEDGER_RECORD", "the approval record file " + path + " does not parse as a ledger file; repair it by hand, never delete it");
+  }
+  return f;
 }
 
 export interface ItemState {
