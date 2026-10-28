@@ -31,7 +31,7 @@ const refused = (globs: string[], path: string) => globs.some((g) => globRegExp(
 
 describe("sealed publication rules", () => {
   test("refuse held-out bodies in any sealed, protected or held-out folder, at the root or nested", () => {
-    for (const path of ["sealed/s1/tasks.json", "sealed/s1/answers.md", "sealed/s1/tasks/t1/task.toml", "sealed/s1/MANIFEST.json", "protected/MANIFEST.json", "protected/cases/c1.json", "heldout/t1.json", "held-out/x/y.md", "holdout/a.json", "tasks/heldout/a.json", "tasks/holdout/t1/task.toml", "lanes/x/sealed/a.json", "lanes/x/protected/b.json", "lanes/x/held-out/c.md", "tasks/dev/t1/answer.sealed", "tasks/dev/t1/key.sealed.json"]) {
+    for (const path of ["sealed/s1/tasks.json", "sealed/s1/answers.md", "sealed/s1/tasks/t1/task.toml", "sealed/s1/MANIFEST.json", "protected/MANIFEST.json", "protected/cases/c1.json", "heldout/t1.json", "held-out/x/y.md", "holdout/a.json", "tasks/heldout/a.json", "tasks/holdout/t1/task.toml", "lanes/x/sealed/a.json", "lanes/x/protected/b.json", "lanes/x/held-out/c.md", "Sealed/a.json", "HELDOUT/a.json", "lanes/x/Heldout/a.json", "held_out/a.json", "tasks/hold-out/a.json", "tasks/heldout-v2/a.json", "tasks/sealed-set/a.json", "tasks/b.SEALED", "Protected/x.json", "tasks/dev/t1/answer.sealed", "tasks/dev/t1/key.sealed.json"]) {
       expect(refused(sealed.paths, path)).toBe(true);
     }
   });

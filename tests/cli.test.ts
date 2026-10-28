@@ -65,6 +65,10 @@ describe("gstack-evals dispatcher", () => {
     const skillEval = COMMANDS.find((c) => c.name === "skill-eval")!;
     const root = fakeRoot({ VERSION: "0.0.1\n", [skillEval.module]: "export async function main(argv) { console.error('args ' + argv.join(' ')); return argv.length; }\n" });
     expect((await call(["skill-eval", "--example", "--json"], root)).code).toBe(2);
+    for (const exit of [0, 1, 3]) {
+      const r = await call(["skill-eval"], fakeRoot({ [skillEval.module]: "export async function main() { return " + exit + "; }\n" }));
+      expect(r).toMatchObject({ code: exit, err: "" });
+    }
     const lines = (await call(["--help"], root)).out.split("\n");
     expect(lines.find((l) => l.startsWith("  skill-eval "))).not.toContain("not built yet");
     expect(lines.find((l) => l.startsWith("  ledger "))).toContain("[not built yet: U4, M0]");
@@ -75,7 +79,7 @@ describe("gstack-evals dispatcher", () => {
     const sources = [
       "export const notMain = 1;\n",
       "export async function main() { throw new Error('boom'); }\n",
-      "export async function main() { throw new Error('first line\\nsecond line'); }\n",
+      "export async function main() { throw new Error('first line\\nsecond line\\rthird line'); }\n",
       "export async function main() {}\n",
       "export async function main() { return 4; }\n",
     ];

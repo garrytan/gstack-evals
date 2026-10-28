@@ -9,7 +9,10 @@ export type Verdict = "PASS" | "FAIL" | "INCOMPLETE";
 /** 0 no loss detected, 1 the edit lost something, 2 no verdict, 3 calibration failed. Several models: 3, then 1, then 2, then 0. */
 export type ExitCode = 0 | 1 | 2 | 3;
 
-/** A built gstack-evals command module exports main; bin/gstack-evals calls it with the arguments after the command name. */
+/**
+ * A built gstack-evals command module exports main; bin/gstack-evals calls it with the arguments after the command name.
+ * main awaits all of its work and returns an ExitCode. It never calls process.exit, which would skip the dispatcher's check.
+ */
 export type CommandMain = (argv: string[]) => Promise<number>;
 
 // Arms (plan v3.2 "Arms and the measured configuration"; schema/arms.schema.json is U5's).

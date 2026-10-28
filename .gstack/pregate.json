@@ -37,13 +37,32 @@
   },
   "sealed": {
     "paths": [
-      "**/heldout/**",
-      "**/held-out/**",
-      "**/holdout/**",
-      "**/sealed/**",
-      "**/protected/**",
+      "**/heldout*/**",
+      "**/Heldout*/**",
+      "**/HeldOut*/**",
+      "**/HELDOUT*/**",
+      "**/held-out*/**",
+      "**/Held-out*/**",
+      "**/Held-Out*/**",
+      "**/HELD-OUT*/**",
+      "**/held_out*/**",
+      "**/hold-out*/**",
+      "**/holdout*/**",
+      "**/Holdout*/**",
+      "**/HoldOut*/**",
+      "**/HOLDOUT*/**",
+      "**/sealed*/**",
+      "**/Sealed*/**",
+      "**/SEALED*/**",
+      "**/protected*/**",
+      "**/Protected*/**",
+      "**/PROTECTED*/**",
       "**/*.sealed",
-      "**/*.sealed.*"
+      "**/*.sealed.*",
+      "**/*.Sealed",
+      "**/*.Sealed.*",
+      "**/*.SEALED",
+      "**/*.SEALED.*"
     ],
     "transcripts": [
       "**/runs/**"

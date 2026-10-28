@@ -68,7 +68,7 @@ export function helpText(root = REPO_ROOT): string {
 
 function errorLines(code: "E_USAGE" | "E_INTERNAL", message: string, fix: string = CODES[code].fix): string {
   return [message, "fix: " + fix, "docs: " + docAnchor(code)]
-    .flatMap((text) => text.split("\n"))
+    .flatMap((text) => text.split(/\r\n|\r|\n/))
     .map((line) => code + " " + line)
     .join("\n");
 }
