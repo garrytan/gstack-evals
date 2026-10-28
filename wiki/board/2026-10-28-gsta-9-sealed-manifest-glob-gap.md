@@ -26,7 +26,7 @@ So no rule can refuse `sealed/<set>/tasks.json` and still let `sealed/<set>/MANI
 
 ## What U1 did
 
-The config now refuses every file under any folder named `sealed` or `protected` (and `heldout`, `held-out` or `holdout`), at any depth. It fails closed. Nothing in v1.0 writes there, since the first seal comes in M2b (earliest 2027-01-08) and needs a second principal first. `tests/sealed.test.ts` checks direct and nested bodies against the config, using the same glob rules gstack-pregate uses.
+The config now refuses every file under any folder whose name starts with `sealed`, `protected`, `heldout`, `held-out`, `held_out`, `hold-out` or `holdout`, in the casings the config lists, at any depth. It fails closed. Nothing in v1.0 writes there, since the first seal comes in M2b (earliest 2027-01-08) and needs a second principal first. `tests/sealed.test.ts` checks direct and nested bodies against the config, using the same glob rules gstack-pregate uses.
 
 ## What has to happen before the first seal
 
