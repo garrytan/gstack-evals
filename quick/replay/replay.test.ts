@@ -7,6 +7,7 @@ import * as crypto from 'node:crypto';
 import { diffLines, filterDiff, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
 import { CapError, Ledger, MODELS, meteredCall, worstUsd } from './llm.ts';
 import { startFake } from './fake-upstream.ts';
+import { findingKey, summarize, type Unit } from './score.ts';
 
 const HERE = import.meta.dir;
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
@@ -87,6 +88,32 @@ describe('diffs and mining helpers', () => {
   });
 });
 
+describe('scoring', () => {
+  const cases = [
+    { id: 'd1', kind: 'defect', source: 'escaped', file: 'lib/a.ts', lines: [[2, 4]] },
+    { id: 'y1', kind: 'decoy', matched_to: 'd1' },
+  ];
+  const f = (summary: string) => ({ severity: 'CRITICAL', confidence: 8, path: 'lib/a.ts', line: 3, summary, cause_path: null, specialist: null }) as any;
+  const u = (trial: number, findings: any[], complete = true, usd = 1): Unit => ({ model: 'haiku', arm: 'gstack', case: 'd1', kind: 'defect', trial, complete, usd, input_tokens: 0, output_tokens: 0, calls: 1, findings, unparsed: 0 });
+  test('an unjudged right-file finding makes its unit incomplete, not a miss', () => {
+    const hit = f('x breaks'), open = f('never judged');
+    const s = summarize([u(1, [hit]), u(2, [open])], cases, { [findingKey(hit)]: { names_defect: true } });
+    const row = s.rows[0];
+    expect(row.recall).toBe(1);
+    expect(row.defect_units).toBe(1);
+    expect(row.unjudged).toBe(1);
+  });
+  test('cost per catch counts the spend of incomplete units', () => {
+    const hit = f('x breaks');
+    const s = summarize([u(1, [hit], true, 1), u(2, [], false, 3)], cases, { [findingKey(hit)]: { names_defect: true } });
+    const row = s.rows[0];
+    expect(row.incomplete).toBe(1);
+    expect(row.catches).toBe(1);
+    expect(row.usd_defects).toBe(4);
+    expect(row.usd_per_catch).toBe(4);
+  });
+});
+
 describe('ledger', () => {
   test('refuses without an approval row', () => {
     const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 1);
@@ -162,7 +189,7 @@ describe('providers against the fake upstream', () => {
     fs.writeFileSync(path.join(dir, 'frozen.sha256'), Object.entries(files).map(([k, v]) => sha(v) + '  ' + k).join('\n') + '\n');
     const mk = (id: string, kind: string, specs: string[]) => ({ case: id, kind, diff_lines: 60, specialists: specs, red_team_by_size: false, prompts: { baseline: id + '/baseline.md', core: id + '/core.md', red_team_template: id + '/red-team.template.md', ...Object.fromEntries(specs.map(s => [s, id + '/' + s + '.md'])) } });
     fs.writeFileSync(path.join(dir, 'plan.json'), JSON.stringify({ cases: [mk('d1', 'defect', ['testing']), mk('y1', 'decoy', [])] }));
-    fs.writeFileSync(path.join(dir, 'cases.json'), JSON.stringify({ cases: [{ id: 'd1', kind: 'defect', file: 'lib/a.ts', lines: [[2, 4]], fix: 'f', fix_diff: '-x\n+y', defect: 'x breaks' }, { id: 'y1', kind: 'decoy' }] }));
+    fs.writeFileSync(path.join(dir, 'cases.json'), JSON.stringify({ cases: [{ id: 'd1', kind: 'defect', source: 'escaped', file: 'lib/a.ts', lines: [[2, 4]], fix: 'f', fix_diff: '-x\n+y', defect: 'x breaks' }, { id: 'y1', kind: 'decoy', matched_to: 'd1' }] }));
     const ledger = path.join(dir, 'ledger.jsonl');
     new Ledger(ledger, 'replay-quick', 60).approve(QUOTES, 'test');
     const env = { ...process.env, ...fake.env, PLAN_FILE: path.join(dir, 'plan.json'), FROZEN_FILE: path.join(dir, 'frozen.sha256'), CASES_FILE: path.join(dir, 'cases.json'), PROMPTS: prompts, RESULTS: path.join(dir, 'results'), LEDGER: ledger, PREREG_SHA: 'test' };
@@ -174,16 +201,23 @@ describe('providers against the fake upstream', () => {
     const r2 = await bun([path.join(HERE, 'score.ts')], env);
     expect(r2.status).toBe(0);
     const s = JSON.parse(fs.readFileSync(path.join(dir, 'results/summary.json'), 'utf8'));
-    const hg = s.primary.rows.find((r: any) => r.model === 'haiku' && r.arm === 'gstack');
+    const hg = s.strata.all.primary.rows.find((r: any) => r.model === 'haiku' && r.arm === 'gstack');
     expect(hg.recall).toBe(1);
     expect(hg.false_alarm).toBe(0);
     expect(hg.defect_units).toBe(3);
+    expect(s.strata.escaped.primary.rows.find((r: any) => r.model === 'haiku' && r.arm === 'gstack').recall).toBe(1);
+    expect(s.strata['review-caught'].primary.rows.length).toBe(0);
     const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
     expect(rows.filter(r => r.type === 'reserve').length).toBe(rows.filter(r => r.type === 'settle').length);
+    expect(hg.usd_all).toBeCloseTo(rows.filter(r => r.type === 'settle' && r.call_id.startsWith('haiku/') && r.call_id.split('/')[2] === 'gstack').reduce((a, r) => a + r.usd, 0), 6);
+    // A recorded INFRA failure is terminal: the rerun below must not call again for it.
+    const t1 = path.join(dir, 'results/haiku/d1/baseline/t1/baseline.json');
+    fs.renameSync(t1, t1.replace(/\.json$/, '.error.json'));
     const before = rows.length;
     const r3 = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku,deepseek'], env);
     expect(r3.status).toBe(0);
     expect(fs.readFileSync(ledger, 'utf8').trim().split('\n').length).toBe(before);
+    expect(fs.existsSync(t1)).toBe(false);
   }, 60000);
 
   test('a prompt that moved after freezing is refused', async () => {

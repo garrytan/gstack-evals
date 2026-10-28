@@ -18,6 +18,8 @@ export type ModelSpec = {
 
 export const MODELS: Record<string, ModelSpec> = {
   opus: { key: 'opus', provider: 'anthropic', model: 'claude-opus-5-5', effort: 'medium', maxTokens: 32000, inPerM: 4.0, outPerM: 20.0, cacheReadFactor: 0.05 },
+  // The exploratory cell: Opus at high effort, gstack arm only, run only if the cap leaves room.
+  'opus-high': { key: 'opus-high', provider: 'anthropic', model: 'claude-opus-5-5', effort: 'high', maxTokens: 32000, inPerM: 4.0, outPerM: 20.0, cacheReadFactor: 0.05 },
   haiku: { key: 'haiku', provider: 'anthropic', model: 'claude-haiku-5-5', effort: 'medium', maxTokens: 32000, inPerM: 0.1, outPerM: 0.5, cacheReadFactor: 0.1 },
   // DeepSeek's own endpoint on OpenRouter; its off-peak list price is 0.15/0.60, peak hours double it.
   deepseek: { key: 'deepseek', provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', effort: 'high', maxTokens: 32000, inPerM: 0.3, outPerM: 1.2 },

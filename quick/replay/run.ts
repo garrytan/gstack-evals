@@ -1,5 +1,5 @@
 // Runs the replay: every case x arm x model x trial, through the ledger.
-// bun quick/replay/run.ts [--models deepseek,haiku,opus] [--cases d01,y01] [--trials 3] [--dry-run]
+// bun quick/replay/run.ts [--models deepseek,haiku,opus] [--cases d01,y01] [--arms baseline,gstack] [--trials 3] [--dry-run]
 // env: LEDGER (the Captain-drive ledger file), PROMPTS, RESULTS, RUN_LIMIT (USD the review
 // calls may commit, below the cap, so the judge keeps its share), PREREG_SHA.
 import * as fs from 'node:fs';
@@ -13,7 +13,7 @@ const arg = (k: string, d?: string) => { const i = process.argv.indexOf('--' + k
 const PROMPTS = process.env.PROMPTS ?? path.join(process.env.HOME!, '.capy/work/replay/prompts');
 const RESULTS = process.env.RESULTS ?? path.join(process.env.HOME!, '.capy/work/replay/results');
 export const CAP = 60;
-const RUN_LIMIT = Number(process.env.RUN_LIMIT ?? '54');
+const RUN_LIMIT = Number(process.env.RUN_LIMIT ?? '55');
 const LEDGER = process.env.LEDGER ?? '/home/user/.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl';
 const PREREG_SHA = process.env.PREREG_SHA ?? '';
 const DRY = process.argv.includes('--dry-run');
@@ -43,11 +43,13 @@ let inFlight = 0;
 let capStopped = false;
 const settled: (() => void)[] = [];
 
-// One reviewer call, resumable: an existing result file is the answer. A cap refusal while
+// One reviewer call, resumable: an existing result file is the answer, and an existing error
+// record is a terminal INFRA failure that a rerun leaves incomplete. A cap refusal while
 // other calls are open waits for one to settle and tries again; with nothing open it is the
 // hard stop, and every later call is skipped.
 async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, out: string, meta: any): Promise<any> {
   if (fs.existsSync(out)) return JSON.parse(fs.readFileSync(out, 'utf8'));
+  if (fs.existsSync(out.replace(/\.json$/, '.error.json'))) return null;
   if (capStopped) return null;
   if (DRY) {
     const rec = { ...meta, dry_run: true, worst_usd: worstUsd(spec, Buffer.byteLength(text)) };
@@ -114,6 +116,7 @@ if (import.meta.main) {
   const models = (arg('models', 'deepseek,haiku,opus')!).split(',');
   const only = arg('cases') ? new Set(arg('cases')!.split(',')) : null;
   const trials = Number(arg('trials', '3'));
+  const arms = arg('arms', 'baseline,gstack')!.split(',') as ('baseline' | 'gstack')[];
   const cases = plan.cases.filter((c: any) => !only || only.has(c.case));
   if (!DRY && !PREREG_SHA) throw new Error('PREREG_SHA is required for a paid run');
   fs.mkdirSync(path.dirname(LEDGER), { recursive: true });
@@ -121,14 +124,16 @@ if (import.meta.main) {
   let worst = 0;
   for (const m of models) {
     const spec = MODELS[m]!;
-    // Trial 1 of each case and arm first; trials 2 and 3 follow at once, so they read the
-    // prompt cache trial 1 wrote.
-    await Promise.all(cases.flatMap((c: any) => (['baseline', 'gstack'] as const).map(async arm => {
+    // Case-arm groups run four at a time in plan order: trial 1, then trials 2 and 3 at once, so
+    // the later trials read the prompt cache trial 1 wrote while it is still live, and a cap
+    // stop cuts the tail of the plan rather than scattered units.
+    const groups = new Gate(4);
+    await Promise.all(cases.flatMap((c: any) => arms.map(arm => groups.run(async () => {
       await unit(ledger, spec, c, arm, 1);
       await Promise.all(Array.from({ length: trials - 1 }, (_, i) => unit(ledger, spec, c, arm, i + 2)));
-    })));
+    }))));
     if (DRY) {
-      for (const c of cases) for (const r of ['baseline', 'core', ...c.specialists, ...(c.red_team_by_size ? ['red_team_template'] : [])]) worst += worstUsd(spec, fs.statSync(path.join(PROMPTS, c.prompts[r])).size) * trials;
+      for (const c of cases) for (const r of [...(arms.includes('baseline') ? ['baseline'] : []), ...(arms.includes('gstack') ? ['core', ...c.specialists, ...(c.red_team_by_size ? ['red_team_template'] : [])] : [])]) worst += worstUsd(spec, fs.statSync(path.join(PROMPTS, c.prompts[r])).size) * trials;
     }
     console.log(m + ' done' + (capStopped ? ' (cap stop)' : ''));
   }

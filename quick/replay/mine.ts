@@ -157,9 +157,45 @@ for (const f of prs) {
     }
   }
 }
+
+// Missed defects, second route: any fix or revert commit on main whose rewritten lines blame
+// mostly to one earlier main commit within ESCAPE_WINDOW commits, with or without a reference
+// in the body. That earlier commit is the case.
+const ESCAPE_WINDOW = 150;
+const mainFp = git('log', '--first-parent', '--format=%H %s', 'origin/main').split('\n').filter(Boolean).map(l => ({ sha: l.slice(0, 40), subject: l.slice(41) })).reverse();
+const fpPos = new Map(mainFp.map((c, i) => [c.sha, i]));
+const seen = new Set(missed.map(m => m.reviewedHead + ' ' + m.file));
+for (let i = 1; i < mainFp.length; i++) {
+  const f = mainFp[i]!;
+  if (!/\b(fix|revert)/i.test(f.subject)) continue;
+  const parent = mainFp[i - 1]!.sha;
+  const files = git('diff', '--name-only', parent, f.sha).split('\n').filter(x => x && filterDiff.keepPath(x) && !/\.md$/.test(x) && !/(^|\/)test\//.test(x) && !/\.test\.[jt]s$/.test(x));
+  if (files.length < 1 || files.length > 4) continue;
+  for (const file of files) {
+    const ranges = oldRanges(parent, f.sha, file);
+    if (!ranges.length || ranges.length > 4) continue;
+    const shas = ranges.flatMap(r => blameShas(parent, file, r));
+    if (!shas.length) continue;
+    const counts = new Map<string, number>();
+    for (const s of shas) counts.set(s, (counts.get(s) ?? 0) + 1);
+    const [top, hits] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+    if (hits < Math.ceil(shas.length / 2)) continue;
+    const j = fpPos.get(top);
+    if (j === undefined || j >= i || i - j > ESCAPE_WINDOW || j === 0) continue;
+    if (seen.has(top + ' ' + file)) continue;
+    const xBefore = mainFp[j - 1]!.sha;
+    const kept = filterDiff(git('diff', xBefore, top), (pp: string) => tryGit('show', top + ':' + pp)?.slice(0, 400) ?? '');
+    if (!kept.includes('diff --git a/' + file + ' ')) continue;
+    const n = diffLines(kept);
+    if (n < 30 || n > 800) continue;
+    seen.add(top + ' ' + file);
+    const x = bySquash.get(top);
+    const fp = bySquash.get(f.sha);
+    missed.push({ pr: x?.number ?? Number(/\(#(\d+)\)\s*$/.exec(mainFp[j]!.subject)?.[1] ?? 0), title: mainFp[j]!.subject, fixPr: fp?.number ?? Number(/\(#(\d+)\)\s*$/.exec(f.subject)?.[1] ?? 0), fixTitle: f.subject, fix: f.sha, reviewedHead: top, base: xBefore, file, ranges, diffLines: n, fixLines: diffLines(git('diff', parent, f.sha, '--', file)), distance: i - j, introducerHasReview: (x?.body ?? '').includes('Pre-Landing Review'), route: 'blame' });
+  }
+}
 fs.writeFileSync(path.join(OUT, 'missed-candidates.json'), JSON.stringify(missed, null, 2));
 console.log('missed-defect candidates ' + missed.length);
-void bySquash;
 
 // Decoys: no later fix on main, within the next 40 commits, rewrote a line this PR added.
 const mainLog = git('log', '--first-parent', '--format=%H %s', 'origin/main').split('\n').filter(Boolean).map(l => ({ sha: l.slice(0, 40), subject: l.slice(41) })).reverse();

@@ -105,13 +105,22 @@ function redTeamTemplate(diff: string, nameStatus: string): string {
   return [FRAMING, '', FIXTURE_TEXT, '', RED, '', '## Checklist', at('review/specialists/red-team.md').trim(), '', '## Changed files', nameStatus.trim(), '', '## Diff (non-fixture source)', fence(code), '', '## Fixture and test files (summary mode)', stat].join('\n');
 }
 
-function scopeAt(base: string, head: string): Scope & { raw: string } {
+// The scope and state-machine detectors run from a clean worktree at GSTACK_SHA, so the
+// dispatch comes from the same gstack as the prompt text, whatever GSTACK_DIR has checked out.
+function pinnedBin(): string {
   fs.mkdirSync(WT, { recursive: true });
+  const dir = path.join(WT, 'gstack-' + GSTACK_SHA.slice(0, 12));
+  if (!fs.existsSync(dir)) git('worktree', 'add', '-q', '--detach', dir, GSTACK_SHA);
+  if (run('git', ['rev-parse', 'HEAD'], dir).trim() !== GSTACK_SHA || run('git', ['status', '--porcelain'], dir).trim()) throw new Error(dir + ' is not a clean checkout of ' + GSTACK_SHA);
+  return path.join(dir, 'bin');
+}
+
+function scopeAt(bin: string, base: string, head: string): Scope & { raw: string } {
   const wt = path.join(WT, 'scope');
   if (!fs.existsSync(wt)) git('worktree', 'add', '-q', '--detach', wt, head);
   run('git', ['checkout', '-q', '--detach', head], wt);
-  const ds = run(path.join(G, 'bin/gstack-diff-scope'), [base], wt, [0, 2]);
-  const sm = run(path.join(G, 'bin/gstack-state-matrix'), ['detect', '--diff-base', base], wt, [0, 1, 2]);
+  const ds = run(path.join(bin, 'gstack-diff-scope'), [base], wt, [0, 2]);
+  const sm = run(path.join(bin, 'gstack-state-matrix'), ['detect', '--diff-base', base], wt, [0, 1, 2]);
   const flag = (k: string) => new RegExp('^SCOPE_' + k + '=true$', 'm').test(ds);
   const smv = /^SCOPE_STATE_MACHINE=(true|false)$/m.exec(sm)?.[1] as 'true' | 'false' | undefined;
   return { BACKEND: flag('BACKEND'), FRONTEND: flag('FRONTEND'), AUTH: flag('AUTH'), MIGRATIONS: flag('MIGRATIONS'), API: flag('API'), STATE_MACHINE: smv ?? 'unknown', raw: (ds + sm).split('\n').filter(l => l.startsWith('SCOPE_')).join(' ') };
@@ -138,6 +147,7 @@ function stackAt(head: string): { stack: string; testFw: string } {
 if (import.meta.main) {
   const { cases } = JSON.parse(fs.readFileSync(path.join(HERE, 'cases.json'), 'utf8'));
   fs.mkdirSync(PROMPTS, { recursive: true });
+  const bin = pinnedBin();
   const frozen: string[] = [];
   const plan: any[] = [];
   const write = (rel: string, text: string) => {
@@ -155,7 +165,7 @@ if (import.meta.main) {
     const diff = filterDiff(git('diff', c.base, c.head), f => git('show', c.head + ':' + f).slice(0, 400));
     if (sha(diff) !== c.diff_sha256) throw new Error(c.id + ': diff digest moved');
     const n = diffLines(diff);
-    const scope = scopeAt(c.base, c.head);
+    const scope = scopeAt(bin, c.base, c.head);
     const { stack, testFw } = stackAt(c.head);
     const specs = selectSpecialists(n, scope);
     const kept = new Set(splitFiles(diff).map(f => f.path));

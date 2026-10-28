@@ -7,6 +7,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 - [Amendment A2 to plan v3.2, sealed releases, parity alpha and the factory keep rule](plans/2026-10-28-gsta-3-v1-plan-amendment-a2.md) (plan, GSTA-3, 2026-10-28): Unreviewed. Prices the d1 release budget against d6 parity sizing for the pilot report, makes sealed releases one bit for one frozen champion, and sets the v1.1 factory keep rule.
 - [gstack-evals v1.0 build breakdown into crew-thread units](plans/2026-10-28-gsta-3-v1-build-breakdown.md) (plan, GSTA-3, 2026-10-28): Units U1 to U18 for M0, M1a, M1b, M1c, the pilot report and Phase 2a, each with scope, done-means, dependencies, files and paid cap, plus a three-thread schedule and collision rules.
 - [Skill eval interface, draft v0.4, from approved plan v3.2](plans/2026-10-28-gsta-3-skill-eval-interface-v0-4.md) (design, GSTA-3, 2026-10-28): Draft CLI, tasks file and verdict contract for Lane A. v0.4 drops the staged ceiling stop and judges VACUOUS_CHECK on the whole predicate. Nothing is built yet.
+- [Quick look 1 preregistration: review replay on known gstack bugs](plans/2026-10-28-gsta-11-review-replay-prereg.md) (plan, GSTA-11, 2026-10-28): Do gstack's /review reviewer prompts catch known gstack bugs better than a two-sentence prompt, split by bugs gstack's review caught and bugs that escaped it? Opus, Haiku, DeepSeek; $60 cap.
 
 ## Board
 
@@ -25,6 +26,7 @@ Generated from each post's front matter by `bun run wiki:index`. Do not edit it 
 | 2026-10-28 | [Skill eval interface, draft v0.4, from approved plan v3.2](plans/2026-10-28-gsta-3-skill-eval-interface-v0-4.md) | design | open | GSTA-3 | Draft CLI, tasks file and verdict contract for Lane A. v0.4 drops the staged ceiling stop and judges VACUOUS_CHECK on the whole predicate. Nothing is built yet. |
 | 2026-10-28 | [Skill eval interface, draft v0.3, pending the final plan gate](plans/2026-10-28-gsta-3-skill-eval-interface-v0-3.md) | design | superseded by [2026-10-28-gsta-3-skill-eval-interface-v0-4](plans/2026-10-28-gsta-3-skill-eval-interface-v0-4.md) | GSTA-3 | Draft CLI, tasks file and verdict contract for the shared before/after skill eval (Lane A) that other repos code against. Nothing is built yet, and it may change before v0.1. |
 | 2026-10-28 | [gstack-evals v1 plan v3.2, approved at autoplan run 2](plans/2026-10-28-gsta-3-gstack-evals-v1-plan-v3-2/README.md) | plan | done | GSTA-3 | The v1 eval rig plan Garry approved at gate_rev 4 (reply Rec). Ends with Amendment A1, model-aware loadouts, which no review round has read. Review record and four gate briefs attached. |
+| 2026-10-28 | [Quick look 1 preregistration: review replay on known gstack bugs](plans/2026-10-28-gsta-11-review-replay-prereg.md) | plan | open | GSTA-11 | Do gstack's /review reviewer prompts catch known gstack bugs better than a two-sentence prompt, split by bugs gstack's review caught and bugs that escaped it? Opus, Haiku, DeepSeek; $60 cap. |
 
 ## Research
 
