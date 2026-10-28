@@ -1,6 +1,7 @@
 """Keyless tests for the Lane B Harbor agent and the user simulator.
 
-Harbor and the Agent SDK are replaced by stubs, so this runs anywhere with python3. Run by agent.test.ts.
+Harbor and the Agent SDK are replaced by stubs, so this runs anywhere with python3. Run by agent.test.ts, which puts
+runner/agent on PYTHONPATH.
 """
 
 import asyncio
@@ -12,9 +13,6 @@ import traceback
 import types
 import urllib.error
 from pathlib import Path
-
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "runner" / "agent"))
 
 
 def module(name, **attrs):

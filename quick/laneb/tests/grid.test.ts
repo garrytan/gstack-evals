@@ -45,6 +45,15 @@ describe("grid", () => {
     expect(overlay.services.main.network_mode).toBeUndefined();
     expect(overlay.services.main.networks).toBeUndefined();
   });
+
+  test("smoke.sh and route-check.sh pass the same overlay to every harbor run", () => {
+    for (const script of ["../runner/smoke.sh", "../runner/route-check.sh"]) {
+      const text = readFileSync(join(import.meta.dir, script), "utf8");
+      const runs = text.split("harbor run").length - 1;
+      expect(runs).toBeGreaterThan(0);
+      expect(text.split('--extra-docker-compose "$here/agent-caps.compose.yaml"').length - 1).toBe(runs);
+    }
+  });
 });
 
 describe("tb2 task.toml", () => {
