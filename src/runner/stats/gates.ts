@@ -4,7 +4,8 @@
 // (NO_VARIATION); an exploratory comparison that cannot pair is blocked alone instead of blocking the family; and the
 // cluster minimum is checked before an interval can fail a comparison, so too few clusters is always inconclusive;
 // superiority is decided by the clustered sign-flip p plus the point estimate (plan v3.2); and a comparison may
-// preregister failure_value, the score of a system failure that left no metric value.
+// preregister failure_value, the score of a system failure that left no metric value. An exact gate may state its
+// metric's direction, so a crash on a higher-is-better metric scores 0 and fails it rather than blocking the family.
 /**
  * Three-gate comparison policy over a preregistered family (plan amendment 4).
  *
@@ -47,7 +48,7 @@ export type ExactAssertion =
   | { kind: 'no_item_regression'; direction: Direction };
 
 export type ComparisonSpec =
-  | { id: string; metric: string; gate: 'exact'; assertion: ExactAssertion; cluster_by?: string; failure_value?: number; description?: string }
+  | { id: string; metric: string; gate: 'exact'; assertion: ExactAssertion; direction?: Direction; cluster_by?: string; failure_value?: number; description?: string }
   | { id: string; metric: string; gate: 'noninferiority'; direction: Direction; tolerance: number; cluster_by: string; failure_value?: number; description?: string }
   | { id: string; metric: string; gate: 'superiority'; direction: Direction; min_effect: number; cluster_by: string; failure_value?: number; description?: string }
   | { id: string; metric: string; gate: 'exploratory'; direction?: Direction; cluster_by?: string; failure_value?: number; description?: string };
@@ -132,6 +133,7 @@ export function validateFamily(value: unknown): ComparisonFamily {
       const a = c.assertion as ExactAssertion | undefined;
       if (!a || !['every_b_equals', 'b_at_most', 'b_at_least', 'no_item_regression'].includes(a.kind)) problems.push(`${label}: exact gate needs an assertion`);
       else if (a.kind === 'no_item_regression' ? !['higher', 'lower'].includes(a.direction) : !finite(a.value)) problems.push(`${label}: assertion needs ${a.kind === 'no_item_regression' ? 'a direction' : 'a finite value'}`);
+      if (c.direction !== undefined && !['higher', 'lower'].includes(c.direction)) problems.push(`${label}: direction must be higher or lower`);
     } else if (c?.gate === 'noninferiority') {
       if (!['higher', 'lower'].includes(c.direction)) problems.push(`${label}: direction must be higher or lower`);
       if (!finite(c.tolerance) || c.tolerance < 0) problems.push(`${label}: tolerance must be a finite number >= 0, in metric units`);
@@ -173,7 +175,7 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
   validateFamily(family);
   const minClusters = family.min_clusters ?? 10;
   const pair = (spec: ComparisonSpec) => {
-    const direction = spec.gate === 'exact' ? (spec.assertion.kind === 'no_item_regression' ? spec.assertion.direction : undefined) : spec.direction;
+    const direction = spec.gate === 'exact' && spec.assertion.kind === 'no_item_regression' ? spec.assertion.direction : spec.direction;
     const selection = { idField: family.id_field, metric: spec.metric, clusterBy: spec.cluster_by, excludeWhen: family.exclude_when, direction, failureValue: spec.failure_value };
     return pairObservations(aRows.map(r => toObservation(r, selection)), bRows.map(r => toObservation(r, selection)));
   };
@@ -279,8 +281,11 @@ export function evaluateFamily(aRows: readonly Row[], bRows: readonly Row[], fam
       } else {
         r.status = 'inconclusive';
         // gstack-evals: say why when there is no p-value at all.
-        // gstack-evals: the sign-flip p and the point estimate decide superiority, so the reason names both.
-        r.reasons.push(confirmP[i] === null ? NO_VARIATION : `an improvement of at least ${spec.min_effect} is not shown (point estimate ${(sign * s.stats.delta).toFixed(4)}, Holm sign-flip p = ${adjusted[i].toFixed(4)}, alpha ${family.alpha}); this is not evidence of a loss`);
+        // gstack-evals: the sign-flip p and the point estimate decide superiority, so the reason names the one that fell short.
+        const estimate = sign * s.stats.delta;
+        r.reasons.push(confirmP[i] === null ? NO_VARIATION
+          : estimate < spec.min_effect - 1e-12 ? `the point estimate ${estimate.toFixed(4)} is below the minimum effect of ${spec.min_effect}, so p_superiority is 1 (the sign-flip p is in stats); this is not evidence of a loss`
+          : `an improvement of at least ${spec.min_effect} is not shown (point estimate ${estimate.toFixed(4)}, Holm sign-flip p = ${adjusted[i].toFixed(4)}, alpha ${family.alpha}); this is not evidence of a loss`);
       }
     }
     if (r.status !== 'pass') reasons.push(`${s.spec.id}: ${r.status}`);

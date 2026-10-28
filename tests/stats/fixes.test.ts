@@ -137,4 +137,28 @@ describe("ship review fixes: superiority and system failures", () => {
     expect(scored.verdict).toBe("fail");
     expect(() => validateFamily(family([{ ...latency, failure_value: Number.NaN }]))).toThrow("failure_value must be a finite number");
   });
+
+  test("an exact gate that states its direction fails on a crash instead of blocking the family", () => {
+    const a = Array.from({ length: 40 }, (_, i) => ({ id: `t${i}`, safe: 1, pass: 1 }));
+    const b = a.map((r) => (r.id === "t3" ? { id: "t3", error: "crash", error_origin: "sut" } : r));
+    const gate = { id: "safe", metric: "safe", gate: "exact" as const, assertion: { kind: "every_b_equals" as const, value: 1 } };
+    const pass = { id: "pass", metric: "pass", gate: "noninferiority" as const, direction: "higher" as const, tolerance: 0.05, cluster_by: "id" };
+    const stated = evaluateFamily(a, b, family([{ ...gate, direction: "higher" }, pass]));
+    expect(stated.verdict).toBe("fail");
+    expect(stated.comparisons[0]!.violations).toEqual(["t3 (A=1, B=0)"]);
+    expect(evaluateFamily(a, b, family([{ ...gate, failure_value: 0 }, pass])).verdict).toBe("fail");
+    const unstated = evaluateFamily(a, b, family([gate, pass]));
+    expect(unstated.verdict).toBe("blocked");
+    expect(unstated.reasons[0]).toContain("preregisters no failure_value");
+    expect(() => validateFamily(family([{ ...gate, direction: "up" as never }]))).toThrow("direction must be higher or lower");
+  });
+
+  test("a superiority reason says when the point estimate, not the sign-flip p, fell short", () => {
+    const a = Array.from({ length: 12 }, (_, i) => ({ id: `t${i}`, score: 0 }));
+    const b = a.map(({ id }) => ({ id, score: 0.25 }));
+    const d = evaluateFamily(a, b, family([{ id: "score", metric: "score", gate: "superiority", direction: "higher", min_effect: 0.3, cluster_by: "id" }]));
+    expect(d.comparisons[0]!.p_superiority).toBe(1);
+    expect(d.comparisons[0]!.stats!.p_greater).toBe(1 / 4096);
+    expect(d.comparisons[0]!.reasons[0]).toBe("the point estimate 0.2500 is below the minimum effect of 0.3, so p_superiority is 1 (the sign-flip p is in stats); this is not evidence of a loss");
+  });
 });

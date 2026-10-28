@@ -322,8 +322,9 @@ export function nonInferiorityP(stats: PairedDelta, tolerance: number, direction
  * sign-flip p in the better direction, exact up to EXACT_CLUSTER_LIMIT
  * clusters. A claimed improvement also needs a point estimate of at least
  * `minEffect` (in metric units, oriented so a larger value is better), so a
- * smaller point estimate returns 1. With `minEffect` 0 this is a plain
- * one-sided sign-flip test.
+ * smaller point estimate returns 1, and the sign-flip p itself stays in
+ * `p_greater` and `p_less`. With `minEffect` 0 this is a plain one-sided
+ * sign-flip test.
  */
 export function superiorityP(stats: PairedDelta, minEffect: number, direction: 'higher' | 'lower'): number | null {
   if (!finite(minEffect) || minEffect < 0) throw new Error('superiority minimum effect must be a finite number >= 0');
