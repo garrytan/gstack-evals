@@ -106,10 +106,10 @@ async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Rec
     } catch (e: any) {
       if (!(e instanceof ProviderError) && !(e instanceof SyntaxError)) throw e;
       judgeNoStatus = e instanceof ProviderError && !e.http ? judgeNoStatus + 1 : 0;
-      if (judgeNoStatus >= 3) throw new Error('STOP: three judge failures in a row with no HTTP status (network?)');
       for (const x of batch) failed[x.k] = String(e.message ?? e).slice(0, 300);
       fs.writeFileSync(failedFile, JSON.stringify(failed, null, 2));
       console.error('JUDGE INFRA ' + c.id + '/' + i + ': ' + String(e.message ?? e).slice(0, 200));
+      if (judgeNoStatus >= 3) throw new Error('STOP: three judge failures in a row with no HTTP status (network?)');
       continue;
     }
     for (const x of batch) {
