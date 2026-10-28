@@ -138,18 +138,18 @@
           {
             "model": "deepseek",
             "arm": "baseline",
-            "defect_units": 36,
-            "decoy_units": 36,
-            "incomplete": 0,
+            "defect_units": 35,
+            "decoy_units": 34,
+            "incomplete": 3,
             "unjudged": 0,
-            "recall": 0.13888888888888887,
+            "recall": 0.16666666666666666,
             "recall_ci": [
               0,
-              0.3333333333333333
+              0.4166666666666667
             ],
             "catches": 5,
-            "recall_critical": 0.1111111111111111,
-            "file_line": 0.19444444444444442,
+            "recall_critical": 0.13888888888888887,
+            "file_line": 0.2222222222222222,
             "false_alarm": 0.2222222222222222,
             "false_alarm_ci": [
               0.05555555555555555,
@@ -160,10 +160,10 @@
             "usd_all": 1.3602759999999996,
             "usd_per_catch": 0.15298040000000004,
             "usd_all_per_catch": 0.27205519999999994,
-            "calls": 72,
-            "in_tokens_per_unit": 8774.236111111111,
-            "out_tokens_per_unit": 25916.208333333332,
-            "unparsed_outputs": 47,
+            "calls": 69,
+            "in_tokens_per_unit": 8942.971014492754,
+            "out_tokens_per_unit": 26645.08695652174,
+            "unparsed_outputs": 44,
             "truncated_outputs": 44,
             "cut_off_empty_calls": 44,
             "units_with_cut_off_empty_call": 44
@@ -171,18 +171,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 35,
+            "defect_units": 31,
             "decoy_units": 35,
-            "incomplete": 2,
+            "incomplete": 6,
             "unjudged": 0,
-            "recall": 0.3055555555555556,
+            "recall": 0.3194444444444445,
             "recall_ci": [
-              0.08333333333333333,
-              0.5555555555555555
+              0.09722222222222221,
+              0.5694444444444444
             ],
-            "catches": 10,
-            "recall_critical": 0.125,
-            "file_line": 0.4166666666666666,
+            "catches": 9,
+            "recall_critical": 0.16666666666666666,
+            "file_line": 0.4444444444444444,
             "false_alarm": 0.16666666666666666,
             "false_alarm_ci": [
               0.027777777777777776,
@@ -191,15 +191,15 @@
             "decoy_any_finding": 0.7916666666666666,
             "usd_defects": 2.237274,
             "usd_all": 4.003170000000001,
-            "usd_per_catch": 0.22372740000000002,
-            "usd_all_per_catch": 0.4003170000000001,
-            "calls": 366,
-            "in_tokens_per_unit": 67941.5142857143,
-            "out_tokens_per_unit": 76015.14285714286,
-            "unparsed_outputs": 69,
-            "truncated_outputs": 64,
-            "cut_off_empty_calls": 62,
-            "units_with_cut_off_empty_call": 29
+            "usd_per_catch": 0.24858600000000003,
+            "usd_all_per_catch": 0.44479666666666673,
+            "calls": 341,
+            "in_tokens_per_unit": 67365.66666666667,
+            "out_tokens_per_unit": 76097.78787878787,
+            "unparsed_outputs": 64,
+            "truncated_outputs": 63,
+            "cut_off_empty_calls": 61,
+            "units_with_cut_off_empty_call": 28
           }
         ],
         "comparisons": [
@@ -241,12 +241,12 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 12,
-            "recall_diff": 0.16666666666666666,
+            "recall_diff": 0.15277777777777776,
             "recall_diff_ci": [
-              0.027777777777777776,
-              0.3611111111111111
+              0,
+              0.34722222222222215
             ],
-            "cases_a_better": 4,
+            "cases_a_better": 3,
             "cases_b_better": 0,
             "false_alarm_diff": -0.05555555555555555,
             "false_alarm_diff_ci": [
@@ -292,10 +292,10 @@
             "a": "deepseek-gstack",
             "b": "opus-baseline",
             "cases": 12,
-            "recall_diff": -0.08333333333333333,
+            "recall_diff": -0.06944444444444445,
             "recall_diff_ci": [
-              -0.2777777777777778,
-              0.05555555555555555
+              -0.2638888888888889,
+              0.05555555555555556
             ],
             "cases_a_better": 1,
             "cases_b_better": 2,
@@ -309,9 +309,9 @@
             "a": "deepseek-gstack",
             "b": "opus-gstack",
             "cases": 12,
-            "recall_diff": -0.13888888888888887,
+            "recall_diff": -0.125,
             "recall_diff_ci": [
-              -0.3333333333333333,
+              -0.3055555555555555,
               0
             ],
             "cases_a_better": 0,
@@ -461,18 +461,18 @@
           {
             "model": "deepseek",
             "arm": "baseline",
-            "defect_units": 36,
-            "decoy_units": 36,
-            "incomplete": 0,
+            "defect_units": 35,
+            "decoy_units": 34,
+            "incomplete": 3,
             "unjudged": 0,
-            "recall": 0.13888888888888887,
+            "recall": 0.16666666666666666,
             "recall_ci": [
               0,
-              0.3333333333333333
+              0.4166666666666667
             ],
             "catches": 5,
-            "recall_critical": 0.1111111111111111,
-            "file_line": 0.19444444444444442,
+            "recall_critical": 0.13888888888888887,
+            "file_line": 0.2222222222222222,
             "false_alarm": 0.2222222222222222,
             "false_alarm_ci": [
               0.05555555555555555,
@@ -483,10 +483,10 @@
             "usd_all": 1.3602759999999996,
             "usd_per_catch": 0.15298040000000004,
             "usd_all_per_catch": 0.27205519999999994,
-            "calls": 72,
-            "in_tokens_per_unit": 8774.236111111111,
-            "out_tokens_per_unit": 25916.208333333332,
-            "unparsed_outputs": 47,
+            "calls": 69,
+            "in_tokens_per_unit": 8942.971014492754,
+            "out_tokens_per_unit": 26645.08695652174,
+            "unparsed_outputs": 44,
             "truncated_outputs": 44,
             "cut_off_empty_calls": 44,
             "units_with_cut_off_empty_call": 44
@@ -494,18 +494,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 35,
+            "defect_units": 31,
             "decoy_units": 35,
-            "incomplete": 2,
+            "incomplete": 6,
             "unjudged": 0,
-            "recall": 0.3333333333333333,
+            "recall": 0.36111111111111116,
             "recall_ci": [
               0.1111111111111111,
-              0.5833333333333334
+              0.6111111111111112
             ],
-            "catches": 11,
-            "recall_critical": 0.125,
-            "file_line": 0.4444444444444444,
+            "catches": 10,
+            "recall_critical": 0.16666666666666666,
+            "file_line": 0.4861111111111111,
             "false_alarm": 0.16666666666666666,
             "false_alarm_ci": [
               0.027777777777777776,
@@ -514,15 +514,15 @@
             "decoy_any_finding": 0.8333333333333334,
             "usd_defects": 2.237274,
             "usd_all": 4.003170000000001,
-            "usd_per_catch": 0.20338854545454546,
-            "usd_all_per_catch": 0.3639245454545455,
-            "calls": 366,
-            "in_tokens_per_unit": 67941.5142857143,
-            "out_tokens_per_unit": 76015.14285714286,
-            "unparsed_outputs": 69,
-            "truncated_outputs": 64,
-            "cut_off_empty_calls": 62,
-            "units_with_cut_off_empty_call": 29
+            "usd_per_catch": 0.22372740000000002,
+            "usd_all_per_catch": 0.4003170000000001,
+            "calls": 341,
+            "in_tokens_per_unit": 67365.66666666667,
+            "out_tokens_per_unit": 76097.78787878787,
+            "unparsed_outputs": 64,
+            "truncated_outputs": 63,
+            "cut_off_empty_calls": 61,
+            "units_with_cut_off_empty_call": 28
           }
         ],
         "comparisons": [
@@ -564,12 +564,12 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 12,
-            "recall_diff": 0.19444444444444445,
+            "recall_diff": 0.19444444444444442,
             "recall_diff_ci": [
-              0.02777777777777778,
-              0.3888888888888889
+              0,
+              0.4444444444444444
             ],
-            "cases_a_better": 4,
+            "cases_a_better": 3,
             "cases_b_better": 0,
             "false_alarm_diff": -0.05555555555555555,
             "false_alarm_diff_ci": [
@@ -615,12 +615,12 @@
             "a": "deepseek-gstack",
             "b": "opus-baseline",
             "cases": 12,
-            "recall_diff": -0.05555555555555556,
+            "recall_diff": -0.02777777777777778,
             "recall_diff_ci": [
-              -0.25,
-              0.08333333333333333
+              -0.22222222222222224,
+              0.11111111111111112
             ],
-            "cases_a_better": 1,
+            "cases_a_better": 2,
             "cases_b_better": 1,
             "false_alarm_diff": -0.11111111111111112,
             "false_alarm_diff_ci": [
@@ -632,13 +632,13 @@
             "a": "deepseek-gstack",
             "b": "opus-gstack",
             "cases": 12,
-            "recall_diff": -0.16666666666666666,
+            "recall_diff": -0.13888888888888887,
             "recall_diff_ci": [
-              -0.3611111111111111,
-              -0.027777777777777776
+              -0.3333333333333333,
+              0
             ],
             "cases_a_better": 0,
-            "cases_b_better": 4,
+            "cases_b_better": 3,
             "false_alarm_diff": -0.16666666666666666,
             "false_alarm_diff_ci": [
               -0.38888888888888884,
@@ -784,32 +784,32 @@
           {
             "model": "deepseek",
             "arm": "baseline",
-            "defect_units": 9,
-            "decoy_units": 19,
-            "incomplete": 44,
+            "defect_units": 8,
+            "decoy_units": 17,
+            "incomplete": 47,
             "unjudged": 0,
-            "recall": 0.41666666666666663,
+            "recall": 0.5,
             "recall_ci": [
               0,
-              0.8333333333333333
+              1
             ],
             "catches": 5,
-            "recall_critical": 0.3333333333333333,
-            "file_line": 0.6666666666666666,
-            "false_alarm": 0.42857142857142855,
+            "recall_critical": 0.41666666666666663,
+            "file_line": 0.75,
+            "false_alarm": 0.5,
             "false_alarm_ci": [
-              0.14285714285714285,
-              0.7619047619047619
+              0.16666666666666666,
+              0.8333333333333334
             ],
-            "decoy_any_finding": 0.7619047619047619,
+            "decoy_any_finding": 0.8888888888888888,
             "usd_defects": 0.7649020000000002,
             "usd_all": 1.3602759999999996,
             "usd_per_catch": 0.15298040000000004,
             "usd_all_per_catch": 0.27205519999999994,
-            "calls": 28,
-            "in_tokens_per_unit": 4280.892857142857,
-            "out_tokens_per_unit": 16355.964285714286,
-            "unparsed_outputs": 3,
+            "calls": 25,
+            "in_tokens_per_unit": 4207.4,
+            "out_tokens_per_unit": 17220.44,
+            "unparsed_outputs": 0,
             "truncated_outputs": 0,
             "cut_off_empty_calls": 44,
             "units_with_cut_off_empty_call": 44
@@ -817,18 +817,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 18,
+            "defect_units": 15,
             "decoy_units": 24,
-            "incomplete": 30,
+            "incomplete": 33,
             "unjudged": 0,
             "recall": 0.375,
             "recall_ci": [
               0.125,
               0.75
             ],
-            "catches": 6,
-            "recall_critical": 0.10416666666666666,
-            "file_line": 0.3958333333333333,
+            "catches": 5,
+            "recall_critical": 0.16666666666666666,
+            "file_line": 0.4583333333333333,
             "false_alarm": 0.14814814814814814,
             "false_alarm_ci": [
               0,
@@ -837,15 +837,15 @@
             "decoy_any_finding": 0.8703703703703703,
             "usd_defects": 2.237274,
             "usd_all": 4.003170000000001,
-            "usd_per_catch": 0.372879,
-            "usd_all_per_catch": 0.6671950000000001,
-            "calls": 171,
-            "in_tokens_per_unit": 33386.45238095238,
-            "out_tokens_per_unit": 41825.71428571428,
-            "unparsed_outputs": 6,
+            "usd_per_catch": 0.44745480000000004,
+            "usd_all_per_catch": 0.8006340000000002,
+            "calls": 154,
+            "in_tokens_per_unit": 32289.25641025641,
+            "out_tokens_per_unit": 40113.717948717946,
+            "unparsed_outputs": 3,
             "truncated_outputs": 2,
-            "cut_off_empty_calls": 62,
-            "units_with_cut_off_empty_call": 29
+            "cut_off_empty_calls": 61,
+            "units_with_cut_off_empty_call": 28
           }
         ],
         "comparisons": [
@@ -887,12 +887,12 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 4,
-            "recall_diff": 0.08333333333333334,
+            "recall_diff": 0,
             "recall_diff_ci": [
               0,
-              0.25
+              0
             ],
-            "cases_a_better": 1,
+            "cases_a_better": 0,
             "cases_b_better": 0,
             "false_alarm_diff": -0.27777777777777773,
             "false_alarm_diff_ci": [
@@ -1142,18 +1142,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 18,
+            "defect_units": 16,
             "decoy_units": 18,
-            "incomplete": 0,
+            "incomplete": 2,
             "unjudged": 0,
-            "recall": 0.05555555555555555,
+            "recall": 0.08333333333333333,
             "recall_ci": [
               0,
-              0.16666666666666666
+              0.25
             ],
             "catches": 1,
             "recall_critical": 0,
-            "file_line": 0.2222222222222222,
+            "file_line": 0.25,
             "false_alarm": 0.16666666666666666,
             "false_alarm_ci": [
               0,
@@ -1164,13 +1164,13 @@
             "usd_all": 1.8276639999999997,
             "usd_per_catch": 1.1297389999999998,
             "usd_all_per_catch": 1.8276639999999997,
-            "calls": 184,
-            "in_tokens_per_unit": 66108.86111111111,
-            "out_tokens_per_unit": 72486.72222222222,
-            "unparsed_outputs": 34,
-            "truncated_outputs": 31,
-            "cut_off_empty_calls": 29,
-            "units_with_cut_off_empty_call": 13
+            "calls": 172,
+            "in_tokens_per_unit": 64066.94117647059,
+            "out_tokens_per_unit": 71848.73529411765,
+            "unparsed_outputs": 31,
+            "truncated_outputs": 30,
+            "cut_off_empty_calls": 28,
+            "units_with_cut_off_empty_call": 12
           }
         ],
         "comparisons": [
@@ -1212,10 +1212,10 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 6,
-            "recall_diff": 0.05555555555555555,
+            "recall_diff": 0.08333333333333333,
             "recall_diff_ci": [
               0,
-              0.16666666666666666
+              0.25
             ],
             "cases_a_better": 1,
             "cases_b_better": 0,
@@ -1263,9 +1263,9 @@
             "a": "deepseek-gstack",
             "b": "opus-baseline",
             "cases": 6,
-            "recall_diff": -0.05555555555555555,
+            "recall_diff": -0.027777777777777773,
             "recall_diff_ci": [
-              -0.16666666666666666,
+              -0.08333333333333331,
               0
             ],
             "cases_a_better": 0,
@@ -1280,9 +1280,9 @@
             "a": "deepseek-gstack",
             "b": "opus-gstack",
             "cases": 6,
-            "recall_diff": -0.05555555555555555,
+            "recall_diff": -0.027777777777777773,
             "recall_diff_ci": [
-              -0.16666666666666666,
+              -0.08333333333333331,
               0
             ],
             "cases_a_better": 0,
@@ -1465,18 +1465,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 18,
+            "defect_units": 16,
             "decoy_units": 18,
-            "incomplete": 0,
+            "incomplete": 2,
             "unjudged": 0,
-            "recall": 0.1111111111111111,
+            "recall": 0.16666666666666666,
             "recall_ci": [
               0,
-              0.3333333333333333
+              0.5
             ],
             "catches": 2,
             "recall_critical": 0,
-            "file_line": 0.27777777777777773,
+            "file_line": 0.3333333333333333,
             "false_alarm": 0.16666666666666666,
             "false_alarm_ci": [
               0,
@@ -1487,13 +1487,13 @@
             "usd_all": 1.8276639999999997,
             "usd_per_catch": 0.5648694999999999,
             "usd_all_per_catch": 0.9138319999999999,
-            "calls": 184,
-            "in_tokens_per_unit": 66108.86111111111,
-            "out_tokens_per_unit": 72486.72222222222,
-            "unparsed_outputs": 34,
-            "truncated_outputs": 31,
-            "cut_off_empty_calls": 29,
-            "units_with_cut_off_empty_call": 13
+            "calls": 172,
+            "in_tokens_per_unit": 64066.94117647059,
+            "out_tokens_per_unit": 71848.73529411765,
+            "unparsed_outputs": 31,
+            "truncated_outputs": 30,
+            "cut_off_empty_calls": 28,
+            "units_with_cut_off_empty_call": 12
           }
         ],
         "comparisons": [
@@ -1535,10 +1535,10 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 6,
-            "recall_diff": 0.1111111111111111,
+            "recall_diff": 0.16666666666666666,
             "recall_diff_ci": [
               0,
-              0.3333333333333333
+              0.5
             ],
             "cases_a_better": 1,
             "cases_b_better": 0,
@@ -1586,12 +1586,12 @@
             "a": "deepseek-gstack",
             "b": "opus-baseline",
             "cases": 6,
-            "recall_diff": 0,
+            "recall_diff": 0.05555555555555556,
             "recall_diff_ci": [
               0,
-              0
+              0.16666666666666666
             ],
-            "cases_a_better": 0,
+            "cases_a_better": 1,
             "cases_b_better": 0,
             "false_alarm_diff": -0.3333333333333333,
             "false_alarm_diff_ci": [
@@ -1603,13 +1603,13 @@
             "a": "deepseek-gstack",
             "b": "opus-gstack",
             "cases": 6,
-            "recall_diff": -0.11111111111111112,
+            "recall_diff": -0.05555555555555555,
             "recall_diff_ci": [
-              -0.22222222222222224,
+              -0.16666666666666666,
               0
             ],
             "cases_a_better": 0,
-            "cases_b_better": 2,
+            "cases_b_better": 1,
             "false_alarm_diff": -0.2222222222222222,
             "false_alarm_diff_ci": [
               -0.5555555555555556,
@@ -1788,9 +1788,9 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 7,
+            "defect_units": 6,
             "decoy_units": 16,
-            "incomplete": 13,
+            "incomplete": 14,
             "unjudged": 0,
             "recall": 0,
             "recall_ci": [
@@ -1810,13 +1810,13 @@
             "usd_all": 1.8276639999999997,
             "usd_per_catch": null,
             "usd_all_per_catch": null,
-            "calls": 101,
-            "in_tokens_per_unit": 36556.04347826087,
-            "out_tokens_per_unit": 46971.95652173913,
-            "unparsed_outputs": 3,
+            "calls": 97,
+            "in_tokens_per_unit": 36634.90909090909,
+            "out_tokens_per_unit": 46365.954545454544,
+            "unparsed_outputs": 2,
             "truncated_outputs": 2,
-            "cut_off_empty_calls": 29,
-            "units_with_cut_off_empty_call": 13
+            "cut_off_empty_calls": 28,
+            "units_with_cut_off_empty_call": 12
           }
         ],
         "comparisons": [
@@ -2080,18 +2080,18 @@
           {
             "model": "deepseek",
             "arm": "baseline",
-            "defect_units": 18,
-            "decoy_units": 18,
-            "incomplete": 0,
+            "defect_units": 17,
+            "decoy_units": 16,
+            "incomplete": 3,
             "unjudged": 0,
-            "recall": 0.27777777777777773,
+            "recall": 0.3333333333333333,
             "recall_ci": [
               0,
-              0.611111111111111
+              0.6666666666666666
             ],
             "catches": 5,
-            "recall_critical": 0.2222222222222222,
-            "file_line": 0.38888888888888884,
+            "recall_critical": 0.27777777777777773,
+            "file_line": 0.4444444444444444,
             "false_alarm": 0.1111111111111111,
             "false_alarm_ci": [
               0,
@@ -2102,10 +2102,10 @@
             "usd_all": 0.5743929999999999,
             "usd_per_catch": 0.0617316,
             "usd_all_per_catch": 0.11487859999999998,
-            "calls": 36,
-            "in_tokens_per_unit": 8890.638888888889,
-            "out_tokens_per_unit": 24812.666666666668,
-            "unparsed_outputs": 23,
+            "calls": 33,
+            "in_tokens_per_unit": 9254.030303030304,
+            "out_tokens_per_unit": 26236.363636363636,
+            "unparsed_outputs": 20,
             "truncated_outputs": 20,
             "cut_off_empty_calls": 20,
             "units_with_cut_off_empty_call": 20
@@ -2113,18 +2113,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 17,
+            "defect_units": 15,
             "decoy_units": 17,
-            "incomplete": 2,
+            "incomplete": 4,
             "unjudged": 0,
             "recall": 0.5555555555555556,
             "recall_ci": [
               0.16666666666666666,
               0.888888888888889
             ],
-            "catches": 9,
-            "recall_critical": 0.25,
-            "file_line": 0.611111111111111,
+            "catches": 8,
+            "recall_critical": 0.3333333333333333,
+            "file_line": 0.6388888888888888,
             "false_alarm": 0.16666666666666666,
             "false_alarm_ci": [
               0.05555555555555555,
@@ -2133,12 +2133,12 @@
             "decoy_any_finding": 0.5833333333333334,
             "usd_defects": 1.107535,
             "usd_all": 2.175506,
-            "usd_per_catch": 0.12305944444444444,
-            "usd_all_per_catch": 0.24172288888888888,
-            "calls": 182,
-            "in_tokens_per_unit": 69881.9705882353,
-            "out_tokens_per_unit": 79751.11764705883,
-            "unparsed_outputs": 35,
+            "usd_per_catch": 0.138441875,
+            "usd_all_per_catch": 0.27193825,
+            "calls": 169,
+            "in_tokens_per_unit": 70870.5625,
+            "out_tokens_per_unit": 80612.40625,
+            "unparsed_outputs": 33,
             "truncated_outputs": 33,
             "cut_off_empty_calls": 33,
             "units_with_cut_off_empty_call": 16
@@ -2183,12 +2183,12 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 6,
-            "recall_diff": 0.2777777777777778,
+            "recall_diff": 0.2222222222222222,
             "recall_diff_ci": [
-              0.05555555555555555,
-              0.611111111111111
+              0,
+              0.5555555555555555
             ],
-            "cases_a_better": 3,
+            "cases_a_better": 2,
             "cases_b_better": 0,
             "false_alarm_diff": 0.05555555555555555,
             "false_alarm_diff_ci": [
@@ -2403,18 +2403,18 @@
           {
             "model": "deepseek",
             "arm": "baseline",
-            "defect_units": 18,
-            "decoy_units": 18,
-            "incomplete": 0,
+            "defect_units": 17,
+            "decoy_units": 16,
+            "incomplete": 3,
             "unjudged": 0,
-            "recall": 0.27777777777777773,
+            "recall": 0.3333333333333333,
             "recall_ci": [
               0,
-              0.611111111111111
+              0.6666666666666666
             ],
             "catches": 5,
-            "recall_critical": 0.2222222222222222,
-            "file_line": 0.38888888888888884,
+            "recall_critical": 0.27777777777777773,
+            "file_line": 0.4444444444444444,
             "false_alarm": 0.1111111111111111,
             "false_alarm_ci": [
               0,
@@ -2425,10 +2425,10 @@
             "usd_all": 0.5743929999999999,
             "usd_per_catch": 0.0617316,
             "usd_all_per_catch": 0.11487859999999998,
-            "calls": 36,
-            "in_tokens_per_unit": 8890.638888888889,
-            "out_tokens_per_unit": 24812.666666666668,
-            "unparsed_outputs": 23,
+            "calls": 33,
+            "in_tokens_per_unit": 9254.030303030304,
+            "out_tokens_per_unit": 26236.363636363636,
+            "unparsed_outputs": 20,
             "truncated_outputs": 20,
             "cut_off_empty_calls": 20,
             "units_with_cut_off_empty_call": 20
@@ -2436,18 +2436,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 17,
+            "defect_units": 15,
             "decoy_units": 17,
-            "incomplete": 2,
+            "incomplete": 4,
             "unjudged": 0,
             "recall": 0.5555555555555556,
             "recall_ci": [
               0.16666666666666666,
               0.888888888888889
             ],
-            "catches": 9,
-            "recall_critical": 0.25,
-            "file_line": 0.611111111111111,
+            "catches": 8,
+            "recall_critical": 0.3333333333333333,
+            "file_line": 0.6388888888888888,
             "false_alarm": 0.16666666666666666,
             "false_alarm_ci": [
               0.05555555555555555,
@@ -2456,12 +2456,12 @@
             "decoy_any_finding": 0.6666666666666666,
             "usd_defects": 1.107535,
             "usd_all": 2.175506,
-            "usd_per_catch": 0.12305944444444444,
-            "usd_all_per_catch": 0.24172288888888888,
-            "calls": 182,
-            "in_tokens_per_unit": 69881.9705882353,
-            "out_tokens_per_unit": 79751.11764705883,
-            "unparsed_outputs": 35,
+            "usd_per_catch": 0.138441875,
+            "usd_all_per_catch": 0.27193825,
+            "calls": 169,
+            "in_tokens_per_unit": 70870.5625,
+            "out_tokens_per_unit": 80612.40625,
+            "unparsed_outputs": 33,
             "truncated_outputs": 33,
             "cut_off_empty_calls": 33,
             "units_with_cut_off_empty_call": 16
@@ -2506,12 +2506,12 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 6,
-            "recall_diff": 0.2777777777777778,
+            "recall_diff": 0.2222222222222222,
             "recall_diff_ci": [
-              0.05555555555555555,
-              0.611111111111111
+              0,
+              0.5555555555555555
             ],
-            "cases_a_better": 3,
+            "cases_a_better": 2,
             "cases_b_better": 0,
             "false_alarm_diff": 0.05555555555555555,
             "false_alarm_diff_ci": [
@@ -2726,32 +2726,32 @@
           {
             "model": "deepseek",
             "arm": "baseline",
-            "defect_units": 8,
-            "decoy_units": 8,
-            "incomplete": 20,
+            "defect_units": 7,
+            "decoy_units": 6,
+            "incomplete": 23,
             "unjudged": 0,
-            "recall": 0.5555555555555555,
+            "recall": 0.6666666666666666,
             "recall_ci": [
               0,
               1
             ],
             "catches": 5,
-            "recall_critical": 0.4444444444444444,
-            "file_line": 0.8888888888888888,
-            "false_alarm": 0.2222222222222222,
+            "recall_critical": 0.5555555555555555,
+            "file_line": 1,
+            "false_alarm": 0.3333333333333333,
             "false_alarm_ci": [
               0,
               0.6666666666666666
             ],
-            "decoy_any_finding": 0.4444444444444444,
+            "decoy_any_finding": 0.6666666666666666,
             "usd_defects": 0.308658,
             "usd_all": 0.5743929999999999,
             "usd_per_catch": 0.0617316,
             "usd_all_per_catch": 0.11487859999999998,
-            "calls": 16,
-            "in_tokens_per_unit": 4286.5,
-            "out_tokens_per_unit": 15828.5,
-            "unparsed_outputs": 3,
+            "calls": 13,
+            "in_tokens_per_unit": 4146.461538461538,
+            "out_tokens_per_unit": 17369.23076923077,
+            "unparsed_outputs": 0,
             "truncated_outputs": 0,
             "cut_off_empty_calls": 20,
             "units_with_cut_off_empty_call": 20
@@ -2759,18 +2759,18 @@
           {
             "model": "deepseek",
             "arm": "gstack",
-            "defect_units": 11,
+            "defect_units": 9,
             "decoy_units": 8,
-            "incomplete": 17,
+            "incomplete": 19,
             "unjudged": 0,
             "recall": 0.6,
             "recall_ci": [
               0.2,
               1
             ],
-            "catches": 6,
-            "recall_critical": 0.16666666666666666,
-            "file_line": 0.6333333333333333,
+            "catches": 5,
+            "recall_critical": 0.26666666666666666,
+            "file_line": 0.7333333333333333,
             "false_alarm": 0.1111111111111111,
             "false_alarm_ci": [
               0,
@@ -2779,12 +2779,12 @@
             "decoy_any_finding": 0.611111111111111,
             "usd_defects": 1.107535,
             "usd_all": 2.175506,
-            "usd_per_catch": 0.18458916666666667,
-            "usd_all_per_catch": 0.36258433333333334,
-            "calls": 70,
-            "in_tokens_per_unit": 29549.57894736842,
-            "out_tokens_per_unit": 35596.05263157895,
-            "unparsed_outputs": 3,
+            "usd_per_catch": 0.22150699999999998,
+            "usd_all_per_catch": 0.43510119999999997,
+            "calls": 57,
+            "in_tokens_per_unit": 26665.470588235294,
+            "out_tokens_per_unit": 32022.58823529412,
+            "unparsed_outputs": 1,
             "truncated_outputs": 0,
             "cut_off_empty_calls": 33,
             "units_with_cut_off_empty_call": 16
@@ -2829,12 +2829,12 @@
             "a": "deepseek-gstack",
             "b": "deepseek-baseline",
             "cases": 3,
-            "recall_diff": 0.11111111111111112,
+            "recall_diff": 0,
             "recall_diff_ci": [
               0,
-              0.3333333333333333
+              0
             ],
-            "cases_a_better": 1,
+            "cases_a_better": 0,
             "cases_b_better": 0,
             "false_alarm_diff": -0.16666666666666666,
             "false_alarm_diff_ci": [
