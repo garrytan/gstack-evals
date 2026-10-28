@@ -151,6 +151,9 @@ describe("ship review fixes: superiority and system failures", () => {
     expect(unstated.verdict).toBe("blocked");
     expect(unstated.reasons[0]).toContain("preregisters no failure_value");
     expect(() => validateFamily(family([{ ...gate, direction: "up" as never }]))).toThrow("direction must be higher or lower");
+    const regression = { id: "pass", metric: "pass", gate: "exact" as const, assertion: { kind: "no_item_regression" as const, direction: "higher" as const } };
+    expect(() => validateFamily(family([{ ...regression, direction: "lower" }]))).toThrow("direction lower contradicts the assertion's direction higher");
+    expect(validateFamily(family([{ ...regression, direction: "higher" }])).comparisons).toHaveLength(1);
   });
 
   test("a superiority reason says when the point estimate, not the sign-flip p, fell short", () => {
