@@ -210,7 +210,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
         } else if (m.type === "result") {
           subtypes.push(m.subtype);
           numTurns += m.num_turns ?? 0;
-          sdkCost += m.total_cost_usd ?? 0;
+          sdkCost = Math.max(sdkCost, m.total_cost_usd ?? 0);
           sdkMs += m.duration_ms ?? 0;
           const outcome = resultOutcome(m, session.budgetHit);
           if (outcome.stop) {
@@ -244,14 +244,18 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
     } finally {
       clearTimeout(wall);
     }
-    const copied = await run(["sh", "-c", `rm -rf "${spec.outDir}/work" && docker cp ${container}:/work - | tar -x -C "${spec.outDir}"`], { timeoutMs: 120_000 });
-    if (copied.code !== 0) errors.push(`E_COPY: ${copied.out}`);
+    const copied = await run(["bash", "-c", `set -o pipefail; rm -rf "${spec.outDir}/work" && docker cp ${container}:/work - | tar -x -C "${spec.outDir}"`], { timeoutMs: 120_000 });
+    if (copied.code !== 0) {
+      status = "infra_error";
+      errors.push(`E_COPY: ${copied.out}`);
+    }
   } catch (e) {
     status = "infra_error";
     errors.push(String((e as Error)?.message ?? e).slice(0, 1000));
   } finally {
     proxy.revoke(token);
     await run(["docker", "rm", "-f", container]);
+    await proxy.drain(session, 30_000);
   }
 
   const t = parseTranscript(messages);

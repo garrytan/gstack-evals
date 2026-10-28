@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CapStop, Ledger } from "../src/ledger.ts";
-import { costUsd, fromApiUsage } from "../src/usage.ts";
+import { costUsd, fromApiUsage, mergeStreamUsage } from "../src/usage.ts";
 import { bootstrapMeanCI, signFlipP, wilson } from "../src/analyze.ts";
 
 describe("ledger", () => {
@@ -36,6 +36,11 @@ describe("usage and price", () => {
     const long = fromApiUsage({ input_tokens: 150_000, output_tokens: 1000 });
     expect(costUsd("claude-haiku-5-5", short)).toBeCloseTo((50_000 * 0.1 + 1000 * 0.5) / 1e6, 9);
     expect(costUsd("claude-haiku-5-5", long)).toBeCloseTo((150_000 * 0.5 + 1000 * 2.5) / 1e6, 9);
+  });
+  test("a stream delta without the cache split does not count the 1h writes twice", () => {
+    const start = fromApiUsage({ input_tokens: 10, cache_creation_input_tokens: 2000, cache_creation: { ephemeral_5m_input_tokens: 1000, ephemeral_1h_input_tokens: 1000 } });
+    const delta = fromApiUsage({ output_tokens: 50, cache_creation_input_tokens: 2000 });
+    expect(mergeStreamUsage(start, delta)).toEqual({ input: 10, output: 50, cacheRead: 0, cacheWrite5m: 1000, cacheWrite1h: 1000, webSearches: 0 });
   });
 });
 
