@@ -286,6 +286,8 @@ export function preregistrationProblems(value: unknown): string[] {
     if (c.a === c.b) problems.push(`comparison ${id}: a and b are the same cell`);
     if (ca.tasks !== cb.tasks) problems.push(`comparison ${id}: cells ${c.a} and ${c.b} run different task sets, so they cannot pair by task`);
     if (a?.pairing === 'trial' && ca.trials !== cb.trials) problems.push(`comparison ${id}: trial-level pairing needs equal trials (${ca.trials} and ${cb.trials}); use task_mean pairing`);
+    const minTrials = a?.missing_cells?.min_trials;
+    if (a?.pairing === 'task_mean' && Number.isSafeInteger(minTrials) && minTrials > Math.min(ca.trials, cb.trials)) problems.push(`comparison ${id}: missing_cells.min_trials ${minTrials} is above the trials scheduled (${ca.trials} and ${cb.trials}), so every task would count as missing`);
     if (!metrics.has(c.metric)) problems.push(`comparison ${id}: metric ${c.metric} is not listed`);
     if (!['exact', 'noninferiority', 'superiority', 'exploratory'].includes(c.gate)) { problems.push(`comparison ${id}: gate must be exact, noninferiority, superiority or exploratory`); continue; }
     if (c.gate === 'exact' && !text(c.assertion)) problems.push(`comparison ${id}: an exact gate needs its assertion`);

@@ -1,6 +1,6 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) at 70cb3d0197b70d24b4bd3344b8248e908d4710a8,
 // tests/prereg.test.ts. MIT License, Copyright (c) 2026 Garry Tan.
-// gstack-evals changes (U2): the import path.
+// gstack-evals changes (U2): the import path, and the tests for an attestation that must precede the result.
 import { describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -78,6 +78,25 @@ test('prints a declared on-branch preregistration as a warning, not a problem, o
     const pre = commit(dir, 'docs/x-prereg.md', 'rule', 'prereg');
     commit(dir, 'docs/x-receipt.json', JSON.stringify({ preregistration_attestation: { preregistration: 'docs/other.md', preregistration_commit: pre } }), 'receipt');
     expect(checkOrder([entry], dir)[0]!.problem).toContain('expected docs/x-prereg.md');
+  });
+
+  test('passes when the attestation names the preregistration as committed before the receipt', () => {
+    const dir = repo();
+    const pre = commit(dir, 'docs/x-prereg.md', 'rule', 'prereg');
+    commit(dir, 'docs/x-receipt.json', JSON.stringify({ preregistration_attestation: { preregistration: 'docs/x-prereg.md', preregistration_commit: pre } }), 'receipt');
+    expect(checkOrder([entry], dir)).toEqual([]);
+  });
+
+  test('fails when the attestation names a preregistration revision made after the receipt', () => {
+    const dir = repo();
+    commit(dir, 'docs/x-prereg.md', 'rule', 'prereg');
+    const result = commit(dir, 'docs/x-receipt.json', '{}', 'receipt');
+    const revised = commit(dir, 'docs/x-prereg.md', 'rule, revised after the results', 'revise prereg');
+    commit(dir, 'docs/x-receipt.json', JSON.stringify({ preregistration_attestation: { preregistration: 'docs/x-prereg.md', preregistration_commit: revised } }), 'attest the revision');
+    const problems = checkOrder([entry], dir);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.problem).toBe(`attestation names ${revised.slice(0, 12)}, which is not before the result's first commit ${result.slice(0, 12)}`);
+    expect(problems[0]!.warning).toBeUndefined();
   });
 });
 

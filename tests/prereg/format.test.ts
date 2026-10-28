@@ -101,6 +101,14 @@ describe("power and parity", () => {
     p.analysis.pairing = "trial";
     expect(preregistrationProblems(p)).toEqual(["comparison parity-haiku: trial-level pairing needs equal trials (3 and 5); use task_mean pairing"]);
   });
+
+  test("the missing-cell minimum cannot exceed either cell's scheduled trials", () => {
+    const p = parity(300, ["haiku"]);
+    p.analysis.missing_cells.min_trials = 3;
+    expect(preregistrationProblems(p)).toEqual([]);
+    p.analysis.missing_cells.min_trials = 4;
+    expect(preregistrationProblems(p)).toEqual(["comparison parity-haiku: missing_cells.min_trials 4 is above the trials scheduled (3 and 5), so every task would count as missing"]);
+  });
 });
 
 describe("the other rules", () => {

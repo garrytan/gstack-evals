@@ -1,7 +1,9 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) at 70cb3d0197b70d24b4bd3344b8248e908d4710a8,
 // runner/prereg/prereg.ts. MIT License, Copyright (c) 2026 Garry Tan.
 // gstack-evals changes (U2): the command-line block at the end is removed. Its stderr lines carried no reason code,
-// and the `plan` command (src/runner/prereg/cli.ts, v1.1) is the entry point here. The checks are unchanged.
+// and the `plan` command (src/runner/prereg/cli.ts, v1.1) is the entry point here. checkOrder also requires an
+// attested preregistration commit to precede the result's first commit, so a revision made after the results cannot
+// be attested without a declared deviation.
 /**
  * Preregistration discipline for paid and gating runs.
  *
@@ -15,7 +17,7 @@
  *   every listed experiment, the commit that first added the preregistration
  *   must be a strict ancestor of the commit that first added each result file,
  *   and any attestation a receipt carries must name a commit at or after the
- *   preregistration's. An experiment that declares `preregistered_on_main: false`
+ *   preregistration's and before the result's. An experiment that declares `preregistered_on_main: false`
  *   with a `reason` (its preregistration commit preceded the trials on a branch
  *   that was squash-merged together with the results) has its order problems
  *   printed as warnings, not failures; the declaration is the published deviation.
@@ -140,13 +142,14 @@ export function checkOrder(entries: ManifestEntry[], cwd = process.cwd()): Order
       continue;
     }
     const declared = entry.preregistered_on_main === false && typeof entry.reason === 'string' && entry.reason.trim() !== '';
+    const orderProblem = (file: string, problem: string): OrderProblem =>
+      declared ? { id: entry.id, file, problem: `${problem} (declared: ${entry.reason!.trim()})`, warning: true } : { id: entry.id, file, problem };
     for (const glob of entry.results) {
       for (const file of trackedFiles(cwd, glob)) {
         const resultCommit = firstAddCommit(cwd, file);
         if (!resultCommit) continue;
         if (!isStrictAncestor(cwd, preCommit, resultCommit)) {
-          const problem = `added in ${resultCommit.slice(0, 12)}, not after the preregistration commit ${preCommit.slice(0, 12)}`;
-          problems.push(declared ? { id: entry.id, file, problem: `${problem} (declared: ${entry.reason!.trim()})`, warning: true } : { id: entry.id, file, problem });
+          problems.push(orderProblem(file, `added in ${resultCommit.slice(0, 12)}, not after the preregistration commit ${preCommit.slice(0, 12)}`));
         }
         const attestation = attestationIn(cwd, file);
         if (attestation) {
@@ -154,6 +157,8 @@ export function checkOrder(entries: ManifestEntry[], cwd = process.cwd()): Order
             problems.push({ id: entry.id, file, problem: `attests ${attestation.preregistration}, expected ${entry.preregistration}` });
           } else if (!isAncestorOrSelf(cwd, preCommit, attestation.preregistration_commit)) {
             problems.push({ id: entry.id, file, problem: `attestation names ${attestation.preregistration_commit.slice(0, 12)}, which does not contain the preregistration` });
+          } else if (!isStrictAncestor(cwd, attestation.preregistration_commit, resultCommit)) {
+            problems.push(orderProblem(file, `attestation names ${attestation.preregistration_commit.slice(0, 12)}, which is not before the result's first commit ${resultCommit.slice(0, 12)}`));
           }
         }
       }
