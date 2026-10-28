@@ -36,8 +36,15 @@ if (import.meta.main) {
     tasks[id] = m;
   }
   const arms = armsCsv.split(",").map((name) => {
-    copyFileSync(join(armDir, `${name}.tar`), join(run, "arms", `${name}.tar`));
-    return { name, tar: `${vm}/run/arms/${name}.tar`, sha256: sha256(join(run, "arms", `${name}.tar`)) };
+    const tar = `${vm}/run/arms/${name}.tar`;
+    const gz = join(armDir, `${name}.tar.gz`);
+    if (!existsSync(gz)) {
+      copyFileSync(join(armDir, `${name}.tar`), join(run, "arms", `${name}.tar`));
+      return { name, tar, sha256: sha256(join(run, "arms", `${name}.tar`)) };
+    }
+    copyFileSync(gz, join(run, "arms", `${name}.tar.gz`));
+    const out = Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" | sha256sum', "sh", gz]).stdout.toString().split(" ")[0];
+    return { name, tar, sha256: out, gz_sha256: sha256(gz) };
   });
   const models = modelsCsv.split(",").map((id) => {
     const m = cells.models.find((c: any) => c.id === id);

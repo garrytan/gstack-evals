@@ -10,6 +10,14 @@ cap=$3
 runner=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 mkdir -p "$run/out"
+for gz in "$run"/arms/*.tar.gz; do
+  [ -e "$gz" ] || continue
+  gzip -dkf "$gz"
+  name=$(basename "$gz" .tar.gz)
+  want=$(jq -r --arg n "$name" '.arms[] | select(.name == $n) | .sha256' "$run/manifest.json")
+  got=$(sha256sum "${gz%.gz}" | cut -d' ' -f1)
+  [ "$got" = "$want" ] || { echo "arm $name: tar sha256 $got, manifest says $want" >&2; exit 5; }
+done
 curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-start.json" || { echo "ledger tunnel not reachable" >&2; exit 4; }
 gw=$(sg docker -c "docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'")
 (
