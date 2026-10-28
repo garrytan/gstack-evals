@@ -8,7 +8,7 @@ model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-28
 status: done
-links: [wiki/README.md, scripts/wiki.ts, .gitignore, .gstack/generated.json, 2026-10-28-gsta-8-ci-evals-e2e-plan]
+links: [wiki/README.md, scripts/wiki.ts, .gitignore, .gstack/generated.json, wiki/plans/2026-10-28-gsta-8-ci-evals-e2e-plan]
 ---
 
 # wiki/INDEX.md is no longer committed
