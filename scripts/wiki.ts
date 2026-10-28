@@ -52,8 +52,9 @@ function splitFlowList(inner: string): string[] | null {
   for (let i = 0; i < inner.length; i++) {
     const ch = inner[i];
     if (quote) {
-      if (ch === quote) quote = "";
-    } else if (ch === '"' || ch === "'") {
+      if (ch === "'" && quote === "'" && inner[i + 1] === "'") i++;
+      else if (ch === quote) quote = "";
+    } else if ((ch === '"' || ch === "'") && inner.slice(start, i).trim() === "") {
       quote = ch;
     } else if (ch === ",") {
       parts.push(inner.slice(start, i));
@@ -73,14 +74,17 @@ export function parseFrontMatter(text: string): { fm: FrontMatter } | { error: s
   if (close < 0) return { error: "front matter is not closed by a --- line", line: 1 };
   const fm: FrontMatter = {};
   let listKey: string | null = null;
+  let listIndent: string | null = null;
   for (let i = 1; i < close; i++) {
     const line = lines[i];
     if (line.trim() === "") continue;
     const unquotable = { error: "value is not a plain or quoted YAML string; quote it with double quotes", line: i + 1 };
-    const item = line.match(/^(?:  )?- (.*)$/);
+    const item = line.match(/^((?:  )?)- (.*)$/);
     if (item) {
       if (!listKey) return { error: "list item without a list field above it", line: i + 1 };
-      const v = scalar(item[1]);
+      if (listIndent !== null && item[1] !== listIndent) return { error: "items of one list must share one indentation", line: i + 1 };
+      listIndent = item[1];
+      const v = scalar(item[2]);
       if (v === null) return unquotable;
       (fm[listKey] as string[]).push(v);
       continue;
@@ -91,6 +95,7 @@ export function parseFrontMatter(text: string): { fm: FrontMatter } | { error: s
     const value = (kv[2] ?? "").trim();
     if (key in fm) return { error: 'duplicate field "' + key + '"', line: i + 1 };
     listKey = null;
+    listIndent = null;
     if (value === "") {
       fm[key] = [];
       listKey = key;
@@ -99,8 +104,8 @@ export function parseFrontMatter(text: string): { fm: FrontMatter } | { error: s
       const parts = splitFlowList(value.slice(1, -1));
       if (!parts) return { error: "inline list has an unclosed quote", line: i + 1 };
       const items: string[] = [];
-      for (const part of parts) {
-        if (part.trim() === "") continue;
+      for (const part of parts.length === 1 && parts[0].trim() === "" ? [] : parts) {
+        if (part.trim() === "") return { error: "inline list has an empty item", line: i + 1 };
         const v = scalar(part);
         if (v === null || (!/^\s*["']/.test(part) && /[[\]{}]/.test(v))) return unquotable;
         items.push(v);

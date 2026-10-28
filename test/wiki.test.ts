@@ -65,15 +65,27 @@ describe("the committed wiki", () => {
 
 describe("front matter", () => {
   test("reads scalars, quoted values, inline lists and block lists", () => {
-    const ok = parseFrontMatter("---\ntitle: It's fine\nsummary: \"Quoted: with a colon\"\nlinks: [a, \"b c\"]\nattachments:\n  - one\n- two\n---\nbody\n");
-    expect(ok).toEqual({ fm: { title: "It's fine", summary: "Quoted: with a colon", links: ["a", "b c"], attachments: ["one", "two"] } });
+    const ok = parseFrontMatter("---\ntitle: It's fine\nsummary: \"Quoted: with a colon\"\nlinks: [a, \"b c\"]\nattachments:\n  - one\n  - two\nanswers:\n- three\n---\nbody\n");
+    expect(ok).toEqual({ fm: { title: "It's fine", summary: "Quoted: with a colon", links: ["a", "b c"], attachments: ["one", "two"], answers: ["three"] } });
   });
 
   test("keeps commas inside quoted inline list items", () => {
     const parsed = parseFrontMatter("---\nlinks: [\"https://example.org/?ids=a,b\", 'x, it''s y', plain]\n---\n");
     expect(parsed).toEqual({ fm: { links: ["https://example.org/?ids=a,b", "x, it's y", "plain"] } });
+    expect(parseFrontMatter("---\nlinks: ['x, it''s, y', plain]\n---\n")).toEqual({ fm: { links: ["x, it's, y", "plain"] } });
     expect(parseFrontMatter("---\nlinks: [\"a, b]\n---\n")).toMatchObject({ error: expect.stringContaining("unclosed quote"), line: 2 });
     expect(parseFrontMatter("---\nlinks: [https://x.org/?q[0]=1]\n---\n")).toMatchObject({ line: 2 });
+  });
+
+  test("treats an apostrophe inside a plain inline list item as text", () => {
+    expect(parseFrontMatter("---\nlinks: [Garry's take, wiki/README.md]\n---\n")).toEqual({ fm: { links: ["Garry's take", "wiki/README.md"] } });
+    expect(parseFrontMatter("---\nlinks: [anna's.md, bob's.md]\n---\n")).toEqual({ fm: { links: ["anna's.md", "bob's.md"] } });
+  });
+
+  test("refuses empty inline items and mixed block list indentation, as YAML does", () => {
+    expect(parseFrontMatter("---\nlinks: []\n---\n")).toEqual({ fm: { links: [] } });
+    expect(parseFrontMatter("---\nlinks: [,a]\n---\n")).toMatchObject({ error: expect.stringContaining("empty item"), line: 2 });
+    expect(parseFrontMatter("---\nlinks:\n  - a\n- b\n---\n")).toMatchObject({ error: expect.stringContaining("one indentation"), line: 4 });
   });
 
   test("refuses a file with no front matter, an unclosed block, CRLF and duplicate fields", () => {
