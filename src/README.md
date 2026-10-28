@@ -16,7 +16,7 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | grade/ | Scoring and blinded adjudication | U10 |
 | runner/proxy/ | The metering proxy, vendored from harness-evals | U3 |
 | runner/ledger/ | The budget ledger, rewritten on vendoring | U4 |
-| runner/prereg/ | The preregistration checker, vendored | U2 |
+| runner/prereg/ | The preregistration checker, vendored, and the prereg.json format and its checks | U2 |
 | runner/stats/ | The statistics kit, vendored, with two fixes | U2 |
 | runner/pricing/ | The price table the proxy and preflight read | not assigned; vendored with the proxy |
 | trial/ | The trial module: isolation, images, network, env allowlist, state root, grading delta, cache | U9 |
