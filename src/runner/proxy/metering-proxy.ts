@@ -379,8 +379,17 @@ export class MeteringProxy {
     } catch {
       isJson = false;
     }
-    const query = [...new URL(req.url).searchParams].flat().join("\n");
-    const leaks = findLeaks(`${query}\n${raw}\n${decodedStrings(parsed).join("\n")}`, o.forbiddenMarkers ?? []);
+    const url = new URL(req.url);
+    const decode = (s: string) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    };
+    const headerText = [...req.headers].flat();
+    const channels = [route, decode(route), url.search, decode(url.search), ...[...url.searchParams].flat(), ...headerText, ...headerText.map(decode), raw, ...decodedStrings(parsed)];
+    const leaks = findLeaks(channels.join("\n"), o.forbiddenMarkers ?? []);
     if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
     if (req.method === "GET") return forwardFree();
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");

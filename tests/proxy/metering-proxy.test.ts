@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { priceRequest, reservationMicros, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
+import { priceRequest, reservationMicros, sseUsage, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -311,12 +311,14 @@ describe("allowlist and allowance", () => {
     await expectProblem(await t.call(a.slot, a.token, "/openai/v1/responses", { model: "gpt-6.1-sol", prompt: { id: "pmpt_1" }, input: "hi" }), 402, "E_ALLOWANCE");
     expect(t.calls).toHaveLength(0);
     expect(usageCost(priceRequest("anthropic", msg, 1000), { input_tokens: 10, output_tokens: 5, speed: "fast" })).toBeNull();
+    const stream = [{ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1, speed: "fast" } } }, { type: "message_delta", usage: { output_tokens: 5 } }];
+    expect(usageCost(priceRequest("anthropic", msg, 1000), sseUsage(stream.map(e => `data: ${JSON.stringify(e)}\n\n`).join("")))).toBeNull();
   });
 
   test("stored context from previous_response_id, a conversation or an item reference is reserved at the context bound", () => {
     const base = { model: "gpt-6.1-sol", input: "hi" };
     const plain = priceRequest("openai", base, 1000).inputTokens;
-    for (const extra of [{ previous_response_id: "resp_1" }, { conversation: "conv_1" }, { input: [{ type: "item_reference", id: "msg_1" }] }]) {
+    for (const extra of [{ previous_response_id: "resp_1" }, { conversation: "conv_1" }, { input: [{ type: "item_reference", id: "msg_1" }] }, { input: [{ id: "msg_1" }] }]) {
       expect(priceRequest("openai", { ...base, ...extra }, 1000).inputTokens).toBeGreaterThanOrEqual(plain + UNKNOWN_CHAIN_CONTEXT_TOKENS - 64);
     }
   });
@@ -612,12 +614,13 @@ describe("unknown sends and reconcile", () => {
     expect(t.journal().map(l => [l.kind, l.status])).toEqual([["free", null]]);
   });
 
-  test("a forbidden marker in the query string is refused on free GET routes too", async () => {
-    const t = setup(() => Response.json({ data: [] }), { forbiddenMarkers: ["HIDDEN-FACT-42"] });
+  test("a forbidden marker in the path, query string or headers is refused, raw or decoded, on free GET routes too", async () => {
+    const t = setup(() => Response.json({ data: [] }), { forbiddenMarkers: ["HIDDEN-FACT-42", "K=V&W+X"] });
     const a = t.bind();
-    const get = (query: string) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openai/v1/models?${query}`, { headers: { authorization: `Bearer ${a.token}` } });
-    for (const query of ["q=HIDDEN-FACT-42", "q=HIDDEN%2DFACT%2D42"]) expect((await expectProblem(await get(query), 403, "E_TRIPWIRE")).detail).not.toContain("HIDDEN-FACT-42");
-    expect((await get("q=fine")).status).toBe(200);
+    const get = (path: string, extra: Record<string, string> = {}) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openai/v1/models${path}`, { headers: { authorization: `Bearer ${a.token}`, ...extra } });
+    const leaking = [get("?q=HIDDEN-FACT-42"), get("?q=HIDDEN%2DFACT%2D42"), get("?q=K=V&W+X"), get("?q=K%3DV%26W%2BX"), get("/HIDDEN-FACT-42"), get("/HIDDEN%2DFACT%2D42"), get("", { "x-note": "HIDDEN-FACT-42" }), get("", { "x-note": "HIDDEN%2DFACT%2D42" })];
+    for (const res of await Promise.all(leaking)) expect((await expectProblem(res, 403, "E_TRIPWIRE")).detail).not.toContain("HIDDEN-FACT-42");
+    expect((await get("?q=fine")).status).toBe(200);
     expect(t.calls).toHaveLength(1);
   });
 

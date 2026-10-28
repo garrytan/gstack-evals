@@ -109,7 +109,7 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   if (provider === "anthropic" && body.inference_geo !== undefined) throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
   if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
   const json = JSON.stringify(body);
-  const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
+  const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') || (Array.isArray(body.input) && body.input.some(i => i && typeof i === "object" && typeof i.id === "string" && i.type === undefined)) ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
   // OpenAI caches automatically; Anthropic writes its cache only where a request sets cache_control.
   const cacheWrite = provider === "openai" ? "5m" : !json.includes('"cache_control"') ? "none" : /"ttl"\s*:\s*"1h"/.test(json) ? "1h" : "5m";
   return { provider, model, ...price, cacheWrite, inputTokens: Buffer.byteLength(json) + 64 + chained, maxOutputTokens };
@@ -175,7 +175,7 @@ export function sseUsage(text: string): Record<string, unknown> | null {
     const finalUsage = event?.response?.usage ?? (event?.type === undefined || event?.type === "message_delta" ? event?.usage : undefined);
     for (const usage of [event?.message?.usage, finalUsage]) {
       if (!usage || typeof usage !== "object") continue;
-      for (const [k, v] of Object.entries(usage)) if (typeof v === "number" || (v && typeof v === "object")) merged[k] = v;
+      for (const [k, v] of Object.entries(usage)) if (typeof v === "number" || (v && typeof v === "object") || k === "speed") merged[k] = v;
     }
     if (finalUsage && typeof finalUsage === "object") final = true;
   }
