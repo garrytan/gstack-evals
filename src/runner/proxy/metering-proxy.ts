@@ -22,7 +22,7 @@
 //   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -47,6 +47,9 @@ const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", open
 const DROPPED_HEADERS = ["host", "content-length", "accept-encoding", "connection", "authorization", "x-api-key", "api-key", "openai-organization", "openai-project", "cookie", "proxy-authorization"];
 const MANAGEMENT_HEADER = "x-gstack-evals-management";
 export const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
+/** How long finalize waits for in-flight calls by default, and the most the management socket lets a caller ask for. */
+export const FINALIZE_TIMEOUT_MS = 30_000;
+export const FINALIZE_MAX_MS = 120_000;
 /** One provider call may run this long; long reasoning calls exceed Bun's own 300-second fetch timeout, which is off. */
 export const UPSTREAM_DEADLINE_MS = 900_000;
 const NO_TOKENS: TokenUsage = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
@@ -116,7 +119,6 @@ export interface Meter {
 }
 
 interface Slot {
-  id: string;
   tokenHash: Buffer;
   cell: CellAttempt;
   models: Set<string>;
@@ -185,9 +187,21 @@ function presentedCredential(req: Request): string | null {
   return bearer ? bearer[1]!.trim() : null;
 }
 
-function outputField(provider: Provider, route: string): string {
-  if (provider === "anthropic") return "max_tokens";
-  return route === "/v1/responses" ? "max_output_tokens" : "max_completion_tokens";
+/** The output-cap fields the provider reads on this route; the first is where the proxy writes the cell's cap. */
+function outputFields(provider: Provider, route: string): string[] {
+  if (provider === "anthropic") return ["max_tokens"];
+  return route === "/v1/responses" ? ["max_output_tokens"] : ["max_completion_tokens", "max_tokens"];
+}
+
+/** Decodes each run of percent escapes on its own, so one malformed escape cannot hide the rest of the string. */
+function percentDecoded(text: string): string {
+  return text.replace(/(?:%[0-9A-Fa-f]{2})+/g, run => {
+    try {
+      return decodeURIComponent(run);
+    } catch {
+      return run.replace(/%([0-7][0-9A-Fa-f])/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+    }
+  });
 }
 
 function retryDelayMs(res: Response, attempt: number): number {
@@ -202,6 +216,7 @@ export class MeteringProxy {
   private trial: ReturnType<typeof Bun.serve> | null = null;
   private management: ReturnType<typeof Bun.serve> | null = null;
   private journalFd: number | null = null;
+  private journalTorn = false;
   private slots = new Map<string, Slot>();
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
@@ -221,11 +236,14 @@ export class MeteringProxy {
   }
 
   start(): void {
-    this.journalFd = openSync(this.options.journal, "a", 0o600);
+    this.journalFd = openSync(this.options.journal, "a+", 0o600);
+    const { size } = fstatSync(this.journalFd);
+    const last = Buffer.alloc(1);
+    this.journalTorn = size > 0 && readSync(this.journalFd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
     if (existsSync(this.options.managementSocket)) rmSync(this.options.managementSocket);
     this.management = Bun.serve({ unix: this.options.managementSocket, fetch: req => this.manage(req) });
     chmodSync(this.options.managementSocket, 0o600);
-    this.trial = Bun.serve({ hostname: this.options.host, port: this.options.port ?? 0, idleTimeout: 0, fetch: (req, server) => this.handle(req, server.requestIP(req)?.address ?? null) });
+    this.trial = Bun.serve({ hostname: this.options.host, port: this.options.port ?? 0, idleTimeout: 0, fetch: (req, server) => this.handle(req, server.requestIP(req)?.address ?? null), error: () => problem("E_INTERNAL", 500, "the request failed before its slot was checked") });
   }
 
   stop(): void {
@@ -239,7 +257,7 @@ export class MeteringProxy {
   bind(request: BindRequest): Binding {
     if (!request.models?.length || !Number.isSafeInteger(request.allowance_micros) || request.allowance_micros <= 0) throw new Error("E_USAGE: metering proxy: bind needs a non-empty models list and a positive integer allowance_micros");
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
-    this.slots.set(binding.slot, { id: binding.slot, tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), allowanceMicros: request.allowance_micros, committedMicros: 0, calls: 0 });
+    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), allowanceMicros: request.allowance_micros, committedMicros: 0, calls: 0 });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
     return binding;
   }
@@ -250,7 +268,7 @@ export class MeteringProxy {
   }
 
   /** Waits for the meter's in-flight calls (at most timeoutMs), then removes and returns it. */
-  async finalize(meterId: string, timeoutMs = 120_000): Promise<Meter> {
+  async finalize(meterId: string, timeoutMs = FINALIZE_TIMEOUT_MS): Promise<Meter> {
     if (this.inflight.get(meterId)) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([new Promise<void>(r => this.waiters.set(meterId, [...(this.waiters.get(meterId) ?? []), r])), new Promise<void>(r => (timer = setTimeout(r, timeoutMs)))]);
@@ -277,17 +295,29 @@ export class MeteringProxy {
         this.unbind(body.slot);
         return Response.json({ ok: true });
       }
-      if (req.method === "POST" && path === "/finalize" && typeof body.meter_id === "string") return Response.json(await this.finalize(body.meter_id, Math.min(Number(body.timeout_ms ?? 30_000), 120_000)));
+      if (req.method === "POST" && path === "/finalize" && typeof body.meter_id === "string") {
+        const timeout = body.timeout_ms ?? FINALIZE_TIMEOUT_MS;
+        if (!Number.isSafeInteger(timeout) || timeout < 0) throw new Error("E_USAGE: metering proxy: finalize needs timeout_ms as a non-negative integer");
+        return Response.json(await this.finalize(body.meter_id, Math.min(timeout, FINALIZE_MAX_MS)));
+      }
     } catch (e) {
       return problem("E_USAGE", 400, (e as Error).message.replace(/^E_USAGE: metering proxy: /, ""));
     }
     return problem("E_USAGE", 404, `no management route ${req.method} ${path}`);
   }
 
+  /** Appends one line and syncs it. After a failed write, the next line starts on a fresh line, so a torn line stays on its own. */
   private journal(line: Record<string, unknown>): void {
     if (this.journalFd === null) throw new Error("E_INTERNAL: metering proxy: the journal is not open");
-    writeSync(this.journalFd, JSON.stringify({ at: new Date().toISOString(), ...line }) + "\n");
-    fsyncSync(this.journalFd);
+    const bytes = Buffer.from(`${this.journalTorn ? "\n" : ""}${JSON.stringify({ at: new Date().toISOString(), ...line })}\n`);
+    try {
+      for (let written = 0; written < bytes.length; ) written += writeSync(this.journalFd, bytes, written);
+      fsyncSync(this.journalFd);
+      this.journalTorn = false;
+    } catch (e) {
+      this.journalTorn = true;
+      throw e;
+    }
   }
 
   private meter(slot: Slot): Meter {
@@ -333,7 +363,7 @@ export class MeteringProxy {
     return problem(code, status, reason);
   }
 
-  /** Allowlist, tripwire, output cap, price, then per attempt: allowance, limiter, reserve, journal, send, settle. */
+  /** Route allowlist, key, tripwire, model allowlist, output cap, price, then per attempt: rate-limit pause, allowance, reserve, journal, send, settle. */
   private async forward(req: Request, ctx: CallContext, beginStream: () => () => void): Promise<Response> {
     const o = this.options;
     const { provider, route, slot } = ctx;
@@ -380,15 +410,8 @@ export class MeteringProxy {
       isJson = false;
     }
     const url = new URL(req.url);
-    const decode = (s: string) => {
-      try {
-        return decodeURIComponent(s);
-      } catch {
-        return s;
-      }
-    };
     const headerText = [...req.headers].flat();
-    const channels = [route, decode(route), url.search, decode(url.search), ...[...url.searchParams].flat(), ...headerText, ...headerText.map(decode), raw, ...decodedStrings(parsed)];
+    const channels = [route, percentDecoded(route), url.search, percentDecoded(url.search), ...[...url.searchParams].flat(), ...headerText, ...headerText.map(percentDecoded), raw, ...decodedStrings(parsed)];
     const leaks = findLeaks(channels.join("\n"), o.forbiddenMarkers ?? []);
     if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
     if (req.method === "GET") return forwardFree();
@@ -399,10 +422,13 @@ export class MeteringProxy {
     if (!slot.models.has(`${provider}:${ctx.model}`)) return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
     if (allowed.free) return forwardFree(raw);
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
+    if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
+    if (provider === "anthropic" && body.inference_geo === undefined) body.inference_geo = "global";
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
-    const stated = [body.max_tokens, body.max_completion_tokens, body.max_output_tokens].filter((v): v is number => typeof v === "number");
+    const fields = outputFields(provider, route);
+    const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");
     if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${Math.max(...stated)} output tokens, above this cell's cap of ${cap}`);
-    if (!stated.length) body[outputField(provider, route)] = cap;
+    if (!stated.length) body[fields[0]!] = cap;
     const outBody = JSON.stringify(body);
     let price: ReturnType<typeof priceRequest>;
     try {
@@ -435,14 +461,19 @@ export class MeteringProxy {
         held = await o.ledger.reserve({ idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros });
       } catch (e) {
         slot.committedMicros -= maxMicros;
-        return this.refuse(ctx, "UPSTREAM", 503, `the ledger did not answer reservation ${idempotencyKey}, so nothing was sent: ${scrubbedCause(e, ctx.secrets)}`);
+        return this.refuse(ctx, "E_LEDGER_UNAVAILABLE", 503, `the ledger did not answer reservation ${idempotencyKey}, so nothing was sent: ${scrubbedCause(e, ctx.secrets)}`);
       }
       if (!held.ok) {
         slot.committedMicros -= maxMicros;
         return this.refuse(ctx, held.code, 402, held.message);
       }
       const rid = held.reservation.reservation_id;
-      this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source });
+      try {
+        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source });
+      } catch (e) {
+        await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, "not sent: the request line could not be journaled");
+        throw e;
+      }
       if (attempt > 1 && Date.now() - started > o.retry.elapsed_ms) {
         const reason = `not sent: attempt ${attempt} would start past this call's retry budget of ${o.retry.elapsed_ms} ms`;
         await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, reason);
@@ -553,18 +584,26 @@ export class MeteringProxy {
 /**
  * Resume: settle every journaled call through the ledger. A call with a recorded outcome is settled with it again
  * (settle is idempotent by reservation id); a call with none is settled as unknown, keeps its full charge, and is never
- * resent. Nothing here can send a provider request.
+ * resent. A line torn by a crash or a short write is skipped and counted as unreadable; a request line lost that way leaves
+ * its reservation open in the ledger. Nothing here can send a provider request.
  */
-export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; refused: Array<{ reservation_id: string; code: string; message: string }> }> {
+export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; refused: Array<{ reservation_id: string; code: string; message: string }>; unreadable: number }> {
   const requests: string[] = [];
   const outcomes = new Map<string, CallOutcome>();
+  let unreadable = 0;
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
-    const entry = JSON.parse(line) as { kind: string; reservation_id?: string; outcome?: CallOutcome };
+    let entry: { kind: string; reservation_id?: string; outcome?: CallOutcome };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      unreadable++;
+      continue;
+    }
     if (entry.kind === "request" && entry.reservation_id) requests.push(entry.reservation_id);
     if (entry.kind === "outcome" && entry.reservation_id && entry.outcome) outcomes.set(entry.reservation_id, entry.outcome);
   }
-  const result = { settled: [] as string[], unknown: [] as string[], refused: [] as Array<{ reservation_id: string; code: string; message: string }> };
+  const result = { settled: [] as string[], unknown: [] as string[], refused: [] as Array<{ reservation_id: string; code: string; message: string }>, unreadable };
   for (const rid of requests) {
     const outcome = outcomes.get(rid) ?? { kind: "unknown" as const };
     const reply = await ledger.settle(rid, outcome);
@@ -596,7 +635,7 @@ export class ProxyControl {
     return this.post("/unbind", { slot });
   }
 
-  finalize(meterId: string, timeoutMs = 30_000): Promise<Meter> {
+  finalize(meterId: string, timeoutMs = FINALIZE_TIMEOUT_MS): Promise<Meter> {
     return this.post("/finalize", { meter_id: meterId, timeout_ms: timeoutMs });
   }
 }

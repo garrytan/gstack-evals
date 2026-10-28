@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem, slotPath, writeOnce } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
@@ -24,7 +24,7 @@ const DOLLAR = 1_000_000;
 function setup(cap = 10 * DOLLAR) {
   const dir = scratch();
   const record = join(dir, "record");
-  recordApproval(record, { action: "init", item: "lanea", cap_micros: cap, quotes: [quote] });
+  recordApproval(record, { action: "init", item: "lanea", cap_micros: cap, quotes: [quote], admission: "warn" });
   return { dir, record, local: LocalLedger.open(join(dir, "machine-a.sqlite")) };
 }
 
@@ -55,11 +55,11 @@ async function race(source: string, argvs: string[][]): Promise<string[]> {
 describe("approvals", () => {
   test("init records the owner's words, a retry is idempotent, raise needs a higher cap", () => {
     const { record } = setup();
-    expect(recordApproval(record, { action: "init", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote] }).seq).toBe(1);
-    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea", cap_micros: 20 * DOLLAR, quotes: [quote] }))).toBe("E_USAGE");
+    expect(recordApproval(record, { action: "init", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote], admission: "warn" }).seq).toBe(1);
+    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea", cap_micros: 20 * DOLLAR, quotes: [quote], admission: "warn" }))).toBe("E_USAGE");
     expect(codeOf(() => recordApproval(record, { action: "raise", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote] }))).toBe("E_USAGE");
     expect(codeOf(() => recordApproval(record, { action: "raise", item: "nothing", cap_micros: DOLLAR, quotes: [quote] }))).toBe("E_LEDGER_MISSING");
-    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea2", cap_micros: DOLLAR, quotes: [{ ...quote, words: " " }] }))).toBe("E_USAGE");
+    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea2", cap_micros: DOLLAR, quotes: [{ ...quote, words: " " }], admission: "warn" }))).toBe("E_USAGE");
     const raise = { action: "raise" as const, item: "lanea", cap_micros: 15 * DOLLAR, quotes: [quote, { words: "raise ok", by: "Garry Tan", source: "gate 2" }] };
     expect(recordApproval(record, raise).seq).toBe(2);
     expect(recordApproval(record, raise).seq).toBe(2);
@@ -150,7 +150,7 @@ describe("leases on one line item", () => {
       openLease(record, null, {
         item: "lanea",
         run_id: "run-a",
-        admission: () => {
+        requireAdmission: () => {
           inner = codeOf(() => openLease(record, null, { item: "lanea", run_id: "run-b" }));
           return null;
         },
@@ -200,6 +200,37 @@ try { openLease(record, null, { item: "lanea", run_id: run }); console.log("ok")
     recordApproval(record, { action: "raise", item: "lanea", cap_micros: 3 * DOLLAR, quotes: [{ words: "raise ok", by: "Garry Tan", source: "gate 2" }] });
     expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: 2 * DOLLAR + 1 }))).toBe("CAP_STOP");
     expect(openLease(record, local, { item: "lanea", run_id: "run-a" }).reserved_micros).toBe(2 * DOLLAR);
+  });
+});
+
+describe("admission", () => {
+  test("a required item asks the requireAdmission seam about the lease it is about to write; a refusal is E_RIG_UNPROVEN and writes nothing", () => {
+    const record = join(scratch(), "record");
+    recordApproval(record, { action: "init", item: "u16-replay", cap_micros: DOLLAR, quotes: [quote], admission: "required" });
+    const seen: string[] = [];
+    const refuse = (_: string, lease: { item: string; seq: number; run_id: string }) => {
+      seen.push(lease.item + "/" + lease.seq + "/" + lease.run_id);
+      return "the Docker tier is red at this commit";
+    };
+    expect(codeOf(() => openLease(record, null, { item: "u16-replay", run_id: "run-a", requireAdmission: refuse }))).toBe("E_RIG_UNPROVEN");
+    expect(readItem(record, "u16-replay").leases).toEqual([]);
+    expect(openLease(record, null, { item: "u16-replay", run_id: "run-a", requireAdmission: () => null }).line_item).toBe("u16-replay");
+    expect(seen).toEqual(["u16-replay/1/run-a"]);
+  });
+
+  test("a warn item leases quietly with a matching admission record, and warns naming a mismatched one", () => {
+    const record = join(scratch(), "record");
+    for (const item of ["lanea", "laneb"]) recordApproval(record, { action: "init", item, cap_micros: DOLLAR, quotes: [quote], admission: "warn" });
+    writeFileSync(slotPath(record, { kind: "admission", item: "lanea", seq: 1 }), JSON.stringify({ item: "lanea", seq: 1, run_id: "run-a", machine_id: "m-1" }));
+    writeFileSync(slotPath(record, { kind: "admission", item: "laneb", seq: 1 }), JSON.stringify({ item: "laneb", seq: 1, run_id: "run-other", machine_id: "m-1" }));
+    const warnings: string[] = [];
+    const warn = (code: string, message: string) => warnings.push(code + " " + message);
+    expect(openLease(record, null, { item: "lanea", run_id: "run-a", machine_id: "m-1", warn }).state).toBe("open");
+    expect(warnings).toEqual([]);
+    expect(openLease(record, null, { item: "laneb", run_id: "run-a", machine_id: "m-1", warn }).state).toBe("open");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toStartWith("RIG_UNPROVEN line item laneb leased without admission: the admission record at ");
+    expect(warnings[0]).toContain("does not name line item laneb, slot 1, run run-a and machine m-1");
   });
 });
 
@@ -265,6 +296,103 @@ describe("settle failures and recovery", () => {
     const revived = LocalLedger.open(join(dir, "machine-a-restored.sqlite"));
     revived.addLease(readItem(record, "lanea").leases[0]!.lease);
     expect(codeOf(() => settleLease(record, revived, lease.lease_id))).toBe("E_SETTLE_CONFLICT");
+  });
+});
+
+
+describe("the sealed workflow's lease round trip", () => {
+  test("the thread exports a lease, a fake workflow spends it in its own ledger, and its settle artifact closes the lease in the record", async () => {
+    const { record } = setup();
+    const lease = openLease(record, null, { item: "lanea", run_id: "sealed-1", machine_id: "workflow:sealed-repo", amount_micros: 3 * DOLLAR });
+    const dispatchInput = JSON.stringify(exportLease(record, lease.lease_id));
+
+    const workflow = LocalLedger.open(join(scratch(), "workflow.sqlite"));
+    workflow.addLease(JSON.parse(dispatchInput));
+    for (const trial of [1, 2]) {
+      const r = reservation(await workflow.reserve({ idempotency_key: "w" + trial, lease_id: lease.lease_id, cell: cell(trial), max_micros: DOLLAR }));
+      await workflow.settle(r.reservation_id, { kind: "spent", spent_micros: 450_000, usage });
+    }
+    expect(await workflow.reserve({ idempotency_key: "w3", lease_id: lease.lease_id, cell: cell(3), max_micros: 2_100_001 })).toMatchObject({ ok: false, code: "CAP_STOP" });
+    const artifact = JSON.stringify(settleLease(null, workflow, lease.lease_id));
+    expect(settleLease(null, workflow, lease.lease_id)).toEqual(JSON.parse(artifact));
+
+    expect(importSettlement(record, JSON.parse(artifact))).toMatchObject({ spent_micros: 900_000 });
+    expect(importSettlement(record, JSON.parse(artifact))).toMatchObject({ spent_micros: 900_000 });
+    expect(codeOf(() => importSettlement(record, { ...JSON.parse(artifact), spent_micros: 1 }))).toBe("E_SETTLE_CONFLICT");
+    expect(codeOf(() => exportLease(record, lease.lease_id))).toBe("E_LEASE_CLOSED");
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 900_000, run_id: "sealed-1", open_lease: null });
+    expect(JSON.parse(readFileSync(slotPath(record, { kind: "lease", item: "lanea", seq: 1 }), "utf8")).machine_id).toBe("workflow:sealed-repo");
+  });
+
+  test("an artifact above the lease's amount or off the staged shape is E_USAGE and writes nothing; one that arrives after the owner reconciled is E_SETTLE_CONFLICT and the reconcile stands", () => {
+    const { dir, record } = setup();
+    const lease = openLease(record, null, { item: "lanea", run_id: "sealed-1", machine_id: "workflow:sealed-repo", amount_micros: 3 * DOLLAR });
+    const workflow = LocalLedger.open(join(scratch(), "workflow.sqlite"));
+    workflow.addLease(exportLease(record, lease.lease_id));
+    const artifact = settleLease(null, workflow, lease.lease_id);
+    for (const bad of [{ ...artifact, spent_micros: 3 * DOLLAR + 1 }, { ...artifact, unknown_micros: 3 * DOLLAR, spent_micros: 1 }, { ...artifact, usage: { ...artifact.usage!, evil: 1 } }, { ...artifact, usage: null }, { ...artifact, closed_at: "not a time" }, { ...artifact, note: "extra" }]) {
+      expect(codeOf(() => importSettlement(record, bad))).toBe("E_USAGE");
+    }
+    expect(readItem(record, "lanea").leases[0]!.close).toBeNull();
+    const exportFile = join(dir, "usage.csv");
+    writeFileSync(exportFile, "date,cost\n");
+    const reconciled = reconcileLease(record, { lease_id: lease.lease_id, spent_micros: 500_000, quotes: [quote], source: exportFile, now: new Date(Date.parse(lease.expires_at) + 1) });
+    expect(codeOf(() => importSettlement(record, artifact))).toBe("E_SETTLE_CONFLICT");
+    expect(readItem(record, "lanea").leases[0]!.close).toEqual(reconciled);
+  });
+});
+
+describe("lease guards from the /ship review", () => {
+  test("a lease the local ledger cannot hold is closed at $0, so its allowance is not stranded; if the ledger cannot even be read, the lease stays reserved", () => {
+    const { dir, record, local } = setup();
+    local.addLease = () => {
+      throw new Error("disk I/O error");
+    };
+    expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("E_LEDGER_PATH");
+    expect(readItem(record, "lanea").leases[0]!.close).toMatchObject({ how: "settled", spent_micros: 0, unknown_micros: 0, unknown_calls: 0 });
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 0, open_lease: null });
+    const healthy = LocalLedger.open(join(dir, "machine-b.sqlite"));
+    const second = openLease(record, healthy, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    settleLease(record, healthy, second.lease_id);
+    const broken = LocalLedger.open(join(dir, "machine-c.sqlite"));
+    broken.addLease = broken.getLease = () => {
+      throw new Error("disk I/O error");
+    };
+    expect(codeOf(() => openLease(record, broken, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("E_LEASE_UNSETTLED");
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: DOLLAR, leases: 3 });
+    local.close();
+    healthy.close();
+  });
+
+  test("a local ledger that throws after holding the lease keeps it open; one holding other bytes under the lease id is E_LEASE_UNSETTLED", () => {
+    const { dir, record, local } = setup();
+    const real = local.addLease.bind(local);
+    local.addLease = (f) => {
+      real(f);
+      throw new Error("late failure");
+    };
+    const held = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    expect(held.state).toBe("open");
+    expect(readItem(record, "lanea").leases[0]!.close).toBeNull();
+    settleLease(record, local, held.lease_id);
+    const other = LocalLedger.open(join(dir, "machine-b.sqlite"));
+    other.addLease = () => {
+      throw new Error("constraint failed");
+    };
+    other.getLease = (id) => ({ file: { ...readItem(record, "lanea").leases[0]!.lease, lease_id: id, reserved_micros: 1 }, state: "open", close: null });
+    expect(codeOf(() => openLease(record, other, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("E_LEASE_UNSETTLED");
+    expect(readItem(record, "lanea").leases[1]!.close).toBeNull();
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: DOLLAR, leases: 2 });
+    local.close();
+    other.close();
+  });
+
+  test("a time to live past 7 days, including one past the Date range, is E_USAGE and writes no lease", () => {
+    const { record, local } = setup();
+    for (const ttl_ms of [9e15, MAX_LEASE_TTL_MS + 1]) expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", ttl_ms }))).toBe("E_USAGE");
+    expect(readItem(record, "lanea").leases).toEqual([]);
+    expect(openLease(record, local, { item: "lanea", run_id: "run-a", ttl_ms: MAX_LEASE_TTL_MS }).reserved_micros).toBe(10 * DOLLAR);
+    local.close();
   });
 });
 
