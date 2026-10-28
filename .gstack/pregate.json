@@ -7,7 +7,7 @@
       "paths": [
         "quick/laneb/runner/agent/laneb_agent.py"
       ],
-      "pattern": "\\(str\\(path\\), st\\.st_size, st\\.st_mtime_ns\\)",
+      "pattern": "\\(str\\(path\\), st\\.st_size, st\\.st_mtime_ns\\)\\s*$",
       "reason": "a file-digest cache key tuple in sha256_file, not a credential"
     }
   ],
