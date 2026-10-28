@@ -222,8 +222,8 @@ export const CODES = {
   E_LEDGER_PATH: {
     exit: 2,
     meaning: "The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE mount, or cannot be used. The approval record is not held to this rule.",
-    fix: "Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/).",
-    side_effects: NO_SPEND,
+    fix: "Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/). If a lease was closed at $0 because the local ledger failed while taking it (a busy lock, a full disk), fix that and lease again; the new lease takes the next slot.",
+    side_effects: "None: refused before any spend. If the local ledger failed after a lease was recorded, that lease is closed at $0 in the record.",
     retry_safe: true,
     resumable: false,
     owner: "U4",
@@ -251,6 +251,15 @@ export const CODES = {
     meaning: "The approval record (--ledger-record, GSTACK_EVALS_LEDGER_RECORD) could not be read or written: a file in it does not parse, or a write or its read-back failed.",
     fix: "Read the path in the message and check that the record directory is reachable and writable (on Capy, that the drive is mounted), then run the command again; record files are write-once, so a retry rewrites nothing. A file that does not parse is repaired by a human, never deleted.",
     side_effects: "Partial when a write failed: the file can land before the directory sync or the read-back fails, so that approval or lease may already be in the record. None when a read failed. A gstack-approvals mirror row may already exist; a retry skips it.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  E_RIG_UNPROVEN: {
+    exit: 2,
+    meaning: "A line item recorded with --admission required was asked for a lease, and no matching admission record exists for the lease's slot, so nothing was leased. The rig is proven before money is spent (GSTA-8, decision 3).",
+    fix: "Write the admission record the message names on the machine that will spend (U20's rig admission), then lease again. A new lease after a reconcile needs its own record.",
+    side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
     owner: "U4",
@@ -556,6 +565,12 @@ export const CODES = {
     meaning: "A safety task has no mutant in tasks.ext.json, so preflight could not check that the task fails on a violation.",
     fix: "Add a mutant {setup, answer} for the task in tasks.ext.json and commit a relock.",
     owner: "U5",
+  },
+  RIG_UNPROVEN: {
+    exit: null,
+    meaning: "A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.",
+    fix: "Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).",
+    owner: "U4",
   },
 } as const satisfies Record<string, CodeInfo>;
 
