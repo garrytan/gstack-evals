@@ -53,6 +53,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_NOT_RESUMABLE](#e_not_resumable) | 2 | U10 |
 | [E_SLOT_DENIED](#e_slot_denied) | 2 | U3 |
 | [E_ALLOWANCE](#e_allowance) | 2 | U3 |
+| [E_TRIPWIRE](#e_tripwire) | 2 | U3 |
 | [E_IMAGE_BUILD](#e_image_build) | 2 | U9 |
 | [E_USERSIM](#e_usersim) | 2 | U10 |
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
@@ -383,11 +384,19 @@ Exit 2. Side effects: None for the refused request: it never reached the provide
 
 ### E_ALLOWANCE
 
-The metering proxy refused a request for a model outside the slot's allowlist, or because the slot spent its allowance.
+The metering proxy refused a request the slot does not allow: a model, route or output cap outside the slot's allowlist, a body it cannot price (unknown model, not JSON), or a call whose worst case the slot's remaining allowance cannot hold.
 
-Fix: A model outside the allowlist means the host called a model the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume &lt;out>.
+Fix: A model, route or output cap outside the allowlist means the host called something the cell did not name: fix the arm or host configuration. A spent allowance means the session needed more than its share; read the allowance in the message before you --resume &lt;out>.
 
 Exit 2. Side effects: None for the refused request: it never reached the provider. Retry safe: yes. Resumable: yes. Owner: U3.
+
+### E_TRIPWIRE
+
+The metering proxy refused a request whose body carried a forbidden marker (a hidden fact, an answer key or a sealed task id), so the cell is invalid.
+
+Fix: Find how the marker reached the agent (task setup, fixtures, arm files or env) and remove it, then run the cell again as a new run. The message counts markers and never prints them.
+
+Exit 2. Side effects: None for the refused request: it never reached the provider. Calls the cell made before it are charged. Retry safe: yes. Resumable: no. Owner: U3.
 
 ### E_IMAGE_BUILD
 
