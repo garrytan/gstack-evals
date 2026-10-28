@@ -1,0 +1,79 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
+  "runner": "bun test {files}",
+  "dependencies": {
+    "bin/gstack-evals": [
+      "tests/cli.test.ts"
+    ],
+    "VERSION": [
+      "tests/cli.test.ts"
+    ],
+    "docs/errors.md": [
+      "tests/errors.test.ts"
+    ],
+    ".gstack/pregate.json": [
+      "tests/wiki.test.ts",
+      "tests/sealed.test.ts"
+    ],
+    "wiki/**": [
+      "tests/wiki.test.ts"
+    ],
+    ".github/workflows/**": [],
+    "package.json": [],
+    "bun.lock": [],
+    "tsconfig.json": [],
+    "src/**/.gitkeep": []
+  },
+  "strays": {
+    "allow": [
+      "lanes",
+      "policy",
+      "tables",
+      "tasks",
+      "coverage",
+      "spikes",
+      "docker"
+    ]
+  },
+  "sealed": {
+    "paths": [
+      "**/heldout*/**",
+      "**/Heldout*/**",
+      "**/HeldOut*/**",
+      "**/HELDOUT*/**",
+      "**/held-out*/**",
+      "**/Held-out*/**",
+      "**/Held-Out*/**",
+      "**/HELD-OUT*/**",
+      "**/held_out*/**",
+      "**/hold-out*/**",
+      "**/holdout*/**",
+      "**/Holdout*/**",
+      "**/HoldOut*/**",
+      "**/HOLDOUT*/**",
+      "**/sealed*/**",
+      "**/Sealed*/**",
+      "**/SEALED*/**",
+      "**/protected*/**",
+      "**/Protected*/**",
+      "**/PROTECTED*/**",
+      "**/*.sealed",
+      "**/*.sealed.*",
+      "**/*.Sealed",
+      "**/*.Sealed.*",
+      "**/*.SEALED",
+      "**/*.SEALED.*"
+    ],
+    "transcripts": [
+      "**/runs/**"
+    ],
+    "answer_markers": [
+      "\\bSEALED(?: [A-Z]+)*:"
+    ],
+    "seed_patterns": [
+      "\\b(?:sealed|holdout|rotation)_seed\\s*[=:]\\s*[\"']?[0-9A-Za-z]{4,}"
+    ],
+    "local_paths": true,
+    "visibility": "public"
+  }
+}

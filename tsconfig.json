@@ -11,5 +11,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "include": ["scripts/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "lanes/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
 }
