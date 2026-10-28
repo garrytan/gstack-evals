@@ -26,11 +26,11 @@ So no rule can refuse `sealed/<set>/tasks.json` and still let `sealed/<set>/MANI
 
 ## What U1 did
 
-The config now refuses every file under `sealed/` and `protected/`. It fails closed. Nothing in v1.0 writes there, since the first seal comes in M2b (earliest 2027-01-08) and needs a second principal first. `tests/sealed.test.ts` checks direct and nested bodies against the config, using the same glob rules gstack-pregate uses.
+The config now refuses every file under any folder named `sealed` or `protected` (and `heldout`, `held-out` or `holdout`), at any depth. It fails closed. Nothing in v1.0 writes there, since the first seal comes in M2b (earliest 2027-01-08) and needs a second principal first. `tests/sealed.test.ts` checks direct and nested bodies against the config, using the same glob rules gstack-pregate uses.
 
 ## What has to happen before the first seal
 
 1. **Ask gstack for an exception list (recommended).** Add a field such as `sealed.allow_paths`, read from the base branch like the rest of the policy, so `sealed/*/MANIFEST.json` and `protected/MANIFEST.json` pass while everything beside them is refused. This keeps the plan's layout and fixes the gap for every repo that uses the guard. It is a request to GStack Minder, through the Captain.
-2. **Or move the manifests out of the refused trees.** For example, use `manifests/sealed/<set>.json` and `manifests/protected.json`, and keep `sealed/**` and `protected/**` refused. This needs no gstack change, but it changes the plan's layout, which the M2b unit and the plan would have to adopt.
+2. **Or move the manifests out of the refused trees.** For example, use `manifests/sealed-<set>.json` and `manifests/protected.json`, and keep every `sealed/` and `protected/` folder refused. A folder named `sealed` under `manifests/` would be refused too. This needs no gstack change, but it changes the plan's layout, which the M2b unit and the plan would have to adopt.
 
 Until one of these lands, a unit that commits a manifest under `sealed/` or `protected/` gets SEALED_OUTPUT_REFUSED.

@@ -32,7 +32,7 @@ U1 is the first unit of the v1.0 build breakdown (milestone M0). Every other gst
 
 ## How to use the shared files
 
-1. **Build a command** by creating its module at the path in its `src/cli.ts` row and exporting `main(argv): Promise<number>` (`CommandMain` in `src/types.ts`). The dispatcher finds it; no edit to the table is needed. Edit your row only to move the path or change the summary.
+1. **Build a command** by creating its module at the path in its `src/cli.ts` row and exporting `main(argv): Promise<number>` (`CommandMain` in `src/types.ts`) that returns an exit code from 0 to 3. Anything else, a throw included, exits 2 with E_INTERNAL. The dispatcher finds it; no edit to the table is needed. Edit your row only to move the path or change the summary.
 2. **Reason codes.** Edit only the codes whose `owner` is your unit, then run `bun run errors:doc`. Add a new code as a new object. Never rename or remove one: `tests/errors.test.ts` pins every planned code at its exit.
 3. **Shared types.** U3 and U4 build in parallel against `ReservationLedger`: `reserve` holds a request's real maximum against a lease or refuses with a reason code, and `settle` is idempotent by reservation id, with an `unknown` outcome that keeps its charge. Change a type only with the units that use it.
 4. **Vendoring.** Mark your NOTICE.md row vendored with the exact source commit, and keep the upstream copyright line in each file header.
@@ -41,7 +41,7 @@ U1 is the first unit of the v1.0 build breakdown (milestone M0). Every other gst
 
 ## The sealed config
 
-- Paths that may never be published: `heldout/**`, `held-out/**`, everything under `sealed/` and `protected/`, and `*.sealed` or `*.sealed.*` files. The plan's manifests (`sealed/<set>/MANIFEST.json`, `protected/MANIFEST.json`) are refused too until the gap in [the sealed-manifest finding](2026-10-28-gsta-9-sealed-manifest-glob-gap.md) is closed, because the guard's globs cannot exempt one file.
+- Paths that may never be published: anything under a folder named `heldout`, `held-out`, `holdout`, `sealed` or `protected`, at any depth (`tasks/heldout/` and `lanes/x/sealed/` included), and `*.sealed` or `*.sealed.*` files. Test fixtures must avoid those folder names: use `tests/fixtures/seal-input/`, not `tests/fixtures/sealed/`. The plan's manifests (`sealed/<set>/MANIFEST.json`, `protected/MANIFEST.json`) are refused too until the gap in [the sealed-manifest finding](2026-10-28-gsta-9-sealed-manifest-glob-gap.md) is closed, because the guard's globs cannot exempt one file.
 - Transcripts: any `runs/` folder, since a run's transcripts stay in `<out>/runs/`. Fake transcripts for tests belong in a fixtures folder, not one named runs.
 - Text rules: the sealed answer marker pattern, seed assignments named `sealed_seed`, `holdout_seed` or `rotation_seed`, and local home paths.
 - `visibility` is `public`, so a finding refuses the push instead of warning, while the repo is still private. The repo will be public, and this keeps it public-safe now.
@@ -62,3 +62,11 @@ U1 is the first unit of the v1.0 build breakdown (milestone M0). Every other gst
 - **Sealed manifests** need gstack to add an exception list, or the manifests need to move, before the first seal in M2b. The [finding](2026-10-28-gsta-9-sealed-manifest-glob-gap.md) has both options.
 
 Only the sealed-manifest gap touches the design, and it is written up as a finding for the Captain. All four are listed in TODOS.md.
+
+## Review notes for later units
+
+The /ship review of PR #3 raised these. They belong to other units' designs, so U1 left them unchanged.
+
+- **U3 and U4:** `ReservationLedger.reserve` takes no idempotency key, and `settle` does not say what a second settle with a different outcome does. Money is float dollars in `Lease` and `Reservation`; integer micro-dollars would stop sums drifting against a cap.
+- **U7:** the dispatcher prints a module's raw error message under E_INTERNAL, with no secret scrubbing yet; the error record's scrubber should cover it. Only `runs/` folders are refused as eval output, so the default `<out>` location should be gitignored or refused once U7 picks it.
+- **CI:** no CI step applies the sealed rules to a pull request, so a push that skips the local `gstack-pregate sealed` check is caught only at review. The wiki check reads answer markers from the pushed config, not the base.
