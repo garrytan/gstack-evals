@@ -9,6 +9,11 @@ Vendored from [harness-evals](https://github.com/garrytan/harness-evals) at `70c
 
 In gstack-evals the cluster is the task: the trials of one task are one cluster, and across-task claims use task-clustered intervals and sign-flip tests.
 
+gstack-evals adds two files of its own:
+
+- `task-means.ts` (fix 2): `pairTaskMeans` averages each arm's valid trials within a task and pairs the arms by task, so arms with different trial counts (5 cheap-rung trials against 3 Opus trials) compare with every task weighted equally. A task with too few valid trials in an arm is a missing cell, handled by the preregistered rule (`drop_task` or `refuse`, with a minimum and an optional cap on the share dropped). `pairTrials` keeps trial-level pairing and is the only place that needs equal trials. Feed either pairing to `clusteredPairedDelta`.
+- `sizing.ts`: tasks needed for a one-sided paired test, the SD a number of tasks covers, the minimum detectable difference, the per-task SD of a difference of task means, and plan v3.2's decision 9 table and Amendment A2's release-split table as code. Counts round up; the plan's printed tables round to the nearest task (wiki finding 2026-10-28-gsta-14-sizing-tables-round-to-nearest).
+
 ## Fix: no p-value when nothing varies
 
 Upstream, when every paired difference was zero, the bootstrap held the single draw 0 and `nonInferiorityP` returned p = 0 for any tolerance above 0. So two arms that both passed every task "showed" non-inferiority at any size, 3 tasks or 300. Now the bootstrap is empty in that case, `nonInferiorityP` and `superiorityP` return null, and `gates.ts` reports the comparison inconclusive with the reason. Identical results on every task usually mean a ceiling or a floor, which the plan treats as not attempted, never as shown. A one-draw bootstrap no longer short-cuts to p = 0 or 1. Tests: `tests/stats/fixes.test.ts`.
