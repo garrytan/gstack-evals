@@ -62,6 +62,14 @@ describe("the committed wiki", () => {
       expect(["wiki/README.md", "wiki/INDEX.md"]).not.toContain(path);
     }
   });
+
+  test("reading posts at a base that still commits INDEX.md skips it", () => {
+    const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    expect([...gitBaseFiles(root, tree).keys()]).toEqual([DECISION]);
+  });
 });
 
 describe("front matter", () => {
@@ -200,14 +208,21 @@ describe("the check", () => {
     expect(problems(makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision"), "\nThe catalogue stays in sealed custody.\n") }))).toEqual([]);
   });
 
-  test("passes with no INDEX.md or a stale one, and fails when INDEX.md is committed", () => {
+  test("passes with no INDEX.md or an untracked stale one, and fails when INDEX.md is committed", () => {
     expect(problems(makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) }, { index: false }))).toEqual([]);
     const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
     write(root, QUESTION, post(fields(QUESTION_ID, "question", { status: "open" })));
     expect(problems(root)).toEqual([]);
     spawnSync("git", ["init", "-q"], { cwd: root });
+    expect(problems(root)).toEqual([]);
     spawnSync("git", ["add", "wiki/INDEX.md"], { cwd: root });
     expect(problems(root)).toEqual(["wiki/INDEX.md: generated, so it must not be committed; run git rm --cached wiki/INDEX.md"]);
+  });
+
+  test("fails when git cannot say whether INDEX.md is committed", () => {
+    const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
+    write(root, ".git", "gitdir: /nonexistent-gstack-evals-test\n");
+    expect(problems(root)).toEqual(["wiki/INDEX.md: git ls-files failed, so the check cannot tell whether INDEX.md is committed"]);
   });
 
   test("allows only status to change in a merged post", () => {

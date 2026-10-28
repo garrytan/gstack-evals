@@ -109,7 +109,7 @@ The check fails when:
 - `supersedes` or `answers` names a missing post, the target's status was not updated, or a status claims a replacement or answer that does not exist;
 - a file in a bundle is missing from `attachments`, or an attachment does not match its sha256;
 - any file under wiki/ matches a common key shape, or holds a sealed marker: the uppercase word SEALED, optionally followed by more uppercase words, then a colon, or a match for any `sealed.answer_markers` pattern in the repo's `.gstack/pregate.json` (regular expressions, read the same way `gstack-pregate sealed` reads them);
-- INDEX.md is committed;
+- INDEX.md is committed, or git cannot tell whether it is;
 - compared with the base branch, a merged post was edited (other than `status`) or removed.
 
 This README is not a post, so it can be edited. A change to the rules should land with a decision post that explains it.

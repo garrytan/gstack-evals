@@ -343,7 +343,10 @@ export function checkWiki(root: string, opts: { baseFiles?: Map<string, Buffer> 
   for (const e of entries) checkEntry(root, e, problems);
   checkLinks(entries, problems);
   if (existsSync(join(root, "wiki"))) scanText(root, opts.markers ?? sealedMarkers(root), problems);
-  if (git(root, ["ls-files", "--", "wiki/INDEX.md"]).out.toString().trim()) {
+  const tracked = git(root, ["ls-files", "--", "wiki/INDEX.md"]);
+  if (!tracked.ok && existsSync(join(root, ".git"))) {
+    problems.push({ file: "wiki/INDEX.md", message: "git ls-files failed, so the check cannot tell whether INDEX.md is committed" });
+  } else if (tracked.out.toString().trim()) {
     problems.push({ file: "wiki/INDEX.md", message: "generated, so it must not be committed; run git rm --cached wiki/INDEX.md" });
   }
   if (opts.baseFiles) checkImmutable(root, opts.baseFiles, problems);

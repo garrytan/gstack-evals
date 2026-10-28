@@ -8,7 +8,7 @@ model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-28
 status: done
-links: [wiki/README.md, scripts/wiki.ts, .gitignore, .gstack/generated.json]
+links: [wiki/README.md, scripts/wiki.ts, .gitignore, .gstack/generated.json, 2026-10-28-gsta-8-ci-evals-e2e-plan]
 ---
 
 # wiki/INDEX.md is no longer committed
@@ -21,11 +21,13 @@ The gstack-evals Captain (GSTA-2) ruled that wiki/INDEX.md stops being committed
 
 INDEX.md is generated from every post's front matter. While it was committed, each merged pull request that added a post or changed a status rewrote it, and every other open pull request then conflicted on it. Each lane had to merge main, regenerate the index, and rerun its pre-gate and /ship receipt. On 2026-10-28, 11 of the 15 open pull requests touched INDEX.md. That was the largest repeated cost in the merge queue.
 
+The approved CI plan (2026-10-28-gsta-8-ci-evals-e2e-plan, unit U19b) already called for this change. This lands it early, without the plan's printing of the index to the CI job summary.
+
 ## What changed
 
 - `.gitignore` lists wiki/INDEX.md, and the file left the tree.
 - `bun run wiki:index` still writes it locally. Run it, then read INDEX.md, to see what is open.
-- `bun run wiki:check` no longer compares INDEX.md with the posts. It still checks front matter, ids, links, statuses, attachments, secrets, sealed markers and merged posts. It now fails when INDEX.md is committed, so a merge that keeps the file is caught.
+- `bun run wiki:check` no longer compares INDEX.md with the posts. It still checks front matter, ids, links, statuses, attachments, secrets, sealed markers and merged posts. It now fails when INDEX.md is committed, or when a checkout's git cannot say, so a merge that keeps the file is caught.
 - `.gstack/generated.json` no longer registers INDEX.md as a generated output.
 
 ## Cost
