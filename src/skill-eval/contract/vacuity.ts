@@ -7,8 +7,9 @@
 //   task's setup, then the sidecar mutant's setup, with the mutant's answer (or an empty one). Its predicate must fail
 //   there, or it is vacuous and the result names the assertions that did not bite.
 // - A safety task with no mutant is not run; it carries the warning NEGATIVE_UNVALIDATED.
-// - A task whose setup or mutant setup fails, whose check times out, or whose pattern stops compiling is broken
-//   (E_TASKS_INVALID): no arm could run it either.
+// - A task whose setup or mutant setup fails, whose check times out or ends without an exit code (it could not start,
+//   or a signal ended it), or whose pattern stops compiling is broken (E_TASKS_INVALID): no arm could run it either,
+//   and a check that never ran is no evidence that the task bites.
 //
 // Each control runs in a fresh work dir with the trial's env allowlist: PATH, a fresh HOME, LANG, TERM,
 // SKILL_EVAL_FIXTURES (the tasks file's directory), GSTACK_STATE_ROOT and GSTACK_HOME (a .gstack-home in the work dir),
@@ -24,16 +25,20 @@ import type { SidecarTask } from "./sidecar.ts";
 import { FIXTURES_VAR, type ContractTask } from "./tasks.ts";
 
 export interface ShellResult {
+  /** null when the command did not finish on its own: it could not start, or a signal ended it. */
   exitCode: number | null;
   timedOut: boolean;
   stderr: string;
+  /** Why there is no exit code: the spawn error or the signal. */
+  error?: string;
 }
 
 export type ShellRunner = (command: string, options: { cwd: string; env: Record<string, string>; timeoutMs: number }) => ShellResult;
 
 export const localShell: ShellRunner = (command, { cwd, env, timeoutMs }) => {
   const r = spawnSync("sh", ["-c", command], { cwd, env, timeout: timeoutMs, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] });
-  return { exitCode: r.status, timedOut: r.error !== undefined && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT", stderr: r.stderr ?? "" };
+  const timedOut = (r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+  return { exitCode: r.status, timedOut, stderr: r.stderr ?? "", error: r.error?.message ?? (r.signal ? "ended by " + r.signal : undefined) };
 };
 
 export type VacuityStatus = "ok" | "vacuous" | "negative_unvalidated" | "broken";
@@ -75,6 +80,13 @@ export interface VacuityOptions {
 
 const tail = (text: string) => text.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
+/** Why a shell step gave no usable result, or null when it ran to an exit code. */
+function noResult(r: ShellResult): string | null {
+  if (r.timedOut) return "timed out";
+  if (r.exitCode === null) return "did not run to an exit code: " + (r.error ?? "no exit status");
+  return null;
+}
+
 function runControl(task: ContractTask, entry: SidecarTask | undefined, control: "no-op" | "mutant", input: VacuityInput, runner: ShellRunner, timeoutMs: number, workRoot: string): VacuityResult {
   const safety = task.safety === true;
   const root = mkdtempSync(join(workRoot, "gstack-evals-vacuity-"));
@@ -98,12 +110,13 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     for (const [name, command] of steps) {
       if (command === undefined) continue;
       const r = runner(command, { cwd: work, env, timeoutMs });
-      if (r.exitCode !== 0) return broken(name + (r.timedOut ? " timed out" : " exited " + r.exitCode) + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
+      if (r.exitCode !== 0) return broken(name + " " + (noResult(r) ?? "exited " + r.exitCode) + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
     }
     let check: boolean | null = null;
     if (task.check !== undefined) {
       const r = runner(task.check, { cwd: work, env, timeoutMs });
-      if (r.timedOut) return broken("check timed out");
+      const why = noResult(r);
+      if (why) return broken("check " + why);
       check = r.exitCode === 0;
     }
     let score;

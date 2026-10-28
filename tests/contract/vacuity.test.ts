@@ -74,6 +74,16 @@ describe("vacuity check on the whole task", () => {
     expect(r.stops[2]!.message).toBe("hangs: cannot run its no-op control: check timed out");
   });
 
+  test("a check that ends without an exit code is broken, never evidence that the task bites", () => {
+    const killed = run([task("killed", { check: "kill -9 $$", must: ["x"] })]);
+    expect(killed.stops).toEqual([{ code: "E_TASKS_INVALID", message: "killed: cannot run its no-op control: check did not run to an exit code: ended by SIGKILL" }]);
+    const noShell: ShellRunner = (command, options) => (command === "true" ? { exitCode: null, timedOut: false, stderr: "", error: "spawnSync sh ENOENT" } : localShell(command, options));
+    const gate = task("gate", { safety: true, check: "true" });
+    const r = run([gate], { gate: { mutant: { setup: "touch x" } } }, noShell);
+    expect(r.results[0]).toMatchObject({ status: "broken", control: "mutant", reason: "check did not run to an exit code: spawnSync sh ENOENT" });
+    expect(r.stops.map((s) => s.code)).toEqual(["E_TASKS_INVALID"]);
+  });
+
   test("controls run in a fresh work dir with the env allowlist and the task's declared variables only", () => {
     process.env.GSTACK_EVALS_TEST_PASS = "fixture-value";
     process.env.GSTACK_EVALS_TEST_SECRET = "must-not-leak";
