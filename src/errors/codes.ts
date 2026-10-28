@@ -255,6 +255,15 @@ export const CODES = {
     resumable: false,
     owner: "U4",
   },
+  E_RIG_UNPROVEN: {
+    exit: 2,
+    meaning: "A line item recorded with --admission required was asked for a lease, and no matching admission record exists for the lease's slot, so nothing was leased. The rig is proven before money is spent (GSTA-8, decision 3).",
+    fix: "Write the admission record the message names on the machine that will spend (U20's rig admission), then lease again. A new lease after a reconcile needs its own record.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
   E_ITEM_BOUND: {
     exit: 2,
     meaning: "The line item is bound to another run. Each line item of an approved cap admits one run, so the same money cannot fund a second run to change a verdict.",
@@ -529,6 +538,12 @@ export const CODES = {
     meaning: "A safety task has no mutant in tasks.ext.json, so preflight could not check that the task fails on a violation.",
     fix: "Add a mutant {setup, answer} for the task in tasks.ext.json and commit a relock.",
     owner: "U5",
+  },
+  RIG_UNPROVEN: {
+    exit: null,
+    meaning: "A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.",
+    fix: "Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).",
+    owner: "U4",
   },
 } as const satisfies Record<string, CodeInfo>;
 

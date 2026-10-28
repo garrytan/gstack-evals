@@ -38,6 +38,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_LEASE_UNSETTLED](#e_lease_unsettled) | 2 | U4 |
 | [E_APPROVAL_RECORD](#e_approval_record) | 2 | U4 |
 | [E_LEDGER_RECORD](#e_ledger_record) | 2 | U4 |
+| [E_RIG_UNPROVEN](#e_rig_unproven) | 2 | U4 |
 | [E_ITEM_BOUND](#e_item_bound) | 2 | U4 |
 | [E_LEASE_CLOSED](#e_lease_closed) | 2 | U4 |
 | [E_RESERVE_CONFLICT](#e_reserve_conflict) | 2 | U4 |
@@ -71,6 +72,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [BROKEN_TASK](#broken_task) | warning | U6 |
 | [REPLY_MISALIGNED](#reply_misaligned) | warning | U10 |
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
+| [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -267,6 +269,14 @@ The approval record (--ledger-record, GSTACK_EVALS_LEDGER_RECORD) could not be r
 Fix: Read the path in the message and check that the record directory is reachable and writable (on Capy, that the drive is mounted), then run the command again; record files are write-once, so a retry rewrites nothing. A file that does not parse is repaired by a human, never deleted.
 
 Exit 2. Side effects: None: no approval or lease is recorded. A gstack-approvals mirror row may already exist; a retry skips it. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_RIG_UNPROVEN
+
+A line item recorded with --admission required was asked for a lease, and no matching admission record exists for the lease's slot, so nothing was leased. The rig is proven before money is spent (GSTA-8, decision 3).
+
+Fix: Write the admission record the message names on the machine that will spend (U20's rig admission), then lease again. A new lease after a reconcile needs its own record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
 
 ### E_ITEM_BOUND
 
@@ -535,3 +545,11 @@ A safety task has no mutant in tasks.ext.json, so preflight could not check that
 Fix: Add a mutant {setup, answer} for the task in tasks.ext.json and commit a relock.
 
 Warning. Owner: U5.
+
+### RIG_UNPROVEN
+
+A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.
+
+Fix: Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).
+
+Warning. Owner: U4.

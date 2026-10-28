@@ -24,7 +24,7 @@ const DOLLAR = 1_000_000;
 function setup(cap = 10 * DOLLAR) {
   const dir = scratch();
   const record = join(dir, "record");
-  recordApproval(record, { action: "init", item: "lanea", cap_micros: cap, quotes: [quote] });
+  recordApproval(record, { action: "init", item: "lanea", cap_micros: cap, quotes: [quote], admission: "warn" });
   return { dir, record, local: LocalLedger.open(join(dir, "machine-a.sqlite")) };
 }
 
@@ -55,11 +55,11 @@ async function race(source: string, argvs: string[][]): Promise<string[]> {
 describe("approvals", () => {
   test("init records the owner's words, a retry is idempotent, raise needs a higher cap", () => {
     const { record } = setup();
-    expect(recordApproval(record, { action: "init", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote] }).seq).toBe(1);
-    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea", cap_micros: 20 * DOLLAR, quotes: [quote] }))).toBe("E_USAGE");
+    expect(recordApproval(record, { action: "init", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote], admission: "warn" }).seq).toBe(1);
+    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea", cap_micros: 20 * DOLLAR, quotes: [quote], admission: "warn" }))).toBe("E_USAGE");
     expect(codeOf(() => recordApproval(record, { action: "raise", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote] }))).toBe("E_USAGE");
     expect(codeOf(() => recordApproval(record, { action: "raise", item: "nothing", cap_micros: DOLLAR, quotes: [quote] }))).toBe("E_LEDGER_MISSING");
-    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea2", cap_micros: DOLLAR, quotes: [{ ...quote, words: " " }] }))).toBe("E_USAGE");
+    expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea2", cap_micros: DOLLAR, quotes: [{ ...quote, words: " " }], admission: "warn" }))).toBe("E_USAGE");
     const raise = { action: "raise" as const, item: "lanea", cap_micros: 15 * DOLLAR, quotes: [quote, { words: "raise ok", by: "Garry Tan", source: "gate 2" }] };
     expect(recordApproval(record, raise).seq).toBe(2);
     expect(recordApproval(record, raise).seq).toBe(2);
@@ -151,7 +151,7 @@ describe("leases on one line item", () => {
       openLease(record, null, {
         item: "lanea",
         run_id: "run-a",
-        admission: () => {
+        requireAdmission: () => {
           inner = codeOf(() => openLease(record, null, { item: "lanea", run_id: "run-b" }));
           return null;
         },
@@ -201,6 +201,22 @@ try { openLease(record, null, { item: "lanea", run_id: run }); console.log("ok")
     recordApproval(record, { action: "raise", item: "lanea", cap_micros: 3 * DOLLAR, quotes: [{ words: "raise ok", by: "Garry Tan", source: "gate 2" }] });
     expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: 2 * DOLLAR + 1 }))).toBe("CAP_STOP");
     expect(openLease(record, local, { item: "lanea", run_id: "run-a" }).reserved_micros).toBe(2 * DOLLAR);
+  });
+});
+
+describe("admission", () => {
+  test("a required item asks the requireAdmission seam about the lease it is about to write; a refusal is E_RIG_UNPROVEN and writes nothing", () => {
+    const record = join(scratch(), "record");
+    recordApproval(record, { action: "init", item: "u16-replay", cap_micros: DOLLAR, quotes: [quote], admission: "required" });
+    const seen: string[] = [];
+    const refuse = (_: string, lease: { item: string; seq: number; run_id: string }) => {
+      seen.push(lease.item + "/" + lease.seq + "/" + lease.run_id);
+      return "the Docker tier is red at this commit";
+    };
+    expect(codeOf(() => openLease(record, null, { item: "u16-replay", run_id: "run-a", requireAdmission: refuse }))).toBe("E_RIG_UNPROVEN");
+    expect(readItem(record, "u16-replay").leases).toEqual([]);
+    expect(openLease(record, null, { item: "u16-replay", run_id: "run-a", requireAdmission: () => null }).line_item).toBe("u16-replay");
+    expect(seen).toEqual(["u16-replay/1/run-a"]);
   });
 });
 

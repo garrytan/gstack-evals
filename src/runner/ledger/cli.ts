@@ -1,23 +1,25 @@
 // gstack-evals ledger: record approved caps with the owner's words, lease line items, settle and reconcile leases.
 // docs/budget-ledger.md is the guide; every error line on stderr starts with its reason code.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { CODES, docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import { approvalsBin, mirrorApproval } from "./approvals.ts";
 import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "./ledger.ts";
 import { openLocalLedger } from "./local.ts";
 import { parseUsd, usd } from "./money.ts";
 import { ledgerPath, recordPath } from "./paths.ts";
-import { isRecordFile, LedgerError, type Quote } from "./record.ts";
+import { isRecordFile, LedgerError, type Admission, type Quote } from "./record.ts";
 
 export const HELP = `Usage: gstack-evals ledger <command> [options]
 
-  init      --cap <usd> --item <name> --words <text> --by <who> --source <ref> [--branch <name>]
+  init      --cap <usd> --item <name> --admission required|warn --words <text> --by <who> --source <ref> [--branch <name>]
             Record a line item's first approved cap with the owner's exact words, mirrored through gstack-approvals.
             Repeat --words for several quotes; give --by and --source once for all of them, or once per --words.
-  raise     (the same flags) Record a higher cap for a line item.
+            --admission required makes every lease wait for a rig admission record; warn only warns. It never changes.
+  raise     (the same flags but --admission) Record a higher cap for a line item.
   lease     --item <name> --run <id> [--amount <usd>] [--ttl <hours>] [--machine <id> --export <file>]
             Lease a line item for a run. The first lease binds the item to that run. --export writes the lease for
             a sealed workflow instead of holding it here.
+  lease     --lease <id> --export <file> Write an open lease's export again.
   lease     --from <lease file>          In the sealed workflow: hold an exported lease in this machine's ledger.
   settle    --lease <id> [--artifact <file>]
             Close a lease into the approval record. In the sealed workflow, --artifact writes the settle artifact.
@@ -30,9 +32,9 @@ Every command takes --ledger <path> (GSTACK_EVALS_LEDGER), --ledger-record <dir>
 and --json. Amounts are dollars with up to six decimals. Guide: docs/budget-ledger.md`;
 
 const ALLOWED: Record<string, string[]> = {
-  init: ["--cap", "--item", "--words", "--by", "--source", "--branch"],
+  init: ["--cap", "--item", "--admission", "--words", "--by", "--source", "--branch"],
   raise: ["--cap", "--item", "--words", "--by", "--source", "--branch"],
-  lease: ["--item", "--run", "--amount", "--ttl", "--machine", "--export", "--from"],
+  lease: ["--item", "--run", "--amount", "--ttl", "--machine", "--export", "--from", "--lease"],
   settle: ["--lease", "--artifact", "--from"],
   reconcile: ["--lease", "--spent", "--words", "--by", "--source"],
   status: ["--item"],
@@ -92,25 +94,50 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
     const print = (value: unknown, line: string) => io.out(json ? JSON.stringify(value, null, 2) : line);
 
     if (cmd === "init" || cmd === "raise") {
-      const a = { action: cmd, item: need("--item"), cap_micros: dollars("--cap"), quotes: quotes(flags) } as const;
+      const admission = one("--admission");
+      if (admission !== undefined && admission !== "required" && admission !== "warn") throw new Usage("--admission is required or warn, not " + JSON.stringify(admission));
+      const a = { action: cmd as "init" | "raise", item: need("--item"), cap_micros: dollars("--cap"), quotes: quotes(flags), admission: admission as Admission | undefined };
       const mirror = { bin: approvalsBin(env), ...a, record, branch: one("--branch") };
       const file = recordApproval(record, a, () => mirrorApproval(mirror));
-      print(file, "APPROVED: item=" + file.item + " cap=" + usd(file.cap_micros) + " approval=" + file.seq + " record=" + record);
+      print(file, "APPROVED: item=" + file.item + " cap=" + usd(file.cap_micros) + (file.admission ? " admission=" + file.admission : "") + " approval=" + file.seq + " record=" + record);
     } else if (cmd === "lease" && flags.has("--from")) {
       const file = readJson(need("--from"));
       if (!isRecordFile(file) || file.kind !== "lease") throw new Usage(one("--from") + " is not a lease export");
       const held = local();
+      const prior = held.getLease(file.lease_id);
+      if (prior && prior.state !== "open") throw new LedgerError("E_LEASE_CLOSED", "lease " + file.lease_id + " is already " + prior.state + " in the local ledger " + held.path + "; a settled lease is never held again");
       held.addLease(file);
       print(file, "LEASE_HELD: " + file.lease_id + " amount=" + usd(file.reserved_micros) + " expires=" + file.expires_at + " ledger=" + held.path);
+    } else if (cmd === "lease" && flags.has("--lease")) {
+      const file = exportLease(record, need("--lease"));
+      writeFileSync(need("--export"), JSON.stringify(file, null, 2) + "\n");
+      print(file, "LEASE_EXPORTED: " + file.lease_id + " amount=" + usd(file.reserved_micros) + " machine=" + file.machine_id + " export=" + one("--export"));
     } else if (cmd === "lease") {
       const exportTo = one("--export");
       if (flags.has("--machine") && !exportTo) throw new Usage("--machine names the holder of an exported lease; add --export <file>");
       const ttl = one("--ttl") === undefined ? undefined : Number(one("--ttl")) * 3_600_000;
       if (ttl !== undefined && !(ttl > 0)) throw new Usage("--ttl must be a positive number of hours");
       const amount = one("--amount") === undefined ? undefined : dollars("--amount");
-      const lease = openLease(record, exportTo ? null : local(), { item: need("--item"), run_id: need("--run"), machine_id: one("--machine"), amount_micros: amount, ttl_ms: ttl });
+      const warnings: string[] = [];
+      const warn = (code: ReasonCode, message: string) => warnings.push(code + " " + message);
+      const request = { item: need("--item"), run_id: need("--run"), machine_id: one("--machine"), amount_micros: amount, ttl_ms: ttl, warn };
+      if (exportTo) {
+        try {
+          writeFileSync(exportTo, "", { flag: "wx" });
+        } catch (error) {
+          throw new Usage("cannot write --export " + exportTo + " (it must be a new file): " + (error as Error).message);
+        }
+      }
+      let lease;
+      try {
+        lease = openLease(record, exportTo ? null : local(), request);
+      } catch (error) {
+        if (exportTo) rmSync(exportTo, { force: true });
+        throw error;
+      }
       if (exportTo) writeFileSync(exportTo, JSON.stringify(exportLease(record, lease.lease_id), null, 2) + "\n");
-      print(lease, "LEASE: " + lease.lease_id + " item=" + lease.line_item + " run=" + lease.run_id + " amount=" + usd(lease.reserved_micros) + " machine=" + lease.machine_id + " expires=" + lease.expires_at + (exportTo ? " export=" + exportTo : ""));
+      if (warnings.length) io.err(warnings.join("\n"));
+      print({ ...lease, warnings }, "LEASE: " + lease.lease_id + " item=" + lease.line_item + " run=" + lease.run_id + " amount=" + usd(lease.reserved_micros) + " machine=" + lease.machine_id + " expires=" + lease.expires_at + (exportTo ? " export=" + exportTo : ""));
     } else if (cmd === "settle") {
       const artifact = one("--artifact");
       const close = flags.has("--from") ? importSettlement(record, readJson(need("--from"))) : settleLease(artifact ? null : record, local(), need("--lease"));
@@ -126,7 +153,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       const paths = { record: recordPath(one("--ledger-record"), env), ledger: ledgerPath(one("--ledger"), env) };
       const lines = ["RECORD: " + paths.record.path + " (" + paths.record.rule + ")", "LEDGER: " + paths.ledger.path + " (" + paths.ledger.rule + ")"];
       for (const s of items) {
-        lines.push("ITEM: " + s.item + " cap=" + usd(s.cap_micros ?? 0) + " committed=" + usd(s.committed_micros) + " left=" + usd(Math.max(s.left_micros, 0)) + " run=" + (s.run_id ?? "-") + " leases=" + s.leases + " open=" + (s.open_lease?.lease_id ?? "-"));
+        lines.push("ITEM: " + s.item + " cap=" + usd(s.cap_micros ?? 0) + " admission=" + (s.admission ?? "-") + " committed=" + usd(s.committed_micros) + " left=" + usd(Math.max(s.left_micros, 0)) + " run=" + (s.run_id ?? "-") + " leases=" + s.leases + " open=" + (s.open_lease?.lease_id ?? "-"));
         for (const q of s.approval?.quotes ?? []) lines.push("  words: " + JSON.stringify(q.words) + " by " + q.by + " (" + q.source + ")");
       }
       print({ ...paths, items }, lines.join("\n"));

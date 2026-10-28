@@ -19,6 +19,7 @@ const approval = (seq: number, cap_micros: number): ApprovalFile => ({
   item: "lanea",
   seq,
   action: seq === 1 ? "init" : "raise",
+  ...(seq === 1 ? { admission: "warn" as const } : {}),
   cap_micros,
   quotes: [{ words: "Rec", by: "Garry Tan", source: "gate 1" }],
   recorded_at: "2026-10-28T00:00:00.000Z",

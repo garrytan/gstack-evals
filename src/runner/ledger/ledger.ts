@@ -3,13 +3,13 @@
 // and a new lease waits until the previous one is settled or reconciled. The local ledger holds a lease's calls against
 // its amount, and the lease closes into the approval record. Nothing here releases an allowance whose spend is unknown.
 import { createHash, randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { Lease } from "../../types.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { isRecordFile, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { isRecordFile, ITEM_NAME, LedgerError, listItems, readItem, slotPath, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 const ESCALATE = "a human must approve a cap and record it with their exact words (docs/budget-ledger.md); on Capy, ask your Captain through a needs-you report";
@@ -54,17 +54,19 @@ const closeText = (c: CloseFile) => c.how + " at " + usd(c.spent_micros) + " spe
  * Records a line item's first cap (init) or a higher one (raise). Retrying the same approval returns the recorded one.
  * mirror runs after every check and before the write, so no approval is recorded until the mirror succeeds.
  */
-export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; now?: Date }, mirror?: () => void): ApprovalFile {
+export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; admission?: Admission; now?: Date }, mirror?: () => void): ApprovalFile {
   if (!ITEM_NAME.test(a.item)) throw new LedgerError("E_USAGE", "line item " + JSON.stringify(a.item) + " must match " + ITEM_NAME);
   if (!isMicros(a.cap_micros) || a.cap_micros === 0) throw new LedgerError("E_USAGE", "a cap must be a positive amount of dollars");
+  if (a.action === "init" && a.admission !== "required" && a.admission !== "warn") throw new LedgerError("E_USAGE", "init needs --admission required or --admission warn");
+  if (a.action === "raise" && a.admission !== undefined) throw new LedgerError("E_USAGE", "a line item's admission is fixed at init; raise cannot change it");
   checkQuotes(a.quotes);
   const state = read(record, a.item);
   const last = state.approvals.at(-1);
-  if (last && last.action === a.action && last.cap_micros === a.cap_micros && sameQuotes(last.quotes, a.quotes)) return last;
+  if (last && last.action === a.action && last.cap_micros === a.cap_micros && last.admission === a.admission && sameQuotes(last.quotes, a.quotes)) return last;
   if (a.action === "init" && last) throw new LedgerError("E_USAGE", "line item " + a.item + " already has an approved cap of " + usd(last.cap_micros) + "; record a higher one with gstack-evals ledger raise");
   if (a.action === "raise" && !last) throw new LedgerError("E_LEDGER_MISSING", "line item " + a.item + " has no approved cap to raise in " + record + "; " + ESCALATE);
   if (last && a.cap_micros <= last.cap_micros) throw new LedgerError("E_USAGE", "raise records a higher cap; line item " + a.item + " is already at " + usd(last.cap_micros));
-  const file: ApprovalFile = { schema: 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, recorded_at: (a.now ?? new Date()).toISOString() };
+  const file: ApprovalFile = { schema: 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, ...(a.admission ? { admission: a.admission } : {}), recorded_at: (a.now ?? new Date()).toISOString() };
   mirror?.();
   if (typeof write(record, file) === "object") throw new LedgerError("E_LEDGER_RECORD", "another approval for line item " + a.item + " was recorded at the same moment; read gstack-evals ledger status, then record again if it is still needed");
   return file;
@@ -93,8 +95,29 @@ export interface LeaseRequest {
   amount_micros?: number;
   ttl_ms?: number;
   now?: Date;
-  /** Seam for GSTA-8's admission check (U20), not built yet: runs after the item admits the run and before the lease is written. */
-  admission?: (lease: LeaseFile, item: ItemState) => { code: ReasonCode; message: string } | null;
+  /** Checks the lease's admission record on an item initialized with an admission mode; defaults to admissionRecordExists. */
+  requireAdmission?: RequireAdmission;
+  /** Receives a warning, such as RIG_UNPROVEN on a warn item, without stopping the lease. */
+  warn?: (code: ReasonCode, message: string) => void;
+}
+
+/**
+ * The seam U20 fills (GSTA-8, decision 3): runs before a lease is written and returns why the lease is not admitted,
+ * or null. The admission record for a lease sits in its slot, <record>/items/<item>/admission-<slot>.json, so it can
+ * be written before the lease whose id it shares up to the id's random suffix.
+ */
+export type RequireAdmission = (record: string, lease: LeaseFile) => string | null;
+
+/** U4's check: an admission record exists for the lease's slot and names its item, run and machine. What proves the rig is U20's to check. */
+export function admissionRecordExists(record: string, lease: LeaseFile): string | null {
+  const path = slotPath(record, { kind: "admission", item: lease.item, seq: lease.seq });
+  if (!existsSync(path)) return "no admission record at " + path;
+  let r: Partial<LeaseFile> | null = null;
+  try {
+    r = JSON.parse(readFileSync(path, "utf8"));
+  } catch {}
+  if (r?.item === lease.item && r.seq === lease.seq && r.run_id === lease.run_id && r.machine_id === lease.machine_id) return null;
+  return "the admission record at " + path + " does not name line item " + lease.item + ", slot " + lease.seq + ", run " + lease.run_id + " and machine " + lease.machine_id;
 }
 
 /** Leases a line item for a run, in the record and, when given, in this machine's local ledger. */
@@ -121,8 +144,9 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     expires_at: new Date(now.getTime() + (req.ttl_ms ?? DEFAULT_LEASE_TTL_MS)).toISOString(),
     created_at: now.toISOString(),
   };
-  const refusal = req.admission?.(file, state);
-  if (refusal) throw new LedgerError(refusal.code, refusal.message);
+  const unproven = state.admission && (req.requireAdmission ?? admissionRecordExists)(record, file);
+  if (unproven && state.admission === "required") throw new LedgerError("E_RIG_UNPROVEN", "line item " + req.item + " requires admission: " + unproven);
+  if (unproven) req.warn?.("RIG_UNPROVEN", "line item " + req.item + " leased without admission: " + unproven);
   if (typeof write(record, file) === "object") {
     admit(record, read(record, req.item), req.run_id);
     throw new LedgerError("E_LEASE_UNSETTLED", "another lease on line item " + req.item + " was written at the same moment; read gstack-evals ledger status");
@@ -218,6 +242,7 @@ export function reconcileLease(record: string, r: { lease_id: string; spent_micr
 export interface ItemStatus {
   item: string;
   cap_micros: number | null;
+  admission: Admission | null;
   committed_micros: number;
   left_micros: number;
   run_id: string | null;
@@ -232,6 +257,7 @@ export function ledgerStatus(record: string): ItemStatus[] {
     return {
       item,
       cap_micros: s.cap_micros,
+      admission: s.admission,
       committed_micros: s.committed_micros,
       left_micros: (s.cap_micros ?? 0) - s.committed_micros,
       run_id: s.run_id,

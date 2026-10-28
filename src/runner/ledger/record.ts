@@ -36,8 +36,12 @@ export interface ApprovalFile extends Slot {
   action: "init" | "raise";
   cap_micros: number;
   quotes: Quote[];
+  /** On init only, and never changed after: whether a lease on the item needs an admission record (GSTA-8, decision 3). */
+  admission?: Admission;
   recorded_at: string;
 }
+
+export type Admission = "required" | "warn";
 
 export interface LeaseFile extends Slot {
   kind: "lease";
@@ -152,7 +156,7 @@ function syncDir(dir: string): void {
 export function isRecordFile(f: unknown): f is RecordFile {
   const r = f as RecordFile | null;
   if (typeof r !== "object" || r === null || r.schema !== 1 || typeof r.item !== "string" || !ITEM_NAME.test(r.item) || !Number.isSafeInteger(r.seq)) return false;
-  if (r.kind === "approval") return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0;
+  if (r.kind === "approval") return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined);
   if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && !Number.isNaN(Date.parse(r.expires_at));
   return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
 }
@@ -175,6 +179,7 @@ export interface ItemState {
   leases: { lease: LeaseFile; close: CloseFile | null }[];
   /** The latest approved cap, or null when none is on record. */
   cap_micros: number | null;
+  admission: Admission | null;
   /** Closed leases count what they spent; open leases count their whole reserved amount. */
   committed_micros: number;
   /** The run the item is bound to: the run of its first lease. */
@@ -204,6 +209,7 @@ export function readItem(record: string, item: string): ItemState {
     approvals,
     leases,
     cap_micros: approvals.at(-1)?.cap_micros ?? null,
+    admission: approvals[0]?.admission ?? null,
     committed_micros: leases.reduce((sum, { lease, close }) => sum + (close ? close.spent_micros + close.unknown_micros : lease.reserved_micros), 0),
     run_id: leases[0]?.lease.run_id ?? null,
     open: leases.find((l) => l.close === null)?.lease ?? null,

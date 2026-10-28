@@ -22,15 +22,16 @@ Money is integer micro-dollars (1 USD is 1,000,000 micros) in every file and tab
 When a command stops with E_LEDGER_MISSING, a human approves a cap and records it with their exact words. On Capy, a crew thread asks its Captain through a needs-you report, and the Captain records the reply.
 
 ```
-gstack-evals ledger init --cap 130 --item lanea-quick \
+gstack-evals ledger init --cap 130 --item lanea-quick --admission required \
   --words "Rec" --source "gate 1 of plan v3.2, approving the \$500 first cap" \
   --words "It should be fast like this week" --source "2026-10-28 message moving the quick looks up" \
   --by "Garry Tan"
 ```
 
 - `--item` names the line item: lowercase letters, digits, dots, dashes and underscores.
+- `--admission required|warn` is explicit on every init and never changes. A program-funded run uses `required`; a caller's own run, such as a skill diet's Lane A check on its own budget, uses `warn`. See "Admission" below.
 - Each `--words` is one quote. Give `--by` and `--source` once for every quote, or once per `--words` in the same order.
-- `init` records the item's first cap; `ledger raise` takes the same flags and records a higher one. Running the same command again changes nothing.
+- `init` records the item's first cap; `ledger raise` takes the same flags except `--admission` and records a higher one. Running the same command again changes nothing.
 - Each quote is mirrored through gstack's `gstack-approvals add` first, so the words also reach the thread's approvals table. Nothing is written to the record until the mirror succeeds. Any failure or absence of gstack-approvals is E_APPROVAL_RECORD, naming the binary, its exit and its APPROVAL_RECORD_* code. Pass `--branch <name>` on a detached checkout. `GSTACK_EVALS_APPROVALS_BIN` overrides where the binary is found.
 
 ## Line items and runs
@@ -49,18 +50,28 @@ gstack-evals ledger settle --lease <lease id>
 gstack-evals ledger status [--item lanea-quick]
 ```
 
+## Admission
+
+Admission is the rig check before money (GSTA-8's CI plan, decision 3). The ledger checks it at the lease, the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross.
+
+- An item's admission mode is recorded with the owner's words in its first approval file, `items/<item>/approval-0001.json`, as `{ item, admission }` with `admission` set to `required` or `warn`. U2's preregistration check reads those two fields.
+- Before a lease is written, the ledger looks for the admission record for that lease's slot, `items/<item>/admission-<slot>.json`. It must name the same item, slot, run and machine as the lease.
+- On a `required` item, a missing or mismatched record refuses the lease with E_RIG_UNPROVEN, and nothing is leased. On a `warn` item the lease goes ahead, and the RIG_UNPROVEN warning is printed and returned with the lease.
+- The ledger checks only that the record exists and matches. What the record must prove, and the command that writes it, are U20's. `openLease` takes a `requireAdmission` function for that, which defaults to the existence check.
+- A new lease after a settle or reconcile is a new slot, so it needs its own record.
+
 ## Settling, and when a machine is lost
 
 `ledger settle` closes a lease into the record from the machine's local ledger. It counts settled calls at their cost and every call with an unknown outcome at its full reservation. Settle is idempotent by lease id. The close is fixed in the local ledger before it is written, so a retry after a lost acknowledgement finds the same bytes already in place. A settle that cannot reach the record exits 2 with E_LEASE_UNSETTLED, and the lease stays reserved until the retry succeeds.
 
-A lease whose machine or local ledger is gone stays reserved in full. It is never released silently. The owner settles it from the provider's usage export:
+A lease whose machine or local ledger is gone stays reserved in full. It is never released silently. Once the lease has expired, so the old machine can admit no more calls even if it comes back, the owner settles it from the provider's usage export:
 
 ```
 gstack-evals ledger reconcile --lease <lease id> --spent 3.10 \
   --words "<owner's exact words>" --by "<who>" --source <provider usage export file>
 ```
 
-The close records the figure, the words and the export's path, plus its sha256 when it is a file. A lease closes once. A later settle or reconcile with a different outcome is E_SETTLE_CONFLICT, and the first close stands.
+`--source` must be the export file. The close records the figure, the words, the export's path and its sha256. A lease closes once. A later settle or reconcile with a different outcome is E_SETTLE_CONFLICT, and the first close stands.
 
 ## Counted runs in the sealed workflow
 
@@ -69,6 +80,10 @@ The sealed repo's workflow belongs to the second principal and cannot reach a Ca
 1. The thread leases the item for the workflow and exports it: `ledger lease --item <item> --run <run id> --machine workflow:<name> --export lease.json`. It passes lease.json as a dispatch input.
 2. The workflow holds the lease in its own local ledger with `ledger lease --from lease.json`, spends against it with provider keys from its protected environment, and writes a settle artifact with `ledger settle --lease <id> --artifact settle.json`.
 3. The thread copies the artifact into the record with `ledger settle --from settle.json`.
+
+If the export file is lost before dispatch, `ledger lease --lease <id> --export <file>` writes it again. A failed `--export` write records no lease.
+
+The workflow's local ledger is the lease's journal, and the ledger cannot see across workflow attempts. So the workflow must keep that file across attempts of the same dispatch, for example as an artifact keyed by the lease id. It must not start an attempt on a fresh runner with the old lease file. A fresh runner needs a new lease, exported after the old one is settled or reconciled. Otherwise a rerun could spend the same allowance twice, and the record would see the second settle only as E_SETTLE_CONFLICT, after the money is gone. `ledger lease --from` refuses a lease that its own ledger has already settled.
 
 ## On Capy
 
@@ -81,8 +96,8 @@ Keep the local ledger at its default under `~/.capy/work/gstack-evals/` and poin
 - `reserve({ idempotency_key, lease_id, cell, max_micros })` holds the call's real maximum. The same key with the same request returns the first reservation. With a different request it is refused with E_RESERVE_CONFLICT.
 - `settle(reservation_id, outcome)` records the cost, or `unknown`, which keeps the full charge. The same outcome again returns the same reservation. A different one is refused with E_SETTLE_CONFLICT.
 
-`openLease` takes an `admission` callback that runs before a lease is written. It is the seam for the admission check proposed in GSTA-8's CI plan, and nothing fills it yet.
+`openLease` takes `requireAdmission`, the seam U20 fills, and a `warn` callback for RIG_UNPROVEN.
 
 ## Reason codes
 
-[CAP_STOP](errors.md#cap_stop), [E_LEDGER_MISSING](errors.md#e_ledger_missing), [E_LEDGER_PATH](errors.md#e_ledger_path), [E_LEDGER_RECORD](errors.md#e_ledger_record), [E_LEASE_UNSETTLED](errors.md#e_lease_unsettled), [E_LEASE_CLOSED](errors.md#e_lease_closed), [E_ITEM_BOUND](errors.md#e_item_bound), [E_APPROVAL_RECORD](errors.md#e_approval_record), [E_RESERVE_CONFLICT](errors.md#e_reserve_conflict), [E_SETTLE_CONFLICT](errors.md#e_settle_conflict). Every error line on stderr starts with its code.
+[CAP_STOP](errors.md#cap_stop), [E_LEDGER_MISSING](errors.md#e_ledger_missing), [E_LEDGER_PATH](errors.md#e_ledger_path), [E_LEDGER_RECORD](errors.md#e_ledger_record), [E_LEASE_UNSETTLED](errors.md#e_lease_unsettled), [E_LEASE_CLOSED](errors.md#e_lease_closed), [E_ITEM_BOUND](errors.md#e_item_bound), [E_RIG_UNPROVEN](errors.md#e_rig_unproven), [RIG_UNPROVEN](errors.md#rig_unproven), [E_APPROVAL_RECORD](errors.md#e_approval_record), [E_RESERVE_CONFLICT](errors.md#e_reserve_conflict), [E_SETTLE_CONFLICT](errors.md#e_settle_conflict). Every error line on stderr starts with its code.
