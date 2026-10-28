@@ -16,22 +16,31 @@
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
 // - OpenAI chat streams get stream_options.include_usage forced on; Anthropic Messages and OpenAI Responses streams are
-//   metered from their own usage events.
+//   metered from their own final usage events.
+// - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
+// - Free routes (model listings, Anthropic token counts) are forwarded unreserved, and every request, free, paid or
+//   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmodSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
-import type { CallOutcome, CellAttempt, ReservationLedger, TokenUsage } from "../../types.ts";
-import { PriceError, priceRequest, reservationUsd, sseUsage, usageCost, type Provider } from "../pricing/prices.ts";
+import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
+import { PriceError, priceRequest, reservationMicros, sseUsage, usageCost, type Provider } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com" };
-const ROUTES: Record<Provider, Array<{ method: string; path: RegExp }>> = {
-  anthropic: [{ method: "POST", path: /^\/v1\/messages$/ }],
+/** Routes the proxy forwards. A free route costs nothing at the provider, so it is forwarded without a reservation. */
+const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true }>> = {
+  anthropic: [
+    { method: "POST", path: /^\/v1\/messages$/ },
+    { method: "POST", path: /^\/v1\/messages\/count_tokens$/, free: true },
+    { method: "GET", path: /^\/v1\/models(\/[^/]+)?$/, free: true },
+  ],
   openai: [
     { method: "POST", path: /^\/v1\/chat\/completions$/ },
     { method: "POST", path: /^\/v1\/responses$/ },
-    { method: "GET", path: /^\/v1\/models(\/[^/]+)?$/ },
+    { method: "GET", path: /^\/v1\/models(\/[^/]+)?$/, free: true },
   ],
 };
 const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" };
@@ -41,6 +50,7 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
 /** One provider call may run this long; long reasoning calls exceed Bun's own 300-second fetch timeout, which is off. */
 export const UPSTREAM_DEADLINE_MS = 900_000;
 const NO_TOKENS: TokenUsage = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
+const usd = (micros: number) => `$${(micros / 1e6).toFixed(6)}`;
 
 type Send = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -64,7 +74,6 @@ export interface ProxyOptions {
   retry: RetryBudget;
   /** Where provider keys come from (defaults to process.env). */
   env?: Record<string, string | undefined>;
-  upstream?: Partial<Record<Provider, string>>;
   fetch?: Send;
   /** Output-token cap injected when a request names none; a request naming more is refused. */
   maxOutputTokens?: number;
@@ -77,7 +86,8 @@ export interface BindRequest {
   cell: Omit<CellAttempt, "meter_id">;
   /** provider:model ids this slot may call, such as anthropic:claude-opus-5-5. */
   models: string[];
-  allowance_usd: number;
+  /** The slot's allowance in integer micro-dollars. */
+  allowance_micros: number;
 }
 
 export interface Binding {
@@ -89,7 +99,8 @@ export interface Binding {
 
 export interface Meter {
   meter_id: string;
-  usd: number;
+  /** Spend in integer micro-dollars, unknown sends at their full reservation. */
+  micros: number;
   /** Paid attempts sent upstream, retries included. */
   requests: number;
   /** Sends with no recorded outcome; each keeps its full reservation. */
@@ -98,7 +109,7 @@ export interface Meter {
   refused: number;
   /** Outcomes journaled but not acknowledged by the ledger; reconcileJournal settles them. */
   unsettled: number;
-  by_model: Record<string, { usd: number; requests: number }>;
+  by_model: Record<string, { micros: number; requests: number }>;
   upstream: { statuses: Record<string, number>; failed: number };
   /** Calls still in flight when finalize timed out. */
   undrained: number;
@@ -109,9 +120,11 @@ interface Slot {
   tokenHash: Buffer;
   cell: CellAttempt;
   models: Set<string>;
-  allowanceUsd: number;
-  /** Spent plus reserved plus unknown, in USD. */
-  committedUsd: number;
+  allowanceMicros: number;
+  /** Spent plus reserved plus unknown, in micro-dollars. */
+  committedMicros: number;
+  /** Paid calls started on this slot; with the attempt number it makes each reserve's idempotency key. */
+  calls: number;
 }
 
 interface CallContext {
@@ -125,18 +138,18 @@ interface CallContext {
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
-const newMeter = (meter_id: string): Meter => ({ meter_id, usd: 0, requests: 0, unknown: 0, refused: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0 });
+const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0 });
+
+const TRIAL_NETWORKS = new BlockList();
+for (const [net, bits] of [["127.0.0.0", 8], ["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]] as const) TRIAL_NETWORKS.addSubnet(net, bits, "ipv4");
+TRIAL_NETWORKS.addAddress("::1", "ipv6");
+TRIAL_NETWORKS.addSubnet("fc00::", 7, "ipv6");
 
 /** True for an IP literal on a loopback or private range (127/8, 10/8, 172.16/12, 192.168/16, ::1, fc00::/7). Never a hostname or a wildcard. */
 export function isTrialNetworkHost(host: string): boolean {
-  const h = host.trim().replace(/^\[(.*)\]$/, "$1").toLowerCase();
-  const octet = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
-  const v4 = h.match(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}$`));
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-  }
-  return h === "::1" || /^f[cd][0-9a-f]{0,2}:[0-9a-f:]*$/.test(h);
+  const h = host.trim().replace(/^\[(.*)\]$/, "$1");
+  const version = isIP(h);
+  return version !== 0 && TRIAL_NETWORKS.check(h, version === 4 ? "ipv4" : "ipv6");
 }
 
 /** A refusal as problem-details JSON. detail starts with the code, like every gstack-evals error line. */
@@ -150,6 +163,19 @@ export function scrubbedCause(error: unknown, secrets: readonly string[]): strin
   const parts: string[] = [];
   for (let e: unknown = error, depth = 0; e && depth < 8; e = (e as { cause?: unknown }).cause, depth++) parts.push(e instanceof Error ? e.message : String(e));
   return secrets.reduce((text, s) => (s ? text.split(s).join("[redacted]") : text), parts.join(": ")).slice(0, 500);
+}
+
+/** Every string a parsed JSON value holds, keys included, decoded from its escapes, so the tripwire sees what the provider will read. */
+function decodedStrings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) for (const v of value) decodedStrings(v, out);
+  else if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      out.push(k);
+      decodedStrings(v, out);
+    }
+  }
+  return out;
 }
 
 function presentedCredential(req: Request): string | null {
@@ -211,9 +237,9 @@ export class MeteringProxy {
   }
 
   bind(request: BindRequest): Binding {
-    if (!request.models?.length || !(request.allowance_usd > 0)) throw new Error("E_USAGE: metering proxy: bind needs a non-empty models list and allowance_usd > 0");
+    if (!request.models?.length || !Number.isSafeInteger(request.allowance_micros) || request.allowance_micros <= 0) throw new Error("E_USAGE: metering proxy: bind needs a non-empty models list and a positive integer allowance_micros");
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
-    this.slots.set(binding.slot, { id: binding.slot, tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), allowanceUsd: request.allowance_usd, committedUsd: 0 });
+    this.slots.set(binding.slot, { id: binding.slot, tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), allowanceMicros: request.allowance_micros, committedMicros: 0, calls: 0 });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
     return binding;
   }
@@ -309,11 +335,12 @@ export class MeteringProxy {
   private async forward(req: Request, ctx: CallContext, beginStream: () => () => void): Promise<Response> {
     const o = this.options;
     const { provider, route, slot } = ctx;
-    if (!ROUTES[provider].some(r => r.method === req.method && r.path.test(route))) return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${route} is not allowlisted`);
+    const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route));
+    if (!allowed) return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${route} is not allowlisted`);
     const key = (o.env ?? process.env)[KEY_ENV[provider]];
     if (!key) return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
     ctx.secrets.push(key);
-    const target = `${o.upstream?.[provider] ?? UPSTREAM[provider]}${route}${new URL(req.url).search}`;
+    const target = `${UPSTREAM[provider]}${route}${new URL(req.url).search}`;
     const headers = new Headers(req.headers);
     for (const h of DROPPED_HEADERS) headers.delete(h);
     if (provider === "anthropic") {
@@ -326,23 +353,29 @@ export class MeteringProxy {
       for (const h of ["content-encoding", "content-length", "transfer-encoding"]) out.delete(h);
       return out;
     };
-    if (req.method === "GET") {
-      const res = await send(target, { method: "GET", headers });
+    const forwardFree = async (body?: string) => {
+      const res = await send(target, { method: req.method, headers, body });
+      this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model || null, status: res.status, source: ctx.source });
       return new Response(await res.text(), { status: res.status, headers: strip(res) });
-    }
+    };
+    if (req.method === "GET") return forwardFree();
 
     const raw = await req.text();
-    const leaks = findLeaks(raw, o.forbiddenMarkers ?? []);
-    if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request body carries ${leaks.length} forbidden marker(s); the cell is invalid`);
-    let body: Record<string, any>;
+    let parsed: unknown;
+    let isJson = true;
     try {
-      body = JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch {
-      return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
+      isJson = false;
     }
-    if (!body || typeof body !== "object" || Array.isArray(body)) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body must be a JSON object");
+    const leaks = findLeaks(`${raw}\n${decodedStrings(parsed).join("\n")}`, o.forbiddenMarkers ?? []);
+    if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request body carries ${leaks.length} forbidden marker(s); the cell is invalid`);
+    if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body must be a JSON object");
+    const body = parsed as Record<string, any>;
     ctx.model = typeof body.model === "string" ? body.model : "";
     if (!slot.models.has(`${provider}:${ctx.model}`)) return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
+    if (allowed.free) return forwardFree(raw);
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const stated = [body.max_tokens, body.max_completion_tokens, body.max_output_tokens].filter((v): v is number => typeof v === "number");
@@ -356,26 +389,37 @@ export class MeteringProxy {
       if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
       throw e;
     }
-    price.inputTokens = Math.max(price.inputTokens, Buffer.byteLength(outBody) + 64);
-    const maxUsd = reservationUsd(price);
+    const maxMicros = reservationMicros(price);
     const meter = this.meter(slot);
+    const call = ++slot.calls;
     const sleep = o.sleep ?? Bun.sleep;
     const started = Date.now();
 
     for (let attempt = 1; ; attempt++) {
-      if (slot.committedUsd + maxUsd > slot.allowanceUsd) {
-        return this.refuse(ctx, "E_ALLOWANCE", 402, `the slot's allowance of $${slot.allowanceUsd.toFixed(4)} cannot hold this call's worst case of $${maxUsd.toFixed(4)} ($${slot.committedUsd.toFixed(4)} already committed)`);
-      }
-      const wait = this.pausedUntil[provider] - Date.now();
-      if (wait > 0) {
+      for (let sleptUntil = 0; this.pausedUntil[provider] > Math.max(Date.now(), sleptUntil); ) {
+        const until = this.pausedUntil[provider];
+        const wait = until - Date.now();
         if (Date.now() - started + wait > o.retry.elapsed_ms) return this.refuse(ctx, "UPSTREAM", 502, `${provider} is rate limited for ${wait} ms more, past this call's retry budget of ${o.retry.elapsed_ms} ms`);
         await sleep(wait);
+        sleptUntil = until;
       }
-      const held = await o.ledger.reserve({ lease_id: o.leaseId, cell: slot.cell, max_usd: maxUsd });
-      if (!held.ok) return this.refuse(ctx, held.code, 402, held.message);
+      if (slot.committedMicros + maxMicros > slot.allowanceMicros) {
+        return this.refuse(ctx, "E_ALLOWANCE", 402, `the slot's allowance of ${usd(slot.allowanceMicros)} cannot hold this call's worst case of ${usd(maxMicros)} (${usd(slot.committedMicros)} already committed)`);
+      }
+      slot.committedMicros += maxMicros;
+      const idempotencyKey = `${slot.cell.meter_id}:${call}:${attempt}`;
+      const held = await o.ledger.reserve({ idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros });
+      if (!held.ok) {
+        slot.committedMicros -= maxMicros;
+        return this.refuse(ctx, held.code, 402, held.message);
+      }
       const rid = held.reservation.reservation_id;
-      slot.committedUsd += maxUsd;
-      this.journal({ kind: "request", reservation_id: rid, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_usd: maxUsd, source: ctx.source });
+      this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source });
+      if (attempt > 1 && Date.now() - started > o.retry.elapsed_ms) {
+        const reason = `not sent: attempt ${attempt} would start past this call's retry budget of ${o.retry.elapsed_ms} ms`;
+        await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, reason);
+        return problem("UPSTREAM", 502, reason);
+      }
       meter.requests++;
       let res: Response;
       try {
@@ -383,7 +427,7 @@ export class MeteringProxy {
       } catch (e) {
         const reason = `the send failed after it may have reached the provider, so it keeps its charge and is not resent: ${scrubbedCause(e, ctx.secrets)}`;
         meter.upstream.failed++;
-        await this.settle(ctx, rid, maxUsd, { kind: "unknown" }, null, reason);
+        await this.settle(ctx, rid, maxMicros, { kind: "unknown" }, null, reason);
         return problem("UPSTREAM", 502, reason);
       }
       meter.upstream.statuses[String(res.status)] = (meter.upstream.statuses[String(res.status)] ?? 0) + 1;
@@ -396,15 +440,23 @@ export class MeteringProxy {
           .then(
             text => {
               const cost = usageCost(price, sseUsage(text));
-              return this.settle(ctx, rid, maxUsd, cost ? { kind: "spent", spent_usd: cost.usd, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage");
+              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage");
             },
-            e => this.settle(ctx, rid, maxUsd, { kind: "unknown" }, res.status, `the stream broke: ${scrubbedCause(e, ctx.secrets)}`),
+            e => this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, `the stream broke: ${scrubbedCause(e, ctx.secrets)}`),
           )
           .finally(finish);
         return new Response(client, { status: res.status, headers: strip(res) });
       }
 
-      const text = await res.text();
+      let text: string;
+      try {
+        text = await res.text();
+      } catch (e) {
+        const reason = `the response body was lost after ${provider} answered ${res.status}, so the call keeps its charge and is not resent: ${scrubbedCause(e, ctx.secrets)}`;
+        meter.upstream.failed++;
+        await this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, reason);
+        return problem("UPSTREAM", 502, reason);
+      }
       let reported: unknown = null;
       try {
         reported = (JSON.parse(text) as { usage?: unknown })?.usage;
@@ -412,11 +464,11 @@ export class MeteringProxy {
       const cost = usageCost(price, reported);
       const retryable = res.status === 429 || res.status >= 500;
       let outcome: CallOutcome;
-      if (cost) outcome = { kind: "spent", spent_usd: cost.usd, usage: cost.usage };
-      else if (res.status >= 400 && res.status < 500) outcome = { kind: "spent", spent_usd: 0, usage: NO_TOKENS };
-      else if (res.status >= 500) outcome = { kind: "spent", spent_usd: maxUsd, usage: NO_TOKENS };
+      if (cost) outcome = { kind: "spent", spent_micros: cost.micros, usage: cost.usage };
+      else if (res.status >= 400 && res.status < 500) outcome = { kind: "spent", spent_micros: 0, usage: NO_TOKENS };
+      else if (res.status >= 500) outcome = { kind: "spent", spent_micros: maxMicros, usage: NO_TOKENS };
       else outcome = { kind: "unknown" };
-      await this.settle(ctx, rid, maxUsd, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined);
+      await this.settle(ctx, rid, maxMicros, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined);
       if (res.status === 401 || res.status === 403) return problem("E_KEY_REJECTED", 502, `${provider} answered ${res.status} to the proxy's key`);
       if (!retryable) return new Response(text, { status: res.status, headers: strip(res) });
       const delay = retryDelayMs(res, attempt);
@@ -429,22 +481,22 @@ export class MeteringProxy {
   }
 
   /** Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter. */
-  private async settle(ctx: CallContext, rid: string, maxUsd: number, outcome: CallOutcome, status: number | null, reason?: string): Promise<void> {
+  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string): Promise<void> {
     const meter = this.meter(ctx.slot);
-    const usd = outcome.kind === "spent" ? outcome.spent_usd : maxUsd;
+    const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}) });
-    ctx.slot.committedUsd += usd - maxUsd;
-    meter.usd += usd;
+    ctx.slot.committedMicros += micros - maxMicros;
+    meter.micros += micros;
     if (outcome.kind === "unknown") meter.unknown++;
     const id = `${ctx.provider}:${ctx.model}`;
-    meter.by_model[id] ??= { usd: 0, requests: 0 };
-    meter.by_model[id].usd += usd;
+    meter.by_model[id] ??= { micros: 0, requests: 0 };
+    meter.by_model[id].micros += micros;
     meter.by_model[id].requests++;
+    let reply: LedgerReply | null = null;
     try {
-      await this.options.ledger.settle(rid, outcome);
-    } catch {
-      meter.unsettled++;
-    }
+      reply = await this.options.ledger.settle(rid, outcome);
+    } catch {}
+    if (!reply?.ok) meter.unsettled++;
   }
 }
 
@@ -453,7 +505,7 @@ export class MeteringProxy {
  * (settle is idempotent by reservation id); a call with none is settled as unknown, keeps its full charge, and is never
  * resent. Nothing here can send a provider request.
  */
-export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[] }> {
+export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; refused: Array<{ reservation_id: string; code: string; message: string }> }> {
   const requests: string[] = [];
   const outcomes = new Map<string, CallOutcome>();
   for (const line of readFileSync(path, "utf8").split("\n")) {
@@ -462,11 +514,12 @@ export async function reconcileJournal(path: string, ledger: ReservationLedger):
     if (entry.kind === "request" && entry.reservation_id) requests.push(entry.reservation_id);
     if (entry.kind === "outcome" && entry.reservation_id && entry.outcome) outcomes.set(entry.reservation_id, entry.outcome);
   }
-  const result = { settled: [] as string[], unknown: [] as string[] };
+  const result = { settled: [] as string[], unknown: [] as string[], refused: [] as Array<{ reservation_id: string; code: string; message: string }> };
   for (const rid of requests) {
     const outcome = outcomes.get(rid) ?? { kind: "unknown" as const };
-    await ledger.settle(rid, outcome);
-    (outcomes.has(rid) ? result.settled : result.unknown).push(rid);
+    const reply = await ledger.settle(rid, outcome);
+    if (!reply.ok) result.refused.push({ reservation_id: rid, code: reply.code, message: reply.message });
+    else (outcomes.has(rid) ? result.settled : result.unknown).push(rid);
   }
   return result;
 }
