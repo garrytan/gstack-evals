@@ -230,7 +230,7 @@ export function preregistrationProblems(value: unknown): string[] {
     if (!text(t.digest) || !SHA256.test(t.digest)) problems.push(`task set ${id}: digest must be a full sha256 in lowercase hex`);
     if (typeof t.sealed !== 'boolean') problems.push(`task set ${id}: sealed must be true or false`);
     if (t.sealed && t.ids !== undefined) problems.push(`task set ${id}: a sealed set lists counts and digests only, never task ids`);
-    if (t.ids !== undefined && (!Array.isArray(t.ids) || new Set(t.ids).size !== t.ids.length || t.ids.length !== t.count)) problems.push(`task set ${id}: ids must be ${t.count} distinct task ids`);
+    if (t.ids !== undefined && (!Array.isArray(t.ids) || !t.ids.every(text) || new Set(t.ids).size !== t.ids.length || t.ids.length !== t.count)) problems.push(`task set ${id}: ids must be ${t.count} distinct task ids`);
   }
 
   const cells = unique(list<PreregCell>(p.cells), 'cell', 'id', problems);
@@ -280,8 +280,13 @@ export function preregistrationProblems(value: unknown): string[] {
       holmOf.set(id, list(family.comparisons).length);
     }
   }
-  const power = new Map(list<PowerCheck>(p.power).map((c) => [c?.comparison, c]));
-  for (const c of list<PowerCheck>(p.power)) if (!comparisons.has(c?.comparison)) problems.push(`power check for ${c?.comparison}: no such comparison`);
+  const power = new Map<string, PowerCheck>();
+  for (const c of list<PowerCheck>(p.power)) {
+    if (!comparisons.has(c?.comparison)) problems.push(`power check for ${c?.comparison}: no such comparison`);
+    if (power.has(c?.comparison)) problems.push(`power check for ${c.comparison} is listed twice`);
+    power.set(c?.comparison, c);
+  }
+  const decided = [...comparisons.values()].filter((c) => c.gate === 'noninferiority' || c.gate === 'superiority');
 
   for (const [id, c] of comparisons) {
     const ca = cells.get(c.a), cb = cells.get(c.b);
@@ -305,6 +310,7 @@ export function preregistrationProblems(value: unknown): string[] {
     }
     if (decides && p.claim === 'exploratory') problems.push(`comparison ${id}: an exploratory preregistration decides nothing; make the gate exploratory or the claim confirmatory`);
     if (!decides || p.claim !== 'confirmatory') continue;
+    if (decided.length > 1 && !holmOf.has(id)) problems.push(`comparison ${id} is one of ${decided.length} confirmatory gates but in no Holm family; list it in one (a family of one states an unsplit alpha)`);
     const check = power.get(id);
     if (!check) { problems.push(`comparison ${id}: a confirmatory gate needs a power check`); continue; }
     if (!(finite(check.sd) && check.sd > 0) || !text(check.sd_source)) problems.push(`power check for ${id}: sd must be positive and sd_source must say where it came from`);
@@ -317,7 +323,7 @@ export function preregistrationProblems(value: unknown): string[] {
     const needed = requiredTasks(check.sd, check.effect, { alpha: check.alpha, power: check.power });
     if (needed > count) problems.push(`comparison ${id} is underpowered: ${needed} tasks needed at SD ${check.sd}, ${count} preregistered; preregister it as exploratory${c.parity ? ', or parity as not attempted' : ''}`);
   }
-  if (p.claim === 'confirmatory' && ![...comparisons.values()].some((c) => c.gate === 'noninferiority' || c.gate === 'superiority')) {
+  if (p.claim === 'confirmatory' && !decided.length) {
     problems.push('a confirmatory preregistration needs at least one noninferiority or superiority comparison');
   }
 

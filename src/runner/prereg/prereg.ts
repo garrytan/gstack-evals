@@ -3,7 +3,8 @@
 // gstack-evals changes (U2): the command-line block at the end is removed. Its stderr lines carried no reason code,
 // and the `plan` command (src/runner/prereg/cli.ts, v1.1) is the entry point here. checkOrder also requires an
 // attested preregistration commit to precede the result's first commit, so a revision made after the results cannot
-// be attested without a declared deviation.
+// be attested without a declared deviation. attestPreregistration compares the file's content with its commit, so a
+// file Git is told to ignore (assume-unchanged, skip-worktree) cannot be attested while it differs.
 /**
  * Preregistration discipline for paid and gating runs.
  *
@@ -80,6 +81,9 @@ export function attestPreregistration(path: string, cwd = process.cwd(), now = n
   }
   const commit = tryGit(cwd, ['log', '-n', '1', '--format=%H', '--', path]);
   if (!commit) throw new Error(`preregistration ${path} is not committed; commit and push it before running`);
+  if (git(cwd, ['hash-object', '--', path]) !== git(cwd, ['rev-parse', `${commit}:./${path}`])) {
+    throw new Error(`preregistration ${path} differs from its commit ${commit.slice(0, 12)}; commit and push it before running`);
+  }
   const remotes = git(cwd, ['branch', '-r', '--contains', commit]);
   if (!remotes.split('\n').some(line => line.trim().startsWith('origin/'))) {
     throw new Error(`preregistration commit ${commit.slice(0, 12)} is not on origin; run \`git push\` before running`);
