@@ -31,7 +31,7 @@ gstack-evals --help
 | [src/errors/codes.ts](src/errors/codes.ts) | Every reason code, one object per code; [docs/errors.md](docs/errors.md) is generated from it |
 | [src/types.ts](src/types.ts) | Interfaces that more than one unit codes against: arms, leases, reservations, outcomes, the error record |
 | [schema/](schema/README.md) | Public-safe JSON schemas (empty until U5 and U6 land) |
-| [docs/](docs/) | Reason codes and adapters so far |
+| [docs/](docs/) | The [budget ledger guide](docs/budget-ledger.md), reason codes and adapters |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
 | [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. Start with [wiki/INDEX.md](wiki/INDEX.md) |
 | [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push |
