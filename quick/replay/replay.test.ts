@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { diffLines, fillRedTeam, filterDiff, introducedRanges, parseFindings, redTeamActive, sameFile, selectSpecialists, shown, bootstrap, isReviewFix } from './lib.ts';
-import { CapError, Ledger, MODELS, meteredCall, worstUsd } from './llm.ts';
+import { CapError, Ledger, MODELS, ProviderError, meteredCall, worstUsd } from './llm.ts';
 import { startFake } from './fake-upstream.ts';
 import { findingKey, summarize, type Unit } from './score.ts';
 
@@ -31,6 +31,9 @@ describe('findings', () => {
     expect(parseFindings('NO FINDINGS').clean).toBe(true);
     expect(parseFindings('Looks fine to me.').unparsed).toBe(true);
     expect(parseFindings('{"specialist":"state-machines","matrix":{"machine":"m"}}\nNO FINDINGS').clean).toBe(true);
+    const stray = parseFindings('The guard { checks "x". Otherwise NO FINDINGS in the rest, except:\n{"severity":"CRITICAL","path":"a.ts","line":2,"summary":"breaks"}');
+    expect(stray.findings.length).toBe(1);
+    expect(stray.clean).toBe(false);
   });
   test('cause path and the display gate', () => {
     const f = parseFindings('{"severity":"CRITICAL","confidence":4,"path":"caller.ts","summary":"s","cause":{"path":"lib/x.ts","line":2}}').findings[0]!;
@@ -114,6 +117,13 @@ describe('scoring', () => {
     expect(row.defect_units).toBe(1);
     expect(row.unjudged).toBe(1);
   });
+  test('a cell with no valid unit still reports its spend and incomplete count', () => {
+    const s = summarize([u(1, [], false, 2), u(2, [], false, 3)], cases, {});
+    const row = s.rows[0];
+    expect(row.incomplete).toBe(2);
+    expect(row.usd_all).toBe(5);
+    expect(row.defect_units).toBe(0);
+  });
   test('cost per catch counts the spend of incomplete units', () => {
     const hit = f('x breaks');
     const s = summarize([u(1, [hit], true, 1), u(2, [], false, 3)], cases, { [findingKey(hit)]: { names_defect: true } });
@@ -190,6 +200,28 @@ describe('providers against the fake upstream', () => {
     expect(s.find(x => x.call_id === 'e200').usd).toBeCloseTo(worstUsd(MODELS.deepseek!, Buffer.byteLength(p)), 6);
     expect(s.find(x => x.call_id === 'e400').usd).toBe(0);
     expect(s.length).toBe(2);
+  });
+  test('a 200 without usage settles at the worst case as a provider failure', async () => {
+    const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);
+    l.approve(QUOTES, 'test');
+    const p = 'FAKE_NO_USAGE diff --git a/q.ts b/q.ts';
+    await expect(meteredCall(l, 'nu', MODELS.haiku!, p)).rejects.toBeInstanceOf(ProviderError);
+    const s = l.rows().filter(x => x.type === 'settle');
+    expect(s[0].outcome).toBe('error');
+    expect(s[0].usd).toBeCloseTo(worstUsd(MODELS.haiku!, Buffer.byteLength(p)), 6);
+  });
+  test('a ledger failure stops the run instead of recording INFRA', async () => {
+    const dir = tmp();
+    const files: Record<string, string> = { 'd1/baseline.md': 'base diff --git a/lib/a.ts b/lib/a.ts' };
+    for (const [k, v] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, 'prompts', k)), { recursive: true }); fs.writeFileSync(path.join(dir, 'prompts', k), v); }
+    fs.writeFileSync(path.join(dir, 'frozen.sha256'), Object.entries(files).map(([k, v]) => sha(v) + '  ' + k).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'plan.json'), JSON.stringify({ cases: [{ case: 'd1', kind: 'defect', diff_lines: 10, specialists: [], red_team_by_size: false, prompts: { baseline: 'd1/baseline.md', core: 'd1/baseline.md', red_team_template: 'd1/baseline.md' } }] }));
+    const ledger = path.join(dir, 'ledger.jsonl');
+    fs.writeFileSync(ledger, JSON.stringify({ type: 'approval', item: 'replay-quick', cap_usd: 60 }) + '\n{"type":"reserve", torn');
+    const r = await bun([path.join(HERE, 'run.ts'), '--models', 'haiku', '--arms', 'baseline'], { ...process.env, ...fake.env, PLAN_FILE: path.join(dir, 'plan.json'), FROZEN_FILE: path.join(dir, 'frozen.sha256'), PROMPTS: path.join(dir, 'prompts'), RESULTS: path.join(dir, 'results'), LEDGER: ledger, PREREG_SHA: 'x' });
+    expect(r.status).not.toBe(0);
+    expect(r.status).not.toBe(2);
+    expect(fs.existsSync(path.join(dir, 'results/haiku/d1/baseline/t1/baseline.error.json'))).toBe(false);
   });
   test('a 500 retries once and settles once', async () => {
     const l = new Ledger(path.join(tmp(), 'l.jsonl'), 'x', 5);

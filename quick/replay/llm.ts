@@ -105,8 +105,10 @@ class HttpError extends Error {
   constructor(readonly status: number, msg: string) { super(msg); }
 }
 
+// timeout: false turns off Bun's idle timeout, which would cut a silent non-streaming reply at
+// about 5 minutes; the 20-minute abort signal is the only limit.
 async function post(url: string, headers: Record<string, string>, body: any): Promise<any> {
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(20 * 60 * 1000) });
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(20 * 60 * 1000), timeout: false } as RequestInit);
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 300) }; }
@@ -125,8 +127,9 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
   if (spec.provider === 'anthropic') {
     const j = await post(BASE.anthropic() + '/v1/messages', { 'x-api-key': key('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
       { model: spec.model, max_tokens: spec.maxTokens, messages: [{ role: 'user', content: [{ type: 'text', text: prompt, ...(cache ? { cache_control: { type: 'ephemeral' } } : {}) }] }], output_config: { effort: spec.effort } });
+    if (!j.usage) throw new Error('Anthropic response carried no usage');
     const text = (j.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
-    return { text, usage: j.usage ?? {}, usd: anthropicUsd(spec, j.usage ?? {}), stop: j.stop_reason ?? null, provider_served: 'anthropic', model_served: j.model ?? null, ms: Date.now() - t0 };
+    return { text, usage: j.usage, usd: anthropicUsd(spec, j.usage), stop: j.stop_reason ?? null, provider_served: 'anthropic', model_served: j.model ?? null, ms: Date.now() - t0 };
   }
   if (spec.provider === 'openrouter') {
     const j = await post(BASE.openrouter() + '/api/v1/chat/completions', { authorization: 'Bearer ' + key('OPENROUTER_API_KEY') },
@@ -139,8 +142,9 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
   }
   const j = await post(BASE.openai() + '/v1/responses', { authorization: 'Bearer ' + key('OPENAI_API_KEY') },
     { model: spec.model, input: prompt, reasoning: { effort: spec.effort }, max_output_tokens: spec.maxTokens, ...(schema ? { text: { format: { type: 'json_schema', name: 'verdict', strict: true, schema } } } : {}) });
+  if (!j.usage) throw new Error('OpenAI response carried no usage');
   const text = (j.output ?? []).filter((o: any) => o.type === 'message').flatMap((o: any) => o.content ?? []).filter((c: any) => c.type === 'output_text').map((c: any) => c.text).join('\n');
-  const u = j.usage ?? {};
+  const u = j.usage;
   return { text, usage: u, usd: ((u.input_tokens ?? 0) * spec.inPerM + (u.output_tokens ?? 0) * spec.outPerM) / 1e6, stop: j.status ?? null, provider_served: 'openai', model_served: j.model ?? null, ms: Date.now() - t0 };
 }
 
@@ -151,22 +155,28 @@ async function once(spec: ModelSpec, prompt: string, schema?: any, cache = true)
 // have been billed. Failures are recorded, never retried.
 // cache: false sends an Anthropic prompt without cache_control, for a prompt no later call
 // repeats (a Red Team prompt carries its own trial's findings).
+// A provider failure, settled in the ledger: the call's terminal INFRA outcome. Any other error
+// from here (a ledger read or write) is not a provider outcome and should stop the run.
+export class ProviderError extends Error {}
+
 export async function meteredCall(ledger: Ledger, callId: string, spec: ModelSpec, prompt: string, opts: { limit?: number; schema?: any; cache?: boolean } = {}): Promise<CallResult> {
   const rid = ledger.reserve(callId, spec, worstUsd(spec, Buffer.byteLength(prompt)), opts.limit);
   let last: any;
   for (let attempt = 0; attempt < 4; attempt++) {
+    let r: CallResult;
     try {
-      const r = await once(spec, prompt, opts.schema, opts.cache ?? true);
-      ledger.settle(rid, callId, 'ok', r.usd, { ...r.usage, attempts: attempt + 1 });
-      return r;
+      r = await once(spec, prompt, opts.schema, opts.cache ?? true);
     } catch (e: any) {
       last = e;
       const retryable = e instanceof HttpError && (e.status === 429 || e.status >= 500);
       if (!retryable || attempt === 3) break;
-      await new Promise(r => setTimeout(r, 2000 * 2 ** attempt));
+      await new Promise(res => setTimeout(res, 2000 * 2 ** attempt));
+      continue;
     }
+    ledger.settle(rid, callId, 'ok', r.usd, { ...r.usage, attempts: attempt + 1 });
+    return r;
   }
   const billed = last instanceof HttpError && last.status >= 400 ? 0 : worstUsd(spec, Buffer.byteLength(prompt));
   ledger.settle(rid, callId, 'error', billed, { error: String(last?.message ?? last).slice(0, 300) });
-  throw last;
+  throw new ProviderError(String(last?.message ?? last));
 }

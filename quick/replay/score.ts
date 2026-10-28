@@ -14,12 +14,16 @@ const RESULTS = process.env.RESULTS ?? path.join(process.env.HOME!, '.capy/work/
 const LEDGER = process.env.LEDGER ?? path.join(process.env.HOME!, '.capy/drive/captain-gstack-evals/ledger/replay-quick.jsonl');
 const CAP = 60;
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
-const git = (...a: string[]) => spawnSync('git', a, { cwd: G, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).stdout;
+function git(...a: string[]): string {
+  const r = spawnSync('git', a, { cwd: G, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error('git ' + a.join(' ') + ' exit ' + r.status + ': ' + (r.stderr ?? '').slice(0, 300));
+  return r.stdout;
+}
 
 export const MODEL_KEYS = ['opus', 'haiku', 'deepseek'];
 export const ARMS = ['baseline', 'gstack'] as const;
 
-export type Unit = { model: string; arm: string; case: string; kind: string; trial: number; complete: boolean; usd: number; input_tokens: number; output_tokens: number; calls: number; findings: Finding[]; unparsed: number };
+export type Unit = { model: string; arm: string; case: string; kind: string; trial: number; complete: boolean; usd: number; input_tokens: number; output_tokens: number; calls: number; findings: Finding[]; unparsed: number; truncated?: number };
 
 // Reads one case x arm x model x trial. A gstack unit is complete when the core reviewer,
 // every dispatched specialist and (when it activates) the Red Team returned.
@@ -43,6 +47,7 @@ export function loadUnit(resultsDir: string, planCase: any, model: string, arm: 
     calls: got.length,
     findings: parsed.flatMap(p => p.findings),
     unparsed: parsed.filter(p => p.unparsed).length,
+    truncated: got.filter((r: any) => r.stop === 'max_tokens' || r.stop === 'length').length,
   };
 }
 
@@ -83,6 +88,7 @@ async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Rec
   for (const f of findings) { const k = findingKey(f); if (!cache[k] && !failed[k] && !todo.has(k)) todo.set(k, f); }
   if (!todo.size) return;
   const fixDiff = c.fix_diff ?? git('diff', c.fix + '^', c.fix, '--', ...defectFiles(c));
+  if (c.fix_diff_sha256 && sha(fixDiff) !== c.fix_diff_sha256) throw new Error(c.id + ': fix diff digest moved');
   const r = rng(parseInt(sha(c.id).slice(0, 8), 16));
   const list = [...todo.entries()].map(([k, f]) => ({ k, f, id: Math.floor(r() * 0xffffff).toString(16).padStart(6, '0') + k.slice(0, 2), o: r() })).sort((a, b) => a.o - b.o);
   for (let i = 0; i < list.length; i += 12) {
@@ -102,8 +108,10 @@ async function judgeCase(ledger: Ledger, c: any, findings: Finding[], cache: Rec
     for (const x of batch) {
       const hit = v.find(y => y.id === x.id);
       if (hit) cache[x.k] = { case: c.id, path: x.f.path, line: x.f.line, summary: x.f.summary, names_defect: hit.names_defect, reason: hit.reason, judge_call: 'judge/' + c.id + '/' + i, usd: res.usd / batch.length };
+      else failed[x.k] = 'the judge returned no verdict for this id';
     }
     fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
+    fs.writeFileSync(failedFile, JSON.stringify(failed, null, 2));
   }
 }
 
@@ -142,7 +150,7 @@ export function summarize(allUnits: Unit[], cases: any[], verdicts: Record<strin
     const cell = units.filter(u => u.model === model && u.arm === arm);
     const mine = cell.filter(valid);
     const d = mine.filter(u => u.kind === 'defect'), y = mine.filter(u => u.kind === 'decoy');
-    if (!mine.length) continue;
+    if (!cell.length) continue;
     const rc = perCaseRate(model, arm, 'defect', catchOf), fa = perCaseRate(model, arm, 'decoy', falseAlarm);
     const catches = d.filter(catchOf).length;
     const usdD = cell.filter(u => u.kind === 'defect').reduce((a, u) => a + u.usd, 0), usdAll = cell.reduce((a, u) => a + u.usd, 0);
@@ -154,7 +162,7 @@ export function summarize(allUnits: Unit[], cases: any[], verdicts: Record<strin
       false_alarm: rate(fa), false_alarm_ci: bootstrap(fa.filter(r => r.length), s => rate(s)), decoy_any_finding: rate(perCaseRate(model, arm, 'decoy', anyFinding)),
       usd_defects: usdD, usd_all: usdAll, usd_per_catch: catches ? usdD / catches : null, usd_all_per_catch: catches ? usdAll / catches : null,
       calls: mine.reduce((a, u) => a + u.calls, 0), in_tokens_per_unit: mean(mine.map(u => u.input_tokens)), out_tokens_per_unit: mean(mine.map(u => u.output_tokens)),
-      unparsed_outputs: mine.reduce((a, u) => a + u.unparsed, 0),
+      unparsed_outputs: mine.reduce((a, u) => a + u.unparsed, 0), truncated_outputs: mine.reduce((a, u) => a + (u.truncated ?? 0), 0),
     });
   }
   const paired = (a: Cell, b: Cell) => {

@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { CapError, Ledger, MODELS, meteredCall, worstUsd, type ModelSpec } from './llm.ts';
+import { CapError, Ledger, MODELS, ProviderError, meteredCall, worstUsd, type ModelSpec } from './llm.ts';
 import { fillRedTeam, parseFindings, redTeamActive, shown, type Finding } from './lib.ts';
 
 const HERE = import.meta.dir;
@@ -48,6 +48,12 @@ const settled: (() => void)[] = [];
 // or the cap stop, wakes them, so refused waiters never wake each other.
 const wake = () => { for (const w of settled.splice(0)) w(); };
 
+function writeAtomic(file: string, rec: any) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file + '.tmp', JSON.stringify(rec, null, 2));
+  fs.renameSync(file + '.tmp', file);
+}
+
 // One reviewer call, resumable: an existing result file is the answer, and an existing error
 // record is a terminal INFRA failure that a rerun leaves incomplete. A cap refusal while
 // other calls are open waits for one to settle and tries again; with nothing open it is the
@@ -77,17 +83,16 @@ async function call(ledger: Ledger, spec: ModelSpec, rel: string, text: string, 
           return null;
         }
         wake();
+        if (!(e instanceof ProviderError)) throw e;
         const rec = { ...meta, prompt: rel, model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, error: String(e.message ?? e).slice(0, 500), at: new Date().toISOString() };
-        fs.mkdirSync(path.dirname(out), { recursive: true });
-        fs.writeFileSync(out.replace(/\.json$/, '.error.json'), JSON.stringify(rec, null, 2));
+        writeAtomic(out.replace(/\.json$/, '.error.json'), rec);
         console.error('INFRA ' + meta.call_id + ': ' + rec.error);
         return null;
       }
       inFlight--;
       wake();
       const rec = { ...meta, prompt: rel, prompt_sha256: sha(text), model: spec.model, effort: spec.effort, prereg_sha: PREREG_SHA, ...r, at: new Date().toISOString() };
-      fs.mkdirSync(path.dirname(out), { recursive: true });
-      fs.writeFileSync(out, JSON.stringify(rec, null, 2));
+      writeAtomic(out, rec);
       return rec;
     }
   }, opts.high);
@@ -123,8 +128,8 @@ async function group(ledger: Ledger, spec: ModelSpec, c: any, arm: 'baseline' | 
     const specFindings = recs.slice(1).flatMap((r: any) => parseFindings(r.text).findings.filter(shown));
     if (!redTeamActive(c.diff_lines, specFindings)) return;
     const text = fillRedTeam(prompt(c.prompts.red_team_template), c.specialists.length, specFindings.map(summaryLine).join('\n'));
-    fs.mkdirSync(dir(t), { recursive: true });
-    fs.writeFileSync(path.join(dir(t), 'red-team.prompt.md'), text);
+    const rt = path.join(dir(t), 'red-team');
+    if (!fs.existsSync(rt + '.json') && !fs.existsSync(rt + '.error.json')) { fs.mkdirSync(dir(t), { recursive: true }); fs.writeFileSync(rt + '.prompt.md', text); }
     await call(ledger, spec, c.prompts.red_team_template, text, path.join(dir(t), 'red-team.json'), meta(t, 'red-team'), { cache: false });
   }));
 }

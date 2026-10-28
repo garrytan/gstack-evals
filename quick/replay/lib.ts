@@ -53,20 +53,31 @@ export type Finding = {
 // Reads a reviewer's output: one JSON object per line, or NO FINDINGS. Objects inside code
 // fences or spread over several lines are found by brace matching. Matrix records
 // (state-machines) carry no summary and are skipped.
-export function parseFindings(text: string): { findings: Finding[]; clean: boolean; unparsed: boolean } {
-  const findings: Finding[] = [];
-  const objs: string[] = [];
-  let depth = 0, start = -1, inStr = false, esc = false;
-  for (let i = 0; i < text.length; i++) {
+// The span from the brace at s to its matching close, or -1. Braces inside strings do not count.
+function braceEnd(text: string, s: number): number {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = s; i < text.length; i++) {
     const c = text[i]!;
     if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
-    if (c === '"') { if (depth > 0) inStr = true; continue; }
-    if (c === '{') { if (depth === 0) start = i; depth++; }
-    else if (c === '}' && depth > 0) { depth--; if (depth === 0 && start >= 0) { objs.push(text.slice(start, i + 1)); start = -1; } }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
   }
-  for (const o of objs) {
+  return -1;
+}
+
+export function parseFindings(text: string): { findings: Finding[]; clean: boolean; unparsed: boolean } {
+  const findings: Finding[] = [];
+  const objs: any[] = [];
+  // A brace that does not open a JSON object (a stray { in prose) is skipped, so it cannot hide
+  // the objects after it.
+  for (let s = text.indexOf('{'); s >= 0; ) {
+    const e = braceEnd(text, s);
     let j: any;
-    try { j = JSON.parse(o); } catch { continue; }
+    if (e >= 0) { try { j = JSON.parse(text.slice(s, e + 1)); } catch { j = undefined; } }
+    if (j !== undefined) { objs.push(j); s = text.indexOf('{', e + 1); } else s = text.indexOf('{', s + 1);
+  }
+  for (const j of objs) {
     if (!j || typeof j !== 'object' || typeof j.path !== 'string' || typeof j.summary !== 'string') continue;
     const conf = Number(j.confidence);
     findings.push({
