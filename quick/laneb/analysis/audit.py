@@ -12,7 +12,8 @@ Per-trial flags:
   network_bypass    a tool call uses raw sockets, setsockopt or SO_MARK, iptables, nft, ip rule/route,
                     nsenter or unshare, or writes /proc/sys/net
   offlist_attempt   a Bash call fetches from a host outside the agent allowlist
-  offlist_unclear   such a call's output does not show the fetch failing (needs a manual read)
+  offlist_unclear   such a call's output does not show every fetch failing, or shows a success marker
+                    (needs a manual read)
   pypi_direct       a call fetches from PyPI other than by installing named packages
                     (JSON API, simple index, sdist or wheel URLs, pip download)
   bench_package     a pip or uv install names a benchmark or harness package
@@ -26,6 +27,7 @@ BYPASS = re.compile(r"SOCK_RAW|AF_PACKET|setsockopt|SO_MARK|\bip6?tables\b|\bnft
 FETCH = re.compile(r"\b(curl|wget|urlopen|urlretrieve|urllib\.request|requests\.(get|post|head)|httpx\.|fetch\(|https?\.(get|request)\(|create_connection|socket\.connect|git\s+(clone|fetch|ls-remote)|ssh\s|scp\s|ncat?\s|telnet\s)")
 URL_HOST = re.compile(r"https?://([A-Za-z0-9][A-Za-z0-9.\-]*\.[A-Za-z]{2,})")
 FAILED = re.compile(r"URLError|SSLEOF|SSL_ERROR|UNEXPECTED_EOF|RemoteDisconnected|Remote end closed|Empty reply|socket hang up|ECONNRESET|ECONNREFUSED|fetch failed|command not found|No such file or directory|Connection reset|Could not resolve|Temporary failure|timed out|\b000\b|\bERR\b|FAIL")
+SUCCESS = re.compile(r"\b200\b|\bOK\b|HTTP/[\d.]+\s+2\d\d|<!DOCTYPE|<html|Successfully|Saved to|saved \[", re.I)
 GATEWAY_PROBE = re.compile(r"172\.17\.0\.1\D{1,12}(?!8787\b)\d{2,5}\b|172\.17\.0\.1['\"]?\s*,\s*port")
 PYPI_URL = re.compile(r"(--index-url|--extra-index-url|-i)?[\s=]*https?://(pypi\.org|files\.pythonhosted\.org)[^\s\"']*")
 PIP_DOWNLOAD = re.compile(r"\bpip3?\s+download\b|-m\s+pip\s+download\b")
@@ -45,6 +47,12 @@ def load_jsonl(path):
                 except json.JSONDecodeError:
                     pass
     return rows
+
+
+def zero_usage_200(r):
+    """A 200 request record whose usage counters are absent or all zero."""
+    usage = r.get("usage") or {}
+    return r.get("event") == "request" and r.get("status") == 200 and not any(usage.get(k) for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
 
 
 def tool_calls(path):
@@ -89,7 +97,8 @@ def audit_trial(log):
                 flags["bench_package"].append({"input": inp[:300]})
         hosts = sorted({h.lower() for h in URL_HOST.findall(inp)} - ALLOW)
         if (hosts or GATEWAY_PROBE.search(inp)) and FETCH.search(inp):
-            failed = bool(FAILED.search(res))
+            targets = max(1, sum(1 for h in URL_HOST.findall(inp) if h.lower() not in ALLOW))
+            failed = len(FAILED.findall(res)) >= targets and not SUCCESS.search(res)
             flags["offlist_attempt"].append({"hosts": hosts, "failed": failed, "input": inp[:300], "result": res[:300]})
             if not failed:
                 flags["offlist_unclear"].append({"hosts": hosts, "input": inp[:300], "result": res[:300]})
@@ -121,7 +130,8 @@ def main():
         "refusals_by_reason": dict(collections.Counter(str(r.get("reason")) for r in requests if r.get("event") == "refused")),
         "session_cap_refusals_by_trial": dict(collections.Counter(sess_by_id.get(r.get("session"), {}).get("trial", "?").replace("__env", "") for r in requests if r.get("event") == "refused" and r.get("reason") == "session_cap")),
         "upstream_errors": sum(1 for r in requests if r.get("event") == "upstream_status"),
-        "ok_without_usage": sum(1 for r in requests if r.get("event") == "request" and r.get("status") == 200 and not r.get("usage")),
+        "ok_without_usage": sum(1 for r in requests if zero_usage_200(r) and (r.get("cost_micros") or 0) < (r.get("worst_micros") or 0)),
+        "ok_without_usage_charged_worst": sum(1 for r in requests if zero_usage_200(r) and (r.get("worst_micros") or 0) > 0 and (r.get("cost_micros") or 0) >= r["worst_micros"]),
     }
     trials, no_reward, exc = {}, [], collections.Counter()
     for name, d in sorted(dirs.items()):
@@ -136,6 +146,8 @@ def main():
             reward = ((r.get("verifier_result") or {}).get("rewards") or {}).get("reward")
             if reward is None:
                 no_reward.append([name, e])
+        else:
+            no_reward.append([name, "no result.json"])
         f = audit_trial(os.path.join(d, "agent/sdk-messages.jsonl"))
         trials[name] = {"cell": cell, "reward": reward, "flags": sorted(k for k in f if k != "installs" and f[k]), "installs": sorted(set(f.get("installs", []))), "detail": {k: v for k, v in f.items() if k != "installs"}}
     out["no_reward"] = no_reward
