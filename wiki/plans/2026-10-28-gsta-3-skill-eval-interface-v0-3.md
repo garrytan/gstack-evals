@@ -7,7 +7,7 @@ author: GSTA-3
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-28
-status: open
+status: superseded
 source: Captain drive handoffs/GSTA-3/skill-eval-interface.md (sha256 d8fd67afc346a8e40734e7f74c3c9a442a067b1c7be146fe082ab57d84b4c555), copied by GSTA-6 on 2026-10-28
 ---
 # gstack-evals skill-eval: interface (draft v0.3, 2026-10-28)
