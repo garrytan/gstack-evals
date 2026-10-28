@@ -4,7 +4,8 @@ The SDK runs here, on the evaluator side. Its CLI subprocess is
 `docker exec -i <trial container> claude ...`, so stream-json and the
 canUseTool control channel cross the container boundary over stdio only.
 The user simulator answers AskUserQuestion from a persona file that never
-enters the container, and logs every question and answer.
+enters the container, and logs every question and answer to evaluator/,
+beside the trial's agent/ directory, which Harbor mounts into the container.
 """
 
 import json
@@ -82,14 +83,16 @@ class SdkClaudeCode(ClaudeCode):
         container = self._container_id(environment)
         workdir = Path(tempfile.mkdtemp(prefix="sdk-claude-code-"))
         wrapper = workdir / "claude-in-container"
-        forward = " ".join(f"-e {name}" for name in FORWARDED_ENV)
+        passed = {k: v for k, v in env.items() if k in FORWARDED_ENV}
+        forward = " ".join(f"-e {name}" for name in [*passed, "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_AGENT_SDK_VERSION"])
         wrapper.write_text(f"#!/bin/sh\nexec docker exec -i -w /app {forward} {container} claude \"$@\"\n")
         wrapper.chmod(0o755)
 
-        self.logs_dir.mkdir(parents=True, exist_ok=True)
+        evaluator_dir = self.logs_dir.parent / "evaluator"
+        evaluator_dir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
-        sim = Simulator(persona, self.logs_dir / "usersim-events.jsonl")
-        sim.log({"event": "start", "container": container, "forwarded_env": sorted(k for k in env if k in FORWARDED_ENV)})
+        sim = Simulator(persona, evaluator_dir / "usersim-events.jsonl")
+        sim.log({"event": "start", "container": container, "forwarded_env": forward.split()[1::2]})
 
         async def can_use_tool(tool_name, tool_input, ctx):
             if tool_name == "AskUserQuestion":
@@ -107,7 +110,7 @@ class SdkClaudeCode(ClaudeCode):
         options = ClaudeAgentOptions(
             cli_path=str(wrapper),
             cwd=str(workdir),
-            env={k: v for k, v in env.items() if k in FORWARDED_ENV},
+            env=passed,
             can_use_tool=can_use_tool,
             hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[keep_open])]},
             permission_mode="default",
@@ -117,7 +120,7 @@ class SdkClaudeCode(ClaudeCode):
             disallowed_tools=self.options.disallowed_tools.split(",") if self.options.disallowed_tools else [],
         )
         sim.log({"event": "disallowed_tools", "tools": options.disallowed_tools})
-        with (self.logs_dir / "sdk-messages.jsonl").open("a") as out:
+        with (evaluator_dir / "sdk-messages.jsonl").open("a") as out:
             async for message in query(prompt=prompt(), options=options):
                 record = {"type": type(message).__name__}
                 data = getattr(message, "data", None)

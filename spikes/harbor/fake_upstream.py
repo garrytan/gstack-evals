@@ -30,8 +30,9 @@ PROBE = (
     "if [ -e /solution ]; then echo solution_visible=yes; else echo solution_visible=no; fi; "
     "echo \"sentinel=$(grep -h -o 'SPIKE-ARM-SENTINEL-[0-9a-f]*' \"$CLAUDE_CONFIG_DIR\"/skills/spike-arm/SKILL.md 2>/dev/null | head -1)\"; "
     "c=PERSONA-CANARY-; c=${c}7f3c91d2e8; "
-    "hits=$(timeout 60 grep -rIl --exclude-dir=proc --exclude-dir=sys \"$c\" / 2>/dev/null | head -3 | tr '\\n' ','); "
-    "echo \"persona_canary_hits=${hits:-none}\"; "
+    "scan=$(timeout 60 grep -rIl --exclude-dir=proc --exclude-dir=sys \"$c\" / 2>/dev/null; echo \"rc=$?\"); "
+    "rc=${scan##*rc=}; hits=$(printf '%s\\n' \"$scan\" | grep -v '^rc=' | head -3 | tr '\\n' ','); "
+    "case $rc in 0|1|2) echo \"persona_canary_hits=${hits:-none}\";; *) echo \"persona_canary_hits=scan_failed_rc$rc\";; esac; "
     "echo agent_only > /app/agent_only.txt; "
     "echo whoami=$(whoami)"
 )

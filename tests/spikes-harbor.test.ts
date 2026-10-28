@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -98,6 +98,57 @@ describe("fake upstream (spikes/harbor/fake_upstream.py)", () => {
       stop();
     }
   });
+
+  // Value: protects=the closing text turn, which Claude Code requests with stream=true, arrives as a text_delta; fails_when=the text branch of the SSE builder breaks; why_new=the stream test covers only a tool_use block; seam=none; no_claim=Claude Code's own SSE parser (a fixture client reads the stream)
+  test("streams the closing text turn as a text delta that ends the turn", async () => {
+    const { base, stop } = await startUpstream(join(scratch(), "upstream.jsonl"));
+    try {
+      const results = ["toolu_spike_1", "toolu_spike_2", "toolu_spike_3"].map((id) => ({ type: "tool_result", tool_use_id: id, content: `${QUESTION}="goodbye"` }));
+      const res = await fetch(`${base}/v1/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "m", stream: true, tools: TOOLS, messages: [{ role: "user", content: "go" }, { role: "user", content: results }] }),
+      });
+      const data = (await res.text()).split("\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+      expect(data.find((e) => e.type === "content_block_delta").delta).toEqual({ type: "text_delta", text: "Done: wrote /app/answer.txt." });
+      expect(data.find((e) => e.type === "message_delta").delta.stop_reason).toBe("end_turn");
+    } finally {
+      stop();
+    }
+  });
+
+  // Value: protects=an AskUserQuestion result sent as a list of text blocks is joined and parsed, and an unparseable one is marked, not guessed; fails_when=the list join in tool_results or the UNPARSED fallback in next_turn breaks; why_new=the script test sends string content with a parseable answer only; seam=none; no_claim=the exact result wording of other Claude Code versions
+  test("parses an answer sent as text blocks and marks one it cannot parse", async () => {
+    const { base, stop } = await startUpstream(join(scratch(), "upstream.jsonl"));
+    try {
+      const writeFor = async (answer: string) => {
+        const res = await fetch(`${base}/v1/messages`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: "m",
+            stream: false,
+            tools: TOOLS,
+            messages: [
+              { role: "user", content: "go" },
+              {
+                role: "user",
+                content: [
+                  { type: "tool_result", tool_use_id: "toolu_spike_1", content: [{ type: "text", text: "Your questions have been answered: " }, { type: "text", text: answer }] },
+                  { type: "tool_result", tool_use_id: "toolu_spike_2", content: [{ type: "text", text: "tests_visible=no\n" }] },
+                ],
+              },
+            ],
+          }),
+        });
+        return ((await res.json()) as Reply).content[0].input.content;
+      };
+      expect(await writeFor(`"${QUESTION}"="hello".`)).toBe("answer=hello\ntests_visible=no\n");
+      expect(await writeFor("the user closed the dialog")).toBe("answer=UNPARSED:Your questions have been answered: the user closed the dialog\ntests_visible=no\n");
+    } finally {
+      stop();
+    }
+  });
 });
 
 describe("user simulator (spikes/harbor/usersim.py)", () => {
@@ -145,6 +196,37 @@ describe("spike task (spikes/harbor/spike-task/)", () => {
     expect(docker).toContain("COPY arm/ /root/.claude/");
     const canary = persona.persona.match(/PERSONA-CANARY-[0-9a-f]+/)[0];
     for (const file of filesUnder(join(SPIKE, "spike-task"))) expect(readFileSync(file, "utf8")).not.toContain(canary);
+    expect(read("fake_upstream.py")).toContain("c=PERSONA-CANARY-; c=${c}" + canary.slice("PERSONA-CANARY-".length));
+  });
+
+  // Value: protects=each verifier reward is 1 only with its evidence in answer.txt, and separate needs answer.txt to have crossed; fails_when=a reward rule in test.sh breaks; why_new=the other task tests read test.sh source only; seam=none; no_claim=Harbor's artifact copy into the verifier (fixture files stand in)
+  test("the verifier scores each check from answer.txt, and scores separate 0 when nothing crossed", () => {
+    const score = (answer: string | null, agentOnly = false) => {
+      const root = scratch();
+      mkdirSync(join(root, "app"), { recursive: true });
+      if (answer !== null) writeFileSync(join(root, "app", "answer.txt"), answer);
+      if (agentOnly) writeFileSync(join(root, "app", "agent_only.txt"), "agent_only\n");
+      const sh = read("spike-task/tests/test.sh").replaceAll("/app/", `${root}/app/`).replaceAll("/logs/", `${root}/logs/`);
+      expect(Bun.spawnSync(["bash", "-c", sh]).exitCode).toBe(0);
+      return JSON.parse(readFileSync(join(root, "logs", "verifier", "reward.json"), "utf8"));
+    };
+    const pass = [
+      "answer=goodbye",
+      "sentinel=SPIKE-ARM-SENTINEL-4b1d9e0a6c",
+      "tests_visible=no",
+      "solution_visible=no",
+      "persona_canary_hits=none",
+      "egress_example_com=rc35:000",
+      "egress_ip_literal=rc52:000",
+      "egress_anthropic=rc35:000",
+      "proxy_healthz=rc0:200",
+      "",
+    ].join("\n");
+    expect(score(pass)).toEqual({ answer: 1, sentinel: 1, hidden: 1, separate: 1, egress_blocked: 1, proxy_reachable: 1 });
+    expect(score(pass.replace("persona_canary_hits=none", "persona_canary_hits=scan_failed_rc124"))).toMatchObject({ hidden: 0 });
+    expect(score(pass.replace("egress_ip_literal=rc52:000", "egress_ip_literal=rc0:200"))).toMatchObject({ egress_blocked: 0 });
+    expect(score(pass, true)).toMatchObject({ separate: 0 });
+    expect(score(null)).toEqual({ answer: 0, sentinel: 0, hidden: 0, separate: 0, egress_blocked: 0, proxy_reachable: 0 });
   });
 
   test("run.sh skips installs and uses a key no secret scanner reads as real", () => {
@@ -153,10 +235,14 @@ describe("spike task (spikes/harbor/spike-task/)", () => {
     expect(run).not.toMatch(/\bsk-[A-Za-z0-9_-]{20,}/);
   });
 
-  test("the SDK agent runs the CLI over docker exec with an explicit env list", () => {
+  test("the SDK agent runs the CLI over docker exec, forwards only the env it set, and logs outside the container's mounts", () => {
     const agent = read("sdk_claude_code.py");
     expect(agent).toContain("exec docker exec -i -w /app {forward} {container} claude");
-    expect(agent).toContain("env={k: v for k, v in env.items() if k in FORWARDED_ENV}");
+    expect(agent).toContain("passed = {k: v for k, v in env.items() if k in FORWARDED_ENV}");
+    expect(agent).toContain('for name in [*passed, "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_AGENT_SDK_VERSION"]');
+    expect(agent).toContain("env=passed,");
+    expect(agent).toContain('evaluator_dir = self.logs_dir.parent / "evaluator"');
+    expect(agent).not.toMatch(/self\.logs_dir \/ "/);
     expect(agent).toContain('"answers": answers');
   });
 });

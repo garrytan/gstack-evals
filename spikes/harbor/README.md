@@ -18,6 +18,6 @@ bash spikes/harbor/run.sh                 # allowlist; needs a kernel with nftab
 NETWORK=public bash spikes/harbor/run.sh  # every phase public, for Capy cloud machines
 ```
 
-Results land in `spikes/harbor/out/`. The trial's `verifier/reward.json` has one key per check, and `agent/usersim-events.jsonl` holds the simulator's log. With `NETWORK=public`, `egress_blocked` is 0 by design.
+Results land in `spikes/harbor/out/`. The trial's `verifier/reward.json` has one key per check, and `evaluator/usersim-events.jsonl` holds the simulator's log. It sits beside `agent/`, not in it, because Harbor mounts `agent/` into the container. With `NETWORK=public`, `egress_blocked` is 0 by design.
 
 `tests/spikes-harbor.test.ts` checks the fake upstream's script, the simulator and the task's settings with no key, Docker or Harbor; it needs python3. Delete it with this folder.
