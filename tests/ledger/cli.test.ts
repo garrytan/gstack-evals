@@ -106,6 +106,7 @@ describe("gstack-evals ledger lease, settle, reconcile and status", () => {
     await w.cli("init", "--cap", "10", "--item", "replay-quick", "--admission", "warn", "--words", "Rec", "--by", "Garry", "--source", "gate 1");
     const lease = JSON.parse((await w.cli("lease", "--item", "replay-quick", "--run", "run-1", "--ttl", "0.0001", "--json")).out);
     rmSync(w.env.GSTACK_EVALS_LEDGER);
+    // gstack-timing-ok: waits past the lease's 360 ms expiry; a slower machine only leaves it further expired
     await Bun.sleep(400);
     expect((await w.cli("settle", "--lease", lease.lease_id)).err).toStartWith("E_LEASE_UNSETTLED ");
     const usage = join(w.dir, "usage.csv");
