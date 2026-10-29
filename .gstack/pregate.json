@@ -48,6 +48,9 @@
     "quick/replay/**": [
       "quick/replay/replay.test.ts"
     ],
+    "docs/benchmarks/2026-11-parity-sd-estimate/**": [
+      "tests/parity-sd-estimate.test.ts"
+    ],
     "quick/laneb/**": [
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",
