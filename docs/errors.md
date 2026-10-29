@@ -61,6 +61,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
 | [E_INTERNAL](#e_internal) | 2 | U1 |
 | [E_TOKENS_COVERAGE](#e_tokens_coverage) | 2 | U13 |
+| [E_PARITY_SOURCE](#e_parity_source) | 2 | U15 |
+| [E_PARITY_STALE](#e_parity_stale) | 2 | U15 |
 | [CALIBRATION_SKILL](#calibration_skill) | 3 | U10 |
 | [CALIBRATION_NONE_LEAK](#calibration_none_leak) | 3 | U10 |
 | [CALIBRATION_SHELL](#calibration_shell) | 3 | U10 |
@@ -456,6 +458,22 @@ gstack-evals tokens export was asked for a model, role or effort the token table
 Fix: Add the measured rows the message names from a metered run, or ask for an approved measuring run.
 
 Exit 2. Side effects: None: no export is written and no call is made. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_PARITY_SOURCE
+
+scripts/parity-sd-estimate.ts could not use the DeepSWE trials file: the download failed, the file is unreadable, its sha256 differs from the one docs/benchmarks/2026-11-parity-sd-estimate/source.json records, or it lacks a configuration the estimate reads.
+
+Fix: Use the recorded file, the one with source.json's sha256. DeepSWE serves a live file, so a new digest needs a new estimate with its own note, never an edit to the old numbers. report --check needs no download.
+
+Exit 2. Side effects: None: nothing is written. Retry safe: yes. Resumable: no. Owner: U15.
+
+### E_PARITY_STALE
+
+A file the parity SD estimate reads or generates (source.json, counts.json, results.json or the note's generated block) cannot be read, differs from what scripts/parity-sd-estimate.ts computes, is missing its markers, or was derived from another source file than source.json records.
+
+Fix: Restore a missing or unreadable file from git. Otherwise run the same command without --check, review the diff, and commit it only if the change is intended.
+
+Exit 2. Side effects: None: nothing is written. Retry safe: yes. Resumable: no. Owner: U15.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
