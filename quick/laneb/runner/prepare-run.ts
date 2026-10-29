@@ -31,7 +31,7 @@ if (import.meta.main) {
   const skillMapRaw = JSON.parse(readFileSync(join(here, "skill-map.json"), "utf8")) as Record<string, { skill: string; branch: string }>;
   for (const id of final) if (!skillMapRaw[id]) throw new Error(`E_USAGE task ${id} has no entry in runner/skill-map.json`);
   const skillMap = Object.fromEntries(final.map((id) => [id, skillMapRaw[id].skill]));
-  const expected = new Map<string, string>([...selection.main, ...selection.reserves].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
+  const expected = new Map<string, string>([...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
   if (existsSync(run)) throw new Error(`${run} exists; use a fresh run directory`);

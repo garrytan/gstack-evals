@@ -56,13 +56,16 @@ describe("prereg 2 explicit invocation", () => {
     expect(run.stdout.toString().trim()).toBe("ok");
   });
 
-  test("skill-map.json covers all 20 final tasks and names real gstack skills", () => {
-    const final: string[] = JSON.parse(readFileSync(join(here, "../tasks/final.json"), "utf8")).tasks;
+  test("skill-map.json covers all 40 final tasks and names real gstack skills", () => {
+    const finalJson = JSON.parse(readFileSync(join(here, "../tasks/final.json"), "utf8"));
+    const final: string[] = finalJson.tasks;
+    expect(final.slice(0, 20)).toEqual(finalJson.original_20);
+    expect(final.slice(20)).toEqual(finalJson.added_20);
     const map = JSON.parse(readFileSync(join(here, "../runner/skill-map.json"), "utf8")) as Record<string, { skill: string; branch: string }>;
     const gstackSkills: string[] = JSON.parse(readFileSync(join(here, "../arms/manifests/gstack.json"), "utf8")).skills.names;
     const branches = ["fix-existing", "optimize-existing", "implement-new"];
     expect(new Set(Object.keys(map))).toEqual(new Set(final));
-    expect(final.length).toBe(20);
+    expect(final.length).toBe(40);
     for (const task of final) {
       expect(map[task]).toBeDefined();
       expect(gstackSkills).toContain(map[task].skill);

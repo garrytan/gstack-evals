@@ -1,6 +1,92 @@
 {
-  "note": "Final task list for the Lane B quick look, in rank order: tasks.json main with oracle failures replaced by reserves in order. Tier A is the first 10.",
+  "note": "Final task list for Lane B, in rank order. Quick looks 1 and 2 ran original_20 (tasks.json main with oracle failures replaced by reserves in order). Quick look 3 runs all 40: original_20 then added_20, the next 20 tasks of selection_tb2.json order (ranks 22 to 41), with oracle failures replaced by ranks 42 to 54 in order. Tier A is the first 10.",
   "tasks": [
+    "filter-js-from-html",
+    "dna-insert",
+    "model-extraction-relu-logits",
+    "chess-best-move",
+    "torch-tensor-parallelism",
+    "adaptive-rejection-sampler",
+    "db-wal-recovery",
+    "polyglot-rust-c",
+    "break-filter-js-from-html",
+    "overfull-hbox",
+    "extract-elf",
+    "torch-pipeline-parallelism",
+    "polyglot-c-py",
+    "query-optimize",
+    "tune-mjcf",
+    "configure-git-webserver",
+    "mailman",
+    "pytorch-model-cli",
+    "cancel-async-tasks",
+    "sanitize-git-repo",
+    "largest-eigenval",
+    "pypi-server",
+    "feal-differential-cryptanalysis",
+    "pytorch-model-recovery",
+    "sparql-university",
+    "custom-memory-heap-crash",
+    "headless-terminal",
+    "openssl-selfsigned-cert",
+    "password-recovery",
+    "large-scale-text-editing",
+    "log-summary-date-ranges",
+    "cobol-modernization",
+    "code-from-image",
+    "constraints-scheduling",
+    "crack-7z-hash",
+    "fix-code-vulnerability",
+    "fix-git",
+    "git-leak-recovery",
+    "git-multibranch",
+    "kv-store-grpc"
+  ],
+  "tier_a": [
+    "filter-js-from-html",
+    "dna-insert",
+    "model-extraction-relu-logits",
+    "chess-best-move",
+    "torch-tensor-parallelism",
+    "adaptive-rejection-sampler",
+    "db-wal-recovery",
+    "polyglot-rust-c",
+    "break-filter-js-from-html",
+    "overfull-hbox"
+  ],
+  "dropped": [
+    {
+      "task_id": "qemu-alpine-ssh",
+      "rank": 14,
+      "replaced_by": "sanitize-git-repo",
+      "reason": "Oracle reward 0 on 2026-10-28: the verifier's apt-get install curl fails with 404 on debian-security bullseye packages (the image is debian:bullseye-slim), so curl, uv and the tests never run. Host-independent."
+    },
+    {
+      "task_id": "qemu-startup",
+      "rank": 27,
+      "replaced_by": "fix-git",
+      "reason": "Oracle reward 0 on 2026-10-29 under the trial network policy: the verifier's apt-get install curl fails with 404 on debian-security bullseye packages, so curl and uvx are missing."
+    },
+    {
+      "task_id": "financial-document-processor",
+      "rank": 30,
+      "replaced_by": "git-leak-recovery",
+      "reason": "Oracle reward 0 on 2026-10-29 under the trial network policy: the reference solution's uv download of python-build-standalone from github.com fails (TLS handshake EOF), so no outputs are written."
+    },
+    {
+      "task_id": "build-pmars",
+      "rank": 34,
+      "replaced_by": "git-multibranch",
+      "reason": "Oracle reward 0 on 2026-10-29 under the trial network policy: the reference solution pins dpkg-dev 1.22.21, which the Debian archive no longer serves, so pmars is never built."
+    },
+    {
+      "task_id": "build-cython-ext",
+      "rank": 36,
+      "replaced_by": "kv-store-grpc",
+      "reason": "Oracle reward 0 on 2026-10-29 under the trial network policy: the reference solution's cd /app/pyknotid fails because the source checkout is missing, so the extension is never built."
+    }
+  ],
+  "original_20": [
     "filter-js-from-html",
     "dna-insert",
     "model-extraction-relu-logits",
@@ -22,24 +108,26 @@
     "cancel-async-tasks",
     "sanitize-git-repo"
   ],
-  "tier_a": [
-    "filter-js-from-html",
-    "dna-insert",
-    "model-extraction-relu-logits",
-    "chess-best-move",
-    "torch-tensor-parallelism",
-    "adaptive-rejection-sampler",
-    "db-wal-recovery",
-    "polyglot-rust-c",
-    "break-filter-js-from-html",
-    "overfull-hbox"
-  ],
-  "dropped": [
-    {
-      "task_id": "qemu-alpine-ssh",
-      "rank": 14,
-      "replaced_by": "sanitize-git-repo",
-      "reason": "Oracle reward 0 on 2026-10-28: the verifier's apt-get install curl fails with 404 on debian-security bullseye packages (the image is debian:bullseye-slim), so curl, uv and the tests never run. Host-independent."
-    }
+  "added_20": [
+    "largest-eigenval",
+    "pypi-server",
+    "feal-differential-cryptanalysis",
+    "pytorch-model-recovery",
+    "sparql-university",
+    "custom-memory-heap-crash",
+    "headless-terminal",
+    "openssl-selfsigned-cert",
+    "password-recovery",
+    "large-scale-text-editing",
+    "log-summary-date-ranges",
+    "cobol-modernization",
+    "code-from-image",
+    "constraints-scheduling",
+    "crack-7z-hash",
+    "fix-code-vulnerability",
+    "fix-git",
+    "git-leak-recovery",
+    "git-multibranch",
+    "kv-store-grpc"
   ]
 }
