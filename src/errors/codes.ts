@@ -411,8 +411,8 @@ export const CODES = {
   E_LEDGER_UNAVAILABLE: {
     exit: 2,
     meaning: "The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.",
-    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key). Stop the proxy and run reconcileJournal on its journal before the lease is settled, so a hold the lost answer left is released at $0, then --resume <out>.",
-    side_effects: "Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0; a lease settled first counts that hold as unknown.",
+    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume <out>. Resume must run reconcileJournal on the stopped proxy's journal before it settles the lease, which releases at $0 a hold the lost answer left. U9 wires that into the runner; until it does, call reconcileJournal from code.",
+    side_effects: "Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0. A lease settled first counts that hold as unknown, which overstates spend and loses none.",
     retry_safe: true,
     resumable: true,
     owner: "U3",

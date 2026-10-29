@@ -414,9 +414,9 @@ Exit 2. Side effects: None for the refused request: it never reached the provide
 
 The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.
 
-Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key). Stop the proxy and run reconcileJournal on its journal before the lease is settled, so a hold the lost answer left is released at $0, then --resume &lt;out>.
+Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume &lt;out>. Resume must run reconcileJournal on the stopped proxy's journal before it settles the lease, which releases at $0 a hold the lost answer left. U9 wires that into the runner; until it does, call reconcileJournal from code.
 
-Exit 2. Side effects: Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0; a lease settled first counts that hold as unknown. Retry safe: yes. Resumable: yes. Owner: U3.
+Exit 2. Side effects: Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0. A lease settled first counts that hold as unknown, which overstates spend and loses none. Retry safe: yes. Resumable: yes. Owner: U3.
 
 ### E_IMAGE_BUILD
 

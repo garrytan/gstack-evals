@@ -22,10 +22,15 @@ This post amends the U3 follow-up post (2026-10-28-gsta-15-u3-proxy-followup) an
 ## Metering proxy (U3)
 
 - **Pricing.** An OpenAI `reasoning` input item with an `id` and no `encrypted_content` string pulls the stored reasoning in, so it is reserved at the context bound, like an untyped item reference. A reasoning item that carries its `encrypted_content` is priced by its bytes.
-- **inference_geo.** The `"global"` pin is sent only to models after Claude 4.5. Claude 4.5 and older answer the field with a 400 and have no regional pricing. A model id the version pattern cannot read is still pinned.
+- **inference_geo.** The `"global"` pin is sent only to models after Claude 4.5. Claude 4.5 and older answer the field with a 400 and have no regional pricing. A model id the version pattern cannot read is still pinned, and so is any id with a character outside lowercase letters, digits, dots and dashes (such as an `@` snapshot suffix).
 - **Journal.** Each paid attempt now writes a `reserve` line with its idempotency key, lease, cell and worst case before the ledger is asked. A refusal the ledger answered carries the same key. The `request` line before the send is unchanged.
 - **Reconcile.** `reconcileJournal` settles every reservation id it finds in a `request` or an `outcome` line, so an outcome whose request line was torn is settled with its recorded outcome. For a `reserve` line with no `request` line and no answered refusal, nothing was sent, but the ledger may hold the reservation if its answer was lost. Reconcile reserves again under the same key, which returns that hold, and settles it at $0. These ids are listed under a new `released` field. A refusal of that second reserve with CAP_STOP, E_LEASE_CLOSED or E_LEDGER_MISSING means the ledger holds nothing under the key; any other refusal is listed under `refused` with `reservation_id: null`.
-- **E_LEDGER_UNAVAILABLE.** Its message now says that reconcileJournal releases a hold the lost answer may have left. Its catalog entry's side effects and fix say the same. Run reconcile on a stopped proxy's journal, before the lease is settled: a call still in flight looks unanswered, and a lease settled first counts the hold as unknown.
+- **Journal lock.** A running proxy holds `<journal>.lock` (its pid) from start to stop, and `reconcileJournal` holds it while it runs. Reconcile refuses with E_USAGE while a proxy holds the journal, because a call still in flight there would look unanswered and could be released at $0 just before it is sent. A second proxy cannot start on a held journal. A lock whose process is gone is taken over.
+- **E_LEDGER_UNAVAILABLE.** Its message now says that reconcileJournal releases a hold the lost answer may have left. Its catalog entry's side effects and fix say the same. A lease settled before reconcile counts the hold as unknown, which overstates spend and loses none.
+
+## For U9
+
+Nothing in src calls `reconcileJournal` yet. The runner's resume must stop the proxy, run `reconcileJournal` on its journal, and only then settle the lease. Otherwise every lost-answer hold closes as unknown at its full reservation.
 
 ## Budget ledger (U4)
 

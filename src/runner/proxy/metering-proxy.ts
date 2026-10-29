@@ -12,7 +12,8 @@
 //   listener serves provider routes only, and binds only to a loopback or private address (no hostnames, no wildcard).
 // - Before each reserve the proxy journals its idempotency key, and before each forward the cell attempt and reservation
 //   id; reconcileJournal settles a call with no recorded outcome as unknown and never resends it, and releases at zero a
-//   hold the ledger kept for a reserve whose answer was lost.
+//   hold the ledger kept for a reserve whose answer was lost. A running proxy or reconcile holds the journal's lock file,
+//   so reconcile never runs beside a proxy that may still send.
 // - The proxy is the single retry owner: 429 and 5xx answers are retried within a finite attempt count and elapsed-time
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
@@ -23,7 +24,7 @@
 //   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -60,11 +61,38 @@ const NOTHING_HELD = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_LEDGER_MISSING"])
 
 /** Claude 4.5 and older answer inference_geo with a 400. A model id this cannot read is pinned, since an unpinned call may bill above the table. */
 function acceptsInferenceGeo(model: string): boolean {
+  if (/[^a-z0-9.-]/.test(model)) return true;
   const version = /^claude-(?:[a-z]+-)?(\d+)(?:[-.](\d{1,2}))?(?=-|$)/.exec(model);
   return !version || Number(version[1]) * 100 + Number(version[2] ?? 0) > 405;
 }
 
 type Send = (input: string, init: RequestInit) => Promise<Response>;
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/** Takes <journal>.lock for this process, so one proxy or one reconcile holds a journal at a time. A lock whose process is gone is taken over. */
+function lockJournal(journal: string): string {
+  const lock = `${journal}.lock`;
+  for (let tries = 0; tries < 2; tries++) {
+    try {
+      writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+      return lock;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+    const pid = Number(readFileSync(lock, "utf8"));
+    if (!Number.isSafeInteger(pid) || pid <= 0 || isAlive(pid)) throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by process ${pid || "(unreadable)"} through ${lock}; stop that proxy or let its reconcile finish, or remove the lock file if no such process holds it`);
+    rmSync(lock, { force: true });
+  }
+  throw new Error(`E_USAGE: metering proxy: another process took the journal lock ${lock} at the same moment`);
+}
 
 /** The preregistered retry budget per call: at most attempts sends, and no new attempt after elapsed_ms. */
 export interface RetryBudget {
@@ -226,6 +254,7 @@ export class MeteringProxy {
   private management: ReturnType<typeof Bun.serve> | null = null;
   private journalFd: number | null = null;
   private journalTorn = false;
+  private journalLock: string | null = null;
   private slots = new Map<string, Slot>();
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
@@ -245,6 +274,7 @@ export class MeteringProxy {
   }
 
   start(): void {
+    this.journalLock = lockJournal(this.options.journal);
     this.journalFd = openSync(this.options.journal, "a+", 0o600);
     const { size } = fstatSync(this.journalFd);
     const last = Buffer.alloc(1);
@@ -258,9 +288,12 @@ export class MeteringProxy {
   stop(): void {
     this.trial?.stop(true);
     this.management?.stop(true);
+    this.trial = this.management = null;
     if (this.journalFd !== null) closeSync(this.journalFd);
     this.journalFd = null;
     rmSync(this.options.managementSocket, { force: true });
+    if (this.journalLock) rmSync(this.journalLock, { force: true });
+    this.journalLock = null;
   }
 
   bind(request: BindRequest): Binding {
@@ -598,10 +631,19 @@ export class MeteringProxy {
  * unknown, keeps its full charge, and is never resent. A reserve line with no request line and no ledger refusal after it
  * was never sent, but the ledger may hold it if its answer was lost: reconcile reserves again under the same idempotency
  * key, which returns any hold the ledger kept, and settles it at zero (released). A line torn by a crash or a short write
- * is skipped and counted as unreadable. Run it only on the journal of a stopped proxy: a call still in flight looks
- * unanswered or unknown. Nothing here can send a provider request.
+ * is skipped and counted as unreadable. It takes the journal's lock, so it refuses (E_USAGE) while a proxy holds the
+ * journal: a call still in flight there would look unanswered. Nothing here can send a provider request.
  */
 export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; released: string[]; refused: Array<{ reservation_id: string | null; code: string; message: string }>; unreadable: number }> {
+  const lock = lockJournal(path);
+  try {
+    return await reconcileLocked(path, ledger);
+  } finally {
+    rmSync(lock, { force: true });
+  }
+}
+
+async function reconcileLocked(path: string, ledger: ReservationLedger): Promise<Awaited<ReturnType<typeof reconcileJournal>>> {
   const calls = new Set<string>();
   const outcomes = new Map<string, CallOutcome>();
   const reserves = new Map<string, { idempotency_key: string; lease_id: string; cell: CellAttempt; max_micros: number }>();
