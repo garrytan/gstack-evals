@@ -3,8 +3,9 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// vm-run.sh with fake sg, curl, bun, sleep and harbor: the oracle job's trials are written by the test, the ledger
-// tunnel answers, and the metering proxy is healthy only when the test asks for it.
+// vm-run.sh with fake sg, curl, bun, sleep, harbor and pkill: the oracle job's trials are written by the test, the ledger
+// tunnel answers, and the metering proxy is healthy only when the test asks for it. The fake pkill logs its arguments
+// and narrows the pattern to this rig's own harbor, so the STOP watcher never signals a real local Harbor.
 function setup(trials: Record<string, string | null> | null, healthy = false) {
   const root = mkdtempSync(join(tmpdir(), "laneb-vmrun-"));
   const bin = join(root, "bin");
@@ -19,6 +20,7 @@ function setup(trials: Record<string, string | null> | null, healthy = false) {
     bun: "#!/usr/bin/env bash\nexit 1\n",
     sleep: "#!/usr/bin/env bash\nPATH=/usr/bin:/bin exec sleep 0.01\n",
     harbor: `#!/usr/bin/env bash\ntrap 'echo "harbor got INT" >> "${log}"; exit 130' INT\necho "harbor running" >> "${log}"\nfor _ in $(seq 1 300); do PATH=/usr/bin:/bin sleep 0.1; done\necho "harbor finished" >> "${log}"\n`,
+    pkill: `#!/usr/bin/env bash\necho "pkill $*" >> "${log}"\nexec /usr/bin/pkill "\${@:1:$#-1}" "${bin}/harbor run"\n`,
   };
   for (const [name, body] of Object.entries(fakes)) {
     writeFileSync(join(bin, name), body);
@@ -100,10 +102,26 @@ describe("vm-run.sh during the paid batch", () => {
     const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
     const code = await proc.exited;
     clearTimeout(timer);
+    expect(s.sg()).toContain("pkill -INT -f /bin/harbor run");
     expect(s.sg().match(/harbor got INT/g)).toHaveLength(1);
     expect(s.sg()).not.toContain("harbor finished");
     expect(s.sg()).toContain("8788/close-all");
     expect(code).toBe(130);
     expect(s.exitFile()).toBe("130");
+  }, 60_000);
+
+  test("a SIGTERM to vm-run.sh records exit code 143 once Harbor returns, and the sessions are closed", async () => {
+    const s = setup(null, true);
+    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 200 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+    proc.kill("SIGTERM");
+    await Bun.sleep(200);
+    writeFileSync(join(s.run, "STOP"), "");
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    expect(s.sg()).toContain("8788/close-all");
+    expect(s.exitFile()).toBe("143");
+    expect(code).toBe(143);
   }, 60_000);
 });

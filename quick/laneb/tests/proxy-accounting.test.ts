@@ -7,7 +7,8 @@
 //   fails_when=finish() bills partial usage when stop_reason never arrives; why_new=existing tests cover close and
 //   cancel, not a truncated stream; seam=none; no_claim=real provider streams (local stub upstream)
 // Value: protects=forward routes bound input with count_tokens plus slack and fall back to the byte bound when
-//   counting fails; fails_when=the count is ignored, or a failed count admits a request on a guess;
+//   counting fails, and a failed count whose byte bound passes the cap answers a retryable 529, not a budget stop;
+//   fails_when=the count is ignored, a failed count admits a request on a guess, or it ends the trial as a budget stop;
 //   why_new=runner.test.ts uses estimate routes only; seam=none; no_claim=Anthropic count_tokens accuracy (stub)
 // Value: protects=the global cap refuses a session whose full reserve does not fit, latches the cap stop and blocks
 //   new sessions;
@@ -35,7 +36,7 @@ test("cache_creation splits into 5m and 1h writes, and the 1h part bills at the 
 });
 
 describe("proxy accounting against a stub upstream", () => {
-  let countFails = false;
+  let countFails = 0;
   let countValue = 10;
   let messagesSeen = 0;
   const enc = new TextEncoder();
@@ -53,7 +54,10 @@ describe("proxy accounting against a stub upstream", () => {
         const url = new URL(req.url);
         const body = (await req.json()) as any;
         if (url.pathname.endsWith("/count_tokens")) {
-          if (countFails) return Response.json({ type: "error", error: { type: "api_error", message: "count down" } }, { status: 500 });
+          if (countFails > 0) {
+            countFails--;
+            return Response.json({ type: "error", error: { type: "api_error", message: "count down" } }, { status: 500 });
+          }
           return Response.json({ input_tokens: countValue });
         }
         messagesSeen++;
@@ -116,17 +120,32 @@ describe("proxy accounting against a stub upstream", () => {
     const entry = readLog("fwd.jsonl").find((e) => e.event === "request" && e.session === a.id);
     expect(entry).toMatchObject({ counted: true, input_tokens_bound: 10 + COUNT_SLACK_TOKENS, worst_micros: counted, complete: true });
 
-    countFails = true;
+    // The same request with a failed count: its byte bound passes the cap, so it gets a retryable 529 and no upstream
+    // call; the retry is counted, fits, and runs.
+    countFails = 1;
     const b = (await (await open(forward, 0.03)).json()) as any;
-    const refused = await message(forward, b.token);
-    expect(refused.status).toBe(400);
-    expect(await refused.text()).toContain("session budget exhausted");
+    const before = messagesSeen;
+    const retry = await message(forward, b.token);
+    expect(retry.status).toBe(529);
+    expect(((await retry.json()) as any).error).toEqual({ type: "overloaded_error", message: "laneb proxy: token count unavailable, retry" });
+    expect(messagesSeen).toBe(before);
+    const again = await message(forward, b.token);
+    expect(again.status).toBe(200);
+    await again.text();
     const closed = await close(forward, b.id);
-    expect(closed.spent_micros).toBe(0);
+    expect(closed).toMatchObject({ refused: 0, refused_budget: 0, requests: 1, ok_responses: 1 });
     const log = readLog("fwd.jsonl").filter((e) => e.session === b.id);
     expect(log.some((e) => e.event === "count_failed" && e.status === 500)).toBe(true);
-    expect(log.find((e) => e.event === "refused")).toMatchObject({ reason: "session_cap", counted: false });
-    countFails = false;
+    expect(log.find((e) => e.event === "count_failed_over_budget")).toMatchObject({ cap_micros: 30_000 });
+    expect(log.some((e) => e.event === "refused")).toBe(false);
+
+    // A counted request over the cap is still a budget stop.
+    const c = (await (await open(forward, 0.02)).json()) as any;
+    const over = await message(forward, c.token);
+    expect(over.status).toBe(400);
+    expect(await over.text()).toContain("session budget exhausted");
+    expect(await close(forward, c.id)).toMatchObject({ refused_budget: 1 });
+    expect(readLog("fwd.jsonl").find((e) => e.event === "refused" && e.session === c.id)).toMatchObject({ reason: "session_cap", counted: true });
   });
 
   test("a worst case that is not a positive number is refused before any upstream call", async () => {

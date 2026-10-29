@@ -55,6 +55,8 @@ except ImportError:
 import laneb_agent as la  # noqa: E402
 from usersim import Simulator  # noqa: E402
 
+la.OPEN_RETRY_S = 0
+
 CAPS_DEFAULT = "CapInh:\t0000000000000000\nCapEff:\t00000000a80425fb\nCapBnd:\t00000000a80425fb\n"
 CAPS_DROPPED = "CapInh:\t0000000000000000\nCapEff:\t00000000a80405fb\nCapBnd:\t00000000a80405fb\n"
 
@@ -68,6 +70,7 @@ class Fake:
         self.kill_raises = kill_raises
         self.caps = caps
         self.open_error = open_error
+        self.open_bodies = []
         self.calls = []
         self.lists = 0
 
@@ -86,8 +89,10 @@ class Fake:
     def post(self, url, body, timeout=30):
         self.calls.append(("post", url.rsplit("/", 1)[-1], timeout))
         if url.endswith("/sessions"):
-            if self.open_error:
-                raise self.open_error
+            self.open_bodies.append(body)
+            error = self.open_error.pop(0) if isinstance(self.open_error, list) else self.open_error
+            if error:
+                raise error
             return {"id": "s-1", "token": "laneb-token"}
         if isinstance(self.close, Exception):
             raise self.close
@@ -182,6 +187,60 @@ def test_session_open_failures(tmp):
             assert type(e).__name__ == want, (type(e).__name__, want)
             continue
         raise AssertionError("expected " + want)
+
+
+def test_session_open_retries_a_timeout_or_a_5xx_with_the_same_open_key(tmp):
+    for first in (TimeoutError("timed out"), la.HttpStatusError("u", 502, {"error": "ledger reserve failed"})):
+        fake = Fake(tmp, open_error=[first, None])
+        run(agent(tmp, fake))
+        keys = [b["open_key"] for b in fake.open_bodies]
+        assert len(keys) == 2 and keys[0] == keys[1] and len(keys[0]) == 32, (first, keys)
+        assert ("post", "close", 120) in fake.calls, fake.calls
+
+
+def test_session_open_gives_up_after_three_attempts_and_never_retries_a_409(tmp):
+    cases = (
+        ([urllib.error.URLError("refused"), ConnectionResetError("reset"), TimeoutError("timed out")], "LanebInfraError", 3),
+        ([la.HttpStatusError("u", 409, {"error": "batch cap reached"}), None], "LedgerCapStop", 1),
+        ([la.HttpStatusError("u", 502, {"error": "ledger reserve failed"})] * 3, "LanebInfraError", 3),
+        ([la.HttpStatusError("u", 400, {"error": "unknown model m"}), None], "LanebInfraError", 1),
+    )
+    for errors, want, calls in cases:
+        fake = Fake(tmp, open_error=list(errors))
+        try:
+            run(agent(tmp, fake))
+        except Exception as e:
+            assert type(e).__name__ == want, (type(e).__name__, want)
+        else:
+            raise AssertionError("expected " + want)
+        assert len(fake.open_bodies) == calls, (want, fake.open_bodies)
+        assert len({b["open_key"] for b in fake.open_bodies}) == 1, fake.open_bodies
+
+
+def test_preflight_process_listing_failure_is_a_retryable_infra_error(tmp):
+    fake = Fake(tmp)
+    a = agent(tmp, fake)
+    a._inject_arm = lambda container: {"event": "arm", "tar_sha256": "x"}
+    env = types.SimpleNamespace(session_id="t1__env")
+
+    def exits_1(script, timeout):
+        return subprocess.CompletedProcess(script, 1, b"", b"Error: No such container: cid")
+
+    def hangs(script, timeout):
+        raise subprocess.TimeoutExpired(script, timeout)
+
+    def no_docker(script, timeout):
+        raise FileNotFoundError("docker")
+
+    for failing in (exits_1, hangs, no_docker):
+        a._exec = lambda container, script, stdin=None, timeout=300: failing(script, timeout) if script == la.LIST_PROCESSES else fake.exec(container, script, stdin, timeout)
+        try:
+            asyncio.run(a.setup(env))
+        except Exception as e:
+            assert type(e).__name__ == "LanebInfraError", (failing.__name__, type(e).__name__, e)
+        else:
+            raise AssertionError("a failed process listing passed the preflight")
+        assert not (tmp / "trial" / "evaluator" / "processes-before.tsv").exists(), failing.__name__
 
 
 def test_preflight_refuses_a_container_that_keeps_net_raw(tmp):

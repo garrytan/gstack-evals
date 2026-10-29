@@ -3,7 +3,7 @@
 // Control plane (127.0.0.1 only): open and close sessions, read totals.
 // Real provider keys stay in this process; containers only ever hold a session token.
 import { appendFileSync, readFileSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 export type Price = { input: number; output: number; cache_write_5m: number; cache_write_1h: number; cache_read: number };
 export type ModelCfg = { route: string; upstream_model: string; price_per_mtok: Price; long_prompt?: { over_tokens: number; price_per_mtok: Price }; body_overrides?: Record<string, unknown>; strip_fields?: string[] };
@@ -83,14 +83,15 @@ export const BODY_KEYS = new Set([
 export const unknownBodyKeys = (body: Record<string, unknown>) => Object.keys(body).filter((k) => !BODY_KEYS.has(k));
 
 // Image and document blocks must carry their content inline. A url or file source makes the provider fetch outside the
-// sandbox, and what it fetches is not in the request bytes that bound the worst case.
+// sandbox, and what it fetches is not in the request bytes that bound the worst case. Callers pass the request content
+// (messages and system); the input of a tool_use block is model-authored tool arguments, not content, so it is skipped.
 const INLINE_SOURCES = new Set(["base64", "text", "content"]);
 export function remoteSources(v: unknown): string[] {
   if (Array.isArray(v)) return v.flatMap(remoteSources);
   if (!v || typeof v !== "object") return [];
   const o = v as any;
   const own = (o.type === "image" || o.type === "document") && !INLINE_SOURCES.has(o.source?.type) ? [String(o.source?.type)] : [];
-  return [...own, ...Object.values(o).flatMap(remoteSources)];
+  return [...own, ...Object.entries(o).filter(([k]) => !(o.type === "tool_use" && k === "input")).flatMap(([, x]) => remoteSources(x))];
 }
 
 // anthropic-beta values Claude Code 2.1.312 sends in the three cells. Others are dropped before the request leaves, so no
@@ -123,7 +124,7 @@ function responseHeaders(upstream: Response, extra: Record<string, string>): Rec
   return out;
 }
 
-// Incremental SSE parser that pulls usage out of message_start and message_delta events.
+// Incremental SSE parser that pulls usage out of message_start and message_delta events, and the first error event.
 export class SseUsage {
   private buf = "";
   readonly usage = emptyUsage();
@@ -131,6 +132,8 @@ export class SseUsage {
   stopReason: string | null = null;
   sawInput = false;
   sawOutput = false;
+  sawStart = false;
+  error: { type: string; message: string } | null = null;
   private note(raw: any) {
     if (typeof raw?.input_tokens === "number") this.sawInput = true;
     if (typeof raw?.output_tokens === "number") this.sawOutput = true;
@@ -146,6 +149,7 @@ export class SseUsage {
         try {
           const data = JSON.parse(line.slice(5).trim());
           if (data.type === "message_start") {
+            this.sawStart = true;
             mergeUsage(this.usage, data.message?.usage);
             this.note(data.message?.usage);
           }
@@ -155,6 +159,7 @@ export class SseUsage {
             if (data.delta?.stop_reason) this.stopReason = data.delta.stop_reason;
             if (typeof data.usage?.cost === "number") this.providerCost = data.usage.cost;
           }
+          if (data.type === "error" && !this.error) this.error = { type: String(data.error?.type ?? ""), message: String(data.error?.message ?? "").slice(0, 300) };
         } catch {}
       }
     }
@@ -186,6 +191,8 @@ type Session = {
   meta: Record<string, unknown>;
   ledgerReserved: boolean;
 };
+
+type OpenBody = { trial: string; model: string; cap_usd: number; meta?: Record<string, unknown>; open_key?: unknown };
 
 export type ProxyOptions = {
   config: ProxyConfig;
@@ -279,6 +286,49 @@ export function startProxy(opts: ProxyOptions) {
     return { ...summary(s), ledger_settle: s.settleResult };
   };
 
+  // An open that carries an open_key gets its session id from the key, and every open with that key shares the first
+  // one's result while it runs and after it succeeds, so a client that retries a timed-out open gets the same session
+  // and causes no second batch-cap check or reserve. A failed open is forgotten so a retry runs again; with the same
+  // id, the ledger reuses a reserve that landed even though its answer was lost.
+  const opens = new Map<string, Promise<{ status: number; body: unknown }>>();
+  const openSession = async (body: OpenBody, id: string): Promise<{ status: number; body: unknown }> => {
+    if (!opts.config.models[body.model]) return { status: 400, body: { error: "unknown model " + body.model } };
+    const capMicros = Math.round(body.cap_usd * 1_000_000);
+    if (!(capMicros > 0)) return { status: 400, body: { error: "cap_usd must be positive" } };
+    if (capStop) return { status: 409, body: { error: "budget stop latched: " + capStop } };
+    // The batch cap is enforced here, against every session's full reserve and every open still waiting on the ledger,
+    // so a session that opened always runs inside its own cap and is never cut off by the batch cap mid-trial.
+    if (opts.globalCapMicros !== undefined) {
+      const committed = openingMicros + [...sessions.values()].reduce((x, o) => x + (o.closedAt ? o.spentMicros : Math.max(o.capMicros, o.spentMicros)), 0);
+      if (committed + capMicros > opts.globalCapMicros) {
+        capStop = `batch cap reached for ${body.trial} at ${new Date().toISOString()}`;
+        log({ event: "cap_stop", reason: capStop, committed_micros: committed, cap_micros: capMicros, global_cap_micros: opts.globalCapMicros });
+        return { status: 409, body: { error: "batch cap reached", committed_micros: committed } };
+      }
+    }
+    const s: Session = { id, token: "laneb-" + randomBytes(24).toString("hex"), trial: body.trial, model: body.model, capMicros, spentMicros: 0, usage: emptyUsage(), requests: 0, okResponses: 0, refused: 0, refusedBudget: 0, pending: new Map(), requestedModels: {}, open: true, openedAt: new Date().toISOString(), settled: false, meta: body.meta ?? {}, ledgerReserved: false };
+    openingMicros += capMicros;
+    let reserve: any;
+    try {
+      reserve = await ledgerCall("/reserve", { id: (opts.ledgerPrefix ?? "") + id, usd_micros: capMicros, meta: { trial: body.trial, model: body.model, worst_case: "session cap enforced by the proxy", ...s.meta } });
+    } catch (e) {
+      log({ event: "reserve_failed", trial: body.trial, reserve_id: (opts.ledgerPrefix ?? "") + id, error: String(e).slice(0, 300) });
+      return { status: 502, body: { error: "ledger reserve failed", detail: String(e).slice(0, 300) } };
+    } finally {
+      openingMicros -= capMicros;
+    }
+    if (!reserve.ok) {
+      capStop = `ledger refused a reserve for ${body.trial} at ${new Date().toISOString()}`;
+      log({ event: "cap_stop", reason: capStop, ledger: reserve });
+      return { status: 409, body: { error: "ledger refused the reserve", ledger: reserve } };
+    }
+    s.ledgerReserved = Boolean(opts.ledgerUrl);
+    sessions.set(id, s);
+    byToken.set(s.token, s);
+    log({ event: "session_open", session: id, trial: s.trial, model: s.model, cap_micros: capMicros });
+    return { status: 200, body: { id, token: s.token } };
+  };
+
   const control = Bun.serve({
     hostname: "127.0.0.1",
     port: opts.controlPort,
@@ -291,43 +341,20 @@ export function startProxy(opts: ProxyOptions) {
         return Response.json({ global_spent_micros: globalSpent, cap_stop: capStop, open_sessions: all.filter((s) => s.open).length, unsettled_sessions: all.filter((s) => s.ledgerReserved && !s.settled).map((s) => s.id), sessions: sessions.size });
       }
       if (req.method === "POST" && url.pathname === "/sessions") {
-        const body = (await req.json()) as { trial: string; model: string; cap_usd: number; meta?: Record<string, unknown> };
-        if (!opts.config.models[body.model]) return Response.json({ error: "unknown model " + body.model }, { status: 400 });
-        const capMicros = Math.round(body.cap_usd * 1_000_000);
-        if (!(capMicros > 0)) return Response.json({ error: "cap_usd must be positive" }, { status: 400 });
-        if (capStop) return Response.json({ error: "budget stop latched: " + capStop }, { status: 409 });
-        // The batch cap is enforced here, against every session's full reserve and every open still waiting on the ledger,
-        // so a session that opened always runs inside its own cap and is never cut off by the batch cap mid-trial.
-        if (opts.globalCapMicros !== undefined) {
-          const committed = openingMicros + [...sessions.values()].reduce((x, o) => x + (o.closedAt ? o.spentMicros : Math.max(o.capMicros, o.spentMicros)), 0);
-          if (committed + capMicros > opts.globalCapMicros) {
-            capStop = `batch cap reached for ${body.trial} at ${new Date().toISOString()}`;
-            log({ event: "cap_stop", reason: capStop, committed_micros: committed, cap_micros: capMicros, global_cap_micros: opts.globalCapMicros });
-            return Response.json({ error: "batch cap reached", committed_micros: committed }, { status: 409 });
-          }
+        const body = (await req.json()) as OpenBody;
+        const key = typeof body.open_key === "string" ? body.open_key : undefined;
+        if (key === undefined) {
+          const r = await openSession(body, "s-" + randomBytes(6).toString("hex"));
+          return Response.json(r.body, { status: r.status });
         }
-        const id = "s-" + randomBytes(6).toString("hex");
-        const s: Session = { id, token: "laneb-" + randomBytes(24).toString("hex"), trial: body.trial, model: body.model, capMicros, spentMicros: 0, usage: emptyUsage(), requests: 0, okResponses: 0, refused: 0, refusedBudget: 0, pending: new Map(), requestedModels: {}, open: true, openedAt: new Date().toISOString(), settled: false, meta: body.meta ?? {}, ledgerReserved: false };
-        openingMicros += capMicros;
-        let reserve: any;
-        try {
-          reserve = await ledgerCall("/reserve", { id: (opts.ledgerPrefix ?? "") + id, usd_micros: capMicros, meta: { trial: body.trial, model: body.model, worst_case: "session cap enforced by the proxy", ...s.meta } });
-        } catch (e) {
-          log({ event: "reserve_failed", trial: body.trial, reserve_id: (opts.ledgerPrefix ?? "") + id, error: String(e).slice(0, 300) });
-          return Response.json({ error: "ledger reserve failed", detail: String(e).slice(0, 300) }, { status: 502 });
-        } finally {
-          openingMicros -= capMicros;
+        let opening = opens.get(key);
+        if (!opening) {
+          opening = openSession(body, "s-" + createHash("sha256").update(key).digest("hex").slice(0, 12));
+          opens.set(key, opening);
+          opening.then((r) => { if (r.status !== 200) opens.delete(key); }, () => opens.delete(key));
         }
-        if (!reserve.ok) {
-          capStop = `ledger refused a reserve for ${body.trial} at ${new Date().toISOString()}`;
-          log({ event: "cap_stop", reason: capStop, ledger: reserve });
-          return Response.json({ error: "ledger refused the reserve", ledger: reserve }, { status: 409 });
-        }
-        s.ledgerReserved = Boolean(opts.ledgerUrl);
-        sessions.set(id, s);
-        byToken.set(s.token, s);
-        log({ event: "session_open", session: id, trial: s.trial, model: s.model, cap_micros: capMicros });
-        return Response.json({ id, token: s.token });
+        const r = await opening;
+        return Response.json(r.body, { status: r.status });
       }
       if (parts[0] === "sessions" && parts[1]) {
         const s = sessions.get(parts[1]);
@@ -376,7 +403,7 @@ export function startProxy(opts: ProxyOptions) {
       if (server.length) return refuse("server_tools", "provider-side tools are not allowed: " + server.join(","), { tools: server });
       const unknown = unknownBodyKeys(body);
       if (unknown.length) return refuse("body_keys", "request fields are not allowed: " + unknown.join(","), { keys: unknown });
-      const remote = remoteSources(body);
+      const remote = remoteSources([body.messages, body.system]);
       if (remote.length) return refuse("remote_source", "image and document content with a url or file source is not allowed", { sources: remote });
       if (!isCount && !validMaxTokens(body.max_tokens)) return refuse("max_tokens", "max_tokens must be a positive integer", { max_tokens: body.max_tokens });
       body.model = model.upstream_model;
@@ -420,6 +447,11 @@ export function startProxy(opts: ProxyOptions) {
       if (!Number.isFinite(worst) || worst <= 0) return refuse("worst_case", "the request's worst-case cost is not a positive number", { worst_micros: worst });
       const inflight = [...s.pending.values()].reduce((x, p) => x + p.worst, 0);
       if (s.spentMicros + inflight + worst > s.capMicros) {
+        // A failed count is not a budget stop: the byte bound overstates the input, so Claude Code is told to retry.
+        if (route.count_tokens === "forward" && !counted) {
+          log({ event: "count_failed_over_budget", session: s.id, spent_micros: s.spentMicros, inflight_micros: inflight, worst_micros: worst, cap_micros: s.capMicros, input_tokens_bound: inputTokens, max_tokens: body.max_tokens });
+          return anthropicError(529, "overloaded_error", "laneb proxy: token count unavailable, retry");
+        }
         s.refusedBudget++;
         return refuse("session_cap", "session budget exhausted", { spent_micros: s.spentMicros, inflight_micros: inflight, worst_micros: worst, cap_micros: s.capMicros, input_tokens_bound: inputTokens, counted, max_tokens: body.max_tokens });
       }
@@ -434,7 +466,7 @@ export function startProxy(opts: ProxyOptions) {
         const micros = complete ? costMicros(usage, priceFor(usage, model)) : worst;
         const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...extra };
         if (!s.pending.delete(rid)) { log({ event: "late_usage", ...entry }); return; }
-        if (status === 200) s.okResponses++;
+        if (status === 200 && !extra.sse_error) s.okResponses++;
         s.spentMicros += micros;
         globalSpent += micros;
         for (const k of Object.keys(usage) as (keyof Usage)[]) s.usage[k] += usage[k];
@@ -475,10 +507,14 @@ export function startProxy(opts: ProxyOptions) {
       const parser = new SseUsage();
       const decoder = new TextDecoder();
       let done = false;
+      // A stream with an error event is never an ok response. It costs nothing when the error came before message_start,
+      // and its worst case after, since output may have been billed.
       const finish = (complete: boolean) => {
         if (done) return;
         done = true;
-        account(parser.usage, parser.providerCost, upstream.status, true, parser.stopReason, complete && parser.stopReason !== null && parser.sawInput && parser.sawOutput);
+        const err = parser.error;
+        if (err) account(parser.usage, parser.providerCost, upstream.status, true, parser.stopReason, complete && !parser.sawStart, { sse_error: err.type, sse_error_message: err.message });
+        else account(parser.usage, parser.providerCost, upstream.status, true, parser.stopReason, complete && parser.stopReason !== null && parser.sawInput && parser.sawOutput);
       };
       const reader = upstream.body.getReader();
       const read = async () => {

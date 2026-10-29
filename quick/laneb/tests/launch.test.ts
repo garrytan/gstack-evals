@@ -120,6 +120,7 @@ describe("launch.sh on interrupt", () => {
     expect(events.some((e) => e.startsWith("down"))).toBe(false);
     expect(stderr).toContain("VM vm-1 is kept");
     expect(stderr).toContain("pull vm-1 work/run/out");
+    expect(stderr).toContain(`reconcile with: bun ${join(import.meta.dir, "../runner")}/ledger.ts reconcile --path ${r.ledgerPath} --item laneb-quick --sessions ${r.run}/pulled/out/proxy-sessions.jsonl --prefix p-; then:`);
     expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
     expect(code).toBe(130);
   }, 60_000);
@@ -144,6 +145,8 @@ describe("launch.sh when the batch connection drops", () => {
     clearTimeout(timer);
     const stderr = await new Response(proc.stderr).text();
     expect(events(r)).toContain("ssh dropped");
+    expect(stderr.match(/pull attempt \d: vm-run.sh has not finished \(no work\/run\/out\/vm-run.exit\)/g)).toHaveLength(3);
+    expect(stderr).not.toContain("failed");
     expect(events(r).some((e) => e.startsWith("pull") || e.startsWith("down"))).toBe(false);
     expect(stderr).toContain("VM vm-1 is kept");
     expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);

@@ -16,6 +16,7 @@ export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 mkdir -p "$run/out" "$run/jobs"
 rm -f "$run/out/vm-run.exit"
 trap 'echo $? > "$run/out/vm-run.exit"' EXIT
+trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
 for gz in "$run"/arms/*.tar.gz; do
   [ -e "$gz" ] || continue
   gzip -dkf "$gz"

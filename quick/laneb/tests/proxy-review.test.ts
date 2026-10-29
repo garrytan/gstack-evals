@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +19,7 @@ const streamEvents = (withUsage: boolean): [string, unknown][] => [
   ["message_delta", { type: "message_delta", delta: { stop_reason: "end_turn" }, ...(withUsage ? { usage: { output_tokens: 500 } } : {}) }],
   ["message_stop", { type: "message_stop" }],
 ];
+const errorEvent: [string, unknown] = ["error", { type: "error", error: { type: "overloaded_error", message: "Overloaded" } }];
 
 describe("proxy request screening", () => {
   test("max_tokens must be a positive integer", () => {
@@ -27,7 +29,7 @@ describe("proxy request screening", () => {
   test("only the body keys Claude Code sends pass", () => {
     const cc = { model: "m", messages: [], system: [], tools: [], metadata: {}, max_tokens: 1, stream: true, thinking: {}, context_management: {}, output_config: {} };
     expect(unknownBodyKeys(cc)).toEqual([]);
-    expect(unknownBodyKeys({ ...cc, mcp_servers: [], container: "x", plugins: [], models: [], provider: {}, speed: "fast", service_tier: "priority" })).toEqual(["mcp_servers", "container", "plugins", "models", "provider", "speed", "service_tier"]);
+    expect(unknownBodyKeys({ ...cc, mcp_servers: [], container: "x", plugins: [], models: [], provider: {}, route: "fallback", speed: "fast", service_tier: "priority", inference_geo: "us" })).toEqual(["mcp_servers", "container", "plugins", "models", "provider", "route", "speed", "service_tier", "inference_geo"]);
   });
   test("unlisted beta values are dropped", () => {
     expect(splitBetas("claude-code-20250219, mcp-client-2025-04-04,context-management-2025-06-27,files-api-2025-04-14")).toEqual({ kept: ["claude-code-20250219", "context-management-2025-06-27"], dropped: ["mcp-client-2025-04-04", "files-api-2025-04-14"] });
@@ -74,6 +76,8 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
         if (mode === "error500") return Response.json({ type: "error", error: { type: "api_error", message: "boom" } }, { status: 500, headers });
         if (mode === "nousage") return Response.json({ type: "message", content: [{ type: "text", text: "hi" }], stop_reason: "end_turn" }, { headers });
         if (mode === "stream-nousage") return new Response(sse(streamEvents(false)), { headers: { "content-type": "text/event-stream" } });
+        if (mode === "stream-error") return new Response(sse([errorEvent]), { headers: { "content-type": "text/event-stream" } });
+        if (mode === "stream-start-error") return new Response(sse([streamEvents(true)[0], errorEvent]), { headers: { "content-type": "text/event-stream" } });
         if (mode === "crlf") return new Response(sse(streamEvents(true), "\r\n"), { headers: { "content-type": "text/event-stream", ...headers } });
         if (mode === "slow-stream") {
           const stream = new ReadableStream<Uint8Array>({
@@ -194,6 +198,26 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     await close(s.id);
   });
 
+  test("a tool_use input holds model-authored arguments, so a document-typed value in it is not refused, count_tokens included", async () => {
+    const s = await open();
+    const before = seen.length;
+    const toolUse = { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: { type: "document", path: "/app/a.pdf" } }] };
+    const result = (content: unknown[]) => ({ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content }] });
+    const count = (messages: unknown[]) => fetch(dataUrl + "/v1/messages/count_tokens", { method: "POST", headers: { "x-api-key": s.token, "content-type": "application/json" }, body: JSON.stringify({ model: "m", messages }) });
+    const allowed = [{ role: "user", content: "read it" }, toolUse, result([{ type: "text", text: "a pdf" }])];
+    expect((await send(s.token, { messages: allowed })).status).toBe(200);
+    expect((await count(allowed)).status).toBe(200);
+    expect(seen.length).toBe(before + 1);
+    const remote = [{ role: "user", content: "read it" }, toolUse, result([{ type: "image", source: { type: "url", url: "https://example.com/a.png" } }])];
+    const refused = await send(s.token, { messages: remote });
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain("url or file source");
+    expect((await count(remote)).status).toBe(400);
+    expect(seen.length).toBe(before + 1);
+    expect(entries(s.id).filter((e) => e.event === "refused").map((e) => e.sources)).toEqual([["url"], ["url"]]);
+    await close(s.id);
+  });
+
   test("finding 5 (json_request x truncated): a JSON body that fails mid-read releases its hold at the worst case", async () => {
     rawMode = "cut";
     const s = await open("raw");
@@ -245,6 +269,20 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     expect(reqs.map((e) => e.complete)).toEqual([false, false]);
     expect(closed.spent_micros).toBe(reqs[0].worst_micros + reqs[1].worst_micros);
     expect(closed.ok_responses).toBe(2);
+  });
+
+  test("a 200 stream that ends in an error event is never an ok response: it costs 0 before message_start and its worst case after", async () => {
+    const s = await open();
+    const bodies: string[] = [];
+    for (const mode of ["stream-error", "stream-start-error"]) {
+      const res = await send(s.token, { stream: true, metadata: { user_id: mode } });
+      expect(res.status).toBe(200);
+      bodies.push(await res.text());
+    }
+    expect(bodies).toEqual([sse([errorEvent]), sse([streamEvents(true)[0], errorEvent])]);
+    const reqs = entries(s.id).filter((e) => e.event === "request");
+    expect(reqs.map((e) => [e.status, e.sse_error, e.cost_micros])).toEqual([[200, "overloaded_error", 0], [200, "overloaded_error", reqs[1].worst_micros]]);
+    expect(await close(s.id)).toMatchObject({ spent_micros: reqs[1].worst_micros, ok_responses: 0, requests: 2 });
   });
 
   test("stream_request x upstream_unreachable: a refused connection releases the hold and charges nothing", async () => {
@@ -390,7 +428,7 @@ describe("batch cap", () => {
   });
 
   // A proxy with a 1 USD batch cap in front of a ledger stub; answer() may replace the ledger's reply to the nth reserve.
-  const capRig = (name: string, answer: (n: number) => Promise<Response | undefined>) => {
+  const capRig = (name: string, answer: (n: number, body: any) => Promise<Response | undefined>) => {
     const ledger = new Ledger(join(dir, `ledger-${name}.jsonl`), "laneb-quick");
     ledger.approve(100, { quotes: ["test"] });
     let reserves = 0;
@@ -400,7 +438,7 @@ describe("batch cap", () => {
       async fetch(req) {
         const b = (await req.json()) as any;
         const isReserve = new URL(req.url).pathname === "/reserve";
-        const special = isReserve ? await answer(reserves++) : undefined;
+        const special = isReserve ? await answer(reserves++, b) : undefined;
         if (special) return special;
         const out = isReserve ? ledger.reserve(b.id, b.usd_micros, b.meta) : ledger.settle(b.id, b.usd_micros, b.meta);
         return Response.json(out, { status: out.ok ? 200 : 409 });
@@ -411,7 +449,7 @@ describe("batch cap", () => {
     const control = `http://127.0.0.1:${proxy.control.port}`;
     return {
       ledger,
-      open: (cap: number) => fetch(control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t", model: "m", cap_usd: cap }) }),
+      open: (cap: number, open_key?: string) => fetch(control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t", model: "m", cap_usd: cap, open_key }) }),
       capStop: async () => ((await (await fetch(control + "/totals")).json()) as any).cap_stop,
       stop: async () => { await proxy.stop(); ledgerServer.stop(true); },
     };
@@ -466,6 +504,61 @@ describe("batch cap", () => {
       expect(r.ledger.status().openReservedMicros).toBe(0);
       expect(await r.capStop()).toContain("ledger refused");
       expect((await r.open(0.1)).status).toBe(409);
+    } finally {
+      await r.stop();
+    }
+  });
+
+  const keyedId = (key: string) => "s-" + createHash("sha256").update(key).digest("hex").slice(0, 12);
+
+  test("open_key: two concurrent opens with one key give one session and one reserve, and the batch cap counts it once", async () => {
+    let reserves = 0;
+    const r = capRig("key-concurrent", async () => { reserves++; await Bun.sleep(100); return undefined; });
+    try {
+      const [a, b] = await Promise.all([r.open(0.6, "k1"), r.open(0.6, "k1")]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      const [ja, jb] = [(await a.json()) as any, (await b.json()) as any];
+      expect(jb).toEqual(ja);
+      expect(ja.id).toBe(keyedId("k1"));
+      expect(reserves).toBe(1);
+      expect(r.ledger.status().openIds).toEqual([ja.id]);
+      expect((await r.open(0.3)).status).toBe(200);
+      expect(await r.capStop()).toBeNull();
+    } finally {
+      await r.stop();
+    }
+  });
+
+  test("open_key: a reserve that landed but whose answer was lost gives 502, and the retry with the same key opens on that reserve", async () => {
+    const r = capRig("key-lost", async (n, b) => {
+      if (n > 0) return undefined;
+      r.ledger.reserve(b.id, b.usd_micros, b.meta);
+      return new Response("not json", { status: 200 });
+    });
+    try {
+      expect((await r.open(0.6, "k2")).status).toBe(502);
+      const retry = await r.open(0.6, "k2");
+      expect(retry.status).toBe(200);
+      const { id } = (await retry.json()) as any;
+      expect(id).toBe(keyedId("k2"));
+      expect(readRows(r.ledger.path).filter((x) => x.kind === "reserve" && x.id === id)).toHaveLength(1);
+      expect(r.ledger.status().openIds).toEqual([id]);
+      expect(await r.capStop()).toBeNull();
+    } finally {
+      await r.stop();
+    }
+  });
+
+  test("open_key: a second open after a successful one returns the same id and token without a second reserve", async () => {
+    let reserves = 0;
+    const r = capRig("key-again", async () => { reserves++; return undefined; });
+    try {
+      const first = (await (await r.open(0.6, "k3")).json()) as any;
+      const again = await r.open(0.6, "k3");
+      expect(again.status).toBe(200);
+      expect(await again.json()).toEqual(first);
+      expect(reserves).toBe(1);
+      expect(r.ledger.status().openIds).toEqual([first.id]);
     } finally {
       await r.stop();
     }

@@ -27,6 +27,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import uuid
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
@@ -89,6 +90,12 @@ class HttpStatusError(RuntimeError):
 NET_CAPS = {"CAP_NET_ADMIN": 12, "CAP_NET_RAW": 13}
 
 PROBE_TIMEOUT_S = 60
+
+# A session open that fails with a timeout, a dropped connection or a 5xx (the proxy's ledger reserve failed and may
+# have landed) is sent again with the same open_key, so the proxy hands back the session it may already have opened,
+# and the ledger reuses a reserve that landed, instead of reserving a second one.
+OPEN_ATTEMPTS = 3
+OPEN_RETRY_S = 2
 
 KILL_CLAUDE = "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = claude ] && kill -9 ${p##*/} 2>/dev/null; done; true"
 LIST_PROCESSES = "for p in /proc/[0-9]*; do [ \"${p##*/}\" = $$ ] && continue; printf '%s\\t%s\\t' \"${p##*/}\" \"$(cat $p/comm 2>/dev/null)\"; tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done"
@@ -210,7 +217,13 @@ class LanebAgent(ClaudeCode):
         held = net_caps_held(res.stdout.decode(errors="replace"))
         if held:
             raise RuntimeError(f"preflight: the agent container must drop NET_RAW and NET_ADMIN (cap_drop in the job's extra compose file); still held: {held!r}")
-        (evdir / "processes-before.tsv").write_bytes(self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S).stdout)
+        try:
+            listing = self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S)
+        except (subprocess.SubprocessError, OSError) as e:
+            raise LanebInfraError(f"preflight process listing failed: {e}") from None
+        if listing.returncode != 0:
+            raise LanebInfraError(f"preflight process listing failed: {listing.stderr[-300:]!r}")
+        (evdir / "processes-before.tsv").write_bytes(listing.stdout)
 
     def _inject_arm(self, container: str) -> dict:
         tar = Path(self.options.arm_tar)
@@ -255,20 +268,25 @@ class LanebAgent(ClaudeCode):
         if not base_url:
             raise RuntimeError("laneb agent needs --base-url pointing at the metering proxy")
 
-        try:
-            session = await asyncio.to_thread(
-                post_json,
-                self.options.control_url + "/sessions",
-                {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
-                 "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}},
-            )
-        except HttpStatusError as e:
-            if e.code == 409:
-                log({"event": "ledger_cap_stop", "message": str(e)[:300]})
-                raise LedgerCapStop(str(e)) from None
-            raise LanebInfraError(f"session open failed: {e}") from None
-        except Exception as e:
-            raise LanebInfraError(f"session open failed: {type(e).__name__}: {e}") from None
+        open_body = {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
+                     "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}, "open_key": uuid.uuid4().hex}
+        for attempt in range(1, OPEN_ATTEMPTS + 1):
+            try:
+                session = await asyncio.to_thread(post_json, self.options.control_url + "/sessions", open_body)
+                break
+            except HttpStatusError as e:
+                if e.code == 409:
+                    log({"event": "ledger_cap_stop", "message": str(e)[:300]})
+                    raise LedgerCapStop(str(e)) from None
+                if e.code < 500 or attempt == OPEN_ATTEMPTS:
+                    raise LanebInfraError(f"session open failed: {e}") from None
+                log({"event": "session_open_retry", "attempt": attempt, "message": str(e)[:300]})
+                await asyncio.sleep(OPEN_RETRY_S)
+            except Exception as e:
+                if attempt == OPEN_ATTEMPTS:
+                    raise LanebInfraError(f"session open failed after {attempt} attempts: {type(e).__name__}: {e}") from None
+                log({"event": "session_open_retry", "attempt": attempt, "message": f"{type(e).__name__}: {e}"[:300]})
+                await asyncio.sleep(OPEN_RETRY_S)
         log({"event": "session_open", "session": session["id"], "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd})
 
         started = time.time()

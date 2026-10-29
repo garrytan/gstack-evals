@@ -37,7 +37,7 @@ finish() {
     if [ "$started" = no ] || [ "$pulled" = yes ]; then
       "$S" down "$name" || say "WARNING: VM $name may still exist; run: $S down $name"
     else
-      say "WARNING: results not fully pulled; VM $name is kept. Once work/run/out/vm-run.exit exists on it, pull with: $S pull $name work/run/out $run/pulled; $S pull $name work/run/jobs $run/pulled; then: $S down $name"
+      say "WARNING: results not fully pulled; VM $name is kept. Once work/run/out/vm-run.exit exists on it, pull with: $S pull $name work/run/out $run/pulled; $S pull $name work/run/jobs $run/pulled; reconcile with: bun $here/ledger.ts reconcile --path $LEDGER --item $ITEM --sessions $run/pulled/out/proxy-sessions.jsonl --prefix $prefix; then: $S down $name"
     fi
   fi
 }
@@ -81,11 +81,15 @@ set -e
 "$S" ssh "$name" 'rm -f ~/.laneb-keys' || true
 mkdir -p "$run/pulled"
 for attempt in 1 2 3; do
-  if "$S" ssh "$name" 'test -f work/run/out/vm-run.exit' && "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
+  if ! "$S" ssh "$name" 'test -f work/run/out/vm-run.exit'; then
+    say "pull attempt $attempt: vm-run.sh has not finished (no work/run/out/vm-run.exit)"
+  elif "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
     && [ "$("$S" ssh "$name" 'cd work/run && find out jobs -type f | wc -l')" = "$(cd "$run/pulled" && find out jobs -type f | wc -l)" ]; then
     pulled=yes; break
+  else
+    say "pull attempt $attempt failed"
   fi
-  say "pull attempt $attempt failed"; sleep "${PULL_RETRY_SEC:-20}"
+  sleep "${PULL_RETRY_SEC:-20}"
 done
 [ "$pulled" = yes ] || rc=7
 kill "$lpid" 2>/dev/null || true
