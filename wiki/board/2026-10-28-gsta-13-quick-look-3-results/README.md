@@ -2,7 +2,7 @@
 id: 2026-10-28-gsta-13-quick-look-3-results
 kind: finding
 title: "Quick look 3 results: no loss shown for gstack's office-hours diet on Opus 5.5"
-summary: "Opus 5.5 after passed 29/39 office-hours sessions, like before and before2. Two second-opinion gates fired, and a 40-session rerun showed no loss. /learn sits at ceiling."
+summary: "Opus 5.5 after passed 29/39 office-hours sessions, like before and before2. Two second-opinion gates fired, and a 40-session rerun did not show a loss, at low power. /learn sits at ceiling."
 author: GSTA-13
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
@@ -32,9 +32,9 @@ Exploratory. These numbers steer gstack research and support no public claim. Au
 
 On Opus 5.5 the diet lost nothing this run could measure. The after arm passed 29 of 39 office-hours sessions. Before passed 29 of 39, and so did before2, the second before panel that sets the noise floor. Without the skill (the none arm) Opus passed 11 of 39, so the skill itself still carries a large effect: none minus before is -46 pp (95% CI -67 to -26).
 
-The preregistered verdict is FAIL anyway, because two REGRESSION gates fired. Both are second-opinion tasks with 3 trials per arm. A preregistered rerun gave each of those two tasks 10 trials per arm and showed no loss: pooled after minus before is +5 pp (95% CI -25 to +35). That null is weak evidence. Against a true 33 pp loss the rerun had about 60% power.
+The preregistered verdict is FAIL anyway, because two REGRESSION gates fired. Both are second-opinion tasks with 3 trials per arm. A preregistered rerun gave each of those two tasks 10 trials per arm and did not show a loss: pooled after minus before is +5 pp (95% CI -25 to +35). That null is weak evidence. Against a true 33 pp loss the rerun had about 55 to 60% power.
 
-The diet cut the skill bytes Opus loaded by 27%, from 105k to 76k. Cost per session did not fall by a margin we can claim, because the two before panels differ by more than before and after do.
+The diet cut the skill bytes Opus loaded by 28%, from 105.5k to 75.5k. Cost per session did not fall by a margin we can claim, because the two before panels differ by more than before and after do.
 
 Haiku 5.5 opened the skill in about a quarter of its runs, so its office-hours numbers say little about the diet. /learn's contract tasks sit at ceiling on Opus and need harder tasks.
 
@@ -137,7 +137,7 @@ Measured spend in the main run: office-hours on Opus $74.98, /learn on Opus $11.
 
 1. Fix the second-opinion-offer grader so a pass needs an offer put to the user. This is the first item for the next Lane A preregistration.
 2. Write /learn tasks with headroom on Opus, since the current ones sit at ceiling.
-3. Cover the 42 changed lines no task reaches, starting with the visual sections and the 11 second-opinion lines.
+3. Cover the 44 changed lines no graded check reaches (42 if judge lines count), starting with the visual sections and the 11 second-opinion lines.
 4. For Haiku, use tasks or prompts that get the skill opened, or report Haiku on opened runs only.
 5. Keep arm images free of the skill's graded fixtures, and run the metering calibration before the next paid stage.
 6. Re-pin images before any paid run, and have the runner check them at prepare. This goes into the U9 checklist and the next Lane A preregistration.
