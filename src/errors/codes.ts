@@ -187,7 +187,7 @@ export const CODES = {
     exit: 2,
     meaning: "A command was called wrong: an unknown command or flag, a bad value, a missing --spend-cap on a command that can spend, or a command that is not built yet.",
     fix: "Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.",
-    side_effects: NO_SPEND,
+    side_effects: "Usually none: the command is refused before it spends or records anything. Two ledger commands can fail after they record: lease --export once the lease is in the record, and settle --artifact once the close is staged in the local ledger. Both keep that record, and the message names the command that writes the file.",
     retry_safe: true,
     resumable: false,
     owner: "U1",

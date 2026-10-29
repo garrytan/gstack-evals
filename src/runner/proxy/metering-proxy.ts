@@ -22,6 +22,9 @@
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
 // - Free routes (model listings, Anthropic token counts) are forwarded unreserved, and every request, free, paid or
 //   refused, is journaled with its source address.
+// - OpenRouter chat and Responses calls are routed with OPENROUTER_API_KEY. The proxy replaces the request's provider routing
+//   with the price row's (its prices as max_price, and its pinned providers), and settles from the token usage OpenRouter
+//   reports, priced at the row, as for the other providers.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -29,10 +32,10 @@ import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, 
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
-import { PriceError, priceRequest, reservationMicros, sseUsage, usageCost, type Provider } from "../pricing/prices.ts";
+import { chatPrice, openRouterRouting, PriceError, priceRequest, reservationMicros, sseUsage, usageCost, type Provider } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
-export const UPSTREAM: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com" };
+export const UPSTREAM: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api" };
 /** Routes the proxy forwards. A free route costs nothing at the provider, so it is forwarded without a reservation. */
 const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true }>> = {
   anthropic: [
@@ -45,8 +48,19 @@ const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true
     { method: "POST", path: /^\/v1\/responses$/ },
     { method: "GET", path: /^\/v1\/models(\/[^/]+)?$/, free: true },
   ],
+  openrouter: [
+    { method: "POST", path: /^\/v1\/chat\/completions$/ },
+    { method: "POST", path: /^\/v1\/responses$/ },
+    { method: "GET", path: /^\/v1\/models$/, free: true },
+  ],
 };
-const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" };
+const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" };
+
+/** True when the proxy has a route and a price row for the model, as in routable("openrouter", "particle-ai/particle-1"). Preflight checks each model with it. */
+export function routable(provider: string, model: string): boolean {
+  return Object.hasOwn(ROUTES, provider) && chatPrice(`${provider}:${model}`) !== undefined;
+}
+
 const DROPPED_HEADERS = ["host", "content-length", "accept-encoding", "connection", "authorization", "x-api-key", "api-key", "openai-organization", "openai-project", "cookie", "proxy-authorization"];
 const MANAGEMENT_HEADER = "x-gstack-evals-management";
 export const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
@@ -266,7 +280,7 @@ export class MeteringProxy {
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
   private waiters = new Map<string, Array<() => void>>();
-  private pausedUntil: Record<Provider, number> = { anthropic: 0, openai: 0 };
+  private pausedUntil: Record<Provider, number> = { anthropic: 0, openai: 0, openrouter: 0 };
   private managementHash: Buffer;
 
   constructor(private options: ProxyOptions) {
@@ -384,7 +398,7 @@ export class MeteringProxy {
 
   private async handle(req: Request, source: string | null): Promise<Response> {
     const path = new URL(req.url).pathname;
-    const match = path.match(/^\/([A-Za-z0-9_-]+)\/(anthropic|openai)(\/.*)$/);
+    const match = path.match(/^\/([A-Za-z0-9_-]+)\/(anthropic|openai|openrouter)(\/.*)$/);
     const slot = match ? this.slots.get(match[1]!) : undefined;
     const credential = presentedCredential(req);
     if (!match || !slot || !sameSecret(slot.tokenHash, credential)) {
@@ -479,6 +493,8 @@ export class MeteringProxy {
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
     if (provider === "anthropic" && body.inference_geo === undefined && acceptsInferenceGeo(ctx.model)) body.inference_geo = "global";
+    const listed = chatPrice(`${provider}:${ctx.model}`);
+    if (provider === "openrouter" && listed) body.provider = openRouterRouting(listed);
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const fields = outputFields(provider, route);
     const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");

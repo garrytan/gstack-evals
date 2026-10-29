@@ -2,9 +2,9 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) runner/ledger/budget-ledger.ts at 70cb3d019,
 // the pricing section only: CHAT_PRICE_OVERRIDES, chatPrice, priceRequest, reservationUsd, usageCost and sseUsage.
 // Changes from upstream (U3):
-// - Anthropic Messages and OpenAI chat and Responses only. Embeddings, rerank, Gemini, Groq, TypeSafe and OpenRouter
-//   pricing are dropped (OpenRouter waits for M2a), and so is the fallback to gbrain's canonical table: a model missing
-//   here is refused, never priced from another table.
+// - Anthropic Messages, and OpenAI and OpenRouter chat and Responses, only. Embeddings, rerank, Gemini, Groq
+//   and TypeSafe pricing are dropped, and so is the fallback to gbrain's canonical table: a model missing here is refused,
+//   never priced from another table.
 // - Rows kept for the current generation of each family plus the ids the plan names; Sonnet rows stay so a caller's own
 //   policy can allow it, and the model allowlist, not this table, enforces the no-Sonnet default.
 // - Money is integer micro-dollars: reservationMicros and usageCost round up. usageCost returns TokenUsage
@@ -16,7 +16,7 @@
 
 import type { TokenUsage } from "../../types.ts";
 
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "openrouter";
 
 interface TokenPrices {
   input: number;
@@ -28,7 +28,21 @@ interface TokenPrices {
 /** A model whose prompts over above_input_tokens (cache reads and writes included) are billed at other rates for the whole request. */
 export interface ChatPrice extends TokenPrices {
   long?: TokenPrices & { above_input_tokens: number };
+  /** OpenRouter only: the providers OpenRouter may route the model to, with no fallback to others. */
+  providers?: string[];
 }
+
+/**
+ * OpenRouter models by OpenRouter id, at list prices in USD per 1M tokens. To add an open-weight ladder slot, add one row
+ * with the prices on its OpenRouter model page, and providers to pin the route when one provider sets the row's price.
+ * The proxy sends the row's input and output prices as OpenRouter's max_price, so OpenRouter never routes the call to a
+ * provider that bills above the row.
+ */
+export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
+  "particle-ai/particle-1": { input: 0.25, output: 1 },
+  // DeepSeek's own endpoint at its weekday peak price, an upper bound (off-peak is half).
+  "deepseek/deepseek-v4.1-flash-1017": { input: 0.3, output: 1.2, cache_read: 0.006, providers: ["deepseek"] },
+};
 
 /** List prices, USD per 1M tokens, as harness-evals checked them on 2026-10-02 to 2026-10-08. */
 export const CHAT_PRICES: Record<string, ChatPrice> = {
@@ -40,7 +54,11 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   "openai:gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   "openai:gpt-6-luna": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 272_000, input: 0.2, output: 0.75, cache_read: 0.02, cache_write: 0.25 } },
   "openai:gpt-6-astra": { input: 10, output: 50, cache_read: 1, cache_write: 12.5, long: { above_input_tokens: 272_000, input: 20, output: 75, cache_read: 2, cache_write: 25 } },
+  ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
 };
+
+/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers, if any, and its prices as the most OpenRouter may route to. */
+export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), max_price: { prompt: price.input, completion: price.output, request: 0 } });
 
 /** A dated API snapshot (gpt-5.5-2026-08-06) is billed at its family's list price. */
 export const chatPrice = (id: string): ChatPrice | undefined => CHAT_PRICES[id] ?? CHAT_PRICES[id.replace(/-\d{4}-?\d{2}-?\d{2}$/, "")];
@@ -114,6 +132,13 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   if (provider === "anthropic" && body.speed !== undefined && body.speed !== "standard") throw new PriceError(`speed ${JSON.stringify(body.speed)} bills above the standard rates in the price table`);
   if (provider === "anthropic" && body.inference_geo !== undefined && body.inference_geo !== "global") throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
   if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
+  if (provider === "openrouter") {
+    const rerouted = ["models", "route", "preset", "plugins", "web_search_options", "service_tier", "prompt", "background", "modalities", "image_config"].find(k => body[k] !== undefined);
+    if (rerouted) throw new PriceError(`OpenRouter's ${rerouted} field can reach other models, tiers, stored input or paid tools that the price row does not cover`);
+    const tools = Array.isArray(body.tools) ? (body.tools as Array<{ type?: unknown }>) : [];
+    const server = tools.find(t => typeof t?.type === "string" && t.type.startsWith("openrouter:"));
+    if (server) throw new PriceError(`the OpenRouter server tool ${server.type} runs and bills outside the model's tokens`);
+  }
   const json = JSON.stringify(body);
   const stored = (i: Record<string, unknown>) => typeof i.id === "string" && ((i.type == null && i.role === undefined) || (i.type === "reasoning" && typeof i.encrypted_content !== "string"));
   const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') || (Array.isArray(body.input) && body.input.some(i => i && typeof i === "object" && stored(i))) ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
