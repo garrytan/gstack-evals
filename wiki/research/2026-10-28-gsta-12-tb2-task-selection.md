@@ -202,7 +202,7 @@ These estimates are rough. Each task's token profile rests on 5 trials from one 
 
 ## Reproduce
 
-Run from this directory with git, Python 3.11+ and pandas (I used a uv venv in .venv). The scripts expect the task repo at ~/.capy/work/ref/terminal-bench-2 checked out at 69671fb (override with TB2_DIR) and harbor at ~/.capy/work/ref/harbor at f3a5a92 (override with HARBOR_DIR).
+Run these steps from quick/laneb/tasks/ with git, Python 3.11+ and pandas (I used a uv venv in quick/laneb/tasks/.venv). The scripts expect the task repo at ~/.capy/work/ref/terminal-bench-2 checked out at 69671fb (override with TB2_DIR) and harbor at ~/.capy/work/ref/harbor at f3a5a92 (override with HARBOR_DIR).
 
 1. Download: `git clone https://github.com/prime-radiant-inc/terminal-bench-analysis raw/terminal-bench-analysis` and check out 2e161fd. Sparse-clone SWE-bench/experiments into raw/swebench-experiments with `evaluation/verified/*/results/results.json`, `evaluation/verified/*/metadata.yaml` and `evaluation/verified/2026*/per_instance_details.json`.
 2. `python fetch_registry.py` writes the Hub pins to raw/hub/.
@@ -215,9 +215,10 @@ Run from this directory with git, Python 3.11+ and pandas (I used a uv venv in .
 
 ## Files
 
-- selection.md: this note.
+This note is wiki/research/2026-10-28-gsta-12-tb2-task-selection.md. Every other path below is under quick/laneb/tasks/.
+
 - tasks.json: the fixed list and reserves with registry pins, images, timeouts, digests and published stats.
 - selection_tb2.json: the rule, the funnel and the full eligible order (54 tasks).
 - internet_labels.json: network class and evidence for every TB 2.0 task.
-- Scripts: flatten_tb2.py, fetch_registry.py, label_network.py, check_images.py, prescreen_tb2.py, build_tasks_json.py, digest_tasks.py, prescreen_swebv.py, cost_estimate.py, report_tables.py.
-- raw/: downloaded data and intermediate tables. Do not commit it. It holds third-party result files, some of which carried leaked credentials upstream.
+- Scripts, all in quick/laneb/tasks/: flatten_tb2.py, fetch_registry.py, label_network.py, check_images.py, prescreen_tb2.py, build_tasks_json.py, digest_tasks.py, prescreen_swebv.py, cost_estimate.py, report_tables.py.
+- quick/laneb/tasks/raw/: downloaded data and intermediate tables that the steps above write. Do not commit it. It holds third-party result files, some of which carried leaked credentials upstream.
