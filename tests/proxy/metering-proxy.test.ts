@@ -542,7 +542,8 @@ describe("OpenRouter route", () => {
     expect(t.calls[0]!.headers.get("authorization")).toBe(`Bearer ${OPENROUTER_KEY}`);
     expect(t.calls[0]!.headers.get("x-api-key")).toBeNull();
     expect(t.calls[0]!.body.provider).toEqual({ max_price: { prompt: 0.25, completion: 1, request: 0 } });
-    expect(t.calls[0]!.body.max_completion_tokens).toBe(32_768);
+    expect(t.calls[0]!.body.max_tokens).toBe(32_768);
+    expect(t.calls[0]!.body.max_completion_tokens).toBeUndefined();
     expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, max_price: { prompt: 0.3, completion: 1.2, request: 0 } });
     expect(t.ledger.settles).toEqual([
       ["res_1", { kind: "spent", spent_micros: 1000 * 0.25 + 200 * 1, usage: { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 } }],
@@ -551,6 +552,17 @@ describe("OpenRouter route", () => {
     const meter = await t.proxy.finalize(a.meter_id);
     expect(meter.by_model[`openrouter:${PARTICLE}`]).toEqual({ micros: 450, requests: 1 });
     expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(OPENROUTER_KEY);
+  });
+
+  test("a chat call always carries max_tokens, OpenRouter's documented output limit, at most the reserved output", async () => {
+    const t = setup(() => ok({ prompt_tokens: 10, completion_tokens: 5 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat(PARTICLE, { max_completion_tokens: 1000 }));
+    await t.call(a.slot, a.token, PATH, chat(PARTICLE, { max_tokens: 500, max_completion_tokens: 2000 }));
+    await expectProblem(await t.call(a.slot, a.token, PATH, chat(PARTICLE, { max_tokens: 100_000 })), 400, "E_ALLOWANCE");
+    expect(t.calls.map(c => [c.body.max_tokens, c.body.max_completion_tokens])).toEqual([[1000, 1000], [500, 2000]]);
+    const held = [...t.ledger.reservations.values()].map(r => r.max_micros);
+    expect(held).toEqual(t.calls.map(c => reservationMicros(priceRequest("openrouter", c.body, Math.max(c.body.max_tokens, c.body.max_completion_tokens)))));
   });
 
   test("a stream settles from the usage in its last chunk, past OpenRouter's keep-alive comments", async () => {

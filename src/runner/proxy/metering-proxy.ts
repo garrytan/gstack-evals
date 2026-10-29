@@ -248,7 +248,8 @@ function presentedCredential(req: Request): string | null {
 /** The output-cap fields the provider reads on this route; the first is where the proxy writes the cell's cap. */
 function outputFields(provider: Provider, route: string): string[] {
   if (provider === "anthropic") return ["max_tokens"];
-  return route === "/v1/responses" ? ["max_output_tokens"] : ["max_completion_tokens", "max_tokens"];
+  if (route === "/v1/responses") return ["max_output_tokens"];
+  return provider === "openrouter" ? ["max_tokens", "max_completion_tokens"] : ["max_completion_tokens", "max_tokens"];
 }
 
 /** Decodes each run of percent escapes on its own, so one malformed escape cannot hide the rest of the string. */
@@ -500,6 +501,7 @@ export class MeteringProxy {
     const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");
     if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${Math.max(...stated)} output tokens, above this cell's cap of ${cap}`);
     if (!stated.length) body[fields[0]!] = cap;
+    if (provider === "openrouter" && route === "/v1/chat/completions") body.max_tokens ??= body.max_completion_tokens;
     const outBody = JSON.stringify(body);
     let price: ReturnType<typeof priceRequest>;
     try {
