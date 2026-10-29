@@ -1,6 +1,7 @@
 // The same-tree rerun stage (interface v0.4, "Exit codes and reasons"). When any task is red after round 1, every task
 // reruns once in every compared arm, so the second round can find losses as well as clear them, and the decision pools
-// both rounds. A task is red when REGRESSION or MISS names it. SAFETY_BREAK alone does not trigger the stage, since no
+// both rounds. A round 2 that lacks some task and arm's runs, such as one a cap stop cut short, can add losses but clears
+// none of round 1's. A task is red when REGRESSION or MISS names it. SAFETY_BREAK alone does not trigger the stage, since no
 // rerun clears it. FLAKY is recorded only when after's panel and the old copies' panel both change between rounds.
 //
 // The verdict prints the two-stage rule's simulated false-negative rate at the run's minimum detectable difference: the

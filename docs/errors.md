@@ -147,7 +147,7 @@ Exit 1. Side effects: The run finished and its spend is settled in the ledger. R
 
 ### NOT_MEASURABLE
 
-Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), or the skill went unopened in both old and new.
+Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), fewer than 5 of them could be paired, the preregistered missing-cell rule refused the paired comparison, or the skill went unopened in both old and new.
 
 Fix: Add harder or more varied tasks, or move to Haiku 5.5 when the suite is at ceiling, commit a relock, and start a new run. Do not --resume.
 

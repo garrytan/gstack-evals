@@ -12,7 +12,8 @@
 // tasks, then clusteredPairedDelta for the interval and the one-sided sign-flip p, whose p_less is WORSE's test. The
 // minimum detectable difference is powerNote's at one-sided alpha 0.05 and 80% power. --margin uses
 // marginShiftedSignFlipP, where null means not attempted, and the margin p-values are Holm-adjusted across the requested
-// models, which only makes noninferior: true harder to reach. nonInferiorityP's bootstrap bound is not used: at 12 tasks
+// models, which only makes noninferior: true harder to reach. The family is every requested model, and a model whose test
+// was not attempted enters it at p = 1. nonInferiorityP's bootstrap bound is not used: at 12 tasks
 // it falsely passed 6.7% of runs.
 //
 // Ceiling is decided after every compared arm has run, from all of them, and never stops anything: a model whose old
@@ -138,7 +139,8 @@ export interface RerunStage {
   name: typeof RERUN_STAGE;
   /** Red tasks in round 1 (REGRESSION or MISS); the stage runs when there is one. */
   red: string[];
-  state: "not-needed" | "done" | "missing";
+  /** partial: round 2 lacks some task and arm's runs, so it can add losses but clears none of round 1's. */
+  state: "not-needed" | "done" | "partial" | "missing";
   flaky: string[];
   simulated_false_negative_rate: { rate: number; mdd_points: number; simulations: number; seed: number } | null;
 }
@@ -302,9 +304,11 @@ export function analyzeModel(input: VerdictInput, model: string, records: readon
         mdd: powerNote(stats, MDD_POWER).mde,
       };
       if (stats.p_less < ALPHA) reasons.push(reason("WORSE", "sign-flip"));
+      if (pairs.length < MIN_INFORMATIVE && informative.length >= MIN_INFORMATIVE) reasons.push(reason("NOT_MEASURABLE", pairs.length + " informative tasks paired"));
     } catch (error) {
       if (!(error instanceof PairingError)) throw error;
       pairingProblem = error.message;
+      reasons.push(reason("NOT_MEASURABLE", error.message));
     }
   }
 
@@ -451,8 +455,14 @@ export function decide(input: VerdictInput, options: VerdictOptions = DEFAULT_OP
     const red = redTasks(first.reasons);
     const second = own.filter((r) => r.round === 2);
     if (second.length && !red.length) throw new VerdictInputError(model + " has round 2 records but no red task in round 1, so no rerun stage was owed");
+    const size = (round: 1 | 2, task: string, arm: string) => own.filter((r) => r.round === round && r.task === task && r.arm === arm).length;
+    const complete = second.length > 0 && input.tasks.every((t) => input.arms.every((arm) => size(2, t.id, arm) >= size(1, t.id, arm)));
     const pooled = second.length ? analyzeModel(input, model, own, options) : first;
-    const flaky = second.length ? flakyTasks(first.counts, analyzeModel(input, model, second, options).counts) : [];
+    if (second.length && !complete) {
+      const kept = new Set(pooled.reasons.map(reasonText));
+      pooled.reasons.push(...first.reasons.filter((r) => CODES[r.code].exit === 1 && !kept.has(reasonText(r))));
+    }
+    const flaky = complete ? flakyTasks(first.counts, analyzeModel(input, model, second, options).counts) : [];
     pooled.warnings.push(...flaky.map((t) => reason("FLAKY", t)));
     const mdd = pooled.comparison?.mdd ?? null;
     const rate =
@@ -489,16 +499,17 @@ export function decide(input: VerdictInput, options: VerdictOptions = DEFAULT_OP
       rerun: {
         name: RERUN_STAGE,
         red,
-        state: !red.length ? "not-needed" : second.length ? "done" : "missing",
+        state: !red.length ? "not-needed" : !second.length ? "missing" : complete ? "done" : "partial",
         flaky,
         simulated_false_negative_rate: rate === null ? null : { rate, mdd_points: pooled.smallest_detectable_loss.mdd_points!, simulations: options.simulations, seed: options.seed },
       },
     };
   });
 
-  const attempted = models.filter((m) => m.margin?.attempted);
-  const adjusted = holmAdjusted(attempted.map((m) => m.margin!.p!));
-  attempted.forEach((m, i) => {
+  const requested = models.filter((m) => m.margin);
+  const adjusted = holmAdjusted(requested.map((m) => (m.margin!.attempted ? m.margin!.p! : 1)));
+  requested.forEach((m, i) => {
+    if (!m.margin!.attempted) return;
     m.margin!.p_holm = adjusted[i]!;
     m.margin!.noninferior = adjusted[i]! < ALPHA;
   });

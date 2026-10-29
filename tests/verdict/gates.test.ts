@@ -116,6 +116,10 @@ describe("statistics", () => {
     const two = run(rows, ["opus", "haiku"]);
     expect(two.models.map((m) => m.margin!.p_holm)).toEqual(holmAdjusted([p, p]));
     expect(two.reasons).toEqual(["NOT_NONINFERIOR on opus", "NOT_NONINFERIOR on haiku"]);
+    const ceiling = grid("haiku", plan(rows.map(() => ["11111", "11111", "1111111111"])));
+    const beside = decide(input(ids(rows.length).map((id) => task(id)), [...grid("opus", plan(rows)), ...ceiling]), margin(10));
+    expect(beside.models[0]!.margin).toMatchObject({ attempted: true, p_holm: Math.min(1, 2 * p), noninferior: false });
+    expect(beside.reasons).toEqual(["NOT_NONINFERIOR on opus", "MARGIN_NOT_ATTEMPTED the old copies passed every run (ceiling) on haiku"]);
   });
 });
 
@@ -159,6 +163,15 @@ describe("exit codes and reasons", () => {
     expect(decide(input(tasks, stalled)).reasons).toEqual(["E_USER_TURNS_MISSING t02"]);
     const more = [...stalled, ...cell("opus", "after", "t03", "tt").map((r) => ({ ...r, trial: r.trial + 5 }))];
     expect(decide(input(tasks, more)).reasons).toEqual(["TIMEOUTS after", "E_USER_TURNS_MISSING t02"]);
+  });
+
+  test("a paired comparison the preregistered missing-cell rule refuses gives no verdict instead of a pass", () => {
+    const short = [...fine().filter((r) => !(r.task === "t01" && r.arm === "after")), ...cell("opus", "after", "t01", "11t")];
+    const refused = decide(input(tasks, short), { ...DEFAULT_OPTIONS, missing: { min_trials: 3, on_missing: "refuse" } });
+    expect(refused.reasons).toEqual(["NOT_MEASURABLE paired comparison blocked: missing cell for t01: valid trials: B 2, below the preregistered minimum of 3"]);
+    expect(refused.exit_code).toBe(2);
+    const dropped = decide(input(tasks, short), { ...DEFAULT_OPTIONS, missing: { min_trials: 3, on_missing: "drop_task" } });
+    expect(dropped.reasons).toEqual(["NOT_MEASURABLE 4 informative tasks paired"]);
   });
 
   test("malformed input is refused", () => {
