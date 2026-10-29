@@ -473,8 +473,8 @@ export const CODES = {
   },
   E_PARITY_STALE: {
     exit: 2,
-    meaning: "A file the parity SD estimate generates (counts.json, results.json or the note's generated block) differs from what scripts/parity-sd-estimate.ts computes, is missing its markers, or was derived from another source file than source.json records.",
-    fix: "Run the same command without --check, review the diff, and commit it only if the change is intended.",
+    meaning: "A file the parity SD estimate reads or generates (source.json, counts.json, results.json or the note's generated block) cannot be read, differs from what scripts/parity-sd-estimate.ts computes, is missing its markers, or was derived from another source file than source.json records.",
+    fix: "Restore a missing or unreadable file from git. Otherwise run the same command without --check, review the diff, and commit it only if the change is intended.",
     side_effects: "None: nothing is written.",
     retry_safe: true,
     resumable: false,

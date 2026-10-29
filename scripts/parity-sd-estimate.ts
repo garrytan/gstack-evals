@@ -298,11 +298,11 @@ function fail(code: ScriptCode, messages: string[], fix: string = CODES[code].fi
 
 const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-function generated(source: Source, counts: Counts): Record<string, string> {
+function coded<T>(code: ScriptCode, what: string, f: () => T): T {
   try {
-    return reportFiles(source, counts);
+    return f();
   } catch (e) {
-    return fail("E_PARITY_STALE", [reason(e)]);
+    return fail(code, [what + ": " + reason(e)]);
   }
 }
 
@@ -329,7 +329,7 @@ function verified(bytes: Uint8Array, source: Source, what: string): void {
 export async function main(argv: string[]): Promise<void> {
   const [cmd, arg] = argv;
   const check = argv.includes("--check");
-  const source = readSource();
+  const source = coded("E_PARITY_STALE", PATHS.source, readSource);
   if (cmd === "fetch" && arg) {
     const res = await fetch(source.url).catch((e) => fail("E_PARITY_SOURCE", [source.url + ": " + reason(e)]));
     if (!res.ok) fail("E_PARITY_SOURCE", [source.url + " answered HTTP " + res.status]);
@@ -338,17 +338,15 @@ export async function main(argv: string[]): Promise<void> {
     writeFileSync(arg, bytes);
     console.log("parity-sd-estimate: wrote " + arg + ", sha256 " + source.sha256);
   } else if (cmd === "build" && arg && arg !== "--check") {
-    let counts: Counts;
-    try {
+    const counts = coded("E_PARITY_SOURCE", arg, () => {
       const bytes = readFileSync(arg);
       verified(bytes, source, arg);
-      counts = extractCounts((JSON.parse(bytes.toString("utf8")) as { rows: TrialRow[] }).rows, source.sha256);
-    } catch (e) {
-      fail("E_PARITY_SOURCE", [arg + ": " + reason(e)]);
-    }
-    settle({ [PATHS.counts]: countsJson(counts), ...generated(source, counts) }, check);
+      return extractCounts((JSON.parse(bytes.toString("utf8")) as { rows: TrialRow[] }).rows, source.sha256);
+    });
+    settle({ [PATHS.counts]: countsJson(counts), ...coded("E_PARITY_STALE", "report", () => reportFiles(source, counts)) }, check);
   } else if (cmd === "report") {
-    settle(generated(source, readCounts()), check);
+    const counts = coded("E_PARITY_STALE", PATHS.counts, readCounts);
+    settle(coded("E_PARITY_STALE", "report", () => reportFiles(source, counts)), check);
   } else {
     fail("E_USAGE", ["unknown command or missing argument: " + (argv.join(" ") || "(none)")], USAGE);
   }
