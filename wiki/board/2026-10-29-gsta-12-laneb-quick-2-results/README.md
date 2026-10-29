@@ -7,7 +7,7 @@ author: GSTA-12
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-29
-status: done
+status: superseded
 links:
   - 2026-10-28-gsta-12-laneb-quick-2-prereg
   - 2026-10-28-gsta-12-laneb-quick-prereg
