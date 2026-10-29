@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p quick/replay/tsconfig.json",
     "errors:doc": "bun src/errors/doc.ts",
     "errors:check": "bun src/errors/doc.ts --check",
     "wiki:index": "bun scripts/wiki.ts index",
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "ajv": "8",
+    "js-tiktoken": "1.0.21",
     "typescript": "^7.0.2"
   }
 }

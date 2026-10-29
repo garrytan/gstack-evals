@@ -35,6 +35,6 @@ Short paragraphs, active verbs, no marketing words, no em dashes.
 
 ## Checks
 
-`bun test`, `bun run typecheck`, `bun run errors:check` and `bun run wiki:check` run without keys, and CI runs them on every pull request. Tests live under tests/.
+`bun test`, `bun run typecheck`, `bun run errors:check` and `bun run wiki:check` run without keys, and CI runs them on every pull request. Tests live under tests/; a quick look under quick/ keeps its keyless tests beside its code.
 
 This guide does not authorise pushing, merging, spending or publishing; follow the current task's instructions for those.

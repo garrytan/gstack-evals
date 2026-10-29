@@ -1,0 +1,45 @@
+{
+  "note": "Final task list for the Lane B quick look, in rank order: tasks.json main with oracle failures replaced by reserves in order. Tier A is the first 10.",
+  "tasks": [
+    "filter-js-from-html",
+    "dna-insert",
+    "model-extraction-relu-logits",
+    "chess-best-move",
+    "torch-tensor-parallelism",
+    "adaptive-rejection-sampler",
+    "db-wal-recovery",
+    "polyglot-rust-c",
+    "break-filter-js-from-html",
+    "overfull-hbox",
+    "extract-elf",
+    "torch-pipeline-parallelism",
+    "polyglot-c-py",
+    "query-optimize",
+    "tune-mjcf",
+    "configure-git-webserver",
+    "mailman",
+    "pytorch-model-cli",
+    "cancel-async-tasks",
+    "sanitize-git-repo"
+  ],
+  "tier_a": [
+    "filter-js-from-html",
+    "dna-insert",
+    "model-extraction-relu-logits",
+    "chess-best-move",
+    "torch-tensor-parallelism",
+    "adaptive-rejection-sampler",
+    "db-wal-recovery",
+    "polyglot-rust-c",
+    "break-filter-js-from-html",
+    "overfull-hbox"
+  ],
+  "dropped": [
+    {
+      "task_id": "qemu-alpine-ssh",
+      "rank": 14,
+      "replaced_by": "sanitize-git-repo",
+      "reason": "Oracle reward 0 on 2026-10-28: the verifier's apt-get install curl fails with 404 on debian-security bullseye packages (the image is debian:bullseye-slim), so curl, uv and the tests never run. Host-independent."
+    }
+  ]
+}

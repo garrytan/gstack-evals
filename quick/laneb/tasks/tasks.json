@@ -1,0 +1,1392 @@
+{
+ "schema": "gsta12-lane-b-tasks/1",
+ "fixed_on": "2026-10-28",
+ "digest_algorithm": "sha256 over sorted lines '<relpath>\\0<sha256(file)>\\n' for every git-tracked file under the task path at registry.git_commit_id (digest_tasks.py)",
+ "sources": {
+  "trials": "huggingface.co/datasets/harborframework/terminal-bench-2-leaderboard @ 572b2614be2c0cb2527e14f5b1e4026f1072e6c1 (2026-05-15), via github.com/prime-radiant-inc/terminal-bench-analysis @ 2e161fdca93b67f14b945cd36eee31686d01a7b6",
+  "registry": "Harbor Hub get_dataset('terminal-bench','2.0'), the default registry of harbor @ f3a5a923f6d722472c9e797af836ae4425fb215f; matches registry.json at that commit"
+ },
+ "rule": {
+  "max_agent_timeout_min": 30,
+  "max_cpus": 4,
+  "max_mem_gb": 8,
+  "frontier_min": 0.2,
+  "min_frontier_subs_solving": 3,
+  "max_est_opus55_usd": 2.0,
+  "max_frontier_median_agent_min": 15,
+  "tierA_frontier_max": 0.85,
+  "tierA_cheap_max": 0.3,
+  "n_main": 20,
+  "n_reserve": 6
+ },
+ "funnel": {
+  "registry tasks": 89,
+  "f_env": 67,
+  "f_solved": 65,
+  "f_cost": 54,
+  "tierA": 10
+ },
+ "main": [
+  {
+   "rank": 1,
+   "role": "main",
+   "task_id": "filter-js-from-html",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "filter-js-from-html"
+   },
+   "docker_image": "alexgshaw/filter-js-from-html:20251031",
+   "docker_image_index_digest": "sha256:92acda0f124b988036a6f426ce0bc47fac19f5efe9fc5e6ea3ea52ccb075d0a4",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 1800,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "security",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [
+    "task.toml"
+   ],
+   "published": {
+    "frontier_rate": 0.3571,
+    "frontier_n": 42,
+    "opus47_rate": 0.6522,
+    "gpt55_rate": 0.0,
+    "frontier_subs_solving": 3,
+    "cheap_rate": 0.0,
+    "cheap_n": 67,
+    "all_rate": 0.0816,
+    "headroom": 0.6429,
+    "frontier_median_agent_min": 3.9073,
+    "opus46_median_cost_usd": 1.9941,
+    "opus47_median_cache_tok": 417153.0,
+    "opus47_median_out_tok": 23276.0,
+    "est_opus55_from_opus47_tokens": 0.6491,
+    "est_opus55_from_opus46_bill": 1.695,
+    "est_opus55_usd": 1.695
+   },
+   "digest": "sha256:c00cee7f6ad360672d1e57420cbbf5411c66ac96f555cf4ff730b01232b00bca",
+   "digest_files": 6
+  },
+  {
+   "rank": 2,
+   "role": "main",
+   "task_id": "dna-insert",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "dna-insert"
+   },
+   "docker_image": "alexgshaw/dna-insert:20251031",
+   "docker_image_index_digest": "sha256:4dd8760694e355de85ecf03605cb487ccdb33322f6afad513d2920829baa33b2",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 1800,
+   "verifier_timeout_sec": 1800,
+   "cpus": 1,
+   "memory": "4G",
+   "category": "scientific-computing",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.4419,
+    "frontier_n": 43,
+    "opus47_rate": 0.5217,
+    "gpt55_rate": 0.35,
+    "frontier_subs_solving": 7,
+    "cheap_rate": 0.0,
+    "cheap_n": 69,
+    "all_rate": 0.3212,
+    "headroom": 0.5581,
+    "frontier_median_agent_min": 4.2408,
+    "opus46_median_cost_usd": 1.5214,
+    "opus47_median_cache_tok": 695377.0,
+    "opus47_median_out_tok": 29490.0,
+    "est_opus55_from_opus47_tokens": 0.8958,
+    "est_opus55_from_opus46_bill": 1.2932,
+    "est_opus55_usd": 1.2932
+   },
+   "digest": "sha256:51844430e650408b067854ad73cb8a76fd6ea297df9d486094649cc758dfe43b",
+   "digest_files": 7
+  },
+  {
+   "rank": 3,
+   "role": "main",
+   "task_id": "model-extraction-relu-logits",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "model-extraction-relu-logits"
+   },
+   "docker_image": "alexgshaw/model-extraction-relu-logits:20251031",
+   "docker_image_index_digest": "sha256:52fe1f089f38650f0dc22d7531ee6e01ebd526de1b349aaa2ecb331dca9fabce",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "mathematics",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.4318,
+    "frontier_n": 44,
+    "opus47_rate": 0.25,
+    "gpt55_rate": 0.65,
+    "frontier_subs_solving": 6,
+    "cheap_rate": 0.2286,
+    "cheap_n": 70,
+    "all_rate": 0.3123,
+    "headroom": 0.4383,
+    "frontier_median_agent_min": 4.8105,
+    "opus46_median_cost_usd": 1.623,
+    "opus47_median_cache_tok": 1095381.0,
+    "opus47_median_out_tok": 49306.0,
+    "est_opus55_from_opus47_tokens": 1.4681,
+    "est_opus55_from_opus46_bill": 1.3795,
+    "est_opus55_usd": 1.4681
+   },
+   "digest": "sha256:0dc5544f14a8f9eb70b9e4572a03cfa1a97c0448eb07a05441cc006303536b7d",
+   "digest_files": 7
+  },
+  {
+   "rank": 4,
+   "role": "main",
+   "task_id": "chess-best-move",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "chess-best-move"
+   },
+   "docker_image": "alexgshaw/chess-best-move:20251031",
+   "docker_image_index_digest": "sha256:bb447f94d9e2a8ed879f85c85a514b213b7418f9fe11fd7b2428a0b0e436e647",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "games",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.6279,
+    "frontier_n": 43,
+    "opus47_rate": 0.4783,
+    "gpt55_rate": 0.8,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.0,
+    "cheap_n": 68,
+    "all_rate": 0.5291,
+    "headroom": 0.3721,
+    "frontier_median_agent_min": 6.6761,
+    "opus46_median_cost_usd": 1.3724,
+    "opus47_median_cache_tok": 1559522.0,
+    "opus47_median_out_tok": 49460.0,
+    "est_opus55_from_opus47_tokens": 1.6754,
+    "est_opus55_from_opus46_bill": 1.1665,
+    "est_opus55_usd": 1.6754
+   },
+   "digest": "sha256:55db198810b8b6f1a88c33ee11ee5258a2ecc31bba50d7713f44d728361a170a",
+   "digest_files": 7
+  },
+  {
+   "rank": 5,
+   "role": "main",
+   "task_id": "torch-tensor-parallelism",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "torch-tensor-parallelism"
+   },
+   "docker_image": "alexgshaw/torch-tensor-parallelism:20251031",
+   "docker_image_index_digest": "sha256:c50ac169e11465f41b49749fe87e4487f24d31a0c39c0906cd3242cc5499c690",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "4G",
+   "category": "software-engineering",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.6512,
+    "frontier_n": 43,
+    "opus47_rate": 0.84,
+    "gpt55_rate": 0.3889,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.1324,
+    "cheap_n": 68,
+    "all_rate": 0.3939,
+    "headroom": 0.3027,
+    "frontier_median_agent_min": 3.8094,
+    "opus46_median_cost_usd": 0.8597,
+    "opus47_median_cache_tok": 379806.0,
+    "opus47_median_out_tok": 29309.0,
+    "est_opus55_from_opus47_tokens": 0.7533,
+    "est_opus55_from_opus46_bill": 0.7307,
+    "est_opus55_usd": 0.7533
+   },
+   "digest": "sha256:b95c4082135aa71f5d910cbe61b64ef1651f565d1c73b020431c99ab151585ab",
+   "digest_files": 6
+  },
+  {
+   "rank": 6,
+   "role": "main",
+   "task_id": "adaptive-rejection-sampler",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "adaptive-rejection-sampler"
+   },
+   "docker_image": "alexgshaw/adaptive-rejection-sampler:20251031",
+   "docker_image_index_digest": "sha256:985bed39e8448bc95f138b5f766b59003a95c4be171c96af8e76448338f3dd8f",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "scientific-computing",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.6512,
+    "frontier_n": 43,
+    "opus47_rate": 0.6522,
+    "gpt55_rate": 0.65,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.2353,
+    "cheap_n": 68,
+    "all_rate": 0.4831,
+    "headroom": 0.2668,
+    "frontier_median_agent_min": 6.7456,
+    "opus46_median_cost_usd": 2.3134,
+    "opus47_median_cache_tok": 643144.0,
+    "opus47_median_out_tok": 62036.0,
+    "est_opus55_from_opus47_tokens": 1.5237,
+    "est_opus55_from_opus46_bill": 1.9664,
+    "est_opus55_usd": 1.9664
+   },
+   "digest": "sha256:b4c60177f24d0308859cde8da1ead1e668f5f0717d6d9fc6e5f4c32729bb7b40",
+   "digest_files": 7
+  },
+  {
+   "rank": 7,
+   "role": "main",
+   "task_id": "db-wal-recovery",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "db-wal-recovery"
+   },
+   "docker_image": "alexgshaw/db-wal-recovery:20251031",
+   "docker_image_index_digest": "sha256:0e33ea5ec823975d1bd6c3778395c9f94251dd88f571146057bff6adb7e4594e",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "file-operations",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.7442,
+    "frontier_n": 43,
+    "opus47_rate": 0.9565,
+    "gpt55_rate": 0.5,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.0725,
+    "cheap_n": 69,
+    "all_rate": 0.4006,
+    "headroom": 0.2373,
+    "frontier_median_agent_min": 1.5362,
+    "opus46_median_cost_usd": 1.4885,
+    "opus47_median_cache_tok": 422553.0,
+    "opus47_median_out_tok": 4568.0,
+    "est_opus55_from_opus47_tokens": 0.2773,
+    "est_opus55_from_opus46_bill": 1.2652,
+    "est_opus55_usd": 1.2652
+   },
+   "digest": "sha256:35aeff78e6f412bb15a449b854114061791b5e6d54923576db8ab7c80ab1bf94",
+   "digest_files": 8
+  },
+  {
+   "rank": 8,
+   "role": "main",
+   "task_id": "polyglot-rust-c",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "polyglot-rust-c"
+   },
+   "docker_image": "alexgshaw/polyglot-rust-c:20251031",
+   "docker_image_index_digest": "sha256:3ba84f0e138a4b65e58c53f920a0fc852571e6402901c3bdbb876e9dab6e6c5e",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "software-engineering",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.7674,
+    "frontier_n": 43,
+    "opus47_rate": 0.9565,
+    "gpt55_rate": 0.55,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.0588,
+    "cheap_n": 68,
+    "all_rate": 0.4709,
+    "headroom": 0.2189,
+    "frontier_median_agent_min": 5.2402,
+    "opus46_median_cost_usd": 0.6477,
+    "opus47_median_cache_tok": 440403.0,
+    "opus47_median_out_tok": 64000.0,
+    "est_opus55_from_opus47_tokens": 1.4738,
+    "est_opus55_from_opus46_bill": 0.5506,
+    "est_opus55_usd": 1.4738
+   },
+   "digest": "sha256:c19e86b5cd48f49576e2967296700d90cd45719ccfa5a9b47bd5545b4d72566f",
+   "digest_files": 6
+  },
+  {
+   "rank": 9,
+   "role": "main",
+   "task_id": "break-filter-js-from-html",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "break-filter-js-from-html"
+   },
+   "docker_image": "alexgshaw/break-filter-js-from-html:20251031",
+   "docker_image_index_digest": "sha256:d7bfb45e47cf10d2e21dc520239215498f4eba9c1ab2d0cd7d647985dddb4fa8",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 1200,
+   "verifier_timeout_sec": 1200,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "security",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.7209,
+    "frontier_n": 43,
+    "opus47_rate": 0.9565,
+    "gpt55_rate": 0.45,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.2239,
+    "cheap_n": 67,
+    "all_rate": 0.6958,
+    "headroom": 0.2166,
+    "frontier_median_agent_min": 4.906,
+    "opus46_median_cost_usd": 0.5791,
+    "opus47_median_cache_tok": 982079.0,
+    "opus47_median_out_tok": 40768.0,
+    "est_opus55_from_opus47_tokens": 1.2475,
+    "est_opus55_from_opus46_bill": 0.4923,
+    "est_opus55_usd": 1.2475
+   },
+   "digest": "sha256:7087019da8f9ff651d8f97a89c34ab80e8c9a552922ad1a3ef737e202d0b9931",
+   "digest_files": 10
+  },
+  {
+   "rank": 10,
+   "role": "main",
+   "task_id": "overfull-hbox",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "overfull-hbox"
+   },
+   "docker_image": "alexgshaw/overfull-hbox:20251031",
+   "docker_image_index_digest": "sha256:67fe0ccc0ff2305d6fcb3652977d377b901bb7bd96904b6765835935574992e1",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 750,
+   "verifier_timeout_sec": 360,
+   "cpus": 2,
+   "memory": "4G",
+   "category": "debugging",
+   "difficulty": "easy",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "A",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "solution/solve.sh",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [
+    "solution/solve.sh"
+   ],
+   "published": {
+    "frontier_rate": 0.7907,
+    "frontier_n": 43,
+    "opus47_rate": 0.913,
+    "gpt55_rate": 0.65,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.2239,
+    "cheap_n": 67,
+    "all_rate": 0.6489,
+    "headroom": 0.1624,
+    "frontier_median_agent_min": 5.412,
+    "opus46_median_cost_usd": 0.8671,
+    "opus47_median_cache_tok": 1537574.0,
+    "opus47_median_out_tok": 55006.0,
+    "est_opus55_from_opus47_tokens": 1.7767,
+    "est_opus55_from_opus46_bill": 0.737,
+    "est_opus55_usd": 1.7767
+   },
+   "digest": "sha256:45bdee2b2f454f45675b81fd53370c258c726720e26821c50ac871fd9ea3e1ee",
+   "digest_files": 13
+  },
+  {
+   "rank": 11,
+   "role": "main",
+   "task_id": "extract-elf",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "extract-elf"
+   },
+   "docker_image": "alexgshaw/extract-elf:20251031",
+   "docker_image_index_digest": "sha256:6932e4cb318464307eacd497ef8dc617eaf551b6a90231f815ec0b911895cfed",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "file-operations",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.7209,
+    "frontier_n": 43,
+    "opus47_rate": 0.913,
+    "gpt55_rate": 0.5,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.5441,
+    "cheap_n": 68,
+    "all_rate": 0.676,
+    "headroom": 0.1272,
+    "frontier_median_agent_min": 2.2897,
+    "opus46_median_cost_usd": 1.1433,
+    "opus47_median_cache_tok": 494495.0,
+    "opus47_median_out_tok": 18070.0,
+    "est_opus55_from_opus47_tokens": 0.579,
+    "est_opus55_from_opus46_bill": 0.9718,
+    "est_opus55_usd": 0.9718
+   },
+   "digest": "sha256:6d1272cf63b53a460b087a1fda3d21ab39894c173e5bb92566ce083d6c5473a5",
+   "digest_files": 7
+  },
+  {
+   "rank": 12,
+   "role": "main",
+   "task_id": "torch-pipeline-parallelism",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "torch-pipeline-parallelism"
+   },
+   "docker_image": "alexgshaw/torch-pipeline-parallelism:20251031",
+   "docker_image_index_digest": "sha256:3cb7b39d86f1704b20e668851da0b08b34b3270c01d583f136d65190984a8d1b",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "4G",
+   "category": "software-engineering",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.8837,
+    "frontier_n": 43,
+    "opus47_rate": 0.9565,
+    "gpt55_rate": 0.8,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.0,
+    "cheap_n": 68,
+    "all_rate": 0.3371,
+    "headroom": 0.1163,
+    "frontier_median_agent_min": 5.1942,
+    "opus46_median_cost_usd": 1.5409,
+    "opus47_median_cache_tok": 462423.0,
+    "opus47_median_out_tok": 61237.0,
+    "est_opus55_from_opus47_tokens": 1.4282,
+    "est_opus55_from_opus46_bill": 1.3098,
+    "est_opus55_usd": 1.4282
+   },
+   "digest": "sha256:caaae18a9f67750e9cfadc4a45a0ae3418ae908ed465188c0d476b9fbf96b75f",
+   "digest_files": 6
+  },
+  {
+   "rank": 13,
+   "role": "main",
+   "task_id": "polyglot-c-py",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "polyglot-c-py"
+   },
+   "docker_image": "alexgshaw/polyglot-c-py:20251031",
+   "docker_image_index_digest": "sha256:0f1c3b7816d70cf5551573fd6aeef76893f2ae3000be2419997b6871b5d987ed",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "software-engineering",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.881,
+    "frontier_n": 42,
+    "opus47_rate": 1.0,
+    "gpt55_rate": 0.75,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.087,
+    "cheap_n": 69,
+    "all_rate": 0.4722,
+    "headroom": 0.1087,
+    "frontier_median_agent_min": 2.6143,
+    "opus46_median_cost_usd": 0.2661,
+    "opus47_median_cache_tok": 473326.0,
+    "opus47_median_out_tok": 12709.0,
+    "est_opus55_from_opus47_tokens": 0.4624,
+    "est_opus55_from_opus46_bill": 0.2262,
+    "est_opus55_usd": 0.4624
+   },
+   "digest": "sha256:de6785fc9ec4d82b78e71c9699a345f142388440fcbf7bae5044aa31fc85d7d7",
+   "digest_files": 6
+  },
+  {
+   "rank": 14,
+   "role": "main",
+   "task_id": "qemu-alpine-ssh",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "qemu-alpine-ssh"
+   },
+   "docker_image": "alexgshaw/qemu-alpine-ssh:20251031",
+   "docker_image_index_digest": "sha256:541e8214a8c4faa7b556531b899d45da21048fa2ca6dd328d8cb6c4cffa8e964",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "4G",
+   "category": "system-administration",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.881,
+    "frontier_n": 42,
+    "opus47_rate": 0.8182,
+    "gpt55_rate": 0.95,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.2174,
+    "cheap_n": 69,
+    "all_rate": 0.5099,
+    "headroom": 0.0932,
+    "frontier_median_agent_min": 11.9396,
+    "opus46_median_cost_usd": 0.5511,
+    "opus47_median_cache_tok": 2044873.0,
+    "opus47_median_out_tok": 25131.0,
+    "est_opus55_from_opus47_tokens": 1.4024,
+    "est_opus55_from_opus46_bill": 0.4684,
+    "est_opus55_usd": 1.4024
+   },
+   "digest": "sha256:dd8c3eae85efa4d91e49947555f691b6ba0c19a3ce687efe6e8e57525ce9e431",
+   "digest_files": 6
+  },
+  {
+   "rank": 15,
+   "role": "main",
+   "task_id": "query-optimize",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "query-optimize"
+   },
+   "docker_image": "alexgshaw/query-optimize:20251031",
+   "docker_image_index_digest": "sha256:28de7da87004eab5b29bd5eaf1823579bc5b73ccea4b80349a5623185770da14",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "data-science",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [
+    "task.toml"
+   ],
+   "published": {
+    "frontier_rate": 0.8529,
+    "frontier_n": 34,
+    "opus47_rate": 0.9286,
+    "gpt55_rate": 0.8,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.459,
+    "cheap_n": 61,
+    "all_rate": 0.5106,
+    "headroom": 0.0796,
+    "frontier_median_agent_min": 9.5247,
+    "opus46_median_cost_usd": 0.9191,
+    "opus47_median_cache_tok": 950105.0,
+    "opus47_median_out_tok": 20153.0,
+    "est_opus55_from_opus47_tokens": 0.8211,
+    "est_opus55_from_opus46_bill": 0.7813,
+    "est_opus55_usd": 0.8211
+   },
+   "digest": "sha256:47e0fba77bc2e62fc49aa6fb0e1fff5fe02be2bd0aa83276c753f219566e5a6b",
+   "digest_files": 8
+  },
+  {
+   "rank": 16,
+   "role": "main",
+   "task_id": "tune-mjcf",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "tune-mjcf"
+   },
+   "docker_image": "alexgshaw/tune-mjcf:20251031",
+   "docker_image_index_digest": "sha256:56c197739db2db79562384581fcc9d3d71e6c171bf052104b1a7ee0282e7c3cf",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "scientific-computing",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.8837,
+    "frontier_n": 43,
+    "opus47_rate": 0.8696,
+    "gpt55_rate": 0.9,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.4058,
+    "cheap_n": 69,
+    "all_rate": 0.6309,
+    "headroom": 0.0691,
+    "frontier_median_agent_min": 7.4329,
+    "opus46_median_cost_usd": 1.5334,
+    "opus47_median_cache_tok": 1275075.0,
+    "opus47_median_out_tok": 34039.0,
+    "est_opus55_from_opus47_tokens": 1.2418,
+    "est_opus55_from_opus46_bill": 1.3034,
+    "est_opus55_usd": 1.3034
+   },
+   "digest": "sha256:28651755e24f42622c138498725408c7116ae40ca04e9cb56f39e40eb78d57ba",
+   "digest_files": 9
+  },
+  {
+   "rank": 17,
+   "role": "main",
+   "task_id": "configure-git-webserver",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "configure-git-webserver"
+   },
+   "docker_image": "alexgshaw/configure-git-webserver:20251031",
+   "docker_image_index_digest": "sha256:9e48389b917fd4650dda1f64406bd7198bbf20dc1c6b0e5c4d81a3c16369f88c",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "system-administration",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.8372,
+    "frontier_n": 43,
+    "opus47_rate": 0.7391,
+    "gpt55_rate": 0.95,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.6377,
+    "cheap_n": 69,
+    "all_rate": 0.6194,
+    "headroom": 0.059,
+    "frontier_median_agent_min": 3.8498,
+    "opus46_median_cost_usd": 0.5796,
+    "opus47_median_cache_tok": 878716.0,
+    "opus47_median_out_tok": 10578.0,
+    "est_opus55_from_opus47_tokens": 0.5982,
+    "est_opus55_from_opus46_bill": 0.4927,
+    "est_opus55_usd": 0.5982
+   },
+   "digest": "sha256:367c8c1983aabd745ac1bfd54b72877dcc1d3136f0f81603c6a6e8713f2580ab",
+   "digest_files": 7
+  },
+  {
+   "rank": 18,
+   "role": "main",
+   "task_id": "mailman",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "mailman"
+   },
+   "docker_image": "alexgshaw/mailman:20251031",
+   "docker_image_index_digest": "sha256:04fac73db7e2b4f49d43f09fbc2266a94d70131f07efa1393d370abc059f4094",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 1800,
+   "verifier_timeout_sec": 1800,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "system-administration",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.881,
+    "frontier_n": 42,
+    "opus47_rate": 0.8182,
+    "gpt55_rate": 0.95,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.5588,
+    "cheap_n": 68,
+    "all_rate": 0.6863,
+    "headroom": 0.0525,
+    "frontier_median_agent_min": 8.2078,
+    "opus46_median_cost_usd": 0.8805,
+    "opus47_median_cache_tok": 1996189.0,
+    "opus47_median_out_tok": 33063.0,
+    "est_opus55_from_opus47_tokens": 1.5396,
+    "est_opus55_from_opus46_bill": 0.7484,
+    "est_opus55_usd": 1.5396
+   },
+   "digest": "sha256:217914a8f3ce49066e39dd2898e9f161e8136a198503f23bb4df7c5f388ec9de",
+   "digest_files": 7
+  },
+  {
+   "rank": 19,
+   "role": "main",
+   "task_id": "pytorch-model-cli",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "pytorch-model-cli"
+   },
+   "docker_image": "alexgshaw/pytorch-model-cli:20251031",
+   "docker_image_index_digest": "sha256:c996884b5fb5fb2c0c07d67da2c4f974f271f07234ed28e1a868240375c57a67",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "model-training",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.8333,
+    "frontier_n": 42,
+    "opus47_rate": 0.6818,
+    "gpt55_rate": 1.0,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.7286,
+    "cheap_n": 70,
+    "all_rate": 0.7973,
+    "headroom": 0.0452,
+    "frontier_median_agent_min": 3.4654,
+    "opus46_median_cost_usd": 0.8649,
+    "opus47_median_cache_tok": 654149.0,
+    "opus47_median_out_tok": 9341.0,
+    "est_opus55_from_opus47_tokens": 0.4746,
+    "est_opus55_from_opus46_bill": 0.7352,
+    "est_opus55_usd": 0.7352
+   },
+   "digest": "sha256:5c0d3625b5dd974a2352d61a034e9e6fd54b496a4bb33a7b8122ff81682d9ece",
+   "digest_files": 13
+  },
+  {
+   "rank": 20,
+   "role": "main",
+   "task_id": "cancel-async-tasks",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "cancel-async-tasks"
+   },
+   "docker_image": "alexgshaw/cancel-async-tasks:20251031",
+   "docker_image_index_digest": "sha256:84c7fae6b256dcc56a350790e2a9715eefc7dad662a9d8e8a472363aa71ef18d",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "software-engineering",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.9302,
+    "frontier_n": 43,
+    "opus47_rate": 0.8696,
+    "gpt55_rate": 1.0,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.4638,
+    "cheap_n": 69,
+    "all_rate": 0.6493,
+    "headroom": 0.0374,
+    "frontier_median_agent_min": 2.8076,
+    "opus46_median_cost_usd": 0.8593,
+    "opus47_median_cache_tok": 1764348.0,
+    "opus47_median_out_tok": 59251.0,
+    "est_opus55_from_opus47_tokens": 1.9613,
+    "est_opus55_from_opus46_bill": 0.7304,
+    "est_opus55_usd": 1.9613
+   },
+   "digest": "sha256:5da010fd0c9de4897fb01a099cd2711442cf616769db51e7bd0d526fe0112180",
+   "digest_files": 7
+  }
+ ],
+ "reserves": [
+  {
+   "rank": 21,
+   "role": "reserve",
+   "task_id": "sanitize-git-repo",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "sanitize-git-repo"
+   },
+   "docker_image": "alexgshaw/sanitize-git-repo:20251031",
+   "docker_image_index_digest": "sha256:4b5234da5bb0d67f3b0bf8db40a2883c07a5219f62b64c2bf9ff1ac84cd0f672",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "security",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.9535,
+    "frontier_n": 43,
+    "opus47_rate": 1.0,
+    "gpt55_rate": 0.9,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.3971,
+    "cheap_n": 68,
+    "all_rate": 0.6904,
+    "headroom": 0.028,
+    "frontier_median_agent_min": 2.6507,
+    "opus46_median_cost_usd": 1.3599,
+    "opus47_median_cache_tok": 884107.0,
+    "opus47_median_out_tok": 13833.0,
+    "est_opus55_from_opus47_tokens": 0.6657,
+    "est_opus55_from_opus46_bill": 1.1559,
+    "est_opus55_usd": 1.1559
+   },
+   "digest": "sha256:0a52105e18321755f469f9faca580a0807d9fbc44f530d851df4104f54f2b17f",
+   "digest_files": 10
+  },
+  {
+   "rank": 22,
+   "role": "reserve",
+   "task_id": "largest-eigenval",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "largest-eigenval"
+   },
+   "docker_image": "alexgshaw/largest-eigenval:20251031",
+   "docker_image_index_digest": "sha256:cb9e3e3b09d0783f3bbcfeec8d77bc32d3791204fb2be6650b19be4fbc082b2e",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "mathematics",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.9286,
+    "frontier_n": 42,
+    "opus47_rate": 0.9091,
+    "gpt55_rate": 0.95,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.6143,
+    "cheap_n": 70,
+    "all_rate": 0.7692,
+    "headroom": 0.0276,
+    "frontier_median_agent_min": 3.362,
+    "opus46_median_cost_usd": 1.4009,
+    "opus47_median_cache_tok": 566020.0,
+    "opus47_median_out_tok": 11754.0,
+    "est_opus55_from_opus47_tokens": 0.4841,
+    "est_opus55_from_opus46_bill": 1.1907,
+    "est_opus55_usd": 1.1907
+   },
+   "digest": "sha256:2bfa63009e386065e419e09018ddf20ecaeceaeb864844ebcac67e87360a8304",
+   "digest_files": 8
+  },
+  {
+   "rank": 23,
+   "role": "reserve",
+   "task_id": "pypi-server",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "pypi-server"
+   },
+   "docker_image": "alexgshaw/pypi-server:20251031",
+   "docker_image_index_digest": "sha256:d18bb30f47c7dcaa3acdbc31ac7413c98eadca2ea16540bbd380f2f063b95276",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "software-engineering",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "registry",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.8864,
+    "frontier_n": 44,
+    "opus47_rate": 1.0,
+    "gpt55_rate": 0.75,
+    "frontier_subs_solving": 8,
+    "cheap_rate": 0.7647,
+    "cheap_n": 68,
+    "all_rate": 0.8926,
+    "headroom": 0.0267,
+    "frontier_median_agent_min": 1.3143,
+    "opus46_median_cost_usd": 0.2905,
+    "opus47_median_cache_tok": 396534.0,
+    "opus47_median_out_tok": 3646.0,
+    "est_opus55_from_opus47_tokens": 0.2474,
+    "est_opus55_from_opus46_bill": 0.2469,
+    "est_opus55_usd": 0.2474
+   },
+   "digest": "sha256:0644861427264cd213466f25e4f5be985e53124dff843f42a0ecc1261830f7a6",
+   "digest_files": 6
+  },
+  {
+   "rank": 24,
+   "role": "reserve",
+   "task_id": "feal-differential-cryptanalysis",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "feal-differential-cryptanalysis"
+   },
+   "docker_image": "alexgshaw/feal-differential-cryptanalysis:20251031",
+   "docker_image_index_digest": "sha256:bea93bafe9eab601ca58729f5735a13f8339f52055322d1cf840e3742b54a287",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 1800,
+   "verifier_timeout_sec": 1800,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "mathematics",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.9535,
+    "frontier_n": 43,
+    "opus47_rate": 0.913,
+    "gpt55_rate": 1.0,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.4265,
+    "cheap_n": 68,
+    "all_rate": 0.7885,
+    "headroom": 0.0267,
+    "frontier_median_agent_min": 3.8061,
+    "opus46_median_cost_usd": 1.0838,
+    "opus47_median_cache_tok": 415702.0,
+    "opus47_median_out_tok": 54226.0,
+    "est_opus55_from_opus47_tokens": 1.2674,
+    "est_opus55_from_opus46_bill": 0.9212,
+    "est_opus55_usd": 1.2674
+   },
+   "digest": "sha256:eacf0f43b76f517f5a831d4f673e72c3ffadacfaf549b9ea2d6fd6d80442853f",
+   "digest_files": 11
+  },
+  {
+   "rank": 25,
+   "role": "reserve",
+   "task_id": "pytorch-model-recovery",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "pytorch-model-recovery"
+   },
+   "docker_image": "alexgshaw/pytorch-model-recovery:20251031",
+   "docker_image_index_digest": "sha256:83efba8d1a163dfe62694789e271ed55010509b6deabbf2d7d6472b40ca8d69a",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "model-training",
+   "difficulty": "medium",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.9286,
+    "frontier_n": 42,
+    "opus47_rate": 1.0,
+    "gpt55_rate": 0.85,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.6393,
+    "cheap_n": 61,
+    "all_rate": 0.8102,
+    "headroom": 0.0258,
+    "frontier_median_agent_min": 2.4711,
+    "opus46_median_cost_usd": 0.6428,
+    "opus47_median_cache_tok": 304126.0,
+    "opus47_median_out_tok": 8621.0,
+    "est_opus55_from_opus47_tokens": 0.3062,
+    "est_opus55_from_opus46_bill": 0.5463,
+    "est_opus55_usd": 0.5463
+   },
+   "digest": "sha256:22c73f0905c98f0da299db75dea42ede8994b197ba9dec7ff4aa6e4c7e9b3660",
+   "digest_files": 9
+  },
+  {
+   "rank": 26,
+   "role": "reserve",
+   "task_id": "sparql-university",
+   "source_dataset": "Terminal-Bench",
+   "source_version": "2.0",
+   "harbor_registry": "terminal-bench@2.0",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+    "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+    "path": "sparql-university"
+   },
+   "docker_image": "alexgshaw/sparql-university:20251031",
+   "docker_image_index_digest": "sha256:92fa4304e51167f9fb4466144eba33ef9272a7df0ac1cab9fc3986bccd1ab708",
+   "docker_image_platforms": [
+    "linux/amd64"
+   ],
+   "agent_timeout_sec": 900,
+   "verifier_timeout_sec": 900,
+   "cpus": 1,
+   "memory": "2G",
+   "category": "data-querying",
+   "difficulty": "hard",
+   "network_needed_by_reference_solution": "none",
+   "tier": "B",
+   "files_changed_on_tb2_main_since_pin": [
+    ".gitignore",
+    "README.md",
+    "task.toml"
+   ],
+   "files_changed_by_tb2_1_fixes": [],
+   "published": {
+    "frontier_rate": 0.9535,
+    "frontier_n": 43,
+    "opus47_rate": 0.913,
+    "gpt55_rate": 1.0,
+    "frontier_subs_solving": 9,
+    "cheap_rate": 0.5147,
+    "cheap_n": 68,
+    "all_rate": 0.7682,
+    "headroom": 0.0226,
+    "frontier_median_agent_min": 2.6364,
+    "opus46_median_cost_usd": 0.6319,
+    "opus47_median_cache_tok": 406709.0,
+    "opus47_median_out_tok": 26433.0,
+    "est_opus55_from_opus47_tokens": 0.7076,
+    "est_opus55_from_opus46_bill": 0.5371,
+    "est_opus55_usd": 0.7076
+   },
+   "digest": "sha256:c9030c1b06e857118aa79deff8828c22350022409e372fbedc609761b06a1826",
+   "digest_files": 8
+  }
+ ]
+}

@@ -1,0 +1,22 @@
+{
+  "note": "Cells for the Lane B quick look. session_cap_usd is reserved in the ledger before each session and enforced by the metering proxy. DeepSeek is metered at the DeepSeek endpoint's weekday peak price, an upper bound.",
+  "models": [
+    {
+      "id": "claude-opus-5-5",
+      "harbor_model": "anthropic/claude-opus-5-5",
+      "session_cap_usd": 5
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "harbor_model": "anthropic/claude-haiku-5-5",
+      "session_cap_usd": 1
+    },
+    {
+      "id": "deepseek-v4.1-flash-1017",
+      "harbor_model": "anthropic/deepseek-v4.1-flash-1017",
+      "session_cap_usd": 0.5
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2
+}

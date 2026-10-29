@@ -3,17 +3,26 @@ import { join } from "node:path";
 
 export const WORK = process.env.LANEA_WORK ?? join(homedir(), ".capy/work/lanea-quick");
 export const GSTACK_REPO = process.env.LANEA_GSTACK ?? join(homedir(), ".capy/work/gstack");
-export const LEDGER_PATH = process.env.LANEA_LEDGER ?? join(homedir(), ".capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl");
-export const CAP_USD = process.env.LANEA_CAP_USD === undefined ? 130 : Number(process.env.LANEA_CAP_USD);
-if (!(Number.isFinite(CAP_USD) && CAP_USD > 0)) throw new Error("E_CONFIG: LANEA_CAP_USD must be a positive number of dollars");
-export const LINE_ITEM = process.env.LANEA_LINE_ITEM ?? "lanea-quick";
+
+export interface LineItem {
+  cap: number;
+  item: string;
+  ledger: string;
+}
+
+export function lineItem(env: Record<string, string | undefined> = process.env): LineItem {
+  const cap = env.LANEA_CAP_USD ?? "";
+  const item = env.LANEA_LINE_ITEM ?? "";
+  if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(cap) || !(Number(cap) > 0)) throw new Error(`E_CONFIG: LANEA_CAP_USD must be the approved cap as a plain positive decimal, such as 35; got ${JSON.stringify(cap)}`);
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(item)) throw new Error(`E_CONFIG: LANEA_LINE_ITEM must be the approved line item in lowercase letters, digits and single hyphens, such as lanea-quick-rerun; got ${JSON.stringify(item)}`);
+  return { cap: Number(cap), item, ledger: env.LANEA_LEDGER || join(homedir(), ".capy/drive/captain-gstack-evals/ledger", `${item}.jsonl`) };
+}
 
 export const CLAUDE_CODE_VERSION = "2.1.312";
 export const BUN_VERSION = "1.4.4";
 export const BASE_IMAGE = `lanea-quick/base:cc${CLAUDE_CODE_VERSION}-bun${BUN_VERSION}`;
 
 export type ArmName = "before" | "after" | "none" | "before2";
-export const ARMS: ArmName[] = ["before", "after", "none", "before2"];
 
 export interface Suite {
   skill: string;
@@ -42,12 +51,6 @@ export const SUITES: Record<string, Suite> = {
     note: "v1.91.287.0 /learn diet (gstack#3524); committed contract tasks",
   },
 };
-
-export function armTree(suite: Suite, arm: ArmName): { sha: string; drop?: string } {
-  if (arm === "after") return { sha: suite.after };
-  if (arm === "none") return { sha: suite.before, drop: suite.skill };
-  return { sha: suite.before };
-}
 
 export function imageTag(suiteName: string, arm: ArmName): string {
   const a = arm === "before2" ? "before" : arm;
@@ -91,8 +94,5 @@ export const MODELS: Record<string, ModelSpec> = {
 export const LIMITS = {
   sessionWallSeconds: 1200,
   maxAgentTurns: 80,
-  maxProseReplies: 8,
-  maxAskAnswers: 12,
-  maxRepliesPerCategory: 2,
   parallel: 6,
 };

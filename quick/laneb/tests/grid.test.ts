@@ -1,0 +1,72 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { jobConfig, RETRY_ON } from "../runner/grid.ts";
+import { tb2TaskToml, TB2_AGENT_HOSTS } from "../runner/materialize.ts";
+
+describe("grid", () => {
+  test("one agent per model and arm, tasks in rank order, kwargs carry the arm and cap", () => {
+    const job = jobConfig({
+      job_name: "r1", tasks_dir: "/run/tasks", tasks: ["a", "b"], attempts: 1, n_concurrent: 4, agent_dir: "/r/agent", runner_dir: "/r", base_url: "http://__GATEWAY__:8787", max_output_tokens: 32000, verifier_timeout_multiplier: 2,
+      models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }],
+      arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }, { name: "gstack", tar: "/run/arms/gstack.tar", sha256: "b" }],
+    });
+    expect(job.agents.map((a) => a.kwargs.arm)).toEqual(["none", "gstack"]);
+    expect(job.agents[1].kwargs).toMatchObject({ upstream_model: "claude-haiku-5-5", session_cap_usd: 1, skip_install: true, arm_tar: "/run/arms/gstack.tar", arm_sha256: "b" });
+    expect(job.agents[0].kwargs.max_output_tokens).toBe(32000);
+    expect(job.tasks).toEqual([{ path: "/run/tasks/a" }, { path: "/run/tasks/b" }]);
+    expect(job.verifier_timeout_multiplier).toBe(2);
+    expect(job.retry.max_retries).toBe(2);
+  });
+
+  const spec = {
+    job_name: "r1", tasks_dir: "/run/tasks", tasks: ["a"], attempts: 1, n_concurrent: 1, agent_dir: "/vm/runner/agent", runner_dir: "/vm/runner", base_url: "http://__GATEWAY__:8787", max_output_tokens: 32000, verifier_timeout_multiplier: 2,
+    models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }],
+    arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }],
+  };
+
+  // Harbor f3a5a92 (trial/queue.py): with include_exceptions set, only those types are rerun, after the trial dir is deleted.
+  test("Harbor reruns only failures that come before any model response", () => {
+    const job = jobConfig(spec) as any;
+    const retried = (type: string) => !(job.retry.exclude_exceptions ?? []).includes(type) && (!job.retry.include_exceptions || job.retry.include_exceptions.includes(type));
+    for (const type of ["LanebInfraError", "EnvironmentStartTimeoutError", "AgentSetupTimeoutError"]) expect(retried(type)).toBe(true);
+    for (const type of ["LedgerCapStop", "AgentTimeoutError", "VerifierTimeoutError", "RewardFileNotFoundError", "RuntimeError", "TimeoutExpired", "TimeoutError", "HttpStatusError"]) expect(retried(type)).toBe(false);
+    const agent = readFileSync(join(import.meta.dir, "../runner/agent/laneb_agent.py"), "utf8");
+    expect(agent).toContain("class LanebInfraError(Exception):");
+    expect(RETRY_ON).toContain("LanebInfraError");
+  });
+
+  test("every trial's main container drops NET_RAW and NET_ADMIN through a compose overlay that keeps Harbor's networking", () => {
+    const job = jobConfig(spec) as any;
+    expect(job.environment.extra_docker_compose).toEqual(["/vm/runner/agent-caps.compose.yaml"]);
+    const overlay = Bun.YAML.parse(readFileSync(join(import.meta.dir, "../runner/agent-caps.compose.yaml"), "utf8")) as any;
+    expect(Object.keys(overlay.services)).toEqual(["main"]);
+    expect(overlay.services.main.cap_drop.sort()).toEqual(["NET_ADMIN", "NET_RAW"]);
+    expect(overlay.services.main.network_mode).toBeUndefined();
+    expect(overlay.services.main.networks).toBeUndefined();
+  });
+
+  test("smoke.sh and route-check.sh pass the same overlay to every harbor run", () => {
+    for (const script of ["../runner/smoke.sh", "../runner/route-check.sh"]) {
+      const text = readFileSync(join(import.meta.dir, script), "utf8");
+      const runs = text.split("harbor run").length - 1;
+      expect(runs).toBeGreaterThan(0);
+      expect(text.split('--extra-docker-compose "$here/agent-caps.compose.yaml"').length - 1).toBe(runs);
+    }
+  });
+});
+
+describe("tb2 task.toml", () => {
+  const original = 'version = "1.0"\n\n[metadata]\ncategory = "x"\n\n[verifier]\ntimeout_sec = 900.0\n\n[agent]\ntimeout_sec = 1800.0\n\n[environment]\nbuild_timeout_sec = 600.0\ndocker_image = "alexgshaw/x:20251031"\ncpus = 1\n';
+  test("drops the prebuilt image, sets the agent allowlist and a public verifier", () => {
+    const out = tb2TaskToml(original, "allowlist");
+    expect(out).not.toContain("docker_image");
+    expect(out).toContain('[agent]\ntimeout_sec = 1800.0\nnetwork_mode = "allowlist"\nallowed_hosts = [');
+    expect(out).toContain('[verifier]\ntimeout_sec = 900.0\nnetwork_mode = "public"');
+    for (const h of TB2_AGENT_HOSTS) expect(out).toContain(`"${h}"`);
+    expect(out).not.toContain("github.com");
+  });
+  test("public mode for hosts without nftables inet", () => {
+    expect(tb2TaskToml(original, "public")).toContain('[agent]\ntimeout_sec = 1800.0\nnetwork_mode = "public"\n');
+  });
+});

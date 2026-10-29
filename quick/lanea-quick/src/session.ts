@@ -1,8 +1,8 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { BASE_IMAGE, LIMITS, type ArmName } from "./config.ts";
+import { join, resolve } from "node:path";
+import { LIMITS, type ArmName } from "./config.ts";
 import { gradePatterns, loadedBytes, parseTranscript, resultOutcome, skillUse, transcriptText, type PatternGrade, type Task } from "./grade.ts";
 import type { MeteringProxy } from "./proxy.ts";
 import { UserSim, type UserScript } from "./usersim.ts";
@@ -18,6 +18,7 @@ export interface SessionSpec {
   model: string;
   trial: number;
   image: string;
+  checkImage: string;
   seedDir: string;
   fixturesDir: string;
   outDir: string;
@@ -45,6 +46,7 @@ export interface SessionResult {
   opened: boolean;
   open_how: string[];
   files_loaded: Record<string, number>;
+  subagent_files_loaded: Record<string, number>;
   loaded_bytes_unique: number;
   loaded_bytes_total: number;
   usage: Usage;
@@ -115,10 +117,11 @@ class Inbox {
 const userMessage = (text: string) => ({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, session_id: "" });
 
 export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promise<SessionResult> {
+  const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const t0 = Date.now();
   mkdirSync(spec.outDir, { recursive: true });
   const errors: string[] = [];
-  const container = `lanea-${spec.id}`.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 120);
+  const container = `lanea-${createHash("sha256").update(resolve(spec.outDir)).digest("hex").slice(0, 8)}-${spec.id}`.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 120);
   const transcriptPath = join(spec.outDir, "transcript.jsonl");
   const stderrPath = join(spec.outDir, "cli-stderr.log");
   const { token, session } = proxy.register(spec.id, spec.model, spec.ceilingUsd, spec.hardLimitUsd, join(spec.outDir, "proxy.jsonl"));
@@ -205,12 +208,12 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
         appendFileSync(transcriptPath, JSON.stringify(m) + "\n");
         if (m.type === "system" && m.subtype === "init") {
           init = { model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, skills: m.skills, tools: m.tools, cwd: m.cwd };
-        } else if (m.type === "assistant") {
+        } else if (m.type === "assistant" && !m.parent_tool_use_id) {
           for (const b of m.message?.content ?? []) if (b.type === "text" && b.text?.trim()) turnText = b.text;
         } else if (m.type === "result") {
           subtypes.push(m.subtype);
           numTurns += m.num_turns ?? 0;
-          sdkCost += m.total_cost_usd ?? 0;
+          sdkCost = Math.max(sdkCost, m.total_cost_usd ?? 0);
           sdkMs += m.duration_ms ?? 0;
           const outcome = resultOutcome(m, session.budgetHit);
           if (outcome.stop) {
@@ -244,14 +247,18 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
     } finally {
       clearTimeout(wall);
     }
-    const copied = await run(["sh", "-c", `rm -rf "${spec.outDir}/work" && docker cp ${container}:/work - | tar -x -C "${spec.outDir}"`], { timeoutMs: 120_000 });
-    if (copied.code !== 0) errors.push(`E_COPY: ${copied.out}`);
+    const copied = await run(["bash", "-c", `set -o pipefail; rm -rf "${spec.outDir}/work" && docker cp ${container}:/work - | tar -x -C "${spec.outDir}"`], { timeoutMs: 120_000 });
+    if (copied.code !== 0) {
+      if (status === "complete") status = "infra_error";
+      errors.push(`E_COPY: ${copied.out}`);
+    }
   } catch (e) {
     status = "infra_error";
     errors.push(String((e as Error)?.message ?? e).slice(0, 1000));
   } finally {
     proxy.revoke(token);
     await run(["docker", "rm", "-f", container]);
+    await proxy.drain(session, 30_000);
   }
 
   const t = parseTranscript(messages);
@@ -261,10 +268,13 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
   if (spec.task.check && status !== "infra_error") {
     const env = { ...STATE_ENV, SKILL_EVAL_FIXTURES: "/fx", HOME: "/tmp", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "safe.directory", GIT_CONFIG_VALUE_0: "*" };
     const r = await run(
-      ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "-v", `${spec.fixturesDir}:/fx:ro`, "-w", "/work", BASE_IMAGE, "sh", "-c", spec.task.check],
+      ["docker", "run", "--rm", "--network", "none", "--user", spec.agentUid, ...envFlags(env), "-v", `${spec.outDir}/work:/work`, "--mount", `type=bind,src=${spec.fixturesDir},dst=/fx,readonly`, "-w", "/work", spec.checkImage, "sh", "-c", spec.task.check],
       { env, timeoutMs: 120_000 },
     );
-    check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };
+    if (r.code === 125) {
+      if (status === "complete") status = "infra_error";
+      errors.push(`E_CHECK: docker could not start the check: ${r.out.slice(-500)}`);
+    } else check = { cmd: spec.task.check, exit: r.code, ok: r.code === 0, output: r.out.slice(-1000) };
   }
   const use = skillUse(t, spec.skill);
   const bytes = loadedBytes(use.files, spec.sizes);
@@ -287,6 +297,7 @@ export async function runSession(spec: SessionSpec, proxy: MeteringProxy): Promi
     opened: use.opened,
     open_how: use.how,
     files_loaded: use.files,
+    subagent_files_loaded: skillUse({ toolUses: t.subagentToolUses }, spec.skill).files,
     loaded_bytes_unique: bytes.unique,
     loaded_bytes_total: bytes.total,
     usage: session.usage,
