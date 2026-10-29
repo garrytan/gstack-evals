@@ -47,6 +47,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_USER_TURNS_MISSING](#e_user_turns_missing) | 2 | U10 |
 | [E_INTERACTIVE_HOST](#e_interactive_host) | 2 | U7 |
 | [E_LOOSE_GSTACK](#e_loose_gstack) | 2 | U7 |
+| [E_MODEL_POLICY](#e_model_policy) | 2 | U7 |
 | [VACUOUS_CHECK](#vacuous_check) | 2 | U5 |
 | [E_TASKS_INVALID](#e_tasks_invalid) | 2 | U5 |
 | [E_ISOLATION_UNSAFE](#e_isolation_unsafe) | 2 | U9 |
@@ -345,6 +346,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 An arm is a loose folder that calls gstack bins, but its gstack root cannot be resolved, so it would measure gstack's degraded mode.
 
 Fix: Pass --base gstack@&lt;sha> --skill &lt;name> with the values the message prints, or point the arm at a rendered gstack skill folder. Do not --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
+
+### E_MODEL_POLICY
+
+A model the run would call is not allowed for its role (subject, judge, adjudicator or user simulator) by the model policy file, needs --smoke, has no row in the metering proxy's price table, or the policy file itself does not parse.
+
+Fix: Read the policy line in the message: pick a model the policy allows for that role, add --smoke for a smoke-only model, or pass your own policy with --policy &lt;models.json> (policy/examples/ has one). The default policy is policy/models.json. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 

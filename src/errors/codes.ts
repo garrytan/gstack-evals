@@ -336,6 +336,15 @@ export const CODES = {
     resumable: false,
     owner: "U7",
   },
+  E_MODEL_POLICY: {
+    exit: 2,
+    meaning: "A model the run would call is not allowed for its role (subject, judge, adjudicator or user simulator) by the model policy file, needs --smoke, has no row in the metering proxy's price table, or the policy file itself does not parse.",
+    fix: "Read the policy line in the message: pick a model the policy allows for that role, add --smoke for a smoke-only model, or pass your own policy with --policy <models.json> (policy/examples/ has one). The default policy is policy/models.json. Do not --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
   VACUOUS_CHECK: {
     exit: 2,
     meaning: "Preflight found a task whose whole pass predicate holds on the no-op control (a non-safety task), or still holds on its mutant (a safety task).",
