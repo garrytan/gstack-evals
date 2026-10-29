@@ -189,16 +189,24 @@ export function exportLease(record: string, lease_id: string): LeaseFile {
   return lease;
 }
 
+/** Warns with LEASE_OVERSPENT when a close holds more than its lease reserved, which a call billed above its reservation causes. */
+function warnOverspent(lease: LeaseFile, close: CloseFile, warn?: (code: ReasonCode, message: string) => void): void {
+  const held = close.spent_micros + close.unknown_micros;
+  if (held > lease.reserved_micros) warn?.("LEASE_OVERSPENT", "lease " + lease.lease_id + " closes at " + usd(held) + ", above the " + usd(lease.reserved_micros) + " it reserved: a provider billed a call above its reservation, and the close records the real spend");
+}
+
 /**
  * Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same
  * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
+ * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning.
  */
-export function settleLease(record: string | null, local: LocalLedger, lease_id: string): CloseFile {
+export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void): CloseFile {
   if (record !== null) {
     const { close: prior } = findLease(record, lease_id);
     if (prior && !local.getLease(lease_id)) return prior;
   }
   const close = local.stageClose(lease_id);
+  warnOverspent(local.getLease(lease_id)!.file, close, warn);
   if (record === null) return close;
   const result = write(record, close, "E_LEASE_UNSETTLED");
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + lease_id + " is already " + closeText(result.conflict as CloseFile) + " in the approval record; this settle says " + closeText(close));
@@ -212,19 +220,21 @@ const keysOf = (o: object | null) => (o === null || typeof o !== "object" ? "" :
 
 /**
  * Copies a sealed workflow's settle artifact into the record. Idempotent: the same artifact again is present. The record
- * is write-once, so only the exact shape a local ledger stages is accepted, and never more than the lease reserved.
+ * is write-once, so only the exact shape a local ledger stages is accepted, holding no more unknown charge than the lease
+ * reserved. Spend above the lease, from a call billed above its reservation, is recorded with a LEASE_OVERSPENT warning.
  */
-export function importSettlement(record: string, close: unknown): CloseFile {
+export function importSettlement(record: string, close: unknown, warn?: (code: ReasonCode, message: string) => void): CloseFile {
   if (!isRecordFile(close) || close.kind !== "close") throw new LedgerError("E_USAGE", "the settle artifact is not a lease close");
   const { lease, close: prior } = findLease(record, close.lease_id);
   const usage = close.usage as Record<string, unknown> | null;
   const shaped = keysOf(close) === SETTLED_KEYS && isTime(close.closed_at) && keysOf(usage) === USAGE_KEYS && Object.values(usage!).every(isMicros);
-  if (!shaped || close.how !== "settled" || close.item !== lease.item || close.seq !== lease.seq || close.spent_micros + close.unknown_micros > lease.reserved_micros) {
-    throw new LedgerError("E_USAGE", "the settle artifact for " + close.lease_id + " is not a settled close of the lease in the approval record " + record + " within its " + usd(lease.reserved_micros));
+  if (!shaped || close.how !== "settled" || close.item !== lease.item || close.seq !== lease.seq || close.unknown_micros > lease.reserved_micros) {
+    throw new LedgerError("E_USAGE", "the settle artifact for " + close.lease_id + " is not a settled close of the lease in the approval record " + record + " with at most its " + usd(lease.reserved_micros) + " held for unknown calls");
   }
   if (prior && JSON.stringify(prior) !== JSON.stringify(close)) throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(prior) + "; the artifact says " + closeText(close));
   const result = write(record, close, "E_LEASE_UNSETTLED");
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(result.conflict as CloseFile) + "; the artifact says " + closeText(close));
+  warnOverspent(lease, close, warn);
   return close;
 }
 

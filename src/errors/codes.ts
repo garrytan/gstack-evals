@@ -411,8 +411,8 @@ export const CODES = {
   E_LEDGER_UNAVAILABLE: {
     exit: 2,
     meaning: "The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.",
-    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume <out>.",
-    side_effects: NO_SPEND,
+    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key). Stop the proxy and run reconcileJournal on its journal before the lease is settled, so a hold the lost answer left is released at $0, then --resume <out>.",
+    side_effects: "Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0; a lease settled first counts that hold as unknown.",
     retry_safe: true,
     resumable: true,
     owner: "U3",
@@ -570,6 +570,12 @@ export const CODES = {
     exit: null,
     meaning: "A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.",
     fix: "Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).",
+    owner: "U4",
+  },
+  LEASE_OVERSPENT: {
+    exit: null,
+    meaning: "A lease closed holding more than it reserved, because a provider billed a call above its reservation. The close records the real spend, so the line item's committed total can pass its cap.",
+    fix: "Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.",
     owner: "U4",
   },
 } as const satisfies Record<string, CodeInfo>;

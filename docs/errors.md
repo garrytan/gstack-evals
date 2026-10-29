@@ -76,6 +76,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [REPLY_MISALIGNED](#reply_misaligned) | warning | U10 |
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
 | [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
+| [LEASE_OVERSPENT](#lease_overspent) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -413,9 +414,9 @@ Exit 2. Side effects: None for the refused request: it never reached the provide
 
 The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.
 
-Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume &lt;out>.
+Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key). Stop the proxy and run reconcileJournal on its journal before the lease is settled, so a hold the lost answer left is released at $0, then --resume &lt;out>.
 
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U3.
+Exit 2. Side effects: Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0; a lease settled first counts that hold as unknown. Retry safe: yes. Resumable: yes. Owner: U3.
 
 ### E_IMAGE_BUILD
 
@@ -578,5 +579,13 @@ Warning. Owner: U5.
 A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.
 
 Fix: Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).
+
+Warning. Owner: U4.
+
+### LEASE_OVERSPENT
+
+A lease closed holding more than it reserved, because a provider billed a call above its reservation. The close records the real spend, so the line item's committed total can pass its cap.
+
+Fix: Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.
 
 Warning. Owner: U4.
