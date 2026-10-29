@@ -532,8 +532,8 @@ describe("OpenRouter route", () => {
   test("a call goes out with OPENROUTER_API_KEY and the price row's routing, and settles from reported tokens at the row", async () => {
     const t = setup(() =>
       t.calls.length === 1
-        ? ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.9 })
-        : ok({ prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 800 }, cost: 0.9 }),
+        ? ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.0004 })
+        : ok({ prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 800 }, cost: 0.0001 }),
     );
     const a = t.bind({ models });
     expect((await t.call(a.slot, a.token, PATH, chat(PARTICLE, { provider: { sort: "price", only: ["somewhere-pricier"] } }))).status).toBe(200);
@@ -541,10 +541,10 @@ describe("OpenRouter route", () => {
     expect(t.calls[0]!.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(t.calls[0]!.headers.get("authorization")).toBe(`Bearer ${OPENROUTER_KEY}`);
     expect(t.calls[0]!.headers.get("x-api-key")).toBeNull();
-    expect(t.calls[0]!.body.provider).toEqual({ max_price: { prompt: 0.25, completion: 1, request: 0 } });
+    expect(t.calls[0]!.body.provider).toEqual({ max_price: { prompt: 0.25, completion: 1, request: 0, image: 0 } });
     expect(t.calls[0]!.body.max_tokens).toBe(32_768);
     expect(t.calls[0]!.body.max_completion_tokens).toBeUndefined();
-    expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, max_price: { prompt: 0.3, completion: 1.2, request: 0 } });
+    expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, max_price: { prompt: 0.3, completion: 1.2, request: 0, image: 0 } });
     expect(t.ledger.settles).toEqual([
       ["res_1", { kind: "spent", spent_micros: 1000 * 0.25 + 200 * 1, usage: { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 } }],
       ["res_2", { kind: "spent", spent_micros: Math.ceil(200 * 0.3 + 800 * 0.006 + 100 * 1.2), usage: { input: 200, output: 100, reasoning: 0, cache_read: 800, cache_write: 0 } }],
@@ -577,14 +577,21 @@ describe("OpenRouter route", () => {
   });
 
   test("a Responses stream, as Codex sends one, gets the row's routing and settles from response.completed", async () => {
-    const usage = { input_tokens: 2000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, output_tokens_details: { reasoning_tokens: 100 }, cost: 0.001 };
+    const usage = { input_tokens: 2000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, output_tokens_details: { reasoning_tokens: 100 }, cost: 0.0005 };
     const t = setup(() => sse([{ type: "response.created", response: { usage: null } }, { type: "response.output_text.delta", delta: "hi" }, { type: "response.completed", response: { usage } }]));
     const a = t.bind({ models });
     const input = [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }];
     await (await t.call(a.slot, a.token, "/openrouter/v1/responses", { model: PARTICLE, stream: true, store: false, input, reasoning: { effort: "high" } })).text();
     expect(t.calls[0]!.url).toBe("https://openrouter.ai/api/v1/responses");
-    expect(t.calls[0]!.body).toMatchObject({ provider: { max_price: { prompt: 0.25, completion: 1, request: 0 } }, max_output_tokens: 32_768 });
+    expect(t.calls[0]!.body).toMatchObject({ provider: { max_price: { prompt: 0.25, completion: 1, request: 0, image: 0 } }, max_output_tokens: 32_768 });
     expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 2000 * 0.25 + 300 * 1, usage: { input: 2000, output: 200, reasoning: 100, cache_read: 0, cache_write: 0 } }]]);
+  });
+
+  test("a call OpenRouter bills above its tokens at the row settles at what OpenRouter billed", async () => {
+    const t = setup(() => ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.002 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    expect(t.ledger.settles[0]![1]).toMatchObject({ kind: "spent", spent_micros: 2000 });
   });
 
   test("settled OpenRouter spend counts toward the cap, so the next call that cannot fit is a cap stop sent nowhere", async () => {
@@ -624,10 +631,14 @@ describe("OpenRouter route", () => {
   test("fields that reach other models, tiers or paid server tools, and unpriced variants, are refused before the provider", async () => {
     const t = setup(() => ok({ prompt_tokens: 10, completion_tokens: 5 }));
     const a = t.bind({ models });
-    for (const extra of [{ models: [PARTICLE, "openai/gpt-6-astra"] }, { route: "fallback" }, { preset: "@preset/x" }, { plugins: [{ id: "web" }] }, { web_search_options: {} }, { service_tier: "priority" }, { prompt: { id: "p" } }, { background: true }, { modalities: ["image"] }, { tools: [{ type: "openrouter:subagent" }] }]) {
+    for (const extra of [{ models: [PARTICLE, "openai/gpt-6-astra"] }, { route: "fallback" }, { preset: "@preset/x" }, { plugins: [{ id: "web" }] }, { web_search_options: {} }, { service_tier: "priority" }, { prompt: { id: "p" } }, { background: true }, { modalities: ["image"] }, { max_price: { prompt: 100 } }, { tools: [{ type: "openrouter:subagent" }] }]) {
       await expectProblem(await t.call(a.slot, a.token, PATH, chat(PARTICLE, extra)), 402, "E_ALLOWANCE");
     }
     await expectProblem(await t.call(a.slot, a.token, PATH, chat(`${PARTICLE}:online`)), 402, "E_ALLOWANCE");
+    for (const file_data of ["https://example.com/a.pdf", "data:application/pdf;base64,JVBERi0="]) {
+      await expectProblem(await t.call(a.slot, a.token, PATH, chat(PARTICLE, { messages: [{ role: "user", content: [{ type: "file", file: { filename: "a.pdf", file_data } }] }] })), 402, "E_ALLOWANCE");
+    }
+    await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/responses", { model: PARTICLE, input: [{ role: "user", content: [{ type: "input_file", file_data: "https://example.com/a.pdf" }] }] }), 402, "E_ALLOWANCE");
     await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/messages", chat()), 403, "E_ALLOWANCE");
     expect(t.calls).toHaveLength(0);
     expect((await t.call(a.slot, a.token, PATH, chat(PARTICLE, { tools: [{ type: "function", function: { name: "f", parameters: {} } }] }))).status).toBe(200);

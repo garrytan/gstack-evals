@@ -57,8 +57,12 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
 };
 
-/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers, if any, and its prices as the most OpenRouter may route to. */
-export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), max_price: { prompt: price.input, completion: price.output, request: 0 } });
+/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers, if any, and its prices as the most OpenRouter may route to, with no per-request or per-image charge. */
+export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), max_price: { prompt: price.input, completion: price.output, request: 0, image: 0 } });
+
+/** A file part: OpenRouter fetches a URL in it, and parses a PDF it cannot pass to the model with a paid OCR engine. */
+const filePart = (value: unknown): boolean =>
+  Array.isArray(value) ? value.some(filePart) : !!value && typeof value === "object" && ((value as { type?: unknown }).type === "file" || (value as { type?: unknown }).type === "input_file" || Object.values(value).some(filePart));
 
 /** A dated API snapshot (gpt-5.5-2026-08-06) is billed at its family's list price. */
 export const chatPrice = (id: string): ChatPrice | undefined => CHAT_PRICES[id] ?? CHAT_PRICES[id.replace(/-\d{4}-?\d{2}-?\d{2}$/, "")];
@@ -133,11 +137,12 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   if (provider === "anthropic" && body.inference_geo !== undefined && body.inference_geo !== "global") throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
   if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
   if (provider === "openrouter") {
-    const rerouted = ["models", "route", "preset", "plugins", "web_search_options", "service_tier", "prompt", "background", "modalities", "image_config"].find(k => body[k] !== undefined);
+    const rerouted = ["models", "route", "preset", "plugins", "web_search_options", "service_tier", "prompt", "background", "modalities", "image_config", "max_price"].find(k => body[k] !== undefined);
     if (rerouted) throw new PriceError(`OpenRouter's ${rerouted} field can reach other models, tiers, stored input or paid tools that the price row does not cover`);
     const tools = Array.isArray(body.tools) ? (body.tools as Array<{ type?: unknown }>) : [];
     const server = tools.find(t => typeof t?.type === "string" && t.type.startsWith("openrouter:"));
     if (server) throw new PriceError(`the OpenRouter server tool ${server.type} runs and bills outside the model's tokens`);
+    if (filePart(body.messages) || filePart(body.input)) throw new PriceError("a file part can be fetched from a URL or parsed by paid OCR, which the request's bytes do not bound");
   }
   const json = JSON.stringify(body);
   const stored = (i: Record<string, unknown>) => typeof i.id === "string" && ((i.type == null && i.role === undefined) || (i.type === "reasoning" && typeof i.encrypted_content !== "string"));
@@ -159,7 +164,11 @@ export function reservationMicros(price: RequestPrice): number {
   return Math.ceil(price.inputTokens * Math.max(rates.input, write) + price.maxOutputTokens * rates.output);
 }
 
-/** Cost in integer micro-dollars (rounded up) and tokens from provider-reported usage, or null when it reports none or reports fast mode, which the table does not price. */
+/**
+ * Cost in integer micro-dollars (rounded up) and tokens from provider-reported usage, or null when it reports none or
+ * reports fast mode, which the table does not price. An OpenRouter call costs the larger of its tokens at the row and the
+ * usage.cost OpenRouter billed, so a fee outside the tokens is never under-recorded.
+ */
 export function usageCost(price: RequestPrice, usage: unknown): { micros: number; usage: TokenUsage } | null {
   if (!usage || typeof usage !== "object") return null;
   const u = usage as Record<string, unknown>;
@@ -182,7 +191,8 @@ export function usageCost(price: RequestPrice, usage: unknown): { micros: number
     (cacheWrite - write1h) * (rates.cache_write ?? rates.input) +
     write1h * rates.input * ANTHROPIC_CACHE_WRITE_1H_MULT +
     allOutput * rates.output;
-  return { micros: Math.ceil(micros), usage: { input: fresh, output: allOutput - reasoning, reasoning, cache_read: cacheRead, cache_write: cacheWrite } };
+  const billed = price.provider === "openrouter" && typeof u.cost === "number" && Number.isFinite(u.cost) ? Math.ceil(Number((u.cost * 1e6).toFixed(3))) : 0;
+  return { micros: Math.max(Math.ceil(micros), billed), usage: { input: fresh, output: allOutput - reasoning, reasoning, cache_read: cacheRead, cache_write: cacheWrite } };
 }
 
 /**
