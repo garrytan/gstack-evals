@@ -450,7 +450,7 @@ if (import.meta.main) {
     } catch {
       raw = null;
     }
-    const touched = git(["diff", "--name-only", "--no-renames", found.base, head]);
+    const touched = git(["diff", "--name-only", "-z", "--no-renames", found.base, head]);
     if (!touched.ok) fail("publish refused: cannot diff the train (" + touched.out + ")");
     const verdict = publishable(raw, {
       nonce: flag(args, "nonce"),
@@ -458,7 +458,7 @@ if (import.meta.main) {
       tree: rev(git, head + "^{tree}"),
       planned: manifest.stages[STAGE]!,
       slots: found.slots,
-      touched: touched.out.split("\n").filter(Boolean),
+      touched: touched.out.split("\0").filter(Boolean),
       surface: manifest.gate_surface,
     });
     if ("error" in verdict) fail("publish refused: " + verdict.error);

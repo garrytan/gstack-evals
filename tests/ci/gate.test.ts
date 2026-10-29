@@ -33,7 +33,7 @@ const TRAIN = "gate.train-0123456789ab-0123456789ab-x1y2z3";
 const BISECT = "gate.bisect-0123456789ab-0123456789ab-x1y2z3";
 
 /** main, an optional scratch base carrying the train policy, two PR branches and a two-slot train on train/<nonce>. */
-function scratchTrain(scratchBase: boolean) {
+function scratchTrain(scratchBase: boolean, gatePath = "gate/two.txt") {
   const dir = mkdtempSync(join(tmpdir(), "gate-train-"));
   sh(dir, "git init -q -b main . && echo a > a.txt && git add a.txt && git commit -qm init");
   if (scratchBase) sh(dir, "git checkout -qb scratch");
@@ -43,7 +43,7 @@ function scratchTrain(scratchBase: boolean) {
   if (scratchBase) sh(dir, "git checkout -q main && echo m > m.txt && git add m.txt && git commit -qm main-moved && git checkout -q scratch");
   const base = sh(dir, "git rev-parse HEAD");
   const p1 = sh(dir, "git checkout -qb p1 && echo 1 > one.txt && git add one.txt && git commit -qm one && git rev-parse HEAD");
-  const p2 = sh(dir, `git checkout -q ${base} -b p2 && mkdir -p gate && echo 2 > gate/two.txt && git add gate && git commit -qm two && git rev-parse HEAD`);
+  const p2 = sh(dir, `git checkout -q ${base} -b p2 && mkdir -p gate && echo 2 > '${gatePath}' && git add gate && git commit -qm two && git rev-parse HEAD`);
   sh(dir, `git checkout -q ${base} -b train/${TRAIN}`);
   const t1 = sh(dir, `git merge -q --no-ff -m "train T1: merge #11 at ${p1.slice(0, 12)}" p1 && git rev-parse HEAD`);
   const t2 = sh(dir, `git merge -q --no-ff -m "train T2: merge #12 at ${p2.slice(0, 12)}" p2 && git rev-parse HEAD`);
@@ -245,6 +245,18 @@ describe("the gate.ts command line", () => {
     const surface = bun(t.dir, ["publish", "--manifest", m, "--repo", t.dir, "--record", rec, "--nonce", TRAIN, "--head", t.t2]);
     expect(surface.status).toBe(1);
     expect(surface.stderr).toContain("a 2-PR train touches the gate surface (gate/two.txt)");
+  });
+
+  test("publish refuses a 2-PR train that adds a non-ASCII path on the gate surface, whatever core.quotePath says", () => {
+    const t = scratchTrain(false, "gate/café.txt");
+    sh(t.dir, "git checkout -q " + t.base);
+    const rec = join(t.dir, "..", "pub-" + Date.now() + ".json");
+    const m = join(t.dir, "..", "pm-" + Date.now() + ".json");
+    writeFileSync(m, JSON.stringify({ schema: 1, stages: { m0: CASES }, gate_surface: ["gate/**"] }));
+    writeFileSync(rec, JSON.stringify(trainRecord({ nonce: TRAIN, head: t.t2, tree: sh(t.dir, "git rev-parse " + t.t2 + "^{tree}"), base: t.base, planned: CASES, panels: [pass("ok"), pass("named", "junit")] })));
+    const quoted = bun(t.dir, ["publish", "--manifest", m, "--repo", t.dir, "--record", rec, "--nonce", TRAIN, "--head", t.t2], { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.quotePath", GIT_CONFIG_VALUE_0: "true" });
+    expect(quoted.status).toBe(1);
+    expect(quoted.stderr).toContain("a 2-PR train touches the gate surface (gate/café.txt)");
   });
 });
 
