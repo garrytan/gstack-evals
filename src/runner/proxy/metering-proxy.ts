@@ -24,7 +24,7 @@
 //   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -77,21 +77,59 @@ const isAlive = (pid: number) => {
   }
 };
 
-/** Takes <journal>.lock for this process, so one proxy or one reconcile holds a journal at a time. A lock whose process is gone is taken over. */
+const lockHolder = (lock: string): string | null => {
+  try {
+    return readFileSync(lock, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+};
+
+/**
+ * Takes <journal>.lock with a token naming this process, so one proxy or one reconcile holds a journal at a time. A lock
+ * whose process is gone is replaced only under <journal>.lock.takeover, and only while it still holds the token found
+ * stale, so two takers cannot both win. Returns the token that releaseJournal needs.
+ */
 function lockJournal(journal: string): string {
   const lock = `${journal}.lock`;
-  for (let tries = 0; tries < 2; tries++) {
+  const token = `${process.pid} ${randomBytes(8).toString("hex")}`;
+  const create = (path: string) => writeFileSync(path, token, { flag: "wx", mode: 0o600 });
+  for (let tries = 0; tries < 3; tries++) {
     try {
-      writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
-      return lock;
+      create(lock);
+      return token;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     }
-    const pid = Number(readFileSync(lock, "utf8"));
+    const held = lockHolder(lock);
+    if (held === null) continue;
+    const pid = Number(held.split(" ")[0]);
     if (!Number.isSafeInteger(pid) || pid <= 0 || isAlive(pid)) throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by process ${pid || "(unreadable)"} through ${lock}; stop that proxy or let its reconcile finish, or remove the lock file if no such process holds it`);
-    rmSync(lock, { force: true });
+    const guard = `${lock}.takeover`;
+    try {
+      create(guard);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      throw new Error(`E_USAGE: metering proxy: another process is taking over the stale journal lock ${lock}; try again, or remove ${guard} if no such process is running`);
+    }
+    try {
+      if (lockHolder(lock) !== held) continue;
+      const fresh = `${lock}.${randomBytes(8).toString("hex")}`;
+      create(fresh);
+      renameSync(fresh, lock);
+      return token;
+    } finally {
+      rmSync(guard, { force: true });
+    }
   }
-  throw new Error(`E_USAGE: metering proxy: another process took the journal lock ${lock} at the same moment`);
+  throw new Error(`E_USAGE: metering proxy: the journal lock ${lock} kept changing hands; try again`);
+}
+
+/** Removes the journal's lock only while it still holds this taker's token. */
+function releaseJournal(journal: string, token: string): void {
+  const lock = `${journal}.lock`;
+  if (lockHolder(lock) === token) rmSync(lock, { force: true });
 }
 
 /** The preregistered retry budget per call: at most attempts sends, and no new attempt after elapsed_ms. */
@@ -254,7 +292,7 @@ export class MeteringProxy {
   private management: ReturnType<typeof Bun.serve> | null = null;
   private journalFd: number | null = null;
   private journalTorn = false;
-  private journalLock: string | null = null;
+  private journalToken: string | null = null;
   private slots = new Map<string, Slot>();
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
@@ -273,16 +311,22 @@ export class MeteringProxy {
     return this.trial!.port as number;
   }
 
+  /** Takes the journal's lock, then opens the journal and both listeners; a failure after the lock releases everything. */
   start(): void {
-    this.journalLock = lockJournal(this.options.journal);
-    this.journalFd = openSync(this.options.journal, "a+", 0o600);
-    const { size } = fstatSync(this.journalFd);
-    const last = Buffer.alloc(1);
-    this.journalTorn = size > 0 && readSync(this.journalFd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
-    if (existsSync(this.options.managementSocket)) rmSync(this.options.managementSocket);
-    this.management = Bun.serve({ unix: this.options.managementSocket, fetch: req => this.manage(req) });
-    chmodSync(this.options.managementSocket, 0o600);
-    this.trial = Bun.serve({ hostname: this.options.host, port: this.options.port ?? 0, idleTimeout: 0, fetch: (req, server) => this.handle(req, server.requestIP(req)?.address ?? null), error: () => problem("E_INTERNAL", 500, "the request failed before its slot was checked") });
+    this.journalToken = lockJournal(this.options.journal);
+    try {
+      this.journalFd = openSync(this.options.journal, "a+", 0o600);
+      const { size } = fstatSync(this.journalFd);
+      const last = Buffer.alloc(1);
+      this.journalTorn = size > 0 && readSync(this.journalFd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
+      if (existsSync(this.options.managementSocket)) rmSync(this.options.managementSocket);
+      this.management = Bun.serve({ unix: this.options.managementSocket, fetch: req => this.manage(req) });
+      chmodSync(this.options.managementSocket, 0o600);
+      this.trial = Bun.serve({ hostname: this.options.host, port: this.options.port ?? 0, idleTimeout: 0, fetch: (req, server) => this.handle(req, server.requestIP(req)?.address ?? null), error: () => problem("E_INTERNAL", 500, "the request failed before its slot was checked") });
+    } catch (e) {
+      this.stop();
+      throw e;
+    }
   }
 
   stop(): void {
@@ -292,8 +336,8 @@ export class MeteringProxy {
     if (this.journalFd !== null) closeSync(this.journalFd);
     this.journalFd = null;
     rmSync(this.options.managementSocket, { force: true });
-    if (this.journalLock) rmSync(this.journalLock, { force: true });
-    this.journalLock = null;
+    if (this.journalToken) releaseJournal(this.options.journal, this.journalToken);
+    this.journalToken = null;
   }
 
   bind(request: BindRequest): Binding {
@@ -635,11 +679,11 @@ export class MeteringProxy {
  * journal: a call still in flight there would look unanswered. Nothing here can send a provider request.
  */
 export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; released: string[]; refused: Array<{ reservation_id: string | null; code: string; message: string }>; unreadable: number }> {
-  const lock = lockJournal(path);
+  const token = lockJournal(path);
   try {
     return await reconcileLocked(path, ledger);
   } finally {
-    rmSync(lock, { force: true });
+    releaseJournal(path, token);
   }
 }
 

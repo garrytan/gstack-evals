@@ -849,6 +849,37 @@ describe("unknown sends and reconcile", () => {
     expect(existsSync(`${path}.lock`)).toBe(false);
   });
 
+  test("a stale journal lock another taker is already replacing is left to that taker, and a release never removes a lock it no longer holds", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-takeover-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    appendFileSync(path, `${JSON.stringify({ kind: "request", reservation_id: "res_5" })}\n`);
+    const stale = String(Bun.spawnSync(["true"]).pid);
+    writeFileSync(`${path}.lock`, stale);
+    writeFileSync(`${path}.lock.takeover`, "4242 other-taker");
+    const ledger = new FakeLedger();
+    await expect(reconcileJournal(path, ledger)).rejects.toThrow(/^E_USAGE: metering proxy: another process is taking over the stale journal lock/);
+    expect(readFileSync(`${path}.lock`, "utf8")).toBe(stale);
+    expect(ledger.settles).toHaveLength(0);
+    rmSync(`${path}.lock.takeover`);
+    rmSync(`${path}.lock`);
+
+    const t = setup(() => ok({}), { journal: path });
+    writeFileSync(`${path}.lock`, "4243 a-taker-that-replaced-it");
+    t.proxy.stop();
+    expect(readFileSync(`${path}.lock`, "utf8")).toBe("4243 a-taker-that-replaced-it");
+  });
+
+  test("a proxy that fails to start after taking the journal lock releases it", async () => {
+    const t = setup(() => ok({}));
+    const dir = mkdtempSync(join(tmpdir(), "u3-failed-start-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    expect(() => setup(() => ok({}), { journal: path, port: t.proxy.port })).toThrow();
+    expect(existsSync(`${path}.lock`)).toBe(false);
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
+  });
+
   test("finalize over the socket refuses a timeout_ms that is not a non-negative integer", async () => {
     const t = setup(() => ok({}));
     const a = t.bind();
