@@ -1,0 +1,22 @@
+{
+  "db-wal-recovery": { "skill": "investigate", "branch": "fix-existing" },
+  "overfull-hbox": { "skill": "investigate", "branch": "fix-existing" },
+  "sanitize-git-repo": { "skill": "investigate", "branch": "fix-existing" },
+  "query-optimize": { "skill": "investigate", "branch": "optimize-existing" },
+  "tune-mjcf": { "skill": "investigate", "branch": "optimize-existing" },
+  "adaptive-rejection-sampler": { "skill": "investigate", "branch": "implement-new" },
+  "break-filter-js-from-html": { "skill": "investigate", "branch": "implement-new" },
+  "cancel-async-tasks": { "skill": "investigate", "branch": "implement-new" },
+  "chess-best-move": { "skill": "investigate", "branch": "implement-new" },
+  "configure-git-webserver": { "skill": "investigate", "branch": "implement-new" },
+  "dna-insert": { "skill": "investigate", "branch": "implement-new" },
+  "extract-elf": { "skill": "investigate", "branch": "implement-new" },
+  "filter-js-from-html": { "skill": "investigate", "branch": "implement-new" },
+  "mailman": { "skill": "investigate", "branch": "implement-new" },
+  "model-extraction-relu-logits": { "skill": "investigate", "branch": "implement-new" },
+  "polyglot-c-py": { "skill": "investigate", "branch": "implement-new" },
+  "polyglot-rust-c": { "skill": "investigate", "branch": "implement-new" },
+  "pytorch-model-cli": { "skill": "investigate", "branch": "implement-new" },
+  "torch-pipeline-parallelism": { "skill": "investigate", "branch": "implement-new" },
+  "torch-tensor-parallelism": { "skill": "investigate", "branch": "implement-new" }
+}
