@@ -14,7 +14,7 @@ Drafts and scratch work live elsewhere: a Capy Drive, a local folder, a branch. 
 4. To answer a question, write a post that lists it in `answers`, and set the question's `status` to `answered` in the same pull request.
 5. Never delete or rename a merged post.
 6. Post only what is safe to publish. No secrets, keys or tokens. No sealed task bodies, hidden tests or answer keys. No code, text or transcripts copied verbatim from private sources. Describe sealed material by counts and digests only.
-7. INDEX.md is generated. Regenerate it in every pull request that adds a post or changes a status.
+7. INDEX.md is generated and never committed. `bun run wiki:index` writes it locally, and git ignores it.
 
 If a merged post leaked something, deleting it does not remove it from git history. Stop, tell the repository owner, and rotate any exposed key. Only the owner can rewrite history.
 
@@ -23,7 +23,7 @@ If a merged post leaked something, deleting it does not remove it from git histo
 ```
 wiki/
   README.md    these rules
-  INDEX.md     generated from front matter, never edited by hand
+  INDEX.md     generated from front matter by bun run wiki:index, not committed
   board/       decision, finding, handoff, report, question
   plans/       plan, design
   research/    research
@@ -94,7 +94,7 @@ links: [.github/workflows/ci.yml]
 
 1. Write the post in the right folder, with front matter. To move a draft from a drive, keep its text as it was, add front matter, and record the original path and sha256 in `source`.
 2. If it replaces or answers an earlier post, list that post and change its `status` in the same change.
-3. Regenerate INDEX.md and run the check.
+3. Run the check.
 4. Open a pull request. A post counts once it merges.
 
 A skill posts the same way. /autoplan can file a plan bundle in plans/, /retro or /ship a report in board/, /learn or /investigate a finding, and a thread passing work to another thread a handoff.
@@ -109,13 +109,13 @@ The check fails when:
 - `supersedes` or `answers` names a missing post, the target's status was not updated, or a status claims a replacement or answer that does not exist;
 - a file in a bundle is missing from `attachments`, or an attachment does not match its sha256;
 - any file under wiki/ matches a common key shape, or holds a sealed marker: the uppercase word SEALED, optionally followed by more uppercase words, then a colon, or a match for any `sealed.answer_markers` pattern in the repo's `.gstack/pregate.json` (regular expressions, read the same way `gstack-pregate sealed` reads them);
-- INDEX.md is stale;
+- INDEX.md is committed, or git cannot tell whether it is;
 - compared with the base branch, a merged post was edited (other than `status`) or removed.
 
 This README is not a post, so it can be edited. A change to the rules should land with a decision post that explains it.
 
 ## In this repo
 
-- `bun run wiki:index` rewrites INDEX.md. `bun run wiki:check` runs the check, comparing history with the merge base of `origin/HEAD`; `--base <ref>` picks another base and `--base none` skips the history comparison. Both live in `scripts/wiki.ts`, tested by `bun test`.
+- `bun run wiki:index` writes INDEX.md, which git ignores; run it, then read INDEX.md, to see what is open. `bun run wiki:check` runs the check, comparing history with the merge base of `origin/HEAD`; `--base <ref>` picks another base and `--base none` skips the history comparison. Both live in `scripts/wiki.ts`, tested by `bun test`.
 - CI runs the check, with no secrets, on every pull request and every push to main.
 - For the gstack-evals crew, the Captain's Capy Drive is the inbox and this folder is the record.
