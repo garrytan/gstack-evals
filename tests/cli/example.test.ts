@@ -30,6 +30,7 @@ describe("skill-eval --example", () => {
       const out = join(TMP, "example-" + mode);
       const started = Date.now();
       const r = spawnSync(bin, ["skill-eval", mode === "pass" ? "--example" : "--example=" + mode, "--out", out], { encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: TMP } });
+      // gstack-timing-ok: the interface promises every --example mode in under 10 seconds
       expect(Date.now() - started).toBeLessThan(10_000);
       const verdict = JSON.parse(readFileSync(join(out, "verdict.json"), "utf8"));
       expect([mode, valid(verdict) ? [] : valid.errors]).toEqual([mode, []]);

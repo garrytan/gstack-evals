@@ -7,7 +7,7 @@ import { approvalRecord, collect, TMP, tree } from "./helpers.ts";
 
 const gstack = tree({ "bin/gstack-approvals": "#!/bin/sh\n", VERSION: "1.91.324.0\n" });
 const healthy: Runner = (command) => ({ status: 0, stdout: command === "docker" ? "29.9.2\n" : command + " 2.1.0\n", stderr: "" });
-const env = (extra: Record<string, string> = {}) => ({ GSTACK_EVALS_APPROVALS_BIN: join(gstack, "bin/gstack-approvals"), ANTHROPIC_API_KEY: "sk-ant-should-never-print-0001", OPENAI_API_KEY: "sk-should-never-print-000000002", ...extra });
+const env = (extra: Record<string, string> = {}) => ({ GSTACK_EVALS_APPROVALS_BIN: join(gstack, "bin/gstack-approvals"), ANTHROPIC_API_KEY: "fake-anthropic-should-never-print", OPENAI_API_KEY: "fake-openai-should-never-print", ...extra });
 
 describe("gstack-evals doctor", () => {
   // Value: protects=doctor's keyless report: Bun, Docker, the host CLI, keys by name, both ledger paths with their rules, and gstack-approvals' version, exit 0 when all pass; fails_when=a check is dropped, a key value is printed, or a path loses its rule; why_new=doctor is new; seam=U4's ledgerPath, recordPath and approvalsBin; no_claim=the trial image, which U9 adds
