@@ -102,3 +102,8 @@ export function classifyProse(finalText: string): Classification {
   const tail = proseQuestion(finalText);
   return tail === null ? NONE : classifyTier(tail, "prose");
 }
+
+/** Classifies free text, such as a skill's ask line, as one prose tier that needs no "?". */
+export function classifyText(text: string): Classification {
+  return classifyTier(text, "prose");
+}
