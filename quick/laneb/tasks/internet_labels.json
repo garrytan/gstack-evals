@@ -1,0 +1,373 @@
+{
+ "source": "https://github.com/laude-institute/terminal-bench-2.git@69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+ "labels": {
+  "adaptive-rejection-sampler": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "bn-fit-modify": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "break-filter-js-from-html": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "build-cython-ext": {
+   "class": "registry",
+   "reason": "solve.sh matches pip3?\\s+install"
+  },
+  "build-pmars": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "build-pov-ray": {
+   "class": "open",
+   "reason": "solve.sh matches \\bwget\\s+\\S*https?://"
+  },
+  "caffe-cifar-10": {
+   "class": "open",
+   "reason": "solve.sh matches git clone\\s+(--\\S+\\s+)*(https?://|git@github)"
+  },
+  "cancel-async-tasks": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "chess-best-move": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install, pip3?\\s+install"
+  },
+  "circuit-fibsqrt": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "cobol-modernization": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "code-from-image": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "compile-compcert": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "configure-git-webserver": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "constraints-scheduling": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "count-dataset-tokens": {
+   "class": "open",
+   "reason": "solve.sh matches from_pretrained, load_dataset\\("
+  },
+  "crack-7z-hash": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "custom-memory-heap-crash": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "db-wal-recovery": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "distribution-search": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "dna-assembly": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "dna-insert": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "extract-elf": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "extract-moves-from-video": {
+   "class": "open",
+   "reason": "instruction asks to download a YouTube video"
+  },
+  "feal-differential-cryptanalysis": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "feal-linear-cryptanalysis": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "filter-js-from-html": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "financial-document-processor": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "fix-code-vulnerability": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "fix-git": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "fix-ocaml-gc": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "gcode-to-text": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install, pip3?\\s+install"
+  },
+  "git-leak-recovery": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "git-multibranch": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "gpt2-codegolf": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "headless-terminal": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "hf-model-inference": {
+   "class": "open",
+   "reason": "solve.sh matches from_pretrained"
+  },
+  "install-windows-3.11": {
+   "class": "open",
+   "reason": "solve.sh matches \\bwget\\s+\\S*https?://"
+  },
+  "kv-store-grpc": {
+   "class": "registry",
+   "reason": "solve.sh matches pip3?\\s+install"
+  },
+  "large-scale-text-editing": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "largest-eigenval": {
+   "class": "registry",
+   "reason": "solve.sh matches pip3?\\s+install"
+  },
+  "llm-inference-batching-scheduler": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "log-summary-date-ranges": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "mailman": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "make-doom-for-mips": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "make-mips-interpreter": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "mcmc-sampling-stan": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "merge-diff-arc-agi-task": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "model-extraction-relu-logits": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "modernize-scientific-stack": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "mteb-leaderboard": {
+   "class": "open",
+   "reason": "solve.sh matches git clone\\s+(--\\S+\\s+)*(https?://|git@github)"
+  },
+  "mteb-retrieve": {
+   "class": "open",
+   "reason": "solution loads BAAI/bge-small-zh-v1.5 from the Hugging Face hub via mteb.get_model"
+  },
+  "multi-source-data-merger": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "nginx-request-logging": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "openssl-selfsigned-cert": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "overfull-hbox": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "password-recovery": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "path-tracing": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "path-tracing-reverse": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "polyglot-c-py": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "polyglot-rust-c": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "portfolio-optimization": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "protein-assembly": {
+   "class": "open",
+   "reason": "solve.sh matches rcsb"
+  },
+  "prove-plus-comm": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "pypi-server": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install, pip3?\\s+install"
+  },
+  "pytorch-model-cli": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install, pip3?\\s+install"
+  },
+  "pytorch-model-recovery": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "qemu-alpine-ssh": {
+   "class": "registry",
+   "reason": "solve.sh matches apk add"
+  },
+  "qemu-startup": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "query-optimize": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "raman-fitting": {
+   "class": "registry",
+   "reason": "solve.sh matches pip3?\\s+install"
+  },
+  "regex-chess": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "regex-log": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "reshard-c4-data": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "rstan-to-pystan": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install, pip3?\\s+install"
+  },
+  "sam-cell-seg": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install, pip3?\\s+install"
+  },
+  "sanitize-git-repo": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "schemelike-metacircular-eval": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "sparql-university": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "sqlite-db-truncate": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "sqlite-with-gcov": {
+   "class": "registry",
+   "reason": "solve.sh matches apt(-get)?\\s+install"
+  },
+  "torch-pipeline-parallelism": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "torch-tensor-parallelism": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "train-fasttext": {
+   "class": "open",
+   "reason": "solve.sh matches git clone\\s+(--\\S+\\s+)*(https?://|git@github)"
+  },
+  "tune-mjcf": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "video-processing": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "vulnerable-secret": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "winning-avg-corewars": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  },
+  "write-compressor": {
+   "class": "none",
+   "reason": "solve.sh fetches nothing"
+  }
+ },
+ "agent_phase_needs_internet": [
+  "build-pov-ray",
+  "caffe-cifar-10",
+  "count-dataset-tokens",
+  "extract-moves-from-video",
+  "hf-model-inference",
+  "install-windows-3.11",
+  "mteb-leaderboard",
+  "mteb-retrieve",
+  "protein-assembly",
+  "train-fasttext"
+ ]
+}

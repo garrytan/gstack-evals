@@ -1,0 +1,8 @@
+{
+  "description": "An unavailable user. Picks an option the agent marked as recommended; otherwise asks the agent to decide and finish.",
+  "recommended_markers": [
+    "(recommended)",
+    "recommended"
+  ],
+  "fallback": "I'm not available to answer questions. Use your best judgment and finish the task without asking again."
+}
