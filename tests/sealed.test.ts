@@ -65,3 +65,37 @@ describe("sealed publication rules", () => {
     expect(sealed.local_paths).toBe(true);
   });
 });
+
+// Reviewed waivers live in .gstack/sealed-allow.tsv, one `rule<TAB>path<TAB>sha<TAB>reason` line each; the checker waives a
+// finding when its rule and path match and its commit starts with the sha. The home-path pattern copies gstack's
+// sealed.local_path rule for Linux, macOS and Windows home folders.
+const ALLOW_FILE = ".gstack/sealed-allow.tsv";
+const allowLines = readFileSync(join(import.meta.dir, "..", ALLOW_FILE), "utf8").split("\n").filter((l) => l.trim());
+const LOCAL_PATH = /(?:^|[^A-Za-z0-9_.~-])(?:\/home\/[^/\s'"`]+\/|\/Users\/[^/\s'"`]+\/|[A-Za-z]:\\+Users\\+[^\\\s'"`]+\\)/;
+
+describe("sealed waivers", () => {
+  test("each waiver names a rule, a repo path, a full commit sha and a reason", () => {
+    expect(allowLines.length).toBeGreaterThan(0);
+    for (const line of allowLines) {
+      const [rule, path, sha, reason, ...rest] = line.split("\t");
+      expect(rest).toEqual([]);
+      expect(["sealed.path", "sealed.transcript", "sealed.answer", "sealed.seed", "sealed.local_path"]).toContain(rule!);
+      expect(path).toMatch(/^[^/\s].*[^/\s]$/);
+      expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      expect((reason ?? "").trim()).not.toBe("");
+    }
+  });
+
+  test("no text rule matches a line of the waiver file, so it never refuses its own commit", () => {
+    const rules = [...sealed.answer_markers, ...sealed.seed_patterns].map((r) => new RegExp(r));
+    for (const line of allowLines) {
+      for (const re of rules) expect(re.test(line)).toBe(false);
+      expect(LOCAL_PATH.test(line)).toBe(false);
+    }
+  });
+
+  test("the home-path pattern matches what the checker refuses and leaves a trailing-slash-free mention alone", () => {
+    expect(LOCAL_PATH.test(" '/home/" + "user/.capy/x'")).toBe(true);
+    expect(LOCAL_PATH.test("home, /home/" + "user;")).toBe(false);
+  });
+});

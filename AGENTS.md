@@ -6,9 +6,9 @@ gstack-evals measures whether gstack's skills help, on which models, and at what
 
 Plans, designs, research, decisions, findings, handoffs and reports worth keeping go into [wiki/](wiki/README.md) as posts, through a pull request.
 
-- Read [wiki/INDEX.md](wiki/INDEX.md) first to see what is open and what has been decided.
+- Run `bun run wiki:index`, then read wiki/INDEX.md to see what is open and what has been decided. The index is generated and never committed.
 - A merged post is immutable except for its `status`. To change one, write a new post that supersedes it.
-- Run `bun run wiki:index` and `bun run wiki:check` before you push.
+- Run `bun run wiki:check` before you push.
 - A drive or scratch folder is the inbox; wiki/ is the record.
 
 ## Never commit
@@ -35,6 +35,6 @@ Short paragraphs, active verbs, no marketing words, no em dashes.
 
 ## Checks
 
-`bun test`, `bun run typecheck`, `bun run errors:check` and `bun run wiki:check` run without keys, and CI runs them on every pull request. Tests live under tests/.
+`bun test`, `bun run typecheck`, `bun run errors:check` and `bun run wiki:check` run without keys, and CI runs them on every pull request. Tests live under tests/; a quick look under quick/ keeps its keyless tests beside its code.
 
 This guide does not authorise pushing, merging, spending or publishing; follow the current task's instructions for those.

@@ -1,0 +1,69 @@
+import { describe, expect, test } from "bun:test";
+import { gradePatterns, loadedBytes, parseTranscript, skillUse, transcriptText } from "../src/grade.ts";
+
+const msgs = [
+  { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Skill", input: { skill: "office-hours" } }] } },
+  { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "Launching skill" }] } },
+  { type: "assistant", message: { content: [{ type: "tool_use", id: "t2", name: "Read", input: { file_path: "/work/.claude/skills/gstack/office-hours/sections/preamble.md" } }] } },
+  { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t2", content: "..." }] } },
+  { type: "assistant", message: { content: [{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ question: "What's your goal?", header: "Goal", options: [{ label: "Building a startup", description: "" }, { label: "Hackathon / demo", description: "" }] }] } }] } },
+  { type: "assistant", message: { content: [{ type: "text", text: "PREMISES:\n1. x. Do you agree?" }] } },
+  { type: "assistant", message: { content: [{ type: "text", text: "Done.\n```py\nimport os\n```" }] } },
+];
+
+describe("grading", () => {
+  const t = parseTranscript(msgs);
+  test("transcript text includes AskUserQuestion options; final answer is the last text", () => {
+    expect(gradePatterns({ id: "m", prompt: "p", must: ["[Ss]tartup", "[Hh]ackathon"] }, transcriptText(t)).ok).toBe(true);
+    expect(gradePatterns({ id: "m", prompt: "p", must: ["[Ss]tartup"] }, t.finalAnswer).ok).toBe(false);
+    expect(gradePatterns({ id: "m", prompt: "p", must: ["PREMISES", "[Aa]gree"] }, transcriptText(t)).ok).toBe(true);
+  });
+  test("must_not reads code blocks only", () => {
+    expect(gradePatterns({ id: "m", prompt: "p", must: ["Done"], must_not: ["import os"] }, t.finalAnswer).ok).toBe(false);
+    expect(gradePatterns({ id: "m", prompt: "p", must: ["Done"], must_not: ["Done"] }, t.finalAnswer).ok).toBe(true);
+  });
+  test("skill use and loaded bytes", () => {
+    const u = skillUse(t, "office-hours");
+    expect(u.opened).toBe(true);
+    expect(u.how).toEqual(["Skill"]);
+    expect(u.files).toEqual({ "office-hours/SKILL.md": 1, "office-hours/sections/preamble.md": 1 });
+    expect(loadedBytes(u.files, { "office-hours/SKILL.md": 100, "office-hours/sections/preamble.md": 20 })).toEqual({ unique: 120, total: 120, unknown: [] });
+    expect(skillUse(t, "learn").opened).toBe(false);
+  });
+  test("a failed Skill call does not count as opened", () => {
+    const failed = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "x1", name: "Skill", input: { skill: "office-hours" } }] } },
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "x1", is_error: true, content: "Unknown skill" }] } },
+    ]);
+    expect(skillUse(failed, "office-hours").opened).toBe(false);
+  });
+  test("a tool call with no result is not an open and loads nothing", () => {
+    const pending = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/SKILL.md" } }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "s1", name: "Skill", input: { skill: "office-hours" } }] } },
+    ]);
+    expect(skillUse(pending, "office-hours")).toEqual({ opened: false, how: [], files: {} });
+  });
+  test("a subagent's reads are counted apart and never as the main agent's", () => {
+    const sub = { parent_tool_use_id: "toolu_task" };
+    const t = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "r0", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/sections/preamble.md" } }] } },
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "r0", content: "..." }] } },
+      { type: "assistant", ...sub, message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/work/.claude/skills/office-hours/SKILL.md" } }] } },
+      { type: "user", ...sub, message: { content: [{ type: "tool_result", tool_use_id: "r1", content: "..." }] } },
+    ]);
+    expect(skillUse(t, "office-hours")).toEqual({ opened: false, how: [], files: { "office-hours/sections/preamble.md": 1 } });
+    expect(skillUse({ toolUses: t.subagentToolUses }, "office-hours").files).toEqual({ "office-hours/SKILL.md": 1 });
+  });
+  test("a subagent's text and questions grade nothing for the main agent", () => {
+    const t = parseTranscript([
+      { type: "assistant", message: { content: [{ type: "text", text: "Here is my plan." }] } },
+      { type: "assistant", parent_tool_use_id: "toolu_task", message: { content: [{ type: "text", text: "SECOND OPINION (Claude subagent): ship it" }, { type: "tool_use", id: "q1", name: "AskUserQuestion", input: { questions: [{ question: "Proceed?" }] } }] } },
+    ]);
+    expect(transcriptText(t)).not.toContain("SECOND OPINION");
+    expect(t.askTexts).toEqual([]);
+    expect(t.finalAnswer).toBe("Here is my plan.");
+    expect(gradePatterns({ id: "x", prompt: "p", must: ["SECOND OPINION"] }, transcriptText(t)).ok).toBe(false);
+    expect(t.subagentToolUses.map((u) => u.name)).toEqual(["AskUserQuestion"]);
+  });
+});
