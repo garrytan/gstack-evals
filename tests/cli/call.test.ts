@@ -58,6 +58,18 @@ describe("effective defaults", () => {
     expect(ok([...BASE, "--out", "/tmp/given"]).out).toEqual({ path: "/tmp/given", rule: "--out" });
   });
 
+  // Value: protects=the effective block names the variable that chose the ledger and approval record, and a flag still wins over it; fails_when=an environment path is reported as --ledger or --ledger-record; why_new=PR #44 review finding; seam=U4's ledgerPath and recordPath; no_claim=none beyond protects
+  test("ledger paths set by environment report the variable, and flags override it", () => {
+    const env = { GSTACK_EVALS_LEDGER: "/env/ledger.sqlite", GSTACK_EVALS_LEDGER_RECORD: "/env/record" };
+    const by = (c: Call) => Object.fromEntries(c.effective.map((s) => [s.name, s]));
+    const fromEnv = by(ok(BASE, env));
+    expect(fromEnv.ledger).toEqual({ name: "ledger", value: "/env/ledger.sqlite", source: "GSTACK_EVALS_LEDGER" });
+    expect(fromEnv["ledger record"]).toEqual({ name: "ledger record", value: "/env/record", source: "GSTACK_EVALS_LEDGER_RECORD" });
+    const fromFlag = by(ok([...BASE, "--ledger", "/flag/ledger.sqlite", "--ledger-record", "/flag/record"], env));
+    expect(fromFlag.ledger).toEqual({ name: "ledger", value: "/flag/ledger.sqlite", source: "--ledger" });
+    expect(fromFlag["ledger record"]).toEqual({ name: "ledger record", value: "/flag/record", source: "--ledger-record" });
+  });
+
   // Value: protects=a call missing a required flag, using an unbuilt flag, or naming a bad policy is refused before anything runs; fails_when=one of these passes resolveCall; why_new=new; seam=none; no_claim=none beyond protects
   test("missing required flags, unbuilt flags and a bad policy are refused", () => {
     expect(call(BASE.slice(0, 6))).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("needs --model") });

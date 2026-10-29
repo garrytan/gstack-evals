@@ -117,8 +117,8 @@ export function resolveCall(parsed: ParsedFlags, env: Env = process.env, home = 
   const timeoutS = (v.get("--timeout") as number | undefined) ?? 600;
   const isolation = ((v.get("--isolation") as string | undefined) ?? "docker") as "docker" | "process";
   const item = (v.get("--item") as string | undefined) ?? null;
-  const ledger = ledgerPath(v.get("--ledger") as string | undefined, env, home);
-  const record = recordPath(v.get("--ledger-record") as string | undefined, env, home);
+  const ledger = ledgerPath(parsed.from.get("--ledger") === "flag" ? (v.get("--ledger") as string) : undefined, env, home);
+  const record = recordPath(parsed.from.get("--ledger-record") === "flag" ? (v.get("--ledger-record") as string) : undefined, env, home);
   const runId = newRunId(arms.skill?.name ?? basename(dirname(tasks)));
   const root = runsRoot(env, home);
   const out: Resolved = v.has("--out") ? { path: resolve(v.get("--out") as string), rule: "--out" } : { path: join(root.path, runId), rule: root.rule };
