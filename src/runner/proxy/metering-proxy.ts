@@ -12,8 +12,8 @@
 //   listener serves provider routes only, and binds only to a loopback or private address (no hostnames, no wildcard).
 // - Before each reserve the proxy journals its idempotency key, and before each forward the cell attempt and reservation
 //   id; reconcileJournal settles a call with no recorded outcome as unknown and never resends it, and releases at zero a
-//   hold the ledger kept for a reserve whose answer was lost. A running proxy or reconcile holds the journal's lock file,
-//   so reconcile never runs beside a proxy that may still send.
+//   hold the ledger kept for a reserve whose answer was lost. A running proxy or reconcile holds a flock on the journal's
+//   lock file, so reconcile never runs beside a proxy that may still send.
 // - The proxy is the single retry owner: 429 and 5xx answers are retried within a finite attempt count and elapsed-time
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
@@ -24,7 +24,8 @@
 //   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { dlopen, FFIType } from "bun:ffi";
+import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -68,68 +69,29 @@ function acceptsInferenceGeo(model: string): boolean {
 
 type Send = (input: string, init: RequestInit) => Promise<Response>;
 
-const isAlive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
-const lockHolder = (lock: string): string | null => {
-  try {
-    return readFileSync(lock, "utf8");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw e;
-  }
-};
+/**
+ * flock(2) through libc, non-blocking and exclusive. The kernel drops the lock when its descriptor closes or its process
+ * dies, so a lock is never stale and nothing ever takes one over.
+ */
+let libc: { symbols: { flock: (fd: number, operation: number) => number } } | null = null;
+const LOCK_EX_NB = 2 | 4;
 
 /**
- * Takes <journal>.lock with a token naming this process, so one proxy or one reconcile holds a journal at a time. A lock
- * whose process is gone is replaced only under <journal>.lock.takeover, and only while it still holds the token found
- * stale, so two takers cannot both win. Returns the token that releaseJournal needs.
+ * Holds <journal>.lock with flock on a kept descriptor, so one proxy or one reconcile holds a journal at a time, in this
+ * process or another. The file stays on disk and records the holder's pid for the refusal message only. Closing the
+ * returned descriptor releases the lock.
  */
-function lockJournal(journal: string): string {
+function lockJournal(journal: string): number {
   const lock = `${journal}.lock`;
-  const token = `${process.pid} ${randomBytes(8).toString("hex")}`;
-  const create = (path: string) => writeFileSync(path, token, { flag: "wx", mode: 0o600 });
-  for (let tries = 0; tries < 3; tries++) {
-    try {
-      create(lock);
-      return token;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
-    const held = lockHolder(lock);
-    if (held === null) continue;
-    const pid = Number(held.split(" ")[0]);
-    if (!Number.isSafeInteger(pid) || pid <= 0 || isAlive(pid)) throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by process ${pid || "(unreadable)"} through ${lock}; stop that proxy or let its reconcile finish, or remove the lock file if no such process holds it`);
-    const guard = `${lock}.takeover`;
-    try {
-      create(guard);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      throw new Error(`E_USAGE: metering proxy: another process is taking over the stale journal lock ${lock}; try again, or remove ${guard} if no such process is running`);
-    }
-    try {
-      if (lockHolder(lock) !== held) continue;
-      const fresh = `${lock}.${randomBytes(8).toString("hex")}`;
-      create(fresh);
-      renameSync(fresh, lock);
-      return token;
-    } finally {
-      rmSync(guard, { force: true });
-    }
+  libc ??= dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
+  const fd = openSync(lock, "a", 0o600);
+  if (libc.symbols.flock(fd, LOCK_EX_NB) !== 0) {
+    closeSync(fd);
+    throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by another proxy or reconcile (process ${readFileSync(lock, "utf8").trim() || "unknown"}) through ${lock}; stop that proxy or let its reconcile finish`);
   }
-  throw new Error(`E_USAGE: metering proxy: the journal lock ${lock} kept changing hands; try again`);
-}
-
-/** Removes the journal's lock only while it still holds this taker's token. */
-function releaseJournal(journal: string, token: string): void {
-  const lock = `${journal}.lock`;
-  if (lockHolder(lock) === token) rmSync(lock, { force: true });
+  ftruncateSync(fd, 0);
+  writeSync(fd, String(process.pid));
+  return fd;
 }
 
 /** The preregistered retry budget per call: at most attempts sends, and no new attempt after elapsed_ms. */
@@ -292,7 +254,7 @@ export class MeteringProxy {
   private management: ReturnType<typeof Bun.serve> | null = null;
   private journalFd: number | null = null;
   private journalTorn = false;
-  private journalToken: string | null = null;
+  private journalLock: number | null = null;
   private slots = new Map<string, Slot>();
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
@@ -313,7 +275,7 @@ export class MeteringProxy {
 
   /** Takes the journal's lock, then opens the journal and both listeners; a failure after the lock releases everything. */
   start(): void {
-    this.journalToken = lockJournal(this.options.journal);
+    this.journalLock = lockJournal(this.options.journal);
     try {
       this.journalFd = openSync(this.options.journal, "a+", 0o600);
       const { size } = fstatSync(this.journalFd);
@@ -336,8 +298,8 @@ export class MeteringProxy {
     if (this.journalFd !== null) closeSync(this.journalFd);
     this.journalFd = null;
     rmSync(this.options.managementSocket, { force: true });
-    if (this.journalToken) releaseJournal(this.options.journal, this.journalToken);
-    this.journalToken = null;
+    if (this.journalLock !== null) closeSync(this.journalLock);
+    this.journalLock = null;
   }
 
   bind(request: BindRequest): Binding {
@@ -679,11 +641,11 @@ export class MeteringProxy {
  * journal: a call still in flight there would look unanswered. Nothing here can send a provider request.
  */
 export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; released: string[]; refused: Array<{ reservation_id: string | null; code: string; message: string }>; unreadable: number }> {
-  const token = lockJournal(path);
+  const lock = lockJournal(path);
   try {
     return await reconcileLocked(path, ledger);
   } finally {
-    releaseJournal(path, token);
+    closeSync(lock);
   }
 }
 

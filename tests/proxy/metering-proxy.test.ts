@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -831,43 +831,43 @@ describe("unknown sends and reconcile", () => {
     const a = t.bind();
     const path = join(t.dir, "journal.ndjson");
     appendFileSync(path, JSON.stringify({ kind: "reserve", idempotency_key: `${a.meter_id}:1:1`, lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, max_micros: 1000 }) + "\n");
-    await expect(reconcileJournal(path, t.ledger)).rejects.toThrow(/^E_USAGE: metering proxy: the journal .* is held by process \d+/);
+    await expect(reconcileJournal(path, t.ledger)).rejects.toThrow(/^E_USAGE: metering proxy: the journal .* is held by another proxy or reconcile \(process \d+\)/);
     expect(t.ledger.reservations.size).toBe(0);
-    expect(() => setup(() => ok({}), { journal: path })).toThrow(/^E_USAGE: metering proxy: the journal .* is held by process/);
+    expect(() => setup(() => ok({}), { journal: path })).toThrow(/^E_USAGE: metering proxy: the journal .* is held by another proxy or reconcile/);
     t.proxy.stop();
     expect((await reconcileJournal(path, t.ledger)).released).toEqual(["res_1"]);
-    expect(existsSync(`${path}.lock`)).toBe(false);
   });
 
-  test("a journal lock left by a process that is gone is taken over and released", async () => {
+  test("lock residue a crashed holder left, a takeover guard from an older build included, never blocks the journal", async () => {
     const dir = mkdtempSync(join(tmpdir(), "u3-stale-lock-"));
     dirs.push(dir);
     const path = join(dir, "journal.ndjson");
     appendFileSync(path, `${JSON.stringify({ kind: "request", reservation_id: "res_5" })}\n`);
-    writeFileSync(`${path}.lock`, String(Bun.spawnSync(["true"]).pid));
+    const dead = String(Bun.spawnSync(["true"]).pid);
+    writeFileSync(`${path}.lock`, dead);
+    writeFileSync(`${path}.lock.takeover`, `${dead} crashed-taker`);
     expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_5"], released: [], refused: [], unreadable: 0 });
-    expect(existsSync(`${path}.lock`)).toBe(false);
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_5"], released: [], refused: [], unreadable: 0 });
   });
 
-  test("a stale journal lock another taker is already replacing is left to that taker, and a release never removes a lock it no longer holds", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "u3-takeover-"));
+  test("the journal lock excludes another process, and a holder killed with SIGKILL releases it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-killed-holder-"));
     dirs.push(dir);
     const path = join(dir, "journal.ndjson");
-    appendFileSync(path, `${JSON.stringify({ kind: "request", reservation_id: "res_5" })}\n`);
-    const stale = String(Bun.spawnSync(["true"]).pid);
-    writeFileSync(`${path}.lock`, stale);
-    writeFileSync(`${path}.lock.takeover`, "4242 other-taker");
-    const ledger = new FakeLedger();
-    await expect(reconcileJournal(path, ledger)).rejects.toThrow(/^E_USAGE: metering proxy: another process is taking over the stale journal lock/);
-    expect(readFileSync(`${path}.lock`, "utf8")).toBe(stale);
-    expect(ledger.settles).toHaveLength(0);
-    rmSync(`${path}.lock.takeover`);
-    rmSync(`${path}.lock`);
-
-    const t = setup(() => ok({}), { journal: path });
-    writeFileSync(`${path}.lock`, "4243 a-taker-that-replaced-it");
-    t.proxy.stop();
-    expect(readFileSync(`${path}.lock`, "utf8")).toBe("4243 a-taker-that-replaced-it");
+    const script = join(dir, "holder.ts");
+    writeFileSync(script, [
+      `import { MeteringProxy } from ${JSON.stringify(join(import.meta.dir, "../../src/runner/proxy/metering-proxy.ts"))};`,
+      `const unused = async () => { throw new Error("unused"); };`,
+      `new MeteringProxy({ ledger: { reserve: unused, settle: unused }, leaseId: "l1", host: "127.0.0.1", managementSocket: ${JSON.stringify(join(dir, "holder.sock"))}, managementToken: ${JSON.stringify(MANAGEMENT)}, journal: ${JSON.stringify(path)}, retry: { attempts: 1, elapsed_ms: 1000 }, env: {} }).start();`,
+      `console.log("ready");`,
+      `setInterval(() => {}, 1000);`,
+    ].join("\n"));
+    const holder = Bun.spawn([process.execPath, script], { stdout: "pipe", stderr: "inherit" });
+    expect(new TextDecoder().decode((await holder.stdout.getReader().read()).value)).toContain("ready");
+    await expect(reconcileJournal(path, new FakeLedger())).rejects.toThrow(new RegExp(`is held by another proxy or reconcile \\(process ${holder.pid}\\)`));
+    holder.kill(9);
+    await holder.exited;
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
   });
 
   test("a proxy that fails to start after taking the journal lock releases it", async () => {
@@ -876,7 +876,6 @@ describe("unknown sends and reconcile", () => {
     dirs.push(dir);
     const path = join(dir, "journal.ndjson");
     expect(() => setup(() => ok({}), { journal: path, port: t.proxy.port })).toThrow();
-    expect(existsSync(`${path}.lock`)).toBe(false);
     expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
   });
 
