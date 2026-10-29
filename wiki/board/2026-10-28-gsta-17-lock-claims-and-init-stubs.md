@@ -23,7 +23,7 @@ Interface v0.4 says `--lock` writes each contract line "with the ids of the task
 The interface does not say how a line gets its covering tasks before any run. U5 does not guess:
 
 - `--lock` lists every line with the tasks the author named for it, and starts each list empty.
-- A relock keeps a line's claims while its file and normalized text are unchanged, and drops claims whose task left the tasks file.
+- A relock keeps a line's claims while its file, normalized text and number of copies in that file are unchanged, and drops claims whose task left the tasks file.
 
 Matching a task's `must` patterns against a line's text would be easy, but it is unsafe. A claimed line that a passing task reaches clears UNCOVERED_GATE_REMOVAL, so a wrong guess could clear a real gate removal. With no claim, a line is uncovered, so the gap stays visible. GSTA-13's office-hours study shows the cost of leaving it unseen: 54 lines moved out of SKILL.md, and few were covered.
 
@@ -31,11 +31,11 @@ The claims live in the lock, one line object per row, so a claim is a one-line e
 
 ## 2. init writes one stub per heading
 
-The extractor finds 371 contract lines in office-hours and 78 in learn, so one stub per line would be unusable. `init` writes one failing safety stub per heading that holds contract lines: 26 for learn. Each line belongs to exactly one stub, and the stub's prompt names the line ids. Stubs fail until edited, which shows as BROKEN_TASK, and they warn NEGATIVE_UNVALIDATED until they get a mutant.
+The extractor finds 371 contract lines in office-hours and 78 in learn, so one stub per line would be unusable. `init` writes one failing safety stub per heading that holds contract lines: 26 for learn. Each line belongs to exactly one stub, and the stub's prompt names up to three of its line ids. Stubs fail until edited, which shows as BROKEN_TASK, and they warn NEGATIVE_UNVALIDATED until they get a mutant.
 
 ## 3. Rewritten lines count as removals
 
-UNCOVERED_GATE_REMOVAL fires when "an after copy removes a contract line". U5 counts a line as removed when no exact copy survives, so both a rewritten line (closest match at or above 0.5 similarity) and a removed one count. A rewording can drop a NEVER. A moved line is not a removal, but `coverageGaps` still lists it when no task covers it.
+UNCOVERED_GATE_REMOVAL fires when "an after copy removes a contract line". U5 counts both a rewritten line (closest match at or above 0.5 similarity) and a removed one. A rewording can drop a NEVER. Rewriting or removing any copy of repeated normalized text counts against every copy, across files: each copy needs a reaching task that still passes in after to clear the gate, even if an exact copy survives. A moved line is not a removal, but `coverageGaps` still lists an uncovered line moved out of SKILL.md.
 
 ## Also noted
 

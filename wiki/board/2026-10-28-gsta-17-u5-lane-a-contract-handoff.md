@@ -67,7 +67,7 @@ U5 is the M1a unit that reads gstack's skill eval contract and fixes a run's inp
   - `lockCommit` trusts `git status`. Record the commit it returns, and check the files again inside the trial image if the image copies them.
   - Pass your container runner to `checkVacuity` as `runner`. The default runs `sh -c` locally with the env allowlist. Report each old-arm run as an `OldArmRun` (`passed`, `files_read` relative to the skill dir, and `asked` with one entry per question: its classifier category, or null when none applies). For lines other than ask lines, the claiming task's check is the observation of the gated event or required output, so `passed` carries it.
 - **U6 (verdict).**
-  - `lineFates(contractLines(readSkillFiles(before)), readSkillFiles(after))`, then `uncoveredRemovals(fates, lineCoverage(lock.lines, oldRuns), passesInAfter)`: each result is an UNCOVERED_GATE_REMOVAL.
+  - `lineFates(contractLines(readSkillFiles(before)), readSkillFiles(after))`, then `uncoveredRemovals(lock.lines, fates, lineCoverage(lock.lines, oldRuns), passesInAfter)`: each result is an UNCOVERED_GATE_REMOVAL.
   - `coverageGaps` lists the touched lines no task covers, such as lines moved out of SKILL.md. Put them in the verdict even when no gate fails.
   - The lock's derived fields (kind, categories, load, ask) are read as written, never derived again from the before copy. Check them against `contractLines` of the before copy, or drift covers it through the skill tree hash.
   - `LockState.before` is optional; pass it, so a changed before copy is drift.
