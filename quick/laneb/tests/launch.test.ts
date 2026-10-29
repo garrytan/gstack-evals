@@ -78,6 +78,7 @@ describe("launch.sh without an interrupt", () => {
     let serving = true;
     for (let i = 0; i < 50 && serving; i++) {
       serving = Bun.spawnSync(["pgrep", "-f", r.ledgerPath]).exitCode === 0;
+      // gstack-timing-ok: a bounded poll for the outcome (the ledger service exits once finish() kills it), not a fixed wait
       if (serving) await Bun.sleep(20);
     }
     expect(serving).toBe(false);

@@ -513,6 +513,7 @@ describe("batch cap", () => {
 
   test("open_key: two concurrent opens with one key give one session and one reserve, and the batch cap counts it once", async () => {
     let reserves = 0;
+    // gstack-timing-ok: the delay only holds the first reserve open so the second open overlaps it; a late second open gets the same result
     const r = capRig("key-concurrent", async () => { reserves++; await Bun.sleep(100); return undefined; });
     try {
       const [a, b] = await Promise.all([r.open(0.6, "k1"), r.open(0.6, "k1")]);
