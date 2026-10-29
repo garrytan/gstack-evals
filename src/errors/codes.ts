@@ -429,8 +429,8 @@ export const CODES = {
   E_LEDGER_UNAVAILABLE: {
     exit: 2,
     meaning: "The metering proxy could not reserve a call because the ledger did not answer, so nothing was sent to the provider.",
-    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume <out>.",
-    side_effects: NO_SPEND,
+    fix: "Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume <out>. Resume must run reconcileJournal on the stopped proxy's journal before it settles the lease, which releases at $0 a hold the lost answer left. U9 wires that into the runner; until it does, call reconcileJournal from code.",
+    side_effects: "Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0. A lease settled first counts that hold as unknown, which overstates spend and loses none.",
     retry_safe: true,
     resumable: true,
     owner: "U3",
@@ -612,6 +612,12 @@ export const CODES = {
     exit: null,
     meaning: "A line item recorded with --admission warn, such as a caller's own Lane A run, was leased without a matching admission record. The lease went ahead.",
     fix: "Nothing is required for a caller's own run. A program-funded run records its line item with --admission required, so the lease waits for the rig's admission record (E_RIG_UNPROVEN).",
+    owner: "U4",
+  },
+  LEASE_OVERSPENT: {
+    exit: null,
+    meaning: "A lease closed holding more than it reserved, because a provider billed a call above its reservation. The close records the real spend, so the line item's committed total can pass its cap.",
+    fix: "Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.",
     owner: "U4",
   },
 } as const satisfies Record<string, CodeInfo>;

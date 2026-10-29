@@ -93,6 +93,8 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
     const record = recordPath(one("--ledger-record"), env).path;
     const local = () => openLocalLedger(ledgerPath(one("--ledger"), env));
     const print = (value: unknown, line: string) => io.out(json ? JSON.stringify(value, null, 2) : line);
+    const warnings: string[] = [];
+    const warn = (code: ReasonCode, message: string) => warnings.push(code + " " + message);
 
     if (cmd === "init" || cmd === "raise") {
       const admission = one("--admission");
@@ -119,8 +121,6 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       const ttl = one("--ttl") === undefined ? undefined : Math.round(Number(one("--ttl")) * 3_600_000);
       if (ttl !== undefined && !(ttl > 0)) throw new Usage("--ttl must be a positive number of hours");
       const amount = one("--amount") === undefined ? undefined : dollars("--amount");
-      const warnings: string[] = [];
-      const warn = (code: ReasonCode, message: string) => warnings.push(code + " " + message);
       const request = { item: need("--item"), run_id: need("--run"), machine_id: one("--machine"), amount_micros: amount, ttl_ms: ttl, warn };
       if (exportTo) {
         try {
@@ -137,11 +137,10 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
         throw error;
       }
       if (exportTo) writeNew("--export", exportTo, JSON.stringify(exportLease(record, lease.lease_id), null, 2) + "\n", "lease " + lease.lease_id + " is recorded; write its export with gstack-evals ledger lease --lease " + lease.lease_id + " --export <file>");
-      if (warnings.length) io.err(warnings.join("\n"));
       print({ ...lease, warnings }, "LEASE: " + lease.lease_id + " item=" + lease.line_item + " run=" + lease.run_id + " amount=" + usd(lease.reserved_micros) + " machine=" + lease.machine_id + " expires=" + lease.expires_at + (exportTo ? " export=" + exportTo : ""));
     } else if (cmd === "settle") {
       const artifact = one("--artifact");
-      const close = flags.has("--from") ? importSettlement(record, readJson(need("--from"))) : settleLease(artifact ? null : record, local(), need("--lease"));
+      const close = flags.has("--from") ? importSettlement(record, readJson(need("--from")), warn) : settleLease(artifact ? null : record, local(), need("--lease"), warn);
       if (artifact) writeNew("--artifact", artifact, JSON.stringify(close, null, 2) + "\n", "the lease is staged to close in this ledger; run the same settle again with another --artifact file");
       print(close, "SETTLED: " + close.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " (" + close.unknown_calls + " calls)" + (artifact ? " artifact=" + artifact : " record=" + record));
     } else if (cmd === "reconcile") {
@@ -159,6 +158,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       }
       print({ ...paths, items }, lines.join("\n"));
     }
+    if (warnings.length) io.err(warnings.join("\n"));
     return 0;
   } catch (error) {
     if (error instanceof Usage) {

@@ -324,13 +324,13 @@ describe("the sealed workflow's lease round trip", () => {
     expect(JSON.parse(readFileSync(slotPath(record, { kind: "lease", item: "lanea", seq: 1 }), "utf8")).machine_id).toBe("workflow:sealed-repo");
   });
 
-  test("an artifact above the lease's amount or off the staged shape is E_USAGE and writes nothing; one that arrives after the owner reconciled is E_SETTLE_CONFLICT and the reconcile stands", () => {
+  test("an artifact holding more unknown charge than the lease's amount, or off the staged shape, is E_USAGE and writes nothing; one that arrives after the owner reconciled is E_SETTLE_CONFLICT and the reconcile stands", () => {
     const { dir, record } = setup();
     const lease = openLease(record, null, { item: "lanea", run_id: "sealed-1", machine_id: "workflow:sealed-repo", amount_micros: 3 * DOLLAR });
     const workflow = LocalLedger.open(join(scratch(), "workflow.sqlite"));
     workflow.addLease(exportLease(record, lease.lease_id));
     const artifact = settleLease(null, workflow, lease.lease_id);
-    for (const bad of [{ ...artifact, spent_micros: 3 * DOLLAR + 1 }, { ...artifact, unknown_micros: 3 * DOLLAR, spent_micros: 1 }, { ...artifact, usage: { ...artifact.usage!, evil: 1 } }, { ...artifact, usage: null }, { ...artifact, closed_at: "not a time" }, { ...artifact, note: "extra" }]) {
+    for (const bad of [{ ...artifact, unknown_micros: 3 * DOLLAR + 1 }, { ...artifact, usage: { ...artifact.usage!, evil: 1 } }, { ...artifact, usage: null }, { ...artifact, closed_at: "not a time" }, { ...artifact, note: "extra" }]) {
       expect(codeOf(() => importSettlement(record, bad))).toBe("E_USAGE");
     }
     expect(readItem(record, "lanea").leases[0]!.close).toBeNull();
@@ -339,6 +339,32 @@ describe("the sealed workflow's lease round trip", () => {
     const reconciled = reconcileLease(record, { lease_id: lease.lease_id, spent_micros: 500_000, quotes: [quote], source: exportFile, now: new Date(Date.parse(lease.expires_at) + 1) });
     expect(codeOf(() => importSettlement(record, artifact))).toBe("E_SETTLE_CONFLICT");
     expect(readItem(record, "lanea").leases[0]!.close).toEqual(reconciled);
+  });
+});
+
+describe("a call billed above its reservation", () => {
+  test("closes its lease at the real spend on both settle paths, with a LEASE_OVERSPENT warning", async () => {
+    const { record, local } = setup();
+    const warnings: string[] = [];
+    const warn = (code: string, message: string) => warnings.push(code + " " + message);
+    const sealed = openLease(record, null, { item: "lanea", run_id: "sealed-1", machine_id: "workflow:sealed-repo", amount_micros: DOLLAR });
+    const workflow = LocalLedger.open(join(scratch(), "workflow.sqlite"));
+    workflow.addLease(exportLease(record, sealed.lease_id));
+    const w = reservation(await workflow.reserve({ idempotency_key: "w1", lease_id: sealed.lease_id, cell: cell(1), max_micros: 900_000 }));
+    await workflow.settle(w.reservation_id, { kind: "spent", spent_micros: 1_200_000, usage });
+    const artifact = JSON.parse(JSON.stringify(settleLease(null, workflow, sealed.lease_id, warn)));
+    expect(importSettlement(record, artifact, warn)).toMatchObject({ how: "settled", spent_micros: 1_200_000, unknown_micros: 0 });
+    expect(readItem(record, "lanea").leases[0]!.close).toEqual(artifact);
+
+    const direct = openLease(record, local, { item: "lanea", run_id: "sealed-1", amount_micros: DOLLAR });
+    const d = reservation(await local.reserve({ idempotency_key: "d1", lease_id: direct.lease_id, cell: cell(2), max_micros: 900_000 }));
+    await local.settle(d.reservation_id, { kind: "spent", spent_micros: 1_100_000, usage });
+    expect(settleLease(record, local, direct.lease_id, warn)).toMatchObject({ spent_micros: 1_100_000 });
+    expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 2_300_000, open_lease: null });
+    expect(warnings).toHaveLength(3);
+    expect(warnings[0]).toStartWith("LEASE_OVERSPENT lease " + sealed.lease_id + " closes at $1.20, above the $1.00 it reserved");
+    expect(warnings[1]).toBe(warnings[0]!);
+    expect(warnings[2]).toStartWith("LEASE_OVERSPENT lease " + direct.lease_id + " closes at $1.10, above the $1.00 it reserved");
   });
 });
 
