@@ -9,7 +9,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/.." && pwd)
 out=${OUT:-$HOME/.capy/work/gsta12/route-check}
 ledger=${LEDGER:-$HOME/.capy/drive/captain-gstack-evals/ledger/laneb-quick.jsonl}
-: "${ANTHROPIC_API_KEY:?}" "${OPENROUTER_API_KEY:?}"
+: "${ANTHROPIC_API_KEY:?}" "${OPENROUTER_API_KEY:?}" "${PREREG:?set PREREG to the preregistration commit sha}"
 mkdir -p "$out/arms/none/.claude/skills"
 tar -C "$out/arms/none" -cf "$out/arms/none.tar" .claude
 rm -rf "$out/task" && cp -r "$here/smoke-task" "$out/task"
@@ -18,7 +18,7 @@ gateway=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gatew
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; }
 trap cleanup EXIT
-bun "$here/ledger.ts" serve --path "$ledger" --item "${ITEM:-laneb-quick}" --port 9911 --prereg "${PREREG:?set PREREG to the preregistration commit sha}" & pids+=($!)
+bun "$here/ledger.ts" serve --path "$ledger" --item "${ITEM:-laneb-quick}" --port 9911 --prereg "$PREREG" & pids+=($!)
 bun "$here/proxy.ts" --config "$root/config/proxy.json" --data-host "$gateway" --data-port 8787 --control-port 8788 \
   --log "$out/proxy-requests.jsonl" --sessions "$out/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix route- & pids+=($!)
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:9911/status >/dev/null 2>&1 && break; sleep 0.5; done
