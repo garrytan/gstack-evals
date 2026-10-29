@@ -40,7 +40,7 @@ describe("skill-eval --lock", () => {
     const r = await call(lockCommand, ["--tasks", tasks]);
     expect(r).toMatchObject({ code: 0, err: "" });
     expect(r.out).toContain("3 contract lines from demo (1 files): 0 claimed by a task, 3 unclaimed and uncovered until a task claims them.");
-    const step = "git -C " + dirname(tasks) + " add tasks.lock.json tasks.json && git -C " + dirname(tasks) + " commit -m \"Lock the demo eval tasks\"";
+    const step = "git -C " + dirname(tasks) + " add tasks.lock.json tasks.json && git -C " + dirname(tasks) + " commit -m 'Lock the demo eval tasks'";
     expect(r.out).toContain("\n  " + step);
     const lockPath = join(dirname(tasks), "tasks.lock.json");
     const git = (...args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -69,6 +69,20 @@ describe("skill-eval --lock", () => {
     git("config", "user.name", "eval");
     expect(spawnSync("bash", ["-c", step], { cwd: tmp, encoding: "utf8" }).status).toBe(0);
     expect(lockCommit(join(dir, "tasks.lock.json"), [join(dir, "tasks.json")]).ok).toBe(true);
+  });
+
+  test("the printed commit message is shell-quoted, so a skill folder name cannot run a command", async () => {
+    const name = "x$(echo INJECTED)`echo TICK`";
+    const root = repo({ [name + "/SKILL.md"]: SKILL, "ev/tasks.json": TASKS });
+    const r = await call(lockCommand, ["--tasks", join(root, "ev/tasks.json"), "--before", join(root, name)]);
+    const step = r.out.split("\n").find((l) => l.startsWith("  git -C "))!.trim();
+    expect(step).toEndWith(" commit -m 'Lock the " + name + " eval tasks'");
+    const git = (...args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    git("config", "user.email", "eval@example.com");
+    git("config", "user.name", "eval");
+    expect(spawnSync("bash", ["-c", step], { cwd: tmp, encoding: "utf8" }).status).toBe(0);
+    expect(git("log", "-1", "--format=%s").stdout.trim()).toBe("Lock the " + name + " eval tasks");
   });
 
   test("--before names the skill outside gstack's layout; without it the call is refused", async () => {

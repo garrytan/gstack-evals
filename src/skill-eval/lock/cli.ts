@@ -74,7 +74,7 @@ export async function lockCommand(argv: string[], io: Io = consoleIo): Promise<n
       ...(previous ? ["Kept " + carried + " claims from the previous lock" + (dropped.length ? "; dropped " + dropped.length + " whose task left the tasks file: " + dropped.join(", ") : "") + "."] : []),
       "To claim a line, add the covering task ids to its tasks list in the lock and run --lock again.",
       "Then commit the lock before you edit the skill:",
-      "  " + git + " add " + files.join(" ") + " && " + git + " commit -m " + JSON.stringify("Lock the " + lock.skill.name + " eval tasks"),
+      "  " + git + " add " + files.join(" ") + " && " + git + " commit -m " + quote("Lock the " + lock.skill.name + " eval tasks"),
     ].join("\n"),
   );
   return 0;
