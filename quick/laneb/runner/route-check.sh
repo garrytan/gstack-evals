@@ -31,7 +31,7 @@ for m in $models; do
     -a laneb_agent:LanebAgent -m "$hm" --base-url "http://$gateway:8787" \
     --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm=none --ak arm_tar="$out/arms/none.tar" \
     --ak session_cap_usd="$cap" --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model="$m" --ak max_output_tokens=32000 --ak repo_dir=/testbed --ak workdir=/testbed \
-    -e docker -o "$out/jobs" --job-name "route-$m-$(date +%s)" || echo "route check: harbor failed for $m"
+    -e docker --extra-docker-compose "$here/agent-caps.compose.yaml" -o "$out/jobs" --job-name "route-$m-$(date +%s)" || echo "route check: harbor failed for $m"
 done
 jq -c '{model, spent_usd: (.spent_micros / 1e6), requests, refused, close_reason, usage}' "$out/proxy-sessions.jsonl"
 for r in "$out"/jobs/route-*/*/verifier/reward.txt; do echo "$r $(cat "$r")"; done

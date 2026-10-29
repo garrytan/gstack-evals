@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Fake ubi-runner for launch.test.ts: the "VM" is the directory $VM, and every call is logged to $EVENTS.
+# FAIL_PULL fails every pull, FAIL_BOOTSTRAP fails vm-bootstrap.sh, and SLOW_BOOTSTRAP makes it take 2 s.
+set -u
+cmd=$1; shift
+echo "$cmd $*" >> "$EVENTS"
+case "$cmd" in
+  up) mkdir -p "$STATE/vm-1"; echo "IP=127.0.0.1" > "$STATE/vm-1/env"; touch "$STATE/vm-1/key"; echo vm-1 ;;
+  sync) mkdir -p "$VM/$3"; cp -r "$2/." "$VM/$3/" ;;
+  ssh) case "$2" in
+         *STOP*) touch "$VM/work/run/STOP" ;;
+         *vm-run.exit*) test -f "$VM/work/run/out/vm-run.exit" ;;
+         *"find out jobs"*) cd "$VM/work/run" && find out jobs -type f | wc -l ;;
+         *vm-bootstrap*) touch "$VM/bootstrapping"; [ -z "${SLOW_BOOTSTRAP:-}" ] || sleep 2; [ -z "${FAIL_BOOTSTRAP:-}" ] ;;
+         *) cat > /dev/null ;;
+       esac ;;
+  pull) [ -z "${FAIL_PULL:-}" ] || exit 1; cp -r "$VM/$2" "$3/" ;;
+  down) ;;
+esac

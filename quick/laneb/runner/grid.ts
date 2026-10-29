@@ -18,13 +18,18 @@ export type BatchSpec = {
   verifier_timeout_multiplier: number;
 };
 
-// Harbor's default no-retry list at f3a5a92, plus our ledger cap stop. A trial that fails for any
-// other reason before it is graded (image build, container start, proxy unreachable) gets two reruns.
-export const NO_RETRY = [
-  "AgentTimeoutError", "VerifierTimeoutError", "RewardFileNotFoundError", "RewardFileEmptyError", "VerifierOutputParseError",
-  "ApiUsageLimitError", "AgentSafetyRefusalError", "AgentAuthenticationError", "ModelNotFoundError", "UnsupportedModelParametersError",
-  "LedgerCapStop",
-];
+// Harbor reruns a trial only for these exception types, and deletes the trial directory first, so the
+// list holds only failures that come before any model response: Harbor's environment start and agent
+// setup timeouts, and LanebInfraError, which the agent raises when its session closed with no ok
+// response (or when setup or the session open failed). Every other error, including teardown and
+// verifier errors after paid work and the ledger cap stop, keeps its result. A plain RuntimeError from
+// image build or container start is not rerun: the verifier raises the same type after paid work.
+export const RETRY_ON = ["EnvironmentStartTimeoutError", "AgentSetupTimeoutError", "LanebInfraError"];
+
+// Compose overlay for every trial's main container: no NET_RAW or NET_ADMIN, so no process in it can
+// set SO_MARK to pass the egress sidecar or open AF_PACKET sockets below its rules. The agent's
+// preflight refuses to start when either capability is still held.
+export const CAPS_OVERLAY = "agent-caps.compose.yaml";
 
 export function jobConfig(b: BatchSpec) {
   const agents = b.models.flatMap((m) =>
@@ -53,8 +58,8 @@ export function jobConfig(b: BatchSpec) {
     n_concurrent_trials: b.n_concurrent,
     verifier_timeout_multiplier: b.verifier_timeout_multiplier,
     quiet: true,
-    retry: { max_retries: 2, exclude_exceptions: NO_RETRY },
-    environment: { type: "docker", delete: true },
+    retry: { max_retries: 2, include_exceptions: RETRY_ON },
+    environment: { type: "docker", delete: true, extra_docker_compose: [`${b.runner_dir}/${CAPS_OVERLAY}`] },
     agents,
     tasks: b.tasks.map((t) => ({ path: `${b.tasks_dir}/${t}` })),
   };

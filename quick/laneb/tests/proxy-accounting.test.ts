@@ -7,9 +7,14 @@
 //   fails_when=finish() bills partial usage when stop_reason never arrives; why_new=existing tests cover close and
 //   cancel, not a truncated stream; seam=none; no_claim=real provider streams (local stub upstream)
 // Value: protects=forward routes bound input with count_tokens plus slack and fall back to the byte bound when
-//   counting fails; fails_when=the count is ignored, or a failed count admits a request on a guess;
+//   counting fails, and a failed count whose byte bound passes the cap answers a retryable 529, not a budget stop;
+//   fails_when=the count is ignored, a failed count admits a request on a guess, or it ends the trial as a budget stop;
 //   why_new=runner.test.ts uses estimate routes only; seam=none; no_claim=Anthropic count_tokens accuracy (stub)
-// Value: protects=the global cap refuses a request, latches the cap stop and blocks new sessions;
+// Value: protects=an uncounted request with image or document blocks on a forward route is never sent on the byte bound,
+//   which does not bound media tokens; fails_when=the media check is dropped or misses blocks nested in tool results;
+//   why_new=no test sends media with a failed count; seam=none; no_claim=provider media token counts (stub)
+// Value: protects=the global cap refuses a session whose full reserve does not fit, latches the cap stop and blocks
+//   new sessions;
 //   fails_when=the global check or the latch is removed; why_new=no existing test sets globalCapMicros;
 //   seam=none; no_claim=ledger interaction (no ledger URL in this proxy)
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -34,7 +39,9 @@ test("cache_creation splits into 5m and 1h writes, and the 1h part bills at the 
 });
 
 describe("proxy accounting against a stub upstream", () => {
-  let countFails = false;
+  let countFails = 0;
+  let countValue = 10;
+  let messagesSeen = 0;
   const enc = new TextEncoder();
   const ev = (type: string, data: unknown) => enc.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   let upstream: ReturnType<typeof Bun.serve>;
@@ -50,9 +57,13 @@ describe("proxy accounting against a stub upstream", () => {
         const url = new URL(req.url);
         const body = (await req.json()) as any;
         if (url.pathname.endsWith("/count_tokens")) {
-          if (countFails) return Response.json({ type: "error", error: { type: "api_error", message: "count down" } }, { status: 500 });
-          return Response.json({ input_tokens: 10 });
+          if (countFails > 0) {
+            countFails--;
+            return Response.json({ type: "error", error: { type: "api_error", message: "count down" } }, { status: 500 });
+          }
+          return Response.json({ input_tokens: countValue });
         }
+        messagesSeen++;
         const truncated = Boolean(body.metadata?.truncated);
         const stream = new ReadableStream<Uint8Array>({
           start(ctrl) {
@@ -112,32 +123,84 @@ describe("proxy accounting against a stub upstream", () => {
     const entry = readLog("fwd.jsonl").find((e) => e.event === "request" && e.session === a.id);
     expect(entry).toMatchObject({ counted: true, input_tokens_bound: 10 + COUNT_SLACK_TOKENS, worst_micros: counted, complete: true });
 
-    countFails = true;
+    // The same request with a failed count: its byte bound passes the cap, so it gets a retryable 529 and no upstream
+    // call; the retry is counted, fits, and runs.
+    countFails = 1;
     const b = (await (await open(forward, 0.03)).json()) as any;
-    const refused = await message(forward, b.token);
-    expect(refused.status).toBe(400);
-    expect(await refused.text()).toContain("session budget exhausted");
+    const before = messagesSeen;
+    const retry = await message(forward, b.token);
+    expect(retry.status).toBe(529);
+    expect(((await retry.json()) as any).error).toEqual({ type: "overloaded_error", message: "laneb proxy: token count unavailable, retry" });
+    expect(messagesSeen).toBe(before);
+    const again = await message(forward, b.token);
+    expect(again.status).toBe(200);
+    await again.text();
     const closed = await close(forward, b.id);
-    expect(closed.spent_micros).toBe(0);
+    expect(closed).toMatchObject({ refused: 0, refused_budget: 0, requests: 1, ok_responses: 1 });
     const log = readLog("fwd.jsonl").filter((e) => e.session === b.id);
     expect(log.some((e) => e.event === "count_failed" && e.status === 500)).toBe(true);
-    expect(log.find((e) => e.event === "refused")).toMatchObject({ reason: "session_cap", counted: false });
-    countFails = false;
+    expect(log.find((e) => e.event === "count_failed_over_budget")).toMatchObject({ cap_micros: 30_000 });
+    expect(log.some((e) => e.event === "refused")).toBe(false);
+
+    // A counted request over the cap is still a budget stop.
+    const c = (await (await open(forward, 0.02)).json()) as any;
+    const over = await message(forward, c.token);
+    expect(over.status).toBe(400);
+    expect(await over.text()).toContain("session budget exhausted");
+    expect(await close(forward, c.id)).toMatchObject({ refused_budget: 1 });
+    expect(readLog("fwd.jsonl").find((e) => e.event === "refused" && e.session === c.id)).toMatchObject({ reason: "session_cap", counted: true });
   });
 
-  test("the global cap refuses the request, latches the cap stop and blocks new sessions", async () => {
-    const s = (await (await open(capped, 1)).json()) as any;
-    const res = await message(capped, s.token);
+  test("on a forward route, an uncounted request with an image or document block answers a retryable 529 and is never sent", async () => {
+    const s = (await (await open(forward, 1)).json()) as any;
+    const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } };
+    const pdf = { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0=" } };
+    const shapes = [
+      [{ role: "user", content: [image, { type: "text", text: "what move?" }] }],
+      [{ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: [pdf] }] }],
+    ];
+    for (const messages of shapes) {
+      countFails = 1;
+      const before = messagesSeen;
+      const res = await message(forward, s.token, { messages });
+      expect(res.status).toBe(529);
+      expect(((await res.json()) as any).error).toEqual({ type: "overloaded_error", message: "laneb proxy: token count unavailable, retry" });
+      expect(messagesSeen).toBe(before);
+    }
+    const counted = await message(forward, s.token, { messages: shapes[0] });
+    expect(counted.status).toBe(200);
+    await counted.text();
+    countFails = 1;
+    const plain = await message(forward, s.token);
+    expect(plain.status).toBe(200);
+    await plain.text();
+    expect(await close(forward, s.id)).toMatchObject({ requests: 2, ok_responses: 2, refused: 0, refused_budget: 0 });
+    expect(readLog("fwd.jsonl").filter((e) => e.event === "count_failed_media" && e.session === s.id)).toHaveLength(2);
+  });
+
+  test("a worst case that is not a positive number is refused before any upstream call", async () => {
+    countValue = -1e9;
+    const s = (await (await open(forward, 1)).json()) as any;
+    const before = messagesSeen;
+    const res = await message(forward, s.token);
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain("global budget exhausted");
+    expect(await res.text()).toContain("worst-case cost is not a positive number");
+    expect(messagesSeen).toBe(before);
+    expect(readLog("fwd.jsonl").find((e) => e.event === "refused" && e.session === s.id)).toMatchObject({ reason: "worst_case" });
+    expect((await close(forward, s.id)).spent_micros).toBe(0);
+    countValue = 10;
+  });
+
+  test("the global cap refuses a session that does not fit at open, latches the cap stop and blocks new sessions", async () => {
+    const first = await open(capped, 1);
+    expect(first.status).toBe(409);
+    expect(((await first.json()) as any).error).toContain("batch cap reached");
     const totals = (await (await fetch(control(capped) + "/totals")).json()) as any;
     expect(totals.cap_stop).toContain("batch cap reached");
     expect(totals.global_spent_micros).toBe(0);
+    expect(totals.sessions).toBe(0);
     const again = await open(capped, 0.001);
     expect(again.status).toBe(409);
     expect(((await again.json()) as any).error).toContain("budget stop latched");
-    const closed = await close(capped, s.id);
-    expect(closed.refused_budget).toBe(1);
-    expect(closed.spent_micros).toBe(0);
   });
 });
