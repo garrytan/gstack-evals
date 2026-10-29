@@ -17,6 +17,10 @@ STAT_COLS = ["frontier_rate", "frontier_n", "opus47_rate", "gpt55_rate", "fronti
 
 
 TB21_FIX = "53ff2b87d621bdb97b455671f2bd9728b7d86c11"  # "Various task fixes for TB2.1"
+EXT_LAST = 41  # quick look 3 (GSTA-30): selection order ranks 27 to 41 join the list, ranks 42 to 54 are their ordered reserves
+EXT_NOTE = ("Quick look 3 (GSTA-30, 2026-10-29) extends the list to 40 tasks with the same rule: selection_tb2.json order, ranks 22 to 41, "
+            "with ranks 42 to 54 as ordered reserves for an oracle failure. Ranks 22 to 26 are the reserves above. "
+            "Digests recomputed with digest_tasks.task_digest from the pinned commit.")
 
 
 def changed_files(path, a, b):
@@ -34,7 +38,7 @@ def main():
     old = {}
     if (HERE / "tasks.json").exists():
         prev = json.loads((HERE / "tasks.json").read_text())
-        old = {t["task_id"]: t for t in prev.get("main", []) + prev.get("reserves", [])}
+        old = {t["task_id"]: t for t in prev.get("main", []) + prev.get("reserves", []) + prev.get("extension", [])}
 
     def entry(name, rank, role):
         s = st.loc[name]
@@ -62,6 +66,9 @@ def main():
 
     main_list = [entry(n, i + 1, "main") for i, n in enumerate(sel["main"])]
     reserves = [entry(n, len(main_list) + i + 1, "reserve") for i, n in enumerate(sel["reserves"])]
+    assert sel["order"][:len(main_list) + len(reserves)] == sel["main"] + sel["reserves"]
+    extension = [entry(n, r, "extension" if r <= EXT_LAST else "extension_reserve")
+                 for r, n in enumerate(sel["order"], 1) if r > len(main_list) + len(reserves)]
     doc = {
         "schema": "gsta12-lane-b-tasks/1",
         "fixed_on": "2026-10-28",
@@ -72,9 +79,10 @@ def main():
         },
         "rule": sel["rule"], "funnel": sel["funnel"],
         "main": main_list, "reserves": reserves,
+        "extension_note": EXT_NOTE, "extension": extension,
     }
     (HERE / "tasks.json").write_text(json.dumps(doc, indent=1) + "\n")
-    print(len(main_list), "main,", len(reserves), "reserves")
+    print(len(main_list), "main,", len(reserves), "reserves,", len(extension), "extension")
 
 
 if __name__ == "__main__":

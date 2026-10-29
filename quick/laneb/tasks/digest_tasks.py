@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Recompute task digests from the registry-pinned git commit.
 
-For each task in tasks.json (main and reserves), this script:
+For each task in tasks.json (main, reserves and extension), this script:
   1. clones the pinned git_url (or reuses --cache-dir/<repo>) and fetches git_commit_id,
   2. lists every file tracked under the task path at that commit (git ls-tree, no working tree involved),
   3. digest = sha256 over the lines "<relative path>\0<sha256 of file bytes>\n", sorted by relative path
@@ -59,7 +59,7 @@ def main():
     cache.mkdir(parents=True, exist_ok=True)
     doc = json.loads(Path(a.tasks).read_text())
     bad = 0
-    for t in doc["main"] + doc["reserves"]:
+    for t in doc["main"] + doc["reserves"] + doc.get("extension", []):
         reg = t["registry"]
         repo = ensure_repo(reg["git_url"], reg["git_commit_id"], cache)
         d, n = task_digest(repo, reg["git_commit_id"], reg["path"])

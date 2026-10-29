@@ -26,8 +26,8 @@ subtable(p.CHEAP, "Cheap")
 d = json.loads((HERE / "tasks.json").read_text())
 print("\n| # | task | category | tier | frontier | Opus 4.7 | GPT-5.5 | frontier subs solving (of 9) | cheap | median frontier agent min | est. Opus 5.5 $/trial | agent timeout min | network |")
 print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
-for t in d["main"] + d["reserves"]:
+for t in d["main"] + d["reserves"] + d.get("extension", []):
     q = t["published"]
-    print(f"| {t['rank']}{'' if t['role'] == 'main' else ' (R)'} | {t['task_id']} | {t['category']} | {t['tier']} | {q['frontier_rate']:.2f} | "
+    print(f"| {t['rank']}{ {'main': '', 'reserve': ' (R)', 'extension': ' (E)'}.get(t['role'], ' (ER)') } | {t['task_id']} | {t['category']} | {t['tier']} | {q['frontier_rate']:.2f} | "
           f"{q['opus47_rate']:.2f} | {q['gpt55_rate']:.2f} | {q['frontier_subs_solving']} | {q['cheap_rate']:.2f} | "
           f"{q['frontier_median_agent_min']:.1f} | {q['est_opus55_usd']:.2f} | {t['agent_timeout_sec'] // 60} | {t['network_needed_by_reference_solution']} |")
