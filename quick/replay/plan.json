@@ -1,0 +1,565 @@
+{
+  "gstack_sha": "61e201ec08bcf59163ef2d3a69a26e334a536c04",
+  "cases": [
+    {
+      "case": "d13",
+      "kind": "defect",
+      "diff_lines": 41,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=false SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_ERROR=unmatched SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "d13/baseline.md",
+        "core": "d13/core.md",
+        "red_team_template": "d13/red-team.template.md"
+      }
+    },
+    {
+      "case": "y13",
+      "kind": "decoy",
+      "diff_lines": 56,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "y13/baseline.md",
+        "core": "y13/core.md",
+        "testing": "y13/testing.md",
+        "maintainability": "y13/maintainability.md",
+        "red_team_template": "y13/red-team.template.md"
+      }
+    },
+    {
+      "case": "d14",
+      "kind": "defect",
+      "diff_lines": 46,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "d14/baseline.md",
+        "core": "d14/core.md",
+        "red_team_template": "d14/red-team.template.md"
+      }
+    },
+    {
+      "case": "y14",
+      "kind": "decoy",
+      "diff_lines": 60,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "performance"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "y14/baseline.md",
+        "core": "y14/core.md",
+        "testing": "y14/testing.md",
+        "maintainability": "y14/maintainability.md",
+        "performance": "y14/performance.md",
+        "red_team_template": "y14/red-team.template.md"
+      }
+    },
+    {
+      "case": "d04",
+      "kind": "defect",
+      "diff_lines": 111,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=false SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "d04/baseline.md",
+        "core": "d04/core.md",
+        "testing": "d04/testing.md",
+        "maintainability": "d04/maintainability.md",
+        "security": "d04/security.md",
+        "performance": "d04/performance.md",
+        "simplification": "d04/simplification.md",
+        "red_team_template": "d04/red-team.template.md"
+      }
+    },
+    {
+      "case": "y04",
+      "kind": "decoy",
+      "diff_lines": 106,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "simplification"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "y04/baseline.md",
+        "core": "y04/core.md",
+        "testing": "y04/testing.md",
+        "maintainability": "y04/maintainability.md",
+        "simplification": "y04/simplification.md",
+        "red_team_template": "y04/red-team.template.md"
+      }
+    },
+    {
+      "case": "d11",
+      "kind": "defect",
+      "diff_lines": 310,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "d11/baseline.md",
+        "core": "d11/core.md",
+        "testing": "d11/testing.md",
+        "maintainability": "d11/maintainability.md",
+        "security": "d11/security.md",
+        "performance": "d11/performance.md",
+        "simplification": "d11/simplification.md",
+        "red_team_template": "d11/red-team.template.md"
+      }
+    },
+    {
+      "case": "y11",
+      "kind": "decoy",
+      "diff_lines": 333,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "y11/baseline.md",
+        "core": "y11/core.md",
+        "testing": "y11/testing.md",
+        "maintainability": "y11/maintainability.md",
+        "security": "y11/security.md",
+        "performance": "y11/performance.md",
+        "simplification": "y11/simplification.md",
+        "red_team_template": "y11/red-team.template.md"
+      }
+    },
+    {
+      "case": "d12",
+      "kind": "defect",
+      "diff_lines": 535,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=true SCOPE_AUTH=true SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "api-contract",
+        "simplification"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "d12/baseline.md",
+        "core": "d12/core.md",
+        "testing": "d12/testing.md",
+        "maintainability": "d12/maintainability.md",
+        "security": "d12/security.md",
+        "performance": "d12/performance.md",
+        "api-contract": "d12/api-contract.md",
+        "simplification": "d12/simplification.md",
+        "red_team_template": "d12/red-team.template.md"
+      }
+    },
+    {
+      "case": "y12",
+      "kind": "decoy",
+      "diff_lines": 542,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "y12/baseline.md",
+        "core": "y12/core.md",
+        "testing": "y12/testing.md",
+        "maintainability": "y12/maintainability.md",
+        "security": "y12/security.md",
+        "performance": "y12/performance.md",
+        "simplification": "y12/simplification.md",
+        "state-machines": "y12/state-machines.md",
+        "red_team_template": "y12/red-team.template.md"
+      }
+    },
+    {
+      "case": "d15",
+      "kind": "defect",
+      "diff_lines": 677,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "d15/baseline.md",
+        "core": "d15/core.md",
+        "testing": "d15/testing.md",
+        "maintainability": "d15/maintainability.md",
+        "security": "d15/security.md",
+        "performance": "d15/performance.md",
+        "simplification": "d15/simplification.md",
+        "state-machines": "d15/state-machines.md",
+        "red_team_template": "d15/red-team.template.md"
+      }
+    },
+    {
+      "case": "y15",
+      "kind": "decoy",
+      "diff_lines": 698,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "y15/baseline.md",
+        "core": "y15/core.md",
+        "testing": "y15/testing.md",
+        "maintainability": "y15/maintainability.md",
+        "security": "y15/security.md",
+        "performance": "y15/performance.md",
+        "simplification": "y15/simplification.md",
+        "state-machines": "y15/state-machines.md",
+        "red_team_template": "y15/red-team.template.md"
+      }
+    },
+    {
+      "case": "d01",
+      "kind": "defect",
+      "diff_lines": 38,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "d01/baseline.md",
+        "core": "d01/core.md",
+        "red_team_template": "d01/red-team.template.md"
+      }
+    },
+    {
+      "case": "y01",
+      "kind": "decoy",
+      "diff_lines": 34,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "y01/baseline.md",
+        "core": "y01/core.md",
+        "red_team_template": "y01/red-team.template.md"
+      }
+    },
+    {
+      "case": "d02",
+      "kind": "defect",
+      "diff_lines": 65,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=false SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_ERROR=unmatched SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "d02/baseline.md",
+        "core": "d02/core.md",
+        "testing": "d02/testing.md",
+        "maintainability": "d02/maintainability.md",
+        "red_team_template": "d02/red-team.template.md"
+      }
+    },
+    {
+      "case": "y02",
+      "kind": "decoy",
+      "diff_lines": 66,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "performance"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "y02/baseline.md",
+        "core": "y02/core.md",
+        "testing": "y02/testing.md",
+        "maintainability": "y02/maintainability.md",
+        "performance": "y02/performance.md",
+        "red_team_template": "y02/red-team.template.md"
+      }
+    },
+    {
+      "case": "d03",
+      "kind": "defect",
+      "diff_lines": 97,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "performance"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "d03/baseline.md",
+        "core": "d03/core.md",
+        "testing": "d03/testing.md",
+        "maintainability": "d03/maintainability.md",
+        "performance": "d03/performance.md",
+        "red_team_template": "d03/red-team.template.md"
+      }
+    },
+    {
+      "case": "y03",
+      "kind": "decoy",
+      "diff_lines": 96,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "performance"
+      ],
+      "red_team_by_size": false,
+      "prompts": {
+        "baseline": "y03/baseline.md",
+        "core": "y03/core.md",
+        "testing": "y03/testing.md",
+        "maintainability": "y03/maintainability.md",
+        "performance": "y03/performance.md",
+        "red_team_template": "y03/red-team.template.md"
+      }
+    },
+    {
+      "case": "d08",
+      "kind": "defect",
+      "diff_lines": 238,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "d08/baseline.md",
+        "core": "d08/core.md",
+        "testing": "d08/testing.md",
+        "maintainability": "d08/maintainability.md",
+        "security": "d08/security.md",
+        "performance": "d08/performance.md",
+        "simplification": "d08/simplification.md",
+        "red_team_template": "d08/red-team.template.md"
+      }
+    },
+    {
+      "case": "y08",
+      "kind": "decoy",
+      "diff_lines": 226,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "y08/baseline.md",
+        "core": "y08/core.md",
+        "testing": "y08/testing.md",
+        "maintainability": "y08/maintainability.md",
+        "simplification": "y08/simplification.md",
+        "state-machines": "y08/state-machines.md",
+        "red_team_template": "y08/red-team.template.md"
+      }
+    },
+    {
+      "case": "d09",
+      "kind": "defect",
+      "diff_lines": 633,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "d09/baseline.md",
+        "core": "d09/core.md",
+        "testing": "d09/testing.md",
+        "maintainability": "d09/maintainability.md",
+        "security": "d09/security.md",
+        "performance": "d09/performance.md",
+        "simplification": "d09/simplification.md",
+        "state-machines": "d09/state-machines.md",
+        "red_team_template": "d09/red-team.template.md"
+      }
+    },
+    {
+      "case": "y09",
+      "kind": "decoy",
+      "diff_lines": 608,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=false",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "y09/baseline.md",
+        "core": "y09/core.md",
+        "testing": "y09/testing.md",
+        "maintainability": "y09/maintainability.md",
+        "security": "y09/security.md",
+        "performance": "y09/performance.md",
+        "simplification": "y09/simplification.md",
+        "red_team_template": "y09/red-team.template.md"
+      }
+    },
+    {
+      "case": "d10",
+      "kind": "defect",
+      "diff_lines": 743,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "d10/baseline.md",
+        "core": "d10/core.md",
+        "testing": "d10/testing.md",
+        "maintainability": "d10/maintainability.md",
+        "security": "d10/security.md",
+        "performance": "d10/performance.md",
+        "simplification": "d10/simplification.md",
+        "state-machines": "d10/state-machines.md",
+        "red_team_template": "d10/red-team.template.md"
+      }
+    },
+    {
+      "case": "y10",
+      "kind": "decoy",
+      "diff_lines": 753,
+      "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_STATE_MACHINE=true",
+      "stack": "node",
+      "test_fw": "unknown",
+      "specialists": [
+        "testing",
+        "maintainability",
+        "security",
+        "performance",
+        "simplification",
+        "state-machines"
+      ],
+      "red_team_by_size": true,
+      "prompts": {
+        "baseline": "y10/baseline.md",
+        "core": "y10/core.md",
+        "testing": "y10/testing.md",
+        "maintainability": "y10/maintainability.md",
+        "security": "y10/security.md",
+        "performance": "y10/performance.md",
+        "simplification": "y10/simplification.md",
+        "state-machines": "y10/state-machines.md",
+        "red_team_template": "y10/red-team.template.md"
+      }
+    }
+  ]
+}

@@ -34,6 +34,9 @@
       "tests/wiki.test.ts",
       "tests/sealed.test.ts"
     ],
+    ".gstack/sealed-allow.tsv": [
+      "tests/sealed.test.ts"
+    ],
     "wiki/**": [
       "tests/wiki.test.ts"
     ],
@@ -42,6 +45,9 @@
     "bun.lock": [],
     "tsconfig.json": [],
     "src/**/.gitkeep": [],
+    "quick/replay/**": [
+      "quick/replay/replay.test.ts"
+    ],
     "quick/laneb/**": [
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",
