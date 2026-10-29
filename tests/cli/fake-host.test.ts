@@ -38,9 +38,9 @@ describe("the fake host's records", () => {
     const failed = fakeRecord({ model: "m", arm: "none", task: forbids, round: 1, trial: 0 }, { arms: { none: "0" } });
     expect(failed.turns).toEqual(["Done.\n\n```\nrm -rf\n```\n"]);
     expect(fakeRecord({ model: "m", arm: "after", task: forbids, round: 1, trial: 0 }, { arms: { after: "1" } }).turns).toEqual(["Done."]);
-    const lookahead = { ...forbids, must_not: ["(?=x)y"] };
+    const lookahead = { ...forbids, must_not: ["(?=y)y"] };
     expect(() => fakeRecord({ model: "m", arm: "none", task: lookahead, round: 1, trial: 0 }, { arms: { none: "0" } })).toThrow("failing_answers");
-    expect(fakeRecord({ model: "m", arm: "none", task: lookahead, round: 1, trial: 0 }, { arms: { none: "0" }, failing_answers: { t: "```\nxy\n```" } }).turns).toEqual(["```\nxy\n```"]);
+    expect(fakeRecord({ model: "m", arm: "none", task: lookahead, round: 1, trial: 0 }, { arms: { none: "0" }, failing_answers: { t: "```\ny\n```" } }).turns).toEqual(["```\ny\n```"]);
   });
 
   // Value: protects=a script with a negative, infinite or non-numeric session_usd is refused before any record, so spend.committed is never negative; fails_when=such a script loads; why_new=PR #49 review; seam=loadScript; no_claim=none beyond protects
