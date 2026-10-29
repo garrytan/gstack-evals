@@ -32,6 +32,7 @@ gstack-evals --help
 | [src/types.ts](src/types.ts) | Interfaces that more than one unit codes against: arms, leases, reservations, outcomes, the error record |
 | [schema/](schema/README.md) | Public-safe JSON schemas: tasks and arms (U5) so far, the verdict schema with U6 |
 | [docs/](docs/) | The [budget ledger guide](docs/budget-ledger.md), reason codes and adapters |
+| [quick/laneb/](quick/laneb/README.md) | GSTA-12's exploratory Lane B quick look on Terminal-Bench 2.0: runner, arms, task list and analysis, with keyless tests |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
 | [quick/lanea-quick/](quick/lanea-quick/README.md) | GSTA-13's thin Lane A runner for Quick look 3, the office-hours diet check, with a fake upstream and keyless tests |
 | [quick/replay/](quick/replay/README.md) | GSTA-11's exploratory review replay on known gstack bugs, with a fake upstream and keyless tests; [preregistration](wiki/plans/2026-10-28-gsta-11-review-replay-prereg.md) in wiki/ |

@@ -1,0 +1,143 @@
+// Append-only spend ledger for the Lane B quick look (line item laneb-quick).
+// Money is integer micro-dollars. A reserve is idempotent by id; a second settle is refused.
+import { appendFileSync, existsSync, readFileSync, mkdirSync, openSync, fsyncSync, closeSync } from "node:fs";
+import { dirname } from "node:path";
+
+export type Row = {
+  ts: string;
+  item: string;
+  kind: "approval" | "reserve" | "settle" | "note";
+  id: string;
+  usd_micros: number;
+  [k: string]: unknown;
+};
+
+export type Totals = { capMicros: number; settledMicros: number; openReservedMicros: number; openIds: string[] };
+
+export const toMicros = (usd: number) => Math.round(usd * 1_000_000);
+export const fromMicros = (m: number) => m / 1_000_000;
+
+export function readRows(path: string): Row[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as Row);
+}
+
+export function totals(rows: Row[]): Totals {
+  const approval = rows.find((r) => r.kind === "approval");
+  if (!approval) throw new Error("ledger has no approval row");
+  const reserved = new Map<string, number>();
+  const settled = new Map<string, number>();
+  for (const r of rows) {
+    if (r.kind === "reserve") reserved.set(r.id, r.usd_micros);
+    if (r.kind === "settle") settled.set(r.id, r.usd_micros);
+  }
+  let settledMicros = 0;
+  for (const v of settled.values()) settledMicros += v;
+  let openReservedMicros = 0;
+  const openIds: string[] = [];
+  for (const [id, v] of reserved) {
+    if (settled.has(id)) continue;
+    openReservedMicros += v;
+    openIds.push(id);
+  }
+  return { capMicros: approval.usd_micros, settledMicros, openReservedMicros, openIds };
+}
+
+function appendDurable(path: string, row: Row) {
+  mkdirSync(dirname(path), { recursive: true });
+  appendFileSync(path, JSON.stringify(row) + "\n");
+  const fd = openSync(path, "r");
+  try { fsyncSync(fd); } catch {} finally { closeSync(fd); }
+}
+
+export class Ledger {
+  constructor(readonly path: string, readonly item: string) {}
+
+  status() {
+    return totals(readRows(this.path));
+  }
+
+  approve(capUsd: number, extra: Record<string, unknown>) {
+    if (readRows(this.path).some((r) => r.kind === "approval")) throw new Error("approval row already present");
+    appendDurable(this.path, { ts: new Date().toISOString(), item: this.item, kind: "approval", id: "approval", usd_micros: toMicros(capUsd), ...extra });
+  }
+
+  reserve(id: string, usdMicros: number, meta: Record<string, unknown> = {}): { ok: true; existing: boolean } | { ok: false; reason: string; totals: Totals } {
+    const rows = readRows(this.path);
+    const prior = rows.find((r) => r.kind === "reserve" && r.id === id);
+    if (prior) {
+      if (prior.usd_micros !== usdMicros) return { ok: false, reason: "reserve id reused with a different amount", totals: totals(rows) };
+      return { ok: true, existing: true };
+    }
+    const t = totals(rows);
+    if (t.settledMicros + t.openReservedMicros + usdMicros > t.capMicros) return { ok: false, reason: "cap", totals: t };
+    appendDurable(this.path, { ts: new Date().toISOString(), item: this.item, kind: "reserve", id, usd_micros: usdMicros, ...meta });
+    return { ok: true, existing: false };
+  }
+
+  settle(id: string, usdMicros: number, meta: Record<string, unknown> = {}): { ok: true } | { ok: false; reason: string } {
+    const rows = readRows(this.path);
+    const reserve = rows.find((r) => r.kind === "reserve" && r.id === id);
+    if (!reserve) return { ok: false, reason: "no reserve for id" };
+    if (rows.some((r) => r.kind === "settle" && r.id === id)) return { ok: false, reason: "already settled" };
+    appendDurable(this.path, { ts: new Date().toISOString(), item: this.item, kind: "settle", id, usd_micros: usdMicros, reserved_micros: reserve.usd_micros, over_reserve: usdMicros > reserve.usd_micros, ...meta });
+    return { ok: true };
+  }
+}
+
+// Service mode: bun ledger.ts serve --path <jsonl> --item <name> [--port 9911]
+// Binds 127.0.0.1 only. The VM reaches it through an SSH reverse tunnel.
+async function serve(args: Record<string, string>) {
+  const ledger = new Ledger(args.path, args.item);
+  ledger.status();
+  const port = Number(args.port ?? 9911);
+  let queue = Promise.resolve();
+  const serial = <T>(fn: () => T) => {
+    const next = queue.then(fn);
+    queue = next.then(() => undefined, () => undefined);
+    return next;
+  };
+  Bun.serve({
+    hostname: "127.0.0.1",
+    port,
+    async fetch(req) {
+      const url = new URL(req.url);
+      if (req.method === "GET" && url.pathname === "/status") return Response.json(ledger.status());
+      if (req.method !== "POST") return new Response("not found", { status: 404 });
+      const body = (await req.json()) as { id: string; usd_micros: number; meta?: Record<string, unknown> };
+      if (typeof body.id !== "string" || !Number.isInteger(body.usd_micros) || body.usd_micros < 0) return Response.json({ ok: false, reason: "bad request" }, { status: 400 });
+      if (url.pathname === "/reserve") {
+        const out = await serial(() => ledger.reserve(body.id, body.usd_micros, body.meta ?? {}));
+        return Response.json(out, { status: out.ok ? 200 : 409 });
+      }
+      if (url.pathname === "/settle") {
+        const out = await serial(() => ledger.settle(body.id, body.usd_micros, body.meta ?? {}));
+        return Response.json(out, { status: out.ok ? 200 : 409 });
+      }
+      return new Response("not found", { status: 404 });
+    },
+  });
+  console.log(`ledger: serving ${args.item} on 127.0.0.1:${port}`);
+}
+
+function parseArgs(argv: string[]) {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < argv.length; i++) if (argv[i].startsWith("--")) out[argv[i].slice(2)] = argv[++i];
+  return out;
+}
+
+if (import.meta.main) {
+  const [cmd, ...rest] = Bun.argv.slice(2);
+  const args = parseArgs(rest);
+  if (cmd === "serve") await serve(args);
+  else if (cmd === "status") {
+    const t = new Ledger(args.path, args.item).status();
+    console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
+  } else {
+    console.error("E_USAGE usage: bun ledger.ts serve|status --path <jsonl> --item <name> [--port N]");
+    process.exit(2);
+  }
+}

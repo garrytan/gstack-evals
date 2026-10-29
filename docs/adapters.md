@@ -8,7 +8,7 @@ Owner: U9 (src/trial), with U10 (the Claude Code and Codex adapters).
 
 ## Lane B: the runner chosen by the Harbor spike
 
-Owner of isolation and egress: **Harbor**, chosen by the U8 spike ([finding](../wiki/board/2026-10-28-gsta-10-harbor-spike-lane-b-runner.md)). gstack-evals owns the metering proxy, the ledger, preregistration, stats and reports. Nothing in Lane B is built yet; this section is the contract M2a builds to.
+Owner of isolation and egress: **Harbor**, chosen by the U8 spike ([finding](../wiki/board/2026-10-28-gsta-10-harbor-spike-lane-b-runner.md)). gstack-evals owns the metering proxy, the ledger, preregistration, stats and reports. M2a's Lane B rig is not built yet; this section is the contract it builds to. GSTA-12's exploratory quick look, [quick/laneb/](../quick/laneb/README.md), runs on Harbor ahead of M2a; its README lists what M2a should keep and the quick look's known gaps.
 
 **Runner.** Harbor, pinned by commit (f3a5a923 or later) until a release carries `skip_install` (harbor#3657). The pin goes into the arm manifest and the preregistration. The agent subclasses Harbor's `ClaudeCode` and calls private helpers (`_resolve_auth_env`, `_resolved_model_name`, `_model_alias_env`, `_sanitize_docker_compose_project_name`), so moving the pin means rerunning the spike's six checks. Tasks are Harbor task directories under `tasks/<track>/<task-id>/`.
 
