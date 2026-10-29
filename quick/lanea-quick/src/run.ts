@@ -325,6 +325,7 @@ async function main() {
     const st = STAGES[stage]!;
     const tasks = prep.suites[st.suite]!.tasks;
     const ledger = new Ledger(opts.ledgerPath, opts.cap, opts.item);
+    if (existsSync(opts.ledgerPath) && !ledger.hasApproval()) ledger.assertOpen();
     const mean = (m: string, s: string) => meanCost(out, m, s);
     const perSession = (m: string): number | null => {
       if (st.suite === "office-hours") return mean(m, "office-hours");

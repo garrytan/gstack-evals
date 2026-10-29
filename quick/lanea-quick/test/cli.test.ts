@@ -36,6 +36,20 @@ describe("run.ts arguments", () => {
     const row = JSON.parse(readFileSync(join(home, ".capy/drive/captain-gstack-evals/ledger/lanea-cli.jsonl"), "utf8"));
     expect(row).toMatchObject({ type: "approval", item: "lanea-cli", cap_usd: 35 });
   });
+  test("project refuses a ledger approved for another cap or item, and shows nothing remaining once it is closed", () => {
+    const ledger = join(work, "rerun.jsonl");
+    const rows = [{ type: "approval", item: "rerun", cap_usd: 35, words: ["Rec"], by: "x", source: "y" }, { type: "settle", reservation_id: "a", usd: 10 }];
+    const project = (cap: string, item: string) => spawn({ ...shell, LANEA_LEDGER: ledger, LANEA_CAP_USD: cap, LANEA_LINE_ITEM: item }, ["project"]);
+    writeFileSync(ledger, rows.map((r) => JSON.stringify(r) + "\n").join(""));
+    for (const [cap, item] of [["130", "rerun"], ["35", "lanea-quick"]] as const) {
+      const r = project(cap, item);
+      expect(r.code).not.toBe(0);
+      expect(r.err).toContain("E_LEDGER_MISSING");
+    }
+    expect(JSON.parse(project("35", "rerun").out).ledger).toMatchObject({ settled: 10, remaining: 25 });
+    writeFileSync(ledger, [...rows, { type: "close", reason: "moved" }].map((r) => JSON.stringify(r) + "\n").join(""));
+    expect(JSON.parse(project("35", "rerun").out).ledger.remaining).toBe(0);
+  });
   test("a paid run still needs --prereg", () => {
     expect(cli("run", "--stage", "S1").err).toContain("E_PREREG");
   });
