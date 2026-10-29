@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "gstack-evals default model policy",
+  "source": "CREW.md, the gstack-evals Captain's rules: never Sonnet for an agent doing our work (Garry's rec on gate decision 4), while Sonnet 5.5 and particle-1 are models under test (Garry, 2026-10-29: \"yes, ok sonnet then. also can you add particle-1 as a model everywhere?\", GST-225); the newest generation of each family only; never gpt-5.4-mini; Fable only in smoke tests. Other projects pass their own file with --policy.",
+  "models": {
+    "claude-opus-5-5": {"provider": "anthropic", "roles": ["subject", "judge", "adjudicator"]},
+    "claude-sonnet-5-5": {"provider": "anthropic", "roles": ["subject"]},
+    "claude-haiku-5-5": {"provider": "anthropic", "roles": ["subject"]},
+    "claude-fable-5-1": {"provider": "anthropic", "roles": ["subject"], "smoke_only": true},
+    "gpt-6-astra": {"provider": "openai", "roles": ["subject", "judge", "adjudicator"]},
+    "gpt-6.1-sol": {"provider": "openai", "roles": ["subject", "judge", "adjudicator"]},
+    "gpt-6-luna": {"provider": "openai", "roles": ["subject", "usersim"]},
+    "gpt-5.4-mini": {"provider": "openai", "roles": [], "refused_because": "Never gpt-5.4-mini (CREW.md)."},
+    "particle-ai/particle-1": {"provider": "openrouter", "roles": ["subject"]}
+  },
+  "defaults": {"judge": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "adjudicator": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "usersim": "gpt-6-luna"}
+}

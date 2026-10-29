@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "name": "Example: a project with a narrower model ladder",
+  "source": "An example for other projects, after GBRA-108's request for the shared eval (2026-10-28): gbrain's skill-diet pilot runs the newest Opus, GPT and Sonnet as models under test, judged by Opus 5.5 or gpt-6.1-sol.",
+  "models": {
+    "claude-opus-5-5": {"provider": "anthropic", "roles": ["subject", "judge", "adjudicator"]},
+    "claude-sonnet-5-5": {"provider": "anthropic", "roles": ["subject"]},
+    "gpt-6.1-sol": {"provider": "openai", "roles": ["subject", "judge", "adjudicator"]},
+    "gpt-6-luna": {"provider": "openai", "roles": ["subject", "usersim"]}
+  },
+  "defaults": {"judge": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "adjudicator": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "usersim": "gpt-6-luna"}
+}

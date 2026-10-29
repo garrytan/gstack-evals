@@ -86,15 +86,28 @@ export interface LockBuild {
   carried: number;
   /** Claims dropped because their task left the tasks file, as "<line id> <task>". */
   dropped: string[];
+  /**
+   * Claims dropped because their line's text no longer appears in its file as many times as the previous lock lists it
+   * (claims follow a line's copies in order, so they cannot be carried), as "<previous line id> <task> (<n> copies in the
+   * lock, <m> now)".
+   */
+  unmatched: string[];
 }
 
+/** buildLock refuses a tasks file or sidecar with problems: a lock pins files that the contract accepts. */
+export class LockInputError extends Error {}
+
 export function buildLock(input: LockInput): LockBuild {
+  const problems = [...input.tasks.problems.map((p) => "tasks file: " + p), ...(input.ext?.problems ?? []).map((p) => "sidecar: " + p)];
+  if (input.tasks.sha256 === null && !problems.length) problems.push("tasks file: it could not be read");
+  if (input.ext && input.ext.sha256 === null && !problems.length) problems.push("sidecar: it could not be read");
+  if (problems.length) throw new LockInputError("cannot lock a tasks file the contract refuses: " + problems.slice(0, 5).join("; "));
   const dir = dirname(input.lockPath);
   const ids = new Set(input.tasks.tasks.map((t) => t.id));
-  const previous = new Map<string, string[][]>();
+  const previous = new Map<string, LockLine[]>();
   for (const l of input.previous?.lines ?? []) {
     const key = l.file + "\n" + l.text_sha256;
-    previous.set(key, [...(previous.get(key) ?? []), l.tasks]);
+    previous.set(key, [...(previous.get(key) ?? []), l]);
   }
   const found = contractLines(input.before).map((l) => {
     const text_sha256 = sha256(l.norm);
@@ -102,7 +115,13 @@ export function buildLock(input: LockInput): LockBuild {
   });
   const copies = new Map<string, number>();
   for (const { key } of found) copies.set(key, (copies.get(key) ?? 0) + 1);
-  const claims = new Map([...previous].filter(([key, list]) => list.length === copies.get(key)));
+  const claims = new Map<string, string[][]>();
+  const unmatched: string[] = [];
+  for (const [key, rows] of previous) {
+    const now = copies.get(key) ?? 0;
+    if (rows.length === now) claims.set(key, rows.map((r) => r.tasks));
+    else for (const r of rows) for (const t of r.tasks) unmatched.push(r.id + " " + t + " (" + rows.length + " copies in the lock, " + now + " now)");
+  }
   let carried = 0;
   const dropped: string[] = [];
   const loads = new Map(input.before.map((f) => [f.path, f.load]));
@@ -138,7 +157,7 @@ export function buildLock(input: LockInput): LockBuild {
     coverage_rule: COVERAGE_RULE,
     lines,
   };
-  return { lock, carried, dropped };
+  return { lock, carried, dropped, unmatched };
 }
 
 /** The lock as JSON, one line object per row so a claim is a one-line edit and a one-line diff. */

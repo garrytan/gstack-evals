@@ -62,7 +62,7 @@ export async function lockCommand(argv: string[], io: Io = consoleIo): Promise<n
   }
   const before = readSkillFiles(beforeDir);
   const policy = policyPath === null ? null : { path: policyPath, sha256: createHash("sha256").update(readFileSync(policyPath)).digest("hex") };
-  const { lock, carried, dropped } = buildLock({ lockPath, tasks: contract.tasks, ext: contract.ext, policy, skillName: basename(resolve(beforeDir)), before, previous });
+  const { lock, carried, dropped, unmatched } = buildLock({ lockPath, tasks: contract.tasks, ext: contract.ext, policy, skillName: basename(resolve(beforeDir)), before, previous });
   writeLock(lockPath, lock);
   const claimed = lock.lines.filter((l) => l.tasks.length).length;
   const short = (s: string | undefined) => (s ? s.slice(0, 12) : "none");
@@ -73,6 +73,7 @@ export async function lockCommand(argv: string[], io: Io = consoleIo): Promise<n
       "LOCKED " + show(lockPath) + ": tasks " + short(lock.tasks.sha256) + ", ext " + short(lock.ext?.sha256) + ", policy " + short(lock.policy?.sha256),
       lock.lines.length + " contract lines from " + lock.skill.name + " (" + before.length + " files): " + claimed + " claimed by a task, " + (lock.lines.length - claimed) + " unclaimed and uncovered until a task claims them.",
       ...(previous ? ["Kept " + carried + " claims from the previous lock" + (dropped.length ? "; dropped " + dropped.length + " whose task left the tasks file: " + dropped.join(", ") : "") + "."] : []),
+      ...(unmatched.length ? ["Dropped " + unmatched.length + " claims on lines whose copies changed in number, so they could not follow their line: " + unmatched.join(", ") + ". Claim those lines again."] : []),
       "To claim a line, add the covering task ids to its tasks list in the lock and run --lock again.",
       "Then commit the lock before you edit the skill:",
       "  " + git + " add " + files.join(" ") + " && " + git + " commit -m " + quote("Lock the " + lock.skill.name + " eval tasks"),
