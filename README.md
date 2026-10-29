@@ -33,6 +33,7 @@ gstack-evals --help
 | [schema/](schema/README.md) | Public-safe JSON schemas: tasks and arms (U5) so far, the verdict schema with U6 |
 | [docs/](docs/) | The [budget ledger guide](docs/budget-ledger.md), reason codes and adapters |
 | [spikes/harbor/](spikes/harbor/README.md) | U8's throwaway Harbor runner spike, with a fake upstream and keyless tests |
+| [quick/lanea-quick/](quick/lanea-quick/README.md) | GSTA-13's thin Lane A runner for Quick look 3, the office-hours diet check, with a fake upstream and keyless tests |
 | [quick/replay/](quick/replay/README.md) | GSTA-11's exploratory review replay on known gstack bugs, with a fake upstream and keyless tests; [preregistration](wiki/plans/2026-10-28-gsta-11-review-replay-prereg.md) in wiki/ |
 | [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. `bun run wiki:index` writes an index of them to wiki/INDEX.md |
 | [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push, and again in CI on every pull request ([sealed.yml](.github/workflows/sealed.yml)) |

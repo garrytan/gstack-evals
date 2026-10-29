@@ -6,12 +6,21 @@ GSTACK=${1:?gstack clone}
 BASE=${2:?base image}
 HERE=$(cd "$(dirname "$0")" && pwd)
 CTX_ROOT=${LANEA_WORK:-$HOME/.capy/work/lanea-quick}/docker-ctx
+# Each context is the tree at its sha without test/, which holds graded task files. It is extracted into a temp dir
+# and renamed into place only when the extraction succeeds, so a failed git archive leaves nothing to reuse.
 build() { # suite arm sha drop
   local suite=$1 arm=$2 sha=$3 drop=${4:-}
-  local ctx="$CTX_ROOT/$sha"
+  local ctx="$CTX_ROOT/$sha-no-test"
   if [ ! -d "$ctx/gstack" ]; then
-    mkdir -p "$ctx/gstack"
-    git -C "$GSTACK" archive "$sha" | tar -x -C "$ctx/gstack"
+    mkdir -p "$CTX_ROOT"
+    local tmp
+    tmp=$(mktemp -d "$CTX_ROOT/.extract-XXXXXX")
+    mkdir "$tmp/gstack"
+    git -C "$GSTACK" archive "$sha" | tar -x -C "$tmp/gstack" || { rm -rf "$tmp"; exit 1; }
+    rm -rf "$tmp/gstack/test"
+    mkdir -p "$ctx"
+    mv "$tmp/gstack" "$ctx/gstack"
+    rmdir "$tmp"
   fi
   docker build -q -f "$HERE/arm.Dockerfile" --build-arg BASE_IMAGE="$BASE" --build-arg DROP_SKILL="$drop" \
     --label lanea.sha="$sha" --label lanea.drop="$drop" -t "lanea-quick/$suite-$arm:latest" "$ctx"

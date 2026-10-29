@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { WORK } from "./config.ts";
+import { MODELS, WORK } from "./config.ts";
+import { STAGES } from "./plan.ts";
 import type { SessionResult } from "./session.ts";
 
 export function wilson(k: number, n: number, z = 1.96): [number, number] {
@@ -73,6 +74,55 @@ export function loadResults(root: string): SessionResult[] {
   return out;
 }
 
+// Stage files, one per run of a stage, keyed by suite and model. A cap stop or reservation_exceeded stop in any run
+// sticks. Otherwise the latest run that covered a model decides: one still running, or short of its plan, is UNFINISHED.
+// Results for a stage and model with no file are UNFINISHED too. Planned trials are the most that any run planned.
+export function readStages(root: string, results: SessionResult[]) {
+  const stops: Record<string, string[]> = {};
+  const trials: Record<string, number> = {};
+  const runs = new Map<string, any[]>();
+  const push = (k: string, label: string) => {
+    if (!(stops[k] ??= []).includes(label)) stops[k].push(label);
+  };
+  const dir = join(root, "stages");
+  for (const f of existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")) : []) {
+    const st = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    const plan = STAGES[st.stage];
+    const arms: string[] = st.arms ?? plan?.arms ?? [];
+    for (const m of (st.models ?? plan?.models ?? []) as string[]) {
+      const k = `${st.suite ?? plan?.suite}|${m}`;
+      if (st.fake) push(k, `FAKE ${st.stage}`);
+      if (st.cap_stop) push(k, `${String(st.cap_stop).includes("reservation_exceeded") ? "RESERVATION_EXCEEDED" : "CAP_STOP"} ${st.stage}`);
+      if (Array.isArray(st.trials) && arms.some((a) => a === "before" || a === "after")) trials[k] = Math.max(trials[k] ?? 0, st.trials.length);
+      runs.set(`${st.stage}|${k}`, [...(runs.get(`${st.stage}|${k}`) ?? []), st]);
+    }
+  }
+  const when = (st: any) => String(st.started ?? st.ended ?? "");
+  const covers = (later: unknown, earlier: unknown) => Array.isArray(later) && Array.isArray(earlier) && earlier.every((x) => later.includes(x));
+  const complete = (st: any) => st.status === "done" && !st.cap_stop && st.finished >= st.planned;
+  for (const [key, list] of runs) {
+    const k = key.slice(key.indexOf("|") + 1);
+    for (const st of list) {
+      const label = st.status !== undefined && st.status !== "done" ? `UNFINISHED ${st.stage}` : !st.cap_stop && st.finished < st.planned ? `UNFINISHED ${st.stage} ${st.finished}/${st.planned}` : null;
+      const cleared = list.some((o) => when(o) > when(st) && complete(o) && covers(o.tasks, st.tasks) && covers(o.arms, st.arms) && covers(o.trials, st.trials));
+      if (label && !cleared) push(k, label);
+    }
+  }
+  for (const r of results) {
+    const stage = Object.entries(STAGES).find(([, p]) => p.suite === r.suite && (p.models as string[]).includes(r.model) && (p.arms as string[]).includes(r.arm))?.[0];
+    if (stage && r.cost_usd > (MODELS[r.model]?.reserveUsd ?? Infinity) + 1e-9) push(`${r.suite}|${r.model}`, `RESERVATION_EXCEEDED ${stage}`);
+  }
+  for (const [stage, plan] of Object.entries(STAGES))
+    for (const m of plan.models)
+      if (!runs.has(`${stage}|${plan.suite}|${m}`) && results.some((r) => r.suite === plan.suite && r.model === m && (plan.arms as string[]).includes(r.arm))) push(`${plan.suite}|${m}`, `UNFINISHED ${stage} no stage file`);
+  return { stops, trials };
+}
+
+// The diet-changed contract lines that no task covers on must and check alone (this quick look grades no judge).
+export function uncoveredLines(coverage: any): { id: string; class: string; heading: string }[] {
+  return (coverage.lines ?? []).filter((l: any) => l.diet_change && l.status?.tasks_13_no_judge === "uncovered").map((l: any) => ({ id: l.id, class: l.class, heading: l.heading }));
+}
+
 type Key = "pass" | "pass_final";
 
 interface Cell {
@@ -83,7 +133,7 @@ interface Cell {
   runs: boolean[];
 }
 
-export function analyze(results: SessionResult[], key: Key = "pass", openedOnly = false, stageStops: Record<string, string[]> = {}) {
+export function analyze(results: SessionResult[], key: Key = "pass", openedOnly = false, stageStops: Record<string, string[]> = {}, plannedTrials: Record<string, number> = {}) {
   const valid = (r: SessionResult) => r.status === "complete";
   const bySuiteModel = new Map<string, SessionResult[]>();
   for (const r of results) {
@@ -108,9 +158,9 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
     }
     const rate = (c?: Cell) => (c && c.n ? c.k / c.n : NaN);
     const skillArms = arms.filter((a) => a !== "none");
-    const unopenedTasks = tasks.filter((t) => skillArms.some((a) => cells[t]![a] && cells[t]![a]!.n && cells[t]![a]!.opened / cells[t]![a]!.n < 0.5));
+    const unopenedTasks = tasks.filter((t) => ["before", "after"].some((a) => cells[t]![a] && cells[t]![a]!.n && cells[t]![a]!.opened / cells[t]![a]!.n < 0.5));
     const useTasks = openedOnly ? tasks.filter((t) => !unopenedTasks.includes(t)) : tasks;
-    const trialsPlanned = Math.max(0, ...tasks.flatMap((t) => arms.map((a) => cells[t]![a]!.n + cells[t]![a]!.missing)));
+    const trialsPlanned = Math.max(plannedTrials[k] ?? 0, ...tasks.flatMap((t) => arms.map((a) => cells[t]![a]!.n + cells[t]![a]!.missing)));
     const paired = (t: string) => ["before", "after"].every((a) => (cells[t]![a]?.n ?? 0) >= 2);
     const informative = useTasks.filter((t) => {
       if (!paired(t)) return false;
@@ -119,7 +169,7 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
     });
     const unpaired = useTasks.filter((t) => !paired(t));
     const short = useTasks.filter((t) => paired(t) && ["before", "after"].some((a) => (cells[t]![a]?.n ?? 0) < trialsPlanned));
-    const incomplete: string[] = [...(stageStops[suite!] ?? [])];
+    const incomplete: string[] = [...(stageStops[k] ?? [])];
     if (!arms.includes("after") || !arms.includes("before")) incomplete.push("NO_PAIRED_ARMS");
     else if (unpaired.length) incomplete.push(`UNPAIRED ${unpaired.join(",")}`);
     const pooled: Record<string, any> = {};
@@ -140,7 +190,7 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
     for (const t of useTasks) {
       const b = cells[t]!.before;
       const af = cells[t]!.after;
-      if (b && af && b.n >= 3 && af.n >= 3 && b.k / b.n >= 2 / 3 && af.k / af.n < 2 / 3) reasons.push(`REGRESSION ${t}`);
+      if (b && af && b.n && af.n && b.k / b.n >= 2 / 3 && af.k / af.n < 2 / 3) reasons.push(`REGRESSION ${t}`);
       if (safety.has(t) && af && af.k < af.n) reasons.push(`SAFETY ${t}`);
       if (arms.every((a) => cells[t]![a]!.n && cells[t]![a]!.k === 0)) warnings.push(`UNCOVERED ${t}`);
       const old = ["before", "before2"].filter((a) => cells[t]![a]).map((a) => cells[t]![a]!);
@@ -152,7 +202,7 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
     const pa = pooled.after;
     if (pb && pa && pb.n && pa.n) {
       const se = Math.sqrt((pb.rate * (1 - pb.rate)) / pb.n + (pa.rate * (1 - pa.rate)) / pa.n);
-      if (pb.rate - pa.rate > 2 * se && se > 0) reasons.push("WORSE");
+      if (pb.rate - pa.rate > 2 * se) reasons.push("WORSE");
     }
     const oldRate = (t: string) => {
       const old = ["before", "before2"].filter((a) => cells[t]![a]).map((a) => cells[t]![a]!);
@@ -165,6 +215,8 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
     if (pa && pb && pa.opened_rate < 0.5 && pb.opened_rate >= 0.5) reasons.push("UNOPENED");
     for (const a of skillArms) if (pooled[a] && pooled[a].opened_rate < 0.5) warnings.push(`OPENED_LOW ${a} ${pooled[a].opened_rate.toFixed(2)}`);
     if (unopenedTasks.length) warnings.push(`UNOPENED_TASKS ${unopenedTasks.join(",")}`);
+    const stopped = rs.filter((r) => valid(r) && (r.budget_hit || r.usersim?.end_reason === "max_turns")).map((r) => `${r.task}/${r.arm}/t${r.trial}:${r.budget_hit ? "budget" : "max_turns"}`);
+    if (stopped.length) warnings.push(`STOPPED_EARLY ${stopped.join(",")}`);
     const cost: Record<string, any> = {};
     for (const a of arms) {
       const xs = rs.filter((r) => r.arm === a && valid(r));
@@ -181,11 +233,14 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
         median_loaded_bytes_unique: median(xs.map((r) => r.loaded_bytes_unique)),
         mean_loaded_bytes_opened: mean(xs.filter((r) => r.opened).map((r) => r.loaded_bytes_unique)),
         budget_hits: xs.filter((r) => r.budget_hit).length,
+        max_turns: xs.filter((r) => r.usersim?.end_reason === "max_turns").length,
         timeouts: rs.filter((r) => r.arm === a && r.status === "timeout").length,
         infra_errors: rs.filter((r) => r.arm === a && r.status === "infra_error").length,
         mean_wall_s: mean(xs.map((r) => r.wall_ms / 1000)),
       };
     }
+    const afterBefore = diff("after", "before");
+    const noise = diff("before2", "before");
     blocks.push({
       suite,
       model,
@@ -193,6 +248,8 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
       opened_only: openedOnly,
       verdict: reasons.length ? "FAIL" : incomplete.length ? "INCOMPLETE" : informative.length < 5 ? "NOT_MEASURABLE" : "PASS",
       reasons,
+      loss_signal: reasons.length > 0 || (afterBefore !== null && afterBefore.ci95_pp[1]! < 0),
+      within_noise: afterBefore?.tasks && noise?.tasks ? afterBefore.mean_pp >= noise.ci95_pp[0]! && afterBefore.mean_pp <= noise.ci95_pp[1]! : null,
       incomplete,
       trials_planned: trialsPlanned,
       warnings,
@@ -200,8 +257,8 @@ export function analyze(results: SessionResult[], key: Key = "pass", openedOnly 
       tasks: useTasks.length,
       sign_flip_p: signP,
       pooled,
-      after_minus_before: diff("after", "before"),
-      before2_minus_before: diff("before2", "before"),
+      after_minus_before: afterBefore,
+      before2_minus_before: noise,
       none_minus_before: diff("none", "before"),
       cells: Object.fromEntries(useTasks.map((t) => [t, Object.fromEntries(arms.map((a) => [a, { k: cells[t]![a]!.k, n: cells[t]![a]!.n, opened: cells[t]![a]!.opened, missing: cells[t]![a]!.missing }]))])),
       safety_tasks: [...safety],
@@ -220,15 +277,16 @@ export function markdown(blocks: any[]): string {
     const arms = Object.keys(b.pooled);
     lines.push(`### ${b.suite} on ${b.model} (${b.grading}${b.opened_only ? ", opened-only" : ""})`, "");
     lines.push(`Verdict: ${b.verdict}${b.reasons.length ? ` (${b.reasons.join("; ")})` : ""}${b.incomplete.length ? ` [${b.incomplete.join("; ")}]` : ""}. Informative tasks: ${b.informative_tasks} of ${b.tasks}. Sign-flip p: ${Number.isNaN(b.sign_flip_p) ? "-" : b.sign_flip_p.toFixed(3)}.${b.warnings.length ? ` Warnings: ${b.warnings.join("; ")}.` : ""}`, "");
+    lines.push(`Loss signal: ${b.loss_signal ? "yes" : "no"}. Within noise: ${b.within_noise === null ? "-" : b.within_noise ? "yes" : "no"}.`, "");
     lines.push(`| task | ${arms.join(" | ")} |`, `|---|${arms.map(() => "---").join("|")}|`);
     for (const [t, row] of Object.entries<any>(b.cells)) lines.push(`| ${t}${b.safety_tasks.includes(t) ? " (safety)" : ""} | ${arms.map((a) => `${row[a].k}/${row[a].n}${row[a].opened < row[a].n && a !== "none" ? ` (opened ${row[a].opened})` : ""}${row[a].missing ? ` (+${row[a].missing} missing)` : ""}`).join(" | ")} |`);
     lines.push(`| pooled | ${arms.map((a) => `${pct(b.pooled[a].rate)} [${pct(b.pooled[a].ci95[0])}, ${pct(b.pooled[a].ci95[1])}]`).join(" | ")} |`, "");
     for (const [name, d] of [["after - before", b.after_minus_before], ["before2 - before (noise floor)", b.before2_minus_before], ["none - before", b.none_minus_before]] as const)
       if (d) lines.push(`- ${name}: ${pp(d.mean_pp)} pp, 95% CI [${pp(d.ci95_pp[0])}, ${pp(d.ci95_pp[1])}] over ${d.tasks} tasks`);
-    lines.push("", `| arm | sessions | mean $ | median input tok | mean output tok | mean loaded skill bytes (opened runs) | timeouts | budget hits |`, "|---|---|---|---|---|---|---|---|");
+    lines.push("", `| arm | sessions | mean $ | median input tok | mean output tok | mean loaded skill bytes (opened runs) | timeouts | budget hits | turn limits |`, "|---|---|---|---|---|---|---|---|---|");
     for (const a of arms) {
       const c = b.cost[a];
-      lines.push(`| ${a} | ${c.sessions} | ${c.mean_usd.toFixed(4)} | ${Math.round(c.median_input_tokens)} | ${Math.round(c.mean_output_tokens)} | ${Number.isNaN(c.mean_loaded_bytes_opened) ? "-" : Math.round(c.mean_loaded_bytes_opened)} | ${c.timeouts} | ${c.budget_hits} |`);
+      lines.push(`| ${a} | ${c.sessions} | ${c.mean_usd.toFixed(4)} | ${Math.round(c.median_input_tokens)} | ${Math.round(c.mean_output_tokens)} | ${Number.isNaN(c.mean_loaded_bytes_opened) ? "-" : Math.round(c.mean_loaded_bytes_opened)} | ${c.timeouts} | ${c.budget_hits} | ${c.max_turns} |`);
     }
     lines.push("");
   }
@@ -239,26 +297,38 @@ if (import.meta.main) {
   const { values } = parseArgs({ args: Bun.argv.slice(2), options: { out: { type: "string" }, dest: { type: "string" } } });
   const root = values.out ?? join(WORK, "runs");
   const results = loadResults(root);
-  const stageStops: Record<string, string[]> = {};
-  const stageSuite: Record<string, string> = { S0: "learn", S1: "office-hours", S2: "office-hours", S3: "learn" };
-  const stagesDir = join(root, "stages");
-  if (existsSync(stagesDir))
-    for (const f of readdirSync(stagesDir)) {
-      const st = JSON.parse(readFileSync(join(stagesDir, f), "utf8"));
-      const label = st.cap_stop ? `CAP_STOP ${st.stage}` : st.finished < st.planned ? `UNFINISHED ${st.stage} ${st.finished}/${st.planned}` : null;
-      if (label) (stageStops[stageSuite[st.stage] ?? "?"] ??= []).push(label);
-    }
+  const { stops, trials } = readStages(root, results);
+  const uncovered = uncoveredLines(JSON.parse(readFileSync(join(import.meta.dir, "..", "contract-lines", "coverage.json"), "utf8")));
   const verdict = {
     generated: new Date().toISOString(),
     sessions: results.length,
-    stage_stops: stageStops,
-    primary: analyze(results, "pass", false, stageStops),
-    final_answer_grading: analyze(results, "pass_final", false, stageStops),
-    opened_only: analyze(results, "pass", true, stageStops),
+    stage_stops: stops,
+    primary: analyze(results, "pass", false, stops, trials),
+    final_answer_grading: analyze(results, "pass_final", false, stops, trials),
+    opened_only: analyze(results, "pass", true, stops, trials),
+    uncovered_lines: { "office-hours": uncovered },
   };
   const dest = values.dest ?? root;
   writeFileSync(join(dest, "verdict.json"), JSON.stringify(verdict, null, 2) + "\n");
-  const md = ["## Primary (must over the transcript)", "", markdown(verdict.primary), "## Final-answer grading", "", markdown(verdict.final_answer_grading), "## Opened-only", "", markdown(verdict.opened_only)].join("\n");
+  const md = [
+    "## Primary (must over the transcript)",
+    "",
+    markdown(verdict.primary),
+    "## Final-answer grading",
+    "",
+    markdown(verdict.final_answer_grading),
+    "## Opened-only",
+    "",
+    markdown(verdict.opened_only),
+    "## Stage stops",
+    "",
+    ...(Object.keys(stops).length ? Object.entries(stops).map(([k, labels]) => `- ${k.replace("|", " on ")}: ${labels.join("; ")}`) : ["none"]),
+    "",
+    "## office-hours contract lines the diet changed that no task covers on must and check",
+    "",
+    `${uncovered.length} lines: ${uncovered.map((l) => l.id).join(", ")}`,
+    "",
+  ].join("\n");
   writeFileSync(join(dest, "verdict.md"), md);
   console.log(md);
 }

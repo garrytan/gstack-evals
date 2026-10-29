@@ -18,7 +18,55 @@ bun src/analyze.ts --out ~/.capy/work/lanea-quick/runs   # verdict.json and verd
 bun test test/ && bunx tsc --noEmit -p .                 # keyless checks
 ```
 
-Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes.
+The keyless `--fake` run still needs Docker and the arm images: only the Messages API is faked. The tests under `test/` need neither; they stub `docker` and `git` and mock the Agent SDK where they need them.
+
+Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial>/`: `result.json`, `transcript.jsonl` (every SDK message), `usersim.jsonl`, `proxy.jsonl` (one row per API request with usage and cost) and `work/` (the final work dir). A rerun skips finished cells, so an interrupted run resumes; after a CAP_STOP or reservation_exceeded stop in any stage, or a result that cost more than its reservation, every later `run` into that `--out` refuses to start (E_STAGE_STOPPED), since a stop ends the run. `--fake` runs default to `~/.capy/work/lanea-quick/runs-fake/` and keep their own ledger there, `ledger-fake.jsonl`.
+
+Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running"` with the stage's models, tasks, arms and trials before the first session, the cap stop as soon as one fires, and `status: "done"` with the finished count at the end. analyze reads every file of a stage. A cap stop (CAP_STOP, or RESERVATION_EXCEEDED when one session spent past its reservation, which analyze also reads from any result whose cost passes its model's reservation) or a `--fake` run marks the block INCOMPLETE for good; a later run never clears it. A run that did not finish (its file still says running, or it finished fewer cells than it planned) stays UNFINISHED until a later run that finishes covers all of its tasks, arms and trials. Results for a stage with no file are UNFINISHED too. verdict.md lists every stage stop, including those of a model with no results. A run with an unknown model or no matching cells stops before it writes a file.
+
+### Environment
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `LANEA_WORK` | `~/.capy/work/lanea-quick` | Work root: `prepared.json`, task copies, Docker build contexts, `runs/` and `runs-fake/` |
+| `LANEA_GSTACK` | `~/.capy/work/gstack` | The gstack clone that `prepare` reads task files from |
+| `LANEA_LEDGER` | `~/.capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl` | The paid ledger. Its lock is the same path plus `.lock` |
+| `LANEA_FAKE_CEILING` | unset | A `--fake` run's per-session spend ceiling in dollars, to exercise the budget refusal |
+
+### run.ts flags
+
+| Flag | Commands | Default | What it does |
+|---|---|---|---|
+| `--stage` | run, project | S1 for run, S2 for project | S0, S1, S2 or S3, as the prereg orders them |
+| `--prereg <sha>` | run | none | Full sha of the pushed prereg commit; every paid run needs it |
+| `--fake` | run | off | Fake upstream, no key, zero reservations, its own ledger under `--out` |
+| `--models a,b` | run | the stage's models | Only these models |
+| `--tasks a,b` | run | every task in the suite | Only these task ids |
+| `--arms a,b` | run | the stage's arms | Only these arms |
+| `--trials 1,2,3` | run | 1,2,3 | Trial numbers to run |
+| `--parallel n` | run | 6 | Sessions at once |
+| `--ledger <path>` | run, project, approve | `LANEA_LEDGER`; for `--fake`, `<out>/ledger-fake.jsonl` | Ledger file. A `--fake` run refuses a ledger outside `--out` |
+| `--out <dir>` | run, project | `<LANEA_WORK>/runs`, or `runs-fake` with `--fake` | Run root that results and stage files go under, and that project reads costs from |
+
+`analyze.ts` takes `--out <dir>` (the run root, default `<LANEA_WORK>/runs`) and `--dest <dir>` (where `verdict.json` and `verdict.md` go, default the run root).
+
+### Approve the cap
+
+A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` equal to the runner's cap ($130). Record the approval once, with each quoted reply as its own `--words`:
+
+```
+bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
+```
+
+Pass the words as separate arguments, not through a shell string with `$` in it (see the last item below). `approve` does nothing when a valid approval row is already there, and refuses a ledger that already has other rows.
+
+### One runner per ledger, per WORK and per results tree
+
+A run takes three locks with an exclusive create before it reads the ledger: `<ledger>.lock`, `<LANEA_WORK>/runner.lock` and `<out>/runner.lock`. `prepare` takes the WORK lock too, since it rewrites the task copies that sessions read. Each lock records the pid, host, start time and a random token. A held lock is never replaced, even when its pid looks dead: the ledger sits on a drive that several machines mount, and machines restored from one snapshot share hostname and boot id, so nothing here can prove the holder is gone. Remove a lock by hand once its runner has ended. A release removes the lock only while it still holds this runner's token. Container names carry a hash of the cell's output dir, so runners on one machine never remove each other's containers. At start the runner settles any open reserve left by a stopped runner at its full amount. When parallel sessions hold enough open reserves that the next one would pass the cap, the runner waits for one to settle; it stops (CAP_STOP) only when settled spend plus the next reservation passes the cap.
+
+### Images
+
+A paid run resolves every image tag to its id and refuses one that `images.json` does not pin. `images.json` pins builds from before the paid runs (66d3ef0). The paid runs used later builds of the same trees, made 2026-10-28 19:11Z to 19:16Z, which `images.json` does not pin (office-hours before `sha256:f31991fde9db…`, after `sha256:cd00c033e9e6…`; the rerun prereg and the results post list them). So this runner refuses them on a paid run (E_IMAGE) until the next prereg rebuilds and re-pins. Both sets were built from full gstack trees, `test/` included. Only the learn after image holds the learn task files (its tree is the learn tasks commit); the learn before and none trees have none, and no office-hours tree holds the office-hours task files. `build-arms.sh` now leaves `test/` out of every arm, which covers only images built from here on: the next prereg rebuilds and re-pins the learn images. After a rebuild, run `prepare`, copy its image ids into `images.json` and commit them before a paid run.
 
 ## Layout
 
@@ -27,10 +75,10 @@ Runs land in `~/.capy/work/lanea-quick/runs/<suite>/<model>/<task>/<arm>/t<trial
 | `src/session.ts` | One session: container, setup, seeded state root, the Agent SDK driving `claude` over `docker exec -i`, the scripted user, the work dir copy, the check in a fresh container, grading |
 | `src/proxy.ts` | Metering proxy on the Docker bridge: a per-session token, one allowed model, one paid request at a time, a spend ceiling and a per-request bound under the reservation, usage parsed from the SSE stream, per-request price |
 | `src/usersim.ts`, `usersim/categories.json` | The scripted user: keyword classifier, sidecar replies, a non-approving fallback, prose-question replies |
-| `src/grade.ts` | `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
-| `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop |
+| `src/grade.ts` | The main agent only, which is narrower than the prereg's "the session's assistant text" (a subagent's tool calls are counted apart): `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
+| `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop; the ledger lock; the in-order reserver |
 | `src/run.ts` | prepare, approve, run (stages, trial-major order, a worker pool), project |
-| `src/analyze.ts` | Contract gates, Wilson intervals, task-clustered bootstrap, sign-flip test, cost and loaded-bytes tables |
+| `src/analyze.ts` | Contract gates, Wilson intervals, task-clustered bootstrap, sign-flip test, loss signal and noise check, stage stops, uncovered contract lines, cost and loaded-bytes tables |
 | `src/fake-upstream.ts` | A scripted fake Messages API for keyless runs |
 | `contract-lines/` | The diet's contract lines and the tasks that cover them |
 

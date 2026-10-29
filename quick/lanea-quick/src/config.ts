@@ -12,7 +12,6 @@ export const BUN_VERSION = "1.4.4";
 export const BASE_IMAGE = `lanea-quick/base:cc${CLAUDE_CODE_VERSION}-bun${BUN_VERSION}`;
 
 export type ArmName = "before" | "after" | "none" | "before2";
-export const ARMS: ArmName[] = ["before", "after", "none", "before2"];
 
 export interface Suite {
   skill: string;
@@ -41,12 +40,6 @@ export const SUITES: Record<string, Suite> = {
     note: "v1.91.287.0 /learn diet (gstack#3524); committed contract tasks",
   },
 };
-
-export function armTree(suite: Suite, arm: ArmName): { sha: string; drop?: string } {
-  if (arm === "after") return { sha: suite.after };
-  if (arm === "none") return { sha: suite.before, drop: suite.skill };
-  return { sha: suite.before };
-}
 
 export function imageTag(suiteName: string, arm: ArmName): string {
   const a = arm === "before2" ? "before" : arm;
@@ -90,8 +83,5 @@ export const MODELS: Record<string, ModelSpec> = {
 export const LIMITS = {
   sessionWallSeconds: 1200,
   maxAgentTurns: 80,
-  maxProseReplies: 8,
-  maxAskAnswers: 12,
-  maxRepliesPerCategory: 2,
   parallel: 6,
 };
