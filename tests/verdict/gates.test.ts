@@ -10,7 +10,7 @@ const ids = (n: number) => Array.from({ length: n }, (_, i) => "t" + String(i + 
 const margin = (points: number): VerdictOptions => ({ ...DEFAULT_OPTIONS, margin_points: points, simulations: 200 });
 const codes = (reasons: string[]) => reasons.map((r) => r.split(" ")[0]);
 /** Plans as [before, before2, after] per task, with none failing every run. */
-const plan = (rows: string[][]) => Object.fromEntries(rows.map(([b, b2, a], i) => ["t" + String(i + 1).padStart(2, "0"), { before: b!, before2: b2!, after: a!, none: "0".repeat(b!.length) }]));
+const plan = (rows: string[][]) => Object.fromEntries(rows.map(([b, b2, ...a], i) => ["t" + String(i + 1).padStart(2, "0"), { before: b!, before2: b2!, after: a.join(""), none: "0".repeat(b!.length) }]));
 
 // Plan v3.2 and interface v0.4: run 2's counterexamples and the easy suite.
 describe("counterexamples", () => {
@@ -85,9 +85,9 @@ describe("statistics", () => {
     expect(d.reasons).toContain("WORSE sign-flip");
   });
 
-  // Found by a seeded search; each plan is 16 tasks with 5 + 5 old runs and 10 after runs.
-  const NONINFERIOR = [["01111", "11110", "1101111111"], ["01111", "11111", "1111111111"], ["11111", "11011", "0011111101"], ["00111", "10111", "1110101110"], ["10100", "11001", "1101111000"], ["11111", "11111", "1111111111"], ["01100", "11101", "0001101101"], ["11100", "11010", "1101111101"], ["11111", "10110", "1110111101"], ["10011", "01001", "0010011000"], ["11100", "01011", "1011111100"], ["10011", "00011", "0000101101"], ["01110", "11001", "1001110100"], ["11111", "11011", "1111111111"], ["01110", "01101", "1111111001"], ["11111", "11110", "1111111111"]];
-  const INFERIOR = [["01111", "11011", "1111111111"], ["11111", "11111", "1110111111"], ["11111", "11111", "1101111101"], ["11111", "11111", "1111111111"], ["11010", "10100", "1000010010"], ["11111", "11111", "1110111111"], ["10011", "10011", "1111110011"], ["11011", "10101", "1110111001"], ["11111", "11011", "1111111111"], ["01110", "10011", "0101000000"], ["11110", "01111", "0111011101"], ["10100", "01111", "0111001101"], ["11111", "11110", "1111111111"], ["01110", "11101", "0110110011"], ["00111", "11100", "0100011110"], ["11111", "11101", "1001111111"]];
+  // Found by a seeded search; each plan is 16 tasks with 5 + 5 old runs and 10 after runs, written as two halves of 5.
+  const NONINFERIOR = [["01111", "11110", "11011", "11111"], ["01111", "11111", "11111", "11111"], ["11111", "11011", "00111", "11101"], ["00111", "10111", "11101", "01110"], ["10100", "11001", "11011", "11000"], ["11111", "11111", "11111", "11111"], ["01100", "11101", "00011", "01101"], ["11100", "11010", "11011", "11101"], ["11111", "10110", "11101", "11101"], ["10011", "01001", "00100", "11000"], ["11100", "01011", "10111", "11100"], ["10011", "00011", "00001", "01101"], ["01110", "11001", "10011", "10100"], ["11111", "11011", "11111", "11111"], ["01110", "01101", "11111", "11001"], ["11111", "11110", "11111", "11111"]];
+  const INFERIOR = [["01111", "11011", "11111", "11111"], ["11111", "11111", "11101", "11111"], ["11111", "11111", "11011", "11101"], ["11111", "11111", "11111", "11111"], ["11010", "10100", "10000", "10010"], ["11111", "11111", "11101", "11111"], ["10011", "10011", "11111", "10011"], ["11011", "10101", "11101", "11001"], ["11111", "11011", "11111", "11111"], ["01110", "10011", "01010", "00000"], ["11110", "01111", "01110", "11101"], ["10100", "01111", "01110", "01101"], ["11111", "11110", "11111", "11111"], ["01110", "11101", "01101", "10011"], ["00111", "11100", "01000", "11110"], ["11111", "11101", "10011", "11111"]];
   const run = (rows: string[][], models = ["opus"]) => decide(input(ids(rows.length).map((id) => task(id)), models.flatMap((m) => grid(m, plan(rows)))), margin(10));
 
   test("--margin passes only with noninferior: true from the margin-shifted sign-flip, and fails powered when it is not shown", () => {
@@ -108,7 +108,7 @@ describe("statistics", () => {
   });
 
   test("margin p-values are Holm-adjusted across models: data noninferior on one model is not on two", () => {
-    const rows = [["11111", "11011", "0101011111"], ["11111", "10111", "1101111110"], ["11101", "11101", "1111010111"], ["11111", "11111", "0111111111"], ["11101", "00011", "1111011011"], ["01011", "10011", "0111111011"], ["11111", "10111", "1111111111"], ["11011", "10111", "1011101011"], ["11111", "00100", "0111011011"], ["10111", "11111", "0111011011"], ["10111", "01111", "1111110011"], ["11111", "11111", "1111111111"]];
+    const rows = [["11111", "11011", "01010", "11111"], ["11111", "10111", "11011", "11110"], ["11101", "11101", "11110", "10111"], ["11111", "11111", "01111", "11111"], ["11101", "00011", "11110", "11011"], ["01011", "10011", "01111", "11011"], ["11111", "10111", "11111", "11111"], ["11011", "10111", "10111", "01011"], ["11111", "00100", "01110", "11011"], ["10111", "11111", "01110", "11011"], ["10111", "01111", "11111", "10011"], ["11111", "11111", "11111", "11111"]];
     const one = run(rows);
     const p = one.models[0]!.margin!.p!;
     expect(p).toBeGreaterThan(0.025);
@@ -116,7 +116,7 @@ describe("statistics", () => {
     const two = run(rows, ["opus", "haiku"]);
     expect(two.models.map((m) => m.margin!.p_holm)).toEqual(holmAdjusted([p, p]));
     expect(two.reasons).toEqual(["NOT_NONINFERIOR on opus", "NOT_NONINFERIOR on haiku"]);
-    const ceiling = grid("haiku", plan(rows.map(() => ["11111", "11111", "1111111111"])));
+    const ceiling = grid("haiku", plan(rows.map(() => ["11111", "11111", "11111", "11111"])));
     const beside = decide(input(ids(rows.length).map((id) => task(id)), [...grid("opus", plan(rows)), ...ceiling]), margin(10));
     expect(beside.models[0]!.margin).toMatchObject({ attempted: true, p_holm: Math.min(1, 2 * p), noninferior: false });
     expect(beside.reasons).toEqual(["NOT_NONINFERIOR on opus", "MARGIN_NOT_ATTEMPTED the old copies passed every run (ceiling) on haiku"]);
