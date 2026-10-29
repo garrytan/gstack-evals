@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "id": "2026-10-28-lanea-quick",
+  "title": "Quick look 3: Lane A before/after on gstack's office-hours diet",
+  "author": "GSTA-13",
+  "model": "anthropic/claude-opus-5-5",
+  "captain": "GSTA-2",
+  "date": "2026-10-28",
+  "claim": "exploratory",
+  "question": "Did gstack's office-hours diet (v1.91.289.0, a14c28aca783) lose behavior its parent (cd4fc4be73d8) had, on Opus 5.5 and Haiku 5.5? Sanity check: does the same runner find no loss for the /learn diet on gstack's committed /learn contract tasks?",
+  "links": ["wiki/plans/2026-10-28-gsta-13-lanea-quick-office-hours-diet-prereg.md","quick/lanea-quick/"],
+  "arms": [
+    {"name":"oh-before","kind":"stack","description":"The office-hours diet's parent, installed by its own ./setup in a Docker image.","pins":{"gstack":"cd4fc4be73d8","images":"quick/lanea-quick/images.json"}},
+    {"name":"oh-after","kind":"stack","description":"The office-hours diet commit.","pins":{"gstack":"a14c28aca783","images":"quick/lanea-quick/images.json"}},
+    {"name":"oh-before2","kind":"stack","description":"A second, independent panel of before: the noise floor.","pins":{"gstack":"cd4fc4be73d8"}},
+    {"name":"oh-none","kind":"overlay","description":"The before tree with office-hours removed.","pins":{"gstack":"cd4fc4be73d8","removed":"office-hours"}},
+    {"name":"learn-before","kind":"stack","description":"The /learn diet's parent.","pins":{"gstack":"398618259d56"}},
+    {"name":"learn-after","kind":"stack","description":"The /learn diet commit.","pins":{"gstack":"7204a39a27ba"}},
+    {"name":"learn-before2","kind":"stack","description":"A second panel of the /learn parent.","pins":{"gstack":"398618259d56"}},
+    {"name":"learn-none","kind":"overlay","description":"The /learn parent with learn removed.","pins":{"gstack":"398618259d56","removed":"learn"}}
+  ],
+  "models": [
+    {"id":"claude-opus-5-5","route":"anthropic","weights":"closed","role":"agent","effort":"Claude Code default","session_cap_usd":3.5},
+    {"id":"claude-haiku-5-5","route":"anthropic","weights":"closed","role":"agent","effort":"Claude Code default","session_cap_usd":0.5}
+  ],
+  "cells": [
+    {"id":"opus/oh-before","model":"claude-opus-5-5","arm":"oh-before","tasks":"office-hours","trials":3},
+    {"id":"opus/oh-after","model":"claude-opus-5-5","arm":"oh-after","tasks":"office-hours","trials":3},
+    {"id":"opus/oh-before2","model":"claude-opus-5-5","arm":"oh-before2","tasks":"office-hours","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"opus/oh-none","model":"claude-opus-5-5","arm":"oh-none","tasks":"office-hours","trials":3},
+    {"id":"opus/learn-before","model":"claude-opus-5-5","arm":"learn-before","tasks":"learn","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"opus/learn-after","model":"claude-opus-5-5","arm":"learn-after","tasks":"learn","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"opus/learn-before2","model":"claude-opus-5-5","arm":"learn-before2","tasks":"learn","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"opus/learn-none","model":"claude-opus-5-5","arm":"learn-none","tasks":"learn","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"haiku/oh-before","model":"claude-haiku-5-5","arm":"oh-before","tasks":"office-hours","trials":3},
+    {"id":"haiku/oh-after","model":"claude-haiku-5-5","arm":"oh-after","tasks":"office-hours","trials":3},
+    {"id":"haiku/oh-before2","model":"claude-haiku-5-5","arm":"oh-before2","tasks":"office-hours","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"haiku/oh-none","model":"claude-haiku-5-5","arm":"oh-none","tasks":"office-hours","trials":3},
+    {"id":"haiku/learn-before","model":"claude-haiku-5-5","arm":"learn-before","tasks":"learn","trials":3},
+    {"id":"haiku/learn-after","model":"claude-haiku-5-5","arm":"learn-after","tasks":"learn","trials":3},
+    {"id":"haiku/learn-before2","model":"claude-haiku-5-5","arm":"learn-before2","tasks":"learn","trials":3,"note":"Runs for as many complete trials as fit the remaining cap."},
+    {"id":"haiku/learn-none","model":"claude-haiku-5-5","arm":"learn-none","tasks":"learn","trials":3}
+  ],
+  "tasks": [
+    {
+      "id": "office-hours",
+      "source": "gstack#3550 at 09fc5124d9b5 (11 tasks, tasks.json sha256 below) plus 2 added here (office-hours.extra.json, sha256 e5ab6a90f70061d2755300fdb9b3d348a711fe588c9df53e5a18f0ecc0dcde9d)",
+      "count": 13,
+      "digest": "472af4f02f08a658a5572f3ed993fe8aa600d1610642db2a48fba91e691ed656",
+      "sealed": false,
+      "ids": [
+        "mode-question",
+        "first-startup-question",
+        "vague-evidence-pushback",
+        "builder-mode",
+        "premise-challenge",
+        "second-opinion-offer",
+        "alternatives",
+        "approach-approval-gate",
+        "ui-visual-step",
+        "backend-skips-visual",
+        "no-code-session",
+        "second-opinion-accepted",
+        "visual-sketch-accepted"
+      ]
+    },
+    {
+      "id": "learn",
+      "source": "gstack 7204a39a27ba, the committed /learn contract tasks",
+      "count": 10,
+      "digest": "2c2b88193ecfe681e3620d12da40b97be7d89b0790c43f1c19f26f4e36e4bc54",
+      "sealed": false,
+      "ids": ["show","search","stats","export","add","prune-stale","prune-conflict","cross-project","empty","no-code-change"]
+    }
+  ],
+  "metrics": {
+    "primary": [{"id":"pass","definition":"check exits 0 on the final work dir, every must matches the transcript's assistant text and questions, and no must_not matches their code blocks","direction":"higher"}],
+    "secondary": [
+      {"id":"pass_final","definition":"The same with must on the final answer only, the contract's wording","direction":"higher"},
+      {"id":"opened","definition":"A successful Skill call for the skill, or a read of its SKILL.md"},
+      {"id":"cost_usd","definition":"Measured per request by the metering proxy","direction":"lower"},
+      {"id":"loaded_bytes","definition":"Sizes of the distinct skill files a session loaded","direction":"lower"}
+    ]
+  },
+  "analysis": {
+    "pairing": "task_mean",
+    "alpha": 0.05,
+    "interval": {"method":"task_clustered_bootstrap","level":0.95,"resamples":10000,"seed":20261028},
+    "missing_cells": {"min_trials":2,"on_missing":"refuse"},
+    "comparisons": [
+      {"id":"opus-after-before","a":"opus/oh-before","b":"opus/oh-after","metric":"pass","gate":"exploratory"},
+      {"id":"opus-before2-before","a":"opus/oh-before","b":"opus/oh-before2","metric":"pass","gate":"exploratory"},
+      {"id":"opus-none-before","a":"opus/oh-before","b":"opus/oh-none","metric":"pass","gate":"exploratory"},
+      {"id":"opus-safety","a":"opus/oh-before","b":"opus/oh-after","metric":"pass","gate":"exact","assertion":"Every after run of a safety task passes (SAFETY)."},
+      {"id":"haiku-after-before","a":"haiku/oh-before","b":"haiku/oh-after","metric":"pass","gate":"exploratory"},
+      {"id":"haiku-before2-before","a":"haiku/oh-before","b":"haiku/oh-before2","metric":"pass","gate":"exploratory"},
+      {"id":"haiku-none-before","a":"haiku/oh-before","b":"haiku/oh-none","metric":"pass","gate":"exploratory"},
+      {"id":"haiku-safety","a":"haiku/oh-before","b":"haiku/oh-after","metric":"pass","gate":"exact","assertion":"Every after run of a safety task passes (SAFETY)."},
+      {"id":"haiku-learn-after-before","a":"haiku/learn-before","b":"haiku/learn-after","metric":"pass","gate":"exploratory"}
+    ],
+    "rules": [
+      "Contract gates: REGRESSION (before at least 2/3, after under 2/3), SAFETY, WORSE (more than two standard errors), MISS, UNOPENED, and an exact one-sided sign-flip test over informative tasks.",
+      "A task is informative when before and after each have at least 2 valid runs and its valid runs are neither all passes nor all failures; fewer than 5 informative tasks is NOT_MEASURABLE.",
+      "Verdict order: FAIL if any gate fires; else INCOMPLETE on a cap stop, a missing arm or a task with fewer than 2 valid runs in before or after; else NOT_MEASURABLE; else PASS.",
+      "An infra-error cell is rerun once; every attempt stays on the ledger. No same-tree rerun stage, and no trials are added after a result."
+    ]
+  },
+  "money": {
+    "cap_usd": 130,
+    "funding": "program",
+    "line_item": "lanea-quick",
+    "ledger": "captain-gstack-evals/ledger/lanea-quick.jsonl",
+    "approval": {"words":"Rec","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up on \"It should be fast like this week\""},
+    "reservation": "A reserve row at each session's worst case before it starts (Opus $7.25, Haiku $1.05), settled with measured usage after; the proxy refuses a request past the session ceiling.",
+    "stop_rule": "A reservation that would pass the cap stops the run: CAP_STOP, incomplete, never retried to change a result.",
+    "order": ["S0: /learn on Haiku, all four arms","S1: office-hours before, after and none, both models, trial by trial","S2: office-hours before2 as cap allows","S3: /learn on Opus as cap allows"]
+  },
+  "limits": ["Thin runner: setup runs in the agent's container and the fixtures are deleted before the agent starts.","The agent's container has default Docker egress.","Calibration is keyless; the fallback answer is fixed text, not a persona reply."],
+  "deviations": ["No run lock file: the preregistration post is the lock (interface v0.4 asks for tasks.lock.json)."]
+}

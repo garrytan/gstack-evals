@@ -10,19 +10,6 @@
       "inputs": [
         "src/errors/**"
       ]
-    },
-    {
-      "id": "wiki-index",
-      "command": "bun run wiki:index",
-      "outputs": [
-        "wiki/INDEX.md"
-      ],
-      "inputs": [
-        "wiki/board/**",
-        "wiki/plans/**",
-        "wiki/research/**",
-        "scripts/wiki.ts"
-      ]
     }
   ]
 }
