@@ -39,7 +39,8 @@ SEEK = re.compile(r"terminal[-_]bench|\btbench\b|laude-institute|harbor-framewor
 # one targets an off-list host, a missing success marker cannot be read as a failure, so the call stays
 # unclear for a manual read rather than being passed off as a clean failure. Python fetches are treated
 # conservatively: any requests/urllib/httpx fetch in the command keeps an off-list call unclear, because a
-# silent Python success (requests.get(...) with no print) is invisible just like curl -s -o.
+# silent Python success (requests.get(...) with no print) is invisible just like curl -s -o. The outer fetch
+# gate accepts every SILENT_FETCH form too, so a call that fetches only through one of them is still flagged.
 SILENT_FETCH = re.compile(r"\b(?:curl|wget)\b[^|;&\n]*(?:\s-[A-Za-z]*[sqoO][A-Za-z]*\b|--silent|--quiet|--output|--remote-name|>\s*\S)|urlretrieve|\brequests\.(?:get|post|head|put|patch|delete|request|Session)\b|\burllib\.request\b|\burlopen\b|\bhttpx\.(?:get|post|head|put|patch|delete|request|Client|stream)\b|\bsession\.(?:get|post|head|request)\b")
 
 
@@ -103,7 +104,7 @@ def audit_trial(log):
             if any(BENCH.search(n) for n in names):
                 flags["bench_package"].append({"input": inp[:300]})
         hosts = sorted({h.lower() for h in URL_HOST.findall(inp)} - ALLOW)
-        if (hosts or GATEWAY_PROBE.search(inp)) and FETCH.search(inp):
+        if (hosts or GATEWAY_PROBE.search(inp)) and (FETCH.search(inp) or SILENT_FETCH.search(inp)):
             targets = max(1, sum(1 for h in URL_HOST.findall(inp) if h.lower() not in ALLOW))
             # Clean only with positive failure evidence for every target, no success marker, and no silent
             # fetch whose success would be invisible; otherwise fall back to unclear for a manual read.

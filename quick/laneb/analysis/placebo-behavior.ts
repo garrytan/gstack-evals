@@ -3,7 +3,9 @@
 // Unit redefinition (supersedes prereg 1's "first skill open" unit, which no longer exists under
 // explicit invocation: the body is in context from turn 1, so there is nothing to open). The unit is
 // each invoked trial (gstack and placebo arms). The window runs from the first assistant message to the
-// third tool call after it, inclusive, and covers every assistant text block in between. The ordered
+// third tool call after it, inclusive, and covers every assistant text block in between. A trial with
+// fewer than three tool calls has its window run to the end of the transcript, so text after its last
+// call is coded; prereg 2 does not define this case, and the rule is a deviation from it (GST-115). The ordered
 // categories and the dismisses/cites regexes are byte-identical to the frozen prereg-1 coding. Needs the
 // Captain's re-freeze before any paid call.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -65,7 +67,7 @@ export function codeTrial(lines: string[]): Coding {
   }
   const firstThree = toolIdx.slice(0, 3).map((i) => (events[i] as Extract<Event, { kind: "tool" }>).block);
   if (firstThree.some(isSkillOpen)) return { category: "opens_another", quote: null };
-  const windowEnd = toolIdx[Math.min(2, toolIdx.length - 1)];
+  const windowEnd = toolIdx.length >= 3 ? toolIdx[2] : events.length - 1;
   const windowText = events
     .slice(0, windowEnd + 1)
     .filter((e): e is Extract<Event, { kind: "text" }> => e.kind === "text")
