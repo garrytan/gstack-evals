@@ -4,7 +4,7 @@
 // Every check prints one line on stdout (ok, warn or skip); a failing check also prints its code lines on stderr, and
 // doctor then exits 2.
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Io } from "../../cli.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
@@ -46,14 +46,16 @@ const localRun: Runner = (command, args) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? (r.error ? String(r.error.message) : "") };
 };
 
-function writable(path: string): boolean {
-  let dir = resolve(path);
+/** Why SQLite could not open or create the ledger file here, or null: it must not be a directory, and its directory (or the nearest one that exists) must take new files, since SQLite writes its WAL files beside it. */
+function ledgerFileProblem(path: string): string | null {
+  if (existsSync(path) && statSync(path).isDirectory()) return "is a directory, not a SQLite file";
+  let dir = dirname(resolve(path));
   while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
   try {
-    accessSync(dir, constants.W_OK);
-    return true;
+    accessSync(dir, constants.W_OK | constants.X_OK);
+    return null;
   } catch {
-    return false;
+    return "cannot be created or opened: " + dir + " is not writable by this user";
   }
 }
 
@@ -94,20 +96,22 @@ export function doctorChecks(opts: DoctorOptions): Check[] {
   const ledger = ledgerPath(opts.ledger, env);
   const remote = remoteMount(ledger.path, opts.mounts ?? readMounts());
   if (remote) add({ name: "ledger", status: "fail", code: "E_LEDGER_PATH", detail: ledger.path + " (" + ledger.rule + ") is on a " + remote + " mount; the local ledger must sit on a local disk" });
-  else if (!writable(ledger.path)) add({ name: "ledger", status: "fail", code: "E_LEDGER_PATH", detail: ledger.path + " (" + ledger.rule + ") is not writable by this user" });
-  else add({ name: "ledger", status: "ok", detail: ledger.path + " (" + ledger.rule + ")" });
+  else {
+    const problem = ledgerFileProblem(ledger.path);
+    if (problem) add({ name: "ledger", status: "fail", code: "E_LEDGER_PATH", detail: ledger.path + " (" + ledger.rule + ") " + problem });
+    else add({ name: "ledger", status: "ok", detail: ledger.path + " (" + ledger.rule + ")" });
+  }
 
   const record = recordPath(opts.record, env);
   try {
     const items = existsSync(record.path) ? ledgerStatus(record.path) : [];
     add({ name: "ledger record", status: "ok", detail: record.path + " (" + record.rule + "), " + (items.length ? items.length + " line item" + (items.length > 1 ? "s" : "") : "no line items yet") });
   } catch (error) {
-    if (!(error instanceof LedgerError)) throw error;
-    add({ name: "ledger record", status: "fail", code: error.code, detail: record.path + " (" + record.rule + "): " + error.message });
+    add({ name: "ledger record", status: "fail", code: error instanceof LedgerError ? error.code : "E_LEDGER_RECORD", detail: record.path + " (" + record.rule + "): " + (error as Error).message });
   }
 
   const bin = approvalsBin(env);
-  if (!bin) add({ name: "gstack-approvals", status: "fail", code: "E_APPROVAL_RECORD", detail: "not found (GSTACK_EVALS_APPROVALS_BIN, PATH or ~/.local/share/gstack/bin); ledger init and raise mirror approvals through it" });
+  if (!bin || !existsSync(bin)) add({ name: "gstack-approvals", status: "fail", code: "E_APPROVAL_RECORD", detail: (bin ? bin + " does not exist" : "not found (GSTACK_EVALS_APPROVALS_BIN, PATH or ~/.local/share/gstack/bin)") + "; ledger init and raise mirror approvals through it" });
   else {
     const versionFile = resolve(dirname(bin), "..", "VERSION");
     add({ name: "gstack-approvals", status: "ok", detail: bin + ", gstack " + (existsSync(versionFile) ? readFileSync(versionFile, "utf8").trim() : "version unknown (no VERSION beside its bin directory)") });

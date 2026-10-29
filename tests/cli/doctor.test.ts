@@ -31,14 +31,20 @@ describe("gstack-evals doctor", () => {
     expect(out).not.toContain("should-never-print");
   });
 
-  // Value: protects=each failing check prints its code lines and doctor exits 2: no Docker, a missing host CLI, a missing subject key, a ledger on a network mount; fails_when=a failure passes or loses its code; why_new=new; seam=the injected runner and mount table; no_claim=none beyond protects
-  test("no Docker, a missing host CLI, a missing key and a remote ledger each fail with their code", () => {
+  // Value: protects=each failing check prints its code lines and doctor exits 2: no Docker, a missing host CLI, a missing subject key, a ledger on a network mount; fails_when=a failure passes, loses its code, or a record read error aborts the report; why_new=new; seam=the injected runner and mount table; no_claim=none beyond protects
+  test("no Docker, a missing host CLI, a missing key, a bad ledger path, an unreadable record and a missing approvals bin each fail with their code", () => {
     const broken: Runner = () => ({ status: 1, stdout: "", stderr: "Cannot connect to the Docker daemon\n" });
     const checks = doctorChecks({ env: env({ OPENAI_API_KEY: "" }), hosts: ["codex"], ledger: join(TMP, "nfs", "ledger.sqlite"), record: join(TMP, "no-record"), run: broken, mounts: [{ point: TMP, type: "nfs4" }] });
     const failed = Object.fromEntries(checks.filter((c) => c.status === "fail").map((c) => [c.name, c.code]));
     expect(failed).toEqual({ docker: "E_ISOLATION_UNSAFE", "codex CLI": "E_HOST_CLI", "codex key": "E_KEY_MISSING", ledger: "E_LEDGER_PATH" });
     expect(checks.find((c) => c.name === "codex key" && c.status === "warn")!.detail).toBe("OPENROUTER_API_KEY not set (openrouter models under test)");
     expect(checks.find((c) => c.name === "ledger record")!.detail).toEndWith("no line items yet");
+    const odd = tree({ "record/items": "not a directory\n", "ledger-dir/.keep": "" });
+    const more = doctorChecks({ env: env({ GSTACK_EVALS_APPROVALS_BIN: join(gstack, "bin/gone") }), hosts: ["claude"], ledger: join(odd, "ledger-dir"), record: join(odd, "record"), run: healthy });
+    const byName = Object.fromEntries(more.filter((c) => c.status === "fail").map((c) => [c.name, [c.code, c.detail]]));
+    expect(byName.ledger).toEqual(["E_LEDGER_PATH", join(odd, "ledger-dir") + " (--ledger) is a directory, not a SQLite file"]);
+    expect(byName["ledger record"]![0]).toBe("E_LEDGER_RECORD");
+    expect(byName["gstack-approvals"]).toEqual(["E_APPROVAL_RECORD", join(gstack, "bin/gone") + " does not exist; ledger init and raise mirror approvals through it"]);
   });
 
   // Value: protects=bin/gstack-evals runs doctor, without --host it checks both host CLIs, and --json prints one object; fails_when=the doctor row stops resolving or --json mixes in text; why_new=the doctor row printed not built yet; seam=src/cli.ts; no_claim=none beyond protects
