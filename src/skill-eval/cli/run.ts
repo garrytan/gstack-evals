@@ -8,7 +8,7 @@ import type { Io } from "../../cli.ts";
 import { fakeRecord, HOST_MODULE, type FakeScript } from "../../adapters/_fake/host.ts";
 import { usd } from "../../runner/ledger/money.ts";
 import type { CalibrationResult, TrialRecord } from "../../types.ts";
-import { decide, DEFAULT_OPTIONS, rerunPlan, type Stop, type VerdictInput } from "../verdict/gates.ts";
+import { decide, DEFAULT_OPTIONS, rerunPlan, type Stop, type VerdictInput, type VerdictOptions } from "../verdict/gates.ts";
 import type { VerdictTask } from "../verdict/grade.ts";
 import type { GateEvidence } from "../verdict/lock.ts";
 import { buildVerdict, writeVerdict, type VerdictContext, type VerdictFile } from "../verdict/verdict.ts";
@@ -68,10 +68,10 @@ export function verdictLines(v: VerdictFile, path: string): string[] {
   ];
 }
 
-/** Decides with U6's engine, writes <out>/verdict.json and prints the summary (or the verdict with --json); returns U6's exit code. */
-export function finishRun(run: FakeRun, context: VerdictContext, out: string, io: Io, json: boolean): number {
-  const decision = decide(run.input, DEFAULT_OPTIONS);
-  const verdict = buildVerdict(run.input, decision, context, DEFAULT_OPTIONS);
+/** Decides with U6's engine under the call's options (--margin), writes <out>/verdict.json and prints the summary (or the verdict with --json); returns U6's exit code. */
+export function finishRun(run: FakeRun, context: VerdictContext, out: string, io: Io, json: boolean, options: VerdictOptions = DEFAULT_OPTIONS): number {
+  const decision = decide(run.input, options);
+  const verdict = buildVerdict(run.input, decision, context, options);
   const path = writeVerdict(out, verdict);
   if (run.stopped && context.spend && !json) io.out("STOP: reason=budget_exhausted spent=" + usd(run.spent) + " reserved=" + usd(context.spend.reserved) + " unknown=" + context.spend.unknown + " cap=" + usd(context.spend.cap));
   io.out(json ? JSON.stringify(verdict) : verdictLines(verdict, path).join("\n"));

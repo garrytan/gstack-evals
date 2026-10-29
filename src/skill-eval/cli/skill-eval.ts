@@ -19,6 +19,7 @@ import { readSkillFiles } from "../lock/contract-lines.ts";
 import { initCommand, lockCommand } from "../lock/cli.ts";
 import { treeSha256 } from "../lock/lock.ts";
 import { errorLines, errorRecord, scrubSecrets, writeErrorRecord } from "../verdict/error-record.ts";
+import { DEFAULT_OPTIONS } from "../verdict/gates.ts";
 import { verdictTasks } from "../verdict/grade.ts";
 import type { VerdictContext } from "../verdict/verdict.ts";
 import { effectiveLines, resolveCall, SKILL_EVAL_HELP, type Call } from "./call.ts";
@@ -185,7 +186,7 @@ function runOnFakeHost(call: Call, report: PreflightReport, io: Io, env: Env, js
     wall_s: (Date.now() - started) / 1000,
     rig: null,
   };
-  return finishRun(run, context, call.out.path, io, json);
+  return finishRun(run, context, call.out.path, io, json, { ...DEFAULT_OPTIONS, margin_points: call.margin });
 }
 
 /** An unexpected error: an E_INTERNAL record with secrets scrubbed, a correlation id and a trace file in <out>. */

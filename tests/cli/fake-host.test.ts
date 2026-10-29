@@ -51,7 +51,7 @@ describe("a run on the fake host", () => {
     return { repo, bin, call };
   }
 
-  // Value: protects=the done-means: diet.md's literal lock step and commit run on learn, and the contract call then runs on the fake host to a real verdict.json with U6's exit code; fails_when=any step of diet.md's call stops on learn; why_new=skill-eval had no run path; seam=GSTACK_EVALS_FAKE_HOST and bin/gstack-evals; no_claim=a real host, which U10 adds
+  // Value: protects=the done-means: diet.md's literal lock step and commit run on learn, and the contract call then runs on the fake host to a real verdict.json with U6's exit code; fails_when=any step of diet.md's call stops on learn; why_new=skill-eval had no run path; seam=GSTACK_EVALS_FAKE_HOST and bin/gstack-evals; no_claim=a real host, which U10 adds; --margin reaches U6, which refuses a margin at ceiling
   test("diet.md's literal call runs on learn with the fake host", async () => {
     const { repo, bin, call } = await setup();
     const out = join(TMP, "diet-run");
@@ -63,6 +63,9 @@ describe("a run on the fake host", () => {
     expect(verdict.lock.commit).toBe(git(repo.root, "rev-parse", "HEAD").trim());
     expect(verdict.lock_drift).toEqual([]);
     expect(Object.keys(verdict.arm_trees)).toEqual(["before", "before2", "after"]);
+    const margin = collect();
+    expect(await skillEvalCommand(call(join(TMP, "margin-run"), ["--margin", "10"]), margin, { GSTACK_EVALS_FAKE_HOST: "1", ...KEYS })).toBe(2);
+    expect(JSON.parse(readFileSync(join(TMP, "margin-run", "verdict.json"), "utf8"))).toMatchObject({ reasons: ["MARGIN_NOT_ATTEMPTED the old copies passed every run (ceiling)"], effective: { margin: 10 } });
   });
 
   // Value: protects=a fake-host script drives the run, the rerun stage runs when round 1 goes red, and a cap stop keeps whole rounds; fails_when=a script is ignored, the rerun stage is skipped, or a round is split at the cap; why_new=new; seam=GSTACK_EVALS_FAKE_HOST=<script.json>; no_claim=none beyond protects
