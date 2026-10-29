@@ -11,6 +11,7 @@ cd quick/lanea-quick && bun install
 docker build -f docker/base.Dockerfile -t lanea-quick/base:cc2.1.312-bun1.4.4 docker/
 bash docker/build-arms.sh ~/.capy/work/gstack lanea-quick/base:cc2.1.312-bun1.4.4
 bun src/run.ts prepare                                   # task files at their shas, digests, skill file sizes per image
+export LANEA_CAP_USD=<cap> LANEA_LINE_ITEM=<item>        # approve, run and project need both, --fake too
 bun src/run.ts run --stage S1 --fake --trials 1          # keyless: fake upstream, no spend
 bun src/run.ts run --stage S0 --prereg <sha>             # paid: needs ANTHROPIC_API_KEY and the ledger's approval row
 bun src/run.ts project                                   # how many S2 trials fit the remaining cap
@@ -30,7 +31,9 @@ Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running
 |---|---|---|
 | `LANEA_WORK` | `~/.capy/work/lanea-quick` | Work root: `prepared.json`, task copies, Docker build contexts, `runs/` and `runs-fake/` |
 | `LANEA_GSTACK` | `~/.capy/work/gstack` | The gstack clone that `prepare` reads task files from |
-| `LANEA_LEDGER` | `~/.capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl` | The paid ledger. Its lock is the same path plus `.lock` |
+| `LANEA_CAP_USD` | none, required | The line item's approved cap in dollars, a plain positive decimal such as `35`. `approve` writes it as the approval's `cap_usd`; a run reserves only when the two are equal |
+| `LANEA_LINE_ITEM` | none, required | The line item, in lowercase letters, digits and single hyphens, such as `lanea-quick-rerun`. `approve` writes it as the approval's `item`; a run reserves only when the two are equal |
+| `LANEA_LEDGER` | `~/.capy/drive/captain-gstack-evals/ledger/<LANEA_LINE_ITEM>.jsonl` | The paid ledger. Its lock is the same path plus `.lock` |
 | `LANEA_FAKE_CEILING` | unset | A `--fake` run's per-session spend ceiling in dollars, to exercise the budget refusal |
 
 ### run.ts flags
@@ -52,13 +55,23 @@ Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running
 
 ### Approve the cap
 
-A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` equal to the runner's cap ($130). Record the approval once, with each quoted reply as its own `--words`:
+Each line item has its own cap and its own ledger. A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` and `item` equal to `LANEA_CAP_USD` and `LANEA_LINE_ITEM`. Neither has a default: a shell that misses either stops with E_CONFIG, and one that names another cap or item than the ledger's approval stops with E_LEDGER_MISSING before it writes a row. Record the approval once, with each quoted reply as its own `--words`:
 
 ```
-bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
+LANEA_CAP_USD=35 LANEA_LINE_ITEM=lanea-quick-rerun bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
 ```
 
 Pass the words as separate arguments, not through a shell string with `$` in it (see the last item below). `approve` does nothing when a valid approval row is already there, and refuses a ledger that already has other rows.
+
+### Close a line item
+
+When a line item ends or its unspent money moves to another, append one close row to its ledger, through a file:
+
+```
+{"ts":"<iso time>","item":"lanea-quick","type":"close","reason":"unspent money moved","moved_usd":20.44,"to_item":"lanea-quick-rerun","by":"<who>","source":"<where it was decided>"}
+```
+
+After a close row, every reserve on that ledger stops with E_LEDGER_CLOSED and `project` shows nothing remaining, so moved money can't be spent twice. Open reserves still settle. Any row with `"type":"close"` closes the ledger; `moved_usd` and `to_item` are optional. A `note` row counts for nothing.
 
 ### One runner per ledger, per WORK and per results tree
 
@@ -76,7 +89,7 @@ A paid run resolves every image tag to its id and refuses one that `images.json`
 | `src/proxy.ts` | Metering proxy on the Docker bridge: a per-session token, one allowed model, one paid request at a time, a spend ceiling and a per-request bound under the reservation, usage parsed from the SSE stream, per-request price |
 | `src/usersim.ts`, `usersim/categories.json` | The scripted user: keyword classifier, sidecar replies, a non-approving fallback, prose-question replies |
 | `src/grade.ts` | The main agent only, which is narrower than the prereg's "the session's assistant text" (a subagent's tool calls are counted apart): `must` over the transcript or the final answer, `must_not` over code blocks, skill opened, loaded files |
-| `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop; the ledger lock; the in-order reserver |
+| `src/ledger.ts` | Append-only JSONL ledger: approval, reserve before each session, settle after, cap stop, close; the ledger lock; the in-order reserver |
 | `src/run.ts` | prepare, approve, run (stages, trial-major order, a worker pool), project |
 | `src/analyze.ts` | Contract gates, Wilson intervals, task-clustered bootstrap, sign-flip test, loss signal and noise check, stage stops, uncovered contract lines, cost and loaded-bytes tables |
 | `src/fake-upstream.ts` | A scripted fake Messages API for keyless runs |

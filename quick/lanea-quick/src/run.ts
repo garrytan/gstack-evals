@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, chmodSync, cpSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { BASE_IMAGE, CAP_USD, GSTACK_REPO, LEDGER_PATH, LIMITS, LINE_ITEM, MODELS, SUITES, WORK, imageTag, type ArmName } from "./config.ts";
+import { BASE_IMAGE, GSTACK_REPO, LIMITS, MODELS, SUITES, WORK, imageTag, lineItem, type ArmName } from "./config.ts";
 import { loadResults, readStages } from "./analyze.ts";
 import { serveFake } from "./fake-upstream.ts";
 import type { Task } from "./grade.ts";
@@ -87,6 +87,8 @@ interface RunOpts {
   fake: boolean;
   out: string;
   ledgerPath: string;
+  cap: number;
+  item: string;
   parallel: number;
   prereg: string;
 }
@@ -128,8 +130,9 @@ async function runCells(cells: Cell[], opts: RunOpts, stage: string, prep: Prepa
   }
   const key = opts.fake ? () => "fake-key" : () => process.env.ANTHROPIC_API_KEY ?? "";
   const proxy = new MeteringProxy({ hostname, port: 0, upstream, upstreamKey: key });
-  const ledger = new Ledger(opts.ledgerPath, CAP_USD, LINE_ITEM, join(opts.out, "ledger-mirror.jsonl"), opts.fake);
+  const ledger = new Ledger(opts.ledgerPath, opts.cap, opts.item, join(opts.out, "ledger-mirror.jsonl"), opts.fake);
   if (opts.fake) ledger.approve({ words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" });
+  ledger.assertOpen();
   ledger.settleStale("reserved by a runner that stopped before settling; charged at the full reservation");
   const fakeExe = join(WORK, "bin", "claude");
   mkdirSync(join(WORK, "bin"), { recursive: true });
@@ -280,8 +283,9 @@ async function main() {
     }
     return;
   }
+  const li = lineItem();
   if (cmd === "approve") {
-    const ledger = new Ledger(values.ledger ?? LEDGER_PATH, CAP_USD, LINE_ITEM);
+    const ledger = new Ledger(values.ledger ?? li.ledger, li.cap, li.item);
     ledger.approve({ words: values.words!, by: values.by!, source: values.source! });
     console.log(JSON.stringify(ledger.totals()));
     return;
@@ -291,7 +295,9 @@ async function main() {
   const opts: RunOpts = {
     fake: values.fake!,
     out,
-    ledgerPath: values.ledger ?? (values.fake ? join(out, "ledger-fake.jsonl") : LEDGER_PATH),
+    ledgerPath: values.ledger ?? (values.fake ? join(out, "ledger-fake.jsonl") : li.ledger),
+    cap: li.cap,
+    item: li.item,
     parallel: Number(values.parallel ?? LIMITS.parallel),
     prereg: values.prereg!,
   };
@@ -318,7 +324,7 @@ async function main() {
     const stage = values.stage ?? "S2";
     const st = STAGES[stage]!;
     const tasks = prep.suites[st.suite]!.tasks;
-    const ledger = new Ledger(opts.ledgerPath, CAP_USD, LINE_ITEM);
+    const ledger = new Ledger(opts.ledgerPath, opts.cap, opts.item);
     const mean = (m: string, s: string) => meanCost(out, m, s);
     const perSession = (m: string): number | null => {
       if (st.suite === "office-hours") return mean(m, "office-hours");

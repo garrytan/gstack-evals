@@ -55,6 +55,8 @@ export class Ledger {
   private open = new Map<string, number>();
   private settledIds = new Set<string>();
   private approved = false;
+  private first: any = null;
+  private closed: any = null;
 
   constructor(private path: string, private cap: number, private item: string, private mirror?: string, private fake = false) {
     mkdirSync(dirname(path), { recursive: true });
@@ -66,13 +68,17 @@ export class Ledger {
     this.open.clear();
     this.settledIds.clear();
     this.approved = false;
+    this.first = null;
+    this.closed = null;
     if (!existsSync(this.path)) return;
-    let first = true;
     for (const line of readFileSync(this.path, "utf8").split("\n")) {
       if (!line.trim()) continue;
       const row = JSON.parse(line);
-      if (first && row.type === "approval" && this.valid(row)) this.approved = true;
-      first = false;
+      if (!this.first) {
+        this.first = row;
+        this.approved = row.type === "approval" && this.valid(row);
+      }
+      if (row.type === "close") this.closed ??= row;
       if (this.settledIds.has(row.reservation_id)) continue;
       if (row.type === "reserve") this.open.set(row.reservation_id, row.usd);
       if (row.type === "settle") {
@@ -84,7 +90,7 @@ export class Ledger {
   }
 
   private valid(row: any): boolean {
-    return Array.isArray(row.words) && row.words.length > 0 && row.words.every(text) && text(row.by) && text(row.source) && row.cap_usd === this.cap && (this.fake || (!row.fake && row.source !== "none"));
+    return Array.isArray(row.words) && row.words.length > 0 && row.words.every(text) && text(row.by) && text(row.source) && row.cap_usd === this.cap && row.item === this.item && (this.fake || (!row.fake && row.source !== "none"));
   }
 
   private append(row: Record<string, unknown>) {
@@ -99,7 +105,7 @@ export class Ledger {
   }
 
   approve(a: Approval) {
-    const row = { type: "approval", cap_usd: this.cap, words: a.words, by: a.by, source: a.source, ...(this.fake ? { fake: true } : {}) };
+    const row = { type: "approval", item: this.item, cap_usd: this.cap, words: a.words, by: a.by, source: a.source, ...(this.fake ? { fake: true } : {}) };
     if (!this.valid(row)) throw new Error("E_APPROVAL: approve needs --words (one or more), --by and --source");
     if (this.hasApproval()) return;
     if (existsSync(this.path) && readFileSync(this.path, "utf8").trim()) throw new Error(`E_APPROVAL: the approval must be the first row of ${this.path}, which already has rows`);
@@ -108,12 +114,21 @@ export class Ledger {
 
   totals() {
     const open = [...this.open.values()].reduce((x, y) => x + y, 0);
-    return { settled: this.settled, open, remaining: this.cap - this.settled - open, cap: this.cap, unsettled: [...this.open.keys()] };
+    return { settled: this.settled, open, remaining: this.closed ? 0 : this.cap - this.settled - open, cap: this.cap, unsettled: [...this.open.keys()] };
+  }
+
+  assertOpen() {
+    this.load();
+    if (!this.approved) {
+      const f = this.first?.type === "approval" ? `; its first row approves item ${this.first.item} at cap_usd ${this.first.cap_usd}` : "";
+      throw new Error(`E_LEDGER_MISSING: ${this.path} has no first-row approval for item ${this.item} at cap_usd ${this.cap}${f}`);
+    }
+    if (this.closed) throw new Error(`E_LEDGER_CLOSED: ${this.path} is closed: ${this.closed.reason ?? "no reason given"}${this.closed.to_item ? `; its unspent money moved to ${this.closed.to_item}` : ""}`);
   }
 
   reserve(id: string, usd: number, meta: Record<string, unknown>) {
     amount(usd);
-    if (!this.hasApproval()) throw new Error("E_LEDGER_MISSING: no approval row");
+    this.assertOpen();
     const t = this.totals();
     if (t.settled + t.open + usd > this.cap + 1e-9) throw new CapStop(t.settled, t.open, usd, this.cap);
     this.open.set(id, usd);
