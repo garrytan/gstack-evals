@@ -89,12 +89,42 @@ describe("ledger", () => {
   });
   test("only the first row can approve, and the old fake runner's approval never authorizes a paid ledger", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(p, JSON.stringify({ type: "approval", cap_usd: 10, words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" }) + "\n");
+    writeFileSync(p, JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" }) + "\n");
     expect(new Ledger(p, 10, "t").hasApproval()).toBe(false);
     expect(() => new Ledger(p, 10, "t").approve({ words: ["Rec"], by: "x", source: "y" })).toThrow("E_APPROVAL");
     const q = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(q, JSON.stringify({ type: "reserve", reservation_id: "a", usd: 1 }) + "\n" + JSON.stringify({ type: "approval", cap_usd: 10, words: ["Rec"], by: "x", source: "y" }) + "\n");
+    writeFileSync(q, JSON.stringify({ type: "reserve", reservation_id: "a", usd: 1 }) + "\n" + JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["Rec"], by: "x", source: "y" }) + "\n");
     expect(new Ledger(q, 10, "t").hasApproval()).toBe(false);
+  });
+  test("a resume fails closed on a ledger approved for another item or another cap, and writes nothing", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+    new Ledger(p, 35, "lanea-quick-rerun").approve({ words: ["Rec"], by: "x", source: "y" });
+    expect(JSON.parse(readFileSync(p, "utf8"))).toMatchObject({ type: "approval", item: "lanea-quick-rerun", cap_usd: 35 });
+    const before = readFileSync(p, "utf8");
+    for (const [cap, item] of [[35, "lanea-quick"], [130, "lanea-quick-rerun"]] as const) {
+      const l = new Ledger(p, cap, item);
+      expect(l.hasApproval()).toBe(false);
+      expect(() => l.reserve("a", 1, {})).toThrow("E_LEDGER_MISSING");
+      expect(() => l.approve({ words: ["Rec"], by: "x", source: "y" })).toThrow("E_APPROVAL");
+    }
+    expect(readFileSync(p, "utf8")).toBe(before);
+    new Ledger(p, 35, "lanea-quick-rerun").reserve("a", 1, {});
+  });
+  test("a close row ends the line item: money it moved away can't be reserved again, and open reserves still settle", () => {
+    const p = approved(130);
+    const l = new Ledger(p, 130, "t");
+    l.reserve("spent", 109.56, {});
+    l.settle("spent", 109.56, {});
+    l.reserve("open", 1, {});
+    appendFileSync(p, JSON.stringify({ type: "note", note: "moved the unspent $20.44 to t-rerun" }) + "\n");
+    expect(new Ledger(p, 130, "t").totals().remaining).toBeCloseTo(19.44, 9);
+    appendFileSync(p, JSON.stringify({ type: "close", reason: "unspent money moved", moved_usd: 20.44, to_item: "t-rerun", by: "x", source: "y" }) + "\n");
+    expect(() => l.reserve("again", 7.25, {})).toThrow("E_LEDGER_CLOSED");
+    expect(() => new Ledger(p, 130, "t").reserve("again", 7.25, {})).toThrow("E_LEDGER_CLOSED");
+    l.settle("open", 1, {});
+    const t = new Ledger(p, 130, "t").totals();
+    expect(t).toMatchObject({ open: 0, remaining: 0 });
+    expect(t.settled).toBeCloseTo(110.56, 9);
   });
   test("the lock sits beside the ledger and admits one runner", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");

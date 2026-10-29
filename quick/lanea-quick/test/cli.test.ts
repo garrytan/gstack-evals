@@ -1,15 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Ledger } from "../src/ledger.ts";
 
 const root = join(import.meta.dir, "..");
 const work = mkdtempSync(join(tmpdir(), "cli-"));
 writeFileSync(join(work, "prepared.json"), JSON.stringify({ suites: { "office-hours": { tasks: [{ id: "a", prompt: "p" }] }, learn: { tasks: [{ id: "b", prompt: "p" }] } }, sizes: {}, images: {} }));
-const cli = (...args: string[]) => {
-  const p = Bun.spawnSync([process.execPath, "src/run.ts", ...args], { cwd: root, env: { PATH: process.env.PATH ?? "", HOME: work, LANEA_WORK: work, LANEA_LEDGER: join(work, "ledger.jsonl") } });
+const shell = { PATH: process.env.PATH ?? "", HOME: work, LANEA_WORK: work };
+const spawn = (env: Record<string, string>, args: string[]) => {
+  const p = Bun.spawnSync([process.execPath, "src/run.ts", ...args], { cwd: root, env });
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
 };
+const cli = (...args: string[]) => spawn({ ...shell, LANEA_LEDGER: join(work, "ledger.jsonl"), LANEA_CAP_USD: "10", LANEA_LINE_ITEM: "t" }, args);
+const approveArgs = ["approve", "--words", "Rec", "--by", "x", "--source", "y"];
 
 describe("run.ts arguments", () => {
   test("project is read-only and needs no --prereg", () => {
@@ -17,6 +21,42 @@ describe("run.ts arguments", () => {
     expect(r.err).not.toContain("E_PREREG");
     expect(r.code).toBe(0);
     expect(JSON.parse(r.out)).toMatchObject({ stage: "S2", ledger: { settled: 0, open: 0 } });
+  });
+  test("a fresh shell without LANEA_CAP_USD and LANEA_LINE_ITEM refuses approve, run and project and writes no ledger", () => {
+    const home = mkdtempSync(join(tmpdir(), "cli-home-"));
+    for (const args of [approveArgs, ["run", "--stage", "S1", "--prereg", "a".repeat(40)], ["project"]]) {
+      const r = spawn({ ...shell, HOME: home }, args);
+      expect(r.code).not.toBe(0);
+      expect(r.err).toContain("E_CONFIG");
+    }
+    expect(existsSync(join(home, ".capy"))).toBe(false);
+  });
+  test("approve writes the runner's cap and item as the first row of the ledger named after the item", () => {
+    const home = mkdtempSync(join(tmpdir(), "cli-home-"));
+    expect(spawn({ ...shell, HOME: home, LANEA_CAP_USD: "35", LANEA_LINE_ITEM: "lanea-cli" }, approveArgs).code).toBe(0);
+    const row = JSON.parse(readFileSync(join(home, ".capy/drive/captain-gstack-evals/ledger/lanea-cli.jsonl"), "utf8"));
+    expect(row).toMatchObject({ type: "approval", item: "lanea-cli", cap_usd: 35 });
+  });
+  test("project refuses a ledger approved for another cap or item, and shows nothing remaining once it is closed", () => {
+    const ledger = join(work, "rerun.jsonl");
+    const rows = [{ type: "approval", item: "rerun", cap_usd: 35, words: ["Rec"], by: "x", source: "y" }, { type: "settle", reservation_id: "a", usd: 10 }];
+    const project = (cap: string, item: string) => spawn({ ...shell, LANEA_LEDGER: ledger, LANEA_CAP_USD: cap, LANEA_LINE_ITEM: item }, ["project"]);
+    writeFileSync(ledger, rows.map((r) => JSON.stringify(r) + "\n").join(""));
+    for (const [cap, item] of [["130", "rerun"], ["35", "lanea-quick"]] as const) {
+      const r = project(cap, item);
+      expect(r.code).not.toBe(0);
+      expect(r.err).toContain("E_LEDGER_MISSING");
+    }
+    expect(JSON.parse(project("35", "rerun").out).ledger).toMatchObject({ settled: 10, remaining: 25 });
+    writeFileSync(ledger, [...rows, { type: "close", reason: "moved" }].map((r) => JSON.stringify(r) + "\n").join(""));
+    expect(JSON.parse(project("35", "rerun").out).ledger.remaining).toBe(0);
+  });
+  test("project --fake reads the fake approval its own run wrote", () => {
+    const out = join(work, "runs-fake-project");
+    new Ledger(join(out, "ledger-fake.jsonl"), 10, "t", undefined, true).approve({ words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" });
+    const r = cli("project", "--fake", "--out", out);
+    expect(r.err).not.toContain("E_LEDGER_MISSING");
+    expect(r.code).toBe(0);
   });
   test("a paid run still needs --prereg", () => {
     expect(cli("run", "--stage", "S1").err).toContain("E_PREREG");
