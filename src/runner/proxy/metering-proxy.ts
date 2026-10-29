@@ -84,14 +84,21 @@ const LOCK_EX_NB = 2 | 4;
 function lockJournal(journal: string): number {
   const lock = `${journal}.lock`;
   libc ??= dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
-  const fd = openSync(lock, "a", 0o600);
+  const fd = openSync(lock, "a+", 0o600);
   if (libc.symbols.flock(fd, LOCK_EX_NB) !== 0) {
+    const holder = Buffer.alloc(16);
+    const read = readSync(fd, holder, 0, holder.length, 0);
     closeSync(fd);
-    throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by another proxy or reconcile (process ${readFileSync(lock, "utf8").trim() || "unknown"}) through ${lock}; stop that proxy or let its reconcile finish`);
+    throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by another proxy or reconcile (process ${holder.subarray(0, read).toString("utf8").trim() || "unknown"}) through ${lock}; stop that proxy or let its reconcile finish`);
   }
-  ftruncateSync(fd, 0);
-  writeSync(fd, String(process.pid));
-  return fd;
+  try {
+    ftruncateSync(fd, 0);
+    writeSync(fd, String(process.pid));
+    return fd;
+  } catch (e) {
+    closeSync(fd);
+    throw e;
+  }
 }
 
 /** The preregistered retry budget per call: at most attempts sends, and no new attempt after elapsed_ms. */

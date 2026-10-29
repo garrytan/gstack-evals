@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -868,6 +868,19 @@ describe("unknown sends and reconcile", () => {
     holder.kill(9);
     await holder.exited;
     expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
+  });
+
+  test.skipIf(!existsSync("/dev/full"))("a lock whose holder pid cannot be recorded, as on a full disk, is released, not stranded", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-full-lock-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    appendFileSync(path, "");
+    symlinkSync("/dev/full", `${path}.lock`);
+    for (let i = 0; i < 2; i++) {
+      const error = await reconcileJournal(path, new FakeLedger()).then(() => null, (e: Error) => e);
+      expect(error?.message).not.toContain("held by another proxy or reconcile");
+      expect(error).not.toBeNull();
+    }
   });
 
   test("a proxy that fails to start after taking the journal lock releases it", async () => {
