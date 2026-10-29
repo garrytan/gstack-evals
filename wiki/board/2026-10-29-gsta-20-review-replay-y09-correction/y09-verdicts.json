@@ -1,0 +1,628 @@
+{
+  "case": "y09",
+  "adjudicator": "GSTA-20 (anthropic/claude-opus-5-5), by hand, blind to model and arm",
+  "criteria": "judgePrompt in quick/replay/score.ts at 7f8fffd, against the defect text in y09-case.json",
+  "categories": {
+    "exit": {
+      "names_defect": true,
+      "reason": "States that a restoreState failure kills the server: the catch closes newBrowser while its exit-on-disconnect handler is attached.",
+      "count": 10
+    },
+    "rollback": {
+      "names_defect": true,
+      "reason": "States that a restoreState failure leaves this.browser/this.context on the closed new browser and the old headless browser orphaned.",
+      "count": 20
+    },
+    "both": {
+      "names_defect": true,
+      "reason": "States both halves: the exit handler fires on the catch close, and the manager is not rolled back to the old browser.",
+      "count": 24
+    },
+    "window_close": {
+      "names_defect": false,
+      "reason": "A user closing the headed window fires the exit handler: a different trigger, not a restore failure.",
+      "count": 12
+    },
+    "concurrency": {
+      "names_defect": false,
+      "reason": "Overlapping handoff calls or commands during the swap: a different failure.",
+      "count": 9
+    },
+    "unused_old_context": {
+      "names_defect": false,
+      "reason": "Notes the unused oldContext or a missing rollback line without stating what a restore failure does.",
+      "count": 11
+    },
+    "tests_only": {
+      "names_defect": false,
+      "reason": "Says a failure path is untested without stating this failure.",
+      "count": 3
+    },
+    "error_strings": {
+      "names_defect": false,
+      "reason": "Failures returned as strings with HTTP 200 and a failure-counter reset: a different problem.",
+      "count": 4
+    },
+    "close_and_leaks": {
+      "names_defect": false,
+      "reason": "The close() timer or fire-and-forget closes leaking processes: a different problem.",
+      "count": 17
+    },
+    "literals": {
+      "names_defect": false,
+      "reason": "Bare numeric literals.",
+      "count": 6
+    },
+    "other": {
+      "names_defect": false,
+      "reason": "A different problem in the same file (state machine, restore fidelity, storage origin, performance, docs, context options).",
+      "count": 25
+    }
+  },
+  "verdicts": {
+    "bb1bf1839ed4d07a": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "a7dd68f76e33aade": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "8d8c0c53f54d44fe": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "e5e2f199e515faee": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "46b8d4fa947d3e7f": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "9836a669a506bbbe": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "05c368a64747c213": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "22319ce575bed666": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "e86f53ef11613474": {
+      "names_defect": false,
+      "category": "literals"
+    },
+    "f815cac4946076a4": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "42ec915073ff0a19": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "e8efb958f77e1989": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "e3a49b5085e9ba63": {
+      "names_defect": false,
+      "category": "error_strings"
+    },
+    "6a231aa8c88c69f9": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "1a410437a4e7990d": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "e6f6103afe4b3433": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "6bb25dca2b3ceab1": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "828db5a827c6d541": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "04bc8562c1dd3b32": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "7c939133f46ab4b2": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "929e26666eb00a15": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "9a29015294aee1a2": {
+      "names_defect": false,
+      "category": "literals"
+    },
+    "afcf2cca53744dfd": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "5e8dc8ee7eb06f27": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "64001d7ef7cd82f6": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "41ddae5f9f345dee": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "798e31096324dd55": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "56cf88db6d49ab03": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "9aa8804ebade54d8": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "a5e02118b89856ff": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "bcfd257a3e263888": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "3d39d2ca9c6016b3": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "5b8441042593cc68": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "4b2c9d4c197852a8": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "d7e506bbe407e0af": {
+      "names_defect": false,
+      "category": "error_strings"
+    },
+    "a7c772878837689b": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "49fb6f73ba024629": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "719f35ae03f8d63b": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "2c878c32113fb38e": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "8ce86e948c7e5340": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "e49e175c054b4b7f": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "462ea481220f4ae5": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "92944019ebcbf36d": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "c827561c1fbe164a": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "608f868b31a1d700": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "df41e420712d90d4": {
+      "names_defect": false,
+      "category": "tests_only"
+    },
+    "1308e57c4429e094": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "9a5120c62eb1f53d": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "724636b98054a87b": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "3fefa8b4081832a8": {
+      "names_defect": false,
+      "category": "literals"
+    },
+    "305ec887b2f2e471": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "51bc55039c403aae": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "e7f628f9e08823b8": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "5604513012009f58": {
+      "names_defect": false,
+      "category": "literals"
+    },
+    "af231f5b27879af1": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "534ede6d0d665a03": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "fdcba05c7be4b91f": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "95a3e51f16b5d49d": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "0a40ce86d7aab6ee": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "dd5305118e93bbae": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "009194e5bc7f18c1": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "3c2367c04265d143": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "75ce6c30be82d22c": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "93a844e743dcdf9d": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "2b9185fe421251da": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "6f16479b0fb9ff14": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "2b3f9d90e31fa4cf": {
+      "names_defect": false,
+      "category": "tests_only"
+    },
+    "1fdb7142dbba4244": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "9a2a09a43413fed0": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "6bdcd7a6a0c42718": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "ec4fb2cbadd3f440": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "383bb6dc0ef81ee8": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "7afdfb04b5591eff": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "78150522eb48b9a7": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "13bf743c7fb49067": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "2daae4b4bbd49015": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "7147146c54c40cfe": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "a98ebeac154e8e5a": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "dae2d3ca607f0743": {
+      "names_defect": false,
+      "category": "tests_only"
+    },
+    "cd119c5c3f8f7259": {
+      "names_defect": false,
+      "category": "literals"
+    },
+    "e361f5fa93539e78": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "07829575266dcdbf": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "0833f8f45ebe04e4": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "c7fd3a385b87e939": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "fe28c2f7b30494af": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "e78d7545c9b24fca": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "ce747ba731a52ff9": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "a0e2d72f4bde220b": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "74de3f020b4abcab": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "2a0d25f1c4d951ad": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "b6510ff9d7d4b4f0": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "d81be3c832c5006b": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "ec6eeaeb0f21a284": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "00ac66c23ea3f935": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "3ba37986eb61f6a6": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "65378c09da479cc2": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "273f196ca9e57fdd": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "d4bb6b3654656d58": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "e925a8f5c6b05a8a": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "16858300d25db485": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "144580a018a76b01": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "fe63ad09d7322dbc": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "27da3a57f0478fae": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "056e88d3869b293c": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "5367cff25db038d3": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "c7d53bb228528211": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "4a927a6263dc8d8a": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "87dd9ebee988ae7c": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "c7b3053f3f7aea6c": {
+      "names_defect": false,
+      "category": "error_strings"
+    },
+    "a88cce8ccd9dc050": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "61391982b9dcc138": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "d2167dc65d79a0d2": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "b0f7d17173a1c6ed": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "ffeb419f3f34bd69": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "46858df5c21fce00": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "caf07c568ff32c5f": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "6d62ab71e3085979": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "dd7157141a3c1503": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "b1899b3db631e5b7": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "4b1310966251d186": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "930c1cedc2d8da85": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "14692cbed154e470": {
+      "names_defect": true,
+      "category": "exit"
+    },
+    "67b45bff7273e403": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "add901251401763f": {
+      "names_defect": false,
+      "category": "literals"
+    },
+    "8a3caa86a69f89d0": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "7fe1673e07495e4a": {
+      "names_defect": false,
+      "category": "error_strings"
+    },
+    "ca20d44f2f8eef65": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "827b6fd517ec2361": {
+      "names_defect": false,
+      "category": "concurrency"
+    },
+    "a73e943ce6acbe24": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    },
+    "c16de2bbb5c33951": {
+      "names_defect": false,
+      "category": "unused_old_context"
+    },
+    "6d4475337e12aea1": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "36513c26f6ad0b54": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "ca03166e97b65ee0": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "0d2936b5ef8bd0ff": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "fa77bab623c12165": {
+      "names_defect": true,
+      "category": "rollback"
+    },
+    "a48dcc7261fc74c2": {
+      "names_defect": false,
+      "category": "other"
+    },
+    "c49c06628a96e51b": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "3aeefa6c03d7c9ac": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "de9c7b335fe5d7de": {
+      "names_defect": false,
+      "category": "window_close"
+    },
+    "c206b7a61466d4f9": {
+      "names_defect": true,
+      "category": "both"
+    },
+    "7d58cc9b38eca13f": {
+      "names_defect": false,
+      "category": "close_and_leaks"
+    }
+  }
+}

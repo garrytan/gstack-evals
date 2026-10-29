@@ -7,7 +7,7 @@ author: GSTA-11
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-28
-status: done
+status: superseded
 links:
   - 2026-10-28-gsta-11-review-replay-prereg
   - https://github.com/garrytan/gstack-evals/pull/5
