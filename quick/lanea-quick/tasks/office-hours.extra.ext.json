@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "note": "GSTA-13 additions to gstack#3550's office-hours set (09fc5124). They cover the two blocks the diet moved into on-demand sections: the accepted Phase 3.5 second opinion (sections/second-opinion.md) and the Phase 4.25 visual step for a UI approach (sections/visual-design.md). Written before any run.",
+  "tasks": {
+    "second-opinion-accepted": {
+      "interactive": true,
+      "user": {
+        "persona": "Dana's friend: a first-time founder with no users yet, short direct answers, never asks for code.",
+        "replies": {
+          "stage": "Pre-product. Nobody uses it yet.",
+          "demand": "Dana pays a virtual assistant $40 a month to do this by hand and said she would pay me instead.",
+          "status_quo": "Copying rows between spreadsheets by hand, about four hours a month per shop.",
+          "specificity": "Dana, who runs a two-person candle shop.",
+          "premises": "I agree with the premises.",
+          "landscape_search": "Skip. Keep this session private.",
+          "second_opinion": "Yes, get a second opinion.",
+          "approach": "Not yet. I want to think about the approaches; stop here and don't write anything."
+        }
+      },
+      "judge": "Runs the second opinion the user accepted and presents it under the SECOND OPINION header, then stops before any design doc."
+    },
+    "visual-sketch-accepted": {
+      "interactive": true,
+      "user": {
+        "persona": "Dana's friend: a first-time founder with no users yet, short direct answers, never asks for code.",
+        "replies": {
+          "stage": "Pre-product. Nobody uses it yet.",
+          "demand": "Dana pays a virtual assistant $40 a month to do this by hand and said she would pay me instead.",
+          "status_quo": "Copying rows between spreadsheets by hand, about four hours a month per shop.",
+          "specificity": "Dana, who runs a two-person candle shop.",
+          "premises": "I agree with the premises.",
+          "landscape_search": "Skip. Keep this session private.",
+          "second_opinion": "No, proceed to alternatives.",
+          "approach": "The web page where shop owners drag in their CSVs and map the columns on screen. I approve that approach.",
+          "visual": "Yes, show me the sketch.",
+          "design_doc": "Not yet. Stop here and don't write the design doc."
+        }
+      },
+      "judge": "For the approved UI approach, runs Phase 4.25. The task's setup removes gstack's design binary, so the skill takes its HTML wireframe path and writes sketch.html."
+    }
+  }
+}
