@@ -22,7 +22,7 @@ class Simulator:
     def pick(self, question: dict) -> tuple[str, str]:
         for option in question.get("options", []) or []:
             label = option.get("label", "")
-            text = (label + " " + option.get("description", "")).lower()
+            text = (label + " " + option.get("description", "")).lower().replace("not recommended", "")
             if any(marker in text for marker in self.persona["recommended_markers"]):
                 return label, "recommended_option"
         return self.persona["fallback"], "fallback"

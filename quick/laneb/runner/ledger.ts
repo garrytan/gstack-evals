@@ -62,7 +62,7 @@ export class Ledger {
 
   approve(capUsd: number, extra: Record<string, unknown>) {
     if (readRows(this.path).some((r) => r.kind === "approval")) throw new Error("approval row already present");
-    appendDurable(this.path, { ts: new Date().toISOString(), item: this.item, kind: "approval", id: "approval", usd_micros: toMicros(capUsd), ...extra });
+    appendDurable(this.path, { ...extra, ts: new Date().toISOString(), item: this.item, kind: "approval", id: "approval", usd_micros: toMicros(capUsd) });
   }
 
   reserve(id: string, usdMicros: number, meta: Record<string, unknown> = {}): { ok: true; existing: boolean } | { ok: false; reason: string; totals: Totals } {
@@ -74,7 +74,7 @@ export class Ledger {
     }
     const t = totals(rows);
     if (t.settledMicros + t.openReservedMicros + usdMicros > t.capMicros) return { ok: false, reason: "cap", totals: t };
-    appendDurable(this.path, { ts: new Date().toISOString(), item: this.item, kind: "reserve", id, usd_micros: usdMicros, ...meta });
+    appendDurable(this.path, { ...meta, ts: new Date().toISOString(), item: this.item, kind: "reserve", id, usd_micros: usdMicros });
     return { ok: true, existing: false };
   }
 
@@ -83,9 +83,28 @@ export class Ledger {
     const reserve = rows.find((r) => r.kind === "reserve" && r.id === id);
     if (!reserve) return { ok: false, reason: "no reserve for id" };
     if (rows.some((r) => r.kind === "settle" && r.id === id)) return { ok: false, reason: "already settled" };
-    appendDurable(this.path, { ts: new Date().toISOString(), item: this.item, kind: "settle", id, usd_micros: usdMicros, reserved_micros: reserve.usd_micros, over_reserve: usdMicros > reserve.usd_micros, ...meta });
+    appendDurable(this.path, { ...meta, ts: new Date().toISOString(), item: this.item, kind: "settle", id, usd_micros: usdMicros, reserved_micros: reserve.usd_micros, over_reserve: usdMicros > reserve.usd_micros });
     return { ok: true };
   }
+}
+
+// Settles every open reserve under prefix whose session has a row in the proxy's sessions file, at that row's spend.
+// The proxy writes the row once the session's spend is final and before it calls the ledger, so the row is the amount
+// a failed settle would have written. Reserves with no row stay open and are listed: they keep counting at their full
+// amount against the cap.
+export function reconcile(ledger: Ledger, sessionRows: Record<string, any>[], prefix: string) {
+  const rows = new Map(sessionRows.filter((r) => r.closed_at && Number.isInteger(r.spent_micros) && r.spent_micros >= 0).map((r) => [prefix + r.id, r]));
+  const settled: { id: string; usd_micros: number }[] = [];
+  const leftOpen: string[] = [];
+  for (const id of ledger.status().openIds) {
+    if (!id.startsWith(prefix)) continue;
+    const row = rows.get(id);
+    if (!row) { leftOpen.push(id); continue; }
+    const out = ledger.settle(id, row.spent_micros, { trial: row.trial, model: row.model, usage: row.usage, requests: row.requests, refused: row.refused, close_reason: row.close_reason, reconciled: true });
+    if (out.ok) settled.push({ id, usd_micros: row.spent_micros });
+    else leftOpen.push(id);
+  }
+  return { settled, leftOpen };
 }
 
 // Service mode: bun ledger.ts serve --path <jsonl> --item <name> [--port 9911]
@@ -133,11 +152,18 @@ if (import.meta.main) {
   const [cmd, ...rest] = Bun.argv.slice(2);
   const args = parseArgs(rest);
   if (cmd === "serve") await serve(args);
-  else if (cmd === "status") {
+  else if (cmd === "reconcile") {
+    if (!args.sessions || args.prefix === undefined) {
+      console.error("E_USAGE usage: bun ledger.ts reconcile --path <jsonl> --item <name> --sessions <proxy-sessions.jsonl> --prefix <ledger prefix>");
+      process.exit(2);
+    }
+    const out = reconcile(new Ledger(args.path, args.item), readRows(args.sessions) as any[], args.prefix);
+    console.log(JSON.stringify({ settled: out.settled.length, settled_usd: fromMicros(out.settled.reduce((x, r) => x + r.usd_micros, 0)), left_open: out.leftOpen }));
+  } else if (cmd === "status") {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("E_USAGE usage: bun ledger.ts serve|status --path <jsonl> --item <name> [--port N]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status|reconcile --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>]");
     process.exit(2);
   }
 }

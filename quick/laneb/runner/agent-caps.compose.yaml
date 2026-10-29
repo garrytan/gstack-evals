@@ -1,0 +1,7 @@
+# Lane B: Harbor's extra_docker_compose overlay for every trial (grid.ts). Drops NET_RAW and NET_ADMIN from
+# the main container, where the agent and the shared verifier run; Harbor's egress sidecar keeps its own.
+services:
+  main:
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN

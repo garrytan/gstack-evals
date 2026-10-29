@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fake ssh for launch.test.ts: plays vm-run.sh. It writes a session row and a trial file and runs until
+# launch.sh writes work/run/STOP, then checks the ledger service is still reachable, as a session settle
+# would, and writes out/vm-run.exit last, as vm-run.sh does. With DROP_SSH set, the connection drops
+# while the batch runs on, so no out/vm-run.exit appears. With FINISH set to an exit code, the batch ends
+# on its own with that code.
+echo "batch started" >> "$EVENTS"
+mkdir -p "$VM/work/run/out" "$VM/work/run/jobs/j/t__1"
+echo '{"id":"s-1","trial":"t__1__env","spent_micros":1234,"ok_responses":1,"closed_at":"x"}' > "$VM/work/run/out/proxy-sessions.jsonl"
+echo 1 > "$VM/work/run/jobs/j/t__1/reward.txt"
+touch "$VM/started"
+if [ -n "${DROP_SSH:-}" ]; then echo "ssh dropped" >> "$EVENTS"; exit 255; fi
+rc=${FINISH:-130}
+if [ -z "${FINISH:-}" ]; then
+  for _ in $(seq 1 200); do [ -e "$VM/work/run/STOP" ] && break; sleep 0.1; done
+fi
+if curl -fsS "127.0.0.1:$LEDGER_PORT/status" > "$VM/work/run/out/ledger-at-close.json"; then echo "ledger up at close" >> "$EVENTS"; else echo "ledger down at close" >> "$EVENTS"; fi
+echo "batch ended" >> "$EVENTS"
+echo "$rc" > "$VM/work/run/out/vm-run.exit"
+exit "$rc"

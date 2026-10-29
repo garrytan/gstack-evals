@@ -290,14 +290,14 @@ export function lineCoverage(lines: readonly LockLine[], runs: readonly OldArmRu
 export const touched = (line: Pick<LockLine, "file">, fate: LineFate) => fate.class === "rewritten" || fate.class === "removed" || (fate.class === "moved" && line.file === "SKILL.md");
 
 /**
- * Each line's id mapped to the ids of every copy of its text in its file. lineFates pairs a file's copies of one line
- * by position, so it cannot tell which copy an edit touched: an edit to any copy counts against them all.
+ * Each line's id mapped to the ids of every copy of its text, in any file. lineFates pairs the copies of one line
+ * across all files, by file and position, so it cannot tell which copy an edit touched: an edit to any copy counts
+ * against them all.
  */
 function copiesOf(lines: readonly LockLine[]): Map<string, string[]> {
-  const text = (l: LockLine) => l.file + "\n" + l.text_sha256;
   const byText = new Map<string, string[]>();
-  for (const l of lines) byText.set(text(l), [...(byText.get(text(l)) ?? []), l.id]);
-  return new Map(lines.map((l) => [l.id, byText.get(text(l))!]));
+  for (const l of lines) byText.set(l.text_sha256, [...(byText.get(l.text_sha256) ?? []), l.id]);
+  return new Map(lines.map((l) => [l.id, byText.get(l.text_sha256)!]));
 }
 
 /** The lines the edit touched that no task covers: the gap the verdict lists, whatever the gates decide. */

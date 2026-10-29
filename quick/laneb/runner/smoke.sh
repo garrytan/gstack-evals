@@ -39,6 +39,6 @@ for arm in ${ARMS:-none skill}; do
     -a laneb_agent:LanebAgent -m anthropic/claude-opus-5-5 --base-url "http://$gateway:8787" \
     --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$armdir/$arm.tar" \
     --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=${REPO_DIR-/testbed} --ak workdir=${WORKDIR-/testbed} \
-    -e docker -o "$out/jobs" --job-name "smoke-$arm-${NETWORK:-allowlist}-$(date +%s)"
+    -e docker --extra-docker-compose "$here/agent-caps.compose.yaml" -o "$out/jobs" --job-name "smoke-$arm-${NETWORK:-allowlist}-$(date +%s)"
 done
 bun "$here/ledger.ts" status --path "$out/ledger.jsonl" --item smoke

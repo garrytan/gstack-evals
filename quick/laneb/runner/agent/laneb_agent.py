@@ -11,7 +11,13 @@ Per trial it:
   3. sends the arm-neutral prompt wrapper around the task instruction,
   4. answers AskUserQuestion from an evaluator-side simulator,
   5. always: stops Claude Code in the container, exports the patch to
-     /logs/artifacts/, and closes the session (which settles the ledger row).
+     /logs/artifacts/, closes the session (which settles the ledger row), and
+     writes laneb-summary.json, even when one of those steps fails.
+
+Evaluator evidence (the simulator log, the SDK message log, process lists and
+the summary) goes to evaluator/ beside the trial's agent/ directory. Harbor
+bind-mounts agent/ read-write at /logs/agent, so nothing the analysis trusts is
+written there.
 """
 
 import asyncio
@@ -21,6 +27,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import uuid
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
@@ -64,7 +71,54 @@ ALIAS_ENV = (
 
 
 class LedgerCapStop(Exception):
-    """The ledger refused this session's reserve: the line item's cap is reached. Never retried."""
+    """The ledger or the batch cap refused this session's reserve. Never retried."""
+
+
+class LanebInfraError(Exception):
+    """No model response reached the agent (container, proxy or provider failure). The only agent error Harbor retries."""
+
+
+class HttpStatusError(RuntimeError):
+    def __init__(self, url: str, code: int, body):
+        super().__init__(f"{url} -> {code}: {str(body)[:500]}")
+        self.code = code
+        self.body = body
+
+
+# Linux capability bits: CAP_NET_ADMIN is 12, CAP_NET_RAW is 13. Either one lets a process set SO_MARK and pass
+# the egress sidecar's own mark; CAP_NET_RAW also opens AF_PACKET sockets below its rules.
+NET_CAPS = {"CAP_NET_ADMIN": 12, "CAP_NET_RAW": 13}
+
+PROBE_TIMEOUT_S = 60
+
+# A session open that fails with a timeout, a dropped connection or a 5xx (the proxy's ledger reserve failed and may
+# have landed) is sent again with the same open_key, so the proxy hands back the session it may already have opened,
+# and the ledger reuses a reserve that landed, instead of reserving a second one.
+OPEN_ATTEMPTS = 3
+OPEN_RETRY_S = 2
+
+KILL_CLAUDE = "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = claude ] && kill -9 ${p##*/} 2>/dev/null; done; true"
+LIST_PROCESSES = "for p in /proc/[0-9]*; do [ \"${p##*/}\" = $$ ] && continue; printf '%s\\t%s\\t' \"${p##*/}\" \"$(cat $p/comm 2>/dev/null)\"; tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done"
+
+
+def net_caps_held(status: str) -> list[str]:
+    """Names of the network capabilities still present in a /proc/<pid>/status text's effective or bounding set."""
+    held = set()
+    for line in status.splitlines():
+        key, _, value = line.partition(":")
+        if key in ("CapEff", "CapBnd"):
+            mask = int(value.strip(), 16)
+            held.update(name for name, bit in NET_CAPS.items() if mask >> bit & 1)
+    return sorted(held)
+
+
+def parse_processes(text: str) -> dict[str, str]:
+    out = {}
+    for line in text.splitlines():
+        pid, _, rest = line.partition("\t")
+        if pid.isdigit():
+            out[pid] = rest.replace("\t", " ").strip()
+    return out
 
 
 _DIGESTS: dict[tuple[str, int, int], str] = {}
@@ -89,7 +143,12 @@ def post_json(url: str, body: dict, timeout: float = 30) -> dict:
         with urllib.request.urlopen(req, timeout=timeout) as res:
             return json.loads(res.read() or b"{}")
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"{url} -> {e.code}: {e.read()[:500]!r}") from None
+        raw = e.read()[:2000]
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            parsed = raw
+        raise HttpStatusError(url, e.code, parsed) from None
 
 
 class LanebOptions(ClaudeCodeOptions):
@@ -105,6 +164,7 @@ class LanebOptions(ClaudeCodeOptions):
     workdir: str = Field(default="", description="Claude Code working directory in the container; empty means the image's WORKDIR.")
     max_output_tokens: int = Field(default=32000, description="CLAUDE_CODE_MAX_OUTPUT_TOKENS; Claude Code otherwise asks for 128k, whose worst case exceeds the cheap cells' caps.")
     sdk_max_turns: int = Field(default=200, description="Hard turn ceiling; the session cap and agent timeout bind first.")
+    close_timeout_sec: float = Field(default=120, description="Session close timeout: above the proxy's 30 s drain plus its settle retries.")
 
 
 class LanebAgent(ClaudeCode):
@@ -118,14 +178,21 @@ class LanebAgent(ClaudeCode):
     def populate_context_post_run(self, context: AgentContext) -> None:
         return
 
+    def _evaluator_dir(self) -> Path:
+        return self.logs_dir.parent / "evaluator"
+
     def _container_id(self, environment: BaseEnvironment) -> str:
         project = _sanitize_docker_compose_project_name(environment.session_id)
-        out = subprocess.check_output(
-            ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}", "--filter", "label=com.docker.compose.service=main"],
-            text=True,
-        ).split()
+        try:
+            out = subprocess.check_output(
+                ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}", "--filter", "label=com.docker.compose.service=main"],
+                text=True,
+                timeout=PROBE_TIMEOUT_S,
+            ).split()
+        except (subprocess.SubprocessError, OSError) as e:
+            raise LanebInfraError(f"docker ps failed for {project}: {e}") from None
         if len(out) != 1:
-            raise RuntimeError(f"expected one main container for {project}, found {out}")
+            raise LanebInfraError(f"expected one main container for {project}, found {out}")
         return out[0]
 
     def _exec(self, container: str, script: str, stdin: bytes | None = None, timeout: float = 300) -> subprocess.CompletedProcess:
@@ -133,18 +200,43 @@ class LanebAgent(ClaudeCode):
 
     async def setup(self, environment: BaseEnvironment) -> None:
         await super().setup(environment)
-        container = self._container_id(environment)
+        container = await asyncio.to_thread(self._container_id, environment)
         self._arm_info = await asyncio.to_thread(self._inject_arm, container)
+        await asyncio.to_thread(self._preflight, container)
+
+    def _preflight(self, container: str) -> None:
+        """Before any model call: the agent's container holds no network capability, and the processes running now are recorded."""
+        evdir = self._evaluator_dir()
+        evdir.mkdir(parents=True, exist_ok=True)
+        try:
+            res = self._exec(container, "cat /proc/self/status", timeout=PROBE_TIMEOUT_S)
+        except (subprocess.SubprocessError, OSError) as e:
+            raise LanebInfraError(f"preflight probe failed: {e}") from None
+        if res.returncode != 0:
+            raise LanebInfraError(f"preflight probe failed: {res.stderr[-300:]!r}")
+        held = net_caps_held(res.stdout.decode(errors="replace"))
+        if held:
+            raise RuntimeError(f"preflight: the agent container must drop NET_RAW and NET_ADMIN (cap_drop in the job's extra compose file); still held: {held!r}")
+        try:
+            listing = self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S)
+        except (subprocess.SubprocessError, OSError) as e:
+            raise LanebInfraError(f"preflight process listing failed: {e}") from None
+        if listing.returncode != 0:
+            raise LanebInfraError(f"preflight process listing failed: {listing.stderr[-300:]!r}")
+        (evdir / "processes-before.tsv").write_bytes(listing.stdout)
 
     def _inject_arm(self, container: str) -> dict:
         tar = Path(self.options.arm_tar)
         digest = sha256_file(tar)
         if self.options.arm_sha256 and digest != self.options.arm_sha256:
             raise RuntimeError(f"arm {self.options.arm}: tar sha256 {digest} is not the preregistered {self.options.arm_sha256}")
-        with tar.open("rb") as f:
-            res = subprocess.run(["docker", "exec", "-i", container, "sh", "-c", "mkdir -p /root && tar -x -C /root"], stdin=f, capture_output=True, timeout=600)
+        try:
+            with tar.open("rb") as f:
+                res = subprocess.run(["docker", "exec", "-i", container, "sh", "-c", "mkdir -p /root && tar -x -C /root"], stdin=f, capture_output=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            raise LanebInfraError("arm extract timed out") from None
         if res.returncode != 0:
-            raise RuntimeError(f"arm extract failed: {res.stderr[-500:]!r}")
+            raise LanebInfraError(f"arm extract failed: {res.stderr[-500:]!r}")
         listing = self._exec(container, "ls -1 /root/.claude/skills 2>/dev/null | sort").stdout.decode().split()
         return {"event": "arm", "arm": self.options.arm, "tar_sha256": digest, "skills_dirs": len(listing)}
 
@@ -161,12 +253,13 @@ class LanebAgent(ClaudeCode):
         return {"event": "patch", "rc": res.returncode, "bytes": res.stdout.decode().strip(), "stderr": res.stderr.decode()[-300:]}
 
     async def run(self, instruction: str, environment: BaseEnvironment, context: AgentContext) -> None:
-        self.logs_dir.mkdir(parents=True, exist_ok=True)
+        evdir = self._evaluator_dir()
+        evdir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
-        sim = Simulator(persona, self.logs_dir / "usersim-events.jsonl")
+        sim = Simulator(persona, evdir / "usersim-events.jsonl")
         log = sim.log
 
-        container = self._container_id(environment)
+        container = await asyncio.to_thread(self._container_id, environment)
         arm_info = self._arm_info
         log(arm_info)
 
@@ -175,78 +268,87 @@ class LanebAgent(ClaudeCode):
         if not base_url:
             raise RuntimeError("laneb agent needs --base-url pointing at the metering proxy")
 
-        try:
-            session = post_json(
-                self.options.control_url + "/sessions",
-                {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
-                 "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}},
-            )
-        except RuntimeError as e:
-            if "-> 409" in str(e):
-                log({"event": "ledger_cap_stop", "message": str(e)[:300]})
-                raise LedgerCapStop(str(e)) from None
-            raise
+        open_body = {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
+                     "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}, "open_key": uuid.uuid4().hex}
+        for attempt in range(1, OPEN_ATTEMPTS + 1):
+            try:
+                session = await asyncio.to_thread(post_json, self.options.control_url + "/sessions", open_body)
+                break
+            except HttpStatusError as e:
+                if e.code == 409:
+                    log({"event": "ledger_cap_stop", "message": str(e)[:300]})
+                    raise LedgerCapStop(str(e)) from None
+                if e.code < 500 or attempt == OPEN_ATTEMPTS:
+                    raise LanebInfraError(f"session open failed: {e}") from None
+                log({"event": "session_open_retry", "attempt": attempt, "message": str(e)[:300]})
+                await asyncio.sleep(OPEN_RETRY_S)
+            except Exception as e:
+                if attempt == OPEN_ATTEMPTS:
+                    raise LanebInfraError(f"session open failed after {attempt} attempts: {type(e).__name__}: {e}") from None
+                log({"event": "session_open_retry", "attempt": attempt, "message": f"{type(e).__name__}: {e}"[:300]})
+                await asyncio.sleep(OPEN_RETRY_S)
         log({"event": "session_open", "session": session["id"], "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd})
 
-        model = self._resolved_model_name() or self.options.upstream_model
-        env = {
-            "ANTHROPIC_API_KEY": session["token"],
-            "ANTHROPIC_BASE_URL": base_url,
-            "ANTHROPIC_MODEL": model,
-            **{k: model for k in ALIAS_ENV},
-            "CLAUDE_CONFIG_DIR": "/root/.claude",
-            "HOME": "/root",
-            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-            "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
-            "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(self.options.max_output_tokens),
-            "DISABLE_AUTOUPDATER": "1",
-            "DISABLE_TELEMETRY": "1",
-            "DISABLE_ERROR_REPORTING": "1",
-            "IS_SANDBOX": "1",
-        }
-
-        wrapper_text = Path(self.options.wrapper_path).read_text()
-        prompt_text = wrapper_text.replace("{instruction}", instruction)
-        log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest()})
-
-        host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
-        wrapper = host_dir / "claude-in-container"
-        forward = " ".join(f"-e {name}" for name in FORWARDED_ENV)
-        workdir = f"-w {self.options.workdir} " if self.options.workdir else ""
-        wrapper.write_text(f"#!/bin/sh\nexec docker exec -i {workdir}{forward} {container} claude \"$@\"\n")
-        wrapper.chmod(0o755)
-
-        async def can_use_tool(tool_name, tool_input, ctx):
-            if tool_name == "AskUserQuestion":
-                answers = sim.answer(tool_input.get("questions", []))
-                return PermissionResultAllow(updated_input={**tool_input, "answers": answers})
-            return PermissionResultAllow(updated_input=tool_input)
-
-        async def keep_open(input_data, tool_use_id, ctx):
-            return {"continue_": True}
-
-        async def prompt():
-            yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
-
-        disallowed = ["WebSearch", "WebFetch"]
-        options = ClaudeAgentOptions(
-            cli_path=str(wrapper),
-            cwd=str(host_dir),
-            env=env,
-            can_use_tool=can_use_tool,
-            hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[keep_open])]},
-            permission_mode="default",
-            model=model,
-            setting_sources=["user", "project"],
-            max_turns=self.options.sdk_max_turns,
-            disallowed_tools=disallowed,
-        )
-        log({"event": "disallowed_tools", "tools": disallowed})
         started = time.time()
         result = {}
         error = None
+        summary = None
         try:
-            with (self.logs_dir / "sdk-messages.jsonl").open("a") as out:
+            model = self._resolved_model_name() or self.options.upstream_model
+            env = {
+                "ANTHROPIC_API_KEY": session["token"],
+                "ANTHROPIC_BASE_URL": base_url,
+                "ANTHROPIC_MODEL": model,
+                **{k: model for k in ALIAS_ENV},
+                "CLAUDE_CONFIG_DIR": "/root/.claude",
+                "HOME": "/root",
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+                "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(self.options.max_output_tokens),
+                "DISABLE_AUTOUPDATER": "1",
+                "DISABLE_TELEMETRY": "1",
+                "DISABLE_ERROR_REPORTING": "1",
+                "IS_SANDBOX": "1",
+            }
+
+            wrapper_text = Path(self.options.wrapper_path).read_text()
+            prompt_text = wrapper_text.replace("{instruction}", instruction)
+            log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest()})
+
+            host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
+            wrapper = host_dir / "claude-in-container"
+            forward = " ".join(f"-e {name}" for name in FORWARDED_ENV)
+            workdir = f"-w {self.options.workdir} " if self.options.workdir else ""
+            wrapper.write_text(f"#!/bin/sh\nexec docker exec -i {workdir}{forward} {container} claude \"$@\"\n")
+            wrapper.chmod(0o755)
+
+            async def can_use_tool(tool_name, tool_input, ctx):
+                if tool_name == "AskUserQuestion":
+                    answers = sim.answer(tool_input.get("questions", []))
+                    return PermissionResultAllow(updated_input={**tool_input, "answers": answers})
+                return PermissionResultAllow(updated_input=tool_input)
+
+            async def keep_open(input_data, tool_use_id, ctx):
+                return {"continue_": True}
+
+            async def prompt():
+                yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
+
+            disallowed = ["WebSearch", "WebFetch"]
+            options = ClaudeAgentOptions(
+                cli_path=str(wrapper),
+                cwd=str(host_dir),
+                env=env,
+                can_use_tool=can_use_tool,
+                hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[keep_open])]},
+                permission_mode="default",
+                model=model,
+                setting_sources=["user", "project"],
+                max_turns=self.options.sdk_max_turns,
+                disallowed_tools=disallowed,
+            )
+            log({"event": "disallowed_tools", "tools": disallowed})
+            with (evdir / "sdk-messages.jsonl").open("a") as out:
                 async for message in query(prompt=prompt(), options=options):
                     record = {"type": type(message).__name__, "t": round(time.time() - started, 2)}
                     data = getattr(message, "data", None)
@@ -262,18 +364,66 @@ class LanebAgent(ClaudeCode):
             error = e
             log({"event": "agent_error", "type": type(e).__name__, "message": str(e)[:500]})
         finally:
-            self._exec(container, "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = claude ] && kill -9 ${p##*/} 2>/dev/null; done; true", timeout=30)
-            patch = self._export_patch(container)
-            log(patch)
-            closed = post_json(self.options.control_url + f"/sessions/{session['id']}/close", {"reason": "agent_finished"})
+            # Run in a thread and awaited to the end even if this task is cancelled again, so Harbor never moves on to the
+            # verifier before the teardown, close and summary finish.
+            base = {"result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, "wall_s": round(time.time() - started, 1)}
+            teardown = asyncio.ensure_future(asyncio.to_thread(self._teardown, container, session["id"], log, base))
+            cancelled = None
+            while not teardown.done():
+                try:
+                    await asyncio.shield(teardown)
+                except asyncio.CancelledError as e:
+                    cancelled = e
+            summary = teardown.result()
+            closed = summary["session"] or {}
             usage = closed.get("usage", {})
-            summary = {"session": closed, "result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, "wall_s": round(time.time() - started, 1), "patch": patch}
-            (self.logs_dir / "laneb-summary.json").write_text(json.dumps(summary, indent=2, default=str))
             cached = usage.get("cache_read_input_tokens", 0)
             context.n_input_tokens = usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_creation_1h_input_tokens", 0) + cached
             context.n_cache_tokens = cached
             context.n_output_tokens = usage.get("output_tokens", 0)
-            context.cost_usd = closed.get("spent_micros", 0) / 1_000_000
-            context.metadata = {"laneb": {"arm": self.options.arm, "session": closed.get("id"), "refused": closed.get("refused"), "requests": closed.get("requests"), "ok_responses": closed.get("ok_responses"), "result": result}}
-        if not closed.get("ok_responses"):
-            raise RuntimeError(f"no model response reached the agent, so this is an infrastructure failure: {error or result}") from error
+            context.cost_usd = closed["spent_micros"] / 1_000_000 if "spent_micros" in closed else None
+            context.metadata = {"laneb": {"arm": self.options.arm, "session": session["id"], "refused": closed.get("refused"), "requests": closed.get("requests"), "ok_responses": closed.get("ok_responses"), "close_error": summary["close_error"], "result": result}}
+            if cancelled is not None:
+                raise cancelled
+        if summary["session"] is not None and not summary["session"].get("ok_responses"):
+            raise LanebInfraError(f"no model response reached the agent, so this is an infrastructure failure: {error or result}") from error
+
+    def _teardown(self, container: str, session_id: str, log, base: dict) -> dict:
+        """Stop Claude Code, record surviving processes, export the patch, close the session and write the summary.
+        Each step's failure is recorded and never skips a later step."""
+        evdir = self._evaluator_dir()
+        errors = {}
+
+        def note(entry: dict) -> None:
+            try:
+                log(entry)
+            except Exception as e:
+                errors.setdefault("log", f"{type(e).__name__}: {e}"[:300])
+
+        try:
+            self._exec(container, KILL_CLAUDE, timeout=30)
+        except Exception as e:
+            errors["kill"] = f"{type(e).__name__}: {e}"[:300]
+        try:
+            after = self._exec(container, LIST_PROCESSES, timeout=PROBE_TIMEOUT_S).stdout
+            (evdir / "processes-after.tsv").write_bytes(after)
+            before = parse_processes((evdir / "processes-before.tsv").read_text(errors="replace")) if (evdir / "processes-before.tsv").exists() else {}
+            survivors = {pid: cmd for pid, cmd in parse_processes(after.decode(errors="replace")).items() if pid not in before}
+            note({"event": "processes_after_agent", "new_since_setup": survivors})
+        except Exception as e:
+            errors["processes"] = f"{type(e).__name__}: {e}"[:300]
+        try:
+            patch = self._export_patch(container)
+        except Exception as e:
+            patch = {"event": "patch", "error": f"{type(e).__name__}: {e}"[:300]}
+        note(patch)
+        closed = None
+        close_error = None
+        try:
+            closed = post_json(self.options.control_url + f"/sessions/{session_id}/close", {"reason": "agent_finished"}, timeout=self.options.close_timeout_sec)
+        except Exception as e:
+            close_error = f"{type(e).__name__}: {e}"[:500]
+            note({"event": "close_failed", "session": session_id, "message": close_error})
+        summary = {**base, "session": closed, "close_error": close_error, "patch": patch, "teardown_errors": errors}
+        (evdir / "laneb-summary.json").write_text(json.dumps(summary, indent=2, default=str))
+        return summary
