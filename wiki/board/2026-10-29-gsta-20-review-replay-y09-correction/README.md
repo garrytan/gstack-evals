@@ -2,7 +2,7 @@
 id: 2026-10-29-gsta-20-review-replay-y09-correction
 kind: finding
 title: "Correction to Quick look 1: decoy y09 holds a real gstack bug, so its 18 CRITICAL flags were catches"
-summary: "y09 (gstack #201) has a real bug, so 18 trials counted as false alarms were catches. Corrected rates per cell, two ways; every gstack-minus-plain gap moves by 1 point or less."
+summary: "y09 (gstack #201) has a real bug, so its 18 false alarms were catches. All-case primary gstack-minus-plain gaps move 1 pt or less; DeepSeek subgroup gaps move 3 to 11 pts."
 author: GSTA-20
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
@@ -126,7 +126,8 @@ y09 leaves this stratum's decoys in both variants, so recall does not change and
 
 ## What holds
 
-- The gstack-minus-plain contrasts move by 1 point or less. Recall: Opus +5 pts [0, 15] under (a) against the published +6 [0, 17], Haiku +3 [0, 8] in both, DeepSeek +14 [0, 32] against +15 [0, 35]. Under (b) all three match the published values. False alarms: Opus +6 [-24, 33], Haiku +18 [3, 33] and DeepSeek -6 [-24, 9], under both variants, against the published +6, +17 and -6.
+- On all cases, the primary gstack-minus-plain contrasts move by 1 point or less. Recall: Opus +5 pts [0, 15] under (a) against the published +6 [0, 17], Haiku +3 [0, 8] in both, DeepSeek +14 [0, 32] against +15 [0, 35]. Under (b) all three match the published values. False alarms: Opus +6 [-24, 33], Haiku +18 [3, 33] and DeepSeek -6 [-24, 9], under both variants, against the published +6, +17 and -6.
+- Three DeepSeek subgroup contrasts move 3 to 5 points: escaped recall from +22 to +19 pts [0, 48] under (a), unchanged under (b); review-caught false alarms from -17 to -20 [-47, 0]; and the all-case answered-only false-alarm gap from -28 to -33 [-67, -7]. None changes sign, and each interval keeps its relation to zero. The review-caught false-alarm gaps also move 2 points for Opus (-11 to -13) and Haiku (+11 to +13). One gap moves more and rests on the review-caught decoys DeepSeek answered in both arms: the answered-only DeepSeek false-alarm gap there goes from -33 [-75, 0] to -44 [-100, 0].
 - gstack's prompts still raise Haiku's false alarms with an interval above zero, on all cases and on the escaped decoys (+22 pts [6, 44], unchanged).
 - With gstack's prompts, Opus still rates most of its catches below CRITICAL: 18% recall at CRITICAL against 33% plain under (a), and on escaped defects 33% against 62%.
 - Neither cheap model with gstack matched Opus, and no parity claim is made. Haiku with gstack against Opus plain is -3 pts [-21, 10] under (a). Haiku with gstack still costs much less per catch than Opus plain ($0.035 against $0.18) and still has more false alarms (27% against 21%).
