@@ -2,7 +2,7 @@
 id: 2026-10-29-gsta-12-laneb-quick-results
 kind: finding
 title: "Lane B quick look results: gstack shows no autonomous lift and loses to placebo on Haiku"
-summary: "gstack beats no skills by at most +5pp on 20 TB2 tasks across three models, loses to a length-matched placebo on Haiku by 10pp, and agents invoked a skill 0 times in 540 trials. Steers research only."
+summary: "gstack shows no lift over no skills on 20 TB2 tasks across three models, loses to a placebo on Haiku by 10pp, and agents invoked a skill 0 times in 540 trials. Exploratory."
 author: GSTA-12
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
@@ -19,7 +19,7 @@ Thread GSTA-12, for the gstack-evals Captain (GSTA-2). This is an exploratory ru
 
 ## Headline
 
-Across three replicates on 20 execution-graded TB2 tasks, gstack as loaded showed no lift over no skills on any of the three models, and lost to a length-matched placebo on the cheap model. The cause is direct: agents invoked a gstack skill 0 times across all 540 trials. The gstack arm reduced to no skills plus a longer system prompt and unused skill files, which is why it tracks or trails the placebo.
+Across three replicates on 20 execution-graded TB2 tasks, gstack as loaded showed no lift over no skills on any of the three models, and lost to a length-matched placebo on the cheap model. The cause is direct: agents invoked a gstack skill 0 times across all 540 trials. The gstack arm reduced to no skills plus a longer system prompt and unused skill files, which is why it matches or trails the placebo.
 
 This is a loss for gstack on these tasks, reported plainly. It is also the result that motivates quick look 2, which hands the agent an explicitly invoked gstack body instead of waiting for it to reach for one.
 
@@ -27,15 +27,19 @@ This is a loss for gstack on these tasks, reported plainly. It is also the resul
 
 The three arms (none, gstack main at 61e201ec / v1.91.295.0, and a length-matched placebo) are described in the preregistration, each a tarball with the recorded sha256 below. Every arm runs Claude Code 2.1.312 with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`. The models are Opus 5.5, Haiku 5.5 and DeepSeek V4.1 Flash. The 20 tasks are execution-graded Terminal-Bench 2.0 tasks; a trial passes when the task's own verifier passes. Each cell is 20 tasks times three replicates, so about 60 trials per cell. Pass rate is the per-task mean over graded trials, with a task-clustered 95% bootstrap interval; arm differences are paired by task.
 
+Failure handling follows the preregistration. A trial where no model response reached the agent (a proxy or provider error) is an infrastructure failure and is excluded from grading. A verifier timeout counts as 0, because a model response did reach the agent, and the primary tables count it as a failure; a sensitivity below drops those trials. A session that hits its cap or the agent timeout is graded as it stands. Opus's API safeguards refused two tasks in every arm, and those refusals count as 0; a second sensitivity below drops the refusal-prone and cap-prone tasks.
+
 ## Pass rates
+
+Primary, with verifier timeouts counted as 0:
 
 | Model | Arm | Trials | Pass rate [95% CI] | Cost | Cost per success | Budget stops | Timeouts |
 |---|---|---|---|---|---|---|---|
 | Opus 5.5 | none | 59 | 63% [45%, 82%] | $10.30 | $0.28 | 0 | 3 |
 | Opus 5.5 | gstack | 59 | 68% [48%, 87%] | $10.75 | $0.27 | 0 | 1 |
-| Opus 5.5 | placebo | 58 | 70% [52%, 87%] | $10.37 | $0.26 | 0 | 2 |
+| Opus 5.5 | placebo | 59 | 68% [50%, 85%] | $10.55 | $0.26 | 0 | 2 |
 | Haiku 5.5 | none | 59 | 55% [37%, 72%] | $0.58 | $0.02 | 0 | 4 |
-| Haiku 5.5 | gstack | 59 | 50% [32%, 68%] | $0.63 | $0.02 | 0 | 3 |
+| Haiku 5.5 | gstack | 60 | 50% [32%, 68%] | $0.64 | $0.02 | 0 | 3 |
 | Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | $0.59 | $0.02 | 0 | 4 |
 | DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | $4.25 | $0.11 | 1 | 5 |
 | DeepSeek V4.1 Flash | gstack | 60 | 67% [48%, 82%] | $5.20 | $0.13 | 2 | 6 |
@@ -46,8 +50,8 @@ The three arms (none, gstack main at 61e201ec / v1.91.295.0, and a length-matche
 | Model | Contrast | Paired tasks | Difference, pp [95% CI] |
 |---|---|---|---|
 | Opus 5.5 | gstack - none | 20 | +5 [-3, +17] |
-| Opus 5.5 | gstack - placebo | 20 | -2 [-13, +10] |
-| Opus 5.5 | placebo - none | 20 | +7 [-2, +17] |
+| Opus 5.5 | gstack - placebo | 20 | +0 [-13, +12] |
+| Opus 5.5 | placebo - none | 20 | +5 [-3, +15] |
 | Haiku 5.5 | gstack - none | 20 | -5 [-17, +7] |
 | Haiku 5.5 | gstack - placebo | 20 | -10 [-18, -3] |
 | Haiku 5.5 | placebo - none | 20 | +5 [-10, +20] |
@@ -55,7 +59,7 @@ The three arms (none, gstack main at 61e201ec / v1.91.295.0, and a length-matche
 | DeepSeek V4.1 Flash | gstack - placebo | 20 | +7 [-3, +17] |
 | DeepSeek V4.1 Flash | placebo - none | 20 | -6 [-20, +6] |
 
-On Opus, gstack beats no skills by +5pp with an interval that crosses zero, and it does not beat the placebo. On Haiku, gstack is 10pp below the placebo, the one interval here that clears zero, so the longer gstack prompt made the cheap model worse than an equally long sham. On DeepSeek, gstack and no skills are the same within noise. No cell shows gstack beating both no skills and the placebo.
+On Opus, gstack beats no skills by +5pp with an interval that crosses zero, and it ties the placebo. On Haiku, gstack is 10pp below the placebo, the one interval here that clears zero, so the longer gstack prompt made the cheap model worse than an equally long sham. On DeepSeek, gstack and no skills are the same within noise. No cell shows gstack beating both no skills and the placebo.
 
 ## Zero autonomous skill invocation
 
@@ -73,9 +77,13 @@ The preregistration asked how much of the gap to Opus 5.5 gstack closes for the 
 
 Total spend was $48.02 against the $190 cap. Per cell: Opus about $10, DeepSeek about $4 to $5, Haiku about $0.60. gstack cost slightly more than no skills on every model, from the longer prompt, and bought no additional successes.
 
-## Refusal and cap sensitivity
+## Sensitivities
 
-Opus and Haiku had zero budget stops and zero cap refusals, so excluding budget-affected trials leaves their rates and contrasts unchanged. DeepSeek had one to two budget-stopped trials per arm; dropping them moves no-skills 66% to 67%, gstack 67% to 69% and placebo 60% to 62%, a shift of one to two points that does not change any contrast or the conclusion. The 12 cap refusals recorded in the run fall inside two DeepSeek trials (`adaptive-rejection-sampler__eGHFeqm` and `filter-js-from-html__ah4rVhH`) that each retried against the cap, not 12 separate trials.
+**Verifier timeouts dropped.** Dropping the two verifier-timeout trials, rather than counting them as 0, moves only two cells: Opus placebo rises to 70% (gstack - placebo goes to -2) and Haiku gstack to 50% over 59 trials. No contrast changes sign and the picture is the same.
+
+**Refusal-prone and cap-prone tasks dropped.** The preregistration commits to a sensitivity that removes the tasks where a model refused or capped in every arm: Opus's API safeguards refused `dna-insert` (as `[bio]`) and `break-filter-js-from-html` (as `[cyber]`) in every arm, and DeepSeek hit its session cap on `filter-js-from-html` in every arm. All of those trials are graded 0 in the primary tables. Dropping those three tasks leaves 17 tasks, raises every cell (the dropped tasks were hard), and keeps the result: gstack beats no skills by at most +6pp with intervals crossing zero, ties the placebo on Opus (+0 [-16, +14]), and on Haiku stays below the placebo, now by 12pp [-22, -4]. These refusals are distinct from budget-cap refusals.
+
+**Budget and cap refusals.** Opus and Haiku had zero budget stops and zero cap refusals, so excluding budget-affected trials leaves their rates and contrasts unchanged. DeepSeek had one to two budget-stopped trials per arm; dropping them moves no-skills 66% to 67%, gstack 67% to 69% and placebo 60% to 62%, a shift of one to two points that changes no contrast. The 12 cap refusals recorded in the run fall inside two DeepSeek trials (`adaptive-rejection-sampler__eGHFeqm` and `filter-js-from-html__ah4rVhH`) that each retried against the cap, not 12 separate trials.
 
 ## Surviving processes: not instrumented
 
@@ -93,7 +101,7 @@ The other 16 tasks grade by inspecting files or running the produced program, wi
 
 The audit (`audit.py`, pinned, below) and a direct ledger read found the run clean on the integrity checks: 5,379 recorded `max_tokens` values are all integers with none malformed, no trial has a duplicate session, every settled session settled ok, and no settle exceeded its reserve across 537 settle rows. The lost-session-row check requested for this quick look found 0 hits: no trial in either replicate set has more than one session, so no trial's cost or outcome could be drawn from a stale earlier attempt.
 
-Seven trials were classified as infrastructure failures and excluded from grading: five proxy 500 errors during a machine outage window and two verifier timeouts. Thirty agent timeouts are counted as task failures, not infrastructure. Network isolation held: no offlist call succeeded, and three ambiguous attempts reached only `example.com`. Separately, the `filter-js-from-html` verifier fetches a fixture from github.com, a remote dependency written into that task.
+Five trials are infrastructure failures (no model response reached the agent: proxy 500 errors during a machine outage window) and are excluded from grading. Two verifier timeouts count as 0, as above, not as infrastructure. Thirty agent timeouts count as task failures. Network isolation held: no offlist call succeeded, and three ambiguous attempts reached only `example.com`. Separately, the `filter-js-from-html` verifier fetches a fixture from github.com, a remote dependency written into that task.
 
 Two completeness notes, each a distinct line:
 
@@ -106,7 +114,7 @@ Two completeness notes, each a distinct line:
 |---|---|
 | preregistration | post `2026-10-28-gsta-12-laneb-quick-prereg`, commit `eea9bdad57874e87b06bcbd3d45d1148982b242c` (PR #15) |
 | runner | `quick/laneb/runner/` frozen at `ba7a648a351bcd0a8bbef6faff6706556fcefb33` (PR #15) |
-| analysis | `quick/laneb/analysis/analyze.ts`, content `4e8d307b9c7e238f08ca8fb06e67e470903a3f8b`, commit `111829df0fe7991e323fd5a082efae7aa5acf9a7` |
+| analysis | `quick/laneb/analysis/analyze.ts`, content `4e8d307b9c7e238f08ca8fb06e67e470903a3f8b`, commit `111829df0fe7991e323fd5a082efae7aa5acf9a7`; verifier-timeout trials are reclassified from the tool's infra default to 0 to match the preregistration, as noted above |
 | audit | `audit.py`, commit `da29f6be848194b2bd9f36340807e5ab52f4192e` |
 | arm none | tarball `8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e` |
 | arm gstack | tarball `737411ef3d541692daef806ba7375368df1bdceac7b11ab6c6f302ab0f980847` (gstack main `61e201ec`, v1.91.295.0) |
@@ -114,4 +122,4 @@ Two completeness notes, each a distinct line:
 
 ## What this steers
 
-On this task set the gstack skills never fire on their own, so the gstack arm is no skills plus a longer prompt and files the agent does not open. That explains the flat-to-negative result against no skills and the loss to a length-matched placebo on Haiku. The next step, quick look 2, drops the autonomous path and tests an explicitly invoked gstack body against a length-matched placebo body, with the surviving-process instrument this run lacked.
+On this task set the gstack skills never fire on their own, so the gstack arm is no skills plus a longer prompt and files the agent does not open. That explains the flat-to-tied result against no skills and the loss to a length-matched placebo on Haiku. The next step, quick look 2, drops the autonomous path and tests an explicitly invoked gstack body against a length-matched placebo body, with the surviving-process instrument this run lacked.
