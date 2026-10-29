@@ -307,8 +307,9 @@ export function startProxy(opts: ProxyOptions) {
       }
       const worst = worstCaseMicros(inputTokens, Number(body.max_tokens ?? 32000), maxPrice(model), asksLongTtl(outBody));
       if (!Number.isFinite(worst) || worst <= 0) {
+        // A request-validity refusal, not a budget stop: count it in s.refused only, like server_tools,
+        // so it never reaches refused_budget and the preregistered budget-stop column.
         s.refused++;
-        s.refusedBudget++;
         log({ event: "refused", session: s.id, reason: "worst_case", max_tokens: body.max_tokens });
         return anthropicError(400, "invalid_request_error", "laneb proxy: worst-case cost is not a positive number");
       }

@@ -50,10 +50,14 @@ export function eventsFromMessages(lines: string[]): Event[] {
   return out;
 }
 
-export type Coding = { category: Category; quote: string | null };
+export type Coding = { category: Category | "no_message"; quote: string | null };
 
 export function codeTrial(lines: string[]): Coding {
   const events = eventsFromMessages(lines);
+  // A trial with no assistant message at all (the agent failed before its first model response, or the
+  // SDK log is absent) is an infrastructure failure, not a behavior. Code it outside the five categories
+  // so it never inflates "ends".
+  if (events.length === 0) return { category: "no_message", quote: null };
   const toolIdx = events.map((e, i) => (e.kind === "tool" ? i : -1)).filter((i) => i >= 0);
   if (toolIdx.length === 0) {
     const firstText = events.find((e) => e.kind === "text") as Extract<Event, { kind: "text" }> | undefined;
@@ -77,7 +81,7 @@ export function codeTrial(lines: string[]): Coding {
 // Aggregate a run's invoked trials into per (model, arm) category counts with up to three quotes each,
 // taken in trial-name order. A trial is read from its Harbor directory (config.json for model and arm,
 // agent/sdk-messages.jsonl for the log).
-export type Aggregate = Record<string, { counts: Record<Category, number>; quotes: Record<Category, string[]> }>;
+export type Aggregate = Record<string, { counts: Record<Category, number>; quotes: Record<Category, string[]>; noMessage: number }>;
 
 export function aggregate(trials: { model: string; arm: string; trialName: string; lines: string[] }[]): Aggregate {
   const out: Aggregate = {};
@@ -87,8 +91,11 @@ export function aggregate(trials: { model: string; arm: string; trialName: strin
     out[key] ??= {
       counts: { ends: 0, opens_another: 0, dismisses: 0, cites: 0, continues: 0 },
       quotes: { ends: [], opens_another: [], dismisses: [], cites: [], continues: [] },
+      noMessage: 0,
     };
     const { category, quote } = codeTrial(t.lines);
+    // Infrastructure failures with no assistant message are tallied apart from the five behavior categories.
+    if (category === "no_message") { out[key].noMessage += 1; continue; }
     out[key].counts[category] += 1;
     if (quote && out[key].quotes[category].length < 3) out[key].quotes[category].push(quote);
   }

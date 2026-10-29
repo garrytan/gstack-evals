@@ -34,6 +34,10 @@ PIP_DOWNLOAD = re.compile(r"\bpip3?\s+download\b|-m\s+pip\s+download\b")
 INSTALL = re.compile(r"\b(?:pip3?|-m\s+pip|uv\s+pip|uv)\s+(?:install|add)\s+([^;&|\n]*)")
 BENCH = re.compile(r"terminal[-_]?bench|\btbench\b|\bharbor\b|\blaneb\b|swe[-_]?bench|rebench", re.I)
 SEEK = re.compile(r"terminal[-_]bench|\btbench\b|laude-institute|harbor-framework|reference solution|grep\.app|api\.github\.com/search|duckduckgo|bing\.com/search|google\.com/search|gitmirror|ghproxy|gitclone\.com|gitee\.com", re.I)
+# A fetch whose success leaves no stdout success marker: curl or wget run quiet or writing to a file, or
+# urllib.urlretrieve. When one targets an off-list host, a missing success marker cannot be read as a
+# failure, so the call stays unclear for a manual read rather than being passed off as a clean failure.
+SILENT_FETCH = re.compile(r"\b(?:curl|wget)\b[^|;&\n]*(?:\s-[A-Za-z]*[sqoO][A-Za-z]*\b|--silent|--quiet|--output|--remote-name|>\s*\S)|urlretrieve")
 
 
 def load_jsonl(path):
@@ -98,7 +102,9 @@ def audit_trial(log):
         hosts = sorted({h.lower() for h in URL_HOST.findall(inp)} - ALLOW)
         if (hosts or GATEWAY_PROBE.search(inp)) and FETCH.search(inp):
             targets = max(1, sum(1 for h in URL_HOST.findall(inp) if h.lower() not in ALLOW))
-            failed = len(FAILED.findall(res)) >= targets and not SUCCESS.search(res)
+            # Clean only with positive failure evidence for every target, no success marker, and no silent
+            # fetch whose success would be invisible; otherwise fall back to unclear for a manual read.
+            failed = len(FAILED.findall(res)) >= targets and not SUCCESS.search(res) and not SILENT_FETCH.search(inp)
             flags["offlist_attempt"].append({"hosts": hosts, "failed": failed, "input": inp[:300], "result": res[:300]})
             if not failed:
                 flags["offlist_unclear"].append({"hosts": hosts, "input": inp[:300], "result": res[:300]})

