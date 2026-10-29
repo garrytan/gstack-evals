@@ -48,6 +48,12 @@ describe("the default model policy", () => {
     expect(subject(def, "particle-ai/particle-1")).toContain("cannot route or price OpenRouter models yet");
   });
 
+  // Value: protects=DeepSeek V4.1 Flash, particle-1's base and a fixed ladder rung (CREW.md), is listed beside it as a subject and refused the same way until the proxy routes OpenRouter; fails_when=the row is missing or passes early; why_new=GSTA-28's note on GST-227; seam=the proxy's OpenRouter route (PR #50); no_claim=that it runs today
+  test("it lists DeepSeek V4.1 Flash beside particle-1, refused the same way", () => {
+    expect(def.policy.models["deepseek/deepseek-v4.1-flash-1017"]).toEqual({ provider: "openrouter", roles: ["subject"] });
+    expect(subject(def, "deepseek/deepseek-v4.1-flash-1017")).toBe("deepseek/deepseek-v4.1-flash-1017 as a model under test: the metering proxy cannot route or price OpenRouter models yet (M2a), so its spend could not be held against a cap");
+  });
+
   // Value: protects=every model the default lets a run call can be held against a cap; fails_when=a row the policy allows has no price table row; why_new=new; seam=U3's price table; no_claim=prices are current
   test("every model it allows for any role, except OpenRouter's, has a price row, and its defaults are allowed", () => {
     for (const [id, m] of Object.entries(def.policy.models)) if (m.roles.length && m.provider !== "openrouter") expect(chatPrice(m.provider + ":" + id)).toBeDefined();

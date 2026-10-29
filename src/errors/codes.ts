@@ -345,6 +345,15 @@ export const CODES = {
     resumable: false,
     owner: "U7",
   },
+  E_HOST_CLI: {
+    exit: 2,
+    meaning: "The host CLI (claude for Claude Code, codex for Codex) is not on PATH, or its --version failed.",
+    fix: "Install the host's CLI on this machine and check that <host> --version runs, or pick the other --host. Then run gstack-evals doctor again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
   VACUOUS_CHECK: {
     exit: 2,
     meaning: "Preflight found a task whose whole pass predicate holds on the no-op control (a non-safety task), or still holds on its mutant (a safety task).",
