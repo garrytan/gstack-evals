@@ -37,7 +37,7 @@ sequenceDiagram
 | `runner/prepare-run.ts` | Builds one batch's run directory: the tasks in `tasks/final.json` materialized and checked against their pinned digests, the arm tarballs, the proxy config, the JobConfig with VM paths, and a manifest with the git head and every digest. |
 | `runner/route-check.sh` | The first paid step: the smoke task once per model through the real proxy and ledger, arm none. |
 | `runner/grid.ts` | Writes a Harbor JobConfig: every task by every (model, arm). Harbor orders trials task by task, so a cap stop leaves complete, paired task blocks. Reruns only `LanebInfraError` and Harbor's environment-start and agent-setup timeouts, and adds `agent-caps.compose.yaml`, which drops `NET_RAW` and `NET_ADMIN` from every trial's main container. |
-| `runner/launch.sh`, `vm-bootstrap.sh`, `vm-run.sh` | One batch on a fresh Ubicloud VM: bootstrap, keys to a 0600 file over stdin, an oracle gate that needs reward 1 on every task, proxy plus Harbor on the VM, ledger service here through a reverse tunnel, results pulled back once `vm-run.sh` has finished, checked by file count, and open reserves reconciled. The VM is destroyed only after a confirmed pull. If the pull still fails after three attempts, the VM is kept, and `launch.sh` exits 7 and prints the commands to pull, reconcile and destroy it. An interrupt stops Harbor, lets the sessions close and settle, then pulls. |
+| `runner/launch.sh`, `vm-bootstrap.sh`, `vm-run.sh` | One batch on a fresh Ubicloud VM: bootstrap, keys to a 0600 file over stdin, an oracle gate that needs reward 1 on every task, proxy plus Harbor on the VM, ledger service here through a reverse tunnel, results pulled back once `vm-run.sh` has finished, checked by file count, and open reserves reconciled. `launch.sh` refuses a run dir that already holds `pulled/`. The VM is destroyed only after a confirmed pull, or when no batch started on it. If the pull still fails after three attempts, the VM is kept, and `launch.sh` exits 7 and prints the commands to pull, reconcile and destroy it. An interrupt before the batch starts destroys the VM; a later one stops Harbor, lets the sessions close and settle, then pulls. |
 | `runner/smoke.sh`, `fake_upstream.ts`, `smoke-task/` | Keyless end-to-end test: fake upstream, proxy, scratch ledger, Harbor, agent, real Claude Code, separate verifier. |
 | `arms/` | The gstack arm build and the seeded placebo generator. |
 | `tasks/` | The task pre-screen scripts and the fixed list with digests; the write-up is the wiki post [2026-10-28-gsta-12-tb2-task-selection](../../wiki/research/2026-10-28-gsta-12-tb2-task-selection.md). `final.json` is the list after oracle checks, with each dropped task and why. |
@@ -46,7 +46,7 @@ sequenceDiagram
 
 ## Checks
 
-Keyless: `bun test quick/laneb` and `npx tsc --noEmit -p quick/laneb/tsconfig.json`. `NETWORK=public bash quick/laneb/runner/smoke.sh` needs Docker and Harbor (`uv tool install "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" --with claude-agent-sdk==0.2.174`).
+Keyless: `bun test quick/laneb` (its agent tests run `tests/agent_test.py` under `python3`) and `npx tsc --noEmit -p quick/laneb/tsconfig.json`. `NETWORK=public bash quick/laneb/runner/smoke.sh` needs Docker and Harbor (`uv tool install "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" --with claude-agent-sdk==0.2.174`).
 
 ## What M2a should know
 
