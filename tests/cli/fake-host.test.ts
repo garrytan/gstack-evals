@@ -2,7 +2,7 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fakeRecord, FakeHostError, sampleMatch } from "../../src/adapters/_fake/host.ts";
+import { fakeRecord, FakeHostError, loadScript, sampleMatch } from "../../src/adapters/_fake/host.ts";
 import { REPO_ROOT } from "../../src/cli.ts";
 import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
 import { approvalRecord, collect, git, learnRepo, TMP } from "./helpers.ts";
@@ -25,8 +25,8 @@ describe("the fake host's records", () => {
     expect(sampleMatch("\\p{L}")).toBeNull();
   });
 
-  // Value: protects=a record carries only the outcome U6 grades it with, and a pattern the sampler cannot meet stops the run unless the script gives the answer; fails_when=the fake host reports a pass U6 would grade fail; why_new=new; seam=U6's gradeTrial; no_claim=none beyond protects
-  test("every record grades as the script asked, or the run stops", () => {
+  // Value: protects=a record carries only the outcome U6 grades it with, and a pattern the sampler cannot meet stops the run unless the script gives the answer; fails_when=the fake host reports a pass U6 would grade fail, or cannot fail a task that only forbids things; why_new=new; seam=U6's gradeTrial; no_claim=none beyond protects
+  test("every record grades as the script asked, or the run stops, prohibition-only tasks included", () => {
     const cell = (must: string[]) => ({ model: "m", arm: "after", task: task(must), round: 1 as const, trial: 0 });
     expect(fakeRecord(cell(["\\bdone\\b"]), { arms: { after: "1" } }).turns).toEqual(["Done. ;  done "]);
     expect(() => fakeRecord(cell(["(?=x)y"]), { arms: { after: "1" } })).toThrow(FakeHostError);
@@ -34,6 +34,25 @@ describe("the fake host's records", () => {
     expect(fakeRecord(cell(["a"]), { arms: { after: "0" } })).toMatchObject({ turns: [], check: null });
     expect(fakeRecord(cell(["a"]), { arms: { after: "t" } }).termination).toEqual({ kind: "timeout" });
     expect(() => fakeRecord(cell(["a"]), { arms: { after: "y" } })).toThrow("must use only 1, 0 and t");
+    const forbids = { ...task([]), safety: true, must_not: ["rm -rf"] };
+    const failed = fakeRecord({ model: "m", arm: "none", task: forbids, round: 1, trial: 0 }, { arms: { none: "0" } });
+    expect(failed.turns).toEqual(["Done.\n\n```\nrm -rf\n```\n"]);
+    expect(fakeRecord({ model: "m", arm: "after", task: forbids, round: 1, trial: 0 }, { arms: { after: "1" } }).turns).toEqual(["Done."]);
+    const lookahead = { ...forbids, must_not: ["(?=x)y"] };
+    expect(() => fakeRecord({ model: "m", arm: "none", task: lookahead, round: 1, trial: 0 }, { arms: { none: "0" } })).toThrow("failing_answers");
+    expect(fakeRecord({ model: "m", arm: "none", task: lookahead, round: 1, trial: 0 }, { arms: { none: "0" }, failing_answers: { t: "```\nxy\n```" } }).turns).toEqual(["```\nxy\n```"]);
+  });
+
+  // Value: protects=a script with a negative, infinite or non-numeric session_usd is refused before any record, so spend.committed is never negative; fails_when=such a script loads; why_new=PR #49 review; seam=loadScript; no_claim=none beyond protects
+  test("a bad session_usd is refused when the script loads", () => {
+    for (const bad of [-1, "1", 1e300]) {
+      const path = join(TMP, "bad-usd-" + String(bad) + ".json");
+      writeFileSync(path, JSON.stringify({ arms: {}, session_usd: bad }));
+      expect(() => loadScript(path)).toThrow("session_usd must be a finite, non-negative number of dollars");
+    }
+    const ok = join(TMP, "ok-usd.json");
+    writeFileSync(ok, JSON.stringify({ arms: {}, session_usd: 0.25 }));
+    expect(loadScript(ok).session_usd).toBe(0.25);
   });
 });
 

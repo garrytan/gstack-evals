@@ -6,7 +6,9 @@
 // patterns match. The fake host samples one string per pattern, for the simple patterns task files use (literals,
 // escapes, classes, groups, alternation and quantifiers), or takes the script's answer, and every record is graded on
 // the spot: a record whose grade differs from the script stops the run (FakeHostError), so the fake host never reports
-// an outcome U6 would not see. A failing record has no answer, a failing check and a not_done judge.
+// an outcome U6 would not see. A failing record has a failing check and a not_done judge, and no answer, except on a task
+// that only forbids things (must_not with no must, check or judge), whose failing answer is a code block holding a
+// sampled match of its first must_not pattern, or the script's failing answer.
 //
 // GSTACK_EVALS_FAKE_HOST=1 runs DEFAULT_SCRIPT: the old copies and after pass every task, and none fails every task. Any
 // other value is the path of a script file in the FakeScript shape.
@@ -23,6 +25,8 @@ export interface FakeScript {
   opened?: Record<string, string>;
   /** A passing final answer per task, for patterns the fake host cannot sample. */
   answers?: Record<string, string>;
+  /** A failing final answer per task that only forbids things, for must_not patterns the fake host cannot sample. */
+  failing_answers?: Record<string, string>;
   /** Dollars each session reports; the run stops at --spend-cap with CAP_STOP. Defaults to 0. */
   session_usd?: number;
 }
@@ -43,6 +47,8 @@ export function loadScript(value: string): FakeScript {
     throw new FakeHostError("GSTACK_EVALS_FAKE_HOST is neither 1 nor a readable script file: " + value + " (" + (error as Error).message + ")");
   }
   if (!script || typeof script.arms !== "object" || script.arms === null) throw new FakeHostError(value + ": a fake-host script needs an arms object");
+  const usd = script.session_usd;
+  if (usd !== undefined && !(typeof usd === "number" && Number.isFinite(usd) && usd >= 0 && Number.isSafeInteger(Math.round(usd * 1_000_000)))) throw new FakeHostError(value + ": session_usd must be a finite, non-negative number of dollars");
   return script;
 }
 
@@ -131,6 +137,9 @@ export function fakeRecord(cell: FakeCell, script: FakeScript): TrialRecord {
   if (pass) {
     const samples = task.must.map(sampleMatch);
     answer = script.answers?.[task.id] ?? (samples.includes(null) ? "" : ["Done.", ...samples].join(" ; "));
+  } else if (ch === "0" && !task.must.length && !task.check && !task.judge && task.must_not.length) {
+    const forbidden = sampleMatch(task.must_not[0]!);
+    answer = script.failing_answers?.[task.id] ?? (forbidden === null ? "" : "Done.\n\n```\n" + forbidden + "\n```\n");
   }
   const openedPattern = script.opened?.[arm] ?? "1";
   const opened = NO_SKILL.includes(arm) ? null : openedPattern[cell.trial % openedPattern.length] === "1";
@@ -149,6 +158,6 @@ export function fakeRecord(cell: FakeCell, script: FakeScript): TrialRecord {
   };
   const outcome = gradeTrial(task, record).outcome;
   const wanted = ch === "t" ? "timeout" : pass ? "pass" : "fail";
-  if (outcome !== wanted) throw new FakeHostError("the fake host cannot write a run of task " + task.id + " that grades " + wanted + " (it grades " + outcome + "); give a passing answer under answers in a script file (GSTACK_EVALS_FAKE_HOST=<script.json>)");
+  if (outcome !== wanted) throw new FakeHostError("the fake host cannot write a run of task " + task.id + " that grades " + wanted + " (it grades " + outcome + "); give the answer under " + (pass ? "answers" : "failing_answers") + " in a script file (GSTACK_EVALS_FAKE_HOST=<script.json>)");
   return record;
 }
