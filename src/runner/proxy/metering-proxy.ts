@@ -10,8 +10,10 @@
 //   agent's env, is revoked by unbind, and is scrubbed from error causes. The meter id authorizes nothing.
 // - bind, unbind and finalize are served only on an evaluator-side unix socket that needs its own credential; the trial
 //   listener serves provider routes only, and binds only to a loopback or private address (no hostnames, no wildcard).
-// - Before each forward the proxy journals the cell attempt and reservation id; reconcileJournal settles a call with no
-//   recorded outcome as unknown and never resends it.
+// - Before each reserve the proxy journals its idempotency key, and before each forward the cell attempt and reservation
+//   id; reconcileJournal settles a call with no recorded outcome as unknown and never resends it, and releases at zero a
+//   hold the ledger kept for a reserve whose answer was lost. A running proxy or reconcile holds a flock on the journal's
+//   lock file, so reconcile never runs beside a proxy that may still send.
 // - The proxy is the single retry owner: 429 and 5xx answers are retried within a finite attempt count and elapsed-time
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
@@ -22,7 +24,8 @@
 //   refused, is journaled with its source address.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
+import { dlopen, FFIType } from "bun:ffi";
+import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -54,8 +57,49 @@ export const FINALIZE_MAX_MS = 120_000;
 export const UPSTREAM_DEADLINE_MS = 900_000;
 const NO_TOKENS: TokenUsage = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(6)}`;
+/** Reserve refusals that, under ReservationLedger's contract, mean the ledger holds nothing under the idempotency key. */
+const NOTHING_HELD = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_LEDGER_MISSING"]);
+
+/** Claude 4.5 and older answer inference_geo with a 400. A model id this cannot read is pinned, since an unpinned call may bill above the table. */
+function acceptsInferenceGeo(model: string): boolean {
+  if (/[^a-z0-9.-]/.test(model)) return true;
+  const version = /^claude-(?:[a-z]+-)?(\d+)(?:[-.](\d{1,2}))?(?=-|$)/.exec(model);
+  return !version || Number(version[1]) * 100 + Number(version[2] ?? 0) > 405;
+}
 
 type Send = (input: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * flock(2) through libc, non-blocking and exclusive. The kernel drops the lock when its descriptor closes or its process
+ * dies, so a lock is never stale and nothing ever takes one over.
+ */
+let libc: { symbols: { flock: (fd: number, operation: number) => number } } | null = null;
+const LOCK_EX_NB = 2 | 4;
+
+/**
+ * Holds <journal>.lock with flock on a kept descriptor, so one proxy or one reconcile holds a journal at a time, in this
+ * process or another. The file stays on disk and records the holder's pid for the refusal message only. Closing the
+ * returned descriptor releases the lock.
+ */
+function lockJournal(journal: string): number {
+  const lock = `${journal}.lock`;
+  libc ??= dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
+  const fd = openSync(lock, "a+", 0o600);
+  if (libc.symbols.flock(fd, LOCK_EX_NB) !== 0) {
+    const holder = Buffer.alloc(16);
+    const read = readSync(fd, holder, 0, holder.length, 0);
+    closeSync(fd);
+    throw new Error(`E_USAGE: metering proxy: the journal ${journal} is held by another proxy or reconcile (process ${holder.subarray(0, read).toString("utf8").trim() || "unknown"}) through ${lock}; stop that proxy or let its reconcile finish`);
+  }
+  try {
+    ftruncateSync(fd, 0);
+    writeSync(fd, String(process.pid));
+    return fd;
+  } catch (e) {
+    closeSync(fd);
+    throw e;
+  }
+}
 
 /** The preregistered retry budget per call: at most attempts sends, and no new attempt after elapsed_ms. */
 export interface RetryBudget {
@@ -217,6 +261,7 @@ export class MeteringProxy {
   private management: ReturnType<typeof Bun.serve> | null = null;
   private journalFd: number | null = null;
   private journalTorn = false;
+  private journalLock: number | null = null;
   private slots = new Map<string, Slot>();
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
@@ -235,23 +280,33 @@ export class MeteringProxy {
     return this.trial!.port as number;
   }
 
+  /** Takes the journal's lock, then opens the journal and both listeners; a failure after the lock releases everything. */
   start(): void {
-    this.journalFd = openSync(this.options.journal, "a+", 0o600);
-    const { size } = fstatSync(this.journalFd);
-    const last = Buffer.alloc(1);
-    this.journalTorn = size > 0 && readSync(this.journalFd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
-    if (existsSync(this.options.managementSocket)) rmSync(this.options.managementSocket);
-    this.management = Bun.serve({ unix: this.options.managementSocket, fetch: req => this.manage(req) });
-    chmodSync(this.options.managementSocket, 0o600);
-    this.trial = Bun.serve({ hostname: this.options.host, port: this.options.port ?? 0, idleTimeout: 0, fetch: (req, server) => this.handle(req, server.requestIP(req)?.address ?? null), error: () => problem("E_INTERNAL", 500, "the request failed before its slot was checked") });
+    this.journalLock = lockJournal(this.options.journal);
+    try {
+      this.journalFd = openSync(this.options.journal, "a+", 0o600);
+      const { size } = fstatSync(this.journalFd);
+      const last = Buffer.alloc(1);
+      this.journalTorn = size > 0 && readSync(this.journalFd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
+      if (existsSync(this.options.managementSocket)) rmSync(this.options.managementSocket);
+      this.management = Bun.serve({ unix: this.options.managementSocket, fetch: req => this.manage(req) });
+      chmodSync(this.options.managementSocket, 0o600);
+      this.trial = Bun.serve({ hostname: this.options.host, port: this.options.port ?? 0, idleTimeout: 0, fetch: (req, server) => this.handle(req, server.requestIP(req)?.address ?? null), error: () => problem("E_INTERNAL", 500, "the request failed before its slot was checked") });
+    } catch (e) {
+      this.stop();
+      throw e;
+    }
   }
 
   stop(): void {
     this.trial?.stop(true);
     this.management?.stop(true);
+    this.trial = this.management = null;
     if (this.journalFd !== null) closeSync(this.journalFd);
     this.journalFd = null;
     rmSync(this.options.managementSocket, { force: true });
+    if (this.journalLock !== null) closeSync(this.journalLock);
+    this.journalLock = null;
   }
 
   bind(request: BindRequest): Binding {
@@ -357,13 +412,13 @@ export class MeteringProxy {
     }
   }
 
-  private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string): Response {
+  private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}): Response {
     this.meter(ctx.slot).refused++;
-    this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source });
+    this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...extra });
     return problem(code, status, reason);
   }
 
-  /** Route allowlist, key, tripwire, model allowlist, output cap, price, then per attempt: rate-limit pause, allowance, reserve, journal, send, settle. */
+  /** Route allowlist, key, tripwire, model allowlist, output cap, price, then per attempt: rate-limit pause, allowance, journal, reserve, journal, send, settle. */
   private async forward(req: Request, ctx: CallContext, beginStream: () => () => void): Promise<Response> {
     const o = this.options;
     const { provider, route, slot } = ctx;
@@ -423,7 +478,7 @@ export class MeteringProxy {
     if (allowed.free) return forwardFree(raw);
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
-    if (provider === "anthropic" && body.inference_geo === undefined) body.inference_geo = "global";
+    if (provider === "anthropic" && body.inference_geo === undefined && acceptsInferenceGeo(ctx.model)) body.inference_geo = "global";
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const fields = outputFields(provider, route);
     const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");
@@ -454,18 +509,20 @@ export class MeteringProxy {
       if (slot.committedMicros + maxMicros > slot.allowanceMicros) {
         return this.refuse(ctx, "E_ALLOWANCE", 402, `the slot's allowance of ${usd(slot.allowanceMicros)} cannot hold this call's worst case of ${usd(maxMicros)} (${usd(slot.committedMicros)} already committed)`);
       }
-      slot.committedMicros += maxMicros;
       const idempotencyKey = `${slot.cell.meter_id}:${call}:${attempt}`;
+      const reservation = { idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros };
+      this.journal({ kind: "reserve", ...reservation, provider, route, model: ctx.model, try: attempt, source: ctx.source });
+      slot.committedMicros += maxMicros;
       let held: LedgerReply;
       try {
-        held = await o.ledger.reserve({ idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros });
+        held = await o.ledger.reserve(reservation);
       } catch (e) {
         slot.committedMicros -= maxMicros;
-        return this.refuse(ctx, "E_LEDGER_UNAVAILABLE", 503, `the ledger did not answer reservation ${idempotencyKey}, so nothing was sent: ${scrubbedCause(e, ctx.secrets)}`);
+        return this.refuse(ctx, "E_LEDGER_UNAVAILABLE", 503, `the ledger did not answer reservation ${idempotencyKey}, so nothing was sent; if the ledger recorded it, reconcileJournal releases it at $0: ${scrubbedCause(e, ctx.secrets)}`);
       }
       if (!held.ok) {
         slot.committedMicros -= maxMicros;
-        return this.refuse(ctx, held.code, 402, held.message);
+        return this.refuse(ctx, held.code, 402, held.message, { idempotency_key: idempotencyKey });
       }
       const rid = held.reservation.reservation_id;
       try {
@@ -583,32 +640,61 @@ export class MeteringProxy {
 
 /**
  * Resume: settle every journaled call through the ledger. A call with a recorded outcome is settled with it again
- * (settle is idempotent by reservation id); a call with none is settled as unknown, keeps its full charge, and is never
- * resent. A line torn by a crash or a short write is skipped and counted as unreadable; a request line lost that way leaves
- * its reservation open in the ledger. Nothing here can send a provider request.
+ * (settle is idempotent by reservation id), whether or not its request line survived; a call with none is settled as
+ * unknown, keeps its full charge, and is never resent. A reserve line with no request line and no ledger refusal after it
+ * was never sent, but the ledger may hold it if its answer was lost: reconcile reserves again under the same idempotency
+ * key, which returns any hold the ledger kept, and settles it at zero (released). A line torn by a crash or a short write
+ * is skipped and counted as unreadable. It takes the journal's lock, so it refuses (E_USAGE) while a proxy holds the
+ * journal: a call still in flight there would look unanswered. Nothing here can send a provider request.
  */
-export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; refused: Array<{ reservation_id: string; code: string; message: string }>; unreadable: number }> {
-  const requests: string[] = [];
+export async function reconcileJournal(path: string, ledger: ReservationLedger): Promise<{ settled: string[]; unknown: string[]; released: string[]; refused: Array<{ reservation_id: string | null; code: string; message: string }>; unreadable: number }> {
+  const lock = lockJournal(path);
+  try {
+    return await reconcileLocked(path, ledger);
+  } finally {
+    closeSync(lock);
+  }
+}
+
+async function reconcileLocked(path: string, ledger: ReservationLedger): Promise<Awaited<ReturnType<typeof reconcileJournal>>> {
+  const calls = new Set<string>();
   const outcomes = new Map<string, CallOutcome>();
+  const reserves = new Map<string, { idempotency_key: string; lease_id: string; cell: CellAttempt; max_micros: number }>();
+  const answered = new Set<string>();
   let unreadable = 0;
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
-    let entry: { kind: string; reservation_id?: string; outcome?: CallOutcome };
+    let entry: { kind: string; reservation_id?: string; idempotency_key?: string; lease_id: string; cell: CellAttempt; max_micros: number; outcome?: CallOutcome };
     try {
       entry = JSON.parse(line);
     } catch {
       unreadable++;
       continue;
     }
-    if (entry.kind === "request" && entry.reservation_id) requests.push(entry.reservation_id);
+    if (entry.kind === "reserve" && entry.idempotency_key) reserves.set(entry.idempotency_key, { idempotency_key: entry.idempotency_key, lease_id: entry.lease_id, cell: entry.cell, max_micros: entry.max_micros });
+    if ((entry.kind === "request" || entry.kind === "refusal") && entry.idempotency_key) answered.add(entry.idempotency_key);
+    if ((entry.kind === "request" || entry.kind === "outcome") && entry.reservation_id) calls.add(entry.reservation_id);
     if (entry.kind === "outcome" && entry.reservation_id && entry.outcome) outcomes.set(entry.reservation_id, entry.outcome);
   }
-  const result = { settled: [] as string[], unknown: [] as string[], refused: [] as Array<{ reservation_id: string; code: string; message: string }>, unreadable };
-  for (const rid of requests) {
+  const result = { settled: [] as string[], unknown: [] as string[], released: [] as string[], refused: [] as Array<{ reservation_id: string | null; code: string; message: string }>, unreadable };
+  for (const rid of calls) {
     const outcome = outcomes.get(rid) ?? { kind: "unknown" as const };
     const reply = await ledger.settle(rid, outcome);
     if (!reply.ok) result.refused.push({ reservation_id: rid, code: reply.code, message: reply.message });
     else (outcomes.has(rid) ? result.settled : result.unknown).push(rid);
+  }
+  for (const [key, reservation] of reserves) {
+    if (answered.has(key)) continue;
+    const held = await ledger.reserve(reservation);
+    if (!held.ok) {
+      if (!NOTHING_HELD.has(held.code)) result.refused.push({ reservation_id: null, code: held.code, message: held.message });
+      continue;
+    }
+    const rid = held.reservation.reservation_id;
+    if (calls.has(rid)) continue;
+    const reply = await ledger.settle(rid, { kind: "spent", spent_micros: 0, usage: NO_TOKENS });
+    if (!reply.ok) result.refused.push({ reservation_id: rid, code: reply.code, message: reply.message });
+    else result.released.push(rid);
   }
   return result;
 }

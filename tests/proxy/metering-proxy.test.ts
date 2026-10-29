@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
+import { LocalLedger } from "../../src/runner/ledger/local.ts";
+import { CHAT_PRICES, priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -333,6 +334,16 @@ describe("allowlist and allowance", () => {
     expect(priceRequest("openai", replay, 1000).inputTokens).toBeLessThan(10_000);
   });
 
+  test("a reasoning item with an id and no encrypted_content is reserved at the context bound; one that carries its encrypted_content is priced by its bytes", () => {
+    const base = { model: "gpt-6.1-sol", input: "hi" };
+    const plain = priceRequest("openai", base, 1000).inputTokens;
+    for (const item of [{ type: "reasoning", id: "rs_1", summary: [] }, { type: "reasoning", id: "rs_1", summary: [], encrypted_content: null }]) {
+      expect(priceRequest("openai", { ...base, input: [item] }, 1000).inputTokens).toBeGreaterThanOrEqual(plain + UNKNOWN_CHAIN_CONTEXT_TOKENS - 64);
+    }
+    const inline = { ...base, input: [{ type: "reasoning", id: "rs_1", summary: [], encrypted_content: "gAAAAB-opaque" }] };
+    expect(priceRequest("openai", inline, 1000).inputTokens).toBeLessThan(10_000);
+  });
+
   test("a request with tools reserves the tool-use system prompt", () => {
     const msg = { model: "claude-opus-5-5", max_tokens: 1000, messages: [] };
     const plain = priceRequest("anthropic", msg, 1000).inputTokens;
@@ -353,6 +364,20 @@ describe("allowlist and allowance", () => {
     const a = t.bind();
     expect((await t.call(a.slot, a.token)).status).toBe(200);
     expect(t.calls[0]!.body.inference_geo).toBe("global");
+  });
+
+  test("Claude 4.5 and older, which answer inference_geo with a 400, are sent without the pin; an id the version pattern cannot read is pinned", async () => {
+    const older = ["claude-opus-4-5", "claude-sonnet-4", "claude-3-5-haiku", "claude-opus-4-5@20251101"];
+    for (const model of older) CHAT_PRICES[`anthropic:${model}`] = CHAT_PRICES["anthropic:claude-opus-5-5"]!;
+    try {
+      const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+      const models = ["claude-opus-4-5-20251101", "claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-opus-5-5", "claude-fable-5-1", "claude-opus-4-5@20251101"];
+      const a = t.bind({ models: models.map(m => `anthropic:${m}`) });
+      for (const model of models) expect((await t.call(a.slot, a.token, undefined, { model, max_tokens: 1000, messages: [] })).status).toBe(200);
+      expect(t.calls.map(c => c.body.inference_geo)).toEqual([undefined, undefined, undefined, "global", "global", "global"]);
+    } finally {
+      for (const model of older) delete CHAT_PRICES[`anthropic:${model}`];
+    }
   });
 
   test("a cap named in a field the route's provider does not read still gets the cell's cap in the route's field", async () => {
@@ -678,9 +703,13 @@ describe("unknown sends and reconcile", () => {
   test("a request-journal failure after reserve gives back the slot's claim and settles the reservation at zero", async () => {
     const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
     const a = t.bind();
-    const proxy = t.proxy as unknown as { journalFd: number | null; slots: Map<string, { committedMicros: number }> };
+    const proxy = t.proxy as unknown as { journalFd: number | null; journal: (line: Record<string, unknown>) => void; slots: Map<string, { committedMicros: number }> };
     const fd = proxy.journalFd;
-    proxy.journalFd = 2 ** 30;
+    const journal = proxy.journal.bind(t.proxy);
+    proxy.journal = line => {
+      if (line.kind === "request") proxy.journalFd = 2 ** 30;
+      journal(line);
+    };
     await expectProblem(await t.call(a.slot, a.token), 500, "E_INTERNAL");
     proxy.journalFd = fd;
     expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }]]);
@@ -698,7 +727,8 @@ describe("unknown sends and reconcile", () => {
     };
     await expectProblem(await t.call(a.slot, a.token), 500, "E_INTERNAL");
     expect(t.calls).toHaveLength(0);
-    expect(await reconcileJournal(join(t.dir, "journal.ndjson"), t.ledger)).toEqual({ settled: ["res_1"], unknown: [], refused: [], unreadable: 0 });
+    t.proxy.stop();
+    expect(await reconcileJournal(join(t.dir, "journal.ndjson"), t.ledger)).toEqual({ settled: ["res_1"], unknown: [], released: [], refused: [], unreadable: 0 });
     expect(t.ledger.reservations.get("res_1")).toMatchObject({ state: "settled", spent_micros: 0 });
   });
 
@@ -710,7 +740,8 @@ describe("unknown sends and reconcile", () => {
     const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { journal: path });
     const a = t.bind();
     expect((await t.call(a.slot, a.token)).status).toBe(200);
-    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: ["res_1"], unknown: [], refused: [], unreadable: 1 });
+    t.proxy.stop();
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: ["res_1"], unknown: [], released: [], refused: [], unreadable: 1 });
   });
 
   test("a failure before the slot check answers E_INTERNAL, not a stack page", async () => {
@@ -733,8 +764,9 @@ describe("unknown sends and reconcile", () => {
     await t.call(a.slot, "wrong");
     proxy.journalFd = fd;
     expect((await t.call(a.slot, a.token)).status).toBe(200);
+    t.proxy.stop();
     const result = await reconcileJournal(join(t.dir, "journal.ndjson"), new FakeLedger());
-    expect(result).toEqual({ settled: ["res_1"], unknown: [], refused: [], unreadable: 1 });
+    expect(result).toEqual({ settled: ["res_1"], unknown: [], released: [], refused: [], unreadable: 1 });
   });
 
   test("reconcile skips a truncated last line and settles the rest", async () => {
@@ -742,7 +774,122 @@ describe("unknown sends and reconcile", () => {
     dirs.push(dir);
     const path = join(dir, "journal.ndjson");
     appendFileSync(path, `${JSON.stringify({ kind: "request", reservation_id: "res_9" })}\n{"kind":"outcome","reserv`);
-    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_9"], refused: [], unreadable: 1 });
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_9"], released: [], refused: [], unreadable: 1 });
+  });
+
+  test("reconcile settles an outcome whose request line was lost with the journaled outcome", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-journal-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    const outcome: CallOutcome = { kind: "spent", spent_micros: 1234, usage: { input: 10, output: 5, reasoning: 0, cache_read: 0, cache_write: 0 } };
+    appendFileSync(path, `{"kind":"request","reserv\n${JSON.stringify({ kind: "outcome", reservation_id: "res_7", outcome })}\n`);
+    const ledger = new FakeLedger();
+    expect(await reconcileJournal(path, ledger)).toEqual({ settled: ["res_7"], unknown: [], released: [], refused: [], unreadable: 1 });
+    expect(ledger.settles).toEqual([["res_7", outcome]]);
+  });
+
+  test("a reserve the ledger recorded but never answered is released at zero by reconcile, so the lease closes with nothing held for it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-lost-ack-"));
+    dirs.push(dir);
+    const local = LocalLedger.open(join(dir, "ledger.sqlite"));
+    const lease_id = "gst8.0001.abcdef";
+    local.addLease({ schema: 1, kind: "lease", item: "gst8", seq: 1, lease_id, run_id: "r1", machine_id: "m-test", reserved_micros: 5_000_000, expires_at: new Date(Date.now() + 3_600_000).toISOString(), created_at: new Date().toISOString() });
+    const reserve = local.reserve.bind(local);
+    let lose = 1;
+    local.reserve = async request => {
+      const reply = await reserve(request);
+      if (lose-- > 0) throw new Error("connection reset after the ledger wrote the reservation");
+      return reply;
+    };
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { ledger: local as unknown as ReservationLedger, leaseId: lease_id });
+    const a = t.bind();
+    const body = await expectProblem(await t.call(a.slot, a.token), 503, "E_LEDGER_UNAVAILABLE");
+    expect(body.detail).toContain("reconcileJournal releases it at $0");
+    expect(t.calls).toHaveLength(0);
+    t.proxy.stop();
+    const result = await reconcileJournal(join(t.dir, "journal.ndjson"), local);
+    expect(result).toMatchObject({ settled: [], unknown: [], refused: [], unreadable: 0 });
+    expect(result.released).toHaveLength(1);
+    expect(await reconcileJournal(join(t.dir, "journal.ndjson"), local)).toEqual(result);
+    expect(local.stageClose(lease_id)).toMatchObject({ spent_micros: 0, unknown_micros: 0, unknown_calls: 0 });
+    local.close();
+  });
+
+  test("reconcile asks the ledger again only for reserves it never answered", async () => {
+    const ledger = new FakeLedger(1);
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }), { ledger });
+    const a = t.bind();
+    await expectProblem(await t.call(a.slot, a.token), 402, "CAP_STOP");
+    const reserves = spyOn(ledger, "reserve");
+    t.proxy.stop();
+    expect(await reconcileJournal(join(t.dir, "journal.ndjson"), ledger)).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
+    expect(reserves).not.toHaveBeenCalled();
+  });
+
+  test("reconcile refuses a journal a running proxy holds, so it cannot release a call the proxy may still send; a second proxy cannot open it either", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind();
+    const path = join(t.dir, "journal.ndjson");
+    appendFileSync(path, JSON.stringify({ kind: "reserve", idempotency_key: `${a.meter_id}:1:1`, lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, max_micros: 1000 }) + "\n");
+    await expect(reconcileJournal(path, t.ledger)).rejects.toThrow(/^E_USAGE: metering proxy: the journal .* is held by another proxy or reconcile \(process \d+\)/);
+    expect(t.ledger.reservations.size).toBe(0);
+    expect(() => setup(() => ok({}), { journal: path })).toThrow(/^E_USAGE: metering proxy: the journal .* is held by another proxy or reconcile/);
+    t.proxy.stop();
+    expect((await reconcileJournal(path, t.ledger)).released).toEqual(["res_1"]);
+  });
+
+  test("lock residue a crashed holder left, a takeover guard from an older build included, never blocks the journal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-stale-lock-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    appendFileSync(path, `${JSON.stringify({ kind: "request", reservation_id: "res_5" })}\n`);
+    const dead = String(Bun.spawnSync(["true"]).pid);
+    writeFileSync(`${path}.lock`, dead);
+    writeFileSync(`${path}.lock.takeover`, `${dead} crashed-taker`);
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_5"], released: [], refused: [], unreadable: 0 });
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: ["res_5"], released: [], refused: [], unreadable: 0 });
+  });
+
+  test("the journal lock excludes another process, and a holder killed with SIGKILL releases it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-killed-holder-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    const script = join(dir, "holder.ts");
+    writeFileSync(script, [
+      `import { MeteringProxy } from ${JSON.stringify(join(import.meta.dir, "../../src/runner/proxy/metering-proxy.ts"))};`,
+      `const unused = async () => { throw new Error("unused"); };`,
+      `new MeteringProxy({ ledger: { reserve: unused, settle: unused }, leaseId: "l1", host: "127.0.0.1", managementSocket: ${JSON.stringify(join(dir, "holder.sock"))}, managementToken: ${JSON.stringify(MANAGEMENT)}, journal: ${JSON.stringify(path)}, retry: { attempts: 1, elapsed_ms: 1000 }, env: {} }).start();`,
+      `console.log("ready");`,
+      `setInterval(() => {}, 1000);`,
+    ].join("\n"));
+    const holder = Bun.spawn([process.execPath, script], { stdout: "pipe", stderr: "inherit" });
+    expect(new TextDecoder().decode((await holder.stdout.getReader().read()).value)).toContain("ready");
+    await expect(reconcileJournal(path, new FakeLedger())).rejects.toThrow(new RegExp(`is held by another proxy or reconcile \\(process ${holder.pid}\\)`));
+    holder.kill(9);
+    await holder.exited;
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
+  });
+
+  test.skipIf(!existsSync("/dev/full"))("a lock whose holder pid cannot be recorded, as on a full disk, is released, not stranded", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "u3-full-lock-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    appendFileSync(path, "");
+    symlinkSync("/dev/full", `${path}.lock`);
+    for (let i = 0; i < 2; i++) {
+      const error = await reconcileJournal(path, new FakeLedger()).then(() => null, (e: Error) => e);
+      expect(error?.message).not.toContain("held by another proxy or reconcile");
+      expect(error).not.toBeNull();
+    }
+  });
+
+  test("a proxy that fails to start after taking the journal lock releases it", async () => {
+    const t = setup(() => ok({}));
+    const dir = mkdtempSync(join(tmpdir(), "u3-failed-start-"));
+    dirs.push(dir);
+    const path = join(dir, "journal.ndjson");
+    expect(() => setup(() => ok({}), { journal: path, port: t.proxy.port })).toThrow();
+    expect(await reconcileJournal(path, new FakeLedger())).toEqual({ settled: [], unknown: [], released: [], refused: [], unreadable: 0 });
   });
 
   test("finalize over the socket refuses a timeout_ms that is not a non-negative integer", async () => {
@@ -769,8 +916,9 @@ describe("unknown sends and reconcile", () => {
     });
     const a = t.bind();
     await t.call(a.slot, a.token);
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ kind: "request", reservation_id: "res_1", lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, try: 1, source: "127.0.0.1" });
+    expect(seen.map(line => line.kind)).toEqual(["reserve", "request"]);
+    expect(seen[0]).toMatchObject({ kind: "reserve", idempotency_key: `${a.meter_id}:1:1`, lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, try: 1, source: "127.0.0.1" });
+    expect(seen[1]).toMatchObject({ kind: "request", reservation_id: "res_1", idempotency_key: `${a.meter_id}:1:1`, lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, try: 1, source: "127.0.0.1" });
   });
 
   test("a settle the ledger refuses is counted as unsettled, and reconcile reports the refusal", async () => {
@@ -781,8 +929,9 @@ describe("unknown sends and reconcile", () => {
     expect((await t.proxy.finalize(a.meter_id)).unsettled).toBe(1);
     const refusing = new FakeLedger();
     refusing.refuseSettles = 1;
+    t.proxy.stop();
     const result = await reconcileJournal(join(t.dir, "journal.ndjson"), refusing);
-    expect(result).toEqual({ settled: [], unknown: [], refused: [{ reservation_id: "res_1", code: "CAP_STOP", message: "settle refused" }], unreadable: 0 });
+    expect(result).toEqual({ settled: [], unknown: [], released: [], refused: [{ reservation_id: "res_1", code: "CAP_STOP", message: "settle refused" }], unreadable: 0 });
   });
 
   test("reconcile settles a call with no outcome as unknown and resends nothing; a lost acknowledgement is settled again", async () => {
@@ -794,8 +943,9 @@ describe("unknown sends and reconcile", () => {
     const path = join(t.dir, "journal.ndjson");
     appendFileSync(path, JSON.stringify({ kind: "request", reservation_id: "res_crashed", lease_id: "l1", cell: { ...cell, meter_id: a.meter_id }, try: 1, max_micros: 500_000 }) + "\n");
     const fresh = new FakeLedger();
+    t.proxy.stop();
     const result = await reconcileJournal(path, fresh);
-    expect(result).toEqual({ settled: ["res_1"], unknown: ["res_crashed"], refused: [], unreadable: 0 });
+    expect(result).toEqual({ settled: ["res_1"], unknown: ["res_crashed"], released: [], refused: [], unreadable: 0 });
     expect(fresh.settles[0]![1]).toMatchObject({ kind: "spent" });
     expect(fresh.settles[1]).toEqual(["res_crashed", { kind: "unknown" }]);
     expect(t.calls).toHaveLength(1);

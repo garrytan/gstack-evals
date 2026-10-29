@@ -131,6 +131,29 @@ describe("gstack-evals ledger lease, settle, reconcile and status", () => {
     expect((await thread.cli("status", "--json")).out).toContain('"committed_micros": 0');
   });
 
+  test("a sealed workflow that spent above its lease settles and imports at the real spend, with LEASE_OVERSPENT on stderr", async () => {
+    const thread = world();
+    const workflow = world();
+    await thread.cli("init", "--cap", "50", "--item", "sealed-run-2", "--admission", "warn", "--words", "Rec", "--by", "Garry", "--source", "gate 3");
+    const exported = join(thread.dir, "lease.json");
+    const lease = JSON.parse((await thread.cli("lease", "--item", "sealed-run-2", "--run", "sealed-2", "--amount", "1", "--machine", "workflow:sealed", "--export", exported, "--json")).out);
+    expect((await workflow.cli("lease", "--from", exported)).code).toBe(0);
+    const held = LocalLedger.open(workflow.env.GSTACK_EVALS_LEDGER);
+    const r = await held.reserve({ idempotency_key: "w1", lease_id: lease.lease_id, cell: { run_id: "sealed-2", arm: "after", task: "t1", model: "claude-opus-5-5", trial: 1, attempt: 1, meter_id: "m-1" }, max_micros: 900_000 });
+    if (!r.ok) throw new Error(r.message);
+    await held.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: 1_200_000, usage: { input: 10, output: 5, reasoning: 0, cache_read: 0, cache_write: 0 } });
+    held.close();
+    const artifact = join(workflow.dir, "settle.json");
+    const staged = await workflow.cli("settle", "--lease", lease.lease_id, "--artifact", artifact);
+    expect(staged.code).toBe(0);
+    expect(everyLine(staged.err, "LEASE_OVERSPENT")).toBe(true);
+    const imported = await thread.cli("settle", "--from", artifact);
+    expect(imported.code).toBe(0);
+    expect(imported.out).toStartWith("SETTLED: " + lease.lease_id + " spent=$1.20");
+    expect(everyLine(imported.err, "LEASE_OVERSPENT")).toBe(true);
+    expect(imported.err).toContain("closes at $1.20, above the $1.00 it reserved");
+  });
+
   test("the dispatcher runs the ledger command", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ledger-dispatch-"));
     dirs.push(dir);
