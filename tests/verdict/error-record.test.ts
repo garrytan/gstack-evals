@@ -30,6 +30,17 @@ describe("the versioned error record", () => {
     }
   });
 
+  test("short credentials and credentials in the cause's code are scrubbed too", () => {
+    const short = { PASSWORD: "s3cr3t", AUTH_TOKEN: "TOKENVALUE42", HOME: "/home/u" };
+    const inferred = errorRecord({ code: "UPSTREAM", operation: "trial", message: "login s3cr3t", cause: new Error("TOKENVALUE42: rejected s3cr3t"), context, trace: "/out/s3cr3t" }, short);
+    const explicit = errorRecord({ code: "UPSTREAM", operation: "trial", message: "m", cause: Object.assign(new Error("refused"), { code: "s3cr3t" }), context }, short);
+    expect([inferred.cause, explicit.cause!.code, inferred.message, inferred.trace]).toEqual([{ code: "[scrubbed AUTH_TOKEN]", message: "[scrubbed AUTH_TOKEN]: rejected [scrubbed PASSWORD]" }, "[scrubbed PASSWORD]", "login [scrubbed PASSWORD]", "/out/[scrubbed PASSWORD]"]);
+    for (const text of [JSON.stringify(inferred), JSON.stringify(explicit), ...errorLines(inferred), ...errorLines(explicit)]) {
+      expect(text).not.toContain("s3cr3t");
+      expect(text).not.toContain("TOKENVALUE42");
+    }
+  });
+
   test("warnings are not errors, and the cause's code comes from the error", () => {
     expect(() => errorRecord({ code: "CEILING", operation: "verdict", message: "x", context })).toThrow("is a warning");
     const coded = Object.assign(new Error("refused"), { code: "E_SLOT_DENIED" });

@@ -2,8 +2,9 @@
 // including one before verdict.json exists, and the stderr lines that mirror it. The fix, side effects, retry safety and
 // resumability come from the code's entry in src/errors/codes.ts, so a record never disagrees with docs/errors.md.
 //
-// Secret values are scrubbed from the message and the cause, never dropped: the value of every environment variable whose
-// name marks a credential, and anything shaped like a provider key or a bearer token, becomes [scrubbed]. Context carries
+// Secret values are scrubbed from the message, the cause's code and message, and the trace, never dropped: the value of
+// every environment variable whose name marks a credential, whatever its length, and anything shaped like a provider key
+// or a bearer token, becomes [scrubbed]. Context carries
 // variable names only.
 import { randomUUID } from "node:crypto";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
@@ -28,7 +29,11 @@ export const SECRET_PATTERNS: readonly RegExp[] = [
 
 export function scrubSecrets(text: string, env: Record<string, string | undefined> = process.env): string {
   let out = text;
-  for (const [name, value] of Object.entries(env)) if (value && value.length >= 8 && SECRET_NAME.test(name)) out = out.split(value).join("[scrubbed " + name + "]");
+  const secrets = Object.entries(env).filter((e): e is [string, string] => !!e[1] && SECRET_NAME.test(e[0])).sort((a, b) => b[1].length - a[1].length);
+  if (secrets.length > 0) {
+    const names = new Map(secrets.map(([name, value]) => [value, name]));
+    out = out.replace(new RegExp(secrets.map(([, value]) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g"), (value) => "[scrubbed " + names.get(value) + "]");
+  }
   for (const pattern of SECRET_PATTERNS) out = out.replace(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g"), "[scrubbed]");
   return out;
 }
@@ -55,7 +60,7 @@ function causeOf(cause: unknown, env: Record<string, string | undefined>): Error
   const message = error ? error.message : String(cause);
   const own = (error as { code?: unknown } | null)?.code;
   const code = typeof own === "string" ? own : (/^([A-Z][A-Z0-9_]{2,})\b/.exec(message)?.[1] ?? error?.name ?? "Error");
-  return { code, message: scrubSecrets(message, env) };
+  return { code: scrubSecrets(code, env), message: scrubSecrets(message, env) };
 }
 
 export function errorRecord(input: ErrorInput, env: Record<string, string | undefined> = process.env): ErrorRecord {
@@ -76,7 +81,7 @@ export function errorRecord(input: ErrorInput, env: Record<string, string | unde
     retry: { safe: info.retry_safe, max: input.retry_max ?? (info.retry_safe ? 1 : 0) },
     resumable: info.resumable,
     correlation_id: input.correlation_id ?? (input.code === "E_INTERNAL" ? randomUUID() : null),
-    trace: input.trace ?? null,
+    trace: input.trace ? scrubSecrets(input.trace, env) : null,
   };
 }
 
