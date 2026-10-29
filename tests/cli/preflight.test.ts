@@ -47,21 +47,19 @@ describe("preflight on gstack's learn tasks", () => {
     }
   });
 
-  // Value: protects=GST-225 under the default policy: Sonnet 5.5 passes as a subject, particle-1 is refused with the pinned line until the proxy routes OpenRouter, and a Sonnet judge is refused; fails_when=the default flips any of the three; why_new=Garry's 2026-10-29 rulings; seam=policy/models.json; no_claim=particle-1 running (GST-227)
-  test("Sonnet 5.5 passes as a subject; particle-1 and a Sonnet judge are refused under the default policy", async () => {
+  // Value: protects=Garry's 2026-10-29 rulings under the default policy: Sonnet 5.5 passes as a subject and as a cross-family judge, and particle-1 is refused with the pinned line until the proxy routes OpenRouter; fails_when=the default refuses Sonnet in either role or lets particle-1 pass early; why_new=GST-225 and the last Sonnet ruling; seam=policy/models.json; no_claim=particle-1 running (GST-227)
+  test("Sonnet 5.5 passes as a subject and as a judge; particle-1 is refused under the default policy", async () => {
     const { args } = await lockedLearn();
     expect((await run(args("claude", "claude-sonnet-5-5"))).code).toBe(0);
+    expect((await run(args("codex", "gpt-6.1-sol", ["--judge-model", "claude-sonnet-5-5"]))).code).toBe(0);
     const particle = await run(args("codex", "particle-ai/particle-1"));
     expect(particle.code).toBe(2);
     expect(particle.err).toContain("E_MODEL_POLICY particle-ai/particle-1 as a model under test: the metering proxy cannot route or price OpenRouter models yet (M2a), so its spend could not be held against a cap");
-    const judge = await run(args("claude", "claude-opus-5-5", ["--judge-model", "claude-sonnet-5-5"]));
-    expect(judge.code).toBe(2);
-    expect(judge.err).toContain("E_MODEL_POLICY claude-sonnet-5-5 as the judge: the policy gstack-evals default model policy allows it only as subject");
     const same = await run(args("claude", "claude-opus-5-5", ["--judge-model", "claude-opus-5-5"]));
     expect(same.err).toContain("judges come from another model family");
   });
 
-  // Value: protects=--policy lets a caller narrow or widen the subject list through the same preflight; fails_when=a narrowing policy still admits Sonnet or a widening one cannot admit gpt-5.5; why_new=GST-225's custom-policy test; seam=the lock pins the policy, so each policy locks its own set; no_claim=none beyond protects
+  // Value: protects=--policy lets a caller narrow or widen the subject list through the same preflight; fails_when=a narrowing policy still admits Haiku or a widening one cannot admit gpt-5.5; why_new=GST-225's custom-policy test; seam=the lock pins the policy, so each policy locks its own set; no_claim=none beyond protects
   test("a caller's own policy narrows or widens the subject list in preflight", async () => {
     const def = JSON.parse(readFileSync(DEFAULT_POLICY, "utf8"));
     const write = (name: string, models: Record<string, unknown>) => {
@@ -69,9 +67,9 @@ describe("preflight on gstack's learn tasks", () => {
       writeFileSync(path, JSON.stringify({ ...def, name, models }));
       return path;
     };
-    const narrow = write("narrow", Object.fromEntries(Object.entries(def.models).filter(([id]) => !id.includes("sonnet"))));
+    const narrow = write("narrow", Object.fromEntries(Object.entries(def.models).filter(([id]) => !id.includes("haiku"))));
     const n = await lockedLearn(narrow);
-    expect((await run(n.args("claude", "claude-sonnet-5-5"))).err).toContain("E_MODEL_POLICY claude-sonnet-5-5 as a model under test: not in the policy narrow");
+    expect((await run(n.args("claude", "claude-haiku-5-5"))).err).toContain("E_MODEL_POLICY claude-haiku-5-5 as a model under test: not in the policy narrow");
     expect((await run(n.args("claude", "claude-opus-5-5"))).code).toBe(0);
     const wide = write("wide", { ...def.models, "gpt-5.5": { provider: "openai", roles: ["subject"] } });
     const w = await lockedLearn(wide);

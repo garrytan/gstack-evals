@@ -104,7 +104,9 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 
 ## Model policy
 
-The default policy, `policy/models.json`, lists the newest generation of each family. Opus 5.5, Sonnet 5.5, Haiku 5.5, gpt-6-astra, gpt-6.1-sol and gpt-6-luna may be subjects. Opus 5.5, gpt-6-astra and gpt-6.1-sol may also judge and adjudicate, and gpt-6-luna simulates the user. Sonnet is a subject only. Fable 5.1 is allowed only with `--smoke`, and gpt-5.4-mini is refused. particle-1 and DeepSeek V4.1 Flash (OpenRouter) are listed as subjects and refused until the metering proxy can route and price OpenRouter (GST-227). Pass your own file with `--policy`; policy/examples/gbrain.json shows a narrower ladder.
+The default policy, `policy/models.json`, lists the newest generation of each family. Opus 5.5, Sonnet 5.5, Haiku 5.5, gpt-6-astra, gpt-6.1-sol and gpt-6-luna may be subjects. Opus 5.5, Sonnet 5.5, gpt-6-astra and gpt-6.1-sol may also judge and adjudicate, and gpt-6-luna simulates the user. Fable 5.1 is allowed only with `--smoke`, and gpt-5.4-mini is refused. particle-1 and DeepSeek V4.1 Flash (OpenRouter) are listed as subjects and refused until the metering proxy can route and price OpenRouter (GST-227). Pass your own file with `--policy`; policy/examples/gbrain.json shows a narrower ladder.
+
+The judge is chosen per preregistration, always from another family than the models under test. gstack's own runs prefer Opus 5.5 wherever that rule allows it, because Garry prefers Opus. This preference is stated here and not enforced in code: the default judge is Opus 5.5 for OpenAI and OpenRouter subjects and gpt-6.1-sol for Anthropic subjects, and `--judge-model` picks any judge the policy allows.
 
 ## Exit codes
 

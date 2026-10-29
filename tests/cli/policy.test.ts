@@ -22,12 +22,12 @@ function custom(name: string, models: Record<string, unknown>): LoadedPolicy {
 }
 
 describe("the default model policy", () => {
-  // Value: protects=Garry's 2026-10-29 rulings: Sonnet 5.5 is a model under test and never a judge or adjudicator; fails_when=the default refuses a Sonnet subject or allows a Sonnet judge; why_new=no policy file existed; seam=none; no_claim=preflight's use of it (tests/cli/preflight.test.ts)
-  test("it allows Sonnet 5.5 as a subject and refuses it as a judge, adjudicator or user simulator", () => {
+  // Value: protects=Garry's last 2026-10-29 ruling: the default refuses Sonnet 5.5 in no role the other current models hold; fails_when=the default refuses Sonnet as a subject, judge or adjudicator; why_new=the ruling replaced the subject-only rule; seam=policy/models.json; no_claim=which judge a preregistration picks
+  test("it allows Sonnet 5.5 as a subject, judge and adjudicator", () => {
     expect(subject(def, "claude-sonnet-5-5")).toBeNull();
-    expect(judge(def, "claude-sonnet-5-5")).toContain("allows it only as subject");
-    expect(modelProblem(def, "claude-sonnet-5-5", "adjudicator", { smoke: false })).toContain("allows it only as subject");
-    expect(modelProblem(def, "claude-sonnet-5-5", "usersim", { smoke: false })).toContain("allows it only as subject");
+    expect(judge(def, "claude-sonnet-5-5")).toBeNull();
+    expect(modelProblem(def, "claude-sonnet-5-5", "adjudicator", { smoke: false })).toBeNull();
+    expect(def.policy.models["claude-sonnet-5-5"]!.roles).toEqual(def.policy.models["claude-opus-5-5"]!.roles);
   });
 
   // Value: protects=CREW.md's other model rules in the default: newest generation only, never gpt-5.4-mini, Fable only in smoke; fails_when=an older generation, gpt-5.4-mini or a non-smoke Fable passes; why_new=new; seam=none; no_claim=none beyond protects
@@ -64,21 +64,20 @@ describe("the default model policy", () => {
 });
 
 describe("a caller's own policy", () => {
-  // Value: protects=--policy lets another project narrow or widen the subject list (brief item 1, GST-225); fails_when=a custom policy cannot drop Sonnet or allow a model the default refuses; why_new=new; seam=none; no_claim=preflight's use (tests/cli/preflight.test.ts)
+  // Value: protects=--policy lets another project narrow or widen the subject list (brief item 1, GST-225); fails_when=a custom policy cannot drop a model or allow one the default refuses; why_new=new; seam=none; no_claim=preflight's use (tests/cli/preflight.test.ts)
   test("it can narrow or widen the subject list", () => {
     const narrow = custom("narrow", { "claude-opus-5-5": { provider: "anthropic", roles: ["subject", "judge", "adjudicator"] }, "gpt-6.1-sol": { provider: "openai", roles: ["judge", "adjudicator", "usersim"] }, "gpt-6-luna": { provider: "openai", roles: ["usersim"] } });
-    expect(subject(narrow, "claude-sonnet-5-5")).toContain("not in the policy");
+    expect(subject(narrow, "claude-haiku-5-5")).toContain("not in the policy");
     expect(subject(narrow, "claude-opus-5-5")).toBeNull();
     const wide = custom("wide", { ...def.policy.models, "gpt-5.5": { provider: "openai", roles: ["subject"] } });
     expect(subject(def, "gpt-5.5")).toContain("not in the policy");
     expect(subject(wide, "gpt-5.5")).toBeNull();
   });
 
-  // Value: protects=the committed example for other projects loads and allows Sonnet as a subject only; fails_when=the example breaks the policy shape or lets Sonnet judge; why_new=new; seam=none; no_claim=none beyond protects
+  // Value: protects=the committed example for other projects loads with its own narrower ladder; fails_when=the example breaks the policy shape; why_new=new; seam=none; no_claim=none beyond protects
   test("policy/examples/gbrain.json loads, allows Sonnet as a subject and judges with Opus or gpt-6.1-sol", () => {
     const example = load(join(REPO_ROOT, "policy", "examples", "gbrain.json"));
     expect(subject(example, "claude-sonnet-5-5")).toBeNull();
-    expect(judge(example, "claude-sonnet-5-5")).toContain("allows it only as subject");
     expect(judge(example, "claude-opus-5-5")).toBeNull();
     expect(subject(example, "claude-haiku-5-5")).toContain("not in the policy");
   });

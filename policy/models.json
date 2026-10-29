@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "name": "gstack-evals default model policy",
-  "source": "CREW.md, the gstack-evals Captain's rules: never Sonnet for an agent doing our work (Garry's rec on gate decision 4), while Sonnet 5.5 and particle-1 are models under test (Garry, 2026-10-29: \"yes, ok sonnet then. also can you add particle-1 as a model everywhere?\", GST-225), with DeepSeek V4.1 Flash, particle-1's base, beside it as a fixed ladder rung; the newest generation of each family only; never gpt-5.4-mini; Fable only in smoke tests. Other projects pass their own file with --policy.",
+  "source": "CREW.md, the gstack-evals Captain's rules: Sonnet 5.5 has the roles of the other current models, judge included (Garry, 2026-10-29: \"tbh sonnet is good now maybe we shouldn't have gstack say no sonnet\"), and the judge is chosen per preregistration with an Opus 5.5 preference stated in docs/skill-eval.md; particle-1 is a model under test (Garry, 2026-10-29: \"also can you add particle-1 as a model everywhere?\", GST-225), with DeepSeek V4.1 Flash, particle-1's base, beside it as a fixed ladder rung; the newest generation of each family only; never gpt-5.4-mini; Fable only in smoke tests. Other projects pass their own file with --policy.",
   "models": {
     "claude-opus-5-5": {"provider": "anthropic", "roles": ["subject", "judge", "adjudicator"]},
-    "claude-sonnet-5-5": {"provider": "anthropic", "roles": ["subject"]},
+    "claude-sonnet-5-5": {"provider": "anthropic", "roles": ["subject", "judge", "adjudicator"]},
     "claude-haiku-5-5": {"provider": "anthropic", "roles": ["subject"]},
     "claude-fable-5-1": {"provider": "anthropic", "roles": ["subject"], "smoke_only": true},
     "gpt-6-astra": {"provider": "openai", "roles": ["subject", "judge", "adjudicator"]},

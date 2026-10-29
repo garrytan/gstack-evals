@@ -44,7 +44,7 @@ U7 built the caller-facing half of Lane A. A call is parsed against one flag tab
 
 ## Choices on the brief's open items
 
-1. **Model policy.** Roles are subject, judge, adjudicator and usersim. The default allows Sonnet 5.5 as a subject only, and lists particle-1 and DeepSeek V4.1 Flash as OpenRouter subjects that are refused until the proxy routes OpenRouter. The CLI-wide Sonnet-judge rule was dropped: a caller's own `--policy` decides its judges.
+1. **Model policy.** Roles are subject, judge, adjudicator and usersim. The default refuses Sonnet 5.5 in no role: it has the roles of the other current models, judge included (Garry's last 2026-10-29 ruling). The judge is chosen per preregistration, and docs/skill-eval.md states the Opus 5.5 preference, which the code does not enforce. particle-1 and DeepSeek V4.1 Flash are OpenRouter subjects, refused until the proxy routes OpenRouter. A caller's own `--policy` sets its own roles.
 2. **The default `--out`.** It is `<state>/runs/<run id>`: `~/.capy/work/gstack-evals/runs` on Capy, else the XDG state dir. It is never the OS temp dir or the tasks repo. E_INTERNAL lines, trace files and error records are scrubbed against the call's environment.
 3. **The PDF flag.** PDF_INPUT is a warning. It names tasks whose prompt, setup, check, mutant or fixtures hold a PDF.
 4. **buildLock.** It throws LockInputError on a bad tasks file or sidecar and reports the claims it dropped.
