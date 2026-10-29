@@ -55,7 +55,7 @@ Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running
 
 ### Approve the cap
 
-Each line item has its own cap and its own ledger. A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` and `item` equal to `LANEA_CAP_USD` and `LANEA_LINE_ITEM`. Neither has a default: a shell that misses either stops with E_CONFIG, and one that names another cap or item than the ledger's approval stops with E_LEDGER_MISSING before it writes a row. Record the approval once, with each quoted reply as its own `--words`:
+Each line item has its own cap and its own ledger. A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` and `item` equal to `LANEA_CAP_USD` and `LANEA_LINE_ITEM`. Neither has a default: a shell that misses either stops with E_CONFIG, and one that names another cap or item than the ledger's approval stops before it writes a row: E_LEDGER_MISSING on run and project, E_APPROVAL on approve. Record the approval once, with each quoted reply as its own `--words`:
 
 ```
 LANEA_CAP_USD=35 LANEA_LINE_ITEM=lanea-quick-rerun bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
@@ -65,7 +65,13 @@ Pass the words as separate arguments, not through a shell string with `$` in it 
 
 ### Close a line item
 
-When a line item ends or its unspent money moves to another, append one close row to its ledger, through a file:
+When a line item ends or its unspent money moves to another, append one close row to its ledger, through a file, while holding the ledger lock. Take `moved_usd` from `project`'s `remaining`, run with the same `LANEA_CAP_USD` and `LANEA_LINE_ITEM` just before:
+
+```
+(set -C; echo '{"host":"<who>, closing"}' > <ledger>.lock) && cat close-row.json >> <ledger> && rm <ledger>.lock
+```
+
+A live runner holds `<ledger>.lock` for its whole run, so the exclusive create fails until that run ends. `close-row.json` holds one line:
 
 ```
 {"ts":"<iso time>","item":"lanea-quick","type":"close","reason":"unspent money moved","moved_usd":20.44,"to_item":"lanea-quick-rerun","by":"<who>","source":"<where it was decided>"}

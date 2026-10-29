@@ -89,11 +89,11 @@ describe("ledger", () => {
   });
   test("only the first row can approve, and the old fake runner's approval never authorizes a paid ledger", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(p, JSON.stringify({ type: "approval", cap_usd: 10, words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" }) + "\n");
+    writeFileSync(p, JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" }) + "\n");
     expect(new Ledger(p, 10, "t").hasApproval()).toBe(false);
     expect(() => new Ledger(p, 10, "t").approve({ words: ["Rec"], by: "x", source: "y" })).toThrow("E_APPROVAL");
     const q = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
-    writeFileSync(q, JSON.stringify({ type: "reserve", reservation_id: "a", usd: 1 }) + "\n" + JSON.stringify({ type: "approval", cap_usd: 10, words: ["Rec"], by: "x", source: "y" }) + "\n");
+    writeFileSync(q, JSON.stringify({ type: "reserve", reservation_id: "a", usd: 1 }) + "\n" + JSON.stringify({ type: "approval", item: "t", cap_usd: 10, words: ["Rec"], by: "x", source: "y" }) + "\n");
     expect(new Ledger(q, 10, "t").hasApproval()).toBe(false);
   });
   test("a resume fails closed on a ledger approved for another item or another cap, and writes nothing", () => {
