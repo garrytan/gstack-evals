@@ -10,7 +10,9 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CODES } from "../src/errors/codes.ts";
 import { seededRandom } from "../src/runner/stats/paired.ts";
+import { codeLines } from "../src/skill-eval/contract/cli-io.ts";
 import {
   coveredSd, DECISION_9_DESIGNS, decision9Table, PARITY_EFFECT, parityDesign, RELEASE_OPTIONS, releaseSplitTable, taskDiffSd,
 } from "../src/runner/stats/sizing.ts";
@@ -286,6 +288,24 @@ export function reportFiles(source: Source, counts: Counts): Record<string, stri
   return { [PATHS.results]: resultsJson(source, r), [PATHS.note]: spliceBlock(readFileSync(PATHS.note, "utf8"), renderBlock(r)) };
 }
 
+type ScriptCode = "E_USAGE" | "E_PARITY_SOURCE" | "E_PARITY_STALE";
+const USAGE = "bun scripts/parity-sd-estimate.ts fetch <out> | build <trials.json> [--check] | report [--check]";
+
+function fail(code: ScriptCode, messages: string[], fix: string = CODES[code].fix): never {
+  console.error(codeLines(code, messages.map((m) => "parity-sd-estimate: " + m), fix));
+  process.exit(CODES[code].exit);
+}
+
+const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+function generated(source: Source, counts: Counts): Record<string, string> {
+  try {
+    return reportFiles(source, counts);
+  } catch (e) {
+    return fail("E_PARITY_STALE", [reason(e)]);
+  }
+}
+
 function settle(files: Record<string, string>, check: boolean): void {
   const stale = Object.entries(files).filter(([path, text]) => {
     let current: string | null = null;
@@ -297,19 +317,13 @@ function settle(files: Record<string, string>, check: boolean): void {
     console.log("parity-sd-estimate: wrote " + Object.keys(files).length + " files under " + DIR);
     return;
   }
-  for (const [path] of stale) console.error("parity-sd-estimate: " + path + " differs from what the script computes; run without --check and review the diff");
-  if (stale.length) process.exit(1);
+  if (stale.length) fail("E_PARITY_STALE", stale.map(([path]) => path + " differs from what the script computes"));
   console.log("parity-sd-estimate: " + Object.keys(files).length + " files match byte for byte");
-}
-
-function fail(message: string): never {
-  console.error("parity-sd-estimate: " + message);
-  process.exit(1);
 }
 
 function verified(bytes: Uint8Array, source: Source, what: string): void {
   const got = sha256(bytes);
-  if (got !== source.sha256) fail(what + " has sha256 " + got + ", but source.json records " + source.sha256 + " (" + source.bytes + " bytes, retrieved " + source.retrieved + "); the estimate reproduces only from the recorded file");
+  if (got !== source.sha256) fail("E_PARITY_SOURCE", [what + " has sha256 " + got + ", but source.json records " + source.sha256 + " (" + source.bytes + " bytes, retrieved " + source.retrieved + "); the estimate reproduces only from the recorded file"]);
 }
 
 export async function main(argv: string[]): Promise<void> {
@@ -317,22 +331,26 @@ export async function main(argv: string[]): Promise<void> {
   const check = argv.includes("--check");
   const source = readSource();
   if (cmd === "fetch" && arg) {
-    const res = await fetch(source.url);
-    if (!res.ok) fail(source.url + " answered HTTP " + res.status);
+    const res = await fetch(source.url).catch((e) => fail("E_PARITY_SOURCE", [source.url + ": " + reason(e)]));
+    if (!res.ok) fail("E_PARITY_SOURCE", [source.url + " answered HTTP " + res.status]);
     const bytes = new Uint8Array(await res.arrayBuffer());
     verified(bytes, source, source.url + " (Last-Modified " + (res.headers.get("last-modified") ?? "unknown") + ")");
     writeFileSync(arg, bytes);
     console.log("parity-sd-estimate: wrote " + arg + ", sha256 " + source.sha256);
   } else if (cmd === "build" && arg && arg !== "--check") {
-    const bytes = readFileSync(arg);
-    verified(bytes, source, arg);
-    const rows = (JSON.parse(bytes.toString("utf8")) as { rows: TrialRow[] }).rows;
-    const counts = extractCounts(rows, source.sha256);
-    settle({ [PATHS.counts]: countsJson(counts), ...reportFiles(source, counts) }, check);
+    let counts: Counts;
+    try {
+      const bytes = readFileSync(arg);
+      verified(bytes, source, arg);
+      counts = extractCounts((JSON.parse(bytes.toString("utf8")) as { rows: TrialRow[] }).rows, source.sha256);
+    } catch (e) {
+      fail("E_PARITY_SOURCE", [arg + ": " + reason(e)]);
+    }
+    settle({ [PATHS.counts]: countsJson(counts), ...generated(source, counts) }, check);
   } else if (cmd === "report") {
-    settle(reportFiles(source, readCounts()), check);
+    settle(generated(source, readCounts()), check);
   } else {
-    fail("usage: bun scripts/parity-sd-estimate.ts fetch <out> | build <trials.json> [--check] | report [--check]");
+    fail("E_USAGE", ["unknown command or missing argument: " + (argv.join(" ") || "(none)")], USAGE);
   }
 }
 

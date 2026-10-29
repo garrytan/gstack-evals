@@ -462,6 +462,24 @@ export const CODES = {
     resumable: false,
     owner: "U13",
   },
+  E_PARITY_SOURCE: {
+    exit: 2,
+    meaning: "scripts/parity-sd-estimate.ts could not use the DeepSWE trials file: the download failed, the file is unreadable, its sha256 differs from the one docs/benchmarks/2026-11-parity-sd-estimate/source.json records, or it lacks a configuration the estimate reads.",
+    fix: "Use the recorded file, the one with source.json's sha256. DeepSWE serves a live file, so a new digest needs a new estimate with its own note, never an edit to the old numbers. report --check needs no download.",
+    side_effects: "None: nothing is written.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U15",
+  },
+  E_PARITY_STALE: {
+    exit: 2,
+    meaning: "A file the parity SD estimate generates (counts.json, results.json or the note's generated block) differs from what scripts/parity-sd-estimate.ts computes, is missing its markers, or was derived from another source file than source.json records.",
+    fix: "Run the same command without --check, review the diff, and commit it only if the change is intended.",
+    side_effects: "None: nothing is written.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U15",
+  },
 
   CALIBRATION_SKILL: {
     exit: 3,

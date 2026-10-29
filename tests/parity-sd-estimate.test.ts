@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   CONFIGS, type Counts, countsJson, extractCounts, moments, pairTerms, pairVariance, PATHS, readCounts, readSource, reportFiles, type TrialRow,
 } from "../scripts/parity-sd-estimate.ts";
@@ -44,6 +47,23 @@ describe("parity SD estimate (U15)", () => {
     expect(m.tasks).toBe(4);
     expect(m.between).toBeCloseTo(2 / 3, 12);
     expect(pairVariance(m)).toBeCloseTo(2 / 3, 12);
+  });
+
+  test("every error line starts with its reason code", () => {
+    const dir = mkdtempSync(join(tmpdir(), "parity-sd-"));
+    try {
+      writeFileSync(join(dir, "trials.json"), "{\"rows\": []}");
+      const script = join(import.meta.dir, "..", "scripts", "parity-sd-estimate.ts");
+      for (const [args, code] of [[["nope"], "E_USAGE"], [["build", join(dir, "trials.json")], "E_PARITY_SOURCE"], [["build", join(dir, "absent.json")], "E_PARITY_SOURCE"]] as const) {
+        const run = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+        expect(run.status).toBe(2);
+        const lines = run.stderr.trimEnd().split("\n");
+        expect(lines.length).toBeGreaterThan(2);
+        for (const line of lines) expect(line).toStartWith(code + " ");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("a resample counts a repeated task each time it is drawn", () => {
