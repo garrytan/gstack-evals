@@ -1,0 +1,549 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/garrytan/gstack-evals/blob/main/schema/verdict.schema.json",
+  "$comment": "Version 1.0.0 (semver). The root is <out>/verdict.json; #/$defs/error is <out>/error.json. Adding an optional field is a minor version; renaming, removing or retyping one is a major version.",
+  "title": "Skill eval verdict (a superset of gstack's contract verdict file)",
+  "description": "verdict, reasons, harness_version, model, trials, calibration, arms, tasks and adjudication keep the contract's names and shapes. With several models, model lists them comma-separated and arms and tasks hold the first model's blocks; every model has a block under models. The contract's UNCOVERED is the BROKEN_TASK warning. Money in spend is integer micro-dollars.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "reasons", "harness_version", "model", "trials", "calibration", "arms", "tasks", "adjudication", "schema_version", "verdict_id", "exit_code", "warnings", "resumable", "smallest_detectable_loss", "noninferior", "effective", "harness", "arm_trees", "lock", "lock_drift", "contract_lines_removed", "models", "levels", "spend", "resumed_from", "wall_s", "rig"],
+  "properties": {
+    "verdict": {"enum": ["PASS", "FAIL", "INCOMPLETE"]},
+    "reasons": {"$ref": "#/$defs/reasons"},
+    "harness_version": {"type": "string"},
+    "model": {"type": "string"},
+    "trials": {"type": "integer", "minimum": 0},
+    "calibration": {"$ref": "#/$defs/calibration"},
+    "arms": {"type": "object", "additionalProperties": {"$ref": "#/$defs/arm"}},
+    "tasks": {"$ref": "#/$defs/tasks"},
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blinded", "judge_model", "disputed"],
+      "properties": {
+        "blinded": {"type": "boolean"},
+        "judge_model": {"type": ["string", "null"]},
+        "disputed": {
+          "description": "Runs where the patterns and the check disagreed.",
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "schema_version": {"const": 1},
+    "verdict_id": {"type": "string"},
+    "exit_code": {"enum": [0, 1, 2, 3]},
+    "warnings": {"$ref": "#/$defs/reasons"},
+    "resumable": {"type": "boolean"},
+    "smallest_detectable_loss": {"$ref": "#/$defs/smallest_detectable_loss"},
+    "noninferior": {
+      "description": "With --margin: true only when every model is noninferior, false when any is not; null without --margin or when a model was not attempted.",
+      "type": ["boolean", "null"]
+    },
+    "effective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trials", "noise_floor", "parallel", "timeout_s", "judge_model", "isolation", "policy_sha256", "base", "skill", "margin", "seed", "draws", "missing_cell_rule", "simulations"],
+      "properties": {
+        "trials": {"type": "integer", "minimum": 0},
+        "noise_floor": {"type": "boolean"},
+        "parallel": {"type": "integer", "minimum": 0},
+        "timeout_s": {"type": "number"},
+        "judge_model": {"type": ["string", "null"]},
+        "isolation": {"enum": ["docker", "process"]},
+        "policy_sha256": {"anyOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]},
+        "base": {"type": ["string", "null"]},
+        "skill": {"type": ["string", "null"]},
+        "margin": {"type": ["number", "null"]},
+        "seed": {"type": "integer", "minimum": 0},
+        "draws": {"type": "integer", "minimum": 0},
+        "missing_cell_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_trials", "on_missing"],
+          "properties": {
+            "min_trials": {"type": "integer", "minimum": 0},
+            "on_missing": {"enum": ["drop_task", "refuse"]},
+            "max_dropped_share": {"type": "number"}
+          }
+        },
+        "simulations": {"type": "integer", "minimum": 0}
+      }
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "host_version", "gstack_evals_version", "adapter_sha256", "image_digest", "base"],
+      "properties": {
+        "host": {"enum": ["claude", "codex"]},
+        "host_version": {"type": ["string", "null"]},
+        "gstack_evals_version": {"type": "string"},
+        "adapter_sha256": {"type": ["string", "null"]},
+        "image_digest": {"type": ["string", "null"]},
+        "base": {"type": ["string", "null"]}
+      }
+    },
+    "arm_trees": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "lock": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tasks_sha256", "ext_sha256", "commit", "post_hoc"],
+          "properties": {
+            "tasks_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "ext_sha256": {"anyOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]},
+            "commit": {"type": ["string", "null"]},
+            "post_hoc": {"type": "boolean"}
+          }
+        }
+      ]
+    },
+    "lock_drift": {
+      "description": "LOCK_DRIFT lines from re-deriving the lock's rows from the before copy.",
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "contract_lines_removed": {
+      "description": "Contract lines the after copy rewrote or removed, with the tasks that claim each; null when no lock was checked.",
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "class", "tasks"],
+            "properties": {
+              "id": {"type": "string"},
+              "class": {"enum": ["rewritten", "removed"]},
+              "tasks": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      ]
+    },
+    "models": {"type": "array", "items": {"$ref": "#/$defs/model"}, "minItems": 1},
+    "levels": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "skill_md", "references"],
+          "properties": {
+            "description": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["before", "after"],
+              "properties": {"before": {"type": "integer", "minimum": 0}, "after": {"type": "integer", "minimum": 0}}
+            },
+            "skill_md": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["before", "after"],
+              "properties": {"before": {"type": "integer", "minimum": 0}, "after": {"type": "integer", "minimum": 0}}
+            },
+            "references": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["before", "after"],
+              "properties": {"before": {"type": "integer", "minimum": 0}, "after": {"type": "integer", "minimum": 0}}
+            }
+          }
+        }
+      ]
+    },
+    "spend": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ledger", "ledger_record", "committed", "reserved", "unknown", "cap", "line_item", "lease_id", "approval", "caps_history"],
+          "properties": {
+            "ledger": {"type": "string"},
+            "ledger_record": {"type": "string"},
+            "committed": {"type": "integer", "minimum": 0},
+            "reserved": {"type": "integer", "minimum": 0},
+            "unknown": {"type": "integer", "minimum": 0},
+            "cap": {"type": "integer", "minimum": 0},
+            "line_item": {"type": ["string", "null"]},
+            "lease_id": {"type": ["string", "null"]},
+            "approval": {
+              "anyOf": [
+                {"type": "null"},
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["words", "by", "source"],
+                  "properties": {"words": {"type": "string"}, "by": {"type": "string"}, "source": {"type": "string"}}
+                }
+              ]
+            },
+            "caps_history": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+          }
+        }
+      ]
+    },
+    "resumed_from": {"type": ["string", "null"]},
+    "wall_s": {"type": ["number", "null"]},
+    "rig": {"$ref": "#/$defs/rig"}
+  },
+  "$defs": {
+    "reasons": {
+      "description": "Reason or warning lines: a code from docs/errors.md, then a subject (a task id, an arm or a detail) and, with several models, 'on <model>'.",
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*( .+)?$"}
+    },
+    "calibration": {
+      "description": "true passed, false failed, null not run for this host or arm set. The contract's skill, none and shell come first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill", "none", "shell", "config", "usersim", "egress"],
+      "properties": {
+        "skill": {"type": ["boolean", "null"]},
+        "none": {"type": ["boolean", "null"]},
+        "shell": {"type": ["boolean", "null"]},
+        "config": {"type": ["boolean", "null"]},
+        "usersim": {"type": ["boolean", "null"]},
+        "egress": {"type": ["boolean", "null"]}
+      }
+    },
+    "tasks": {
+      "description": "The contract's tasks block: per task and arm, each trial's grade in round and trial order; null for a timeout or a missing cell.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {"type": "array", "items": {"type": ["boolean", "null"]}}
+      }
+    },
+    "arm": {
+      "description": "The contract's per-arm block (pass_rate, tokens_per_run, turns_per_run, opened_skill_rate, files_loaded, cost_usd) and gstack-evals' counts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass_rate", "tokens_per_run", "turns_per_run", "opened_skill_rate", "files_loaded", "cost_usd", "sessions", "graded", "timeouts", "excluded", "loaded_bytes_per_run", "wall_s_per_run"],
+      "properties": {
+        "pass_rate": {"type": ["number", "null"]},
+        "tokens_per_run": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input", "output", "reasoning", "cache_read", "cache_write"],
+              "properties": {
+                "input": {"type": "number"},
+                "output": {"type": "number"},
+                "reasoning": {"type": "number"},
+                "cache_read": {"type": "number"},
+                "cache_write": {"type": "number"}
+              }
+            }
+          ]
+        },
+        "turns_per_run": {"type": ["number", "null"]},
+        "opened_skill_rate": {"type": ["number", "null"]},
+        "files_loaded": {
+          "description": "Runs that read each skill file.",
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "cost_usd": {"type": ["number", "null"]},
+        "sessions": {"type": "integer", "minimum": 0},
+        "graded": {"type": "integer", "minimum": 0},
+        "timeouts": {"type": "integer", "minimum": 0},
+        "excluded": {"type": "integer", "minimum": 0},
+        "loaded_bytes_per_run": {"type": ["number", "null"]},
+        "wall_s_per_run": {"type": ["number", "null"]}
+      }
+    },
+    "smallest_detectable_loss": {
+      "description": "The sign-flip bar in tasks (the fewest tasks that must all drop for p < 0.05) and the minimum detectable difference in points at one-sided 0.05 and 80% power.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sign_flip_tasks", "mdd_points"],
+      "properties": {
+        "sign_flip_tasks": {"type": ["integer", "null"], "minimum": 0},
+        "mdd_points": {"type": ["number", "null"]}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "verdict", "exit_code", "reasons", "warnings", "calibration", "informative_tasks", "ceiling_tasks", "not_measurable_tasks", "at_ceiling", "session_kind", "arms", "tasks", "opened", "worse", "comparison", "margin", "noninferior", "smallest_detectable_loss", "rerun", "gate", "metrics", "disputes"],
+      "properties": {
+        "model": {"type": "string"},
+        "verdict": {"enum": ["PASS", "FAIL", "INCOMPLETE"]},
+        "exit_code": {"enum": [0, 1, 2, 3]},
+        "reasons": {"$ref": "#/$defs/reasons"},
+        "warnings": {"$ref": "#/$defs/reasons"},
+        "calibration": {"$ref": "#/$defs/calibration"},
+        "informative_tasks": {"type": "array", "items": {"type": "string"}},
+        "ceiling_tasks": {"type": "array", "items": {"type": "string"}},
+        "not_measurable_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["task", "reason"],
+            "properties": {"task": {"type": "string"}, "reason": {"type": "string"}}
+          }
+        },
+        "at_ceiling": {"type": "boolean"},
+        "session_kind": {
+          "description": "Per task: an interactive session grades every user-visible assistant turn (interface v0.5); an unattended one grades the final answer.",
+          "type": "object",
+          "additionalProperties": {"enum": ["interactive", "unattended"]}
+        },
+        "arms": {"type": "object", "additionalProperties": {"$ref": "#/$defs/arm"}},
+        "tasks": {"$ref": "#/$defs/tasks"},
+        "opened": {
+          "description": "Share of runs that opened the skill, per arm and for the old copies (old).",
+          "type": "object",
+          "additionalProperties": {"type": ["number", "null"]}
+        },
+        "worse": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "description": "gstack's WORSE: overall pass rates of before and after and the standard error of their difference.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["before", "after", "se", "fires"],
+              "properties": {
+                "before": {"type": "number"},
+                "after": {"type": "number"},
+                "se": {"type": "number"},
+                "fires": {"type": "boolean"}
+              }
+            }
+          ]
+        },
+        "comparison": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "description": "after against the old copies on per-task means over the informative tasks: delta, the task-clustered bootstrap interval, the one-sided sign-flip p and the minimum detectable difference.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tasks", "dropped", "old_rate", "after_rate", "delta", "ci95", "p_less", "p_method", "mdd"],
+              "properties": {
+                "tasks": {"type": "integer", "minimum": 0},
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["task", "reason"],
+                    "properties": {"task": {"type": "string"}, "reason": {"type": "string"}}
+                  }
+                },
+                "old_rate": {"type": "number"},
+                "after_rate": {"type": "number"},
+                "delta": {"type": "number"},
+                "ci95": {
+                  "anyOf": [
+                    {"type": "null"},
+                    {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+                  ]
+                },
+                "p_less": {"type": "number"},
+                "p_method": {"type": "string"},
+                "mdd": {"type": ["number", "null"]}
+              }
+            }
+          ]
+        },
+        "margin": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "description": "--margin as a fraction, the margin-shifted sign-flip p, its Holm adjustment across models, and why it was not attempted.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["margin", "attempted", "reason", "p", "p_holm", "noninferior"],
+              "properties": {
+                "margin": {"type": "number"},
+                "attempted": {"type": "boolean"},
+                "reason": {"type": ["string", "null"]},
+                "p": {"type": ["number", "null"]},
+                "p_holm": {"type": ["number", "null"]},
+                "noninferior": {"type": ["boolean", "null"]}
+              }
+            }
+          ]
+        },
+        "noninferior": {"type": ["boolean", "null"]},
+        "smallest_detectable_loss": {"$ref": "#/$defs/smallest_detectable_loss"},
+        "rerun": {
+          "description": "The one same-tree rerun stage, preregistered by the tool, and the two-stage rule's simulated false-negative rate at this model's minimum detectable difference.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "red", "state", "flaky", "simulated_false_negative_rate"],
+          "properties": {
+            "name": {"const": "same-tree-rerun"},
+            "red": {"type": "array", "items": {"type": "string"}},
+            "state": {
+              "description": "partial: round 2 lacks some task and arm, so it added losses but cleared none of round 1's.",
+              "enum": ["not-needed", "done", "partial", "missing"]
+            },
+            "flaky": {"type": "array", "items": {"type": "string"}},
+            "simulated_false_negative_rate": {
+              "anyOf": [
+                {"type": "null"},
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["rate", "mdd_points", "simulations", "seed"],
+                  "properties": {
+                    "rate": {"type": "number"},
+                    "mdd_points": {"type": "number"},
+                    "simulations": {"type": "integer", "minimum": 0},
+                    "seed": {"type": "integer", "minimum": 0}
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "gate": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["uncovered", "gaps"],
+              "properties": {
+                "uncovered": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "class", "why", "tasks"],
+                    "properties": {
+                      "id": {"type": "string"},
+                      "class": {"enum": ["rewritten", "removed"]},
+                      "why": {"enum": ["unclaimed", "unreached", "fails-in-after"]},
+                      "tasks": {"type": "array", "items": {"type": "string"}}
+                    }
+                  }
+                },
+                "gaps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "class", "status"],
+                    "properties": {
+                      "id": {"type": "string"},
+                      "class": {"enum": ["kept", "moved", "rewritten", "removed"]},
+                      "status": {"enum": ["covered", "unreached", "unclaimed"]}
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["metric", "blocked", "delta", "ci95", "p_two_sided"],
+            "properties": {
+              "metric": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "direction", "min"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "direction": {"enum": ["higher", "lower"]},
+                  "min": {"type": ["number", "null"]},
+                  "failure_value": {"type": "number"}
+                }
+              },
+              "blocked": {"type": ["string", "null"]},
+              "delta": {"type": ["number", "null"]},
+              "ci95": {
+                "anyOf": [
+                  {"type": "null"},
+                  {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+                ]
+              },
+              "p_two_sided": {"type": ["number", "null"]}
+            }
+          }
+        },
+        "disputes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "rig": {
+      "description": "Reserved for U20 (CI plan v5): rig admit fills it with the recipe hash that U9's cache key also takes, and may add fields. Until then every verdict writes null.",
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["recipe_sha256"],
+          "properties": {"recipe_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        }
+      ]
+    },
+    "error": {
+      "description": "The versioned error record (interface v0.4, 'Error records'): <out>/error.json under --json, for any failure.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "code", "operation", "role", "model", "message", "cause", "context", "fix", "doc", "side_effects", "retry", "resumable", "correlation_id", "trace"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$"},
+        "operation": {"type": "string"},
+        "role": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]},
+        "message": {"type": "string"},
+        "cause": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "message"],
+              "properties": {"code": {"type": "string"}, "message": {"type": "string"}}
+            }
+          ]
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource_ids", "gstack_evals_version", "host", "host_version", "image_digest", "policy_sha256", "ledger", "ledger_record", "env_names"],
+          "properties": {
+            "resource_ids": {"type": "object", "additionalProperties": {"type": "string"}},
+            "gstack_evals_version": {"type": "string"},
+            "host": {"enum": ["claude", "codex", null]},
+            "host_version": {"type": ["string", "null"]},
+            "image_digest": {"type": ["string", "null"]},
+            "policy_sha256": {"type": ["string", "null"]},
+            "ledger": {"type": ["string", "null"]},
+            "ledger_record": {"type": ["string", "null"]},
+            "env_names": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "fix": {"type": "string"},
+        "doc": {"type": "string", "pattern": "^docs/errors\\.md#[a-z0-9_]+$"},
+        "side_effects": {"type": "string"},
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["safe", "max"],
+          "properties": {"safe": {"type": "boolean"}, "max": {"type": "integer", "minimum": 0}}
+        },
+        "resumable": {"type": "boolean"},
+        "correlation_id": {"type": ["string", "null"]},
+        "trace": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

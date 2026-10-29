@@ -83,7 +83,7 @@ Each entry gives the meaning, the fix, and these facts:
 
 ### REGRESSION
 
-A task whose before panel passed at least 2 of 3 runs passed fewer than 2 of 3 in after (gstack's contract floor).
+A task whose before panel passed at least two thirds of its runs (2 of 3) passed fewer than two thirds in after (gstack's contract floor). With the rerun stage the thresholds apply to the pooled rounds.
 
 Fix: Read the task's after transcripts in &lt;out>/runs/, restore what the edit removed, and check it with a new run. A new run after a fix, never a rerun of the same tree to change the verdict.
 
@@ -149,7 +149,7 @@ Exit 1. Side effects: The run finished and its spend is settled in the ledger. R
 
 ### NOT_MEASURABLE
 
-Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), or the skill went unopened in both old and new.
+Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), fewer than 5 of them could be paired, the preregistered missing-cell rule refused the paired comparison, or the skill went unopened in both old and new.
 
 Fix: Add harder or more varied tasks, or move to Haiku 5.5 when the suite is at ceiling, commit a relock, and start a new run. Do not --resume.
 
@@ -157,7 +157,7 @@ Exit 2. Side effects: The run finished and its spend is settled in the ledger. R
 
 ### MARGIN_NOT_ATTEMPTED
 
---margin was given and, on at least one requested model, the minimum detectable difference is wider than the margin or the model is at ceiling.
+--margin was given and, on at least one requested model, the minimum detectable difference is wider than the margin, the model is at ceiling, or the margin test had nothing to compare (no paired variation, or fewer than 2 tasks).
 
 Fix: Add tasks or trials until the minimum detectable difference fits inside the margin, or drop the model at ceiling, then start a new run. Do not --resume.
 
@@ -553,7 +553,7 @@ Warning. Owner: U6.
 
 ### CEILING
 
-An arm passed every run on this model, so it cannot show a loss there. It is decided only after every compared arm has run.
+The old copies (before and before2) passed every run on this model, so the suite has no headroom there and a loss can only show as after's failures. It is decided only after every compared arm has run, and never stops the run.
 
 Fix: Try Haiku 5.5 or harder tasks. With --margin, a model at ceiling makes the run MARGIN_NOT_ATTEMPTED.
 
