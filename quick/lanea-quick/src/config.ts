@@ -3,9 +3,20 @@ import { join } from "node:path";
 
 export const WORK = process.env.LANEA_WORK ?? join(homedir(), ".capy/work/lanea-quick");
 export const GSTACK_REPO = process.env.LANEA_GSTACK ?? join(homedir(), ".capy/work/gstack");
-export const LEDGER_PATH = process.env.LANEA_LEDGER ?? join(homedir(), ".capy/drive/captain-gstack-evals/ledger/lanea-quick.jsonl");
-export const CAP_USD = 130;
-export const LINE_ITEM = "lanea-quick";
+
+export interface LineItem {
+  cap: number;
+  item: string;
+  ledger: string;
+}
+
+export function lineItem(env: Record<string, string | undefined> = process.env): LineItem {
+  const cap = env.LANEA_CAP_USD ?? "";
+  const item = env.LANEA_LINE_ITEM ?? "";
+  if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(cap) || !(Number(cap) > 0)) throw new Error(`E_CONFIG: LANEA_CAP_USD must be the approved cap as a plain positive decimal, such as 35; got ${JSON.stringify(cap)}`);
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(item)) throw new Error(`E_CONFIG: LANEA_LINE_ITEM must be the approved line item in lowercase letters, digits and single hyphens, such as lanea-quick-rerun; got ${JSON.stringify(item)}`);
+  return { cap: Number(cap), item, ledger: env.LANEA_LEDGER || join(homedir(), ".capy/drive/captain-gstack-evals/ledger", `${item}.jsonl`) };
+}
 
 export const CLAUDE_CODE_VERSION = "2.1.312";
 export const BUN_VERSION = "1.4.4";
