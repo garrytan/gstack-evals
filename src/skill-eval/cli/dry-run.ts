@@ -26,6 +26,8 @@ export interface PlanTask {
   id: string;
   judge: boolean;
   interactive: boolean;
+  /** The task's agent timeout: its sidecar timeout_s, else --timeout. */
+  timeout_s: number;
 }
 
 export interface Part {
@@ -45,6 +47,7 @@ export interface Plan {
   total: number | null;
   /** One trial of every task in every arm, for every model, at the agent allowance. */
   round: number | null;
+  /** Every agent session at its timeout, both rounds and calibration, spread over --parallel slots. */
   worst_wall_s: number;
 }
 
@@ -75,14 +78,16 @@ export function plan(call: Pick<Call, "policy" | "models" | "arms" | "trials" | 
   add("usersim " + call.usersimModel, simulated, simulated ? allowanceMicros(call, call.usersimModel, USERSIM_ALLOWANCE) : 0, simulated ? describe(call.usersimModel, USERSIM_ALLOWANCE) + " per interactive session, both rounds" : "no interactive task");
   const totals = parts.map((p) => p.total);
   const roundParts = call.models.map((m) => allowanceMicros(call, m, SESSION_ALLOWANCE));
-  const agentSessions = 2 * perModel * call.models.length;
+  const taskSeconds = tasks.reduce((s, t) => s + t.timeout_s, 0) * arms.length * call.trials * 2;
+  const calibrationSeconds = parts.filter((p) => p.name.startsWith("calibration ")).reduce((s, p) => s + p.sessions, 0) * call.timeoutS;
+  const longest = Math.max(call.timeoutS, ...tasks.map((t) => t.timeout_s));
   return {
     matrix: call.models.length + " model" + (call.models.length > 1 ? "s" : "") + " x " + arms.length + " arms (" + arms.join(", ") + ") x " + tasks.length + " tasks x " + call.trials + " trials = " + perModel * call.models.length + " sessions",
     sessions: perModel * call.models.length,
     parts,
     total: totals.includes(null) ? null : (totals as number[]).reduce((s, x) => s + x, 0),
     round: roundParts.includes(null) ? null : (roundParts as number[]).reduce((s, x) => s + x * arms.length * tasks.length, 0),
-    worst_wall_s: Math.ceil(agentSessions / call.parallel) * call.timeoutS,
+    worst_wall_s: Math.ceil((taskSeconds * call.models.length + calibrationSeconds) / call.parallel) + longest,
   };
 }
 
@@ -95,6 +100,6 @@ export function planLines(p: Plan, parallel: number): string[] {
     ...p.parts.map((x) => "  " + x.name.padEnd(width) + "  " + x.sessions + " x " + money(x.each) + " = " + money(x.total) + "  (" + x.detail + ")"),
     "  " + "total".padEnd(width) + "  " + money(p.total),
     "one arm-balanced round: " + money(p.round) + "; a smaller --spend-cap is refused (E_CAP_TOO_LOW)",
-    "parallel " + parallel + "; worst-case wall time " + (p.worst_wall_s / 3600).toFixed(1) + " h (every session at its timeout, rerun stage included)",
+    "parallel " + parallel + "; worst-case wall time " + (p.worst_wall_s / 3600).toFixed(1) + " h (every agent session at its timeout, task timeouts, rerun stage and calibration included; judge calls not counted)",
   ];
 }

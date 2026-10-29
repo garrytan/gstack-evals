@@ -52,7 +52,12 @@ export function errorContext(call: Call | null, env_names: string[], env: Env): 
   };
 }
 
-/** --lock runs the contract and vacuity checks first and refuses to lock a set that fails them (GST-109 decision 1). */
+/**
+ * --lock runs the contract and vacuity checks first and refuses to lock a set that fails them (GST-109 decision 1). The
+ * controls run as this user with the env allowlist: the lock is the author's own step on their own committed tasks, and
+ * U9's container runner takes the same runner seam when it lands. Preflight, which honors --isolation, refuses to run
+ * them under docker until then.
+ */
 async function lockWithChecks(argv: string[], io: Io): Promise<number> {
   const parsed = parseLockFlags(argv, ["--tasks", "--ext", "--before", "--policy"], ["--help", "-h"]);
   if (typeof parsed !== "string" && parsed.values.has("--tasks") && !parsed.set.size) {
@@ -64,6 +69,7 @@ async function lockWithChecks(argv: string[], io: Io): Promise<number> {
         for (const s of vacuity.stops) io.err(codeLines(s.code, [s.message, "--lock refuses a task set that fails the vacuity check, so a fix never needs a post-hoc relock."]));
         return 2;
       }
+      io.out("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control (the controls ran as this user with the env allowlist)");
     }
   }
   return lockCommand(argv, io);
@@ -97,20 +103,20 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
   try {
     report = preflight(call, { env, dryRun: call.dryRun, host: hostCheck(call, env) });
     for (const w of report.warnings) io.err(w.code + " " + w.message);
+    const refuse = (stops: readonly Stop[], names: string[]): number => {
+      printStops(io, stops);
+      if (json) writeErrorRecord(call.out.path, errorRecord({ code: stops[0]!.code, operation: "preflight", message: stops.map((s) => s.code + " " + s.message).join("\n"), context: errorContext(call, names, env) }, env), io.out);
+      return 2;
+    };
     if (call.dryRun) {
-      if (report.stops.length) return (printStops(io, report.stops), 2);
+      if (report.stops.length) return refuse(report.stops, report.env_names);
       io.out(planLines(report.plan!, call.parallel).join("\n"));
       return 0;
     }
     for (const line of report.passed) io.out("ok " + line);
     if (report.stops.length) {
-      printStops(io, report.stops);
       if (report.plan && report.stops.some((s) => s.code === "E_USAGE" && s.message.startsWith("--spend-cap"))) io.out(planLines(report.plan, call.parallel).join("\n"));
-      if (json) {
-        const first = report.stops[0]!;
-        writeErrorRecord(call.out.path, errorRecord({ code: first.code, operation: "preflight", message: report.stops.map((s) => s.code + " " + s.message).join("\n"), context: errorContext(call, report.env_names, env) }, env), io.out);
-      }
-      return 2;
+      return refuse(report.stops, report.env_names);
     }
     if (mode === "preflight") {
       io.out("PREFLIGHT: pass (" + report.passed.length + " steps; nothing was spent)");

@@ -28,7 +28,7 @@ async function lockedLearn(policy = DEFAULT_POLICY) {
   git(repo.root, "add", "-A");
   git(repo.root, "commit", "-q", "-m", "lock");
   const record = approvalRecord("learn-fake", 500);
-  const args = (host: string, model: string, extra: string[] = []) => ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", host, "--model", model, "--spend-cap", "100", "--item", "learn-fake", "--ledger", join(TMP, "ledger.sqlite"), "--ledger-record", record, "--out", join(TMP, "out"), ...policyArgs, ...extra];
+  const args = (host: string, model: string, extra: string[] = []) => ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", host, "--model", model, "--spend-cap", "100", "--item", "learn-fake", "--ledger", join(TMP, "ledger.sqlite"), "--ledger-record", record, "--out", join(TMP, "out"), "--isolation", "process", ...policyArgs, ...extra];
   return { repo, record, args };
 }
 
@@ -86,7 +86,7 @@ describe("preflight's lock step", () => {
   test("LOCK_MISSING prints the --lock command and the git steps, and running them clears it", async () => {
     const repo = learnRepo();
     const record = approvalRecord("learn-fake", 500);
-    const args = ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", "claude", "--model", "claude-opus-5-5", "--spend-cap", "100", "--item", "learn-fake", "--ledger", join(TMP, "l.sqlite"), "--ledger-record", record, "--out", join(TMP, "o")];
+    const args = ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", "claude", "--model", "claude-opus-5-5", "--spend-cap", "100", "--item", "learn-fake", "--ledger", join(TMP, "l.sqlite"), "--ledger-record", record, "--out", join(TMP, "o"), "--isolation", "process"];
     const missing = await run(args);
     expect(missing.code).toBe(2);
     const lines = missing.err.split("\n").filter((l) => l.startsWith("LOCK_MISSING "));
@@ -97,6 +97,28 @@ describe("preflight's lock step", () => {
     const bin = join(REPO_ROOT, "bin", "gstack-evals");
     expect(spawnSync("bash", ["-c", command.replace(/^gstack-evals/, bin) + " && " + gitStep], { encoding: "utf8" }).status).toBe(0);
     expect((await run(args)).code).toBe(0);
+  });
+
+  // Value: protects=under the default --isolation docker, preflight refuses to run task controls on this machine until U9's container runner exists; fails_when=a setup, mutant or check runs on the host without --isolation process; why_new=PR #45 review: the local runner ignored --isolation; seam=PreflightOptions.runner, which U9 fills; no_claim=--lock, which runs the author's own controls as this user
+  test("under --isolation docker, preflight runs no task control and stops with E_ISOLATION_UNSAFE", async () => {
+    const { args } = await lockedLearn();
+    const r = await run(args("claude", "claude-opus-5-5").filter((a, i, all) => a !== "--isolation" && all[i - 1] !== "--isolation"));
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("E_ISOLATION_UNSAFE the vacuity check runs each task's setup, mutant and check; under --isolation docker they need the container runner U9 builds");
+    expect(r.err).toContain("E_ISOLATION_UNSAFE fix: Pass --isolation process");
+    expect(r.out).not.toContain("ok vacuity");
+    expect(r.out).toContain("ok lock: ");
+  });
+
+  // Value: protects=a lock row edit is caught when only before is a folder and after is a repo@sha arm; fails_when=mixed arm types skip the re-derivation; why_new=PR #45 review; seam=U6's rederiveLock, which needs only the before copy; no_claim=a before arm given as repo@sha, whose files are not read yet
+  test("a hand-edited lock row is LOCK_DRIFT when after is a repo@sha arm", async () => {
+    const { repo, args } = await lockedLearn();
+    const lockPath = join(repo.root, "test/fixtures/skill-evals/learn/tasks.lock.json");
+    writeFileSync(lockPath, readFileSync(lockPath, "utf8").replace('"kind":"prose"', '"kind":"heading"'));
+    git(repo.root, "commit", "-q", "-am", "edit a row");
+    const mixed = args("claude", "claude-opus-5-5", ["--skill", "learn"]).map((a) => (a.startsWith("before=") ? "before=" + repo.skill + ",after=gstack@" + "c".repeat(40) + ",none" : a));
+    const r = await run(mixed);
+    expect(r.err).toMatch(/LOCK_DRIFT lines\[\d+\] \(B:SKILL:\d{4}\): kind is "heading" in the lock and "prose" from the before copy/);
   });
 
   // Value: protects=a hand-edited lock row is LOCK_DRIFT naming the re-derived row (brief item 8's LOCK_DRIFT text); fails_when=preflight trusts the stored row; why_new=U6's re-derivation was not in preflight; seam=U6's rederiveLock; no_claim=none beyond protects
@@ -115,7 +137,7 @@ describe("preflight's lock step", () => {
     const root = tree({ "demo/SKILL.md": "---\nname: demo\ndescription: d\n---\n\nNEVER guess.\n", "test/fixtures/skill-evals/demo/tasks.json": JSON.stringify([{ id: "always-true", prompt: "Do it.", check: "true" }]) });
     commitAll(root);
     const tasks = join(root, "test/fixtures/skill-evals/demo/tasks.json");
-    const r = await run(["--arms", "before=" + join(root, "demo") + ",after=" + join(root, "demo"), "--tasks", tasks, "--host", "claude", "--model", "claude-opus-5-5", "--out", join(TMP, "v")]);
+    const r = await run(["--arms", "before=" + join(root, "demo") + ",after=" + join(root, "demo"), "--tasks", tasks, "--host", "claude", "--model", "claude-opus-5-5", "--out", join(TMP, "v"), "--isolation", "process"]);
     expect(r.err).toContain("VACUOUS_CHECK always-true: passes on the no-op control");
     expect(r.err).toContain("LOCK_MISSING no lock committed");
     const lock = await run(["--lock", "--tasks", tasks], FAKE, "run");
@@ -178,13 +200,26 @@ describe("preflight's ledger, key and host steps", () => {
   // Value: protects=--dry-run prints the matrix and the worst case in parts and needs no key, ledger or lock; fails_when=dry-run refuses for a missing key or lock, or drops a part; why_new=new; seam=none; no_claim=the allowance matching real spend
   test("--dry-run prints the matrix and the worst case in parts, with no key, ledger or lock", async () => {
     const repo = learnRepo();
+    const dry = ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", "claude", "--model", "claude-opus-5-5", "--dry-run", "--parallel", "2"];
     const io = collect();
-    const code = await skillEvalCommand(["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", "claude", "--model", "claude-opus-5-5", "--dry-run", "--parallel", "2"], io, {});
+    expect(await skillEvalCommand(dry, io, {})).toBe(0);
     const { out } = io.text();
-    expect(code).toBe(0);
     expect(out).toContain("sessions claude-opus-5-5     120 x $2.24 = $268.80");
     expect(out).toContain("rerun stage claude-opus-5-5  120 x $2.24 = $268.80");
     expect(out).toContain("one arm-balanced round: $89.60");
-    expect(out).toContain("parallel 2; worst-case wall time 20.0 h");
+    expect(out).toContain("parallel 2; worst-case wall time 20.8 h (every agent session at its timeout, task timeouts, rerun stage and calibration included; judge calls not counted)");
+    writeFileSync(join(repo.root, "test/fixtures/skill-evals/learn/tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { show: { timeout_s: 7200 } } }));
+    const slow = collect();
+    expect(await skillEvalCommand(dry, slow, {})).toBe(0);
+    expect(slow.text().out).toContain("worst-case wall time 44.7 h");
+  });
+
+  // Value: protects=--json writes <out>/error.json for a --dry-run that preflight refuses, as for any failure; fails_when=a dry-run stop leaves no record; why_new=PR #45 review; seam=U6's writeErrorRecord; no_claim=none beyond protects
+  test("a refused --dry-run with --json writes error.json", async () => {
+    const root = tree({ "demo/SKILL.md": "---\nname: demo\ndescription: d\n---\n\nNEVER guess.\n" });
+    const out = join(root, "out");
+    const r = await run(["--arms", "before=" + join(root, "demo") + ",after=" + join(root, "demo"), "--tasks", join(root, "missing.json"), "--host", "claude", "--model", "claude-opus-5-5", "--dry-run", "--json", "--out", out]);
+    expect(r.code).toBe(2);
+    expect(JSON.parse(readFileSync(join(out, "error.json"), "utf8"))).toMatchObject({ code: "E_TASKS_INVALID", operation: "preflight" });
   });
 });

@@ -133,7 +133,7 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
   if (policy.length) stop("E_MODEL_POLICY", policy.join("\n"));
   else report.passed.push("policy: " + call.models.join(", ") + " under " + call.policy.policy.name + " (sha256 " + call.policy.sha256.slice(0, 12) + ")");
 
-  report.plan = plan(call, tasks.map((t) => ({ id: t.id, judge: ext[t.id]?.judge !== undefined, interactive: interactive.includes(t.id) })));
+  report.plan = plan(call, tasks.map((t) => ({ id: t.id, judge: ext[t.id]?.judge !== undefined, interactive: interactive.includes(t.id), timeout_s: ext[t.id]?.timeout_s ?? call.timeoutS })));
   if (opts.dryRun) return report;
 
   const providers = new Set<PolicyProvider>(subjects.flatMap((s) => (s.provider ? [s.provider] : [])));
@@ -146,11 +146,15 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
   if (missing.length) stop("E_KEY_MISSING", "not set: " + missing.join(", ") + " (the run needs " + keys.join(", ") + "; values are never printed)");
   else report.passed.push("keys: " + keys.join(", ") + " set (checked by name)");
 
-  const vacuity = checkVacuity({ tasks, dir: contract.tasks.dir, sidecar: ext }, opts.runner ? { runner: opts.runner } : {});
-  report.vacuity = vacuity;
-  for (const s of vacuity.stops) stop(s.code, s.message);
-  report.warnings.push(...vacuity.warnings);
-  if (!vacuity.stops.length) report.passed.push("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control, " + vacuity.warnings.length + " safety tasks without a mutant");
+  if (call.isolation === "docker" && !opts.runner) {
+    stop("E_ISOLATION_UNSAFE", "the vacuity check runs each task's setup, mutant and check; under --isolation docker they need the container runner U9 builds, which is not built yet, so preflight did not run them", "Pass --isolation process to run the controls as this user with the trial's env allowlist; the verdict records it.");
+  } else {
+    const vacuity = checkVacuity({ tasks, dir: contract.tasks.dir, sidecar: ext }, opts.runner ? { runner: opts.runner } : {});
+    report.vacuity = vacuity;
+    for (const s of vacuity.stops) stop(s.code, s.message);
+    report.warnings.push(...vacuity.warnings);
+    if (!vacuity.stops.length) report.passed.push("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control, " + vacuity.warnings.length + " safety tasks without a mutant" + (opts.runner ? "" : " (controls ran as this user with the env allowlist, --isolation process)"));
+  }
 
   const lockPath = join(contract.tasks.dir, LOCK_FILE);
   const committed = lockCommit(lockPath, [contract.tasks.path, ...(contract.ext ? [contract.ext.path] : [])]);
@@ -161,12 +165,11 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
     else {
       const policyPin = { path: call.policy.path, sha256: call.policy.sha256 };
       const [before, after] = ["before", "after"].map((n) => call.arms.arms.find((a) => a.name === n)!);
-      let gate: GateEvidence | null = null;
-      let drift: string[];
-      if (before.kind === "overlay" && before.dir && after.kind === "overlay" && after.dir) {
-        gate = { lockPath, lock: read.lock, tasks: contract.tasks, ext: contract.ext, policy: policyPin, before: readSkillFiles(before.dir), after: readSkillFiles(after.dir) };
-        drift = rederiveLock(gate).drift;
-      } else drift = lockDrift(read.lock, { tasks: contract.tasks, ext: contract.ext, policySha256: call.policy.sha256 });
+      const folder = (arm: typeof before) => (arm.kind === "overlay" && arm.dir ? readSkillFiles(arm.dir) : null);
+      const [beforeFiles, afterFiles] = [folder(before), folder(after)];
+      const evidence = beforeFiles ? { lockPath, lock: read.lock, tasks: contract.tasks, ext: contract.ext, policy: policyPin, before: beforeFiles, after: afterFiles ?? [] } : null;
+      const gate: GateEvidence | null = evidence && afterFiles ? evidence : null;
+      const drift = evidence ? rederiveLock(evidence).drift : lockDrift(read.lock, { tasks: contract.tasks, ext: contract.ext, policySha256: call.policy.sha256 });
       if (drift.length) stop("LOCK_DRIFT", drift.join("\n"));
       else {
         report.lock = { lock: read.lock, commit: committed.commit, gate };
