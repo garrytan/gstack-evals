@@ -20,6 +20,8 @@ links:
 attachments:
   - d64845ddbc1a8c33d6c36b0dfdb0125f5420c58ea438818c4520592ac79185d6  verdict.md
   - 5b7989402388aa35e04dfc2acb6289545dfbb920e4e6c7c4d37a9975d3db95ab  rerun-verdict.json
+  - eb3f4e46f2c0c312133173137703725cb141ef0c34f1c9fbee0a8c1f191a8333  rerun-analyze.ts
+  - 9a86172fdb1abca894ff83c1dc9cb2430c2dcd06036486b21da693376eecb5ec  regrade-main.ts
 ---
 
 # Quick look 3 results: no loss shown for gstack's office-hours diet on Opus 5.5
@@ -45,6 +47,7 @@ Haiku 5.5 opened the skill in about a quarter of its runs, so its office-hours n
 - Stages: S0 /learn on Haiku (120 sessions), S1 office-hours before, after and none (234), S2 office-hours before2 (78), S3 /learn on Opus (120). All 552 sessions completed. No stage hit its cap.
 - Rerun: preregistration [2026-10-28-gsta-13-second-opinion-rerun-prereg](https://github.com/garrytan/gstack-evals/pull/21), commit `c1d214f142384e957859b2aeaff20d830d1cd862`, which is `66734b7` plus a cap and line-item override. It ran 40 Opus sessions, one at a time, and every result records that sha.
 - The full tables are in `verdict.md` (main run) and `rerun-verdict.json` (rerun), attached to this post.
+- Analysis code: `verdict.md` comes from the runner's own `analyze.ts`. `rerun-verdict.json` comes from `rerun-analyze.ts`, attached here, which implements the rerun preregistration's analysis (Wilson intervals, a one-sided Fisher test, the stratified bootstrap with seed 20261028, the 8-valid-run rule and the Offered metric). It imports `wilson` from `analyze.ts` at `c1d214f`. Run as `bun rerun-analyze.ts <rerun runs> <parent runs> <runner dir at c1d214f>`, it reproduces the attached file byte for byte. `regrade-main.ts`, also attached, is the keyless main-agent-only regrade described under Deviations.
 
 ## Office-hours on Opus 5.5
 
@@ -126,6 +129,8 @@ Measured spend in the main run: office-hours on Opus $74.98, /learn on Opus $11.
 - **Preflight.** One paid preflight session ($0.004) ran before S0. It is on the ledger and out of the results.
 - **Grading scope.** The grader that ran read subagent messages as well as the main agent's. #22 grades the main agent only, which is narrower than the preregistration's wording, "the session's assistant text". A keyless regrade of all 592 sessions on the main agent alone changed no pass, final-answer pass, opened flag or loaded file. 25 sessions had subagent messages. Every second-opinion header came from the main agent.
 - **Reported cost.** The settle rows' `sdk_reported_usd` adds up the SDK's cumulative per-turn `total_cost_usd`, so it overstates multi-turn sessions. Every cost here is the metering proxy's measured cost. In the 392 sessions checked, that matched the SDK's last result within 1%.
+- **Rerun analysis code.** The rerun preregistration describes its analysis in prose, but the code that implements it, `rerun-analyze.ts`, was written after `c1d214f` and is not in that commit. It is attached to this post. The committed analyzer does not run the Fisher test or the session-level bootstrap.
+- **Rerun preregistration arithmetic.** Its funding line adds to $35.44 against the $35 cap, and 40 sessions at $0.46 is $18.40, not about $19. Its stated power of about 60% is nearer 55% by one reviewer's bootstrap. Its cap math assumes one session at a time, and the run used `--parallel 1` and an explicit `--ledger`, neither of which the post names. Spend stayed at $18.62 of $35.
 - **Runner defects.** #6's /ship review found seven blocking defects in the runner's spend accounting, locking and stage bookkeeping. #22 fixes them. #22 also blocks any paid run on its runner until a keyless calibration of what Claude Code 2.1.312 sends has landed and its headers are allowlisted.
 
 ## Next
