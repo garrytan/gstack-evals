@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "id": "2026-10-28-laneb-quick",
+  "title": "Quick look 2: Lane B on public Terminal-Bench 2.0 tasks",
+  "author": "GSTA-12",
+  "model": "anthropic/claude-opus-5-5",
+  "captain": "GSTA-2",
+  "date": "2026-10-28",
+  "claim": "exploratory",
+  "question": "On real coding tasks graded by whether the result works, does gstack beat no skills and a length-matched placebo, on Opus 5.5 and two cheap models, and how much of the gap to Opus does gstack close?",
+  "links": ["quick/laneb/PREREG.md"],
+  "arms": [
+    {"name":"none","kind":"bare","description":"An empty skills folder.","pins":{"tarball":"__NONE_TAR__"}},
+    {"name":"gstack","kind":"stack","description":"gstack installed for Claude Code by its own setup.","pins":{"gstack":"61e201ec08bcf59163ef2d3a69a26e334a536c04","tarball":"__GSTACK_TAR__"}},
+    {"name":"placebo","kind":"placebo","description":"gstack's names and routing text, each SKILL.md body replaced by non-procedural prose within 5% of its tokens.","pins":{"tarball":"__PLACEBO_TAR__","generator":"__GEN_HASH__","seed":"__SEED__"}}
+  ],
+  "models": [
+    {"id":"claude-opus-5-5","route":"anthropic","weights":"closed","role":"agent","session_cap_usd":5,"max_tokens":32000},
+    {"id":"claude-haiku-5-5","route":"anthropic","weights":"closed","role":"agent","session_cap_usd":1,"max_tokens":32000},
+    {"id":"deepseek/deepseek-v4.1-flash-1017","route":"openrouter Anthropic Messages, provider only [deepseek], no fallbacks","weights":"open","role":"agent","session_cap_usd":0.5,"max_tokens":32000}
+  ],
+  "cells": [
+    {"id":"opus/none","model":"claude-opus-5-5","arm":"none","tasks":"tb2","trials":2,"note":"Further replicates while money remains."},
+    {"id":"opus/gstack","model":"claude-opus-5-5","arm":"gstack","tasks":"tb2","trials":2,"note":"Further replicates while money remains."},
+    {"id":"opus/placebo","model":"claude-opus-5-5","arm":"placebo","tasks":"tb2","trials":2,"note":"Further replicates while money remains."},
+    {"id":"haiku/none","model":"claude-haiku-5-5","arm":"none","tasks":"tb2","trials":3},
+    {"id":"haiku/gstack","model":"claude-haiku-5-5","arm":"gstack","tasks":"tb2","trials":3},
+    {"id":"haiku/placebo","model":"claude-haiku-5-5","arm":"placebo","tasks":"tb2","trials":3},
+    {"id":"deepseek/none","model":"deepseek/deepseek-v4.1-flash-1017","arm":"none","tasks":"tb2","trials":3},
+    {"id":"deepseek/gstack","model":"deepseek/deepseek-v4.1-flash-1017","arm":"gstack","tasks":"tb2","trials":3},
+    {"id":"deepseek/placebo","model":"deepseek/deepseek-v4.1-flash-1017","arm":"placebo","tasks":"tb2","trials":3}
+  ],
+  "tasks": [
+    {
+      "id": "tb2",
+      "source": "terminal-bench@2.0 at 69671fbaac6d, 20 tasks chosen by a fixed rule over published per-trial results (tasks/selection.md)",
+      "count": 20,
+      "digest": "1b42434876a2e1dfb2f8e7f87459efe778aa6c4a9181695fd6f3e3db0336856e",
+      "sealed": false,
+      "replacement": "Before the first paid call, a task whose oracle fails is replaced by the next reserve; after it, an ungradable task is dropped and reported."
+    }
+  ],
+  "metrics": {
+    "primary": [{"id":"pass","definition":"The task's verifier reward, 1 or 0","direction":"higher"}],
+    "secondary": [{"id":"cost_per_success","definition":"Metered cost of graded trials over passes","direction":"lower"},{"id":"opened","definition":"A Skill call or a SKILL.md read"}]
+  },
+  "analysis": {
+    "pairing": "task_mean",
+    "alpha": 0.05,
+    "interval": {"method":"task_clustered_bootstrap","level":0.95,"resamples":10000,"seed":20261028},
+    "missing_cells": {"min_trials":1,"on_missing":"drop_task"},
+    "comparisons": [
+      {"id":"opus-gstack-none","a":"opus/none","b":"opus/gstack","metric":"pass","gate":"exploratory"},
+      {"id":"opus-gstack-placebo","a":"opus/placebo","b":"opus/gstack","metric":"pass","gate":"exploratory"},
+      {"id":"opus-placebo-none","a":"opus/none","b":"opus/placebo","metric":"pass","gate":"exploratory"},
+      {"id":"haiku-gstack-none","a":"haiku/none","b":"haiku/gstack","metric":"pass","gate":"exploratory"},
+      {"id":"haiku-gstack-placebo","a":"haiku/placebo","b":"haiku/gstack","metric":"pass","gate":"exploratory"},
+      {"id":"haiku-placebo-none","a":"haiku/none","b":"haiku/placebo","metric":"pass","gate":"exploratory"},
+      {"id":"deepseek-gstack-none","a":"deepseek/none","b":"deepseek/gstack","metric":"pass","gate":"exploratory"},
+      {"id":"deepseek-gstack-placebo","a":"deepseek/placebo","b":"deepseek/gstack","metric":"pass","gate":"exploratory"},
+      {"id":"deepseek-placebo-none","a":"deepseek/none","b":"deepseek/placebo","metric":"pass","gate":"exploratory"}
+    ],
+    "rules": ["Share of the Opus gap closed per cheap model, over tasks graded in all three cells, with the share of resamples where the gap is positive.","Tier A (ranks 1 to 10) is a secondary set."]
+  },
+  "money": {
+    "cap_usd": 190,
+    "funding": "program",
+    "line_item": "laneb-quick",
+    "ledger": "captain-gstack-evals/ledger/laneb-quick.jsonl",
+    "approval": {"words":"Rec","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up on \"It should be fast like this week\""},
+    "reservation": "The proxy reserves each session's cap before it starts and refuses any request whose worst case would pass it.",
+    "stop_rule": "When the ledger refuses a reserve, no new session starts and the run is reported incomplete; never retried to change a result.",
+    "order": ["Route check","Replicate 1 on every cell","Replicates 2 and 3 on Haiku and DeepSeek","Replicate 2 on Opus, then more while money remains"]
+  },
+  "peg": {"as_of":null,"sha256":null,"source":"openrouter.ai/collections/programming, read 2026-10-28 18:10 UTC","note":"The Data API needs an OpenRouter key; the route check reads it once the key lands and records meta.as_of with the results."},
+  "limits": ["20 tasks at 1 to 3 trials per cell: exploratory estimates.","DeepSeek is metered at the peak price, so its costs are upper bounds."],
+  "deviations": ["Verifier timeouts doubled for every task, as Terminal-Bench 2.1 later did."]
+}

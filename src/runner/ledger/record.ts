@@ -39,8 +39,12 @@ export interface ApprovalFile extends Slot {
   action: "init" | "raise";
   cap_micros: number;
   quotes: Quote[];
+  /** On init only, and never changed after: whether a lease on the item needs an admission record (GSTA-8, decision 3). */
+  admission?: Admission;
   recorded_at: string;
 }
+
+export type Admission = "required" | "warn";
 
 export interface LeaseFile extends Slot {
   kind: "lease";
@@ -158,26 +162,25 @@ function syncDir(dir: string): void {
   }
 }
 
+/** The shape checks every record file passes, also applied to a lease export or settle artifact before it is used. */
+export function isRecordFile(f: unknown): f is RecordFile {
+  const r = f as RecordFile | null;
+  if (typeof r !== "object" || r === null || r.schema !== 1 || typeof r.item !== "string" || !ITEM_NAME.test(r.item) || !Number.isSafeInteger(r.seq)) return false;
+  if (r.kind === "approval") return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined);
+  if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at);
+  return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
+}
+
 function parseFile(path: string, text: string): RecordFile {
   const name = FILE.exec(basename(path));
-  let f: RecordFile | null = null;
+  let f: unknown = null;
   try {
     f = JSON.parse(text);
   } catch {}
-  const valid =
-    name !== null &&
-    f !== null &&
-    f.schema === 1 &&
-    f.kind === name[1] &&
-    f.seq === Number(name[2]) &&
-    f.item === basename(dirname(path)) &&
-    (f.kind === "approval"
-      ? isMicros(f.cap_micros) && Array.isArray(f.quotes) && f.quotes.length > 0
-      : f.kind === "lease"
-        ? isMicros(f.reserved_micros) && typeof f.lease_id === "string" && typeof f.run_id === "string" && isTime(f.expires_at)
-        : isMicros(f.spent_micros) && isMicros(f.unknown_micros) && typeof f.lease_id === "string");
-  if (!valid) throw new LedgerError("E_LEDGER_RECORD", "the approval record file " + path + " does not parse as a ledger file; repair it by hand, never delete it");
-  return f!;
+  if (name === null || !isRecordFile(f) || f.kind !== name[1] || f.seq !== Number(name[2]) || f.item !== basename(dirname(path))) {
+    throw new LedgerError("E_LEDGER_RECORD", "the approval record file " + path + " does not parse as a ledger file; repair it by hand, never delete it");
+  }
+  return f;
 }
 
 export interface ItemState {
@@ -186,6 +189,7 @@ export interface ItemState {
   leases: { lease: LeaseFile; close: CloseFile | null }[];
   /** The latest approved cap, or null when none is on record. */
   cap_micros: number | null;
+  admission: Admission | null;
   /** Closed leases count what they spent; open leases count their whole reserved amount. */
   committed_micros: number;
   /** The run the item is bound to: the run of its first lease. */
@@ -216,6 +220,7 @@ export function readItem(record: string, item: string): ItemState {
     approvals,
     leases,
     cap_micros: approvals.at(-1)?.cap_micros ?? null,
+    admission: approvals[0]?.admission ?? null,
     committed_micros: leases.reduce((sum, { lease, close }) => sum + (close ? close.spent_micros + close.unknown_micros : lease.reserved_micros), 0),
     run_id: leases[0]?.lease.run_id ?? null,
     open: leases.find((l) => l.close === null)?.lease ?? null,
