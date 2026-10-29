@@ -77,6 +77,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [NONE_MATCHES](#none_matches) | warning | U6 |
 | [BROKEN_TASK](#broken_task) | warning | U6 |
 | [REPLY_MISALIGNED](#reply_misaligned) | warning | U10 |
+| [PDF_INPUT](#pdf_input) | warning | U7 |
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
 | [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 
@@ -206,9 +207,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### LOCK_DRIFT
 
-The tasks file, the sidecar or the policy no longer matches the committed lock.
+The tasks file, the sidecar, the policy, the before copy, the contract-line rules or the question classifier no longer match the committed lock, or a lock row differs from the row re-derived from the before copy (a hand-edited or deleted row). Each line of the message names one difference, re-derived rows by index and id.
 
-Fix: Restore the locked files, or commit a relock (--lock), which reruns the changed tasks in every arm and marks the verdict post_hoc. Do not --resume.
+Fix: Restore the locked files (git checkout the lock to undo a hand edit to a row), or commit a relock (--lock), which reruns the changed tasks in every arm and marks the verdict post_hoc. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U5.
 
@@ -366,9 +367,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_TASKS_INVALID
 
-A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules: an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks.
+A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules (an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks), or preflight could not run a task's control: its setup or mutant setup failed, its check ended in an error (no exit code, exit 2, or a command missing outside the work dir), or a pattern stopped compiling.
 
-Fix: Fix each problem the lines above name, then run gstack-evals validate --tasks &lt;tasks.json> until it exits 0. If the tasks file is locked, commit a relock (--lock).
+Fix: Fix each problem the lines above name. gstack-evals validate --tasks &lt;tasks.json> checks the file rules, and gstack-evals preflight runs the controls. If the tasks file is locked, commit a relock (--lock).
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U5.
 
@@ -591,6 +592,14 @@ A scripted reply matched a question ambiguously and got a non-approving answer, 
 Fix: Read the event log's reply sources and give the question's category its own reply in tasks.ext.json.
 
 Warning. Owner: U10.
+
+### PDF_INPUT
+
+A task's prompt, setup, check or mutant names a PDF, or the task has a setup and its fixtures hold one. The metering proxy reserves a PDF sent inline as base64 loosely, so one call's reservation bound may not hold; settlement still bills the provider's reported usage (U3, accepted as won't-fix).
+
+Fix: Prefer text fixtures. If the task needs the PDF, keep headroom in the cap and check the ledger's settled spend after the run.
+
+Warning. Owner: U7.
 
 ### NEGATIVE_UNVALIDATED
 

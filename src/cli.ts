@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CODES, docAnchor } from "./errors/codes.ts";
+import { scrubSecrets } from "./skill-eval/verdict/error-record.ts";
 import type { CommandMain } from "./types.ts";
 
 export const REPO_ROOT = join(import.meta.dir, "..");
@@ -79,7 +80,7 @@ function usageError(io: Io, message: string): number {
 }
 
 function internalError(io: Io, command: Command, message: string): number {
-  io.err(errorLines("E_INTERNAL", "gstack-evals " + command.name + ": " + message, "this is a defect in " + command.module + ", not in your input. File an issue with these lines."));
+  io.err(errorLines("E_INTERNAL", "gstack-evals " + command.name + ": " + scrubSecrets(message), "this is a defect in " + command.module + ", not in your input. File an issue with these lines."));
   return 2;
 }
 

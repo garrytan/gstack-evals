@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { REPO_ROOT } from "../../src/cli.ts";
-import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
+import { REPO_ROOT, run as dispatch } from "../../src/cli.ts";
+import { resolveCall, type Call } from "../../src/skill-eval/cli/call.ts";
+import { parseFlags, SKILL_EVAL_FLAGS, type ParsedFlags } from "../../src/skill-eval/cli/flags.ts";
+import { internal, skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
+import { ERROR_FILE } from "../../src/skill-eval/verdict/error-record.ts";
 import { collect, tree } from "./helpers.ts";
 
 async function run(argv: string[], env: Record<string, string> = {}) {
@@ -53,8 +56,8 @@ describe("gstack-evals skill-eval routing", () => {
     for (const line of g.err.split("\n")) expect(line).toStartWith("E_LOOSE_GSTACK ");
   });
 
-  // Value: protects=the explain and skill-eval rows in bin/gstack-evals run their modules; fails_when=a row's module moves or lacks main; why_new=both rows printed not built yet; seam=src/cli.ts; no_claim=none beyond protects
-  test("bin/gstack-evals runs explain and skill-eval", () => {
+  // Value: protects=the explain, skill-eval and preflight rows in bin/gstack-evals run their modules; fails_when=a row's module moves or lacks main; why_new=both rows printed not built yet; seam=src/cli.ts; no_claim=none beyond protects
+  test("bin/gstack-evals runs explain, skill-eval and preflight", () => {
     const bin = join(REPO_ROOT, "bin", "gstack-evals");
     const explain = spawnSync(bin, ["explain", "E_LOOSE_GSTACK"], { encoding: "utf8" });
     expect(explain.status).toBe(0);
@@ -62,5 +65,44 @@ describe("gstack-evals skill-eval routing", () => {
     const help = spawnSync(bin, ["skill-eval", "--help"], { encoding: "utf8" });
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("Options:");
+    const preflight = spawnSync(bin, ["preflight", "--help"], { encoding: "utf8" });
+    expect(preflight.status).toBe(0);
+    expect(preflight.stdout).toContain("Options:");
+  });
+});
+
+describe("secrets in error output (brief item 2)", () => {
+  const SECRET = "fake-anthropic-value-u7-0123456789";
+  const SHAPED = "sk-ant-api03-" + "x".repeat(24);
+  const callArgs = (loose: string) => ["--arms", "before=" + loose + ",after=" + loose + ",none", "--tasks", join(loose, "tasks.json"), "--host", "claude", "--model", "claude-opus-5-5"];
+
+  // Value: protects=an unexpected error's stderr lines, trace file and error record carry no key value or key-shaped token; fails_when=a key echoed into an exception reaches any of the three; why_new=item 2 asked U7 to scrub E_INTERNAL; seam=U6's scrubSecrets and errorRecord; no_claim=secrets under names SECRET_NAME does not match
+  test("E_INTERNAL scrubs key values and key shapes from stderr, the trace file and the error record", () => {
+    const loose = tree({ "SKILL.md": SKILL });
+    const out = join(loose, "out");
+    const env = { ANTHROPIC_API_KEY: SECRET };
+    const call = resolveCall(parseFlags([...callArgs(loose), "--out", out], SKILL_EVAL_FLAGS, env) as ParsedFlags, env) as Call;
+    const io = collect();
+    expect(internal(io, call, new Error("upstream echoed " + SECRET + " and " + SHAPED), ["ANTHROPIC_API_KEY"], env, true, "preflight")).toBe(2);
+    const { out: stdout, err } = io.text();
+    const files = readdirSync(out);
+    const trace = readFileSync(join(out, files.find((f) => f.startsWith("trace-"))!), "utf8");
+    const written = files.map((f) => readFileSync(join(out, f), "utf8")).join("\n");
+    for (const text of [stdout, err, written]) {
+      expect(text).not.toContain(SECRET);
+      expect(text).not.toContain(SHAPED);
+    }
+    expect(trace).toContain("upstream echoed [scrubbed ANTHROPIC_API_KEY] and [scrubbed]");
+    for (const line of err.split("\n")) expect(line).toStartWith("E_INTERNAL ");
+    expect(JSON.parse(readFileSync(join(out, ERROR_FILE), "utf8"))).toMatchObject({ code: "E_INTERNAL", context: { env_names: ["ANTHROPIC_API_KEY"] } });
+  });
+
+  // Value: protects=the dispatcher's E_INTERNAL line, for any command that throws, carries no key-shaped token; fails_when=exception text reaches stderr as is; why_new=the dispatcher printed exception text as is; seam=src/cli.ts run; no_claim=none beyond protects
+  test("the dispatcher's E_INTERNAL line is scrubbed", async () => {
+    const root = tree({ "src/skill-eval/cli/skill-eval.ts": "export async function main() { throw new Error('upstream echoed " + SHAPED + "'); }\n" });
+    const io = collect();
+    expect(await dispatch(["skill-eval"], io, root)).toBe(2);
+    expect(io.text().err).toContain("E_INTERNAL gstack-evals skill-eval: upstream echoed [scrubbed]");
+    expect(io.text().err).not.toContain(SHAPED);
   });
 });

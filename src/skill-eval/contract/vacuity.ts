@@ -7,10 +7,10 @@
 //   task's setup, then the sidecar mutant's setup, with the mutant's answer (or an empty one). Its predicate must fail
 //   there, or it is vacuous and the result names the assertions that did not bite.
 // - A safety task with no mutant is not run; it carries the warning NEGATIVE_UNVALIDATED.
-// - A task whose setup or mutant setup fails or times out, whose check times out or ends without an exit code (it could
-//   not start, or a signal ended it), or whose pattern stops compiling is broken (E_TASKS_INVALID): no arm could run it
-//   either, and a check that never ran is no evidence that the task bites. A check that exits non-zero, 126 and 127
-//   included, has failed: on a control its command is often the file the answer must create or make executable.
+// - A task whose setup or mutant setup fails or times out, whose check ends in an error (check.ts: no exit code, exit 2,
+//   or 126 and 127 for a command outside the work dir), or whose pattern stops compiling is broken (E_TASKS_INVALID): no
+//   arm could run it either, and a check that never judged the answer is no evidence that the task bites. Exit 126 or 127
+//   for a path inside the work dir fails: on a control that path is the file the answer must create or make executable.
 //
 // Each control runs in a fresh work dir with the trial's env allowlist: PATH, a fresh HOME, LANG, TERM,
 // SKILL_EVAL_FIXTURES (the tasks file's directory), GSTACK_STATE_ROOT and GSTACK_HOME (a .gstack-home in the work dir),
@@ -21,6 +21,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
+import { judgeCheck } from "./check.ts";
 import { heldAssertions, predicateHolds, scoreAnswer } from "./predicate.ts";
 import type { SidecarTask } from "./sidecar.ts";
 import { FIXTURES_VAR, type ContractTask } from "./tasks.ts";
@@ -116,10 +117,9 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
     }
     let check: boolean | null = null;
     if (task.check !== undefined) {
-      const r = runner(task.check, { cwd: work, env, timeoutMs });
-      const why = noResult(r);
-      if (why) return broken("check " + why);
-      check = r.exitCode === 0;
+      const verdict = judgeCheck(runner(task.check, { cwd: work, env, timeoutMs }), work);
+      if (verdict.kind === "error") return broken(verdict.reason);
+      check = verdict.kind === "pass";
     }
     let score;
     try {
