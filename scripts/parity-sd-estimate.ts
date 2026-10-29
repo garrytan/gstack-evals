@@ -191,7 +191,12 @@ export function analyse(counts: Counts) {
 
 export type Results = ReturnType<typeof analyse>;
 
-export const resultsJson = (source: Source, r: Results) => JSON.stringify({ source, trials: TRIALS, bootstrap: BOOTSTRAP, ceiling: CEILING, ...r }, null, 2) + "\n";
+/** results.json for U17: one top-level field per line, and one line per element of a list. */
+export function resultsJson(source: Source, r: Results): string {
+  const doc: Record<string, unknown> = { source, trials: TRIALS, bootstrap: BOOTSTRAP, ceiling: CEILING, ...r };
+  const field = ([k, v]: [string, unknown]) => "  " + JSON.stringify(k) + ": " + (Array.isArray(v) ? "[\n" + v.map((e) => "    " + JSON.stringify(e)).join(",\n") + "\n  ]" : JSON.stringify(v));
+  return "{\n" + Object.entries(doc).map(field).join(",\n") + "\n}\n";
+}
 
 export const MARKERS = { start: "<!-- parity-sd-estimate:start (bun scripts/parity-sd-estimate.ts report writes this block; do not edit by hand) -->", end: "<!-- parity-sd-estimate:end -->" };
 
