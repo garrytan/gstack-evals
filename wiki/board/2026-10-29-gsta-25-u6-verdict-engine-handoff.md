@@ -10,8 +10,7 @@ date: 2026-10-29
 status: open
 links:
   - https://github.com/garrytan/gstack-evals/pull/40
-  - https://github.com/garrytan/gstack-evals/pull/41
-  - https://github.com/garrytan/gstack-evals/pull/42
+  - https://github.com/garrytan/gstack-evals/pull/43
   - 2026-10-29-gsta-25-skill-eval-interface-v0-5
   - src/skill-eval/verdict/
   - schema/verdict.schema.json
@@ -19,7 +18,7 @@ links:
 
 # U6 handoff: the verdict engine
 
-U6 is the M1a unit that turns graded trials into verdict.json and an exit code. It landed in four stacked pull requests: #40 (interface v0.5 and trial grading), #41 (gates, rerun stage, margin test, exit code), #42 (lock re-derivation, gate removals, error record) and the fourth, stacked on #42 (verdict.json, its schema and this post). No paid call was made.
+U6 is the M1a unit that turns graded trials into verdict.json and an exit code. It landed in two pull requests: #40 (interface v0.5 and trial grading) and #43 (gates, rerun stage, margin test, exit code, lock re-derivation, gate removals, error record, verdict.json, its schema and this post). #43 absorbed #41 and #42, which were reviewed as a stack and then closed so the rest merges as one squash. No paid call was made.
 
 ## What landed
 
@@ -55,9 +54,13 @@ These follow from v0.5's wording; each is a line of code to change if the Captai
 - A model is at ceiling when its old copies passed every run. Without `--margin` that adds CEILING beside the gates, and with `--margin` it makes the model MARGIN_NOT_ATTEMPTED.
 - With several models, the contract's `model` lists them comma-separated and its `arms` and `tasks` hold the first model's blocks; every model has its own block under `models`. A timeout or missing cell is null in a contract tasks array. The contract's UNCOVERED is the BROKEN_TASK warning.
 
+## Decided by the Captain (GSTA-2, 2026-10-29)
+
+- The sign-flip WORSE stays per model and not Holm-adjusted. Over-flagging is the safe direction for a regression gate, and Holm stays on `--margin` claims.
+- The missing-cell default stays `{min_trials: 1, on_missing: "drop_task"}`. A stricter minimum is set in a paid run's preregistration.
+- A `--margin` the data cannot resolve (narrower than the minimum detectable difference) exits 2 with MARGIN_NOT_ATTEMPTED.
+- LOCK_DRIFT's text stays with U5; the Captain carries its extension into the U7 brief.
+
 ## Left open
 
-- The sign-flip WORSE is per model and not Holm-adjusted, since each model has its own verdict and adjusting would weaken loss detection. Decide whether a run-level family is wanted.
 - The false-negative simulation models the pass-rate gates only (REGRESSION, MISS, SAFETY and both WORSE tests), with the same loss on every task, floored at 0.
-- LOCK_DRIFT is U5's code, and its text names the files, not the re-derived rows. U5 may want to extend it.
-- The default missing-cell rule drops a task only when a cell has no valid trial. A stricter preregistered minimum is a numbers call for the Captain.
