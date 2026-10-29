@@ -88,10 +88,12 @@ export class Ledger {
   }
 }
 
-// Service mode: bun ledger.ts serve --path <jsonl> --item <name> [--port 9911]
+// Service mode: bun ledger.ts serve --path <jsonl> --item <name> [--port 9911] [--prereg <sha>]
 // Binds 127.0.0.1 only. The VM reaches it through an SSH reverse tunnel.
+// --prereg stamps every reserve and settle row it writes with the preregistration commit.
 async function serve(args: Record<string, string>) {
   const ledger = new Ledger(args.path, args.item);
+  const stamp = args.prereg ? { prereg: args.prereg } : {};
   ledger.status();
   const port = Number(args.port ?? 9911);
   let queue = Promise.resolve();
@@ -110,11 +112,11 @@ async function serve(args: Record<string, string>) {
       const body = (await req.json()) as { id: string; usd_micros: number; meta?: Record<string, unknown> };
       if (typeof body.id !== "string" || !Number.isInteger(body.usd_micros) || body.usd_micros < 0) return Response.json({ ok: false, reason: "bad request" }, { status: 400 });
       if (url.pathname === "/reserve") {
-        const out = await serial(() => ledger.reserve(body.id, body.usd_micros, body.meta ?? {}));
+        const out = await serial(() => ledger.reserve(body.id, body.usd_micros, { ...(body.meta ?? {}), ...stamp }));
         return Response.json(out, { status: out.ok ? 200 : 409 });
       }
       if (url.pathname === "/settle") {
-        const out = await serial(() => ledger.settle(body.id, body.usd_micros, body.meta ?? {}));
+        const out = await serial(() => ledger.settle(body.id, body.usd_micros, { ...(body.meta ?? {}), ...stamp }));
         return Response.json(out, { status: out.ok ? 200 : 409 });
       }
       return new Response("not found", { status: 404 });
@@ -137,7 +139,7 @@ if (import.meta.main) {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("E_USAGE usage: bun ledger.ts serve|status --path <jsonl> --item <name> [--port N]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status --path <jsonl> --item <name> [--port N] [--prereg <sha>]");
     process.exit(2);
   }
 }

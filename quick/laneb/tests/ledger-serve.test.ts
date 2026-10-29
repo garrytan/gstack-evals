@@ -20,7 +20,7 @@ beforeAll(async () => {
   const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
   const port = probe.port;
   probe.stop(true);
-  proc = Bun.spawn(["bun", join(import.meta.dir, "../runner/ledger.ts"), "serve", "--path", path, "--item", "laneb-test", "--port", String(port)], { stdout: "pipe", stderr: "pipe" });
+  proc = Bun.spawn(["bun", join(import.meta.dir, "../runner/ledger.ts"), "serve", "--path", path, "--item", "laneb-test", "--port", String(port), "--prereg", "0123abc"], { stdout: "pipe", stderr: "pipe" });
   url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 100; i++) {
     try { if ((await fetch(url + "/status")).ok) return; } catch {}
@@ -49,4 +49,15 @@ test("serve rejects negative and non-integer micros on /reserve and /settle with
   expect(readRows(path).length).toBe(before);
   expect(((await (await fetch(url + "/status")).json()) as any).openReservedMicros).toBe(1000);
   expect((await post("/settle", { id: "a", usd_micros: 400 })).status).toBe(200);
+});
+
+test("serve --prereg stamps the preregistration commit on every reserve and settle row", async () => {
+  expect((await post("/reserve", { id: "p", usd_micros: 1000, meta: { arm: "none" } })).status).toBe(200);
+  expect((await post("/settle", { id: "p", usd_micros: 300, meta: { arm: "none" } })).status).toBe(200);
+  const rows = readRows(path).filter((r: any) => r.id === "p");
+  expect(rows.map((r: any) => r.kind)).toEqual(["reserve", "settle"]);
+  for (const r of rows as any[]) {
+    expect(r.prereg).toBe("0123abc");
+    expect(r.arm).toBe("none");
+  }
 });

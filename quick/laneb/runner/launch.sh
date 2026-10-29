@@ -3,19 +3,20 @@
 # The ledger service runs here, on the machine that holds the line item's ledger file,
 # and the VM reaches it through an SSH reverse tunnel. Provider keys go to a 0600 file
 # on the VM through stdin and are read only by the metering proxy.
-# Usage: UBI_OWNER=<thread code> launch.sh <run dir> <ledger prefix> <batch cap usd>
+# Usage: UBI_OWNER=<thread code> PREREG=<sha> LEDGER=<path> ITEM=<item> launch.sh <run dir> <ledger prefix> <batch cap usd>
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 S=${UBI_RUNNER:-/home/user/.capy/drive/user-garry-tan/skills/ubicloud/scripts/ubi-runner.sh}
 LEDGER=${LEDGER:?set LEDGER to the line item ledger path}
 ITEM=${ITEM:-laneb-quick}
+PREREG=${PREREG:?set PREREG to the preregistration commit sha; the ledger stamps it on every row}
 run=$(cd "$1" && pwd)
 prefix=$2
 cap=$3
 state_root=${UBI_RUNNER_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner}
 
 bun "$here/ledger.ts" status --path "$LEDGER" --item "$ITEM"
-bun "$here/ledger.ts" serve --path "$LEDGER" --item "$ITEM" --port 9911 > "$run/ledger-service.log" 2>&1 &
+bun "$here/ledger.ts" serve --path "$LEDGER" --item "$ITEM" --port 9911 --prereg "$PREREG" > "$run/ledger-service.log" 2>&1 &
 lpid=$!
 name=""
 cleanup() {
