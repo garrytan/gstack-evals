@@ -1,0 +1,3009 @@
+{
+  "strata": {
+    "all": {
+      "primary": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4358974358974359,
+            "recall_ci": [
+              0.20512820512820512,
+              0.6923076923076923
+            ],
+            "catches": 17,
+            "recall_critical": 0.33333333333333337,
+            "file_line": 0.41025641025641024,
+            "false_alarm": 0.2121212121212121,
+            "false_alarm_ci": [
+              0.0303030303030303,
+              0.4242424242424242
+            ],
+            "decoy_any_finding": 0.6969696969696969,
+            "usd_defects": 3.1347229999999997,
+            "usd_all": 5.432837999999999,
+            "usd_per_catch": 0.18439547058823527,
+            "usd_all_per_catch": 0.31957870588235293,
+            "calls": 72,
+            "in_tokens_per_unit": 13421.333333333334,
+            "out_tokens_per_unit": 2564.4444444444443,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4871794871794872,
+            "recall_ci": [
+              0.23076923076923078,
+              0.7435897435897435
+            ],
+            "catches": 19,
+            "recall_critical": 0.17948717948717946,
+            "file_line": 0.6410256410256411,
+            "false_alarm": 0.2727272727272727,
+            "false_alarm_ci": [
+              0.0606060606060606,
+              0.5151515151515151
+            ],
+            "decoy_any_finding": 0.9696969696969696,
+            "usd_defects": 18.820342999999998,
+            "usd_all": 31.049333999999998,
+            "usd_per_catch": 0.9905443684210525,
+            "usd_all_per_catch": 1.6341754736842105,
+            "calls": 381,
+            "in_tokens_per_unit": 104811.30555555556,
+            "out_tokens_per_unit": 11259.902777777777,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.3846153846153847,
+            "recall_ci": [
+              0.15384615384615385,
+              0.641025641025641
+            ],
+            "catches": 15,
+            "recall_critical": 0.2564102564102564,
+            "file_line": 0.43589743589743585,
+            "false_alarm": 0.09090909090909091,
+            "false_alarm_ci": [
+              0,
+              0.2424242424242424
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.128805,
+            "usd_all": 0.236675,
+            "usd_per_catch": 0.008587000000000001,
+            "usd_all_per_catch": 0.01577833333333333,
+            "calls": 72,
+            "in_tokens_per_unit": 13421.333333333334,
+            "out_tokens_per_unit": 5276.347222222223,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4102564102564103,
+            "recall_ci": [
+              0.15384615384615385,
+              0.6666666666666667
+            ],
+            "catches": 16,
+            "recall_critical": 0.25641025641025644,
+            "file_line": 0.4871794871794872,
+            "false_alarm": 0.2727272727272727,
+            "false_alarm_ci": [
+              0.09090909090909091,
+              0.4848484848484848
+            ],
+            "decoy_any_finding": 0.8787878787878789,
+            "usd_defects": 0.563459,
+            "usd_all": 0.9392719999999998,
+            "usd_per_catch": 0.0352161875,
+            "usd_all_per_catch": 0.058704499999999986,
+            "calls": 379,
+            "in_tokens_per_unit": 104402.20833333333,
+            "out_tokens_per_unit": 15224.625,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 1,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 38,
+            "decoy_units": 31,
+            "incomplete": 3,
+            "unjudged": 0,
+            "recall": 0.23076923076923078,
+            "recall_ci": [
+              0,
+              0.46153846153846156
+            ],
+            "catches": 8,
+            "recall_critical": 0.20512820512820512,
+            "file_line": 0.28205128205128205,
+            "false_alarm": 0.1515151515151515,
+            "false_alarm_ci": [
+              0,
+              0.30303030303030304
+            ],
+            "decoy_any_finding": 0.3636363636363636,
+            "usd_defects": 0.8775130000000002,
+            "usd_all": 1.3602759999999996,
+            "usd_per_catch": 0.10968912500000003,
+            "usd_all_per_catch": 0.17003449999999995,
+            "calls": 69,
+            "in_tokens_per_unit": 8942.971014492754,
+            "out_tokens_per_unit": 26645.08695652174,
+            "unparsed_outputs": 44,
+            "truncated_outputs": 44,
+            "cut_off_empty_calls": 44,
+            "units_with_cut_off_empty_call": 44
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 34,
+            "decoy_units": 32,
+            "incomplete": 6,
+            "unjudged": 0,
+            "recall": 0.37179487179487186,
+            "recall_ci": [
+              0.14102564102564102,
+              0.6153846153846154
+            ],
+            "catches": 12,
+            "recall_critical": 0.23076923076923078,
+            "file_line": 0.48717948717948717,
+            "false_alarm": 0.09090909090909091,
+            "false_alarm_ci": [
+              0,
+              0.1818181818181818
+            ],
+            "decoy_any_finding": 0.7727272727272727,
+            "usd_defects": 2.412629,
+            "usd_all": 4.003170000000001,
+            "usd_per_catch": 0.20105241666666665,
+            "usd_all_per_catch": 0.33359750000000005,
+            "calls": 341,
+            "in_tokens_per_unit": 67365.66666666667,
+            "out_tokens_per_unit": 76097.78787878787,
+            "unparsed_outputs": 64,
+            "truncated_outputs": 63,
+            "cut_off_empty_calls": 61,
+            "units_with_cut_off_empty_call": 28
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": 0.05128205128205128,
+            "recall_diff_ci": [
+              0,
+              0.15384615384615385
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.060606060606060615,
+            "false_alarm_diff_ci": [
+              -0.24242424242424238,
+              0.33333333333333337
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 13,
+            "recall_diff": 0.025641025641025644,
+            "recall_diff_ci": [
+              0,
+              0.07692307692307693
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.18181818181818182,
+            "false_alarm_diff_ci": [
+              0.0303030303030303,
+              0.3333333333333334
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 13,
+            "recall_diff": 0.14102564102564102,
+            "recall_diff_ci": [
+              0,
+              0.3205128205128205
+            ],
+            "cases_a_better": 3,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.0606060606060606,
+            "false_alarm_diff_ci": [
+              -0.2424242424242424,
+              0.09090909090909091
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": -0.025641025641025644,
+            "recall_diff_ci": [
+              -0.20512820512820515,
+              0.10256410256410257
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.060606060606060615,
+            "false_alarm_diff_ci": [
+              -0.2424242424242424,
+              0.36363636363636365
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 13,
+            "recall_diff": -0.07692307692307691,
+            "recall_diff_ci": [
+              -0.25641025641025644,
+              0.05128205128205129
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 2,
+            "false_alarm_diff": -1.5139404881252134e-17,
+            "false_alarm_diff_ci": [
+              -0.3333333333333333,
+              0.2727272727272727
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": -0.06410256410256411,
+            "recall_diff_ci": [
+              -0.24358974358974358,
+              0.0641025641025641
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 2,
+            "false_alarm_diff": -0.12121212121212123,
+            "false_alarm_diff_ci": [
+              -0.36363636363636365,
+              0.09090909090909091
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 13,
+            "recall_diff": -0.11538461538461539,
+            "recall_diff_ci": [
+              -0.28205128205128205,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 3,
+            "false_alarm_diff": -0.18181818181818182,
+            "false_alarm_diff_ci": [
+              -0.393939393939394,
+              0
+            ]
+          }
+        ]
+      },
+      "ungated": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4358974358974359,
+            "recall_ci": [
+              0.20512820512820512,
+              0.6923076923076923
+            ],
+            "catches": 17,
+            "recall_critical": 0.33333333333333337,
+            "file_line": 0.41025641025641024,
+            "false_alarm": 0.2121212121212121,
+            "false_alarm_ci": [
+              0.0303030303030303,
+              0.4242424242424242
+            ],
+            "decoy_any_finding": 0.6969696969696969,
+            "usd_defects": 3.1347229999999997,
+            "usd_all": 5.432837999999999,
+            "usd_per_catch": 0.18439547058823527,
+            "usd_all_per_catch": 0.31957870588235293,
+            "calls": 72,
+            "in_tokens_per_unit": 13421.333333333334,
+            "out_tokens_per_unit": 2564.4444444444443,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.5384615384615384,
+            "recall_ci": [
+              0.28205128205128205,
+              0.7692307692307693
+            ],
+            "catches": 21,
+            "recall_critical": 0.17948717948717946,
+            "file_line": 0.7435897435897437,
+            "false_alarm": 0.2727272727272727,
+            "false_alarm_ci": [
+              0.0606060606060606,
+              0.5151515151515151
+            ],
+            "decoy_any_finding": 0.9696969696969696,
+            "usd_defects": 18.820342999999998,
+            "usd_all": 31.049333999999998,
+            "usd_per_catch": 0.8962068095238094,
+            "usd_all_per_catch": 1.4785397142857142,
+            "calls": 381,
+            "in_tokens_per_unit": 104811.30555555556,
+            "out_tokens_per_unit": 11259.902777777777,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.3846153846153847,
+            "recall_ci": [
+              0.15384615384615385,
+              0.641025641025641
+            ],
+            "catches": 15,
+            "recall_critical": 0.2564102564102564,
+            "file_line": 0.43589743589743585,
+            "false_alarm": 0.09090909090909091,
+            "false_alarm_ci": [
+              0,
+              0.2424242424242424
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.128805,
+            "usd_all": 0.236675,
+            "usd_per_catch": 0.008587000000000001,
+            "usd_all_per_catch": 0.01577833333333333,
+            "calls": 72,
+            "in_tokens_per_unit": 13421.333333333334,
+            "out_tokens_per_unit": 5276.347222222223,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4102564102564103,
+            "recall_ci": [
+              0.15384615384615385,
+              0.6666666666666667
+            ],
+            "catches": 16,
+            "recall_critical": 0.25641025641025644,
+            "file_line": 0.6153846153846155,
+            "false_alarm": 0.2727272727272727,
+            "false_alarm_ci": [
+              0.09090909090909091,
+              0.4848484848484848
+            ],
+            "decoy_any_finding": 0.8787878787878789,
+            "usd_defects": 0.563459,
+            "usd_all": 0.9392719999999998,
+            "usd_per_catch": 0.0352161875,
+            "usd_all_per_catch": 0.058704499999999986,
+            "calls": 379,
+            "in_tokens_per_unit": 104402.20833333333,
+            "out_tokens_per_unit": 15224.625,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 1,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 38,
+            "decoy_units": 31,
+            "incomplete": 3,
+            "unjudged": 0,
+            "recall": 0.23076923076923078,
+            "recall_ci": [
+              0,
+              0.46153846153846156
+            ],
+            "catches": 8,
+            "recall_critical": 0.20512820512820512,
+            "file_line": 0.28205128205128205,
+            "false_alarm": 0.1515151515151515,
+            "false_alarm_ci": [
+              0,
+              0.30303030303030304
+            ],
+            "decoy_any_finding": 0.3636363636363636,
+            "usd_defects": 0.8775130000000002,
+            "usd_all": 1.3602759999999996,
+            "usd_per_catch": 0.10968912500000003,
+            "usd_all_per_catch": 0.17003449999999995,
+            "calls": 69,
+            "in_tokens_per_unit": 8942.971014492754,
+            "out_tokens_per_unit": 26645.08695652174,
+            "unparsed_outputs": 44,
+            "truncated_outputs": 44,
+            "cut_off_empty_calls": 44,
+            "units_with_cut_off_empty_call": 44
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 34,
+            "decoy_units": 32,
+            "incomplete": 6,
+            "unjudged": 0,
+            "recall": 0.4102564102564103,
+            "recall_ci": [
+              0.15384615384615385,
+              0.6666666666666667
+            ],
+            "catches": 13,
+            "recall_critical": 0.23076923076923078,
+            "file_line": 0.5256410256410257,
+            "false_alarm": 0.09090909090909091,
+            "false_alarm_ci": [
+              0,
+              0.1818181818181818
+            ],
+            "decoy_any_finding": 0.8181818181818182,
+            "usd_defects": 2.412629,
+            "usd_all": 4.003170000000001,
+            "usd_per_catch": 0.18558684615384616,
+            "usd_all_per_catch": 0.3079361538461539,
+            "calls": 341,
+            "in_tokens_per_unit": 67365.66666666667,
+            "out_tokens_per_unit": 76097.78787878787,
+            "unparsed_outputs": 64,
+            "truncated_outputs": 63,
+            "cut_off_empty_calls": 61,
+            "units_with_cut_off_empty_call": 28
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": 0.10256410256410257,
+            "recall_diff_ci": [
+              0,
+              0.23076923076923078
+            ],
+            "cases_a_better": 3,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.060606060606060615,
+            "false_alarm_diff_ci": [
+              -0.24242424242424238,
+              0.33333333333333337
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 13,
+            "recall_diff": 0.025641025641025644,
+            "recall_diff_ci": [
+              0,
+              0.07692307692307693
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.18181818181818182,
+            "false_alarm_diff_ci": [
+              0.0303030303030303,
+              0.3333333333333334
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 13,
+            "recall_diff": 0.17948717948717946,
+            "recall_diff_ci": [
+              0,
+              0.38461538461538464
+            ],
+            "cases_a_better": 3,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.0606060606060606,
+            "false_alarm_diff_ci": [
+              -0.2424242424242424,
+              0.09090909090909091
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": -0.025641025641025644,
+            "recall_diff_ci": [
+              -0.20512820512820515,
+              0.10256410256410257
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.060606060606060615,
+            "false_alarm_diff_ci": [
+              -0.2424242424242424,
+              0.36363636363636365
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 13,
+            "recall_diff": -0.1282051282051282,
+            "recall_diff_ci": [
+              -0.3076923076923077,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 3,
+            "false_alarm_diff": -1.5139404881252134e-17,
+            "false_alarm_diff_ci": [
+              -0.3333333333333333,
+              0.2727272727272727
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": -0.025641025641025644,
+            "recall_diff_ci": [
+              -0.20512820512820515,
+              0.10256410256410257
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.12121212121212123,
+            "false_alarm_diff_ci": [
+              -0.36363636363636365,
+              0.09090909090909091
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 13,
+            "recall_diff": -0.1282051282051282,
+            "recall_diff_ci": [
+              -0.3076923076923077,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 3,
+            "false_alarm_diff": -0.18181818181818182,
+            "false_alarm_diff_ci": [
+              -0.393939393939394,
+              0
+            ]
+          }
+        ]
+      },
+      "answered_only": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4358974358974359,
+            "recall_ci": [
+              0.20512820512820512,
+              0.6923076923076923
+            ],
+            "catches": 17,
+            "recall_critical": 0.33333333333333337,
+            "file_line": 0.41025641025641024,
+            "false_alarm": 0.2121212121212121,
+            "false_alarm_ci": [
+              0.0303030303030303,
+              0.4242424242424242
+            ],
+            "decoy_any_finding": 0.6969696969696969,
+            "usd_defects": 3.1347229999999997,
+            "usd_all": 5.432837999999999,
+            "usd_per_catch": 0.18439547058823527,
+            "usd_all_per_catch": 0.31957870588235293,
+            "calls": 72,
+            "in_tokens_per_unit": 13421.333333333334,
+            "out_tokens_per_unit": 2564.4444444444443,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4871794871794872,
+            "recall_ci": [
+              0.23076923076923078,
+              0.7435897435897435
+            ],
+            "catches": 19,
+            "recall_critical": 0.17948717948717946,
+            "file_line": 0.6410256410256411,
+            "false_alarm": 0.2727272727272727,
+            "false_alarm_ci": [
+              0.0606060606060606,
+              0.5151515151515151
+            ],
+            "decoy_any_finding": 0.9696969696969696,
+            "usd_defects": 18.820342999999998,
+            "usd_all": 31.049333999999998,
+            "usd_per_catch": 0.9905443684210525,
+            "usd_all_per_catch": 1.6341754736842105,
+            "calls": 381,
+            "in_tokens_per_unit": 104811.30555555556,
+            "out_tokens_per_unit": 11259.902777777777,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.3846153846153847,
+            "recall_ci": [
+              0.15384615384615385,
+              0.641025641025641
+            ],
+            "catches": 15,
+            "recall_critical": 0.2564102564102564,
+            "file_line": 0.43589743589743585,
+            "false_alarm": 0.09090909090909091,
+            "false_alarm_ci": [
+              0,
+              0.2424242424242424
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.128805,
+            "usd_all": 0.236675,
+            "usd_per_catch": 0.008587000000000001,
+            "usd_all_per_catch": 0.01577833333333333,
+            "calls": 72,
+            "in_tokens_per_unit": 13421.333333333334,
+            "out_tokens_per_unit": 5276.347222222223,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 39,
+            "decoy_units": 33,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.4102564102564103,
+            "recall_ci": [
+              0.15384615384615385,
+              0.6666666666666667
+            ],
+            "catches": 16,
+            "recall_critical": 0.25641025641025644,
+            "file_line": 0.4871794871794872,
+            "false_alarm": 0.2727272727272727,
+            "false_alarm_ci": [
+              0.09090909090909091,
+              0.4848484848484848
+            ],
+            "decoy_any_finding": 0.8787878787878789,
+            "usd_defects": 0.563459,
+            "usd_all": 0.9392719999999998,
+            "usd_per_catch": 0.0352161875,
+            "usd_all_per_catch": 0.058704499999999986,
+            "calls": 379,
+            "in_tokens_per_unit": 104402.20833333333,
+            "out_tokens_per_unit": 15224.625,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 1,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 11,
+            "decoy_units": 14,
+            "incomplete": 47,
+            "unjudged": 0,
+            "recall": 0.6,
+            "recall_ci": [
+              0.2,
+              1
+            ],
+            "catches": 8,
+            "recall_critical": 0.5333333333333333,
+            "file_line": 0.8,
+            "false_alarm": 0.4,
+            "false_alarm_ci": [
+              0.06666666666666667,
+              0.7333333333333333
+            ],
+            "decoy_any_finding": 0.8666666666666666,
+            "usd_defects": 0.8775130000000002,
+            "usd_all": 1.3602759999999996,
+            "usd_per_catch": 0.10968912500000003,
+            "usd_all_per_catch": 0.17003449999999995,
+            "calls": 25,
+            "in_tokens_per_unit": 4207.4,
+            "out_tokens_per_unit": 17220.44,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 44,
+            "units_with_cut_off_empty_call": 44
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 17,
+            "decoy_units": 22,
+            "incomplete": 33,
+            "unjudged": 0,
+            "recall": 0.4444444444444444,
+            "recall_ci": [
+              0.1111111111111111,
+              0.7777777777777778
+            ],
+            "catches": 7,
+            "recall_critical": 0.25925925925925924,
+            "file_line": 0.5185185185185185,
+            "false_alarm": 0.041666666666666664,
+            "false_alarm_ci": [
+              0,
+              0.125
+            ],
+            "decoy_any_finding": 0.8541666666666666,
+            "usd_defects": 2.412629,
+            "usd_all": 4.003170000000001,
+            "usd_per_catch": 0.3446612857142857,
+            "usd_all_per_catch": 0.5718814285714287,
+            "calls": 154,
+            "in_tokens_per_unit": 32289.25641025641,
+            "out_tokens_per_unit": 40113.717948717946,
+            "unparsed_outputs": 3,
+            "truncated_outputs": 2,
+            "cut_off_empty_calls": 61,
+            "units_with_cut_off_empty_call": 28
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": 0.05128205128205128,
+            "recall_diff_ci": [
+              0,
+              0.15384615384615385
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.060606060606060615,
+            "false_alarm_diff_ci": [
+              -0.24242424242424238,
+              0.33333333333333337
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 13,
+            "recall_diff": 0.025641025641025644,
+            "recall_diff_ci": [
+              0,
+              0.07692307692307693
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.18181818181818182,
+            "false_alarm_diff_ci": [
+              0.0303030303030303,
+              0.3333333333333334
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 5,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.3333333333333333,
+            "false_alarm_diff_ci": [
+              -0.6666666666666667,
+              -0.06666666666666667
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 13,
+            "recall_diff": -0.025641025641025644,
+            "recall_diff_ci": [
+              -0.20512820512820515,
+              0.10256410256410257
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.060606060606060615,
+            "false_alarm_diff_ci": [
+              -0.2424242424242424,
+              0.36363636363636365
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 13,
+            "recall_diff": -0.07692307692307691,
+            "recall_diff_ci": [
+              -0.25641025641025644,
+              0.05128205128205129
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 2,
+            "false_alarm_diff": -1.5139404881252134e-17,
+            "false_alarm_diff_ci": [
+              -0.3333333333333333,
+              0.2727272727272727
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 9,
+            "recall_diff": -0.1111111111111111,
+            "recall_diff_ci": [
+              -0.3333333333333333,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.25,
+            "false_alarm_diff_ci": [
+              -0.5416666666666666,
+              -0.041666666666666664
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 9,
+            "recall_diff": -0.1111111111111111,
+            "recall_diff_ci": [
+              -0.3333333333333333,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.25,
+            "false_alarm_diff_ci": [
+              -0.5416666666666666,
+              -0.041666666666666664
+            ]
+          }
+        ]
+      }
+    },
+    "review-caught": {
+      "primary": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.1111111111111111,
+            "false_alarm": 0.4,
+            "false_alarm_ci": [
+              0.06666666666666667,
+              0.7333333333333333
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 1.688924,
+            "usd_all": 2.269571,
+            "usd_per_catch": 0.844462,
+            "usd_all_per_catch": 1.1347855,
+            "calls": 33,
+            "in_tokens_per_unit": 13312.454545454546,
+            "out_tokens_per_unit": 2240.181818181818,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.4444444444444444,
+            "false_alarm": 0.26666666666666666,
+            "false_alarm_ci": [
+              0,
+              0.6666666666666666
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 9.545061,
+            "usd_all": 13.800501,
+            "usd_per_catch": 4.7725305,
+            "usd_all_per_catch": 6.9002505,
+            "calls": 162,
+            "in_tokens_per_unit": 101794.24242424243,
+            "out_tokens_per_unit": 10922.575757575758,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.27777777777777773,
+            "false_alarm": 0.13333333333333333,
+            "false_alarm_ci": [
+              0,
+              0.4
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.070579,
+            "usd_all": 0.09708699999999998,
+            "usd_per_catch": 0.0352895,
+            "usd_all_per_catch": 0.04854349999999999,
+            "calls": 33,
+            "in_tokens_per_unit": 13312.454545454546,
+            "out_tokens_per_unit": 4596.545454545455,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.16666666666666666,
+            "recall_ci": [
+              0,
+              0.5
+            ],
+            "catches": 3,
+            "recall_critical": 0.05555555555555555,
+            "file_line": 0.38888888888888884,
+            "false_alarm": 0.26666666666666666,
+            "false_alarm_ci": [
+              0,
+              0.5333333333333333
+            ],
+            "decoy_any_finding": 0.9333333333333332,
+            "usd_defects": 0.291063,
+            "usd_all": 0.40519000000000005,
+            "usd_per_catch": 0.09702100000000001,
+            "usd_all_per_catch": 0.13506333333333334,
+            "calls": 163,
+            "in_tokens_per_unit": 101749.93939393939,
+            "out_tokens_per_unit": 13949.939393939394,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0,
+            "recall_ci": [
+              0,
+              0
+            ],
+            "catches": 0,
+            "recall_critical": 0,
+            "file_line": 0,
+            "false_alarm": 0.2,
+            "false_alarm_ci": [
+              0,
+              0.4666666666666666
+            ],
+            "decoy_any_finding": 0.5333333333333333,
+            "usd_defects": 0.456244,
+            "usd_all": 0.6732720000000002,
+            "usd_per_catch": null,
+            "usd_all_per_catch": null,
+            "calls": 33,
+            "in_tokens_per_unit": 8743,
+            "out_tokens_per_unit": 28145,
+            "unparsed_outputs": 24,
+            "truncated_outputs": 24,
+            "cut_off_empty_calls": 24,
+            "units_with_cut_off_empty_call": 24
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 16,
+            "decoy_units": 15,
+            "incomplete": 2,
+            "unjudged": 0,
+            "recall": 0.08333333333333333,
+            "recall_ci": [
+              0,
+              0.25
+            ],
+            "catches": 1,
+            "recall_critical": 0,
+            "file_line": 0.25,
+            "false_alarm": 0,
+            "false_alarm_ci": [
+              0,
+              0
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 1.1297389999999998,
+            "usd_all": 1.6523089999999998,
+            "usd_per_catch": 1.1297389999999998,
+            "usd_all_per_catch": 1.6523089999999998,
+            "calls": 151,
+            "in_tokens_per_unit": 63995.32258064516,
+            "out_tokens_per_unit": 69845.41935483871,
+            "unparsed_outputs": 30,
+            "truncated_outputs": 29,
+            "cut_off_empty_calls": 27,
+            "units_with_cut_off_empty_call": 11
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.1333333333333333,
+            "false_alarm_diff_ci": [
+              -0.6,
+              0.33333333333333337
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.13333333333333333,
+            "false_alarm_diff_ci": [
+              0,
+              0.4
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 6,
+            "recall_diff": 0.08333333333333333,
+            "recall_diff_ci": [
+              0,
+              0.25
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.2,
+            "false_alarm_diff_ci": [
+              -0.4666666666666666,
+              0
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.13333333333333336,
+            "false_alarm_diff_ci": [
+              -0.6,
+              0.3333333333333333
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -1.1102230246251566e-17,
+            "false_alarm_diff_ci": [
+              -0.5333333333333334,
+              0.4
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": -0.027777777777777773,
+            "recall_diff_ci": [
+              -0.08333333333333331,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.4,
+            "false_alarm_diff_ci": [
+              -0.7333333333333333,
+              -0.06666666666666667
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 6,
+            "recall_diff": -0.027777777777777773,
+            "recall_diff_ci": [
+              -0.08333333333333331,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.26666666666666666,
+            "false_alarm_diff_ci": [
+              -0.6666666666666666,
+              0
+            ]
+          }
+        ]
+      },
+      "ungated": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.1111111111111111,
+            "false_alarm": 0.4,
+            "false_alarm_ci": [
+              0.06666666666666667,
+              0.7333333333333333
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 1.688924,
+            "usd_all": 2.269571,
+            "usd_per_catch": 0.844462,
+            "usd_all_per_catch": 1.1347855,
+            "calls": 33,
+            "in_tokens_per_unit": 13312.454545454546,
+            "out_tokens_per_unit": 2240.181818181818,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.2222222222222222,
+            "recall_ci": [
+              0,
+              0.5555555555555555
+            ],
+            "catches": 4,
+            "recall_critical": 0,
+            "file_line": 0.611111111111111,
+            "false_alarm": 0.26666666666666666,
+            "false_alarm_ci": [
+              0,
+              0.6666666666666666
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 9.545061,
+            "usd_all": 13.800501,
+            "usd_per_catch": 2.38626525,
+            "usd_all_per_catch": 3.45012525,
+            "calls": 162,
+            "in_tokens_per_unit": 101794.24242424243,
+            "out_tokens_per_unit": 10922.575757575758,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.27777777777777773,
+            "false_alarm": 0.13333333333333333,
+            "false_alarm_ci": [
+              0,
+              0.4
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.070579,
+            "usd_all": 0.09708699999999998,
+            "usd_per_catch": 0.0352895,
+            "usd_all_per_catch": 0.04854349999999999,
+            "calls": 33,
+            "in_tokens_per_unit": 13312.454545454546,
+            "out_tokens_per_unit": 4596.545454545455,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.16666666666666666,
+            "recall_ci": [
+              0,
+              0.5
+            ],
+            "catches": 3,
+            "recall_critical": 0.05555555555555555,
+            "file_line": 0.6666666666666666,
+            "false_alarm": 0.26666666666666666,
+            "false_alarm_ci": [
+              0,
+              0.5333333333333333
+            ],
+            "decoy_any_finding": 0.9333333333333332,
+            "usd_defects": 0.291063,
+            "usd_all": 0.40519000000000005,
+            "usd_per_catch": 0.09702100000000001,
+            "usd_all_per_catch": 0.13506333333333334,
+            "calls": 163,
+            "in_tokens_per_unit": 101749.93939393939,
+            "out_tokens_per_unit": 13949.939393939394,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0,
+            "recall_ci": [
+              0,
+              0
+            ],
+            "catches": 0,
+            "recall_critical": 0,
+            "file_line": 0,
+            "false_alarm": 0.2,
+            "false_alarm_ci": [
+              0,
+              0.4666666666666666
+            ],
+            "decoy_any_finding": 0.5333333333333333,
+            "usd_defects": 0.456244,
+            "usd_all": 0.6732720000000002,
+            "usd_per_catch": null,
+            "usd_all_per_catch": null,
+            "calls": 33,
+            "in_tokens_per_unit": 8743,
+            "out_tokens_per_unit": 28145,
+            "unparsed_outputs": 24,
+            "truncated_outputs": 24,
+            "cut_off_empty_calls": 24,
+            "units_with_cut_off_empty_call": 24
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 16,
+            "decoy_units": 15,
+            "incomplete": 2,
+            "unjudged": 0,
+            "recall": 0.16666666666666666,
+            "recall_ci": [
+              0,
+              0.5
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.3333333333333333,
+            "false_alarm": 0,
+            "false_alarm_ci": [
+              0,
+              0
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 1.1297389999999998,
+            "usd_all": 1.6523089999999998,
+            "usd_per_catch": 0.5648694999999999,
+            "usd_all_per_catch": 0.8261544999999999,
+            "calls": 151,
+            "in_tokens_per_unit": 63995.32258064516,
+            "out_tokens_per_unit": 69845.41935483871,
+            "unparsed_outputs": 30,
+            "truncated_outputs": 29,
+            "cut_off_empty_calls": 27,
+            "units_with_cut_off_empty_call": 11
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0.11111111111111112,
+            "recall_diff_ci": [
+              0,
+              0.22222222222222224
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.1333333333333333,
+            "false_alarm_diff_ci": [
+              -0.6,
+              0.33333333333333337
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.13333333333333333,
+            "false_alarm_diff_ci": [
+              0,
+              0.4
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 6,
+            "recall_diff": 0.16666666666666666,
+            "recall_diff_ci": [
+              0,
+              0.5
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.2,
+            "false_alarm_diff_ci": [
+              -0.4666666666666666,
+              0
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.13333333333333336,
+            "false_alarm_diff_ci": [
+              -0.6,
+              0.3333333333333333
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 6,
+            "recall_diff": -0.05555555555555555,
+            "recall_diff_ci": [
+              -0.16666666666666666,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -1.1102230246251566e-17,
+            "false_alarm_diff_ci": [
+              -0.5333333333333334,
+              0.4
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.4,
+            "false_alarm_diff_ci": [
+              -0.7333333333333333,
+              -0.06666666666666667
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 6,
+            "recall_diff": -0.05555555555555555,
+            "recall_diff_ci": [
+              -0.16666666666666666,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.26666666666666666,
+            "false_alarm_diff_ci": [
+              -0.6666666666666666,
+              0
+            ]
+          }
+        ]
+      },
+      "answered_only": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.1111111111111111,
+            "false_alarm": 0.4,
+            "false_alarm_ci": [
+              0.06666666666666667,
+              0.7333333333333333
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 1.688924,
+            "usd_all": 2.269571,
+            "usd_per_catch": 0.844462,
+            "usd_all_per_catch": 1.1347855,
+            "calls": 33,
+            "in_tokens_per_unit": 13312.454545454546,
+            "out_tokens_per_unit": 2240.181818181818,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.4444444444444444,
+            "false_alarm": 0.26666666666666666,
+            "false_alarm_ci": [
+              0,
+              0.6666666666666666
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 9.545061,
+            "usd_all": 13.800501,
+            "usd_per_catch": 4.7725305,
+            "usd_all_per_catch": 6.9002505,
+            "calls": 162,
+            "in_tokens_per_unit": 101794.24242424243,
+            "out_tokens_per_unit": 10922.575757575758,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.1111111111111111,
+            "recall_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "catches": 2,
+            "recall_critical": 0,
+            "file_line": 0.27777777777777773,
+            "false_alarm": 0.13333333333333333,
+            "false_alarm_ci": [
+              0,
+              0.4
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.070579,
+            "usd_all": 0.09708699999999998,
+            "usd_per_catch": 0.0352895,
+            "usd_all_per_catch": 0.04854349999999999,
+            "calls": 33,
+            "in_tokens_per_unit": 13312.454545454546,
+            "out_tokens_per_unit": 4596.545454545455,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 15,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.16666666666666666,
+            "recall_ci": [
+              0,
+              0.5
+            ],
+            "catches": 3,
+            "recall_critical": 0.05555555555555555,
+            "file_line": 0.38888888888888884,
+            "false_alarm": 0.26666666666666666,
+            "false_alarm_ci": [
+              0,
+              0.5333333333333333
+            ],
+            "decoy_any_finding": 0.9333333333333332,
+            "usd_defects": 0.291063,
+            "usd_all": 0.40519000000000005,
+            "usd_per_catch": 0.09702100000000001,
+            "usd_all_per_catch": 0.13506333333333334,
+            "calls": 163,
+            "in_tokens_per_unit": 101749.93939393939,
+            "out_tokens_per_unit": 13949.939393939394,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 1,
+            "decoy_units": 8,
+            "incomplete": 24,
+            "unjudged": 0,
+            "recall": 0,
+            "recall_ci": [
+              0,
+              0
+            ],
+            "catches": 0,
+            "recall_critical": 0,
+            "file_line": 0,
+            "false_alarm": 0.4444444444444444,
+            "false_alarm_ci": [
+              0,
+              1
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.456244,
+            "usd_all": 0.6732720000000002,
+            "usd_per_catch": null,
+            "usd_all_per_catch": null,
+            "calls": 9,
+            "in_tokens_per_unit": 3124.222222222222,
+            "out_tokens_per_unit": 17865,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 24,
+            "units_with_cut_off_empty_call": 24
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 6,
+            "decoy_units": 14,
+            "incomplete": 13,
+            "unjudged": 0,
+            "recall": 0,
+            "recall_ci": [
+              0,
+              0
+            ],
+            "catches": 0,
+            "recall_critical": 0,
+            "file_line": 0,
+            "false_alarm": 0,
+            "false_alarm_ci": [
+              0,
+              0
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 1.1297389999999998,
+            "usd_all": 1.6523089999999998,
+            "usd_per_catch": null,
+            "usd_all_per_catch": null,
+            "calls": 83,
+            "in_tokens_per_unit": 33840.75,
+            "out_tokens_per_unit": 41671.85,
+            "unparsed_outputs": 2,
+            "truncated_outputs": 2,
+            "cut_off_empty_calls": 27,
+            "units_with_cut_off_empty_call": 11
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.1333333333333333,
+            "false_alarm_diff_ci": [
+              -0.6,
+              0.33333333333333337
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.13333333333333333,
+            "false_alarm_diff_ci": [
+              0,
+              0.4
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 1,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.4444444444444444,
+            "false_alarm_diff_ci": [
+              -1,
+              0
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.13333333333333336,
+            "false_alarm_diff_ci": [
+              -0.6,
+              0.3333333333333333
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 6,
+            "recall_diff": 0.05555555555555556,
+            "recall_diff_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": -1.1102230246251566e-17,
+            "false_alarm_diff_ci": [
+              -0.5333333333333334,
+              0.4
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 3,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.4,
+            "false_alarm_diff_ci": [
+              -0.7333333333333333,
+              -0.06666666666666667
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 3,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.26666666666666666,
+            "false_alarm_diff_ci": [
+              -0.6666666666666666,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    "escaped": {
+      "primary": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.7142857142857143,
+            "recall_ci": [
+              0.42857142857142855,
+              1
+            ],
+            "catches": 15,
+            "recall_critical": 0.6190476190476192,
+            "file_line": 0.6666666666666666,
+            "false_alarm": 0.05555555555555555,
+            "false_alarm_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "decoy_any_finding": 0.4444444444444444,
+            "usd_defects": 1.445799,
+            "usd_all": 3.163267,
+            "usd_per_catch": 0.0963866,
+            "usd_all_per_catch": 0.21088446666666666,
+            "calls": 39,
+            "in_tokens_per_unit": 13513.461538461539,
+            "out_tokens_per_unit": 2838.8205128205127,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.8095238095238095,
+            "recall_ci": [
+              0.5238095238095238,
+              1
+            ],
+            "catches": 17,
+            "recall_critical": 0.3333333333333333,
+            "file_line": 0.8095238095238095,
+            "false_alarm": 0.27777777777777773,
+            "false_alarm_ci": [
+              0,
+              0.611111111111111
+            ],
+            "decoy_any_finding": 0.9444444444444443,
+            "usd_defects": 9.275281999999997,
+            "usd_all": 17.248833,
+            "usd_per_catch": 0.5456048235294116,
+            "usd_all_per_catch": 1.0146372352941178,
+            "calls": 219,
+            "in_tokens_per_unit": 107364.20512820513,
+            "out_tokens_per_unit": 11545.333333333334,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 13,
+            "recall_critical": 0.47619047619047616,
+            "file_line": 0.5714285714285714,
+            "false_alarm": 0.05555555555555555,
+            "false_alarm_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.05822599999999999,
+            "usd_all": 0.13958800000000002,
+            "usd_per_catch": 0.0044789230769230765,
+            "usd_all_per_catch": 0.010737538461538463,
+            "calls": 39,
+            "in_tokens_per_unit": 13513.461538461539,
+            "out_tokens_per_unit": 5851.5641025641025,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 13,
+            "recall_critical": 0.42857142857142855,
+            "file_line": 0.5714285714285714,
+            "false_alarm": 0.27777777777777773,
+            "false_alarm_ci": [
+              0.05555555555555555,
+              0.611111111111111
+            ],
+            "decoy_any_finding": 0.8333333333333334,
+            "usd_defects": 0.272396,
+            "usd_all": 0.534082,
+            "usd_per_catch": 0.020953538461538464,
+            "usd_all_per_catch": 0.04108323076923077,
+            "calls": 216,
+            "in_tokens_per_unit": 106646.43589743589,
+            "out_tokens_per_unit": 16303.205128205129,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 1,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 20,
+            "decoy_units": 16,
+            "incomplete": 3,
+            "unjudged": 0,
+            "recall": 0.42857142857142855,
+            "recall_ci": [
+              0.14285714285714285,
+              0.8571428571428571
+            ],
+            "catches": 8,
+            "recall_critical": 0.38095238095238093,
+            "file_line": 0.5238095238095238,
+            "false_alarm": 0.1111111111111111,
+            "false_alarm_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "decoy_any_finding": 0.2222222222222222,
+            "usd_defects": 0.421269,
+            "usd_all": 0.6870039999999998,
+            "usd_per_catch": 0.052658625,
+            "usd_all_per_catch": 0.08587549999999998,
+            "calls": 36,
+            "in_tokens_per_unit": 9126.277777777777,
+            "out_tokens_per_unit": 25270.166666666668,
+            "unparsed_outputs": 20,
+            "truncated_outputs": 20,
+            "cut_off_empty_calls": 20,
+            "units_with_cut_off_empty_call": 20
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 17,
+            "incomplete": 4,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 11,
+            "recall_critical": 0.42857142857142855,
+            "file_line": 0.6904761904761905,
+            "false_alarm": 0.16666666666666666,
+            "false_alarm_ci": [
+              0.05555555555555555,
+              0.27777777777777773
+            ],
+            "decoy_any_finding": 0.5833333333333334,
+            "usd_defects": 1.2828899999999999,
+            "usd_all": 2.350861,
+            "usd_per_catch": 0.11662636363636363,
+            "usd_all_per_catch": 0.21371463636363638,
+            "calls": 190,
+            "in_tokens_per_unit": 70350.82857142857,
+            "out_tokens_per_unit": 81635.6,
+            "unparsed_outputs": 34,
+            "truncated_outputs": 34,
+            "cut_off_empty_calls": 34,
+            "units_with_cut_off_empty_call": 17
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": 0.09523809523809523,
+            "recall_diff_ci": [
+              0,
+              0.2857142857142857
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.22222222222222224,
+            "false_alarm_diff_ci": [
+              0,
+              0.4444444444444445
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 7,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.22222222222222224,
+            "false_alarm_diff_ci": [
+              0.05555555555555555,
+              0.4444444444444445
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 7,
+            "recall_diff": 0.19047619047619047,
+            "recall_diff_ci": [
+              0,
+              0.4761904761904762
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.05555555555555555,
+            "false_alarm_diff_ci": [
+              -0.11111111111111112,
+              0.2222222222222222
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": -0.09523809523809525,
+            "recall_diff_ci": [
+              -0.42857142857142855,
+              0.14285714285714285
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.2222222222222222,
+            "false_alarm_diff_ci": [
+              -0.05555555555555557,
+              0.5555555555555556
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 7,
+            "recall_diff": -0.19047619047619047,
+            "recall_diff_ci": [
+              -0.4761904761904762,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 2,
+            "false_alarm_diff": -9.25185853854297e-18,
+            "false_alarm_diff_ci": [
+              -0.4444444444444444,
+              0.2777777777777778
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": -0.09523809523809525,
+            "recall_diff_ci": [
+              -0.42857142857142855,
+              0.14285714285714285
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.1111111111111111,
+            "false_alarm_diff_ci": [
+              0,
+              0.2222222222222222
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 7,
+            "recall_diff": -0.19047619047619047,
+            "recall_diff_ci": [
+              -0.4761904761904762,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 2,
+            "false_alarm_diff": -0.11111111111111112,
+            "false_alarm_diff_ci": [
+              -0.3888888888888889,
+              0.1111111111111111
+            ]
+          }
+        ]
+      },
+      "ungated": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.7142857142857143,
+            "recall_ci": [
+              0.42857142857142855,
+              1
+            ],
+            "catches": 15,
+            "recall_critical": 0.6190476190476192,
+            "file_line": 0.6666666666666666,
+            "false_alarm": 0.05555555555555555,
+            "false_alarm_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "decoy_any_finding": 0.4444444444444444,
+            "usd_defects": 1.445799,
+            "usd_all": 3.163267,
+            "usd_per_catch": 0.0963866,
+            "usd_all_per_catch": 0.21088446666666666,
+            "calls": 39,
+            "in_tokens_per_unit": 13513.461538461539,
+            "out_tokens_per_unit": 2838.8205128205127,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.8095238095238095,
+            "recall_ci": [
+              0.5238095238095238,
+              1
+            ],
+            "catches": 17,
+            "recall_critical": 0.3333333333333333,
+            "file_line": 0.8571428571428571,
+            "false_alarm": 0.27777777777777773,
+            "false_alarm_ci": [
+              0,
+              0.611111111111111
+            ],
+            "decoy_any_finding": 0.9444444444444443,
+            "usd_defects": 9.275281999999997,
+            "usd_all": 17.248833,
+            "usd_per_catch": 0.5456048235294116,
+            "usd_all_per_catch": 1.0146372352941178,
+            "calls": 219,
+            "in_tokens_per_unit": 107364.20512820513,
+            "out_tokens_per_unit": 11545.333333333334,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 13,
+            "recall_critical": 0.47619047619047616,
+            "file_line": 0.5714285714285714,
+            "false_alarm": 0.05555555555555555,
+            "false_alarm_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.05822599999999999,
+            "usd_all": 0.13958800000000002,
+            "usd_per_catch": 0.0044789230769230765,
+            "usd_all_per_catch": 0.010737538461538463,
+            "calls": 39,
+            "in_tokens_per_unit": 13513.461538461539,
+            "out_tokens_per_unit": 5851.5641025641025,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 13,
+            "recall_critical": 0.42857142857142855,
+            "file_line": 0.5714285714285714,
+            "false_alarm": 0.27777777777777773,
+            "false_alarm_ci": [
+              0.05555555555555555,
+              0.611111111111111
+            ],
+            "decoy_any_finding": 0.8333333333333334,
+            "usd_defects": 0.272396,
+            "usd_all": 0.534082,
+            "usd_per_catch": 0.020953538461538464,
+            "usd_all_per_catch": 0.04108323076923077,
+            "calls": 216,
+            "in_tokens_per_unit": 106646.43589743589,
+            "out_tokens_per_unit": 16303.205128205129,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 1,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 20,
+            "decoy_units": 16,
+            "incomplete": 3,
+            "unjudged": 0,
+            "recall": 0.42857142857142855,
+            "recall_ci": [
+              0.14285714285714285,
+              0.8571428571428571
+            ],
+            "catches": 8,
+            "recall_critical": 0.38095238095238093,
+            "file_line": 0.5238095238095238,
+            "false_alarm": 0.1111111111111111,
+            "false_alarm_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "decoy_any_finding": 0.2222222222222222,
+            "usd_defects": 0.421269,
+            "usd_all": 0.6870039999999998,
+            "usd_per_catch": 0.052658625,
+            "usd_all_per_catch": 0.08587549999999998,
+            "calls": 36,
+            "in_tokens_per_unit": 9126.277777777777,
+            "out_tokens_per_unit": 25270.166666666668,
+            "unparsed_outputs": 20,
+            "truncated_outputs": 20,
+            "cut_off_empty_calls": 20,
+            "units_with_cut_off_empty_call": 20
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 18,
+            "decoy_units": 17,
+            "incomplete": 4,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 11,
+            "recall_critical": 0.42857142857142855,
+            "file_line": 0.6904761904761905,
+            "false_alarm": 0.16666666666666666,
+            "false_alarm_ci": [
+              0.05555555555555555,
+              0.27777777777777773
+            ],
+            "decoy_any_finding": 0.6666666666666666,
+            "usd_defects": 1.2828899999999999,
+            "usd_all": 2.350861,
+            "usd_per_catch": 0.11662636363636363,
+            "usd_all_per_catch": 0.21371463636363638,
+            "calls": 190,
+            "in_tokens_per_unit": 70350.82857142857,
+            "out_tokens_per_unit": 81635.6,
+            "unparsed_outputs": 34,
+            "truncated_outputs": 34,
+            "cut_off_empty_calls": 34,
+            "units_with_cut_off_empty_call": 17
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": 0.09523809523809523,
+            "recall_diff_ci": [
+              0,
+              0.2857142857142857
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.22222222222222224,
+            "false_alarm_diff_ci": [
+              0,
+              0.4444444444444445
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 7,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.22222222222222224,
+            "false_alarm_diff_ci": [
+              0.05555555555555555,
+              0.4444444444444445
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 7,
+            "recall_diff": 0.19047619047619047,
+            "recall_diff_ci": [
+              0,
+              0.4761904761904762
+            ],
+            "cases_a_better": 2,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.05555555555555555,
+            "false_alarm_diff_ci": [
+              -0.11111111111111112,
+              0.2222222222222222
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": -0.09523809523809525,
+            "recall_diff_ci": [
+              -0.42857142857142855,
+              0.14285714285714285
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.2222222222222222,
+            "false_alarm_diff_ci": [
+              -0.05555555555555557,
+              0.5555555555555556
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 7,
+            "recall_diff": -0.19047619047619047,
+            "recall_diff_ci": [
+              -0.4761904761904762,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 2,
+            "false_alarm_diff": -9.25185853854297e-18,
+            "false_alarm_diff_ci": [
+              -0.4444444444444444,
+              0.2777777777777778
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": -0.09523809523809525,
+            "recall_diff_ci": [
+              -0.42857142857142855,
+              0.14285714285714285
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.1111111111111111,
+            "false_alarm_diff_ci": [
+              0,
+              0.2222222222222222
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 7,
+            "recall_diff": -0.19047619047619047,
+            "recall_diff_ci": [
+              -0.4761904761904762,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 2,
+            "false_alarm_diff": -0.11111111111111112,
+            "false_alarm_diff_ci": [
+              -0.3888888888888889,
+              0.1111111111111111
+            ]
+          }
+        ]
+      },
+      "answered_only": {
+        "rows": [
+          {
+            "model": "opus",
+            "arm": "baseline",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.7142857142857143,
+            "recall_ci": [
+              0.42857142857142855,
+              1
+            ],
+            "catches": 15,
+            "recall_critical": 0.6190476190476192,
+            "file_line": 0.6666666666666666,
+            "false_alarm": 0.05555555555555555,
+            "false_alarm_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "decoy_any_finding": 0.4444444444444444,
+            "usd_defects": 1.445799,
+            "usd_all": 3.163267,
+            "usd_per_catch": 0.0963866,
+            "usd_all_per_catch": 0.21088446666666666,
+            "calls": 39,
+            "in_tokens_per_unit": 13513.461538461539,
+            "out_tokens_per_unit": 2838.8205128205127,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "opus",
+            "arm": "gstack",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.8095238095238095,
+            "recall_ci": [
+              0.5238095238095238,
+              1
+            ],
+            "catches": 17,
+            "recall_critical": 0.3333333333333333,
+            "file_line": 0.8095238095238095,
+            "false_alarm": 0.27777777777777773,
+            "false_alarm_ci": [
+              0,
+              0.611111111111111
+            ],
+            "decoy_any_finding": 0.9444444444444443,
+            "usd_defects": 9.275281999999997,
+            "usd_all": 17.248833,
+            "usd_per_catch": 0.5456048235294116,
+            "usd_all_per_catch": 1.0146372352941178,
+            "calls": 219,
+            "in_tokens_per_unit": 107364.20512820513,
+            "out_tokens_per_unit": 11545.333333333334,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "baseline",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 13,
+            "recall_critical": 0.47619047619047616,
+            "file_line": 0.5714285714285714,
+            "false_alarm": 0.05555555555555555,
+            "false_alarm_ci": [
+              0,
+              0.16666666666666666
+            ],
+            "decoy_any_finding": 1,
+            "usd_defects": 0.05822599999999999,
+            "usd_all": 0.13958800000000002,
+            "usd_per_catch": 0.0044789230769230765,
+            "usd_all_per_catch": 0.010737538461538463,
+            "calls": 39,
+            "in_tokens_per_unit": 13513.461538461539,
+            "out_tokens_per_unit": 5851.5641025641025,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "haiku",
+            "arm": "gstack",
+            "defect_units": 21,
+            "decoy_units": 18,
+            "incomplete": 0,
+            "unjudged": 0,
+            "recall": 0.6190476190476192,
+            "recall_ci": [
+              0.2857142857142857,
+              0.9047619047619049
+            ],
+            "catches": 13,
+            "recall_critical": 0.42857142857142855,
+            "file_line": 0.5714285714285714,
+            "false_alarm": 0.27777777777777773,
+            "false_alarm_ci": [
+              0.05555555555555555,
+              0.611111111111111
+            ],
+            "decoy_any_finding": 0.8333333333333334,
+            "usd_defects": 0.272396,
+            "usd_all": 0.534082,
+            "usd_per_catch": 0.020953538461538464,
+            "usd_all_per_catch": 0.04108323076923077,
+            "calls": 216,
+            "in_tokens_per_unit": 106646.43589743589,
+            "out_tokens_per_unit": 16303.205128205129,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 1,
+            "cut_off_empty_calls": 0,
+            "units_with_cut_off_empty_call": 0
+          },
+          {
+            "model": "deepseek",
+            "arm": "baseline",
+            "defect_units": 10,
+            "decoy_units": 6,
+            "incomplete": 23,
+            "unjudged": 0,
+            "recall": 0.75,
+            "recall_ci": [
+              0.25,
+              1
+            ],
+            "catches": 8,
+            "recall_critical": 0.6666666666666666,
+            "file_line": 1,
+            "false_alarm": 0.3333333333333333,
+            "false_alarm_ci": [
+              0,
+              0.6666666666666666
+            ],
+            "decoy_any_finding": 0.6666666666666666,
+            "usd_defects": 0.421269,
+            "usd_all": 0.6870039999999998,
+            "usd_per_catch": 0.052658625,
+            "usd_all_per_catch": 0.08587549999999998,
+            "calls": 16,
+            "in_tokens_per_unit": 4816.6875,
+            "out_tokens_per_unit": 16857.875,
+            "unparsed_outputs": 0,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 20,
+            "units_with_cut_off_empty_call": 20
+          },
+          {
+            "model": "deepseek",
+            "arm": "gstack",
+            "defect_units": 11,
+            "decoy_units": 8,
+            "incomplete": 20,
+            "unjudged": 0,
+            "recall": 0.6666666666666666,
+            "recall_ci": [
+              0.3333333333333333,
+              1
+            ],
+            "catches": 7,
+            "recall_critical": 0.38888888888888884,
+            "file_line": 0.7777777777777777,
+            "false_alarm": 0.1111111111111111,
+            "false_alarm_ci": [
+              0,
+              0.3333333333333333
+            ],
+            "decoy_any_finding": 0.611111111111111,
+            "usd_defects": 1.2828899999999999,
+            "usd_all": 2.350861,
+            "usd_per_catch": 0.18327,
+            "usd_all_per_catch": 0.3358372857142857,
+            "calls": 71,
+            "in_tokens_per_unit": 30656.105263157893,
+            "out_tokens_per_unit": 38473.57894736842,
+            "unparsed_outputs": 1,
+            "truncated_outputs": 0,
+            "cut_off_empty_calls": 34,
+            "units_with_cut_off_empty_call": 17
+          }
+        ],
+        "comparisons": [
+          {
+            "a": "opus-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": 0.09523809523809523,
+            "recall_diff_ci": [
+              0,
+              0.2857142857142857
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.22222222222222224,
+            "false_alarm_diff_ci": [
+              0,
+              0.4444444444444445
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "haiku-baseline",
+            "cases": 7,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": 0.22222222222222224,
+            "false_alarm_diff_ci": [
+              0.05555555555555555,
+              0.4444444444444445
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "deepseek-baseline",
+            "cases": 4,
+            "recall_diff": 0,
+            "recall_diff_ci": [
+              0,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 0,
+            "false_alarm_diff": -0.16666666666666666,
+            "false_alarm_diff_ci": [
+              -0.3333333333333333,
+              0
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-baseline",
+            "cases": 7,
+            "recall_diff": -0.09523809523809525,
+            "recall_diff_ci": [
+              -0.42857142857142855,
+              0.14285714285714285
+            ],
+            "cases_a_better": 1,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0.2222222222222222,
+            "false_alarm_diff_ci": [
+              -0.05555555555555557,
+              0.5555555555555556
+            ]
+          },
+          {
+            "a": "haiku-gstack",
+            "b": "opus-gstack",
+            "cases": 7,
+            "recall_diff": -0.19047619047619047,
+            "recall_diff_ci": [
+              -0.4761904761904762,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 2,
+            "false_alarm_diff": -9.25185853854297e-18,
+            "false_alarm_diff_ci": [
+              -0.4444444444444444,
+              0.2777777777777778
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-baseline",
+            "cases": 6,
+            "recall_diff": -0.16666666666666666,
+            "recall_diff_ci": [
+              -0.5,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": 0,
+            "false_alarm_diff_ci": [
+              0,
+              0
+            ]
+          },
+          {
+            "a": "deepseek-gstack",
+            "b": "opus-gstack",
+            "cases": 6,
+            "recall_diff": -0.16666666666666666,
+            "recall_diff_ci": [
+              -0.5,
+              0
+            ],
+            "cases_a_better": 0,
+            "cases_b_better": 1,
+            "false_alarm_diff": -0.22222222222222224,
+            "false_alarm_diff_ci": [
+              -0.6666666666666666,
+              0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "exploratory_opus_high_vs_opus_t1": {
+    "rows": [
+      {
+        "model": "opus-high",
+        "arm": "gstack",
+        "defect_units": 6,
+        "decoy_units": 0,
+        "incomplete": 0,
+        "unjudged": 0,
+        "recall": 0.8333333333333334,
+        "recall_ci": [
+          0.5,
+          1
+        ],
+        "catches": 5,
+        "recall_critical": 0.5,
+        "file_line": 0.8333333333333334,
+        "false_alarm": null,
+        "false_alarm_ci": [
+          null,
+          null
+        ],
+        "decoy_any_finding": null,
+        "usd_defects": 5.0493939999999995,
+        "usd_all": 5.0493939999999995,
+        "usd_per_catch": 1.0098787999999999,
+        "usd_all_per_catch": 1.0098787999999999,
+        "calls": 31,
+        "in_tokens_per_unit": 98793.33333333333,
+        "out_tokens_per_unit": 17777.166666666668,
+        "unparsed_outputs": 0,
+        "truncated_outputs": 0,
+        "cut_off_empty_calls": 0,
+        "units_with_cut_off_empty_call": 0
+      },
+      {
+        "model": "opus",
+        "arm": "gstack",
+        "defect_units": 6,
+        "decoy_units": 0,
+        "incomplete": 0,
+        "unjudged": 0,
+        "recall": 0.6666666666666666,
+        "recall_ci": [
+          0.3333333333333333,
+          1
+        ],
+        "catches": 4,
+        "recall_critical": 0.3333333333333333,
+        "file_line": 0.6666666666666666,
+        "false_alarm": null,
+        "false_alarm_ci": [
+          null,
+          null
+        ],
+        "decoy_any_finding": null,
+        "usd_defects": 4.3143460000000005,
+        "usd_all": 4.3143460000000005,
+        "usd_per_catch": 1.0785865000000001,
+        "usd_all_per_catch": 1.0785865000000001,
+        "calls": 31,
+        "in_tokens_per_unit": 98870.5,
+        "out_tokens_per_unit": 11636.333333333334,
+        "unparsed_outputs": 0,
+        "truncated_outputs": 0,
+        "cut_off_empty_calls": 0,
+        "units_with_cut_off_empty_call": 0
+      }
+    ],
+    "comparisons": [
+      {
+        "a": "opus-high-gstack",
+        "b": "opus-gstack",
+        "cases": 6,
+        "recall_diff": 0.16666666666666666,
+        "recall_diff_ci": [
+          0,
+          0.5
+        ],
+        "cases_a_better": 1,
+        "cases_b_better": 0,
+        "false_alarm_diff": null,
+        "false_alarm_diff_ci": [
+          null,
+          null
+        ]
+      }
+    ]
+  },
+  "judged_findings": 629,
+  "judge_cap_stop": false,
+  "ledger_committed_usd": 48.46162300000001
+}

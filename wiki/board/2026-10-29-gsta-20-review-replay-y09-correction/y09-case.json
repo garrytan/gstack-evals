@@ -1,0 +1,41 @@
+{
+  "cases_json_row": {
+    "id": "y09",
+    "kind": "defect",
+    "source": "escaped",
+    "pr": 201,
+    "title": "feat: browse handoff — headless-to-headed browser switching (v0.7.4)",
+    "base": "d9611882769922d51f83c3dea975594caa1b8e1c",
+    "head": "2d97ab993166ddbe1a21a973215ebc9bb0dad717",
+    "file": "browse/src/browser-manager.ts",
+    "lines": [
+      [
+        482,
+        496
+      ],
+      [
+        509,
+        514
+      ]
+    ],
+    "fix": "01593aa67c94780528e8f5121e47362502410ced",
+    "fix_pr": 2959,
+    "defect": "handoff() points this.browser and this.context at the new headed browser, clears this.pages and attaches the disconnected handler that calls process.exit(1), all before restoreState() runs. If restoreState() throws (addCookies or newPage), the catch calls newBrowser.close(), which fires that handler and exits the browse server. Even with the exit suppressed, the catch never puts the old headless browser back, so the manager points at a closed browser and the old one is orphaned, while the returned message says the headless browser is still running.",
+    "diff_lines": 608,
+    "diff_sha256": "4da1b7c97a126a2fb640c6a9b036bc3f3d9994980f58fa605bf8055702b777d5",
+    "fix_diff_sha256": "d37e7aef2c7725217f3ec0f1a16e684e44dc0a98399b939abdc005184626b535",
+    "review_receipt": true,
+    "was": {
+      "kind": "decoy",
+      "matched_to": "d09",
+      "receipt": "No issues found. ## TODOS - State Persistence TODO updated: `saveState()`/`restoreState()` reusable, effort reduced M → S. ## Test plan - [x]"
+    }
+  },
+  "plan_json_change": {
+    "case": "y09",
+    "kind": {
+      "from": "decoy",
+      "to": "defect"
+    }
+  }
+}
