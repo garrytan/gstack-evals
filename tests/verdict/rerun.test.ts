@@ -32,6 +32,15 @@ describe("the same-tree rerun stage", () => {
     expect(lone.reasons).toContain("REGRESSION a");
   });
 
+  test("a partial second round can add losses but clears none of round 1's", () => {
+    const first = grid("opus", { ...base, a: { before: "111", after: "100", none: "000" } });
+    const partial = grid("opus", { a: { after: "111" } }, 2);
+    const d = decide(input(tasks, [...first, ...partial]));
+    expect(d.models[0]!.rerun.state).toBe("partial");
+    expect(d.reasons).toContain("REGRESSION a");
+    expect(d.exit_code).toBe(1);
+  });
+
   test("FLAKY is recorded only when the old copies also disagree with themselves across rounds", () => {
     const first = grid("opus", { ...base, a: { before: "111", after: "100", none: "000" } });
     const steady = grid("opus", { ...base, a: { before: "111", after: "111", none: "000" } }, 2);

@@ -113,7 +113,7 @@ export const CODES = {
 
   NOT_MEASURABLE: {
     exit: 2,
-    meaning: "Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), or the skill went unopened in both old and new.",
+    meaning: "Fewer than 5 tasks were informative (a task is informative unless every run of every arm failed, or every run of every arm passed), fewer than 5 of them could be paired, the preregistered missing-cell rule refused the paired comparison, or the skill went unopened in both old and new.",
     fix: "Add harder or more varied tasks, or move to Haiku 5.5 when the suite is at ceiling, commit a relock, and start a new run. Do not --resume.",
     side_effects: DONE,
     retry_safe: false,
