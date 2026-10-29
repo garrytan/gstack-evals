@@ -1,0 +1,101 @@
+{
+  "source": "quick look 2 proxy session rows (run-p2-grid-r1, run-p2-grid-r23, run-p2-pilot-v3 out/proxy-sessions.jsonl in handoffs/GSTA-12/laneb-jobdirs.tgz)",
+  "field_notes": "cmd_expanded is the proxy probe: whole first request contains <command-name>. first_req_prompt_tokens is the proxy's first-request input bound: count_tokens plus 64 on the Anthropic route, request bytes on OpenRouter.",
+  "jobs": {
+    "grid": {
+      "claude-haiku-5-5|gstack": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 33918,
+        "first_req_tokens_median": 34144.0,
+        "first_req_tokens_max": 35436
+      },
+      "claude-haiku-5-5|none": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 20396,
+        "first_req_tokens_median": 20509.0,
+        "first_req_tokens_max": 21155
+      },
+      "claude-haiku-5-5|placebo": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 34176,
+        "first_req_tokens_median": 34402.0,
+        "first_req_tokens_max": 35694
+      },
+      "claude-opus-5-5|gstack": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 33915,
+        "first_req_tokens_median": 34141.0,
+        "first_req_tokens_max": 35433
+      },
+      "claude-opus-5-5|none": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 20393,
+        "first_req_tokens_median": 20506.0,
+        "first_req_tokens_max": 21152
+      },
+      "claude-opus-5-5|placebo": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 34173,
+        "first_req_tokens_median": 34399.0,
+        "first_req_tokens_max": 35691
+      },
+      "deepseek-v4.1-flash-1017|gstack": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 92617,
+        "first_req_tokens_median": 93277.0,
+        "first_req_tokens_max": 97533
+      },
+      "deepseek-v4.1-flash-1017|none": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 57495,
+        "first_req_tokens_median": 57825.0,
+        "first_req_tokens_max": 59953
+      },
+      "deepseek-v4.1-flash-1017|placebo": {
+        "sessions": 60,
+        "cmd_expanded_true": 60,
+        "first_req_tokens_min": 104622,
+        "first_req_tokens_median": 105282.0,
+        "first_req_tokens_max": 109538
+      }
+    },
+    "pilot": {
+      "claude-haiku-5-5|gstack": {
+        "sessions": 5,
+        "cmd_expanded_true": 5,
+        "first_req_tokens_min": 33918,
+        "first_req_tokens_median": 34154,
+        "first_req_tokens_max": 35436
+      },
+      "claude-haiku-5-5|placebo": {
+        "sessions": 5,
+        "cmd_expanded_true": 5,
+        "first_req_tokens_min": 34176,
+        "first_req_tokens_median": 34412,
+        "first_req_tokens_max": 35694
+      },
+      "claude-opus-5-5|gstack": {
+        "sessions": 5,
+        "cmd_expanded_true": 5,
+        "first_req_tokens_min": 33915,
+        "first_req_tokens_median": 34151,
+        "first_req_tokens_max": 35433
+      },
+      "claude-opus-5-5|placebo": {
+        "sessions": 5,
+        "cmd_expanded_true": 5,
+        "first_req_tokens_min": 34173,
+        "first_req_tokens_median": 34409,
+        "first_req_tokens_max": 35691
+      }
+    }
+  }
+}
