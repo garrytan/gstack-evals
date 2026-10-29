@@ -298,10 +298,12 @@ export function startProxy(opts: ProxyOptions) {
       }
       if (!s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
       // Body-load probe: on the session's first forwarded request, record whether the CLI expanded a
-      // slash command (the outgoing body carries "<command-name>", so a skill body was injected) and the
-      // token bound for that first request. Both land in the session summary; cost accounting is untouched.
+      // slash command (the messages carry "<command-name>", so a skill body was injected) and the token
+      // bound for that first request. Both land in the session summary; cost accounting is untouched.
+      // Only the messages are searched: Claude Code's Skill tool description also names <command-name>,
+      // so a whole-body match was true in every session, none included.
       if (s.cmdExpanded === undefined) {
-        s.cmdExpanded = outBody.includes("<command-name>");
+        s.cmdExpanded = JSON.stringify(body.messages ?? []).includes("<command-name>");
         s.firstReqPromptTokens = inputTokens;
         log({ event: "body_load_probe", session: s.id, cmd_expanded: s.cmdExpanded, first_req_prompt_tokens: inputTokens });
       }

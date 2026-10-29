@@ -18,7 +18,7 @@ gateway=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gatew
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; }
 trap cleanup EXIT
-bun "$here/ledger.ts" serve --path "$ledger" --item laneb-quick --port 9911 & pids+=($!)
+bun "$here/ledger.ts" serve --path "$ledger" --item "${ITEM:-laneb-quick}" --port 9911 & pids+=($!)
 bun "$here/proxy.ts" --config "$root/config/proxy.json" --data-host "$gateway" --data-port 8787 --control-port 8788 \
   --log "$out/proxy-requests.jsonl" --sessions "$out/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix route- & pids+=($!)
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:9911/status >/dev/null 2>&1 && break; sleep 0.5; done
@@ -35,4 +35,4 @@ for m in $models; do
 done
 jq -c '{model, spent_usd: (.spent_micros / 1e6), requests, refused, close_reason, usage}' "$out/proxy-sessions.jsonl"
 for r in "$out"/jobs/route-*/*/verifier/reward.txt; do echo "$r $(cat "$r")"; done
-bun "$here/ledger.ts" status --path "$ledger" --item laneb-quick
+bun "$here/ledger.ts" status --path "$ledger" --item "${ITEM:-laneb-quick}"

@@ -223,6 +223,15 @@ describe("prereg 2 proxy worst-case guard and body-load probe", () => {
     expect(row.cmd_expanded).toBe(true);
     expect(typeof row.first_req_prompt_tokens).toBe("number");
   });
+
+  test("the body-load probe ignores <command-name> outside the messages", async () => {
+    const s = await open();
+    const tools = [{ name: "Skill", description: "If you see a <command-name> tag in the current turn, the skill is already loaded.", input_schema: { type: "object" } }];
+    const res = await send(s.token, { model: "m", max_tokens: 32000, stream: false, tools, messages: [{ role: "user", content: "do the task" }] });
+    expect(res.status).toBe(200);
+    const closed = (await (await fetch(control() + `/sessions/${s.id}/close`, { method: "POST", body: "{}" })).json()) as any;
+    expect(closed.cmd_expanded).toBe(false);
+  });
 });
 
 describe("audit.py", () => {

@@ -357,9 +357,9 @@ def99316bfad517eae9bf0047ebe76bcfb21f0dc3d618c2fc6ea2c2ef011435f	463603	644	file
 -	0	755	dir	.claude/skills/gstack/.git/objects
 -	0	755	dir	.claude/skills/gstack/.git/objects/info
 -	0	755	dir	.claude/skills/gstack/.git/objects/pack
-9d76a6bf4b14da6e3d66a1f1d138a7c1116b8b819282b710297c313f59c9238a	129368	444	file	.claude/skills/gstack/.git/objects/pack/pack-5b429414d9d92bd645dd1833142b4b35884cb82e.idx
-84accd817ec0c29fc1690ef77ec526bbb5a82f8febc35d47e311367ae98ec3a8	23547253	444	file	.claude/skills/gstack/.git/objects/pack/pack-5b429414d9d92bd645dd1833142b4b35884cb82e.pack
-e90166a0ed0ae1f214a80f42cf9ab0452017c7e65aea5dd20251313b006c60ad	18380	444	file	.claude/skills/gstack/.git/objects/pack/pack-5b429414d9d92bd645dd1833142b4b35884cb82e.rev
+68effd3e6568f224c949b6d867c4053191f85b0e464649974ced7e24d8858b79	129368	444	file	.claude/skills/gstack/.git/objects/pack/pack-b3d96b65521acfa41503b7d91964175e9925bc77.idx
+6cc9cd4cb0f9bb35f3ac3eea9487c18b2522949b5bc167423ba1fb6f51b4863c	23577234	444	file	.claude/skills/gstack/.git/objects/pack/pack-b3d96b65521acfa41503b7d91964175e9925bc77.pack
+ff2b48ebe91bd219c02718f00c56f0991c468c5717d64d80032512974e7cfbb5	18380	444	file	.claude/skills/gstack/.git/objects/pack/pack-b3d96b65521acfa41503b7d91964175e9925bc77.rev
 -	0	755	dir	.claude/skills/gstack/.git/refs
 -	0	755	dir	.claude/skills/gstack/.git/refs/heads
 -	0	755	dir	.claude/skills/gstack/.git/refs/tags
