@@ -1,0 +1,27 @@
+{
+  "base_image": "lanea-quick/base:cc2.1.312-bun1.4.4",
+  "images": {
+    "lanea-quick/office-hours-before:latest": "sha256:dbd268384476529231016966ebc3312bd72e2b1ad2110af8512647b9b41b94ed",
+    "lanea-quick/office-hours-after:latest": "sha256:9b17b20493552b8f9f6dc024088168554f9394f2d57375ae9f04b1fb6bfd439f",
+    "lanea-quick/office-hours-none:latest": "sha256:15f3fd3fafb717907e14cd6a629e2ac06f23c742b79be1cda05bc8e68abe6b13",
+    "lanea-quick/learn-before:latest": "sha256:b8e3d91f0d6d234736f6c467b312509416e7cbbe6c067f162c73d5720cd7b2d9",
+    "lanea-quick/learn-after:latest": "sha256:3485db92962b8de267c0260551cf9721110ae54b5e6bab70879d8529ed8fd4cf",
+    "lanea-quick/learn-none:latest": "sha256:6b7e634de68f1e4f8f0f92f12a6982df04a9569432e7cd0c35c1554c89aaaf71",
+    "lanea-quick/base:cc2.1.312-bun1.4.4": "sha256:a74925dde9302f1ed33436d6a1d5a894dda6d9eafd780d621959bb571356e616"
+  },
+  "claude_code": "2.1.312",
+  "bun": "1.4.4",
+  "agent_sdk": "0.3.312",
+  "trees": {
+    "office-hours": {
+      "before": "cd4fc4be73d86a5b14be9a91026d3e4b16cd8520",
+      "after": "a14c28aca7839cd0182fa130bff9874714672c24",
+      "tasks": "09fc5124d9b5c3e2e23144e520c230d7f1478aad"
+    },
+    "learn": {
+      "before": "398618259d56df55e66793f168d0bd8c25cb9085",
+      "after": "7204a39a27ba90755db2e71e5bb869262a937402",
+      "tasks": "7204a39a27ba90755db2e71e5bb869262a937402"
+    }
+  }
+}
