@@ -1,0 +1,11 @@
+{
+  "url": "https://deepswe.datacurve.ai/artifacts/v1.1/trials.json",
+  "retrieved": "2026-10-29T19:27:59Z",
+  "sha256": "310cb428fe8914cff21b8edcb0b17256884efca55666bd6d6646d223c77d2ce6",
+  "bytes": 51023870,
+  "last_modified": "Fri, 23 Oct 2026 19:16:54 GMT",
+  "etag": "\"a2824ce1b1e0701756828741a54bb566\"",
+  "scope": "Every DeepSWE rollout and every cross-benchmark trial, after fairness filtering",
+  "n_trials": 31617,
+  "licence": "None stated for this file. The benchmark's GitHub repository (datacurve-ai/deep-swe) is Apache-2.0 but holds only the tasks, so this folder commits the digest, the fetch script and derived per-task counts, never the file."
+}

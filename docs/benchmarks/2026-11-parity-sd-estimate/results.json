@@ -1,0 +1,358 @@
+{
+  "source": {
+    "url": "https://deepswe.datacurve.ai/artifacts/v1.1/trials.json",
+    "retrieved": "2026-10-29T19:27:59Z",
+    "sha256": "310cb428fe8914cff21b8edcb0b17256884efca55666bd6d6646d223c77d2ce6",
+    "bytes": 51023870,
+    "last_modified": "Fri, 23 Oct 2026 19:16:54 GMT",
+    "etag": "\"a2824ce1b1e0701756828741a54bb566\"",
+    "scope": "Every DeepSWE rollout and every cross-benchmark trial, after fairness filtering",
+    "n_trials": 31617,
+    "licence": "None stated for this file. The benchmark's GitHub repository (datacurve-ai/deep-swe) is Apache-2.0 but holds only the tasks, so this folder commits the digest, the fetch script and derived per-task counts, never the file."
+  },
+  "trials": {
+    "cheap": 5,
+    "frontier": 3
+  },
+  "bootstrap": {
+    "seed": 20261029,
+    "draws": 10000
+  },
+  "ceiling": 213,
+  "tasks": 113,
+  "ladder": [
+    {
+      "rung": "Haiku 5.5",
+      "proxy": "gpt-5-6-luna [max]",
+      "frontier": "claude-opus-5 [max]",
+      "tasks": 112,
+      "gap_points": -6.4,
+      "between_sd": 0.344,
+      "sd": 0.421,
+      "ci95": [
+        0.364,
+        0.47
+      ]
+    },
+    {
+      "rung": "DeepSeek V4.1 Flash",
+      "proxy": "deepseek-v4-flash [max]",
+      "frontier": "claude-opus-5 [max]",
+      "tasks": 113,
+      "gap_points": -20.5,
+      "between_sd": 0.32,
+      "sd": 0.407,
+      "ci95": [
+        0.354,
+        0.456
+      ]
+    },
+    {
+      "rung": "GLM 5.3 Flash",
+      "proxy": "glm-5-3-flash [max]",
+      "frontier": "claude-opus-5 [max]",
+      "tasks": 113,
+      "gap_points": -10.3,
+      "between_sd": 0.157,
+      "sd": 0.286,
+      "ci95": [
+        0.24,
+        0.329
+      ]
+    }
+  ],
+  "headline": {
+    "sd": 0.376,
+    "ci95": [
+      0.34,
+      0.408
+    ]
+  },
+  "grid": [
+    {
+      "cheap": "gpt-5-6-luna [max]",
+      "frontier": "claude-opus-5 [max]",
+      "sd": 0.421
+    },
+    {
+      "cheap": "gpt-5-6-luna [max]",
+      "frontier": "gpt-6-astra [xhigh]",
+      "sd": 0.398
+    },
+    {
+      "cheap": "gpt-5-6-luna [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.367
+    },
+    {
+      "cheap": "gpt-5-6-luna [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.351
+    },
+    {
+      "cheap": "gpt-5-6-terra [max]",
+      "frontier": "claude-opus-5 [max]",
+      "sd": 0.407
+    },
+    {
+      "cheap": "gpt-5-6-terra [max]",
+      "frontier": "gpt-6-astra [xhigh]",
+      "sd": 0.354
+    },
+    {
+      "cheap": "gpt-5-6-terra [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.35
+    },
+    {
+      "cheap": "gpt-5-6-terra [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.27
+    },
+    {
+      "cheap": "deepseek-v4-flash [max]",
+      "frontier": "claude-opus-5 [max]",
+      "sd": 0.407
+    },
+    {
+      "cheap": "deepseek-v4-flash [max]",
+      "frontier": "gpt-6-astra [xhigh]",
+      "sd": 0.425
+    },
+    {
+      "cheap": "deepseek-v4-flash [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.432
+    },
+    {
+      "cheap": "deepseek-v4-flash [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.39
+    },
+    {
+      "cheap": "deepseek-v4-pro [max]",
+      "frontier": "claude-opus-5 [max]",
+      "sd": 0.38
+    },
+    {
+      "cheap": "deepseek-v4-pro [max]",
+      "frontier": "gpt-6-astra [xhigh]",
+      "sd": 0.397
+    },
+    {
+      "cheap": "deepseek-v4-pro [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.398
+    },
+    {
+      "cheap": "deepseek-v4-pro [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.337
+    },
+    {
+      "cheap": "glm-5-3-flash [max]",
+      "frontier": "claude-opus-5 [max]",
+      "sd": 0.286
+    },
+    {
+      "cheap": "glm-5-3-flash [max]",
+      "frontier": "gpt-6-astra [xhigh]",
+      "sd": 0.405
+    },
+    {
+      "cheap": "glm-5-3-flash [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.394
+    },
+    {
+      "cheap": "glm-5-3-flash [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.38
+    },
+    {
+      "cheap": "glm-5-3 [max]",
+      "frontier": "claude-opus-5 [max]",
+      "sd": 0.296
+    },
+    {
+      "cheap": "glm-5-3 [max]",
+      "frontier": "gpt-6-astra [xhigh]",
+      "sd": 0.409
+    },
+    {
+      "cheap": "glm-5-3 [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.377
+    },
+    {
+      "cheap": "glm-5-3 [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.387
+    }
+  ],
+  "sensitivity": {
+    "low": {
+      "cheap": "gpt-5-6-terra [max]",
+      "frontier": "gpt-5-6-sol [max]",
+      "sd": 0.27
+    },
+    "high": {
+      "cheap": "deepseek-v4-flash [max]",
+      "frontier": "gemini-3-8-flash [high]",
+      "sd": 0.432
+    }
+  },
+  "aggregate_rate_sd": 0.44,
+  "opus_five_trials_sd": 0.36,
+  "effort_steps": [
+    {
+      "from": "claude-opus-5 [high]",
+      "to": "claude-opus-5 [xhigh]",
+      "between_sd": 0.069
+    },
+    {
+      "from": "claude-opus-5 [xhigh]",
+      "to": "claude-opus-5 [max]",
+      "between_sd": 0.083
+    }
+  ],
+  "gstack_spread": [
+    {
+      "spread": 0.1,
+      "sd": 0.389
+    },
+    {
+      "spread": 0.2,
+      "sd": 0.426
+    }
+  ],
+  "table_sds": [
+    0.27,
+    0.34,
+    0.376,
+    0.408,
+    0.432
+  ],
+  "fits": [
+    {
+      "option": "v3.2",
+      "design": "three-models",
+      "covered_sd": 0.3,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "v3.2",
+      "design": "one-primary",
+      "covered_sd": 0.349,
+      "at_estimate": "does not fit",
+      "bootstrap": "changes",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "v3.2",
+      "design": "one-primary-80",
+      "covered_sd": 0.411,
+      "at_estimate": "fits",
+      "bootstrap": "fits",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "A",
+      "design": "three-models",
+      "covered_sd": 0.283,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "A",
+      "design": "one-primary",
+      "covered_sd": 0.323,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "A",
+      "design": "one-primary-80",
+      "covered_sd": 0.375,
+      "at_estimate": "does not fit",
+      "bootstrap": "changes",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "B",
+      "design": "three-models",
+      "covered_sd": 0.3,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "B",
+      "design": "one-primary",
+      "covered_sd": 0.349,
+      "at_estimate": "does not fit",
+      "bootstrap": "changes",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "B",
+      "design": "one-primary-80",
+      "covered_sd": 0.411,
+      "at_estimate": "fits",
+      "bootstrap": "fits",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "C",
+      "design": "three-models",
+      "covered_sd": 0.261,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "does not fit"
+    },
+    {
+      "option": "C",
+      "design": "one-primary",
+      "covered_sd": 0.29,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "C",
+      "design": "one-primary-80",
+      "covered_sd": 0.331,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    },
+    {
+      "option": "C-steer",
+      "design": "three-models",
+      "covered_sd": 0.235,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "does not fit"
+    },
+    {
+      "option": "C-steer",
+      "design": "one-primary",
+      "covered_sd": 0.256,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "does not fit"
+    },
+    {
+      "option": "C-steer",
+      "design": "one-primary-80",
+      "covered_sd": 0.287,
+      "at_estimate": "does not fit",
+      "bootstrap": "does not fit",
+      "sensitivity": "changes"
+    }
+  ]
+}
