@@ -1,22 +1,30 @@
 // gstack-evals skill-eval: the Lane A command (interface v0.5, v0.4 where v0.5 is silent). It routes init and --lock to
-// U5's commands, resolves the call with its effective defaults, prints --dry-run's plan, and runs preflight before any
-// spend. gstack-evals preflight runs the same steps and stops there. The fake-host run lands in U7's next pull request.
+// U5's commands and --example to the keyless examples, resolves the call with its effective defaults, prints --dry-run's
+// plan, runs preflight before any spend, then runs the trials and writes U6's verdict. gstack-evals preflight runs the
+// same steps and stops after preflight.
 //
 // The host: GSTACK_EVALS_FAKE_HOST selects the keyless fake host (src/adapters/_fake/), which makes no model call, so a
 // literal call (diet.md's) runs in tests. The real Claude Code and Codex adapters are U10's and the trial module U9's;
 // until they land, a call on a real host stops after preflight's own checks.
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { FakeHostError, loadScript } from "../../adapters/_fake/host.ts";
 import { REPO_ROOT, type Io } from "../../cli.ts";
 import type { ErrorContext } from "../../types.ts";
 import { codeLines, consoleIo, parseFlags as parseLockFlags } from "../contract/cli-io.ts";
 import { loadContract } from "../contract/sidecar.ts";
 import { checkVacuity } from "../contract/vacuity.ts";
+import { readSkillFiles } from "../lock/contract-lines.ts";
 import { initCommand, lockCommand } from "../lock/cli.ts";
+import { treeSha256 } from "../lock/lock.ts";
 import { errorLines, errorRecord, scrubSecrets, writeErrorRecord } from "../verdict/error-record.ts";
+import { verdictTasks } from "../verdict/grade.ts";
+import type { VerdictContext } from "../verdict/verdict.ts";
 import { effectiveLines, resolveCall, SKILL_EVAL_HELP, type Call } from "./call.ts";
 import { planLines } from "./dry-run.ts";
+import { runExample, type ExampleMode } from "./example.ts";
+import { FAKE_ADAPTER_SHA256, finishRun, runFake } from "./run.ts";
 import { flagHelp, parseFlags, SKILL_EVAL_FLAGS } from "./flags.ts";
 import { preflight, type PreflightReport, type Stop } from "./preflight.ts";
 
@@ -34,7 +42,17 @@ export const version = (): string => {
 export const isFakeHost = (env: Env): boolean => !!env.GSTACK_EVALS_FAKE_HOST;
 
 function hostCheck(call: Call, env: Env): () => Stop | null {
-  if (isFakeHost(env)) return () => null;
+  if (isFakeHost(env)) {
+    return () => {
+      try {
+        loadScript(env.GSTACK_EVALS_FAKE_HOST!);
+        return null;
+      } catch (error) {
+        if (error instanceof FakeHostError) return { code: "E_USAGE", message: error.message };
+        throw error;
+      }
+    };
+  }
   return () => ({ code: "E_USAGE", message: "the " + call.host + " host adapter (U10) and the trial module (U9) are not built yet, so nothing can run on a real host" });
 }
 
@@ -92,13 +110,22 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
     return 0;
   }
   const json = parsed.values.has("--json");
+  if (parsed.values.has("--example")) {
+    const others = [...parsed.from].filter(([name, source]) => source === "flag" && !["--example", "--out", "--json"].includes(name)).map(([name]) => name);
+    if (others.length) {
+      io.err(codeLines("E_USAGE", ["skill-eval: --example takes only --out and --json; drop " + others.join(", ")], HINT));
+      return 2;
+    }
+    const value = parsed.values.get("--example");
+    return runExample((value === true ? "pass" : value) as ExampleMode, parsed.values.has("--out") ? resolve(parsed.values.get("--out") as string) : null, json, io, version(), env);
+  }
   const call = resolveCall(parsed, env);
   if ("code" in call) {
     io.err(codeLines(call.code, ["skill-eval: " + call.message], call.fix ?? (call.code === "E_USAGE" ? HINT : undefined)));
     if (json) writeErrorRecord(null, errorRecord({ code: call.code, operation: "call", message: call.message, context: errorContext(null, [], env) }, env), io.out);
     return 2;
   }
-  io.out(effectiveLines(call).join("\n"));
+  if (!json) io.out(effectiveLines(call).join("\n"));
   let report: PreflightReport | null = null;
   try {
     report = preflight(call, { env, dryRun: call.dryRun, host: hostCheck(call, env) });
@@ -110,23 +137,55 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
     };
     if (call.dryRun) {
       if (report.stops.length) return refuse(report.stops, report.env_names);
-      io.out(planLines(report.plan!, call.parallel).join("\n"));
+      io.out(json ? JSON.stringify(report.plan) : planLines(report.plan!, call.parallel).join("\n"));
       return 0;
     }
-    for (const line of report.passed) io.out("ok " + line);
+    if (!json) for (const line of report.passed) io.out("ok " + line);
     if (report.stops.length) {
       if (report.plan && report.stops.some((s) => s.code === "E_USAGE" && s.message.startsWith("--spend-cap"))) io.out(planLines(report.plan, call.parallel).join("\n"));
       return refuse(report.stops, report.env_names);
     }
     if (mode === "preflight") {
-      io.out("PREFLIGHT: pass (" + report.passed.length + " steps; nothing was spent)");
+      io.out(json ? JSON.stringify({ preflight: "pass", steps: report.passed, warnings: report.warnings.map((w) => w.code + " " + w.message) }) : "PREFLIGHT: pass (" + report.passed.length + " steps; nothing was spent)");
       return 0;
     }
-    io.err(codeLines("E_USAGE", ["skill-eval: preflight passed, but the fake-host run lands in U7's next pull request"], HINT));
-    return 2;
+    return runOnFakeHost(call, report, io, env, json);
   } catch (error) {
     return internal(io, call, error, report?.env_names ?? [], env, json, mode);
   }
+}
+
+/** After preflight, which stops a real host until U9 and U10 land: the trials on the fake host, then U6's verdict. */
+function runOnFakeHost(call: Call, report: PreflightReport, io: Io, env: Env, json: boolean): number {
+  const started = Date.now();
+  const ids = new Set(report.tasks.map((t) => t.id));
+  const tasks = verdictTasks(report.contract!).filter((t) => ids.has(t.id));
+  let run;
+  try {
+    run = runFake({ models: call.models, arms: call.arms.arms.map((a) => a.name), tasks, trials: call.trials, cap: call.spendCap, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, loadScript(env.GSTACK_EVALS_FAKE_HOST!));
+  } catch (error) {
+    if (!(error instanceof FakeHostError)) throw error;
+    io.err(codeLines("E_USAGE", ["skill-eval: " + error.message], HINT));
+    return 2;
+  }
+  const judged = tasks.some((t) => t.judge);
+  const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
+  const context: VerdictContext = {
+    verdict_id: call.runId,
+    harness_version: version(),
+    trials: call.trials,
+    effective: { noise_floor: call.noiseFloor, parallel: call.parallel, timeout_s: call.timeoutS, judge_model: judged ? call.judgeModel : null, isolation: call.isolation, policy_sha256: call.policy.sha256, base, skill: call.arms.skill?.name ?? null },
+    harness: { host: call.host, host_version: "fake", gstack_evals_version: version(), adapter_sha256: FAKE_ADAPTER_SHA256, image_digest: null, base },
+    arm_trees: Object.fromEntries(call.arms.arms.flatMap((a) => (a.kind === "overlay" && a.dir ? [[a.name, treeSha256(readSkillFiles(a.dir))]] : []))),
+    lock: report.lock ? { tasks_sha256: report.lock.lock.tasks.sha256, ext_sha256: report.lock.lock.ext?.sha256 ?? null, commit: report.lock.commit, post_hoc: false } : null,
+    levels: null,
+    spend: { ledger: call.ledger.path, ledger_record: call.record.path, committed: run.spent, reserved: 0, unknown: 0, cap: call.spendCap!, line_item: call.item, lease_id: null, approval: null, caps_history: [call.spendCap!] },
+    adjudication: { blinded: true, judge_model: judged ? call.judgeModel : null },
+    resumed_from: null,
+    wall_s: (Date.now() - started) / 1000,
+    rig: null,
+  };
+  return finishRun(run, context, call.out.path, io, json);
 }
 
 /** An unexpected error: an E_INTERNAL record with secrets scrubbed, a correlation id and a trace file in <out>. */
