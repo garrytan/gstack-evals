@@ -56,9 +56,7 @@ U5 is the M1a unit that reads gstack's skill eval contract and fixes a run's inp
     - A check the shell cannot parse exits 2, and vacuity reads that as the check failing (vacuity.ts, the check's exit handling). Decide whether a parse error makes the task broken.
     - Exit 126 or 127 from a check is ambiguous. It can mean the runner is broken, or that the check runs a file the answer has not created or made executable yet, which is a valid failing control. Vacuity now treats it as a failing control. Decide with U9 how to tell the two apart.
   - Notes from #18's /ship review:
-    - `buildLock` trusts its tasks file. Call it only after `loadContract` reports no problems.
-    - `readSkillFiles` returns nothing for a folder without SKILL.md; refuse that folder before locking.
-    - Resolve a relative lock path once, at the command line.
+    - `lockCommand` already does three of them: it calls `buildLock` only after `loadContract` reports no problems, refuses a before folder without SKILL.md, and resolves the lock path once. Route to it rather than calling `buildLock` yourself.
     - A relock drops claims when a repeated line's copy count changes, and does not say so. Print them as dropped.
 - **U9 (trial).**
   - Before any trial reads the sidecar's `env`, make it an allowlist of fixture variable names, with a test that refuses host credential names. Today it is a denylist (sidecar.ts), so names such as GITHUB_PAT or NODE_OPTIONS pass validate, and interface v0.4 passes declared env into every agent child (the Captain's call on #9).
@@ -69,7 +67,7 @@ U5 is the M1a unit that reads gstack's skill eval contract and fixes a run's inp
 - **U6 (verdict).**
   - `lineFates(contractLines(readSkillFiles(before)), readSkillFiles(after))`, then `uncoveredRemovals(lock.lines, fates, lineCoverage(lock.lines, oldRuns), passesInAfter)`: each result is an UNCOVERED_GATE_REMOVAL.
   - `coverageGaps` lists the touched lines no task covers, such as lines moved out of SKILL.md. Put them in the verdict even when no gate fails.
-  - The lock's derived fields (kind, categories, load, ask) are read as written, never derived again from the before copy. Check them against `contractLines` of the before copy, or drift covers it through the skill tree hash.
+  - The lock's derived fields (kind, categories, load, ask) are read as written, never derived again from the before copy, and `lockDrift` checks only the skill tree hash. So a hand-edited row (an ask set to null) or a deleted row passes drift and weakens the gate. Rebuild the rows with `buildLock` over the before copy, compare id, file, kind, categories, load, ask and text_sha256 row by row, and report a mismatch as LOCK_DRIFT. (#19)
   - `LockState.before` is optional; pass it, so a changed before copy is drift.
   - State the reach and pass thresholds the verdict uses for coverage.
 - **U10 (simulator).** Use `classifyAsk` and `classifyProse` and record `CLASSIFIER_SHA256`. Never approve when `ambiguous` is true. Approval binding to the named effect is yours.
@@ -83,6 +81,8 @@ U5 is the M1a unit that reads gstack's skill eval contract and fixes a run's inp
   - `coverage_rule` is not checked for drift, and `EXTRACTOR_SHA256` does not hash the parser code;
   - `readSkillFiles` follows symlinks and hashes decoded text rather than bytes;
   - claims follow a line's position among its copies, so a section reorder can move them (the gate no longer depends on this);
+  - (#19) grouping copies by text across files makes the gate over-fire in the safe direction: dropping a redundant copy in one file lists the kept copy in another as a rewritten removal, and a line moved out of SKILL.md lists its untouched copy elsewhere as a moved gap. Decide in `lineFates` or `uncoveredRemovals` whether a surviving exact copy clears a dropped one, and pin it with a test;
+  - (#19) a relock never compares the previous lock's skill name with the new before folder, so claims on shared boilerplate lines carry across skills;
   - proposed tests: a relock with fewer copies, the parser rules, references/ and .tmpl files, the `lineFates` threshold, the policy and ext pins, and the SKILL.md branch of `touched()`.
 - Where coverage claims come from, how init groups its stubs, and why rewritten lines count as removals: see [the finding](2026-10-28-gsta-17-lock-claims-and-init-stubs.md).
 - The office-hours tasks (gstack PR #3550) validate and pass vacuity by hand: 9 tasks pass on the no-op control and both mutants bite. They are not vendored here until that PR merges.

@@ -85,6 +85,17 @@ describe("skill-eval --lock", () => {
     expect(git("log", "-1", "--format=%s").stdout.trim()).toBe("Lock the " + name + " eval tasks");
   });
 
+  test("init's printed next commands quote the tasks path, so a skill folder name cannot run a command", async () => {
+    const name = "x$(echo INJECTED)`echo TICK`";
+    const root = repo({ [name + "/SKILL.md"]: SKILL });
+    const out = join(root, "ev", name, "tasks.json");
+    const r = await call(initCommand, ["--skill", join(root, name), "--out", out]);
+    expect(r.code).toBe(0);
+    const next = r.out.split("\n").find((l) => l.startsWith("Next: "))!;
+    const arg = next.slice(next.indexOf("--lock --tasks ") + "--lock --tasks ".length, next.lastIndexOf(", and commit"));
+    expect(spawnSync("bash", ["-c", "printf '%s' " + arg], { encoding: "utf8" }).stdout).toBe(out);
+  });
+
   test("--before names the skill outside gstack's layout; without it the call is refused", async () => {
     const root = repo({ "skill/SKILL.md": SKILL, "evals/tasks.json": TASKS });
     const refused = await call(lockCommand, ["--tasks", join(root, "evals/tasks.json")]);

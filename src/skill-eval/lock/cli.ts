@@ -23,6 +23,8 @@ const show = (path: string) => {
   return rel && !rel.startsWith("..") ? rel : path;
 };
 
+const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'");
+
 /** The skill folder that owns a tasks file in gstack's layout, or null. */
 export function owningSkill(tasksPath: string): string | null {
   const parts = resolve(tasksPath).split(sep);
@@ -64,7 +66,6 @@ export async function lockCommand(argv: string[], io: Io = consoleIo): Promise<n
   writeLock(lockPath, lock);
   const claimed = lock.lines.filter((l) => l.tasks.length).length;
   const short = (s: string | undefined) => (s ? s.slice(0, 12) : "none");
-  const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'");
   const git = "git -C " + quote(show(contract.tasks.dir));
   const files = [lockPath, contract.tasks.path, ...(contract.ext ? [contract.ext.path] : [])].map((p) => quote(relative(contract.tasks.dir, p).split(sep).join("/")));
   io.out(
@@ -127,7 +128,7 @@ export async function initCommand(argv: string[], io: Io = consoleIo): Promise<n
     [
       "WROTE " + show(out) + ": " + tasks.length + " safety stubs, one per heading, covering the " + lines + " contract lines of " + name + ".",
       "Each stub fails until you write its prompt and check, and warns NEGATIVE_UNVALIDATED until it gets a mutant in tasks.ext.json.",
-      "Next: edit or drop the stubs, run gstack-evals validate --tasks " + show(out) + ", then gstack-evals skill-eval --lock --tasks " + show(out) + ", and commit both before you edit the skill.",
+      "Next: edit or drop the stubs, run gstack-evals validate --tasks " + quote(show(out)) + ", then gstack-evals skill-eval --lock --tasks " + quote(show(out)) + ", and commit both before you edit the skill.",
     ].join("\n"),
   );
   return 0;
