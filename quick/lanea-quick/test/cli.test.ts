@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Ledger } from "../src/ledger.ts";
 
 const root = join(import.meta.dir, "..");
 const work = mkdtempSync(join(tmpdir(), "cli-"));
@@ -49,6 +50,13 @@ describe("run.ts arguments", () => {
     expect(JSON.parse(project("35", "rerun").out).ledger).toMatchObject({ settled: 10, remaining: 25 });
     writeFileSync(ledger, [...rows, { type: "close", reason: "moved" }].map((r) => JSON.stringify(r) + "\n").join(""));
     expect(JSON.parse(project("35", "rerun").out).ledger.remaining).toBe(0);
+  });
+  test("project --fake reads the fake approval its own run wrote", () => {
+    const out = join(work, "runs-fake-project");
+    new Ledger(join(out, "ledger-fake.jsonl"), 10, "t", undefined, true).approve({ words: ["keyless fake run, no spend"], by: "lanea-quick test", source: "none" });
+    const r = cli("project", "--fake", "--out", out);
+    expect(r.err).not.toContain("E_LEDGER_MISSING");
+    expect(r.code).toBe(0);
   });
   test("a paid run still needs --prereg", () => {
     expect(cli("run", "--stage", "S1").err).toContain("E_PREREG");
