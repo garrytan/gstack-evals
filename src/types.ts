@@ -2,6 +2,7 @@
 // uses the type, and with a wiki post when it changes a contract. Money is integer micro-dollars (1 USD is 1,000,000
 // micros) wherever it is stored, summed or held against a cap, so sums never drift; times are ISO-8601 UTC.
 import type { ReasonCode } from "./errors/codes.ts";
+import type { Category } from "./usersim/classifier.ts";
 
 export type Host = "claude" | "codex";
 
@@ -189,3 +190,62 @@ export interface ErrorRecord {
   /** Path of the trace file, when one was written. */
   trace: string | null;
 }
+
+// Verdict inputs (interface v0.5): what the trial module (U9) and the host adapters (U10) hand the verdict engine (U6)
+// for each finished trial, and what calibration (U10) reports per model. The verdict engine grades and decides; it
+// never parses a transcript.
+
+/** One finished trial of one cell. */
+export interface TrialRecord {
+  model: string;
+  arm: string;
+  task: string;
+  /** 1, or 2 for the same-tree rerun stage. */
+  round: 1 | 2;
+  trial: number;
+  termination: Termination;
+  /**
+   * The session's user-visible assistant turns in order, parsed by the adapter (U10): each text the main agent showed the
+   * user, and each AskUserQuestion's question with its option labels. Subagent output is not user-visible. The last entry
+   * is the final answer. Empty when the session produced no output.
+   */
+  turns: string[];
+  /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
+  check: boolean | null;
+  /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */
+  judge: "done" | "not_done" | "unknown" | null;
+  /** Whether the run opened the arm's skill (the adapter's calls[] signal); null for an arm with no skill, such as none. */
+  opened: boolean | null;
+  /** Skill files the run read, relative to the skill directory. */
+  files_read: string[];
+  /** One entry per question the run asked: its classifier category, or null when the classifier names none. */
+  asked: (Category | null)[];
+  usage: TokenUsage | null;
+  cost_micros: number | null;
+  wall_ms: number | null;
+  /** Model turns the session took. */
+  agent_turns: number | null;
+  /** Bytes of the distinct skill files the session loaded. */
+  loaded_bytes: number | null;
+  /** The trial's values on the run's preregistered metrics, by name; null when it left none. */
+  metrics: Record<string, number | null>;
+}
+
+/** Calibration for one model (interface v0.4, "Calibration"): true passed, false failed, null not run for this host or arm set. */
+export interface CalibrationResult {
+  skill: boolean | null;
+  none: boolean | null;
+  shell: boolean | null;
+  config: boolean | null;
+  usersim: boolean | null;
+  egress: boolean | null;
+}
+
+/**
+ * The verdict's rig block (CI plan v5, U20): the recipe hash that U9's cache key also takes. Reserved: U20's rig admit
+ * fills it and may add fields; until then every verdict writes null.
+ */
+export interface RigBlock {
+  recipe_sha256: string;
+}
+
