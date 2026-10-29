@@ -180,7 +180,7 @@ def test_no_model_response_raises_the_retryable_error(tmp):
 
 
 def test_session_open_failures(tmp):
-    for error, want in ((urllib.error.URLError("refused"), "LanebInfraError"), (la.HttpStatusError("u", 409, {"error": "batch cap reached"}) if hasattr(la, "HttpStatusError") else RuntimeError("u -> 409: cap"), "LedgerCapStop")):
+    for error, want in ((urllib.error.URLError("refused"), "LanebInfraError"), (la.HttpStatusError("u", 409, {"error": "batch cap reached"}), "LedgerCapStop")):
         try:
             run(agent(tmp, Fake(tmp, open_error=error)))
         except Exception as e:

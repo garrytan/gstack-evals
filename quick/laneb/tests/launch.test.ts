@@ -35,7 +35,7 @@ function rig(opts: { failPull?: boolean; dropSsh?: boolean; finish?: number; fai
 }
 
 const LAUNCH = join(import.meta.dir, "../runner/launch.sh");
-const events = (r: ReturnType<typeof rig>) => readFileSync(r.events, "utf8").trim().split("\n");
+const events = (r: ReturnType<typeof rig>) => (existsSync(r.events) ? readFileSync(r.events, "utf8").trim().split("\n") : []);
 
 async function interruptDuringBatch(r: ReturnType<typeof rig>, cmd = ["bash", LAUNCH, r.run, "p-", "5"]) {
   const proc = Bun.spawn(cmd, { env: r.env, stdout: "pipe", stderr: "pipe" });
@@ -54,7 +54,8 @@ async function runToEnd(r: ReturnType<typeof rig>) {
   const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
   const code = await proc.exited;
   clearTimeout(timer);
-  return { code, events: events(r) };
+  const stderr = await new Response(proc.stderr).text();
+  return { code, stderr, events: events(r) };
 }
 
 describe("launch.sh without an interrupt", () => {
@@ -85,6 +86,26 @@ describe("launch.sh without an interrupt", () => {
     expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
     expect(code).toBe(1);
   }, 60_000);
+
+  test("pull_failed x no_interrupt: vm-run.exit exists but the pull fails, so the VM is kept, the commands are printed and it exits 7", async () => {
+    const r = rig({ failPull: true, finish: 0 });
+    const { code, stderr, events } = await runToEnd(r);
+    expect(events).toContain("batch ended");
+    expect(stderr.match(/pull attempt \d failed/g)).toHaveLength(3);
+    expect(events.some((e) => e.startsWith("down"))).toBe(false);
+    expect(stderr).toContain("VM vm-1 is kept");
+    expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
+    expect(code).toBe(7);
+  }, 60_000);
+
+  test("a run dir that already holds pulled/ from an earlier launch is refused before any VM exists", async () => {
+    const r = rig({ finish: 0 });
+    mkdirSync(join(r.run, "pulled", "out"), { recursive: true });
+    const { code, stderr, events } = await runToEnd(r);
+    expect(stderr).toContain(`${r.run}/pulled exists from an earlier launch`);
+    expect(events.some((e) => e.startsWith("up"))).toBe(false);
+    expect(code).toBe(2);
+  }, 60_000);
 });
 
 describe("launch.sh on interrupt", () => {
@@ -96,9 +117,12 @@ describe("launch.sh on interrupt", () => {
     const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
     const code = await proc.exited;
     clearTimeout(timer);
+    const stderr = await new Response(proc.stderr).text();
     expect(events(r).some((e) => e.includes("STOP"))).toBe(false);
     expect(events(r)).not.toContain("batch started");
     expect(events(r)).toContain("down vm-1");
+    expect(stderr).toContain("interrupted before the batch started: nothing to pull; the VM is destroyed");
+    expect(stderr).not.toContain("results are pulled");
     expect(code).toBe(130);
   }, 60_000);
 
@@ -152,5 +176,22 @@ describe("launch.sh when the batch connection drops", () => {
     expect(stderr).toContain("VM vm-1 is kept");
     expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
     expect(code).toBe(7);
+  }, 60_000);
+
+  test("not_finished x interrupt: an interrupt after the drop writes STOP, pulls nothing, keeps the VM and exits 130", async () => {
+    const r = rig({ dropSsh: true });
+    r.env.PULL_RETRY_SEC = "1";
+    const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 300 && !events(r).includes("ssh dropped"); i++) await Bun.sleep(50);
+    proc.kill("SIGINT");
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    const stderr = await new Response(proc.stderr).text();
+    expect(events(r)).toContain("ssh vm-1 touch work/run/STOP");
+    expect(events(r).some((e) => e.startsWith("pull") || e.startsWith("down"))).toBe(false);
+    expect(stderr).toContain("VM vm-1 is kept");
+    expect(readRows(r.ledgerPath).filter((x) => x.kind === "settle")).toHaveLength(0);
+    expect(code).toBe(130);
   }, 60_000);
 });

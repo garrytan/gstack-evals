@@ -17,6 +17,7 @@ S=${UBI_RUNNER:-/home/user/.capy/drive/user-garry-tan/skills/ubicloud/scripts/ub
 LEDGER=${LEDGER:?set LEDGER to the line item ledger path}
 ITEM=${ITEM:-laneb-quick}
 run=$(cd "$1" && pwd)
+[ ! -e "$run/pulled" ] || { echo "launch.sh: $run/pulled exists from an earlier launch; start from a fresh run dir" >&2; exit 2; }
 prefix=$2
 cap=$3
 state_root=${UBI_RUNNER_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner}
@@ -44,8 +45,12 @@ finish() {
 trap finish EXIT
 on_signal() {
   stopping=yes
-  if [ "$started" = yes ]; then "$S" ssh "$name" 'touch work/run/STOP' || true; fi
-  say "interrupted: stopping the batch; sessions close and results are pulled before the VM goes"
+  if [ "$started" = yes ]; then
+    "$S" ssh "$name" 'touch work/run/STOP' || true
+    say "interrupted: stopping the batch; sessions close and results are pulled before the VM goes"
+  else
+    say "interrupted before the batch started: nothing to pull; the VM is destroyed"
+  fi
 }
 trap on_signal INT TERM HUP
 not_stopping() { [ "$stopping" = no ] || exit 130; }

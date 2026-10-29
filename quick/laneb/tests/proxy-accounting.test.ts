@@ -10,6 +10,9 @@
 //   counting fails, and a failed count whose byte bound passes the cap answers a retryable 529, not a budget stop;
 //   fails_when=the count is ignored, a failed count admits a request on a guess, or it ends the trial as a budget stop;
 //   why_new=runner.test.ts uses estimate routes only; seam=none; no_claim=Anthropic count_tokens accuracy (stub)
+// Value: protects=an uncounted request with image or document blocks on a forward route is never sent on the byte bound,
+//   which does not bound media tokens; fails_when=the media check is dropped or misses blocks nested in tool results;
+//   why_new=no test sends media with a failed count; seam=none; no_claim=provider media token counts (stub)
 // Value: protects=the global cap refuses a session whose full reserve does not fit, latches the cap stop and blocks
 //   new sessions;
 //   fails_when=the global check or the latch is removed; why_new=no existing test sets globalCapMicros;
@@ -146,6 +149,33 @@ describe("proxy accounting against a stub upstream", () => {
     expect(await over.text()).toContain("session budget exhausted");
     expect(await close(forward, c.id)).toMatchObject({ refused_budget: 1 });
     expect(readLog("fwd.jsonl").find((e) => e.event === "refused" && e.session === c.id)).toMatchObject({ reason: "session_cap", counted: true });
+  });
+
+  test("on a forward route, an uncounted request with an image or document block answers a retryable 529 and is never sent", async () => {
+    const s = (await (await open(forward, 1)).json()) as any;
+    const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } };
+    const pdf = { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0=" } };
+    const shapes = [
+      [{ role: "user", content: [image, { type: "text", text: "what move?" }] }],
+      [{ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: [pdf] }] }],
+    ];
+    for (const messages of shapes) {
+      countFails = 1;
+      const before = messagesSeen;
+      const res = await message(forward, s.token, { messages });
+      expect(res.status).toBe(529);
+      expect(((await res.json()) as any).error).toEqual({ type: "overloaded_error", message: "laneb proxy: token count unavailable, retry" });
+      expect(messagesSeen).toBe(before);
+    }
+    const counted = await message(forward, s.token, { messages: shapes[0] });
+    expect(counted.status).toBe(200);
+    await counted.text();
+    countFails = 1;
+    const plain = await message(forward, s.token);
+    expect(plain.status).toBe(200);
+    await plain.text();
+    expect(await close(forward, s.id)).toMatchObject({ requests: 2, ok_responses: 2, refused: 0, refused_budget: 0 });
+    expect(readLog("fwd.jsonl").filter((e) => e.event === "count_failed_media" && e.session === s.id)).toHaveLength(2);
   });
 
   test("a worst case that is not a positive number is refused before any upstream call", async () => {

@@ -53,6 +53,7 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
   const release = () => { while (waiting.length) waiting.shift()!(); };
   const seen: { betas: string | null; body: any }[] = [];
   let failSettles = 0;
+  const loseSettle = new Set<string>();
   let rawMode: "cut" | "reset" = "cut";
   let up: ReturnType<typeof Bun.serve>;
   let raw: Server;
@@ -77,6 +78,7 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
         if (mode === "nousage") return Response.json({ type: "message", content: [{ type: "text", text: "hi" }], stop_reason: "end_turn" }, { headers });
         if (mode === "stream-nousage") return new Response(sse(streamEvents(false)), { headers: { "content-type": "text/event-stream" } });
         if (mode === "stream-error") return new Response(sse([errorEvent]), { headers: { "content-type": "text/event-stream" } });
+        if (mode === "stream-start-usage") return new Response(sse([streamEvents(true)[0], streamEvents(false)[1], streamEvents(false)[2]]), { headers: { "content-type": "text/event-stream" } });
         if (mode === "stream-start-error") return new Response(sse([streamEvents(true)[0], errorEvent]), { headers: { "content-type": "text/event-stream" } });
         if (mode === "crlf") return new Response(sse(streamEvents(true), "\r\n"), { headers: { "content-type": "text/event-stream", ...headers } });
         if (mode === "slow-stream") {
@@ -107,6 +109,7 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
         const url = new URL(req.url);
         const b = (await req.json()) as any;
         if (url.pathname === "/settle" && failSettles > 0) { failSettles--; return new Response("bad gateway", { status: 502 }); }
+        if (url.pathname === "/settle" && loseSettle.delete(b.id)) { ledger.settle(b.id, b.usd_micros, b.meta); return new Response("not json"); }
         const out = url.pathname === "/reserve" ? ledger.reserve(b.id, b.usd_micros, b.meta) : ledger.settle(b.id, b.usd_micros, b.meta);
         return Response.json(out, { status: out.ok ? 200 : 409 });
       },
@@ -226,6 +229,7 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     expect(proxy.sessions.get(s.id)!.pending.size).toBe(0);
     const closed = await close(s.id);
     expect(closed.spent_micros).toBe(worstOf(s.id));
+    expect(closed.ok_responses).toBe(0);
     expect(entries(s.id).find((e) => e.event === "request")).toMatchObject({ complete: false, status: 200 });
   });
 
@@ -269,6 +273,16 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     expect(reqs.map((e) => e.complete)).toEqual([false, false]);
     expect(closed.spent_micros).toBe(reqs[0].worst_micros + reqs[1].worst_micros);
     expect(closed.ok_responses).toBe(2);
+  });
+
+  test("a stream whose only output usage is message_start's placeholder is charged its worst case", async () => {
+    const s = await open();
+    expect(await (await send(s.token, { stream: true, metadata: { user_id: "stream-start-usage" } })).text()).toContain("message_stop");
+    const closed = await close(s.id);
+    const reqs = entries(s.id).filter((e) => e.event === "request");
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]).toMatchObject({ complete: false, cost_micros: reqs[0].worst_micros, stop_reason: "end_turn" });
+    expect(closed.spent_micros).toBe(reqs[0].worst_micros);
   });
 
   test("a 200 stream that ends in an error event is never an ok response: it costs 0 before message_start and its worst case after", async () => {
@@ -391,6 +405,38 @@ describe("proxy accounting and close against misbehaving upstreams and ledgers",
     expect(out.find((x) => x.id === s.id)).toMatchObject({ settled: true, spent_micros: usageCost, ledger_settle: { ok: true } });
     expect(readRows(ledgerPath).filter((r) => r.id === "r-" + s.id && r.kind === "settle").map((r) => r.usd_micros)).toEqual([usageCost]);
     expect(readFileSync(sessionsPath, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.id === s.id)).toHaveLength(1);
+    expect(((await (await fetch(controlUrl + "/totals")).json()) as any).unsettled_sessions).toEqual([]);
+  });
+
+  test("the sessions row holds only what is final when it is written, so it carries no settled flag", async () => {
+    const s = await open();
+    await send(s.token);
+    expect(await close(s.id)).toMatchObject({ settled: true, spent_micros: usageCost });
+    const rows = readFileSync(sessionsPath, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.id === s.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ spent_micros: usageCost, open: false });
+    expect(rows[0]).not.toHaveProperty("settled");
+  });
+
+  test("already_settled x close: a settle whose answer was lost is retried, and the ledger's 'already settled' marks the session settled", async () => {
+    const s = await open();
+    await send(s.token);
+    loseSettle.add("r-" + s.id);
+    const closed = await close(s.id);
+    expect(closed).toMatchObject({ settled: true, spent_micros: usageCost, ledger_settle: { ok: false, reason: "already settled" } });
+    expect(entries(s.id).filter((e) => e.event === "settle_failed")).toHaveLength(1);
+    expect(readRows(ledgerPath).filter((r) => r.id === "r-" + s.id && r.kind === "settle").map((r) => r.usd_micros)).toEqual([usageCost]);
+    expect(((await (await fetch(controlUrl + "/totals")).json()) as any).unsettled_sessions).toEqual([]);
+  });
+
+  test("already_settled x close_all: close-all marks a session settled when the ledger answers 'already settled'", async () => {
+    const s = await open();
+    await send(s.token);
+    loseSettle.add("r-" + s.id);
+    const out = (await (await fetch(controlUrl + "/close-all", { method: "POST" })).json()) as any[];
+    expect(out.find((x) => x.id === s.id)).toMatchObject({ settled: true, ledger_settle: { ok: false, reason: "already settled" } });
+    expect(entries(s.id).filter((e) => e.event === "settle_failed")).toHaveLength(1);
+    expect(readRows(ledgerPath).filter((r) => r.id === "r-" + s.id && r.kind === "settle")).toHaveLength(1);
     expect(((await (await fetch(controlUrl + "/totals")).json()) as any).unsettled_sessions).toEqual([]);
   });
 });
@@ -544,6 +590,29 @@ describe("batch cap", () => {
       expect(id).toBe(keyedId("k2"));
       expect(readRows(r.ledger.path).filter((x) => x.kind === "reserve" && x.id === id)).toHaveLength(1);
       expect(r.ledger.status().openIds).toEqual([id]);
+      expect(await r.capStop()).toBeNull();
+    } finally {
+      await r.stop();
+    }
+  });
+
+  test("open_key x open_failed x join: a same-key open that joins a failing open gets its failure, and a later retry opens", async () => {
+    let calls = 0;
+    // gstack-timing-ok: the delay only holds the first reserve open so the second open joins it; a late second open would fail on its own
+    const r = capRig("key-join-fail", async (n) => {
+      calls++;
+      if (n > 0) return undefined;
+      await Bun.sleep(100);
+      return new Response("not json", { status: 502 });
+    });
+    try {
+      const [a, b] = await Promise.all([r.open(0.6, "k4"), r.open(0.6, "k4")]);
+      expect([a.status, b.status]).toEqual([502, 502]);
+      expect(calls).toBe(1);
+      const retry = await r.open(0.6, "k4");
+      expect(retry.status).toBe(200);
+      expect(((await retry.json()) as any).id).toBe(keyedId("k4"));
+      expect(calls).toBe(2);
       expect(await r.capStop()).toBeNull();
     } finally {
       await r.stop();

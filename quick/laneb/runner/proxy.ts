@@ -60,7 +60,9 @@ export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
 
 // Input tokens for the worst case. Anthropic routes use count_tokens. Otherwise, and when counting fails, one token per
 // UTF-8 byte: a byte-level tokenizer never emits more tokens than bytes, and Opus 5.5 counts random base64 at 1.05 bytes
-// per token. The slack covers tokens the provider adds around tools and system text.
+// per token. The slack covers tokens the provider adds around tools and system text. Image and document blocks are billed
+// by pixels and pages, not bytes, so an Anthropic route never sends them on the byte bound (hasMedia); on OpenRouter
+// that gap stays open and the settle's over_reserve flag shows any session it pushed past its reserve.
 export const COUNT_SLACK_TOKENS = 64;
 export const BYTE_SLACK_TOKENS = 1024;
 export const COUNT_FIELDS = ["model", "messages", "system", "tools", "tool_choice", "thinking"];
@@ -94,6 +96,14 @@ export function remoteSources(v: unknown): string[] {
   return [...own, ...Object.entries(o).filter(([k]) => !(o.type === "tool_use" && k === "input")).flatMap(([, x]) => remoteSources(x))];
 }
 
+export function hasMedia(v: unknown): boolean {
+  if (Array.isArray(v)) return v.some(hasMedia);
+  if (!v || typeof v !== "object") return false;
+  const o = v as any;
+  if (o.type === "image" || o.type === "document") return true;
+  return Object.entries(o).some(([k, x]) => !(o.type === "tool_use" && k === "input") && hasMedia(x));
+}
+
 // anthropic-beta values Claude Code 2.1.312 sends in the three cells. Others are dropped before the request leaves, so no
 // unlisted beta (MCP connector, code execution, files, server-side fallback) reaches the provider; a request that needed
 // one fails upstream with an unbilled 400.
@@ -125,6 +135,7 @@ function responseHeaders(upstream: Response, extra: Record<string, string>): Rec
 }
 
 // Incremental SSE parser that pulls usage out of message_start and message_delta events, and the first error event.
+// Output usage counts as seen only from message_delta: message_start's output count is a placeholder.
 export class SseUsage {
   private buf = "";
   readonly usage = emptyUsage();
@@ -151,7 +162,7 @@ export class SseUsage {
           if (data.type === "message_start") {
             this.sawStart = true;
             mergeUsage(this.usage, data.message?.usage);
-            this.note(data.message?.usage);
+            if (typeof data.message?.usage?.input_tokens === "number") this.sawInput = true;
           }
           if (data.type === "message_delta") {
             mergeUsage(this.usage, data.usage);
@@ -253,7 +264,8 @@ export function startProxy(opts: ProxyOptions) {
       log({ event: "charged_at_worst", session: s.id, request: rid, worst_micros: p.worst, reason: "still in flight at close" });
     }
     s.closedAt = new Date().toISOString();
-    appendFileSync(opts.sessionsPath, JSON.stringify({ ...summary(s), close_reason: reason }) + "\n");
+    const { settled: _, ...row } = summary(s);
+    appendFileSync(opts.sessionsPath, JSON.stringify({ ...row, close_reason: reason }) + "\n");
   };
 
   // Settle with retries. A failure leaves the session unsettled, so the next close or close-all tries again.
@@ -443,6 +455,10 @@ export function startProxy(opts: ProxyOptions) {
         }
       }
       if (!s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      if (route.count_tokens === "forward" && !counted && hasMedia([body.messages, body.system])) {
+        log({ event: "count_failed_media", session: s.id, input_tokens_bound: inputTokens, max_tokens: body.max_tokens });
+        return anthropicError(529, "overloaded_error", "laneb proxy: token count unavailable, retry");
+      }
       const worst = worstCaseMicros(inputTokens, body.max_tokens, maxPrice(model), asksLongTtl(outBody));
       if (!Number.isFinite(worst) || worst <= 0) return refuse("worst_case", "the request's worst-case cost is not a positive number", { worst_micros: worst });
       const inflight = [...s.pending.values()].reduce((x, p) => x + p.worst, 0);
@@ -466,7 +482,7 @@ export function startProxy(opts: ProxyOptions) {
         const micros = complete ? costMicros(usage, priceFor(usage, model)) : worst;
         const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...extra };
         if (!s.pending.delete(rid)) { log({ event: "late_usage", ...entry }); return; }
-        if (status === 200 && !extra.sse_error) s.okResponses++;
+        if (status === 200 && !extra.sse_error && !extra.error) s.okResponses++;
         s.spentMicros += micros;
         globalSpent += micros;
         for (const k of Object.keys(usage) as (keyof Usage)[]) s.usage[k] += usage[k];
