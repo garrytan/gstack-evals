@@ -1,0 +1,250 @@
+# Train gate (U19): the full keyless gate of a merge train, in the shape gstack's merge train reads (gstack 1.91.319.0,
+# docs/ship-policy.md "Run a merge train"). gstack-ship-queue train build pushes train/<nonce>, a chain of
+# "train T<i>: merge #<pr> at <sha12>" merge commits on the train's base, and dispatches this workflow there with evals_all,
+# expected_sha and a nonce. It finds the run by the nonce in the run name. train bisect dispatches it again with cases and
+# prefix_shas.
+# The gate code and its case list come from the train's base (scripts/gate.ts and gate/manifest.json at the first parent of
+# T1), and gate.ts runs from the base's worktree, never from the head's, so a pull request in the train cannot change how the
+# train is judged. route checks the inputs. test runs the base's cases on the head with a read-only token and uploads a
+# TrainGateRecord on every completed run, red or green. bisect runs the named cases on each prefix and uploads one record per
+# prefix. publish is the only job that can write, and only a check run: it posts the policy's full_gate_check on the head for
+# a complete green census bound to this run's nonce, head and tree, and never for a train of two or more pull requests that
+# touches the gate surface. A dispatch with no nonce runs the gate and publishes nothing.
+name: train-gate
+run-name: ${{ inputs.nonce != '' && format('train-gate [eval-bg {0}]', inputs.nonce) || 'train-gate' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      evals_all:
+        description: Run the whole gate (gstack sends true for a train)
+        type: boolean
+        default: false
+      expected_sha:
+        description: The train head this run must check out
+        type: string
+        default: ""
+      nonce:
+        description: gstack's train or bisect nonce, carried in the run name
+        type: string
+        default: ""
+      cases:
+        description: "Bisect: comma-separated case ids from the base's gate"
+        type: string
+        default: ""
+      prefix_shas:
+        description: "Bisect: comma-separated prefix commits, each an ancestor of the train head"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: train-gate-${{ github.ref }}-${{ inputs.nonce }}
+  cancel-in-progress: false
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.route.outputs.mode }}
+      base: ${{ steps.route.outputs.base }}
+      cases: ${{ steps.route.outputs.cases }}
+      prefixes: ${{ steps.route.outputs.prefixes }}
+      record_artifact: ${{ steps.route.outputs.record_artifact }}
+      full_gate_check: ${{ steps.route.outputs.full_gate_check }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Bun, checked against the release's SHA-256
+        env:
+          BUN_VERSION: 1.4.4
+          BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - name: Check out the train base's gate code
+        run: |
+          t1="$(git log --first-parent --max-count=8 --format='%H %s' HEAD | grep -E '^[0-9a-f]{40} train T1: merge #[0-9]+ at [0-9a-f]{12}$' | head -n 1 | cut -d ' ' -f 1)"
+          if [ -n "$t1" ]; then base="$(git rev-parse --verify "$t1^1")"; else base="$(git rev-parse --verify HEAD)"; fi
+          git worktree add -q --detach "$RUNNER_TEMP/base" "$base"
+          printf 'BASE=%s\n' "$base" >> "$GITHUB_ENV"
+      - name: Route the dispatch with the base's gate code
+        id: route
+        env:
+          NONCE: ${{ inputs.nonce }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EVALS_ALL: ${{ inputs.evals_all }}
+          CASES: ${{ inputs.cases }}
+          PREFIX_SHAS: ${{ inputs.prefix_shas }}
+        run: |
+          cd "$RUNNER_TEMP/base"
+          bun --no-env-file --config=/dev/null scripts/gate.ts route --repo "$GITHUB_WORKSPACE" --base "$BASE" --github-output "$GITHUB_OUTPUT"
+
+  test:
+    needs: route
+    if: needs.route.outputs.mode == 'train' || needs.route.outputs.mode == 'dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Bun, checked against the release's SHA-256
+        env:
+          BUN_VERSION: 1.4.4
+          BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - name: Fetch gstack at the pinned commit
+        env:
+          GSTACK_SHA: 61e201ec08bcf59163ef2d3a69a26e334a536c04 # gstack v1.91.295.0
+        run: |
+          git init -q "$RUNNER_TEMP/gstack"
+          git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
+          git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
+          printf '%s\n' "$RUNNER_TEMP/gstack/bin" >> "$GITHUB_PATH"
+      - name: Diff every added line as text
+        run: |
+          attributes="$(git rev-parse --git-path info/attributes)"
+          mkdir -p "$(dirname "$attributes")"
+          printf '* diff\n' > "$attributes"
+      - name: Check out the train base's gate code
+        env:
+          BASE: ${{ needs.route.outputs.base }}
+        run: git worktree add -q --detach "$RUNNER_TEMP/base" "$BASE"
+      - name: Install (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run the base's gate on the head
+        env:
+          BASE: ${{ needs.route.outputs.base }}
+          NONCE: ${{ inputs.nonce }}
+          GATE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          cd "$RUNNER_TEMP/base"
+          bun --no-env-file --config=/dev/null scripts/gate.ts run --root "$GITHUB_WORKSPACE" --base "$BASE" --nonce "$NONCE" --out "$RUNNER_TEMP/record/train-record.json"
+      - name: Upload the train record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ needs.route.outputs.record_artifact }}
+          path: ${{ runner.temp }}/record/train-record.json
+          if-no-files-found: ignore
+
+  bisect:
+    needs: route
+    if: needs.route.outputs.mode == 'bisect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        prefix: ${{ fromJSON(needs.route.outputs.mode == 'bisect' && needs.route.outputs.prefixes || '["none"]') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ matrix.prefix }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Bun, checked against the release's SHA-256
+        env:
+          BUN_VERSION: 1.4.4
+          BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - name: Fetch gstack at the pinned commit
+        env:
+          GSTACK_SHA: 61e201ec08bcf59163ef2d3a69a26e334a536c04 # gstack v1.91.295.0
+        run: |
+          git init -q "$RUNNER_TEMP/gstack"
+          git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
+          git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
+          printf '%s\n' "$RUNNER_TEMP/gstack/bin" >> "$GITHUB_PATH"
+      - name: Diff every added line as text
+        run: |
+          attributes="$(git rev-parse --git-path info/attributes)"
+          mkdir -p "$(dirname "$attributes")"
+          printf '* diff\n' > "$attributes"
+      - name: Check out the train base's gate code
+        env:
+          BASE: ${{ needs.route.outputs.base }}
+        run: git worktree add -q --detach "$RUNNER_TEMP/base" "$BASE"
+      - name: Install (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run the named cases on this prefix
+        id: bisect
+        env:
+          BASE: ${{ needs.route.outputs.base }}
+          NONCE: ${{ inputs.nonce }}
+          CASES: ${{ needs.route.outputs.cases }}
+          PREFIX: ${{ matrix.prefix }}
+          RECORD: ${{ needs.route.outputs.record_artifact }}
+          GATE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          cd "$RUNNER_TEMP/base"
+          bun --no-env-file --config=/dev/null scripts/gate.ts bisect --root "$GITHUB_WORKSPACE" --base "$BASE" --cases "$CASES" --nonce "$NONCE" --out "$RUNNER_TEMP/record/bisect-record.json"
+          printf 'artifact=%s-bisect-%s\n' "$RECORD" "${PREFIX:0:12}" >> "$GITHUB_OUTPUT"
+      - name: Upload the prefix record
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ steps.bisect.outputs.artifact }}
+          path: ${{ runner.temp }}/record/bisect-record.json
+          if-no-files-found: error
+
+  publish:
+    needs: [route, test]
+    if: needs.route.outputs.mode == 'train' && needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.route.outputs.base }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Bun, checked against the release's SHA-256
+        env:
+          BUN_VERSION: 1.4.4
+          BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.route.outputs.record_artifact }}
+          path: ${{ runner.temp }}/record
+      - name: Check the record with the base's gate code
+        shell: bash
+        env:
+          NONCE: ${{ inputs.nonce }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          bun --no-env-file --config=/dev/null scripts/gate.ts publish --repo . --record "$RUNNER_TEMP/record/train-record.json" --nonce "$NONCE" --head "$HEAD_SHA" | tee "$RUNNER_TEMP/publish.txt"
+      - name: Post the full-gate check on the train head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK: ${{ needs.route.outputs.full_gate_check }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" -f name="$CHECK" -f head_sha="$HEAD_SHA" -f status=completed -f conclusion=success -f details_url="$RUN_URL" -f "output[title]=Train gate green" -f "output[summary]=$(cat "$RUNNER_TEMP/publish.txt")"

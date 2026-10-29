@@ -1,10 +1,12 @@
 # Keyless CI: typecheck, unit tests, the reason-code doc and the wiki check. Nothing here needs a secret.
-# Actions are pinned to commit SHAs; Bun is pinned by bun-version.
+# Actions are pinned to commit SHAs. Bun is downloaded at a pinned version and checked against the release's SHA-256.
+# workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19).
 # Later units add tests under tests/; `bun test` picks them up without a change here.
 name: ci
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main]
 
@@ -19,9 +21,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.4.4
+      - name: Install Bun, checked against the release's SHA-256
+        env:
+          BUN_VERSION: 1.4.4
+          BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Install (frozen lockfile)
         run: bun install --frozen-lockfile
       - name: Typecheck

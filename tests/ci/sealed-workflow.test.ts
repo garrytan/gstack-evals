@@ -21,10 +21,17 @@ const bash = (script: string, cwd: string, env: Record<string, string> = {}) =>
   spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], { cwd, env: { PATH: process.env.PATH ?? "", ...env } });
 
 describe("sealed.yml", () => {
-  test("runs the default branch's copy on every pull request event that changes its commits or base", () => {
-    expect(body).toMatch(/^on:\n  pull_request_target:\n    types: \[opened, synchronize, reopened, edited\]\n\n/m);
-    expect(body).not.toMatch(/^\s+(branches|branches-ignore|paths|paths-ignore):/m);
+  test("runs the default branch's copy on every pull request event that changes its commits or base, and on every push to main", () => {
+    expect(body).toMatch(/^on:\n  pull_request_target:\n    types: \[opened, synchronize, reopened, edited\]\n  push:\n    branches: \[main\]\n\n/m);
+    expect(body.match(/^\s+branches:/gm)).toHaveLength(1);
+    expect(body).not.toMatch(/^\s+(branches-ignore|paths|paths-ignore|tags):/m);
     expect(body).not.toMatch(/^\s+pull_request:/m);
+  });
+
+  test("scans a push from its old head to its new one, and a pull request from its base to its head", () => {
+    expect(body).toContain("ref: ${{ github.event.pull_request.head.sha || github.sha }}");
+    expect(body).toContain("BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}");
+    expect(body).toContain("HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}");
   });
 
   test("pins every action and the gstack fetch to a full commit sha", () => {
@@ -37,7 +44,7 @@ describe("sealed.yml", () => {
   });
 
   test("reads the pull request as data: head sha, full history, no persisted token, read-only, no secrets", () => {
-    expect(body).toContain("ref: ${{ github.event.pull_request.head.sha }}");
+    expect(body).toContain("ref: ${{ github.event.pull_request.head.sha || github.sha }}");
     expect(body).toContain("fetch-depth: 0");
     expect(body).toContain("persist-credentials: false");
     expect(body).toContain("allow-unsafe-pr-checkout: true");
@@ -49,7 +56,7 @@ describe("sealed.yml", () => {
   test("deletes the checked-out files before Bun is installed or run, keeping only the git objects", () => {
     const wipe = step("find . -mindepth 1 -maxdepth 1");
     expect(wipe).toBe(step("actions/checkout@") + 1);
-    expect(wipe).toBeLessThan(step("oven-sh/setup-bun@"));
+    expect(wipe).toBeLessThan(step("releases/download/bun-v"));
     const dir = mkdtempSync(join(tmpdir(), "sealed-wipe-"));
     expect(bash("git init -q . && git -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m base", dir).status).toBe(0);
     mkdirSync(join(dir, "nested"));
@@ -88,7 +95,7 @@ describe("sealed.yml", () => {
   });
 
   test("runs only known commands, so nothing from the pull request executes", () => {
-    const known = /^(git |test |mkdir -p |printf |attributes=|find \. |grep -Eq |bun --no-env-file --config=\/dev\/null "\$RUNNER_TEMP\/gstack\/bin\/gstack-pregate" )/;
+    const known = /^(git |test |mkdir -p |printf |attributes=|find \. |grep -Eq |curl -fsSL |unzip -q |bun --no-env-file --config=\/dev\/null "\$RUNNER_TEMP\/gstack\/bin\/gstack-pregate" )/;
     const lines = job.steps.flatMap((s) => (s.run ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) expect(line).toMatch(known);

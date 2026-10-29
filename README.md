@@ -37,7 +37,8 @@ gstack-evals --help
 | [quick/lanea-quick/](quick/lanea-quick/README.md) | GSTA-13's thin Lane A runner for Quick look 3, the office-hours diet check, with a fake upstream and keyless tests |
 | [quick/replay/](quick/replay/README.md) | GSTA-11's exploratory review replay on known gstack bugs, with a fake upstream and keyless tests; [preregistration](wiki/plans/2026-10-28-gsta-11-review-replay-prereg.md) in wiki/ |
 | [wiki/](wiki/README.md) | Plans, designs, research, decisions and handoffs, as immutable posts. `bun run wiki:index` writes an index of them to wiki/INDEX.md |
-| [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push, and again in CI on every pull request ([sealed.yml](.github/workflows/sealed.yml)) |
+| [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output config `gstack-pregate sealed` checks before every push, and again in CI on every pull request and every push to main ([sealed.yml](.github/workflows/sealed.yml)) |
+| [gate/manifest.json](gate/manifest.json) | The keyless full gate a merge train runs ([train-gate.yml](.github/workflows/train-gate.yml)); [scripts/gate.ts](scripts/gate.ts) runs it, and `bun run gate` runs it locally |
 | [NOTICE.md](NOTICE.md) | Every vendored or planned-vendored source and its licence |
 | [TODOS.md](TODOS.md) | Open items carried from the plan |
 

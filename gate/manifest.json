@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "stages": {
+    "m0": [
+      {
+        "id": "typecheck",
+        "kind": "command",
+        "run": "bun run typecheck"
+      },
+      {
+        "id": "unit",
+        "kind": "command",
+        "run": "bun test"
+      },
+      {
+        "id": "wiki",
+        "kind": "command",
+        "run": "bun run wiki:check"
+      },
+      {
+        "id": "errors-doc",
+        "kind": "command",
+        "run": "bun run errors:check"
+      },
+      {
+        "id": "sealed",
+        "kind": "command",
+        "run": "gstack-pregate sealed --range \"$GATE_BASE..$GATE_HEAD\" --base \"$GATE_DEFAULT_BRANCH\" | tee /dev/stderr | grep -Eq \"^SEALED[:] clear .*policy=origin/$GATE_DEFAULT_BRANCH( |\\$)\""
+      },
+      {
+        "id": "hygiene",
+        "kind": "junit",
+        "run": "bun test tests/ci/workflow-hygiene.test.ts --reporter=junit --reporter-outfile=\"$GATE_JUNIT\"",
+        "tests": [
+          "pins every action to a full commit sha",
+          "keeps every token read-only except the train gate's publish job",
+          "names no secret",
+          "installs Bun only by the checksummed download, at one version and digest",
+          "fetches gstack at one pinned commit",
+          "runs the gate's command cases in ci.yml"
+        ]
+      }
+    ]
+  },
+  "gate_surface": [
+    ".github/workflows/**",
+    "gate/**",
+    "scripts/gate.ts",
+    "tests/ci/**",
+    ".gstack/**",
+    "package.json"
+  ]
+}
