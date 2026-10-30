@@ -321,8 +321,10 @@ export async function runReplay(o: ReplayOptions): Promise<number> {
         if (held && (held.state === "open" || held.state === "closing")) settleLease(record, local, prior!.lease_id!, warn);
         const base = { schema_version: 1 as const, run_id: runId, plan_name: plan.name, plan_sha256: loaded.sha256, line_item: o.item, created_at: prior?.created_at ?? new Date().toISOString() };
         if (!prior) {
+          const created: string[] = [];
+          for (let dir = itemsDir; !existsSync(dir); dir = dirname(dir)) created.push(dir);
           mkdirSync(itemsDir, { recursive: true });
-          for (const dir of [out, dirname(out)]) syncDir(dir);
+          for (const dir of [...created, dirname(created.at(-1) ?? itemsDir)]) syncDir(dir);
           writeDurable(runPath, { ...base, lease_id: null } satisfies RunFile, false);
         }
         lease = openLease(record, local, { item: o.item, run_id: runId, warn });
