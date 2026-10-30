@@ -1,6 +1,7 @@
 // gstack-evals doctor (interface v0.4, Quickstart and Spend and ledger): keyless checks of this machine before a run.
 // Bun, the Docker daemon, the host CLIs, keys by name (never their values), both ledger paths with the rule that chose
-// each, and gstack-approvals' presence and version. The trial image and its digest are U9's; doctor says so and skips it.
+// each, and gstack-approvals' presence and version. With a Docker daemon it builds the trial image from the repo's
+// Dockerfile and pins its digest (U9, src/trial/image.ts); a failed build is E_IMAGE_BUILD.
 // Every check prints one line on stdout (ok, warn or skip); a failing check also prints its code lines on stderr, and
 // doctor then exits 2.
 import { spawnSync } from "node:child_process";
@@ -9,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import type { Io } from "../../cli.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { approvalsBin } from "../../runner/ledger/approvals.ts";
+import { buildTrialImage, stateRoot, type Runner } from "../../trial/image.ts";
 import { ledgerStatus } from "../../runner/ledger/ledger.ts";
 import { ledgerPath, readMounts, recordPath, remoteMount, type Mount } from "../../runner/ledger/paths.ts";
 import { LedgerError } from "../../runner/ledger/record.ts";
@@ -20,7 +22,7 @@ import { DEFAULT_POLICY, loadPolicy } from "./policy.ts";
 import { PROVIDER_KEYS } from "./preflight.ts";
 
 type Env = Record<string, string | undefined>;
-export type Runner = (command: string, args: string[]) => { status: number | null; stdout: string; stderr: string };
+export type { Runner };
 
 export interface Check {
   name: string;
@@ -41,8 +43,8 @@ export interface DoctorOptions {
 
 const DOCTOR_FLAGS = SKILL_EVAL_FLAGS.filter((f) => ["--host", "--ledger", "--ledger-record", "--json", "--help"].includes(f.name));
 const firstLine = (s: string) => s.trim().split("\n")[0] ?? "";
-const localRun: Runner = (command, args) => {
-  const r = spawnSync(command, args, { encoding: "utf8", timeout: 15_000 });
+const localRun: Runner = (command, args, opts) => {
+  const r = spawnSync(command, args, { encoding: "utf8", timeout: opts?.timeoutMs ?? 15_000 });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? (r.error ? String(r.error.message) : "") };
 };
 
@@ -77,7 +79,12 @@ export function doctorChecks(opts: DoctorOptions): Check[] {
   const docker = run("docker", ["version", "--format", "{{.Server.Version}}"]);
   if (docker.status === 0) add({ name: "docker", status: "ok", detail: "daemon " + firstLine(docker.stdout) });
   else add({ name: "docker", status: "fail", code: "E_ISOLATION_UNSAFE", detail: "no Docker daemon answered docker version" + (firstLine(docker.stderr) ? ": " + firstLine(docker.stderr) : "") });
-  add({ name: "trial image", status: "skip", detail: "the image build and its digest land with U9's trial module" });
+  if (docker.status !== 0) add({ name: "trial image", status: "skip", detail: "no Docker daemon to build it with" });
+  else {
+    const image = buildTrialImage({ run, state: stateRoot(env) });
+    if (image.ok) add({ name: "trial image", status: "ok", detail: image.tag + " " + image.digest + " (recipe " + image.recipe_sha256.slice(0, 12) + ", pinned)" });
+    else add({ name: "trial image", status: "fail", code: image.code, detail: image.message });
+  }
 
   for (const host of opts.hosts) {
     const cli = run(host, ["--version"]);
