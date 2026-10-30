@@ -95,7 +95,7 @@ Per arm, 30 sessions each: before $3.53 at 7.4 turns, before2 $3.04 at 7.0, afte
 | empty | 3/3 | 3/3 | 3/3 | 3/3 |
 | no-code-change | 0/3, 3 missing | 1/3, 2 missing | 0/3, 3 missing | 3/3 |
 
-Reasons: 10 UNCOVERED_GATE_REMOVAL, NOT_MEASURABLE (3 informative tasks: show, export, prune-stale), E_USER_TURNS_MISSING on prune-stale and no-code-change. Warnings: NONE_MATCHES on seven tasks. On the 3 informative tasks the old copy passed 0.78 and the diet's copy 1.00, a difference of +0.22 with a 95% interval of 0 to 0.50 (exact sign-flip) and a smallest detectable difference of 36.5 points. That is far too wide to read. Opened-skill rates: before 0.90, before2 0.83, after 0.93. Each arm cost about $0.09 for 30 sessions.
+Reasons: 10 UNCOVERED_GATE_REMOVAL, NOT_MEASURABLE (3 informative tasks: show, export, prune-stale), E_USER_TURNS_MISSING on prune-stale and no-code-change. Warnings: NONE_MATCHES on seven tasks. On the 3 informative tasks the old copy passed 0.78 and the diet's copy 1.00, a difference of +0.22 with a 95% interval of 0 to 0.50 (task-cluster bootstrap) and a smallest detectable difference of 36.5 points. That is far too wide to read. Opened-skill rates: before 0.90, before2 0.83, after 0.93. Each arm cost about $0.09 for 30 sessions.
 
 **Row 2, the particle-1 pilot** (uncounted, never pooled): `show` passed in all four arms. The after session did not open the skill (UNOPENED), so the pilot's own verdict was FAIL, exit 1.
 
