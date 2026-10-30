@@ -60,6 +60,20 @@
         "spread": "wide"
       },
       "note": "Both ran in round 2."
+    },
+    {
+      "id": "D-vs-C12",
+      "variant": "D",
+      "reference": "C12",
+      "margin_points": 10,
+      "margin_reason": "GSTA-40 plan, Big decision 1: 10 points of blocking recall",
+      "post_hoc": true,
+      "frozen_bar": "4",
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "note": "Round 4 (D) against C pooled over round 3 and round 4b (C2), as GSTA-167 scored it. Frozen bar 4 is measured against C's round 3 pass."
     }
   ],
   "power": {

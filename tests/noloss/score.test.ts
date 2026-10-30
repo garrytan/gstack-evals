@@ -11,7 +11,8 @@ import { cleanup, editArm, editJudgments, run, tmp, writeArm } from "./helpers.t
 afterAll(cleanup);
 const { suite, sha256 } = loadSuite("gsta167-14pr");
 const COMPARISONS = join(REPO_ROOT, "lanes/review-noloss/comparisons/gsta167-14pr.json");
-const legacy = loadArms(ARMS_ROOT, suite, sha256);
+const ingested = loadArms(ARMS_ROOT, suite, sha256);
+const legacy = new Map([...ingested].filter(([id]) => ["A", "A2", "B", "C"].includes(id)));
 const files = (id: string) => readIngested(join(ARMS_ROOT, "gsta167-14pr", id), suite, sha256).files;
 const scored = (f: Map<string, Buffer>): ScoredArm => ({ arm: parseArm(f, suite, sha256), tree_sha256: "test" });
 const opts = { seed: 1, draws: 2000 };
@@ -36,7 +37,7 @@ describe("legacy arms, as the scorer reports them", () => {
 
   test("A', A and B each LOSS against C at 10 points, and B against A NOT_DISTINGUISHED", () => {
     const file = JSON.parse(readFileSync(COMPARISONS, "utf8"));
-    const recs = scoreComparisons(suite, sha256, legacy, file.comparisons, opts);
+    const recs = scoreComparisons(suite, sha256, legacy, file.comparisons.filter((c: Comparison) => legacy.has(c.variant) && legacy.has(c.reference)), opts);
     expect(recs.map((r) => [r.id, r.result.verdict, r.result.losses, r.result.gains, r.result.p_no_loss, r.result.p_loss, r.exit])).toEqual([
       ["A2-vs-C", "LOSS", 9, 2, 0.931091, 0.03125, 1],
       ["A-vs-C", "LOSS", 11, 3, 0.914246, 0.03125, 1],
@@ -65,6 +66,30 @@ describe("legacy arms, as the scorer reports them", () => {
     expect([p.grade, p.reference.units, p.reference.tokens_per_pass, p.reference.per_unit_mean, p.reference.found, p.reference.per_blocker_found]).toEqual(["upper-bound", 11, 311112137, 28282922, 16, 19444509]);
     expect([p.variant.tokens_per_pass, p.variant.per_unit_mean, p.variant.found, p.variant.per_blocker_found]).toEqual([194864669, 17714970, 10, 19486467]);
     expect(pairedCost(suite, legacy.get("A")!.arm, legacy.get("C")!.arm)).toEqual({ reason: "arm A has no metered units" });
+  });
+});
+
+describe("round 4b arms: C2, C pooled over both passes (C12) and D", () => {
+  const byPass = (id: string, pass: number) => new Map(ingested.get(id)!.arm.judgments!.filter((j) => j.pass === pass).map((j) => [j.unit.id + " " + j.blocker.id, j.outcome]));
+
+  test("C12's first pass is C and its second is C2; blocking recall C2 19/29, C12 19/29, D 13/29", () => {
+    expect(byPass("C12", 1)).toEqual(byPass("C", 1));
+    expect(byPass("C12", 2)).toEqual(byPass("C2", 1));
+    expect(Object.fromEntries(["C2", "C12", "D"].map((id) => [id, armMetrics(suite, ingested.get(id)!, opts).blocking!.found]))).toEqual({ C2: 19, C12: 19, D: 13 });
+  });
+
+  test("in the committed family of 5, every legacy result holds and D is LOSS against pooled C after failing frozen bar 4", () => {
+    const file = JSON.parse(readFileSync(COMPARISONS, "utf8"));
+    const recs = scoreComparisons(suite, sha256, ingested, file.comparisons, opts);
+    expect(recs.map((r) => [r.id, r.result.verdict, r.result.losses, r.result.gains, r.result.p_no_loss, r.result.p_loss, r.result.holm_family, r.exit])).toEqual([
+      ["A2-vs-C", "LOSS", 9, 2, 0.931091, 0.03125, 5, 1],
+      ["A-vs-C", "LOSS", 11, 3, 0.914246, 0.03125, 5, 1],
+      ["B-vs-C", "LOSS", 13, 2, 0.990479, 0.003906, 5, 1],
+      ["B-vs-A", "NOT_DISTINGUISHED", 3, 0, 0.548401, 0.125, 5, 2],
+      ["D-vs-C12", "LOSS", 8, 2, 0.858337, 0.046875, 5, 1],
+    ]);
+    expect([recs[4]!.frozen_bar!.result, recs[4]!.frozen_bar!.detail]).toEqual(["FAIL", "misses 7 of the 19 blockers C found (allows 1)"]);
+    expect(recs[4]!.judging.labelled).toBe(true);
   });
 });
 
@@ -185,7 +210,7 @@ describe("noloss score and export commands", () => {
     expect([loss.code, JSON.parse(loss.out).result.verdict, JSON.parse(loss.out).version]).toEqual([1, "LOSS", 1]);
     const nd = await run(["score", "--suite", "gsta167-14pr", "--variant", "B", "--reference", "A", "--prereg", COMPARISONS]);
     expect(nd.code).toBe(2);
-    expect(nd.out).toContain("(Holm 1.000 over 4)");
+    expect(nd.out).toContain("(Holm 1.000 over 5)");
     expect(nd.out.split("\n")[0]).toStartWith("labelled judging, transcribed (B, A), post hoc: frozen bar, round 2: B FAIL");
     const none = await run(["score", "--suite", "gsta167-14pr", "--variant", "B", "--reference", "A"]);
     expect([none.code, none.err.split("\n")[0]]).toEqual([2, expect.stringContaining("E_USAGE noloss score needs --margin")]);
@@ -200,7 +225,7 @@ describe("noloss score and export commands", () => {
     const md = renderExport(buildExport({ comparisons: COMPARISONS, root: ARMS_ROOT }));
     expect(md).not.toMatch(/\bno loss\b/i);
     const verdictLines = md.split("\n").filter((l) => / vs [A-Z]/.test(l) && l.includes("margin"));
-    expect(verdictLines.length).toBe(4);
+    expect(verdictLines.length).toBe(5);
     for (const l of verdictLines) expect(l).toStartWith("- labelled judging");
   }, 60_000);
 

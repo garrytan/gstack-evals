@@ -1,0 +1,59 @@
+pr	blocker_id	outcome	matched_finding	raw_severity	mapped_severity	judge	saw_label	note	pass	coverage
+3593	B1	F	3593-p1-20;3593-p1-23	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3593	B2	F	3593-p1-35	High	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3596	B1	F	3596-p1-5	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3596	B2	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3516	B1	F	3516-p1-0;3516-p1-9	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3516	B2	F	3516-p1-4	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3524	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3526	B1	F	3526-p1-12;3526-p1-25	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3526	B2	F	3526-p1-26;3526-p1-21	High	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3526	B3	F	3526-p1-13;3526-p1-7;3526-p1-27	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3526	B4	D	3526-p1-28	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3527	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3527-p1-24 adversarial-native FIXABLE and 3527-p1-38 outside-voice High: quiet revise ignores the plan delta; never names the capped owner gate 9c34fda restored (round 3)	1	complete
+3527	B2	F	3527-p1-30;3527-p1-40;3527-p1-7	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3527	B3	F	3527-p1-19	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3527	B4	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3534	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3534-p1-8/3534-p1-9 adversarial-native FIXABLE; not the removed manifests/config/fixtures/goldens/workflows waiver	1	complete
+3534	B2	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	re-lookup: 3534-p1-13 outside-voice Medium is the finding round 4 credited as D for arm D; round 3 recorded M and this row keeps it	1	complete
+3534	B3	F	3534-p1-12	High	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3534	B4	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3540	B1	F	3540-p1-3	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3545	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3564	B1	F	3564-p1-7;3564-p1-13	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3567	B1	F	3567-p1-16	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	part (b) of 3567-p1-16: startsWith binding	1	complete
+3567	B2	F	3567-p1-16;3567-p1-23	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	part (a) of 3567-p1-16: queue recompute without scope	1	complete
+3567	B3	F	3567-p1-15	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	working-tree scan labeled as the bound head, the same cause as carry --head (round 3)	1	complete
+3573	B1	F	3573-p1-1;3573-p1-2	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3578	B1	F	3578-p1-0	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3583	B1	F	3583-p1-14	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3583	B2	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		1	complete
+3593	B1	F	3593-p2-28	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3593	B2	F	3593-p2-32;3593-p2-54	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	also outside-voice Medium (3593-p2-54); C's outside voice wrote High	2	complete
+3596	B1	D	3596-p2-10;3596-p2-3	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C's CRITICAL came from adversarial-native, which did not raise this in C2; red-team and outside voice raised it below the floor. Not a label flip	2	complete
+3596	B2	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	no finding on the range being classified without scope or gate-scan inputs	2	complete
+3516	B1	F	3516-p2-0;3516-p2-7	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3516	B2	F	3516-p2-4	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	same no-plan-branch finding C was credited with	2	complete
+3524	B1	D	3524-p2-14	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3526	B1	F	3526-p2-23	High	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3526	B2	F	3526-p2-18;3526-p2-24	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3526	B3	F	3526-p2-6;3526-p2-10;3526-p2-25	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3526	B4	F	3526-p2-11;3526-p2-26	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C had outside-voice Medium only; adversarial-native raised it at FIXABLE here	2	complete
+3527	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3527-p2-7 security INFORMATIONAL and 3527-p2-31 outside-voice High (quiet revise; capped owner gate only as contrast); round 3 judged C's equivalent CRITICAL MISSED	2	complete
+3527	B2	D	3527-p2-24;3527-p2-8	INVESTIGATE	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	label flip: adversarial-native wrote FIXABLE in C and INVESTIGATE here; C's outside voice (High) did not raise it here	2	complete
+3527	B3	F	3527-p2-12;3527-p2-13	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3527	B4	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	no finding on a fix-check running with a blocker open	2	complete
+3534	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3534-p2-3 adversarial-native FIXABLE (deleted non-test source with untested importers), the near-miss C and D raised; round 3 judged it MISSED	2	complete
+3534	B2	D	3534-p2-12	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3534	B3	F	3534-p2-11	High	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3534	B4	D	3534-p2-9	INVESTIGATE	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3540	B1	F	3540-p2-2	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3545	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	no finding on test 5's zero-PowerShell assertion	2	complete
+3564	B1	F	3564-p2-7;3564-p2-9;3564-p2-17	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3567	B1	F	3567-p2-13	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	part (b) of 3567-p2-13: startsWith binding	2	complete
+3567	B2	F	3567-p2-13	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	part (c) of 3567-p2-13: queue recompute without gstack-diff-scope	2	complete
+3567	B3	F	3567-p2-0;3567-p2-12;3567-p2-19	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3573	B1	F	3573-p2-1;3573-p2-2	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3578	B1	F	3578-p2-0	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3583	B1	F	3583-p2-8;3583-p2-13	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes		2	complete
+3583	B2	F	3583-p2-26	High	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	outside voice High; C and D did not raise it	2	complete

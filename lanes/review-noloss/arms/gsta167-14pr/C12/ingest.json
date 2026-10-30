@@ -1,0 +1,30 @@
+{
+  "contract_version": 1,
+  "suite": "gsta167-14pr",
+  "suite_sha256": "20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789",
+  "arm": "C12",
+  "state": "judged",
+  "provenance": "live",
+  "source_sha256": {
+    "arm.json": "39b56e1361572e7fd4a5e012aa56b9834901c93899daaaa73c9f20776e8d1040",
+    "cost.tsv": "5cd628dd35ed7ec67078f36b40211bed34bf04efd862430fdb5a451d155efaaa",
+    "findings/3516.jsonl": "f7c24aa6fe0bb028fc83639449ae53e3a23bcbf8310331be5ae50c0ac4c9e8f3",
+    "findings/3524.jsonl": "5b90e0d6906f849c6fb4b31583e8a141946239167b34dee5947d3fbf71d8d825",
+    "findings/3526.jsonl": "0839f08b9ccef72ab0d0773d5fae1a04048409d5521be65291dfdb747c4d34a7",
+    "findings/3527.jsonl": "445446541ff9768f989636b5770c4a7f0b64f96a73444c5344cf2fde52e1a11f",
+    "findings/3534.jsonl": "e2b06700a1691fb08701420c3744e09c860bc26f6cb7c5d6be0752c47f5cec67",
+    "findings/3540.jsonl": "82f3b5b82346027755816042b685d71b81ecc3b26198632c78c948200f2568a4",
+    "findings/3545.jsonl": "4f1c15467504bfbd2a48a93bba394a207cadcec130d494a52aa95911c9353ddf",
+    "findings/3564.jsonl": "938a5b825d2ad58789920114ae68b292c132b552e44a9793ba0ee5d5ea4da8c4",
+    "findings/3567.jsonl": "98d68df94c2aa5169340ae39b5bb11ab534dfac415f0e88a2b0c833a3946db86",
+    "findings/3573.jsonl": "15aecc2c018b4a05f696dba1c129d13a038e2adcace8fad3ec59b6d4085dfb1c",
+    "findings/3578.jsonl": "8bf10dde9de9569abee46485c951d450fe61ec3f638a10f3335faf2203b9c72d",
+    "findings/3583.jsonl": "7e1f91cd1d85fc5ed54fec7ff6573ed1a2ca846cf983ecf119b19b42cc3f3ad0",
+    "findings/3593.jsonl": "beb713d452d68f086e5134e9e119f3e7719278610c739a7e295d14c464de7b65",
+    "findings/3596.jsonl": "eb77620937287157f71737e232f78ff4427e3ae6edd9e5167ea54db61912565d",
+    "judgments.tsv": "bf6b343e73437ae6ae09f5e2c5686c1e5112b883b9fd57c6f6a35c96581e2e96"
+  },
+  "tree_sha256": "d1f83a5bee9302f897c85a3ad3e5adf25c65354e401956b4eb25065fe0c8b29f",
+  "digest_only": "all",
+  "replaced": null
+}
