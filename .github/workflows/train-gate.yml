@@ -12,9 +12,12 @@
 # T1), and gate.ts runs from the base's worktree, never from the head's. The test and bisect jobs install the head's
 # dependencies with lifecycle scripts off, so no postinstall or prepare hook in the head's package.json or lockfile runs. They
 # check out the base's worktree only after that install, check that it is the base commit with nothing changed or added, and
-# record a digest of its files. After the cases they recompute the digest and fail on any change, and the test job then
-# uploads no record. The cases still run the head's code (its package.json scripts and tests) in the test job, so this does
-# not isolate the train from a hostile head: trains take only reviewed same-repo pull requests. route checks the inputs. test runs the base's cases on the head with a read-only token and uploads a
+# record a digest of its files. After the cases they recompute the digest and fail on a change, and the test job then
+# uploads no record. That second check catches a case that writes into the base by mistake, not a hostile one: the cases run
+# the head's code (its package.json scripts and tests) as the runner's user, which can put its own tools on PATH through
+# GITHUB_PATH or GITHUB_ENV, or leave a process running past the step to change the base or the record after the check. So
+# this does not isolate the train from a hostile head: trains take only reviewed same-repo pull requests, and isolating the
+# cases needs a separate user (GST-254). route checks the inputs. test runs the base's cases on the head with a read-only token and uploads a
 # TrainGateRecord on every completed run, red or green. bisect runs the named cases on each prefix and uploads one record per
 # prefix. publish is the only job that can write, and only a check run: it posts the policy's full_gate_check on the head for
 # a complete green census bound to this run's nonce, head and tree, and never for a train of two or more pull requests that
