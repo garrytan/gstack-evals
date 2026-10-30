@@ -53,8 +53,9 @@ finding text, and for nothing else.
 
 The comparisons file is one Holm family for the no-loss p, and the size rule simulates at Holm's strictest step, 0.05
 divided by the family size. So a new comparison changes `holm_family` and the size-rule power of every other comparison
-in the file, but none of their verdicts, counts or raw p-values. Adding D moved the family from 4 to 5. The size-rule
-power for A', A and B against C fell from 7.0% to 5.5%, and for B against A from 6.2% to 5.1%.
+in the file, and it can change their Holm-adjusted p. Counts and raw p-values stay fixed, but a NO_LOSS near the
+threshold could become NOT_DISTINGUISHED. Adding D moved the family from 4 to 5 and changed no legacy verdict. The
+size-rule power for A', A and B against C fell from 7.0% to 5.5%, and for B against A from 6.2% to 5.1%.
 
 ## 3. Arm D
 
