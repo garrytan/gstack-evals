@@ -3,13 +3,13 @@
 // Claude Code CLI the Agent SDK bundles, or the Codex CLI from @openai/codex (each the version docker/host-cli.json pins
 // in the trial image), with the trial's agent env and its own HOME.
 // No key and no network: the proxy's fetch is the fake.
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import type { Provider } from "../../src/runner/pricing/prices.ts";
-import type { AgentSession, StepResult } from "../../src/trial/sandbox.ts";
+import type { AgentSession, Sandbox, StepResult } from "../../src/trial/sandbox.ts";
 import { trialEnv } from "../../src/trial/env.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -148,6 +148,32 @@ export interface Harness {
   /** SIGKILL every CLI process the sessions spawned: a host crash mid-run. */
   crash(): void;
   close(): void;
+}
+
+/** A local sandbox for the run loop's test rig: no isolation, HOME under the trial dir, install(home) puts the arm in it before the agent starts. */
+export function localSandbox(install: (home: string) => void): Sandbox {
+  return {
+    isolation: "process",
+    workPath: (work) => work,
+    fixturesPath: (fixtures) => fixtures,
+    homePath: (dir) => join(dir, "home"),
+    step(_role, command, _task, o) {
+      const r = spawnSync("sh", ["-c", command], { cwd: o.work, env: o.env, timeout: o.timeoutMs, encoding: "utf8" });
+      return { exitCode: r.status ?? 1, timedOut: r.error?.message.includes("ETIMEDOUT") ?? false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    },
+    agent(_task, o) {
+      mkdirSync(o.env.HOME!, { recursive: true });
+      install(o.env.HOME!);
+      return {
+        exec: (command, timeoutMs) => {
+          const r = spawnSync("sh", ["-c", command], { cwd: o.work, env: o.env, timeout: timeoutMs, encoding: "utf8" });
+          return { exitCode: r.status ?? 1, timedOut: false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+        },
+        spawn: (argv, extra = {}) => spawn(argv[0] === "claude" ? CLAUDE_CLI : argv[0] === "codex" ? CODEX_CLI : argv[0]!, argv.slice(1), { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? o.env.PATH!, ...extra }, stdio: ["pipe", "pipe", "pipe"] }),
+        stop() {},
+      };
+    },
+  };
 }
 
 /**

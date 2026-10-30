@@ -34,6 +34,8 @@ export interface SkillRef {
   name: string;
   /** Where the skill's folder sits in the agent's environment; a gstack base can reach one folder by two paths. */
   roots: string[];
+  /** The agent's HOME, so a shell read through ~ or $HOME counts. */
+  home?: string;
 }
 
 export interface SkillUse {
@@ -230,7 +232,7 @@ export function skillUse(calls: readonly Call[], skill: SkillRef | null): SkillU
       read("SKILL.md");
       continue;
     }
-    const paths = c.tool === "Read" ? [c.input.file_path ?? c.input.path ?? ""] : c.input.command ? shellReads(c.input.command) : [];
+    const paths = (c.tool === "Read" ? [c.input.file_path ?? c.input.path ?? ""] : c.input.command ? shellReads(c.input.command) : []).map((p) => (skill.home ? p.replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, skill.home) : p));
     for (const p of paths) {
       const root = roots.find((r) => p.startsWith(r));
       if (!root || p.length === root.length) continue;

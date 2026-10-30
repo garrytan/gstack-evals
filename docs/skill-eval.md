@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex need the host adapters and the run loop (U10). The trial module (U9) and both host adapters (src/adapters/claude-code/ and src/adapters/codex/) are built; until the rest lands, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
+Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, `none` and `bare`. A gstack base at a sha (including the one inferred from a rendered gstack skill), a stack arm, a placebo arm and the persona's free-form model come with GST-272; until then such a call stops with E_USAGE naming GST-272 before anything is spent. So do tasks with a judge rubric, until blinded adjudication lands.
 
 ## Quickstart
 
@@ -92,7 +92,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 6. **Lock.** `tasks.lock.json` must be committed and clean at HEAD (LOCK_MISSING prints the exact `--lock` command and git steps). A changed tasks file, sidecar, policy, before copy or extractor, or a hand-edited row, is LOCK_DRIFT.
 7. **Ledger and cap.** The line item needs an approved cap on record, and `--spend-cap` must fit within it and what is left (E_LEDGER_MISSING, E_ITEM_BOUND). A cap below one arm-balanced round is E_CAP_TOO_LOW. With no `--spend-cap`, the stop prints the dry-run matrix and never a cap to copy.
 8. **PDF flag.** A task that sends a PDF gets the PDF_INPUT warning.
-9. **Host adapter.** The fake host is ready; a real host stops here until U10 lands.
+9. **Host adapter.** The fake host is ready. A real host is ready for loose skill folders, `none` and `bare` under `--isolation docker`; other arms stop here with E_USAGE naming GST-272.
 
 `skill-eval --lock` runs the contract and vacuity checks first and refuses to lock a set that fails them, so a rebuilt task set is checked and locked fresh. It runs the controls in containers on the pinned trial image when Docker answers, and otherwise as you with the trial's env allowlist; its vacuity line says which.
 
