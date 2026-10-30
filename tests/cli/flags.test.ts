@@ -59,9 +59,9 @@ describe("the skill-eval flag table", () => {
     expect(parse([], { GSTACK_EVALS_ITEM: "" })).not.toBeString();
   });
 
-  // Value: protects=a flag whose owner has not built it parses but is reported, and help says so; fails_when=--resume runs silently before U10 builds it; why_new=new; seam=none; no_claim=none beyond protects
+  // Value: protects=a flag whose owner has not built it parses but is reported, and help says so; fails_when=--mirror runs silently before U10 builds it; why_new=new; seam=none; no_claim=none beyond protects
   test("unbuilt flags are reported with their owner, and help marks them", () => {
-    expect(unbuiltFlags(ok(["--resume", "/out", "--calibrate"])).map((f) => f.name + " " + f.owner)).toEqual(["--resume U10"]);
+    expect(unbuiltFlags(ok(["--mirror", "/out", "--calibrate"])).map((f) => f.name + " " + f.owner)).toEqual(["--mirror U10"]);
     const help = flagHelp(SKILL_EVAL_FLAGS);
     expect(help).toContain("not built yet: U10");
     expect(help).toContain("env GSTACK_EVALS_ITEM");

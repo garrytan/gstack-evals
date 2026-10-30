@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, `none` and `bare`. A gstack base at a sha (including the one inferred from a rendered gstack skill), a stack arm, a placebo arm and the persona's free-form model come with GST-272; until then such a call stops with E_USAGE naming GST-272 before anything is spent. So do tasks with a judge rubric, until blinded adjudication lands.
+Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, `none` and `bare`. A gstack base at a sha (including the one inferred from a rendered gstack skill), a stack arm, a placebo arm and the persona's free-form model come with GST-272; until then such a call stops with E_USAGE naming GST-272 before anything is spent. A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
 
 ## Quickstart
 
@@ -72,8 +72,8 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--timeout` | 600 | Seconds per session; a sidecar timeout_s overrides it per task. |
 | `--judge-model` | the policy's default for the subjects' provider | The cross-family judge for tasks with a judge rubric. |
 | `--margin` | none | A non-inferiority margin in percentage points; needed for `noninferior: true`. |
-| `--resume` | none | Continue a stopped run. Not built (U10). |
-| `--repair` | none | Rerun the cells a named repair affects. Not built (U10). |
+| `--resume` | none | Continue a stopped run on Claude Code or Codex from its out directory: finished sessions whose key still matches are reused. The fake host refuses it (E_USAGE). |
+| `--repair` | none | With `--resume <out>`: rerun the cells whose key changed under a new verdict id; the value names the repair. |
 | `--mirror` | none | Copy the verdict and receipts without transcripts. Not built (U10). |
 | `--arms-file` | none | The full arm manifest. Not built (U9). |
 | `--json` | off | Stdout carries JSON only: the verdict, the plan or the preflight result. Every failure writes `<out>/error.json`. |
@@ -98,7 +98,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 
 ## Spend
 
-- The dry run prices every session at its allowance: 400k input and 32k output tokens per agent session, 60k and 4k per judged run, 80k and 5k per user-simulator session, at list price. The rerun stage doubles each part.
+- The dry run prices every session at its allowance: 400k input and 32k output tokens per agent session, 200k and 40k per judged run (one request with no tools: the input holds the whole answer and the evidence, and the output covers the proxy's 32,768-token cap, which a request that names none reserves), 80k and 5k per user-simulator session, at list price. The rerun stage doubles each part.
 - One arm-balanced round is one trial of every task in every arm, for every model. A round that would pass the cap is not started, so a cap stop keeps complete paired cells, exits 2 with CAP_STOP and prints `STOP: reason=budget_exhausted spent=<usd> reserved=<usd> unknown=<n> cap=<usd>`.
 - Approvals are recorded by a person with `gstack-evals ledger init|raise` and their exact words (docs/budget-ledger.md). The CLI never implies or suggests a cap.
 
@@ -110,7 +110,7 @@ A real run outlasts one tool call, so run it the way Capy runs long work:
 2. Register a wait on that operation and end the turn. The wait keeps the machine awake through the operation's own timeout and wakes the thread when it ends.
 3. Keep `--out` at its default under `~/.capy/work`, which survives a wake, and the local ledger at its default on the machine. Point `--ledger-record` at your Captain drive.
 4. While you wait, read `<out>/progress.json`: sessions done, passed, failed, timed out and missing, the cells still running and an ETA. It is rewritten whole after every session.
-5. If the operation ended before the run did (the six-hour limit, or a machine that slept with no wait on it), run the same call with `--resume <out>` (not built until U10). Resume stops the proxy, reconciles its journal, then settles the lease (docs/adapters.md, Lane A), and a session whose cache key changed stops with E_CACHE_STALE before any spend.
+5. If the operation ended before the run did (the six-hour limit, or a machine that slept with no wait on it), run the same call with `--resume <out>`. Resume stops the proxy, reconciles its journal, then settles the lease (docs/adapters.md, Lane A), and a session whose cache key changed stops with E_CACHE_STALE before any spend.
 6. If the machine is replaced, its lease stays reserved until `gstack-evals ledger reconcile` records the settlement from the provider's usage export.
 
 On a VM that is deleted after the run, set `GSTACK_EVALS_EPHEMERAL=1` and `GSTACK_EVALS_RECEIPTS` to a directory that outlives it; the run copies its receipts and journal there before it exits.

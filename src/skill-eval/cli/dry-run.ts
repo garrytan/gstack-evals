@@ -18,7 +18,13 @@ export interface Allowance {
 }
 
 export const SESSION_ALLOWANCE: Allowance = { input: 400_000, output: 32_000 };
-export const JUDGE_ALLOWANCE: Allowance = { input: 60_000, output: 4_000 };
+/**
+ * A judge is one request with no tools. The proxy writes its 32,768-token output cap into a request that names none and
+ * reserves for it, so the output allowance must cover that cap (a reasoning judge thinks before its one line). The input
+ * holds the whole answer (every turn of an interactive task, up to a session's 32,000 output tokens) and the evidence's
+ * file lists. Only what the call uses is metered and spent.
+ */
+export const JUDGE_ALLOWANCE: Allowance = { input: 200_000, output: 40_000 };
 export const USERSIM_ALLOWANCE: Allowance = { input: 80_000, output: 5_000 };
 
 /** What the plan needs to know about the tasks the run will use. */

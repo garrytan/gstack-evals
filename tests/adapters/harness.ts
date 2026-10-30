@@ -90,7 +90,7 @@ export type ResponsesScript = (turn: ResponsesTurn) => Item[];
 
 const RESPONSES_USAGE = { input_tokens: 2100, input_tokens_details: { cached_tokens: 2000 }, output_tokens: 50, output_tokens_details: { reasoning_tokens: 10 }, total_tokens: 2150 };
 
-/** One streamed Responses answer, with usage the proxy settles from. */
+/** One Responses answer, streamed or not, with usage the proxy settles from. */
 export function responsesResponse(body: Record<string, any>, items: Item[]): Response {
   const id = "resp_fake_" + Math.random().toString(36).slice(2);
   const output = items.map((it, i) =>
@@ -98,6 +98,7 @@ export function responsesResponse(body: Record<string, any>, items: Item[]): Res
       ? { type: "message", id: "msg_" + i, role: "assistant", status: "completed", content: [{ type: "output_text", text: it.text, annotations: [] }] }
       : { type: "function_call", id: "fc_" + i, call_id: it.id, name: "exec_command", arguments: JSON.stringify({ cmd: it.cmd }), status: "completed" },
   );
+  if (!body.stream) return Response.json({ id, object: "response", model: body.model, status: "completed", output, usage: RESPONSES_USAGE });
   const events: [string, unknown][] = [["response.created", { type: "response.created", response: { id, object: "response", model: body.model, status: "in_progress", output: [] } }]];
   output.forEach((item, output_index) => {
     events.push(["response.output_item.added", { type: "response.output_item.added", output_index, item }]);

@@ -6,7 +6,7 @@
 // --lock, and skill-eval --lock itself refuses a set that fails them (GST-109 decision 1: a rebuilt set, such as the
 // office-hours set gstack rebuilt in U12, is a new set that is checked and locked fresh; the CLI keeps no numbers
 // across task sets). Every step that can run does, so one call reports every stop.
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { usd } from "../../runner/ledger/money.ts";
@@ -197,10 +197,12 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
       if (!report.stops.some((s) => s.code === "E_LEDGER_RECORD")) stop("E_LEDGER_MISSING", "no approved cap is on record for line item " + call.item + " in " + call.record.path + " (" + call.record.rule + "). Escalate: a human approves a cap and records it with their exact words; on Capy, ask your Captain through a needs-you report.");
     } else if (call.spendCap !== null) {
       const approval = status.approval!;
+      const resumed = call.resume && existsSync(join(call.resume.dir, "run.json")) ? (JSON.parse(readFileSync(join(call.resume.dir, "run.json"), "utf8")) as { run_id?: string }).run_id : undefined;
+      const own = status.run_id !== null && status.run_id === resumed;
       const words = approval.quotes.map((q) => JSON.stringify(q.words) + " (" + q.by + ", " + q.source + ")").join("; ");
       if (call.spendCap > status.cap_micros) stop("E_LEDGER_MISSING", "--spend-cap " + usd(call.spendCap) + " is above the approved cap of " + usd(status.cap_micros) + " for line item " + call.item + " (" + words + "). Escalate for a higher cap (gstack-evals ledger raise with the owner's words), or lower --spend-cap.");
-      else if (call.spendCap > status.left_micros) stop("E_LEDGER_MISSING", "--spend-cap " + usd(call.spendCap) + " is above the " + usd(status.left_micros) + " left on line item " + call.item + " (cap " + usd(status.cap_micros) + ", " + usd(status.committed_micros) + " committed).");
-      else if (status.run_id !== null) stop("E_ITEM_BOUND", "line item " + call.item + " is bound to run " + status.run_id + "; each line item funds one run");
+      else if (!own && call.spendCap > status.left_micros) stop("E_LEDGER_MISSING", "--spend-cap " + usd(call.spendCap) + " is above the " + usd(status.left_micros) + " left on line item " + call.item + " (cap " + usd(status.cap_micros) + ", " + usd(status.committed_micros) + " committed).");
+      else if (status.run_id !== null && !own) stop("E_ITEM_BOUND", "line item " + call.item + " is bound to run " + status.run_id + "; each line item funds one run");
       else report.passed.push("ledger: line item " + call.item + " approved at " + usd(status.cap_micros) + " (" + words + "); --spend-cap " + usd(call.spendCap) + " is within it");
     }
   }
