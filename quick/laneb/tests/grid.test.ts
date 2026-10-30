@@ -18,6 +18,19 @@ describe("grid", () => {
     expect(job.retry.exclude_exceptions).toContain("LedgerCapStop");
     expect(job.retry.exclude_exceptions).toContain("AgentTimeoutError");
   });
+
+  test("a model with only_arms gets just those arms, in arm order, after the full models", () => {
+    const job = jobConfig({
+      job_name: "r1", tasks_dir: "/run/tasks", tasks: ["a"], attempts: 1, n_concurrent: 4, agent_dir: "/r/agent", runner_dir: "/r", base_url: "http://__GATEWAY__:8787", max_output_tokens: 32000, verifier_timeout_multiplier: 2,
+      models: [
+        { id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 },
+        { id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 5, only_arms: ["none"] },
+      ],
+      arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }, { name: "gstack", tar: "/run/arms/gstack.tar", sha256: "b" }],
+    });
+    expect(job.agents.map((a) => `${a.kwargs.upstream_model}/${a.kwargs.arm}`)).toEqual(["claude-haiku-5-5/none", "claude-haiku-5-5/gstack", "claude-opus-5-5/none"]);
+    expect(job.agents[2].kwargs).toMatchObject({ session_cap_usd: 5, invoke: false });
+  });
 });
 
 describe("tb2 task.toml", () => {

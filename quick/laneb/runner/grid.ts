@@ -1,4 +1,5 @@
-// Writes a Harbor JobConfig for one Lane B batch: every task x every (model, arm) agent.
+// Writes a Harbor JobConfig for one Lane B batch: every task x every (model, arm) agent. A model with
+// only_arms runs just those arms (quick look 3's Opus 5.5 none reference).
 // Harbor orders trials attempt-major, then task, then agent, so each task's arms run as
 // a block and a cap stop leaves complete, paired blocks behind.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -7,7 +8,7 @@ export type BatchSpec = {
   job_name: string;
   tasks_dir: string;
   tasks: string[];
-  models: { id: string; harbor_model: string; session_cap_usd: number }[];
+  models: { id: string; harbor_model: string; session_cap_usd: number; only_arms?: string[] }[];
   arms: { name: string; tar: string; sha256: string }[];
   attempts: number;
   n_concurrent: number;
@@ -35,7 +36,7 @@ export const NO_RETRY = [
 
 export function jobConfig(b: BatchSpec) {
   const agents = b.models.flatMap((m) =>
-    b.arms.map((a) => ({
+    b.arms.filter((a) => !m.only_arms || m.only_arms.includes(a.name)).map((a) => ({
       name: "laneb-claude-code",
       import_path: "laneb_agent:LanebAgent",
       model_name: m.harbor_model,
@@ -73,5 +74,5 @@ if (import.meta.main) {
   const [specPath, outPath] = Bun.argv.slice(2);
   const spec = JSON.parse(readFileSync(specPath, "utf8")) as BatchSpec;
   writeFileSync(outPath, JSON.stringify(jobConfig(spec), null, 2) + "\n");
-  console.log(`wrote ${outPath}: ${spec.tasks.length} tasks x ${spec.models.length * spec.arms.length} agents x ${spec.attempts} attempts`);
+  console.log(`wrote ${outPath}: ${spec.tasks.length} tasks x ${jobConfig(spec).agents.length} agents x ${spec.attempts} attempts`);
 }

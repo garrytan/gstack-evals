@@ -62,10 +62,14 @@ if (import.meta.main) {
     if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (arms/manifests/${name}.json)`);
     return { name, tar, sha256: got, ...extra };
   });
-  const models = modelsCsv.split(",").map((id) => {
+  const models = modelsCsv.split(",").map((spec) => {
+    const [id, only] = spec.split(":");
     const m = cells.models.find((c: any) => c.id === id);
     if (!m) throw new Error(`unknown model ${id}`);
-    return m;
+    if (!only) return m;
+    const onlyArms = only.split("+");
+    for (const a of onlyArms) if (!arms.some((x) => x.name === a)) throw new Error(`E_USAGE model ${id}: arm ${a} is not in the arms list`);
+    return { ...m, only_arms: onlyArms };
   });
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
   const job = jobConfig({
@@ -88,5 +92,5 @@ if (import.meta.main) {
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells, arms, tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-  console.log(`${run}: ${final.length} tasks x ${models.length} models x ${arms.length} arms x ${attempts} attempts, git ${manifest.git_head.slice(0, 7)}${manifest.git_dirty ? " (dirty)" : ""}`);
+  console.log(`${run}: ${final.length} tasks x ${job.agents.length} (model, arm) cells x ${attempts} attempts, git ${manifest.git_head.slice(0, 7)}${manifest.git_dirty ? " (dirty)" : ""}`);
 }
