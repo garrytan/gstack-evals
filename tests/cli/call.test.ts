@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveCall, runsRoot, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS, type ParsedFlags } from "../../src/skill-eval/cli/flags.ts";
@@ -73,8 +75,20 @@ describe("effective defaults", () => {
   // Value: protects=a call missing a required flag, using an unbuilt flag, or naming a bad policy is refused before anything runs; fails_when=one of these passes resolveCall; why_new=new; seam=none; no_claim=none beyond protects
   test("missing required flags, unbuilt flags and a bad policy are refused", () => {
     expect(call(BASE.slice(0, 6))).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("needs --model") });
-    expect(call([...BASE, "--mirror", "/x"])).toMatchObject({ code: "E_USAGE", message: "--mirror is not built yet (U10)" });
+    expect(call([...BASE, "--arms-file", "/x"])).toMatchObject({ code: "E_USAGE", message: "--arms-file is not built yet (U9)" });
     expect(call([...BASE, "--policy", "/no/such/policy.json"])).toMatchObject({ code: "E_MODEL_POLICY", message: expect.stringContaining("cannot read the policy file") });
     expect(call([...BASE.slice(0, 6), "--model", "a,a"])).toMatchObject({ code: "E_USAGE", message: "--model names a model twice" });
+  });
+
+  // Value: protects=--mirror resolves to its own directory and never to the run's out directory, so a scrubbed copy cannot overwrite the receipts it copies; fails_when=--mirror equal to --out or --resume passes, or the path is lost; why_new=GST-273 (U10b builds --mirror); seam=resolveCall; no_claim=the scrub itself (tests/cli/mirror.test.ts)
+  test("--mirror resolves beside the out directory and refuses the out directory itself", () => {
+    expect(call([...BASE, "--out", "/runs/one", "--mirror", "/public/one"])).toMatchObject({ mirror: "/public/one" });
+    expect(call([...BASE, "--out", "/runs/one", "--mirror", "/runs/one/"])).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("--mirror must name a directory other than the run's out directory") });
+    expect(call([...BASE, "--resume", "/runs/old", "--mirror", "/runs/old"])).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("--mirror must name a directory other than") });
+    expect(call(BASE)).toMatchObject({ mirror: null });
+    const root = mkdtempSync(join(tmpdir(), "gse-call-mirror-"));
+    mkdirSync(join(root, "out"));
+    symlinkSync(join(root, "out"), join(root, "alias"));
+    expect(call([...BASE, "--out", join(root, "out"), "--mirror", join(root, "alias")])).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("--mirror must name a directory other than") });
   });
 });

@@ -45,6 +45,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SETTLE_CONFLICT](#e_settle_conflict) | 2 | U4 |
 | [E_CAP_TOO_LOW](#e_cap_too_low) | 2 | U7 |
 | [E_USER_TURNS_MISSING](#e_user_turns_missing) | 2 | U10 |
+| [E_APPROVAL_BYPASS](#e_approval_bypass) | 2 | U10 |
 | [E_INTERACTIVE_HOST](#e_interactive_host) | 2 | U7 |
 | [E_LOOSE_GSTACK](#e_loose_gstack) | 2 | U7 |
 | [E_MODEL_POLICY](#e_model_policy) | 2 | U7 |
@@ -341,6 +342,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The agent asked a question (AskUserQuestion) in a task with no scripted replies, so that trial ended as a missing cell. The message names the task and the question.
 
 Fix: Declare the task interactive in tasks.ext.json (user replies, or interactive: true), commit a relock, and start a new run. Do not --resume.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_APPROVAL_BYPASS
+
+An AskUserQuestion call got an answer that did not come from the user simulator through the adapter's canUseTool, so that trial ended as a missing cell. The Claude Code adapter routes every tool call to canUseTool with a PreToolUse hook, so this means the pinned CLI found another route.
+
+Fix: Read the trial's host/transcript.ndjson and host/usersim.ndjson to see which question was answered and how, then fix the adapter or the CLI pin before any counted run. Do not --resume.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
 

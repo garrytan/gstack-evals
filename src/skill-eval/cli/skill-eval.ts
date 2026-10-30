@@ -37,6 +37,8 @@ import { skillName } from "./arms.ts";
 import { isReasonCode } from "../../errors/codes.ts";
 import { flagHelp, parseFlags, SKILL_EVAL_FLAGS } from "./flags.ts";
 import { preflight, type PreflightReport, type Stop } from "./preflight.ts";
+import { MirrorAliasError, mirrorRun } from "./mirror.ts";
+import { homedir, tmpdir } from "node:os";
 
 type Env = Record<string, string | undefined>;
 const HINT = "gstack-evals skill-eval --help shows the call and every flag.";
@@ -165,10 +167,27 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
       io.err(codeLines("E_USAGE", ["skill-eval: --resume continues a run on Claude Code or Codex; the fake host keeps no journal to resume"], HINT));
       return 2;
     }
-    return isFakeHost(env) ? runOnFakeHost(call, report, io, env, json) : await runOnRealHost(call, report, io, env, json);
+    const exit = isFakeHost(env) ? runOnFakeHost(call, report, io, env, json) : await runOnRealHost(call, report, io, env, json);
+    return mirrorReceipts(call, io, json) ? exit : 2;
   } catch (error) {
     return internal(io, call, error, report?.env_names ?? [], env, json, mode);
   }
+}
+
+/** --mirror: the run's verdict and receipts, scrubbed of transcripts, machine paths and meter ids, copied to the mirror directory. False when the mirror directory is the out directory, after printing E_USAGE. */
+export function mirrorReceipts(call: Call, io: Io, json: boolean): boolean {
+  if (!call.mirror) return true;
+  const roots = [dirname(resolve(call.tasks)), call.ledger.path, call.record.path, REPO_ROOT, homedir(), tmpdir(), process.cwd(), ...call.arms.arms.flatMap((a) => (a.kind === "overlay" && a.dir ? [a.dir] : []))];
+  let written: string[];
+  try {
+    written = mirrorRun(call.resume?.dir ?? call.out.path, call.mirror, roots);
+  } catch (error) {
+    if (!(error instanceof MirrorAliasError)) throw error;
+    io.err(codeLines("E_USAGE", ["skill-eval: --mirror: " + error.message], HINT));
+    return false;
+  }
+  if (!json) io.out("mirror: " + written.length + " files in " + call.mirror);
+  return true;
 }
 
 /** After preflight, which stops a real host until U9 and U10 land: the trials on the fake host, then U6's verdict. */
@@ -277,7 +296,7 @@ export async function runOnRealHost(call: Call, report: PreflightReport, io: Io,
   let run;
   let spend: Awaited<ReturnType<HostRig["close"]>>;
   try {
-    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap, runId, out, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, calibrateOnly: call.calibrate, judgeModel: call.judgeModel, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(), host_version: pins[call.host] ?? null, adapter_sha256: adapterSha256(call.host), isolation: call.isolation, verifier: verifierSha256() }, ...(resume ? { reuse: readJournal(out), repair: resume.repair !== null } : {}), ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
+    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap, runId, out, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, calibrateOnly: call.calibrate, judgeModel: call.judgeModel, usersimModel: call.usersimModel, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(), host_version: pins[call.host] ?? null, adapter_sha256: adapterSha256(call.host), isolation: call.isolation, verifier: verifierSha256() }, ...(resume ? { reuse: readJournal(out), repair: resume.repair !== null } : {}), ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
   } finally {
     spend = await rig.close();
   }

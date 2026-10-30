@@ -126,6 +126,9 @@ export type TurnResult = { reply: string } | { end: string };
 /** The text a question is matched on for its effects: header, question, option labels and option descriptions. */
 const askText = (q: AskQuestion) => [q.header ?? "", q.question ?? "", ...(q.options ?? []).flatMap((o) => [o.label ?? "", o.description ?? ""])].join("\n");
 
+/** The question as the free-form source sees it: the question, then each option with its description. */
+const askPrompt = (q: AskQuestion) => [q.question ?? q.header ?? "", ...(q.options ?? []).map((o) => "- " + (o.label ?? "") + (o.description ? ": " + o.description : ""))].join("\n");
+
 export class UserSim {
   /** One entry per question asked, its category or null: TrialRecord.asked. */
   readonly asked: (Category | null)[] = [];
@@ -191,7 +194,7 @@ export class UserSim {
     for (const q of questions) {
       const c = classifyAsk(q);
       this.asked.push(c.category);
-      const r = this.askAnswers < LIMITS.ask_answers ? await this.reply(c, q.question ?? "", askText(q)) : { text: FALLBACK, source: "fallback" as const, approves: false, misaligned: null };
+      const r = this.askAnswers < LIMITS.ask_answers ? await this.reply(c, askPrompt(q), askText(q)) : { text: FALLBACK, source: "fallback" as const, approves: false, misaligned: null };
       this.askAnswers++;
       answers[q.question ?? ""] = r.text;
       this.event({ kind: "ask", question: q.question ?? null, header: q.header ?? null, options: (q.options ?? []).map((o) => o.label ?? ""), category: c.category, tier: c.tier, matched: c.matched, keywords: c.keywords, ambiguous: c.ambiguous, effects: effectsOf(askText(q)), reply: r.text, source: r.source, approves: r.approves, misaligned: r.misaligned });
