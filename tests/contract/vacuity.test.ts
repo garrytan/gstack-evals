@@ -106,25 +106,25 @@ describe("vacuity check on the whole task", () => {
   });
 
   test("controls run in a fresh work dir with the env allowlist and the task's declared variables only", () => {
-    process.env.GSTACK_EVALS_TEST_PASS = "fixture-value";
+    process.env.EVAL_FIXTURE_GREETING = "fixture-value";
     process.env.GSTACK_EVALS_TEST_UNLISTED = "must-not-leak";
     try {
       const seen: Record<string, string>[] = [];
       const spy: ShellRunner = (command, options) => (seen.push(options.env), localShell(command, options));
       const out = join(tmp, "env.txt");
-      const r = run([task("env", { check: "env > " + JSON.stringify(out) + "; test -z \"$(ls -A)\"", must: ["x"] })], { env: { env: ["GSTACK_EVALS_TEST_PASS"] } }, spy);
+      const r = run([task("env", { check: "env > " + JSON.stringify(out) + "; test -z \"$(ls -A)\"", must: ["x"] })], { env: { env: ["EVAL_FIXTURE_GREETING"] } }, spy);
       expect(r.results[0]!.status).toBe("ok");
       expect(r.results[0]!.held).toEqual(["check"]);
       const env = seen[0]!;
-      expect(Object.keys(env).toSorted()).toEqual(["GSTACK_EVALS_TEST_PASS", "GSTACK_HOME", "GSTACK_STATE_ROOT", "HOME", "LANG", "PATH", "SKILL_EVAL_FIXTURES", "TERM"]);
+      expect(Object.keys(env).toSorted()).toEqual(["EVAL_FIXTURE_GREETING", "GSTACK_HOME", "GSTACK_STATE_ROOT", "HOME", "LANG", "PATH", "SKILL_EVAL_FIXTURES", "TERM"]);
       expect(env.SKILL_EVAL_FIXTURES).toBe(tmp);
       expect(env.GSTACK_HOME).toBe(env.GSTACK_STATE_ROOT!);
       expect(env.GSTACK_HOME).toEndWith("/work/.gstack-home");
       const printed = readFileSync(out, "utf8");
-      expect(printed).toContain("GSTACK_EVALS_TEST_PASS=fixture-value");
+      expect(printed).toContain("EVAL_FIXTURE_GREETING=fixture-value");
       expect(printed).not.toContain("must-not-leak");
     } finally {
-      delete process.env.GSTACK_EVALS_TEST_PASS;
+      delete process.env.EVAL_FIXTURE_GREETING;
       delete process.env.GSTACK_EVALS_TEST_UNLISTED;
     }
   });

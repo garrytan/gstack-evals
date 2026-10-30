@@ -18,7 +18,7 @@
 // whose check does not test its line is a wrong claim, the same as a guessed one.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { SidecarFile } from "../contract/sidecar.ts";
 import { KEBAB_ID, type TasksFile } from "../contract/tasks.ts";
@@ -255,7 +255,11 @@ export function lockDrift(lock: Lock, now: LockState): string[] {
   return drift;
 }
 
-/** Whether the lock and the files it pins are committed and clean at HEAD, and the commit a paid run records. */
+/**
+ * Whether the lock and the files it pins are committed and clean at HEAD, and the commit a paid run records. git status is
+ * not trusted alone: each file's bytes must hash to its blob in HEAD, which an assume-unchanged or skip-worktree flag
+ * cannot fake (U9, Captain brief item 6).
+ */
 export function lockCommit(lockPath: string, pinned: readonly string[]): { ok: true; commit: string } | { ok: false; reason: string } {
   if (!existsSync(lockPath)) return { ok: false, reason: "no lock at " + lockPath };
   const cwd = dirname(lockPath);
@@ -267,6 +271,12 @@ export function lockCommit(lockPath: string, pinned: readonly string[]): { ok: t
   if (untracked.length) return { ok: false, reason: "not committed: " + untracked.map((f) => relative(cwd, f) || f).join(", ") };
   const dirty = git(["status", "--porcelain", "--", ...files]).stdout.split("\n").map((s) => s.trim()).filter(Boolean);
   if (dirty.length) return { ok: false, reason: "uncommitted changes: " + dirty.join("; ") };
+  const differs = files.filter((f) => {
+    const committed = git(["rev-parse", "--verify", "--quiet", "HEAD:./" + relative(cwd, f).split(sep).join("/")]);
+    const working = git(["hash-object", "--no-filters", "--", f]);
+    return committed.status !== 0 || working.status !== 0 || committed.stdout.trim() !== working.stdout.trim();
+  });
+  if (differs.length) return { ok: false, reason: "the working copy differs from the commit at HEAD, though git status reports it clean (assume-unchanged or skip-worktree hides it): " + differs.map((f) => relative(cwd, f) || f).join(", ") };
   return { ok: true, commit: head.stdout.trim() };
 }
 
