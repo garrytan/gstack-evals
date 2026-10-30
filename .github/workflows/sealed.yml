@@ -9,9 +9,13 @@
 # version and checked against the release's SHA-256 before it runs.
 # .git/info/attributes sets "* diff", which outranks any .gitattributes in the pull request and treats files with NUL bytes
 # as text, so every added line reaches the checker's text rules.
-# The policy is the default branch's .gstack/pregate.json joined with the head's: a pull request can tighten it, never relax
-# it. The job passes only on a clear verdict under the default branch's policy, and U1's sealed config sets visibility public,
-# so any finding fails it. The verdict pattern writes its colon as [:] so this file does not trip the checker's answer marker.
+# The policy is the base's .gstack/pregate.json joined with the head's: a pull request or push can tighten it, never relax
+# it. The base is a commit the head cannot choose: the default branch's tip for a pull request, and the default branch as it
+# stood before the push (github.event.before) for a push. Before the scan the job points origin/<default>, where the checker
+# reads the base policy and the waivers in .gstack/sealed-allow.tsv, at that commit. So a pull request that loosens the
+# policy or adds a waiver is still judged under the old policy, and so is the push that merges it (GST-254). The job passes
+# only on a clear verdict under that policy, and U1's sealed config sets visibility public, so any finding fails it. The
+# verdict pattern writes its colon as [:] so this file does not trip the checker's answer marker.
 # This backs up the pre-push check and cannot unpublish a pushed commit. A run whose verdict line says "refused" is an incident:
 # close the pull request, delete the branch, burn the named held-out items (record their digests as burned) and write a wiki
 # finding with counts and digests only. A verdict of "error" means a sealed policy to fix (gstack-pregate validate) or a diff
@@ -65,6 +69,17 @@ jobs:
           attributes="$(git rev-parse --git-path info/attributes)"
           mkdir -p "$(dirname "$attributes")"
           printf '* diff\n' > "$attributes"
+      - name: Pin the base policy to a commit the head cannot choose
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          POLICY_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          policy="refs/remotes/origin/$POLICY_BRANCH"
+          test "$EVENT" != push || policy="$BEFORE"
+          policy="$(git rev-parse --verify "$policy^{commit}")"
+          git update-ref "refs/remotes/origin/$POLICY_BRANCH" "$policy"
+          printf 'policy commit: %s\n' "$policy"
       - name: gstack-pregate sealed over the pull request's or the push's commits
         shell: bash
         env:
