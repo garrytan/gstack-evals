@@ -21,7 +21,7 @@ GSTA-42, for the gstack-evals Captain (GSTA-2), issue GST-280. Written 2026-10-3
 
 ## Approval
 
-Not yet given. The recommendation is a $500 cap with a $480 ledger hard stop and about $150 of expected spend. The Captain asks Garry once this pull request is up. The ledger's approval row will quote Garry's words and name this post's commit.
+Not yet given. The recommendation is a $500 cap with a $480 ledger hard stop and about $150 of expected spend. The Captain asks Garry once this pull request is up. Each line item's approval row will quote Garry's words and name this post's commit.
 
 ## Why
 
@@ -111,7 +111,7 @@ It passes only if every particle-1 call's settled spend is within its reservatio
 
 ## Spend and caps
 
-Garry's cap is $500, with a $480 ledger hard stop on the line item `lanea-shakedown`. Expected spend is about $150 as the planning figure, $95 with no rerun and $260 at the high end. GSTA-41's projection, from the rig's price table applied to GSTA-13's metered sessions:
+Garry's cap is $500, with a $480 hard stop across the shakedown's line items. Expected spend is about $150 as the planning figure, $95 with no rerun and $260 at the high end. GSTA-41's projection, from the rig's price table applied to GSTA-13's metered sessions:
 
 | Line | Basis | Projected |
 |---|---|---|
@@ -131,7 +131,8 @@ How the caps work, from the run loop:
 - Calibration runs before any batch with no admission check, but its spend counts toward spent.
 - E_CAP_TOO_LOW checks only one round of agent sessions, so it is a floor, not the cap.
 - Each /learn cap is its calibration worst case, plus five batches at the high expected spend, plus one batch worst case, rounded up. A call's lease reserves its whole cap and releases what it did not spend, so a /learn cap moves the peak only while it runs.
-- The office-hours cap is the ledger headroom under $480 left after /learn, read with `gstack-evals ledger status --item lanea-shakedown` before the call.
+- The ledger binds each line item to the first run that leases it (E_ITEM_BOUND), so every call has its own item: `lanea-shakedown-<row>` for each row below, and `lanea-shakedown-<row>c` for the `--calibrate` call before rows 3, 4, 5 and 7. Garry's one approval covers all of them. The Captain records each item with `gstack-evals ledger init`, quoting his words, just before its call. The item's cap is the smaller of the table's `--spend-cap` and $480 minus the settled spend on every earlier shakedown item, read with `gstack-evals ledger status`. The calls run one at a time, so settled spend plus the one open lease never passes $480.
+- The office-hours cap is therefore the headroom under $480 left after /learn.
 
 Worst cases from `--dry-run` and `--calibrate --dry-run` on these flags (allowances: agent session $7.04 on Opus 5.5, $0.88 on Haiku 5.5, $6.88 on gpt-6.1-sol, $0.192 on particle-1; judged run $0.80; usersim $0.0105). Each of rows 3, 4, 5 and 7 is preceded by its own `--calibrate` call with the same flags, capped at $8, $57, $56 and $64. Row 6 runs only if the smoke (rows 1 and 2) passes.
 
@@ -153,9 +154,9 @@ Without before2, any REGRESSION on 3 trials can't be told from panel noise, and 
 
 ## Order of work
 
-1. Garry approves the cap. The Captain records it with `gstack-evals ledger init --item lanea-shakedown`, quoting his words, with the approval record in the Captain drive.
+1. Garry approves the cap. The Captain keeps his words and the approval record in the Captain drive, and records each call's line item as above.
 2. On the run machine: the claude and codex CLIs on PATH, `gstack-evals doctor` for each host, a full gstack clone under `<state>/sources/` and the four arm folders exported as above.
-3. The calls in the table's order, each started as a background operation with the line item and `--ledger-record` in the Captain drive, and this post's commit in the run notes. Every call checks its stop rules (persona fallback, JUDGE_ALLOWANCE, the smoke) before its next stage.
+3. The calls in the table's order, each started as a background operation with its own line item and `--ledger-record` in the Captain drive, and this post's commit in the run notes. Every call checks its stop rules (persona fallback, JUDGE_ALLOWANCE, the smoke) before its next stage.
 
 ## Out of scope
 
