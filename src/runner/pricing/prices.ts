@@ -2,7 +2,7 @@
 // Vendored from harness-evals (https://github.com/garrytan/harness-evals) runner/ledger/budget-ledger.ts at 70cb3d019,
 // the pricing section only: CHAT_PRICE_OVERRIDES, chatPrice, priceRequest, reservationUsd, usageCost and sseUsage.
 // Changes from upstream (U3):
-// - Anthropic Messages, and OpenAI and OpenRouter chat and Responses, only. Embeddings, rerank, Gemini, Groq
+// - Anthropic Messages, OpenAI and OpenRouter chat and Responses, and OpenRouter's Anthropic-compatible Messages, only. Embeddings, rerank, Gemini, Groq
 //   and TypeSafe pricing are dropped, and so is the fallback to gbrain's canonical table: a model missing here is refused,
 //   never priced from another table.
 // - Rows kept for the current generation of each family plus the ids the plan names; Sonnet rows stay so a caller's own
@@ -81,6 +81,8 @@ export class PriceError extends Error {}
 export interface RequestPrice extends TokenPrices {
   provider: Provider;
   model: string;
+  /** The usage shape the route reports: Anthropic Messages (cache reads and writes beside input_tokens) or OpenAI (inside it). */
+  format: "anthropic" | "openai";
   /** The prompt-cache write the request may pay for: none, a cache_write-rate write, or Anthropic's one-hour write. */
   cacheWrite: "none" | "5m" | "1h";
   long?: ChatPrice["long"];
@@ -124,7 +126,7 @@ function unboundedInput(value: unknown, key = ""): string | null {
 }
 
 /** Price a chat request from its outgoing JSON body, or throw PriceError: a request the table cannot price is never forwarded. */
-export function priceRequest(provider: Provider, body: Record<string, unknown>, maxOutputTokens: number): RequestPrice {
+export function priceRequest(provider: Provider, body: Record<string, unknown>, maxOutputTokens: number, route = ""): RequestPrice {
   const model = typeof body.model === "string" ? body.model : "";
   if (!model) throw new PriceError("the request names no model, so its cost cannot be reserved");
   const price = chatPrice(`${provider}:${model}`);
@@ -150,7 +152,8 @@ export function priceRequest(provider: Provider, body: Record<string, unknown>, 
   const toolUse = Array.isArray(body.tools) && body.tools.length > 0 ? TOOL_USE_SYSTEM_TOKENS : 0;
   // OpenAI caches automatically; Anthropic writes its cache only where a request sets cache_control.
   const cacheWrite = provider === "openai" ? "5m" : !json.includes('"cache_control"') ? "none" : /"ttl"\s*:\s*"1h"/.test(json) ? "1h" : "5m";
-  return { provider, model, ...price, cacheWrite, inputTokens: Buffer.byteLength(json) + REQUEST_OVERHEAD_TOKENS + toolUse + chained, maxOutputTokens };
+  const format = provider === "anthropic" || route === "/v1/messages" ? "anthropic" : "openai";
+  return { provider, model, format, ...price, cacheWrite, inputTokens: Buffer.byteLength(json) + REQUEST_OVERHEAD_TOKENS + toolUse + chained, maxOutputTokens };
 }
 
 /**
@@ -179,7 +182,7 @@ export function usageCost(price: RequestPrice, usage: unknown): { micros: number
   const cacheRead = n(u.cache_read_input_tokens) + sub("input_tokens_details", "cached_tokens") + sub("prompt_tokens_details", "cached_tokens");
   const cacheWrite = n(u.cache_creation_input_tokens) + sub("input_tokens_details", "cache_write_tokens") + sub("prompt_tokens_details", "cache_write_tokens");
   const write1h = Math.min(sub("cache_creation", "ephemeral_1h_input_tokens"), cacheWrite);
-  const allInput = price.provider === "anthropic" ? n(u.input_tokens) + cacheRead + cacheWrite : n(u.input_tokens) + n(u.prompt_tokens);
+  const allInput = price.format === "anthropic" ? n(u.input_tokens) + cacheRead + cacheWrite : n(u.input_tokens) + n(u.prompt_tokens);
   const allOutput = n(u.output_tokens) + n(u.completion_tokens);
   if (allInput === 0 && allOutput === 0) return null;
   const reasoning = sub("output_tokens_details", "reasoning_tokens") + sub("completion_tokens_details", "reasoning_tokens");

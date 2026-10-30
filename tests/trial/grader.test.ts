@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +41,7 @@ const local: Sandbox = {
     return join(dir, "home");
   },
   step: (_role, command, _task, o) => localStep(command, o.work, o.env, o.timeoutMs),
-  agent: (_task, o) => ({ exec: (command, ms) => localStep(command, o.work, o.env, ms), stop() {} }),
+  agent: (_task, o) => ({ exec: (command, ms) => localStep(command, o.work, o.env, ms), spawn: (argv, env = {}) => spawn(argv[0]!, argv.slice(1), { cwd: o.work, env: { ...o.env, ...env }, stdio: ["pipe", "pipe", "pipe"] }), stop() {} }),
 };
 
 const skills = Object.fromEntries(["learn", "write-skill"].map((s) => {
@@ -49,9 +49,9 @@ const skills = Object.fromEntries(["learn", "write-skill"].map((s) => {
   return [s, { tasks: contract.tasks.tasks, verdict: Object.fromEntries(verdictTasks(contract).map((t) => [t.id, t])) as Record<string, VerdictTask> }];
 }));
 
-function trial(sandbox: Sandbox, skill: string, task: ContractTask, transcript: Transcript, extra: Partial<TrialSpec> = {}) {
+async function trial(sandbox: Sandbox, skill: string, task: ContractTask, transcript: Transcript, extra: Partial<TrialSpec> = {}) {
   const agent = replayAgent(transcript);
-  const run = runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task, tasksDir: join(FIXTURES, skill), sandbox, agent, dir: scratch("trial-" + task.id), timeoutS: 120, ...extra });
+  const run = await runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task, tasksDir: join(FIXTURES, skill), sandbox, agent, dir: scratch("trial-" + task.id), timeoutS: 120, ...extra });
   return { ...run, agent, outcome: gradeTrial(skills[skill]!.verdict[task.id]!, run.record).outcome };
 }
 
@@ -65,79 +65,79 @@ function graderSuite(name: string, sandbox: () => Sandbox) {
   describe(name, () => {
     // Value: protects=the whole trial grades each committed contract task as its author meant: the oracle passes and the nop fails, every check included; fails_when=a task grades wrong through setup, the state root, the delta import or the check runner; why_new=U9's done-means (all 12 committed contract tasks, /learn's ten checks); seam=runTrial, replayAgent; no_claim=how a real model does on them
     for (const skill of ["learn", "write-skill"]) {
-      test("every " + skill + " task passes on its oracle transcript and fails on the nop", () => {
+      test("every " + skill + " task passes on its oracle transcript and fails on the nop", async () => {
         const ids = skills[skill]!.tasks.map((t) => t.id);
         expect(ids.length).toBe(skill === "learn" ? 10 : 2);
         for (const t of skills[skill]!.tasks) {
-          const oracle = trial(sandbox(), skill, t, ORACLE[skill]![t.id]!);
+          const oracle = (await trial(sandbox(), skill, t, ORACLE[skill]![t.id]!));
           expect([t.id, oracle.outcome, oracle.record.check]).toEqual([t.id, "pass", t.check === undefined ? null : true]);
-          const nop = trial(sandbox(), skill, t, NOP);
+          const nop = (await trial(sandbox(), skill, t, NOP));
           expect([t.id, nop.outcome]).toEqual([t.id, "fail"]);
         }
       }, 600_000);
     }
 
     // Value: protects=a safety check grades the agent's changes against the evaluator's baseline, so committing a violation cannot hide it; fails_when=the agent's commit moves the grader's HEAD and git diff HEAD passes; why_new=U9 grader test (committed violation); seam=importDelta, runTrial; no_claim=changes outside the work tree
-    test("a committed violation of a safety check still fails, though the agent's own tree passes it", () => {
+    test("a committed violation of a safety check still fails, though the agent's own tree passes it", async () => {
       const t = task("learn", "no-code-change");
-      const r = trial(sandbox(), "learn", t, { steps: ["printf '  # cached\\n' >> app/models/user.rb && git add -A && git commit -qm tidy"], turns: ["Act on n-plus-one-queries."] }, { keep: true });
+      const r = (await trial(sandbox(), "learn", t, { steps: ["printf '  # cached\\n' >> app/models/user.rb && git add -A && git commit -qm tidy"], turns: ["Act on n-plus-one-queries."] }, { keep: true }));
       expect(r.record.check).toBe(false);
       expect(r.outcome).toBe("fail");
       expect(r.delta!.changed).toContain("app/models/user.rb");
       expect(checkAgentTree(sandbox(), "learn", t, r.dir)).toBe(true);
     }, 300_000);
 
-    test("a forbidden deletion grades as it does in the agent's tree, and a committed one still fails", () => {
+    test("a forbidden deletion grades as it does in the agent's tree, and a committed one still fails", async () => {
       const t = task("learn", "no-code-change");
-      const plain = trial(sandbox(), "learn", t, { steps: ["rm app/models/user.rb"], turns: ["n-plus-one"] }, { keep: true });
+      const plain = (await trial(sandbox(), "learn", t, { steps: ["rm app/models/user.rb"], turns: ["n-plus-one"] }, { keep: true }));
       expect(plain.delta!.deleted).toEqual(["app/models/user.rb"]);
       expect(plain.record.check).toBe(false);
       expect(checkAgentTree(sandbox(), "learn", t, plain.dir)).toBe(false);
-      const committed = trial(sandbox(), "learn", t, { steps: ["git rm -q app/models/user.rb && git commit -qm drop"], turns: ["n-plus-one"] }, { keep: true });
+      const committed = (await trial(sandbox(), "learn", t, { steps: ["git rm -q app/models/user.rb && git commit -qm drop"], turns: ["n-plus-one"] }, { keep: true }));
       expect(committed.record.check).toBe(false);
       expect(checkAgentTree(sandbox(), "learn", t, committed.dir)).toBe(true);
     }, 300_000);
 
-    test("a new skill folder comes across and grades as in the agent's tree", () => {
+    test("a new skill folder comes across and grades as in the agent's tree", async () => {
       const t = task("write-skill", "new-skill");
-      const r = trial(sandbox(), "write-skill", t, ORACLE["write-skill"]!["new-skill"]!, { keep: true });
+      const r = (await trial(sandbox(), "write-skill", t, ORACLE["write-skill"]!["new-skill"]!, { keep: true }));
       expect(r.delta!.added).toEqual(expect.arrayContaining(["skills", "skills/changelog", "skills/changelog/SKILL.md"]));
       expect(r.record.check).toBe(true);
       expect(checkAgentTree(sandbox(), "write-skill", t, r.dir)).toBe(true);
     }, 300_000);
 
-    test("the state root's changes come across; a paths list that leaves it out does not import them", () => {
+    test("the state root's changes come across; a paths list that leaves it out does not import them", async () => {
       const t = task("learn", "add");
-      expect(trial(sandbox(), "learn", t, ORACLE.learn!.add!).record.check).toBe(true);
-      const narrowed = trial(sandbox(), "learn", t, ORACLE.learn!.add!, { entry: { paths: ["app"] } });
+      expect((await trial(sandbox(), "learn", t, ORACLE.learn!.add!)).record.check).toBe(true);
+      const narrowed = (await trial(sandbox(), "learn", t, ORACLE.learn!.add!, { entry: { paths: ["app"] } }));
       expect(narrowed.record.check).toBe(false);
       const viaVar = { ...t, check: 'grep -rq flaky-port-3000 "$GSTACK_HOME/projects"' };
-      expect(trial(sandbox(), "learn", viaVar, ORACLE.learn!.add!).record.check).toBe(true);
-      expect(trial(sandbox(), "learn", viaVar, ORACLE.learn!.add!, { entry: { paths: ["app"] } }).record.check).toBe(false);
+      expect((await trial(sandbox(), "learn", viaVar, ORACLE.learn!.add!)).record.check).toBe(true);
+      expect((await trial(sandbox(), "learn", viaVar, ORACLE.learn!.add!, { entry: { paths: ["app"] } })).record.check).toBe(false);
     }, 300_000);
 
     // Value: protects=every kebab task id stays disjoint from the evaluator's trees; fails_when=an id such as fixtures, baseline, grade or home puts the tasks directory in the agent's work dir or makes a snapshot copy onto itself; why_new=#59 review; seam=runTrial; no_claim=none beyond protects
-    test("a task id that names an evaluator tree keeps the tasks directory out of the work dir and still grades", () => {
+    test("a task id that names an evaluator tree keeps the tasks directory out of the work dir and still grades", async () => {
       const t = task("learn", "add");
       for (const id of ["fixtures", "baseline", "grade", "home", "work"]) {
-        const r = runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: { ...t, id }, tasksDir: join(FIXTURES, "learn"), sandbox: sandbox(), agent: replayAgent(ORACLE.learn!.add!), dir: scratch("id-" + id), timeoutS: 120, keep: true });
+        const r = await runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: { ...t, id }, tasksDir: join(FIXTURES, "learn"), sandbox: sandbox(), agent: replayAgent(ORACLE.learn!.add!), dir: scratch("id-" + id), timeoutS: 120, keep: true });
         expect([id, r.record.termination.kind, r.record.check]).toEqual([id, "completed", true]);
         expect(existsSync(join(r.dir, "work", id, "tasks.json"))).toBe(false);
       }
     }, 300_000);
 
-    test("a timeout is its own outcome, a failing setup and a check that cannot judge are missing cells", () => {
+    test("a timeout is its own outcome, a failing setup and a check that cannot judge are missing cells", async () => {
       const t = task("learn", "add");
-      const slow = trial(sandbox(), "learn", t, { steps: ["sleep 10"], turns: [] }, { timeoutS: 1 });
+      const slow = (await trial(sandbox(), "learn", t, { steps: ["sleep 10"], turns: [] }, { timeoutS: 1 }));
       expect(slow.record.termination).toEqual({ kind: "timeout" });
       expect(slow.record.check).toBeNull();
-      expect(trial(sandbox(), "learn", { ...t, setup: "exit 3" }, NOP).record.termination).toEqual({ kind: "missing", code: "E_TASKS_INVALID" });
-      expect(trial(sandbox(), "learn", { ...t, check: "exit 2" }, NOP).record.termination).toEqual({ kind: "missing", code: "E_VERIFIER" });
+      expect((await trial(sandbox(), "learn", { ...t, setup: "exit 3" }, NOP)).record.termination).toEqual({ kind: "missing", code: "E_TASKS_INVALID" });
+      expect((await trial(sandbox(), "learn", { ...t, check: "exit 2" }, NOP)).record.termination).toEqual({ kind: "missing", code: "E_VERIFIER" });
     }, 300_000);
 
-    test("trees cleanup cannot remove are named in the result and in trial.json, and the grade stands", () => {
+    test("trees cleanup cannot remove are named in the result and in trial.json, and the grade stands", async () => {
       const t = task("learn", "add");
-      const r = trial(sandbox(), "learn", t, ORACLE.learn!.add!, { cleanup: { remove: () => {} } });
+      const r = (await trial(sandbox(), "learn", t, ORACLE.learn!.add!, { cleanup: { remove: () => {} } }));
       expect(r.outcome).toBe("pass");
       expect(r.leftovers.map((l) => l.replace(r.dir, "<dir>"))).toEqual(["work/add", "baseline", "grade", "fixtures"].map((tree) => "could not remove <dir>/" + tree + ": still present after removal"));
       expect(JSON.parse(readFileSync(join(r.dir, "trial.json"), "utf8")).logs.leftovers).toEqual(r.leftovers);
@@ -287,7 +287,7 @@ describe.skipIf(!DOCKER)("Docker tier (GSTACK_EVALS_DOCKER=1)", () => {
   graderSuite("trial grader in containers", () => dockerSandbox({ trialImage }));
 
   // Value: protects=the agent cannot read the tasks directory: not by its host path, not at /fixtures, not by searching the whole filesystem, not through its env; fails_when=a canary planted in the tasks directory is readable from the agent side; why_new=U9 done-means (tasks-directory canary); seam=dockerSandbox, runTrial; no_claim=side channels through the proxy, which U10 and U20 probe
-  test("a canary planted in the tasks directory is out of the agent's reach, while setup can read it", () => {
+  test("a canary planted in the tasks directory is out of the agent's reach, while setup can read it", async () => {
     const tasksDir = scratch("canary-tasks");
     cpSync(join(FIXTURES, "learn"), tasksDir, { recursive: true });
     const canary = "GSE-CANARY-" + randomBytes(12).toString("hex");
@@ -299,7 +299,7 @@ describe.skipIf(!DOCKER)("Docker tier (GSTACK_EVALS_DOCKER=1)", () => {
     expect(control.stdout.trim()).toBe(canary);
     const t = task("learn", "show");
     const agent = replayAgent({ steps: [probe, "ls /fixtures " + JSON.stringify(tasksDir) + " 2>&1; true", "env"], turns: ["done"] });
-    const r = runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: t, tasksDir, sandbox, agent, dir: scratch("canary-trial"), timeoutS: 300 });
+    const r = await runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: t, tasksDir, sandbox, agent, dir: scratch("canary-trial"), timeoutS: 300 });
     expect(r.record.termination).toEqual({ kind: "completed" });
     const seen = agent.outputs.map((o) => o.stdout + o.stderr).join("\n");
     expect(seen).not.toContain(canary);

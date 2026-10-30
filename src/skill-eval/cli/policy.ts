@@ -25,7 +25,7 @@ export type Role = (typeof ROLES)[number];
 
 export const DEFAULT_POLICY = join(REPO_ROOT, "policy", "models.json");
 
-/** How calls reach a model: openrouter is an OpenAI-compatible endpoint, run on the codex host. */
+/** How calls reach a model: openrouter serves OpenAI-compatible routes for the codex host and an Anthropic-compatible Messages route for the claude host. */
 export type PolicyProvider = "anthropic" | "openai" | "openrouter";
 
 export interface PolicyModel {

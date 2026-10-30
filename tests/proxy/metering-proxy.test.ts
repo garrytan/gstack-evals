@@ -639,7 +639,10 @@ describe("OpenRouter route", () => {
       await expectProblem(await t.call(a.slot, a.token, PATH, chat(PARTICLE, { messages: [{ role: "user", content: [{ type: "file", file: { filename: "a.pdf", file_data } }] }] })), 402, "E_ALLOWANCE");
     }
     await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/responses", { model: PARTICLE, input: [{ role: "user", content: [{ type: "input_file", file_data: "https://example.com/a.pdf" }] }] }), 402, "E_ALLOWANCE");
-    await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/messages", chat()), 403, "E_ALLOWANCE");
+    for (const extra of [{ plugins: [{ id: "web" }] }, { tools: [{ type: "web_search_20250305", name: "web_search" }] }]) {
+      await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/messages", chat(PARTICLE, extra)), 402, "E_ALLOWANCE");
+    }
+    await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/completions", chat()), 403, "E_ALLOWANCE");
     expect(t.calls).toHaveLength(0);
     expect((await t.call(a.slot, a.token, PATH, chat(PARTICLE, { tools: [{ type: "function", function: { name: "f", parameters: {} } }] }))).status).toBe(200);
   });
