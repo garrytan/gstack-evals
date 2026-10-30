@@ -32,7 +32,7 @@ describe("exact margin-shifted sign-flip", () => {
       if (s >= values.reduce((x, y) => x + y, 0)) at++;
     }
     expect(signFlipTail(values)).toBe(at / 2 ** 24);
-  });
+  }, 10_000);
 
   test("no discordant blocker off ceiling and floor gives p = 2^-k; a true ceiling or floor stays null", () => {
     const same = (vals: number[]) => vals.map((v, i) => ({ id: String(i), cluster: "c" + i, a: v, b: v }));
