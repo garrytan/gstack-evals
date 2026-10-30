@@ -21,6 +21,12 @@
     "docs/errors.md": [
       "tests/errors.test.ts"
     ],
+    "lanes/review-noloss/arm.schema.json": [
+      "tests/noloss/contract.test.ts"
+    ],
+    "lanes/review-noloss/suites/**": [
+      "tests/noloss/catalog.test.ts"
+    ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"
     ],
