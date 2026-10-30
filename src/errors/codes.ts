@@ -437,11 +437,20 @@ export const CODES = {
   },
   E_IMAGE_BUILD: {
     exit: 2,
-    meaning: "gstack-evals doctor could not build the trial image from the repo's Dockerfile.",
-    fix: "Read the build log the message names, check Docker and the build's network (installs need egress at build time, never in a trial), then run doctor again.",
+    meaning: "gstack-evals could not build the trial image (doctor) or an arm image, or a built arm image holds the skill's eval fixtures: a skill-evals path or a file with the same bytes as one in the tasks directory, which would put the answer key in the agent's reach.",
+    fix: "Read the build log or the files the message names. Check Docker and the build's network (installs need egress at build time, never in a trial). Drop fixtures from the arm's tree (gstack keeps them under test/fixtures/skill-evals), then build again.",
     side_effects: "Partial: layers already built stay in the Docker cache.",
     retry_safe: true,
     resumable: false,
+    owner: "U9",
+  },
+  E_IMAGE_STALE: {
+    exit: 2,
+    meaning: "The trial image a run would use is not the pinned one: no pin exists for this checkout's recipe, the tag now names a rebuilt image, its recipe label differs, or its digest differs from the one the run or its preregistration recorded.",
+    fix: "Run gstack-evals doctor to build and pin the image for this recipe. A resumed or preregistered run keeps its recorded digest: restore that image from the run's retained tarball (docker load -i) instead of rebuilding.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
     owner: "U9",
   },
   E_USERSIM: {

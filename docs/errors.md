@@ -59,6 +59,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_TRIPWIRE](#e_tripwire) | 2 | U3 |
 | [E_LEDGER_UNAVAILABLE](#e_ledger_unavailable) | 2 | U3 |
 | [E_IMAGE_BUILD](#e_image_build) | 2 | U9 |
+| [E_IMAGE_STALE](#e_image_stale) | 2 | U9 |
 | [E_USERSIM](#e_usersim) | 2 | U10 |
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
 | [E_INTERNAL](#e_internal) | 2 | U1 |
@@ -444,11 +445,19 @@ Exit 2. Side effects: Nothing was sent or spent. If the ledger recorded the rese
 
 ### E_IMAGE_BUILD
 
-gstack-evals doctor could not build the trial image from the repo's Dockerfile.
+gstack-evals could not build the trial image (doctor) or an arm image, or a built arm image holds the skill's eval fixtures: a skill-evals path or a file with the same bytes as one in the tasks directory, which would put the answer key in the agent's reach.
 
-Fix: Read the build log the message names, check Docker and the build's network (installs need egress at build time, never in a trial), then run doctor again.
+Fix: Read the build log or the files the message names. Check Docker and the build's network (installs need egress at build time, never in a trial). Drop fixtures from the arm's tree (gstack keeps them under test/fixtures/skill-evals), then build again.
 
 Exit 2. Side effects: Partial: layers already built stay in the Docker cache. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_IMAGE_STALE
+
+The trial image a run would use is not the pinned one: no pin exists for this checkout's recipe, the tag now names a rebuilt image, its recipe label differs, or its digest differs from the one the run or its preregistration recorded.
+
+Fix: Run gstack-evals doctor to build and pin the image for this recipe. A resumed or preregistered run keeps its recorded digest: restore that image from the run's retained tarball (docker load -i) instead of rebuilding.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U9.
 
 ### E_USERSIM
 

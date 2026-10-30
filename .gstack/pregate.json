@@ -69,6 +69,11 @@
       "quick/lanea-quick/test/proxy.test.ts",
       "quick/lanea-quick/test/runrules.test.ts",
       "quick/lanea-quick/test/usersim.test.ts"
+    ],
+    "docker/**": [
+      "tests/trial/recipe.test.ts",
+      "tests/trial/image.test.ts",
+      "tests/cli/doctor.test.ts"
     ]
   },
   "strays": {

@@ -6,6 +6,16 @@ Each lane has one owner of isolation and egress (plan v3.2, "Lane B: trial runne
 
 Owner: U9 (src/trial), with U10 (the Claude Code and Codex adapters).
 
+**Images.** `docker/trial.Dockerfile` builds the trial image from an empty build context, so no repository file and no eval fixture can enter it. Every FROM is pinned by digest, and glibc is present because the metering proxy loads `libc.so.6` for its journal lock. Installs happen at build time with egress, never inside a trial. `gstack-evals doctor` builds the image (E_IMAGE_BUILD on failure), tags it by its recipe hash, labels it with the hash, and pins its digest under `<state>/images/`. `GSTACK_EVALS_DOCKER_BIN` names another docker client. The recipe hash (`src/rig/recipe.ts`) covers the Dockerfile, bun.lock, the FROM pins, the host CLI versions in `docker/host-cli.json` and the adapter tree (`git rev-parse HEAD:src/adapters`). The session cache key and the verdict's rig block take the same hash.
+
+**Pins.** Before a run starts, `checkImagePin` refuses with E_IMAGE_STALE when no image is pinned for this checkout's recipe, when the tag now names a rebuilt image, when the label names another recipe, or when the digest differs from the one the run (on resume) or its preregistration recorded. A run never starts on a rebuilt image by mistake (GST-59).
+
+**Arm images.** An arm image is the trial image plus the arm's installed tree, copied in as content-addressed layers and tagged by a hash of the base digest, the staged tree and the destinations. The build drops `.git`, any `skill-evals` path (gstack keeps its eval tasks under `test/fixtures/skill-evals/`) and any file with the same bytes as a file in the tasks directory. The built image is then scanned whole, and an arm image that still holds a fixture refuses with E_IMAGE_BUILD.
+
+**Retention.** A run keeps every image and arm tree it uses under `<state>/retained/`: `images/<image id>.tar` from `docker save`, `trees/<tree sha256>.tar` as byte-stable tars, and `MANIFEST.jsonl` listing each with its sha256 and size. The retention target: every retained file of a counted run stays fetchable by digest for as long as any report cites the run, so a replicator gets the exact bytes. The run's results pull request names where the files went. Until the program has its own bucket, that is a GitHub release on garrytan/gstack-evals named for the run id, one asset per digest. A retained file a published report cites is never pruned.
+
+**Docker tier.** Tests that need a Docker daemon skip unless `GSTACK_EVALS_DOCKER=1`, so the default CI job stays fast. U20's rig.yml runs them and counts a skipped expected case as a failure.
+
 ## Lane B: the runner chosen by the Harbor spike
 
 Owner of isolation and egress: **Harbor**, chosen by the U8 spike ([finding](../wiki/board/2026-10-28-gsta-10-harbor-spike-lane-b-runner.md)). gstack-evals owns the metering proxy, the ledger, preregistration, stats and reports. M2a's Lane B rig is not built yet; this section is the contract it builds to. GSTA-12's exploratory quick look, [quick/laneb/](../quick/laneb/README.md), runs on Harbor ahead of M2a; its README lists what M2a should keep and the quick look's known gaps.
