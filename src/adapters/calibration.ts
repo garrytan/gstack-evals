@@ -26,6 +26,9 @@ export const NO_SKILL = "NO-SKILL";
 /** The line only one arm's calibration copy holds. */
 export const sentinelFor = (nonce: string, arm: string): string => SENTINEL + ": " + nonce + "-" + arm;
 
+/** The text quotes this exact sentinel: the next character cannot extend it into another arm's (before into before2). */
+export const quotes = (text: string, sentinel: string): boolean => new RegExp(sentinel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])").test(text);
+
 /** A calibration copy's SKILL.md: the arm's own text, then its sentinel line as an HTML comment. */
 export const withSentinel = (skillMd: string, line: string): string => skillMd.replace(/\n*$/, "\n") + "\n<!-- " + line + " -->\n";
 
@@ -87,9 +90,9 @@ function probeProblem(run: ProbeRun, nonce: string, sentinels: Readonly<Record<s
   const { probe, outcome, calls } = run;
   if (outcome.termination.kind !== "completed") return "the session ended as " + outcome.termination.kind + ("code" in outcome.termination ? " " + outcome.termination.code : "");
   const text = outcome.turns.join("\n");
-  const quoted = Object.entries(sentinels).filter(([, s]) => text.includes(s)).map(([arm]) => arm);
+  const quoted = Object.entries(sentinels).filter(([, s]) => quotes(text, s)).map(([arm]) => arm);
   if (probe.check === "skill") {
-    if (!text.includes(sentinels[probe.arm]!)) return "the answer did not quote this arm's sentinel";
+    if (!quotes(text, sentinels[probe.arm]!)) return "the answer did not quote this arm's sentinel";
     if (quoted.some((a) => sentinels[a] !== sentinels[probe.arm])) return "the answer quoted the sentinel of " + quoted.filter((a) => sentinels[a] !== sentinels[probe.arm]).join(", ");
     if (outcome.opened !== true) return "the calls show no read of the arm's copy";
     return null;

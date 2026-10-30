@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { NO_SKILL, withSentinel } from "../../src/adapters/calibration.ts";
 import { SKILL_DIRS } from "../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
-import { dockerRig, runOnHost, sentinels, type HostRig } from "../../src/skill-eval/cli/run-host.ts";
+import { dockerRig, hostReadiness, runOnHost, sentinels, type HostRig } from "../../src/skill-eval/cli/run-host.ts";
 import type { Call } from "../../src/skill-eval/cli/call.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { buildTrialImage, stateRoot } from "../../src/trial/image.ts";
@@ -23,6 +23,8 @@ const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
 const SKILL = "demo";
 const NONCE = "n0nce42";
 const MODELS: Record<Host, string> = { claude: "claude-haiku-5-5", codex: "gpt-6.1-sol" };
+/** The model the Claude Code script fails in the after arm, so its hello task goes red. */
+const RED_MODEL = "claude-sonnet-5-5";
 
 function armDir(root: string, name: string): string {
   const dir = join(root, "arms", name);
@@ -81,6 +83,7 @@ const claudeModel: Script = ({ results, body }) => {
     if (!results.has("toolu_ask")) return [{ type: "tool_use", id: "toolu_ask", name: "AskUserQuestion", input: { questions: [{ question: "Which approach should we take?", header: "Approach", multiSelect: false, options: [{ label: "Approach A", description: "" }, { label: "Approach B", description: "" }] }] } }];
     return [{ type: "text", text: results.get("toolu_ask")!.text.includes("Approach B") ? "Approach B" : "unknown" }];
   }
+  if (body.model === RED_MODEL && JSON.stringify(body).includes("arm after")) return [{ type: "text", text: "Goodbye." }];
   return [{ type: "text", text: "HELLO from the task." }];
 };
 
@@ -99,7 +102,7 @@ const codexModel: ResponsesScript = ({ outputs, body }) => {
   return [{ type: "message", text: "HELLO from the task." }];
 };
 
-async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; calibrateOnly?: boolean } = {}) {
+async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; calibrateOnly?: boolean; models?: string[] } = {}) {
   const h = host === "claude" ? harness(claudeModel) : harness(() => [], { responses: codexModel });
   open.push(h);
   const root = mkdtempSync(join(tmpdir(), "gse-runhost-"));
@@ -112,7 +115,7 @@ async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: bool
   mkdirSync(tasksDir, { recursive: true });
   const interactive = o.interactive ?? false;
   const run = await runOnHost({
-    host, models: [MODELS[host]], trials: 1, parallel: 2, timeoutS: 120, cap: o.cap === undefined ? null : o.cap, runId: "run-test", out: join(root, "out"), tasksDir, policy, arms, skill: SKILL, nonce: NONCE,
+    host, models: o.models ?? [MODELS[host]], trials: 1, parallel: 2, timeoutS: 120, cap: o.cap === undefined ? null : o.cap, runId: "run-test", out: join(root, "out"), tasksDir, policy, arms, skill: SKILL, nonce: NONCE,
     tasks: [{ id: "hello", prompt: "Say hello." }],
     verdict: [{ id: "hello", safety: false, interactive, judge: false, must: ["hello"], must_not: [], check: false }],
     entries: interactive ? { hello: { interactive: true, user: { replies: { mode: "Building a startup" } } } } : {},
@@ -156,6 +159,15 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     }
   }, 300_000);
 
+  // Value: protects=the rerun stage runs only for the models with a red task, so a multi-model run where one model goes red reruns that model alone and U6 still decides; fails_when=round 2 reruns every model, which spends on cells no rerun is owed for and makes decide throw; why_new=Capy's review of #67; seam=runOnHost's round(2, red models), rerunPlan; no_claim=none beyond protects
+  test("only the model with a red task reruns", async () => {
+    const { run } = await runHost("claude", { models: [MODELS.claude, RED_MODEL] });
+    expect(run.calibrationFailures).toEqual([]);
+    const second = run.input.records.filter((r) => r.round === 2);
+    expect([second.length, [...new Set(second.map((r) => r.model))]]).toEqual([3, [RED_MODEL]]);
+    expect(decide(run.input, DEFAULT_OPTIONS).models.map((m) => [m.model, m.rerun?.red ?? []])).toEqual([[MODELS.claude, []], [RED_MODEL, ["hello"]]]);
+  }, 300_000);
+
   // Value: protects=a round whose worst case passes the cap is not started, so a cap stop keeps only complete paired cells and the run stops with CAP_STOP; fails_when=a partial round runs or the stop is lost; why_new=U10 conformance (cap stop) in the real-host loop; seam=runOnHost's round guard; no_claim=none beyond protects
   test("a round past the cap is not started: CAP_STOP with no partial cells", async () => {
     const { run } = await runHost("codex", { cap: 1 });
@@ -164,6 +176,19 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect(run.input.stops).toEqual([{ code: "CAP_STOP", model: null, subject: null }]);
     expect(run.stopped).toBe(true);
   }, 300_000);
+});
+
+describe("real-host readiness", () => {
+  // Value: protects=a call a real host cannot run as asked is refused before the rig opens: a loadout arm (no installer, so it would run as an empty arm and pass calibration on NO-SKILL) and a task with a user persona (no free-form source until GST-272, so the simulator would answer with its fallback); fails_when=either reaches the rig; why_new=Capy's review of #67; seam=hostReadiness; no_claim=the base, stack and placebo refusals, which tests/cli/preflight.test.ts covers
+  test("a loadout arm and a persona task are refused with E_USAGE", () => {
+    const call = (arms: ArmSpec[]) => ({ host: "claude" as const, arms: { arms, base: null, skill: null, notes: [] }, isolation: "docker" as const, item: "x", spendCap: 1 }) as unknown as Parameters<typeof hostReadiness>[0];
+    const loose: ArmSpec = { name: "after", kind: "overlay", base: null, skill: SKILL, dir: "/tmp/after" };
+    const loadout: ArmSpec = { name: "kit", kind: "loadout", manifest: { name: "kit", base: "gstack@" + "a".repeat(40), modules: [] } } as unknown as ArmSpec;
+    expect(hostReadiness(call([loose, loadout]), [])?.message).toBe("loadout arm kit: a real host has no loadout install yet; use loose skill folders, none and bare");
+    const tasks = [{ id: "ask", judge: false }, { id: "plain", judge: false }];
+    expect(hostReadiness(call([loose]), tasks, { ask: { interactive: true, user: { persona: "A founder in a hurry." } } })?.message).toBe("task ask declares a user persona, whose free-form answers land with GST-272; a real host runs scripted replies only");
+    expect(hostReadiness(call([loose]), tasks, { ask: { interactive: true, user: { replies: { approach: "Approach B" } } } })).toBeNull();
+  });
 });
 
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";

@@ -1,5 +1,5 @@
 // The run on a real host (U10): calibration first, then round 1 in arm-balanced rounds and the same-tree rerun stage
-// when round 1 has a red task, as on the fake host (run.ts). Each session is a U9 trial (runTrial) with the host's
+// for each model with a red task in round 1, as on the fake host (run.ts). Each session is a U9 trial (runTrial) with the host's
 // adapter, on its own proxy slot whose meter settles the session's cost. The loop is written against a HostRig, so the
 // same code runs on the Docker rig below and on the keyless test rig (an in-process proxy with a fake upstream).
 //
@@ -12,7 +12,8 @@
 //   container on the trial network (createTrialNetwork) and binds slots over its management socket. close() keeps
 //   resume's order: stop the proxy, reconcile its journal, settle the lease.
 // - Arms on a real host are loose skill folders, none and bare. A gstack base at a sha, a stack and a placebo arm, and
-//   the persona's free-form model, are GST-272's; hostReadiness refuses them with E_USAGE before anything is spent.
+//   the persona's free-form model, are GST-272's, and a loadout arm has no installer yet; hostReadiness refuses them
+//   with E_USAGE before anything is spent.
 import { createHash, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -94,10 +95,14 @@ const holdsSkill = (arm: ArmSpec): arm is Extract<ArmSpec, { kind: "overlay" }> 
 export const sentinels = (arms: readonly ArmSpec[], nonce: string): Record<string, string> => Object.fromEntries(arms.filter(holdsSkill).map((a) => [a.name, sentinelFor(nonce, a.name)]));
 
 /** Why this call cannot run on a real host yet, or null. */
-export function hostReadiness(call: Pick<Call, "host" | "arms" | "isolation" | "item" | "spendCap">, tasks: readonly { judge: boolean }[]): Stop & { message: string } | null {
+export function hostReadiness(call: Pick<Call, "host" | "arms" | "isolation" | "item" | "spendCap">, tasks: readonly { id: string; judge: boolean }[], entries: Readonly<Record<string, SidecarTask>> = {}): Stop & { message: string } | null {
   const stop = (message: string) => ({ code: "E_USAGE" as const, model: null, subject: null, message });
   const later = call.arms.arms.filter((a) => a.kind === "stack" || a.kind === "placebo" || (a.kind === "overlay" && a.base !== null));
   if (later.length) return stop("arm" + (later.length > 1 ? "s " : " ") + later.map((a) => a.name).join(", ") + " need" + (later.length > 1 ? "" : "s") + " a gstack base, stack or placebo install on a real host, which lands with GST-272; use loose skill folders, none and bare");
+  const loadouts = call.arms.arms.filter((a) => a.kind === "loadout");
+  if (loadouts.length) return stop("loadout arm" + (loadouts.length > 1 ? "s " : " ") + loadouts.map((a) => a.name).join(", ") + ": a real host has no loadout install yet; use loose skill folders, none and bare");
+  const personas = tasks.filter((t) => entries[t.id]?.user?.persona !== undefined).map((t) => t.id);
+  if (personas.length) return stop("task" + (personas.length > 1 ? "s " : " ") + personas.join(", ") + " declare" + (personas.length > 1 ? "" : "s") + " a user persona, whose free-form answers land with GST-272; a real host runs scripted replies only");
   if (call.isolation !== "docker") return stop("a real host runs under --isolation docker only; process isolation has no arm install");
   if (tasks.some((t) => t.judge)) return stop("tasks with a judge rubric need blinded adjudication on a real host, which is not built yet");
   if (call.item === null || call.spendCap === null) return stop("a real host run needs a ledger line item and --spend-cap");
@@ -185,9 +190,9 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   const total = o.models.length * o.verdict.length * o.arms.length * o.trials;
   let progress = newProgress(o.runId, total);
   let wall = 0;
-  const round = async (r: 1 | 2): Promise<boolean> => {
+  const round = async (r: 1 | 2, models: readonly string[]): Promise<boolean> => {
     for (let trial = 0; trial < o.trials; trial++) {
-      const batch = o.models.flatMap((model) => o.verdict.flatMap((task) => o.arms.map((arm) => ({ model, task, arm }))));
+      const batch = models.flatMap((model) => o.verdict.flatMap((task) => o.arms.map((arm) => ({ model, task, arm }))));
       const worst = batch.reduce((s, c) => s + allowance(c.model), 0);
       if (o.cap !== null && spent + worst > o.cap) {
         stops.push({ code: "CAP_STOP", model: null, subject: null });
@@ -209,7 +214,10 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     }
     return true;
   };
-  if ((await round(1)) && rerunPlan(input).length) await round(2);
+  if (await round(1, o.models)) {
+    const red = rerunPlan(input).map((m) => m.model);
+    if (red.length) await round(2, red);
+  }
   return { input, spent, stopped: stops.length > 0, calibrationFailures };
 }
 

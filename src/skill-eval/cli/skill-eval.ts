@@ -201,7 +201,7 @@ async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: E
   const started = Date.now();
   const ids = new Set(report.tasks.map((t) => t.id));
   const tasks = verdictTasks(report.contract!).filter((t) => ids.has(t.id));
-  const notReady = hostReadiness(call, tasks);
+  const notReady = hostReadiness(call, tasks, report.contract!.ext?.sidecar?.tasks ?? {});
   if (notReady) {
     printStops(io, [notReady]);
     return 2;
