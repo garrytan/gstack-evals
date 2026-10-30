@@ -16,7 +16,7 @@ The results tables score names_known_file with a grep on the known file name onl
 
 ### What is not here
 
-- Case 3 of the source panel-cases.json is a harness-evals case, a private repo, so none of its text is committed. It is withheld with this digest: sha256 `33e1b474e63b22a1f9ca11d4312512c187679081f8059f069f55d3a6c2dc3cbf` over the UTF-8 bytes of `JSON.stringify(cases[2], null, 2)`, where cases is the parsed source file, with no trailing newline. The committed file is `JSON.stringify(cases.slice(0, 2), null, 2)`, which matches the source's own formatting (the source is `JSON.stringify(cases, null, 2)` with no trailing newline).
+- Case 3 of the source panel-cases.json is a harness-evals case, a private repo, so none of its text is committed. It is withheld with this digest: sha256 `33e1b474e63b22a1f9ca11d4312512c187679081f8059f069f55d3a6c2dc3cbf` over the UTF-8 bytes of `JSON.stringify(cases[2], null, 2)`, where cases is the parsed source file, with no trailing newline. The committed file is `JSON.stringify(cases.slice(0, 2), null, 2)` with one em dash replaced (see Credit and changes), which matches the source's own formatting (the source is `JSON.stringify(cases, null, 2)` with no trailing newline).
 - Rendered prompts. They are gstack text and render from a checkout, so panel/*/prompts/ is gitignored.
 - Per-trial results (results/*.json, model output text) and the pilot files. They stay in the org drive at handoffs/gsta131-review-replay/eval1/results/ and eval2/results/.
 - GSTA-131's run.ts. The lane's runner is rebuilt, not vendored.
@@ -44,7 +44,7 @@ Every committed panel file, with its source in the org drive's handoffs/gsta131-
 
 | File | sha256 as committed | Source | Source sha256 |
 |---|---|---|---|
-| `panel/build.ts` | `86354be25321eece058bc39a59351d748465aac8e57947b7bf88a731eecab970` | build.ts and build2.ts, changed | 6886718c0c3c31abc0f2fa3ea04ac8557c519c6f000bd18b2ca5297ae5428e71 and 4d83a3ec021d5745bf3afbe5fea1ca52b4d13e42b29aa03d84758a95a45a4dd9 |
+| `panel/build.ts` | `c4b6386261ff970fe02341d6a9ef6d751c88fc5b72c40d385fe0a0aba0f9e51d` | build.ts and build2.ts, changed | 6886718c0c3c31abc0f2fa3ea04ac8557c519c6f000bd18b2ca5297ae5428e71 and 4d83a3ec021d5745bf3afbe5fea1ca52b4d13e42b29aa03d84758a95a45a4dd9 |
 | `panel/eval1/frozen.sha256` | `5f77b6b629b31dba1f08521aabe199037ba47bcfc1f008db3411e01c9ef59cd3` | eval1/frozen.sha256 | same bytes |
 | `panel/eval1/items.jsonl` | `7088c46cacba4d328fd11fb51310a8361965f819e7af47aa91fc05985745cb09` | eval1/items.jsonl, prompt_file rewritten | 71a4c272d1ac4557cbe0360be686e5ce2317b3d1c7839b5ea333716029c43cc9 |
 | `panel/eval1/prereg.md` | `daf92b34a5a296005aa14b84c88507aa5613f95e1f9319593aa98d76f7dbce49` | eval1/prereg.md | same bytes |
@@ -54,7 +54,7 @@ Every committed panel file, with its source in the org drive's handoffs/gsta131-
 | `panel/eval2/prereg2.md` | `60d04ee58c273f552fa52b025b84729a405c2e7e56026a14a070352d196b199e` | eval2/prereg2.md | same bytes |
 | `panel/eval2/results.tsv` | `c0e1c3d00d2a68ebfd826cdce0931b2923e48737a705d9d2011784085c2e52c5` | eval2/results.tsv | same bytes |
 | `panel/measured-tokens.json` | `ea719656c8787a756a214784fd56b55bbd590bdaf87c0c6c35169b1ab486eb37` | measured-tokens.json | same bytes |
-| `panel/panel-cases.json` | `fcda04b4c4ea4467c9d1d32798f446720841d88bec360df4f598bb60a5144d7c` | panel-cases.json, cases 1 and 2 only | 3d715edc88a9c2fbfa7f71f070fd32383a7c88710ab837122706229c9629b1ae |
+| `panel/panel-cases.json` | `81e47a1d9e6a69e79f1ffe610580a239e3898db52f74f73c22ffef0850b6994c` | panel-cases.json, cases 1 and 2 only, one em dash replaced | 3d715edc88a9c2fbfa7f71f070fd32383a7c88710ab837122706229c9629b1ae |
 
 ## The catalog
 
@@ -70,4 +70,4 @@ catalog/public/ holds two seeds from panel cases 1 and 2, with full shas resolve
 
 The panel is GSTA-131's work: a gstack crew thread working for this repo's owner, whose gstack change is garrytan/gstack#3527 (merged). Its scripts were scratch files on GSTA-131's machine, so they have no source commit; the digest table above identifies every source file. The two cases were caught in GSTA-128's and GSTA-129's /ship review loops on gstack #3516 and #3518.
 
-Changes on vendoring: build.ts's header lists its changes. The items files point at prompts/<item>.md relative to their eval dir instead of absolute paths on GSTA-131's machine. panel-cases.json keeps cases 1 and 2 only. Every other panel file is byte for byte. The catalog is new code for U13a.
+Changes on vendoring: build.ts's header lists its changes. The items files point at prompts/<item>.md relative to their eval dir instead of absolute paths on GSTA-131's machine. panel-cases.json keeps cases 1 and 2 only, with its one em dash (in case 1's unknowns) replaced by a semicolon, under this repo's plain-writing rule. Every other panel file is byte for byte. The catalog is new code for U13a.

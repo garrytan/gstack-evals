@@ -21,7 +21,7 @@
       "79ac33c96e2d parent 3e4240a76f30 (fork point)",
       "captain-gstack-minder/reports/GSTA-128-decisions.tsv row 56 (SHIP_RECEIPT passes=3 blocking_found=2)"
     ],
-    "unknowns": "Pass 1 (candidate ee73419 + audit tests) also found two CRITICALs in the original diff (Testing: two-attempt retained-edit filter; Red Team: circular Scope Check prerequisite), both fixed in 3712b79 — usable as extra original-diff panel items. Receipt blocking_found=2 vs three CRITICALs named across passes is inconsistent. Per-reviewer models and the raw pass-2 review log (Subagent 1's fresh machine) not read. merge_base is the branch fork point; main was not merged into the branch until 889c66a, after the loop."
+    "unknowns": "Pass 1 (candidate ee73419 + audit tests) also found two CRITICALs in the original diff (Testing: two-attempt retained-edit filter; Red Team: circular Scope Check prerequisite), both fixed in 3712b79; usable as extra original-diff panel items. Receipt blocking_found=2 vs three CRITICALs named across passes is inconsistent. Per-reviewer models and the raw pass-2 review log (Subagent 1's fresh machine) not read. merge_base is the branch fork point; main was not merged into the branch until 889c66a, after the loop."
   },
   {
     "case": "2-GSTA-129-3518-fail-open",

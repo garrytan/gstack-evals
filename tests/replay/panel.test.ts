@@ -78,11 +78,13 @@ describe("lanes/review-replay/panel", () => {
     try {
       expect(await main(["--gstack", notPinned, "--check", evalDir])).toBe(2);
       expect(await main(["--gstack", notPinned])).toBe(2);
+      expect(await main(["--gstack", join(tmp, "missing"), "--check", evalDir])).toBe(2);
     } finally {
       console.error = spy;
     }
     expect(err[0]).toMatch(/^E_USAGE .*--check needs gstack at [0-9a-f]{40}/);
     expect(err[1]).toMatch(/^E_USAGE usage:/);
+    expect(err[2]).toMatch(/^E_USAGE .*missing does not exist/);
     expect(files(evalDir).map((f) => [f, sha256(readFileSync(f))])).toEqual(before);
   });
 });

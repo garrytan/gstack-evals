@@ -17,7 +17,7 @@
 //   by file name. It prints one OK or DIFF line per prompt, exits 1 on any difference and never writes the frozen file
 //   or the eval dir. It refuses a checkout whose HEAD is not PINNED_GSTACK.
 // - The digest comparison and the overwrite refusal are exported, so keyless tests run them without a checkout.
-// - Refusals print E_USAGE on stderr and exit 2.
+// - Refusals, including a missing checkout, print E_USAGE on stderr and exit 2.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -150,6 +150,7 @@ export async function main(argv: string[]): Promise<number> {
     const { values } = parseArgs({ args: argv, options: { gstack: { type: "string" }, out: { type: "string" }, check: { type: "string" } }, strict: true });
     if (!values.gstack || (values.out === undefined) === (values.check === undefined)) throw new Refusal(USAGE);
     const gstack = resolve(values.gstack);
+    if (!existsSync(gstack)) throw new Refusal(gstack + " does not exist; --gstack takes a gstack checkout");
     if (values.out !== undefined) {
       const out = resolve(values.out);
       await render(gstack, out);
@@ -158,7 +159,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     const evalDir = resolve(values.check!);
     const frozen = readFileSync(frozenFile(evalDir), "utf8");
-    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: gstack, encoding: "utf8" }).stdout.trim();
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: gstack, encoding: "utf8" }).stdout?.trim();
     if (head !== PINNED_GSTACK) throw new Refusal(gstack + " is at " + (head || "no commit") + "; --check needs gstack at " + PINNED_GSTACK + " (lanes/review-replay/README.md, The panel)");
     const scratch = mkdtempSync(join(tmpdir(), "review-replay-check-"));
     try {
