@@ -1,0 +1,92 @@
+{
+  "learn": {
+    "show": {
+      "steps": [
+        "cat \"$GSTACK_HOME\"/projects/*/learnings.jsonl"
+      ],
+      "turns": [
+        "Two lessons stand out: n-plus-one-queries (preload associations in loops) and always-run-rubocop before every commit."
+      ]
+    },
+    "search": {
+      "steps": [
+        "grep -i cache \"$GSTACK_HOME\"/projects/*/learnings.jsonl"
+      ],
+      "turns": [
+        "Yes: stale-cache-after-deploy says the Redis cache is not invalidated on deploy."
+      ]
+    },
+    "stats": {
+      "steps": [],
+      "turns": [
+        "Total entries: 7. Unique entries: 6. By type: pattern 3, pitfall 2, preference 1, operational 1."
+      ]
+    },
+    "export": {
+      "steps": [],
+      "turns": [
+        "## Project learnings\n\n- pitfall: stale-cache-after-deploy, the Redis cache is stale after deploys.\n- preference: always-run-rubocop before every commit."
+      ]
+    },
+    "add": {
+      "steps": [
+        "f=$(ls \"$GSTACK_HOME\"/projects/*/learnings.jsonl) && printf '%s\\n' '{\"skill\":\"learn\",\"type\":\"pitfall\",\"key\":\"flaky-port-3000\",\"insight\":\"Port 3000 collides with the dev proxy, so tests use 3100\",\"confidence\":8,\"source\":\"user-stated\",\"files\":[\"app/models/user.rb\"],\"trusted\":true}' >> \"$f\""
+      ],
+      "turns": [
+        "Recorded flaky-port-3000 as a trusted pitfall."
+      ]
+    },
+    "prune-stale": {
+      "steps": [
+        "f=$(ls \"$GSTACK_HOME\"/projects/*/learnings.jsonl) && grep -v stale-cache-after-deploy \"$f\" > \"$f.tmp\" && mv \"$f.tmp\" \"$f\""
+      ],
+      "turns": [
+        "Removed stale-cache-after-deploy: config/redis.yml no longer exists."
+      ]
+    },
+    "prune-conflict": {
+      "steps": [],
+      "turns": [
+        "One contradiction: api-retry-count says retry payment calls 3 times, and another api-retry-count entry says never retry them."
+      ]
+    },
+    "cross-project": {
+      "steps": [
+        "cat \"$GSTACK_HOME\"/projects/*/learnings.jsonl"
+      ],
+      "turns": [
+        "other-service has docker-layer-cache: copy the lockfile before the source so the dependency layer stays cached."
+      ]
+    },
+    "empty": {
+      "steps": [],
+      "turns": [
+        "No learnings are recorded for this project yet."
+      ]
+    },
+    "no-code-change": {
+      "steps": [],
+      "turns": [
+        "Act on n-plus-one-queries first: preload the associations in User#orders_total."
+      ]
+    }
+  },
+  "write-skill": {
+    "add-lesson": {
+      "steps": [
+        "cat > deploy/SKILL.md <<'EOF'\n---\nname: deploy\ndescription: Deploy the web app to production.\n---\n\n# Deploy\n\n1. Build the release image with `make release`.\n2. Run database migrations and wait for them to finish before restarting the web servers.\n3. Restart the web servers one at a time.\n4. Check the health endpoint returns 200.\nEOF"
+      ],
+      "turns": [
+        "Folded the lesson into step 2: deploy/SKILL.md went 262 -> 291 bytes."
+      ]
+    },
+    "new-skill": {
+      "steps": [
+        "mkdir -p skills/changelog && printf '%s\\n' '---' 'name: changelog' 'description: Add an entry to this repo CHANGELOG.md.' '---' '' '# Changelog entries' '' 'Add one line per change under ## Unreleased, newest first.' > skills/changelog/SKILL.md"
+      ],
+      "turns": [
+        "Wrote skills/changelog/SKILL.md."
+      ]
+    }
+  }
+}

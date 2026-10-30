@@ -6,6 +6,7 @@ import { REPO_ROOT } from "../../src/cli.ts";
 import { lockCommand } from "../../src/skill-eval/lock/cli.ts";
 import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
 import { DEFAULT_POLICY } from "../../src/skill-eval/cli/policy.ts";
+import { buildTrialImage } from "../../src/trial/image.ts";
 import { approvalRecord, collect, commitAll, git, learnRepo, TMP, tree } from "./helpers.ts";
 
 // Each preflight runs the vacuity check on learn's ten tasks, which runs gstack's seed script per task.
@@ -98,16 +99,37 @@ describe("preflight's lock step", () => {
     expect((await run(args)).code).toBe(0);
   });
 
-  // Value: protects=under the default --isolation docker, preflight refuses to run task controls on this machine until U9's container runner exists; fails_when=a setup, mutant or check runs on the host without --isolation process; why_new=PR #45 review: the local runner ignored --isolation; seam=PreflightOptions.runner, which U9 fills; no_claim=--lock, which runs the author's own controls as this user
-  test("under --isolation docker, preflight runs no task control and stops with E_ISOLATION_UNSAFE", async () => {
+  // Value: protects=under the default --isolation docker, preflight runs no task control on this machine: with no daemon it stops E_ISOLATION_UNSAFE, and with no pinned trial image E_IMAGE_STALE; fails_when=a setup, mutant or check runs on the host without --isolation process; why_new=PR #45 review, then U9's container runner (U7 handoff); seam=containerRunner, PreflightOptions.runner; no_claim=the controls in containers, which the Docker tier covers
+  test("under --isolation docker, preflight runs no task control without a daemon or a pinned trial image", async () => {
     const { args } = await lockedLearn();
-    const r = await run(args("claude", "claude-opus-5-5").filter((a, i, all) => a !== "--isolation" && all[i - 1] !== "--isolation"));
-    expect(r.code).toBe(2);
-    expect(r.err).toContain("E_ISOLATION_UNSAFE the vacuity check runs each task's setup, mutant and check; under --isolation docker they need the container runner U9 builds");
-    expect(r.err).toContain("E_ISOLATION_UNSAFE fix: Pass --isolation process");
-    expect(r.out).not.toContain("ok vacuity");
-    expect(r.out).toContain("ok lock: ");
+    const docker = (body: string) => {
+      const bin = join(tree({ docker: "#!/bin/sh\n" + body + "\n" }), "docker");
+      spawnSync("chmod", ["+x", bin]);
+      return bin;
+    };
+    const argv = args("claude", "claude-opus-5-5").filter((a, i, all) => a !== "--isolation" && all[i - 1] !== "--isolation");
+    const none = await run(argv, { ...FAKE, GSTACK_EVALS_DOCKER_BIN: docker("exit 1") });
+    expect(none.code).toBe(2);
+    expect(none.err).toContain("E_ISOLATION_UNSAFE no Docker daemon answered");
+    expect(none.err).toContain("E_ISOLATION_UNSAFE fix: Start Docker, or pass --isolation process on purpose");
+    expect(none.out).not.toContain("ok vacuity");
+    expect(none.out).toContain("ok lock: ");
+    const unpinned = await run(argv, { ...FAKE, GSTACK_EVALS_DOCKER_BIN: docker('[ "$1" = version ] && exit 0; exit 1'), XDG_STATE_HOME: join(TMP, "no-pins") });
+    expect(unpinned.code).toBe(2);
+    expect(unpinned.err).toContain("E_IMAGE_STALE no trial image is pinned for recipe");
+    expect(unpinned.err).toContain("E_IMAGE_STALE fix: Run gstack-evals doctor");
+    expect(unpinned.out).not.toContain("ok vacuity");
   });
+
+  test.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("Docker tier: with a pinned trial image, preflight runs every control in containers", async () => {
+    const built = buildTrialImage({ state: join(TMP, "pinned-xdg", "gstack-evals") });
+    if (!built.ok) throw new Error(built.message);
+    const { args } = await lockedLearn();
+    const r = await run(args("claude", "claude-opus-5-5").filter((a, i, all) => a !== "--isolation" && all[i - 1] !== "--isolation"), { ...FAKE, XDG_STATE_HOME: join(TMP, "pinned-xdg") });
+    expect(r.err.trim()).toBe("NEGATIVE_UNVALIDATED no-code-change: a safety task with no mutant in tasks.ext.json, so nothing showed it fails on a violation");
+    expect(r.out).toContain("ok vacuity: 9 tasks bite on their control, 1 safety tasks without a mutant (controls ran in containers)");
+    expect(r.code).toBe(0);
+  }, 900_000);
 
   // Value: protects=a lock row edit is caught when only before is a folder and after is a repo@sha arm; fails_when=mixed arm types skip the re-derivation; why_new=PR #45 review; seam=U6's rederiveLock, which needs only the before copy; no_claim=a before arm given as repo@sha, whose files are not read yet
   test("a hand-edited lock row is LOCK_DRIFT when after is a repo@sha arm", async () => {
