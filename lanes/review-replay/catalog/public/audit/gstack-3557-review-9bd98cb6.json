@@ -1,0 +1,100 @@
+{
+  "id": "gstack-3557-review-9bd98cb6",
+  "candidate": "garrytan/gstack#3557@9bd98cb6490d",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3557 merged into main at 2026-10-29T05:35:57Z; review fix 9bd98cb6490d is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "415e343b5242 is an ancestor of 7459bb48317d"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "lib/restamp.ts lines 228,234,235,236,473 are added lines of 415e343b5242..7459bb48317d"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 7459bb48317d..9bd98cb6490d -- lib/restamp.ts rewrote 5 old lines; git blame 7459bb48317d gives 5 to #3557's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 138 and decoy 40 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "lib/restamp.ts",
+    "fix_file": "lib/restamp.ts",
+    "lines": [
+      228,
+      234,
+      235,
+      236,
+      473
+    ],
+    "blamed": 5,
+    "owned": 5,
+    "insertion_only": false,
+    "introduced_by": [
+      "810631a04016cd7b94f28e56856fecb3f97a4ec1"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 138,
+    "decoy_lines": 40
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "7459bb48317d795f3aca605743b2b7d0e06d1fab",
+    "to": "9bd98cb6490dc2f901e4bee9fee697ad4e8752ca",
+    "files": [
+      "bin/gstack-version-bump",
+      "lib/restamp.ts",
+      "test/restamp-four-part-manifest.test.ts"
+    ],
+    "added_lines": 30,
+    "searched": {
+      "branch": 1,
+      "default": 21,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix reads the manifest form 'at the base, like the policy, so a branch an older restamp cut to three parts heals'. At the head manifestKeepsFourParts read the working-tree manifest, so a branch already cut to three parts kept writing three parts in a repo whose convention is four.",
+    "summary": "gstack-restamp decided whether package.json keeps a four-part version from the branch's own copy, so a branch an older restamp had cut to three parts stayed at three parts instead of the repo's four-part form.",
+    "severity": {
+      "deserved": "INFORMATIONAL",
+      "basis": "the review section reports no blocking findings and four informational items, three fixed in the diff including reading the manifest form at the base"
+    },
+    "in_history": [
+      {
+        "by": "pass 1 reviewers (six specialist lenses, adversarial, outside voice), gstack /ship review on #3557",
+        "rated": "informational"
+      }
+    ]
+  },
+  "needs_human_check": []
+}

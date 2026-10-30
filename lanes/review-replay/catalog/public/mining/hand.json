@@ -1,0 +1,1725 @@
+{
+  "auditor": "GSTA-33 (Opus 5.5)",
+  "audits": {
+    "gstack-3516-ship-hook-actor-negation-guard": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Fix 27a1b1f's message says the pass-1 negation guard in ownersOwnHand() scanned the whole prefix before the reflexive and refused an honest request after a negated subordinate clause, a recall regression that would red the paid ship-local-hook-preservation case; line 146 at 3712b79 is that guard, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 1."
+    },
+    "gstack-3518-train-verify-unreadable-state": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Fix ada2acc's message says stopped() read prState's 'unreadable' as not merged, so a slot-1 squash already on main while gh pr view failed answered that nothing merged and the queue is not frozen; line 150 at a2077ff is that read, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 2.",
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "every reviewer rated it INFORMATIONAL and the panel names no failing test or production break, so deserved severity stays null"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "unsettled",
+          "later_fix": null,
+          "reason": "5905c76 (later on #3518's branch) rewrote the decoy's states/landed/unreadable lines in stopped() to fix a two-read race: freezeQueue re-read prState and could file a slot that read MERGED as unmerged. Both reads came in with pass 1's fix, before this decoy, so the decoy did not introduce the race but carries it in the lines it rewrote; a reviewer who flags it would be right, so it is not clean, and it is not this decoy's own defect either. The other hit, 73a678eb8972, only casts a test fixture row to any for the typecheck ratchet (test line 1036), not a defect fix."
+        }
+      }
+    },
+    "garrytan/gstack#3515@8c12f8d3fce2": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says the pack's blob list came from a HEAD-only diff that dropped an intent-to-add entry's empty blob and the stages of an unmerged entry, so the copied index named blobs the VM lacked. Lines 637-638 build that list at the reviewed head.",
+      "line": 637,
+      "summary": "cmd_pack packed only the blobs from `diff --cached HEAD`, which drops intent-to-add and unmerged-stage blobs. The copied index then names objects the VM snapshot lacks, so the VM's write-tree and fsck cannot read them.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names the missing blobs and adds a VM fsck assertion, but says nothing of a failing test or production break."
+      },
+      "in_history": [
+        {
+          "by": "#3515's Pre-Landing Review",
+          "rated": "not named in the review section (it names an earlier staged-blob defect, already fixed); the fix commit's subject marks it a pass 5 review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no failing test, production break or data loss is named for this defect."
+        }
+      ]
+    },
+    "garrytan/gbrain#7684@de9eb9dd86fb": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says self-heal only accepted HEAD^'s version, so after commits of other paths a failed index refresh 'wedges writes of that page with git_index_conflict (red before: the next write refused)'. parentEntries (lines 405-414) and its call at 289-290 read only commit^.",
+      "line": 407,
+      "summary": "The door's self-heal treated a stale index entry as clean only if it matched HEAD's first parent. After a failed index refresh and later commits of other paths, every write of that page refused with git_index_conflict.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the fix commit says the new test was red before: the next write refused."
+      },
+      "in_history": [
+        {
+          "by": "#7684's Pre-Landing Review",
+          "rated": "not named in the review section (its CRITICAL is the 100664 tree-mode case); the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "c7440036c1fc rewords the git_target_changed advice, adds an actor and restores PATH in a test shim; 82c419b6bbff (#7775) swaps bare paths for literalPathspecs across the door for repository hooks, not a fix to this logic."
+        }
+      }
+    },
+    "garrytan/gbrain#7511@55279fb3180d": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says --accept-pending (GBRAIN_ACCEPT_PENDING) should exit 0 in accept-all as on the single-write path, 'red at HEAD: exit 10', and the poll command lacked the --brain routing. Lines 170 and 181 hold both at the reviewed head.",
+      "line": 181,
+      "summary": "`gbrain trust review --accept-all` exited 10 on a pending write even with --accept-pending, and its poll command dropped the CLI's --brain routing and the envelope fix.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the fix commit says its exit-code test is red at HEAD (exit 10)."
+      },
+      "in_history": [
+        {
+          "by": "#7511's Pre-Landing Review",
+          "rated": "not named in the part of the review section the dossier shows; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gstack#3431@9a79ceefaa0b": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'a Bun crash on Windows exits 3', which the validator's exit 3 read as invalid input and skipped silently, and that timeline-log now 'keeps the original event when ts stamping fails'. Lines 23-34 and 39 hold both.",
+      "summary": "gstack-timeline-log used exit 3 to mean invalid input, so a Bun crash on Windows (also exit 3) silently dropped the event. A failed ts stamp replaced the event with empty output, losing it.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review lists 'a lost timeline event when the timestamp stamp fails' among its fixes, which is data loss."
+      },
+      "in_history": [
+        {
+          "by": "Red Team (exit 3 collision) and the /review passes (lost event), gstack /ship review on #3431",
+          "rated": "listed under Fixed with no severity; the final pass converged with informational findings only"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gbrain#7603@6cfabf3b2a9d": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the located lines rename accessFlagValues to a generic flagValues helper. The --surface=<v> failure the review names sits in parseSurfaceFlag in src/mcp/surface.ts.",
+      "in_history": [
+        {
+          "by": "pass 1 red team, gstack /ship review on #7603",
+          "rated": "CRITICAL (the --surface=<v> finding, fixed outside the located file)"
+        }
+      ]
+    },
+    "garrytan/gstack#3397@65d4890a95f0": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says a SESSION_ID placeholder 'collapsing every agent-logged answer into one bound', a log line that parses to null is now skipped, and an unseeded dimension is tolerated. Lines 440, 450, 457 and 465 hold each case at the reviewed head.",
+      "line": 450,
+      "summary": "accumulateSignals keyed the per-session bound on any session_id, so the unsubstituted SESSION_ID placeholder merged every agent-logged answer into one bound. A `null` log line crashed on `e.question_id`, and an unseeded dimension produced NaN.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the review reports 0 critical, but a failure is named and the fixed items are not rated."
+      },
+      "in_history": [
+        {
+          "by": "#3397's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "the review's 0 critical / 5 informational count does not say whether it covers these fixes."
+        },
+        {
+          "item": "decoy 0",
+          "reason": "10821a1c436a is framed as a design decision (Decision A) but names a failure of the decoy's own lines."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@10821a1c436a",
+            "fixed": "placeholder rows each counted as their own session, leaving each answer unbounded; the bound now keys on the UTC day"
+          },
+          "reason": "10821a1c436a rewrites the decoy's lines 450-451 and says the placeholder 'left each answer unbounded'; ffdedba75b02 tightens line 442 to string fields; b2ab7a8d93c8 is a test addition."
+        }
+      }
+    },
+    "garrytan/gbrain#7621@24c32c4a32c2": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix (cycle-3 red team) makes the direct entry strip global flags 'like main' and hedges advice for true/false or 0/1 values. Its new tests show `auth list --quiet --timeout 5s` must pass and `--expect=on` must get the value reading; lines 252-255 and 287-288 held the old behaviour.",
+      "line": 288,
+      "summary": "directEntryArgs ran the = rule and unknown-flag check on raw argv without stripping global flags, so a direct entry refused global flags main accepts. Without a command table, a true/false value on a value flag got advice to write it as a bare switch.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names no failing test or production break."
+      },
+      "in_history": [
+        {
+          "by": "#7621's Pre-Landing Review",
+          "rated": "not named in the review section (invocation 7); the fix commit's subject marks it a cycle-3 red team fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no failure is rated in the evidence."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "90a2994b51d3 only narrows the directEntryArgs docstring at line 305; its code changes are in other files."
+        }
+      }
+    },
+    "garrytan/gbrain#7878@748bf63162fc": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'a path outside the corpus that no longer exists is located by its spelled path, not held as corpus_path_unresolvable'. Line 69 returned unresolvable for any missing real path.",
+      "line": 69,
+      "summary": "corpusLocation held any transcript whose real path was missing as corpus_path_unresolvable, even one outside the corpus, so a missing non-corpus file was held instead of routed by its spelled path.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review says all five pass 1 issues were fixed with revert-red tests, so the defect fails a test."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 of gstack /ship review on #7878 (six specialists, red team)",
+          "rated": "one of five fixed with revert-red tests; REVIEW_LOOP counts 3 blocking without saying which"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "331193f8d3e8 is the release restamp: it replaces since 'TBD' with '0.60.483.0' in BEHAVIOR_CHANGES rows."
+        }
+      }
+    },
+    "garrytan/gbrain#7681@57bbfdc8277b": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the only located line passes engine to refreshHolderReport; the holder bookkeeping the fix names lives in worktree-refresh.ts.",
+      "in_history": [
+        {
+          "by": "#7681's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3433@31ee45039918": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "unclear: most located lines (37-48) are a prose reflow for the byte cap. The line 13 change depends on the checker's exit behaviour after a malformed --accepted record, which the template does not show, so H1 and H2 cannot be settled from these lines.",
+      "in_history": [
+        {
+          "by": "#3433's Pre-Landing Review",
+          "rated": "passes 1-3 fixed what they found (31ee450 named) with no severity per item"
+        }
+      ]
+    },
+    "garrytan/gbrain#7476@d77b2a37c2ad": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix limits the doctor check to crontabs that mention gbrain and renames a constant. It names no failure.",
+      "in_history": [
+        {
+          "by": "#7476's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gbrain#7640@126c1e8ac1b8": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix rewords a skip message so it keeps 'not a directory' for an existing test's string match. No behaviour changes.",
+      "in_history": [
+        {
+          "by": "#7640's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gbrain#7134@db68fd899c0e": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix asks for a 'two-sided restoration proof'. Its tests show the old one-sided fallbacks ([4,0,16], [0,4,16] at line 101) restored a marker from a paraphrased lead-in or an unrelated sentence sharing one side's words.",
+      "line": 101,
+      "summary": "restoreNeutralized accepted words on one side of a marker as proof, so it could write a raw span into a stored fact when the other side did not match. It also built regexes from output text at a cost the fix calls non-linear.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix commit names no failing test, break or loss; there is no review section."
+      },
+      "in_history": [
+        {
+          "by": "#7134's Pre-Landing Review",
+          "rated": "no Pre-Landing Review section; the fix commit's subject marks it a #7125 review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no rating or named failure in the evidence."
+        }
+      ]
+    },
+    "garrytan/gstack#3573": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-visible: the failure needs an install run from inside /ship's docs step; at the reviewed head no ship template names install.sh (grep), and gstack-upgrade already excluded the caller's own session by design."
+    },
+    "garrytan/gstack#3387": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "unclear: sessions from removed Claude worktrees counted in no repository, but the located lines only neighbour the new else branch, and the case rests on Claude Code's worktree layout, not on a wrong line."
+    },
+    "garrytan/gstack#3483@b8373e2bfc66": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'the by-tree pregate mirror must hold the tests stage (what --stage tests --remote writes) rather than every check'. Line 199 required every CHECK_IDS entry, so a valid tests-stage mirror was refused.",
+      "line": 199,
+      "summary": "mirrorGap rejected a by-tree pregate mirror unless it held every registered check, but `gstack-pregate --stage tests --remote` writes only the tests stage. A valid remote tests run could never stand in.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names the refusal but no failing test or production break."
+      },
+      "in_history": [
+        {
+          "by": "pass 2 of gstack /ship review on #3483 (structured, native adversarial, GPT outside voice)",
+          "rated": "found and fixed in b8373e2; the dossier's copy of the pass 2 list is cut off, so its rating is not shown"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "the pass 2 rating is not in the dossier's excerpt."
+        }
+      ]
+    },
+    "garrytan/gstack#3380": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix adds Rust test grouping to init-draft as part of a new Rust crate lanes feature."
+    },
+    "garrytan/gbrain#7141@aa79e14a2874": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix rewrites BEHAVIOR_CHANGES text to match earlier review fixes; docs only.",
+      "in_history": [
+        {
+          "by": "#7141's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3620@00aba4e13cb6": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says unseen charges (settle --unknown, a Claude-metered outside voice) 'are booked at their reservation and never measured, so they cannot shrink the dispatch factor'. Line 180 measured every settled reservation.",
+      "line": 180,
+      "summary": "measureSettled measured reservations whose charge the meter cannot see, so their zero or partial actuals shrank the run's dispatch factor and later projections.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names wrong calibration but no failing test, break or loss."
+      },
+      "in_history": [
+        {
+          "by": "#3620's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no rating or failure named in the evidence."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "d33461825a14 adds a `remaining` field to the Reservation interface on line 54 for the handoff feature."
+        }
+      }
+    },
+    "garrytan/gstack#3402": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix updates a harness-version blob pin because this PR changed boundaries.ts; the reviewed pin was right for its own code."
+    },
+    "garrytan/gbrain#7674@31f010f10ee5": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix updates a skills.lock hash after the migration note's wording changed.",
+      "in_history": [
+        {
+          "by": "#7674's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3463@96df9eaa8adf": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix adds a guard that exits when any AIza key survives the strip. Its message names no key that actually survived at the reviewed head; the located lines already strip the one known literal, so this is hardening with no failure named.",
+      "in_history": [
+        {
+          "by": "#3463's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's body credits the adversarial pass"
+        }
+      ]
+    },
+    "garrytan/gbrain#7032@e3ffda5e26cc": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the located lines are behaviour-change notice rows; the fix only adds a notice row for #6799. The Codex configuration_conflict failure it describes lives in the harness code, not in these lines.",
+      "in_history": [
+        {
+          "by": "#7032's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3534": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the fix to lanes.ts only adds the 'removed (no lane owed)' report line and detail note in describe() and run(). The logic that stopped a deleted or renamed test from failing with PREGATE_NO_LANE is not in the located lines.",
+      "in_history": [
+        {
+          "by": "#3480's Pre-Landing Review",
+          "rated": "not raised: its lanes.ts note is about the observedStart comment, not removed tests"
+        }
+      ]
+    },
+    "garrytan/gstack#3381@4a0aaaf8ed64": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix's subject says the recall lookup now 'fails closed on malformed, dangling or unsearchable stores'. At the reviewed head cmd_memorable_get treated a store in an unsearchable directory as absent (both -e and -L false), printed 'unset', and so lifted a deny or read-only veto; it also ran ensure_file, a write, on a lookup.",
+      "summary": "The Memorable recall lookup failed open: a policy store it could not see or parse cleanly (an unsearchable directory, a non-object JSON body) read as no policy, which silently lifted a deny or read-only veto.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: a security review fix for a fail-open privacy veto, but the evidence names no failing test, production break or confirmed leak"
+      },
+      "in_history": [
+        {
+          "by": "#3381's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a security review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "fail-open veto named by a security review; no test failure or leak stated"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@668d6391ae50",
+            "fixed": "memorable_store_answer checked only the parent directory, so an unsearchable ancestor higher up still hid an existing store and the lookup read it as absent"
+          },
+          "reason": "668d6391ae50 rewrites the fix's own unsearchable-directory check (security review, second pass) and widens the hook to every origin URL; 8a52c271ad81 then closes a dangling ancestor symlink on the client fast path (third pass)."
+        }
+      }
+    },
+    "garrytan/gbrain#7606@d571f0b72c04": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review section says Red Team found, reproduced and fixed that 'recover:' was offered when the job's own page check would skip (permission_denied under a narrowed writer grant). At the head factsRecovery handled only superseded and page_missing skips, so any other skip fell through to the recover command.",
+      "summary": "gbrain repair failed-writes offered a 'recover:' retry-dead command for a refused facts batch even when the job's own page check would skip it (for example permission_denied), so the suggested retry could not recover the facts.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: Red Team rated it CRITICAL and reproduced it, but the evidence names a wrong recovery hint, not a failing test, production break or data loss"
+      },
+      "in_history": [
+        {
+          "by": "Red Team, invocation 3 pass 1, gstack /ship review on #7606",
+          "rated": "CRITICAL"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "reviewer CRITICAL label versus the floor; consequence is a wrong recovery command"
+        }
+      ]
+    },
+    "garrytan/gstack#3557@9bd98cb6490d": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix reads the manifest form 'at the base, like the policy, so a branch an older restamp cut to three parts heals'. At the head manifestKeepsFourParts read the working-tree manifest, so a branch already cut to three parts kept writing three parts in a repo whose convention is four.",
+      "summary": "gstack-restamp decided whether package.json keeps a four-part version from the branch's own copy, so a branch an older restamp had cut to three parts stayed at three parts instead of the repo's four-part form.",
+      "severity": {
+        "deserved": "INFORMATIONAL",
+        "basis": "the review section reports no blocking findings and four informational items, three fixed in the diff including reading the manifest form at the base"
+      },
+      "in_history": [
+        {
+          "by": "pass 1 reviewers (six specialist lenses, adversarial, outside voice), gstack /ship review on #3557",
+          "rated": "informational"
+        }
+      ]
+    },
+    "garrytan/gstack#3621@1d460c6e1c49": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says topLevelKeys now takes keys 'from the diff's own lines, never the working tree, which a symlink can point at a private file (outside voice CRITICAL)'. At the head dataSummary called topLevelKeys(path.join(root, p)), reading the file from disk into the reviewer packet.",
+      "summary": "The review packet summarised a large data file by reading it from the working tree, so a symlinked data path could pull a private file's keys or columns into what reviewers are sent.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix body says outside voice rated it CRITICAL as a possible private-file exposure, but no leak, test failure or production break is stated"
+      },
+      "in_history": [
+        {
+          "by": "#3621's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's body credits the outside voice and rates it CRITICAL"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "possible secret exposure rated CRITICAL by the outside voice; no confirmed leak"
+        }
+      ]
+    },
+    "garrytan/gbrain#7901@8923ce6bdd02": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review section's FIXED, CRITICAL item says the self-attestation guard 'did not cover scripts/lib/gh-issue.ts, which scripts/ci-reuse.ts imports', fixed red-first. At the head scripts/ci-reuse.ts line 42 imports ./lib/gh-issue.ts and the guard loop on line 87 omitted it.",
+      "summary": "The remote-gate reuse guard did not refuse a tree that changes scripts/lib/gh-issue.ts, a helper ci-reuse.ts imports, so such a tree could have reused its own CI runs as proof.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "reviewers rated it CRITICAL and fixed it red-first, so a test fails on the old guard; the guard failed open"
+      },
+      "in_history": [
+        {
+          "by": "pass 1 (6 specialists, red team), gstack /ship review on #7901",
+          "rated": "CRITICAL"
+        }
+      ]
+    },
+    "garrytan/gstack#3386": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix PR says the autopilot check ran 'only right before its destructive walk', after legacy cleanup, a rename and 'gbrain sources add', so 'a refused run still registered a source it never synced'; its new test fails on main. The located lines are that late check in runCodeImport, added by #1808.",
+      "summary": "/sync-gbrain's code stage checked for a running gbrain autopilot only right before the walk, so a refused run had already renamed sources and run gbrain sources add, leaving a registered source that was never synced.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the fix PR's evidence says the new test fails on main and the refused run changed the brain's source list"
+      }
+    },
+    "garrytan/gstack#3430@c7ec40bc194c": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says capture must 'refuse an --out that holds a still or frames but no capture.json instead of deleting them'. At the head the located loop ran fs.rmSync on frames, still.png, mask.png and the rest in any --out.",
+      "summary": "gstack-motion-capture deleted frames, still.png, mask.png and other files from any --out directory before capturing, even one it had not written, so a user's files there were lost.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the fix names deleting files in a foreign --out, which loses data"
+      },
+      "in_history": [
+        {
+          "by": "#3430's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a second review cycle fix"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@fb1a8f8d3776",
+            "fixed": "the capture.json test refused the rerun after MOTION_CONTRACT_MISSING or a crash, since frames/ was left without a manifest; an ownership marker replaces it"
+          },
+          "reason": "fb1a8f8d3776 rewrites the fix's refusal lines and its test so a valid rerun is no longer refused; 1ec1a2d481fe only extends the encode 'clean (overflow not checked)' line to full-bleed masks, a feature."
+        }
+      }
+    },
+    "garrytan/gstack#3304@da1a9687f4d0": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix joins 'a wrapped line only when it continues in lowercase' and adds the test reply 'Summary of the retry helper\\nNo issues found.' to the no-findings set. At the head line 177 joined that new line onto the previous one, so the no-findings statement was not the conclusion and a clean reply did not count as no-findings.",
+      "summary": "concludesNoFindings joined every wrapped prose line, so a new sentence on its own line (such as 'No issues found.' after a heading-like line) merged into the line above and a clean outside review was not read as no-findings.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix adds a regression case but does not state that it fails on the old code or that production broke"
+      },
+      "in_history": [
+        {
+          "by": "#3304's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "whether the added test case fails at the reviewed head is not stated"
+        }
+      ]
+    },
+    "garrytan/gstack#3434@b8fd2850026a": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix changes one phrase in a skill template ('no code beyond the requirement' to 'no code beyond the accepted scope'). It is wording in prompt text, with no failing behaviour named.",
+      "in_history": [
+        {
+          "by": "#3434's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3619@174bc2fd7b57": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'pull_request runs stay broad'. At the base the manifest step set no EVALS_SCREEN_POLICY, and paid-select.ts treats unset as broad; the reviewed head's line 573 defaulted it to 'narrow' for every event, including the pull_request run that is the merge gate when no train block exists.",
+      "summary": "The evals workflow defaulted the screen policy to narrow on pull_request runs too, so the merge gate on a PR without a train dropped derived dependent cases that a broad run keeps.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the merge gate ran fewer cases, but the evidence names no missed failure, and the review section rates its four noted items informational without saying this was one"
+      },
+      "in_history": [
+        {
+          "by": "#3619's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "gate narrowing with no stated missed failure; review rating for this item not given"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "5348c15ec3c6 only rewrites a doc comment and the selection reporting in lib/ship-queue-train-ready.ts (screen only on full-fallback), a feature that does not correct the fix's lines."
+        }
+      }
+    },
+    "garrytan/gstack#3478": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located line changes train max_size from 5 to 3 and fill_hours from 3 to 1. That is tuning with no failure named in those lines."
+    },
+    "garrytan/gbrain#7898@95195da3682a": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'a recorded setup --no-hooks turns the plugin's hook off too'. At the head otherLaneWiresHook (line 166) only checked other lanes' hook entries, while the setup receipt already recorded consent.wiring_scope hooks 'none' (claude-code.ts line 48), so the plugin's hook still ran after the user declined hooks.",
+      "summary": "The plugin's own UserPromptSubmit hook ignored a recorded gbrain setup --no-hooks choice and kept firing, because the yield check looked only at other lanes' hook entries.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the hook ran against a recorded user choice, but the evidence names no failing test, break or data loss"
+      },
+      "in_history": [
+        {
+          "by": "#7898's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "consent ignored; no stated test failure or production break"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "5aa489610dbb is a release restamp that changes the notice row's since version only."
+        }
+      }
+    },
+    "garrytan/gstack#3438@4afaa98f54e9": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'result refuses an unpushed HEAD' and 'reports unwritable records'. At the head cmdResult bound the PR body's receipt to the local HEAD without comparing it to the PR's pushed head, and its mkdir and writes were unguarded, so an unwritable --out threw instead of reporting incomplete.",
+      "summary": "gstack-ship-receipt result accepted a receipt for a local HEAD that was never pushed, and crashed instead of reporting status=incomplete when the run record could not be written.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: a gate that could pass an unpushed head, but the evidence names no failing test or production break"
+      },
+      "in_history": [
+        {
+          "by": "#3438's Pre-Landing Review (eleven review cycles, seven native adversarial passes)",
+          "rated": "listed as fixed along the way with no rating; the fix commit marks it an adversarial-review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "fail-open gate with no stated failure; no rating in the review section"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@95cf833708bb",
+            "fixed": "the fix's pushed-head check passed when gh returned no headRefOid; it now fails closed"
+          },
+          "reason": "95cf833708bb rewrites the fix's headRefOid check to fail closed (and only collapses whitespace in a train-ready message); b9222a57b784 is wording; 576839cb8ce7 moves the write code into writeRunRecord, a refactor; f375b873de3c restructures ready's screen merge, a feature."
+        }
+      }
+    },
+    "garrytan/gstack#3471@2219c78ebe48": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located lines are /retro skill template prose and a quoted placeholder in an example command. The fix's behaviour changes (unavailable instead of 0, paging, validation) are in the scorecard code, not these lines.",
+      "in_history": [
+        {
+          "by": "#3471's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3265": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-visible: the fix PR says dependency-closure files reach verify only since v1.91.123.0 (#3240). The reviewed head is v1.91.69.0, so the REDACTION_FAILED on closure names depends on code that arrived later."
+    },
+    "garrytan/gstack#3572@4ad8a6bfd925": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says carry 'refuses a --head other than the checked-out HEAD, a receipt with gstack_version but no review_depth, and an owner exception that no longer stands'. At the head line 602 only recomputed depth when review_depth was present, against whatever was checked out, so those receipts carried.",
+      "line": 602,
+      "summary": "gstack-ship-receipt carry let through a receipt with gstack_version but no review_depth, an owner exception that no longer stands, and a --head that is not the checked-out commit, so the depth check could read the wrong tree.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: carry checks failed open, but the evidence names no failing test or production break, and the review section does not rate this item"
+      },
+      "in_history": [
+        {
+          "by": "#3572's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "fail-open carry checks without a stated failure or rating"
+        }
+      ]
+    },
+    "garrytan/gstack#3494@c555ce3a8324": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'a file whose first line is not the header (a blank file, rows written by hand) gets the header appended, and a UTF-8 BOM before the header no longer turns it into a data row'. At the head appendRow wrote the header only when the file was empty, and readRows compared line 0 with the BOM still on it.",
+      "summary": "gstack-decision-trail counted a BOM-prefixed header as a data row, and never added a header to a trail file that was blank or held hand-written rows.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: wrong row counts and a missing header, but no failing test, production break or data loss is stated"
+      },
+      "in_history": [
+        {
+          "by": "#3494's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "wrong output with no stated test failure or break"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@96927f2d4c55",
+            "fixed": "the fix's hasHeader looked only at the first line, so a blank or hand-written trail got a new header on every append"
+          },
+          "reason": "96927f2d4c55 fixes the fix's hasHeader and its broken-worktree path check on Git for Windows; 0d372b73493f pins git status flags so config cannot hide untracked files; 0cab97447cd0 moves the trail code into lib/decision-trail.ts, a refactor."
+        }
+      }
+    },
+    "garrytan/gstack#3473@02ac865411f3": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located lines are /captain skill template text (a parameter row, slot and freeze wording). The 'do it' parse fix named in the subject is not in these lines.",
+      "in_history": [
+        {
+          "by": "#3473's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3475@b01754469dd4": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "unclear: the fix bounds the floor reader to 64 KiB, takes the first field occurrence and rewords the SKIP text. The named failures need a 95 MB policy file or a nested min_gstack_version that lib/ship-policy.ts already rejects, and the rest is message wording, so no failure on valid input is settled."
+    },
+    "garrytan/gstack#3448@0c33acefdeac": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix adds a backslash to SCHEMELESS_PROXY_RE and refuses any proxy URL with a path, query or fragment, because a DOMAIN\\user login or a / in a password \"landed in the path, which the redactor does not mask\". The reviewed regex at line 324 let a backslash through to the URL parser.",
+      "line": 324,
+      "summary": "A proxy value with a backslash in the login (DOMAIN\\user) or a / in the password was parsed into the URL path, which is not redacted, so the password was printed in the clear on the start line, in the daemon log and in the state file.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "The fix message says the credential was printed in the clear in the daemon log and the state file: a secret exposure."
+      },
+      "in_history": [
+        {
+          "by": "#3448's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "8ca299f2c7e7 also refuses an empty ? or #, which carries no credential, and edits a test list; c0205373677c is docs wording only."
+        }
+      }
+    },
+    "garrytan/gbrain#7896@ddd54a9743c4": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located lines gain a checkpoint wait in DEFAULTS and a doc line; the review says the checkpoint wait \"moved into sync-receipt-wait.ts\", a refactor with no failure named."
+    },
+    "garrytan/gstack#3491@646947248396": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the only located line is the --was help text, which the fix rewords to mention the CHANGELOG re-heading. The behaviour fixes (closing quotes, positional provenance, journal retry) sit in lib/restamp.ts."
+    },
+    "garrytan/gbrain#7892@ac7f6aa99af0": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located line is the doc comment on CALLER_CONTENT_OPERATIONS; the fix documents why revert_version and restore_page are absent and adds tests, with no behaviour change."
+    },
+    "garrytan/gbrain#7884@f95f181afb01": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix moves the visibility_noncanonical refusal after the source-fallback warning so ingest_capture \"logs a source fallback before refusing\". At the reviewed head the throw at lines 335-338 ran first, so the warning never printed on a refused request.",
+      "line": 336,
+      "summary": "When ingest_capture fell back to the default source and then refused a non-canonical private request, it threw before logging the source-fallback warning, so the operator never saw that the requested source was unavailable.",
+      "severity": {
+        "deserved": "INFORMATIONAL",
+        "basis": "The review counts one blocking finding, deferred as #7897, so the two fixed adversarial findings, this one included, were below the blocking floor, and no failure beyond a missing log line is named."
+      },
+      "in_history": [
+        {
+          "by": "Opus adversarial pass, gstack /ship review on #7884",
+          "rated": "not rated in the review section; fixed, and not the one blocking finding"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gstack#3423@c44548413d84": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix recognises the gstack checkout by .git, VERSION, setup and a SKILL.md named gstack \"so the bin/dev-setup layout counts and other repos do not\". The reviewed line 860 dropped any checkout that enclosed the root and accepted any repo with VERSION and setup. Most other located lines are a docblock move.",
+      "line": 860,
+      "summary": "exactSendSet treated any git repo with VERSION and setup as the gstack checkout, so other repos' files could be sent, and it refused the bin/dev-setup layout, so those skills fell back to the offline estimate.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the run-6 review section does not name this finding, and the fix message names no failing test or production break."
+      },
+      "in_history": [
+        {
+          "by": "#3423's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "No rating or failure class for this finding in the review section or fix message."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "0e6c39978e23 is a feature (render folder) that rewrites the docblock; 214eb68d8195 moves isGstackCheckout unchanged above its docblock and rewords the walkMd comment."
+        }
+      }
+    },
+    "garrytan/gbrain#7660@bd39dc6282b8": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "unclear: the fix commit has no message, and the pass 1 list in the review does not name the trigger WHEN comparison. The parenthesis-erasing filter does look like it fails open, but no text from the fix or the review names that failure for this commit."
+    },
+    "garrytan/gbrain#7789@751f6d541fd5": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix makes neutralizeOutsideText call sanitizeForJsonb first, because connectorRender stripped NUL after the neutralizer, \"so a NUL inside a marker, citation or row prefix rebuilt it in the stored page\". Line 65 is the reviewed function body that skipped the NUL strip.",
+      "line": 65,
+      "summary": "neutralizeOutsideText ran its matchers before NUL bytes were stripped, so outside text with a NUL inside a gbrain marker, citation or timeline prefix passed the neutralizer and became a live marker once the render stripped the NUL.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "The review rates it CRITICAL and says it was fixed with a test that fails before the fix."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 red team, gstack /ship review on #7789",
+          "rated": "CRITICAL"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gstack#3532": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "environment: register qm fails because QM's own pack fetcher caps a pack at 32 MiB and 5000 files, a fact of another system that the reviewed repo does not hold. The TypeError crash the fix also names sits in bin/gstack-harness, not the located lines."
+    },
+    "garrytan/gstack#3501@a681c00a2bec": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review's pass 1 blocking finding says the compose gate linted the verbatim tool sections, so an arrow in the review legend \"would have dead-ended Step 19\"; the fix lints only the top file with --sections. Line 191 is the reviewed gate command that passed both files.",
+      "line": 191,
+      "summary": "The PR-body compose gate ran gstack-prose-lint over the verbatim tool sections too, so normal tool output such as an arrow in the review legend failed the gate and stopped /ship at Step 19.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "Pass 1 rated it blocking and says it would have dead-ended /ship Step 19, which breaks the shipping workflow."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 (6 specialists + Red Team), gstack /ship review on #3501",
+          "rated": "blocking"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@0a741933beb6",
+            "fixed": "an inline-code <!-- opened a comment in maskProse and blanked the rest of the file (pass 2 finding)"
+          },
+          "reason": "0a741933beb6 removes the decoy's tail <!-- handling in maskProse, the pass 2 bug; cc5ff0fea2e5 rewrites the block walk (a ## heading in a fence re-selected sections) and the line 191 gate; b3d3e73c730f fixes the decoy's line 80 path that did not exist yet."
+        }
+      }
+    },
+    "garrytan/gstack#3567@4ad8a6bfd925": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix makes carry refuse \"a --head other than the checked-out HEAD\" and a receipt with gstack_version but no review_depth. At line 602 the reviewed code ran only when review_depth was set and scanned the working tree whatever --head named.",
+      "line": 602,
+      "summary": "gstack-ship-receipt carry recomputed review depth from the checked-out tree even when --head named another commit, so it recorded a gate scan of the wrong tree; a receipt with gstack_version but no review_depth carried through though the queue would refuse it.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "The review calls it a reproduced CRITICAL: the receipt recorded a working-tree gate scan for another head."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 testing specialist and outside voice openai/gpt-6.1-sol, gstack /ship review on #3567",
+          "rated": "CRITICAL (reproduced)"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gstack#3451": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix adds regeneratedAtBase so an unstamped head may regenerate a release output, which the reviewed PR treated as a stamp on purpose. The PR body frames it as one of two policy options GStack Minder named, a design change with a new feature."
+    },
+    "garrytan/gstack#3556@5e63f0f8ea31": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review says the allow_paths check \"also refuses ** in the name and extension-only wildcards\"; the reviewed line 70 caught only a wildcard-only last segment, so a glob like **/*.json passed validation.",
+      "line": 70,
+      "summary": "The sealed.allow_paths validator accepted a file name with ** or an extension-only wildcard, so one exception could exempt whole directories or file types from the sealed guard.",
+      "severity": {
+        "deserved": "INFORMATIONAL",
+        "basis": "The review rates all six pass 1 findings INFORMATIONAL with 0 CRITICAL, and no failure beyond the loose check is named."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 testing and security specialists, gstack /ship review on #3556",
+          "rated": "INFORMATIONAL"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gbrain#7652@31a324f9403b": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix switches line 1005 from unrecordedStop to resumableRowStop so \"a permission refusal keeps the pass row open\"; its new doc says otherwise a plain sync would retry the resumable pass forever. The reviewed catch path ended a permission refusal resumable.",
+      "line": 1005,
+      "summary": "A sync pass stopped by a permission refusal ended its row resumable, so a plain sync would retry it forever instead of the row reading interrupted, then abandoned, for an operator to act on.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the reviewed PR has no review section and the fix names no failing test or production break."
+      },
+      "in_history": [
+        {
+          "by": "#7652's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "No review receipt and no failure class in the fix text."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "b3a4a172e267 passes onlyOpen to the save on line 1005 so a stop never rewrites a row its pass already ended; that save predates the decoy, which only swapped the classifier."
+        }
+      }
+    },
+    "garrytan/gstack#3521@ead576d45c0b": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located line is skill prose; the fix adds \"after the session-start check\" to the plan-before-build sentence, a wording change."
+    },
+    "garrytan/gstack#3390": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix adds a push trigger on main to windows-free-tests.yml so trains get a Windows run; the reviewed workflow did what it was written to do, and the change adds coverage without naming wrong behaviour in the lines."
+    },
+    "garrytan/gstack#3404": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix is a feature, the --fix-range start for Step 9 re-review; the located lines are the usage comment it extends, and fix-range passes did not exist at the reviewed head."
+    },
+    "garrytan/gstack#3426@a3d402d07e85": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says \"Bun treats --production as frozen, so the old fallback could never recover a stale lockfile\" and refreshes it with --lockfile-only first. Line 1720 is the reviewed install_runtime_deps fallback.",
+      "line": 1720,
+      "summary": "setup's fallback after a failed frozen production install ran bun install --production, which Bun also treats as frozen, so a fork or local edit with a stale bun.lock could never install.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the review section details only the second /ship invocation; this fix's rating is not named and no failing test or production break is stated."
+      },
+      "in_history": [
+        {
+          "by": "#3426's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "Invocation 1's findings are not rated in the review section."
+        },
+        {
+          "item": "H2",
+          "reason": "The defect rests on Bun's --production implying a frozen lockfile, a tool fact the fix asserts and a real-Bun test pins."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "b5b8820df886 rewords the browser-ensure failure hint and its tests; 9773f6844f8d adds a contributor full-install branch before the decoy's line without rewriting it and edits tests; 394f3fd233d1 is test isolation only."
+        }
+      }
+    },
+    "garrytan/gbrain#7829@643991cf2164": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located line is a behaviour-change notice string; the fix narrows its wording, and the review calls these findings \"stale doc and notice wording\"."
+    },
+    "garrytan/gstack#3587@174bc2fd7b57": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix's subject says \"pull_request runs stay broad\" and its new comment calls a pull_request run \"the merge gate when no train block exists\". Reviewed line 573 defaulted every run without a screen_policy input to narrow, so that gate left hub-file dependents to a train gate that was not running.",
+      "line": 573,
+      "summary": "The evals workflow defaulted pull_request runs to the narrow screen policy, so when no train runs, the merge gate skipped the dependents of hub files and could pass without running them.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the review lists it among 7 fixed findings without a rating, and no failing test or production break is named."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 (9 dispatches incl. red team, adversarial and outside voice), gstack /ship review on #3587",
+          "rated": "not rated in the review section; listed as fixed"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "The finding has no rating in the review section."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "9184ffd16cfe (#3619) is a feature that changes when ship-queue recommends a screen, rewriting the docblock and the selection call to read coverage mode."
+        }
+      }
+    },
+    "garrytan/gbrain#7610@398377611bff": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix only makes three flag readers share configFlagOn, a dedup the review rated informational; the accepted values ('true', 'on', '1', 'yes') stay the same, so no failure is named."
+    },
+    "garrytan/gstack#3481@6f5782b5fddb": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix rewords Step 9 prose to keep the phrasing a string-contract test asserts (\"keep the Step 9 first-entry and Fix-First phrasing\"); no behaviour of the skill changes."
+    },
+    "garrytan/gbrain#7912@0f68223ab7d9": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix moves the eager SELECT skill_bundles_enabled at line 53 into the tree_mismatch branch through the tolerant reader, \"so older schemas don't fail the preview\" (review section). At the reviewed head every repair preview ran that query, even on a brain whose schema lacks the column.",
+      "line": 53,
+      "summary": "content-receipt-root read skill_bundles_enabled from persistence_brain up front for every repair preview, so on an older schema without that column the preview failed instead of listing its verdicts.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the review section does not rate this finding (REVIEW_LOOP blocking_found=0, while the same pass names 9 CRITICAL test gaps), and no test failure or production break is named for it."
+      },
+      "in_history": [
+        {
+          "by": "pass 1 batched specialist, gstack /ship review on #7912",
+          "rated": "not named in the review section; listed among the 11 fixed findings, REVIEW_LOOP blocking_found=0"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no rating is given for this finding and no failure beyond the preview error is named"
+        }
+      ]
+    },
+    "garrytan/gstack#3500@3c6e0c446f57": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix keys the none branch on the host's transcripts field and throws for an undeclared body; at head 0119569a6e48 only hosts/claude.ts and hosts/codex.ts declare transcripts, so no host got wrong output. Reviewers rated all findings informational."
+    },
+    "garrytan/gbrain#7178@32ff374c3a63": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says a pending commit's projection build started \"outside the consumer's limits\" (M1), edits detached their build too (L3), and the hook keyed on searchable 'pending', so a quarantined new page over 4 MiB did not reply at commit (L5). All three come from the finally block at lines 650 to 652 and the hook type at 114 to 118.",
+      "line": 651,
+      "summary": "The coordinator started every detached projection build at once, outside the consumer's limits, detached builds for edits as well as new pages, and keyed the hook on searchable 'pending', so a quarantined new page over 4 MiB still waited for its build before replying.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix labels the items M1, L3 and L5 but the reviewed PR has no Pre-Landing Review section, and no test failure, production break or data loss is named."
+      },
+      "in_history": [
+        {
+          "by": "#7178's Pre-Landing Review",
+          "rated": "no Pre-Landing Review section; the fix commit's subject marks it a #7106 review fix (items M1, L3, L5)"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "M and L labels suggest medium and low ratings, but no floor rating is stated"
+        }
+      ]
+    },
+    "garrytan/gstack#3527@636776fcf6be": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix commit is a feature (\"feat(ship): Step 9 dispatches what gstack-review-plan plans\"); its gstack-review-plan lines add a new --fix-check-prompt mode and name no failure."
+    },
+    "garrytan/gstack#3544@3d372db3ef7b": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix moves the sentence on how open findings count in issues_found within review/SKILL.md.tmpl prose; the rule is the same before and after, and the review rated all nine findings below the floor."
+    },
+    "garrytan/gbrain#7643@af9cfeeec615": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located lines are a header comment in the v278 migration; the fix rewords it and drops a stale provisional-number note, with no SQL change."
+    },
+    "garrytan/gstack#3422@1a1f2cebdc72": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says a malformed or missing --accepted file \"printed nothing\", and the craft section reads a missing CRAFT_RESULT as check unavailable, \"so one bad finalized.json switched the gate off\". The process.exit(2) in the catch at lines 44 and 45 of the reviewed head is where the check failed open.",
+      "line": 44,
+      "summary": "When the --accepted exceptions file was missing or malformed, gstack-design-craft exited 2 before printing any CRAFT_RESULT line, so the craft section treated the check as unavailable and one bad finalized.json switched the gate off.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: both adversarial voices found it, but the review section gives no rating for it (the structured outside review reports no P0 or P1 on any pass), and no test failure or production break is named."
+      },
+      "in_history": [
+        {
+          "by": "native adversarial (Claude) and outside voice (openai/gpt-6.1-sol), gstack /ship review on #3422",
+          "rated": "not named in the review section; the structured outside review reports GATE PASS (no P0/P1) on every pass"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "a check that fails open, but no rating or named failure puts it on either side of the floor"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "cdb3b2b6521c fixes Start fresh inheriting old exceptions, from the 'whenever a finalized.json sits beside the page' instruction that predates the fix (the fix only appended the cannot-use-exceptions sentence); 6c5b2d46123c is a test tweak adding touchfiles; d87eec950a64 replaces the craft check with gstack-design-lint as a feature."
+        }
+      }
+    },
+    "garrytan/gstack#3303": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the fix adds history truncation in #3303 itself, so status.truncated did not exist at the reviewed head and historyCoverage was not wrong there; the named failure (history over 1 MiB ending not_assessed) came from the read cap in the snapshot code, not lib/cso/cli.ts."
+    },
+    "garrytan/gstack#3453@b8fd2850026a": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: a one-phrase prose change in the CEO Philosophy bullet (\"the requirement\" to \"the accepted scope\"); no failure is named and the reviewed PR has no review record rating it."
+    },
+    "garrytan/gstack#3614@00aba4e13cb6": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says unseen charges (settle --unknown, a Claude-metered outside voice) are \"never measured, so they cannot shrink the dispatch factor\"; at the reviewed head measureSettled at line 180 measured them, and settleIn set no unseen mark. The outside review found it and the review counts it among 2 blocking fixes.",
+      "line": 180,
+      "summary": "measureSettled measured reservations whose charge the meter cannot see (settled --unknown or a Claude-metered outside voice), so their near-zero reading could shrink the run's dispatch factor and under-project later spend.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review section rates the two defects fixed here as blocking (REVIEW_LOOP blocking_found=2), and gstack's blocking floor is a failing test, production break, security or data-loss defect."
+      },
+      "in_history": [
+        {
+          "by": "outside review by openai/gpt-6.1-sol (Capy subagent), gstack /ship review on #3614",
+          "rated": "blocking"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "dcd62c389d73 (#3620) only adds a remaining field to the Reservation interface beside unseen, a feature that does not correct the fix."
+        }
+      }
+    },
+    "garrytan/gbrain#7485@4c4493455e6c": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the reviewed head documented that only a submitted form counts; the fix reverses that to keep answers from a form that timed out part-way and adds the question as an assistant turn, a design change and a feature with no failure named at the head."
+    },
+    "garrytan/gstack#3495@13c57847674a": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review names the blocker as the bin's SIGINT/SIGTERM/SIGHUP handlers that \"never ran in the synchronous poll loop and made the process ignore kill\"; the fix deletes those handlers at lines 29 to 33 and adds a real SIGTERM test.",
+      "line": 31,
+      "summary": "gstack-pr-wait installed signal handlers that never ran inside its synchronous poll loop, so the process ignored SIGTERM and SIGINT instead of exiting.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review section rates it the one blocking finding of pass 1 (Red Team, confidence 9), and the fix adds a real SIGTERM test against the bin that the old handlers would fail."
+      },
+      "in_history": [
+        {
+          "by": "Red Team, pass 1 of gstack /ship review on #3495",
+          "rated": "blocking"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@c26e7401379b",
+            "fixed": "advisory checks still exempt from green, so Step 2 and Step 3 could disagree, and BEHIND keyed on the base oid re-announced on every base commit"
+          },
+          "reason": "c26e7401379b rewrites the fix's lib/pr-wait.ts lines to remove the advisory-check exemption and the base-keyed BEHIND (review pass 2 calls both fixes); 1f246e3505ea only adds --exclude to the usage line, a feature."
+        }
+      }
+    },
+    "garrytan/gbrain#7794@e85621a010bb": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says the release preview now strips bidi and format characters and escapes a quote or comma \"so a held row cannot show the owner a field it does not have\"; at the reviewed head printable at line 111 kept \\p{Cf} characters and releasedFields and the summary printed raw quotes and commas.",
+      "line": 111,
+      "summary": "The trust release preview kept bidi and format characters and left quotes and commas unescaped in the claim, source and context, so a held row could fake a field and show the owner something it does not have before they confirm.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "H4: the #7794 review receipt says the spoofing gap was fixed in e85621a0 with a test that was red before, so the defect fails a test; the review loop rated no blocking finding, which is recorded separately in in_history."
+      },
+      "in_history": [
+        {
+          "by": "Opus 5.5 adversarial pass, gstack /ship review on #7794",
+          "rated": "not named in the review section; REVIEW_LOOP blocking_found=0"
+        }
+      ]
+    },
+    "garrytan/gstack#3507@b5c44b972aa2": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says \"inline-handler tells report at the value's line\"; at the reviewed head codeOf at line 91 gave an inline handler's code the position of the attribute match, not of the value, so tells in it reported at the wrong offset. The GPT outside pass rated it P3.",
+      "line": 91,
+      "summary": "The copy tier placed inline-handler code at the start of the on... attribute instead of its value, so a tell inside a handler reported at the wrong position and could name the wrong line.",
+      "severity": {
+        "deserved": "INFORMATIONAL",
+        "basis": "the outside review (openai/gpt-6.1-sol) rated the inline-handler line finding P3, and the review's one blocking finding is a different item (saved-page CSS)."
+      },
+      "in_history": [
+        {
+          "by": "outside review by openai/gpt-6.1-sol, gstack /ship review on #3507",
+          "rated": "P3"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "lines 132 to 137",
+          "reason": "the superlinear nav count fixed there is a performance change with no failure named; line 91 is the defect site"
+        }
+      ]
+    },
+    "garrytan/gstack#3517": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "environment: the fix PR is titled fix(flaky) and the failure is a timing test that refused early only when the usage read was slow under machine load; counting a wall-clock deadline is not wrong output in normal runs."
+    },
+    "garrytan/gbrain#7872@df92c3d9946d": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review names it 1 CRITICAL, revert-red proven: chunksEmbeddedAsIs \"called a page embedded without checking that its text projection was sealed\" at the page revision and above the safe-chunk fence, so a no-op with pending projection work queued no embedding effect. The query is at lines 127 to 130.",
+      "line": 129,
+      "summary": "chunksEmbeddedAsIs treated a page as embedded without checking that its text projection was sealed at its revision and above the safe-chunk fence, so a content no-op with pending projection work queued no embedding effect.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review rates it CRITICAL and says the fix is revert-red proven, so the old code fails a test."
+      },
+      "in_history": [
+        {
+          "by": "full run pass 1 (6 specialists, red team, QA), gstack /ship review on #7872",
+          "rated": "CRITICAL"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "6658e606911b (#7896) parametrizes the strict-pass test over both passes and scales its waits, a test change that does not correct the fix."
+        }
+      }
+    },
+    "garrytan/gstack#3376": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix PR records it as an owner decision (Decision 1, \"do it\") that reverses the pinned bare-dash-p2 fixture from clean to findings; the reviewed head's rule of reading not-ready only when no severity parsed was the pinned design."
+    },
+    "garrytan/gstack#3540@0e2e112182f7": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the review lists [CRITICAL, fixed] bin/gstack-doctor:103, where cfg() \"reselected the state root\", so --check and --json printed selected by GSTACK_STATE_ROOT whatever selected it; the fix keeps _gstack_sr_var across gstack_config_select and adds a regression test.",
+      "line": 103,
+      "summary": "The doctor's in-process config read reselected the state root after the doctor set GSTACK_STATE_ROOT, so the --check and --json state-root row always said it was selected by GSTACK_STATE_ROOT.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review rates it CRITICAL (REVIEW_LOOP blocking_found=1) and the fix adds a regression test, with a gate note that the behavioural check goes red when the config read breaks."
+      },
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3540",
+          "rated": "CRITICAL"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "line 96",
+          "reason": "the clamp comment fix there is an informational wording item, not the defect"
+        }
+      ]
+    },
+    "garrytan/gstack#3398@065317461094": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the fix's safety change (ignore a user policy path inside the checkout) lives in lib/pregate/context.ts; the located config.ts lines are a doc comment, the explain text, an error label naming the user file, and a new digest field."
+    },
+    "garrytan/gbrain#7603@f91a9be53afd": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located lines rename the bindResolveIpcForServe option readOnly to lean and update its docstring; server.ts passes the same value (`lean`) under the new name. No behaviour changes; the other files in the fix are wording.",
+      "in_history": [
+        {
+          "by": "#7603's Pre-Landing Review",
+          "rated": "pass 2 fixed \"the lean IPC option name\" with no severity per item"
+        }
+      ]
+    },
+    "garrytan/gstack#3397@b2ab7a8d93c8": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says \"Date alone parses strings such as \\\"junk 1\\\" as real days, which let junk rows escape the bound and inflate days_span\", and that a zoneless space-separated time should read as UTC. At the reviewed head (ffdedba75b02) line 448 appends Z only to a T-separated zoneless ts and line 449 passes any other string to new Date. Node here gives new Date(\"junk 1\") = 2001-06-01, so the comment's promise that junk cannot escape the bound does not hold. No decoy hits.",
+      "line": 449,
+      "summary": "accumulateSignals handed any string ts to new Date, which reads junk such as \"junk 1\" as a real day, so junk rows escaped the shared undated bucket and the per-day bound and inflated diversity.days_span. A zoneless space-separated time was read as local time instead of UTC.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names wrong output (an escaped bound, an inflated days_span) but no failing test, production break or data loss, and the review's 0 critical / 5 informational count was taken at this fix's tree, not of it."
+      },
+      "in_history": [
+        {
+          "by": "#3397's Pre-Landing Review",
+          "rated": "not named in the review section, which says both reviews were bound at b2ab7a8; the fix commit's subject marks it a review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no failing test, production break or data loss is named, and no reviewer rating for this item is given."
+        }
+      ]
+    },
+    "garrytan/gstack#3433@a65d492cf833": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the commit is a refactor that trims skill growth to the planned size; the located manifest line only shortens the craft-audit trigger text (\"auditing a Persuade page or a redesign\"). No failure is named.",
+      "in_history": [
+        {
+          "by": "#3433's Pre-Landing Review",
+          "rated": "not named; the commit is a refactor, not a review fix"
+        }
+      ]
+    },
+    "garrytan/gstack#3433@51a117a83879": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix names pass R3 (native adversarial, Medium): the CRAFT_CHECK fix text for round-number and needs-proof \"says to drop or remove the claim, which could lead Phase 8 to delete a real claim\". At the reviewed head (0f59c01238d9) line 13 of craft-audit.md.tmpl guards only \"as the rules below say\", while lib/design-catalog.ts:496 and :503 print \"drop the claim\" and \"remove the claim before publishing\" on each CRAFT_CHECK line the same sentence tells the agent to file. The fix widens the guard to \"a rule or fix\" and says defer and ask for proof.",
+      "line": 13,
+      "summary": "The craft audit forbade cutting a claim only when the rules said so, but the checker's printed fix text for round-number and needs-proof says to drop or remove the claim, so Phase 8 could delete a real claim from the user's page.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the reviewer rated it Medium and closed it under a cycle-cap exception; the failure it names is a possible content deletion, not an observed one, and no test fails."
+      },
+      "in_history": [
+        {
+          "by": "native adversarial, pass R3 of the post-merge /ship review on #3433",
+          "rated": "Medium (closed by the third cycle-cap exception, Captain 2026-10-26)"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "a Medium rating on a possible content-deletion path does not settle CRITICAL against INFORMATIONAL on gstack's floor."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "d87eec950a64 (#3507) rewrites line 13 for a feature, swapping gstack-design-craft's CRAFT_CHECK protocol for gstack-design-lint's blocks/ask/waived lines; it keeps the decoy's sentence \"Never mark or cut a claim as a rule or fix says: defer it and ask for the proof\" verbatim, and its own saved-page fix concerns the new lint, not the decoy's text."
+        }
+      }
+    },
+    "garrytan/gbrain#7674@70ce87afb50b": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: the located line is the skills.lock.json hash of migrations/v0.60.467.0.md, updated after the note's wording changed. The failures the fix names (an unreadable bundle not journaled, the rerun command dropping --json) sit in src/core/agent-install/setup.ts.",
+      "in_history": [
+        {
+          "by": "#7674's Pre-Landing Review",
+          "rated": "pass 1 fixed the setup.ts items with no severity per item; the lock hash is not named"
+        }
+      ]
+    },
+    "garrytan/gbrain#7674@71d49156b517": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says \"A first artifactFromBundle probe that failed left identity unset, and the retry inside the install filled it without the floor check, so a transient probe failure could install a below-floor runtime.\" At the reviewed head the floor check at lines 194-200 runs only when the first probe set identity, and line 257 (`identity ??= artifactFromBundle(...)`) refills it with no check before installArtifact. The review says the fix came with a revert-red test. No decoy hits.",
+      "line": 257,
+      "summary": "setupInAgent checked the bundle's Bun version against the 1.4.4 floor only after the first probe; when that probe failed and the in-install retry succeeded, line 257 filled identity with no floor check, so a below-floor runtime could be installed.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the review says the defect was \"Fixed in 71d49156b with a revert-red test\", a test the old code fails, and the defect installs the below-floor Bun runtime the PR exists to refuse (TLS postgres.js leak, Brotli CVE)."
+      },
+      "in_history": [
+        {
+          "by": "red team, pass 2 of the third /ship invocation on #7674",
+          "rated": "fixed with a revert-red test; no rating named (that pass's four INFORMATIONAL items were the skipped ones)"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gbrain#7640@578193ed3fa3": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the located line adds advice to a diagnosis message (\"for a page an import or repair wrote, rerun that command\"). No failure is named for the old text; the fix's behaviour-related change (the autopilot skip warning) is in another file.",
+      "in_history": [
+        {
+          "by": "#7640's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+        }
+      ]
+    },
+    "garrytan/gbrain#7681@a36534bf8f9c": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'A plain refresh of a recovery_required row refuses refresh_recovery_required with its stored fix instead of refresh_in_progress'. At the reviewed head precheck line 232 threw inProgress for any active row, recovery_required included, and inProgress's structured fix says 'a live one finishes on its own; an orphaned one names ... --resume, which the next plain refresh also runs by itself', which is false for a row the plain refresh never adopts (adoptOrphanedRefresh returns null for recovery_required, and its own comment says 'the precheck refuses each case by name'). The other located lines are a scan tuning (599) and message wording (648, 772).",
+      "line": 232,
+      "summary": "A plain gbrain sources refresh of a worktree whose refresh needs a reset decision refused refresh_in_progress, with a fix saying the refresh finishes on its own or by the next plain refresh. Neither happens: the row waits for the user, and the right refusal is refresh_recovery_required with its stored fix.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: wrong refusal code and misleading fix advice; the fix adds a state-matrix test but does not say it was red before, and names no production break."
+      },
+      "in_history": [
+        {
+          "by": "#7681's Pre-Landing Review",
+          "rated": "not named in the review section; the fix commit's subject marks it a pre-landing review fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "wrong refusal code with no stated failing test, production break or data loss."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "4755341734a7 drops inProgress's prose suggestion argument for one shared suggestion (lines 509, 654), a consolidation of wording; 84b96abc481c is a master merge that restamps the BEHAVIOR_CHANGES since version; 57bbfdc8277b and 26be70f71b2b extend the 7c state-matrix test with more kinds. None fixes a defect in the decoy's lines."
+        }
+      }
+    },
+    "garrytan/gbrain#7660@0e4d51d21932": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "other-file: both located lines only rename the imported helper (sameUpToOrChainParentheses to sameUpToFlattenedBooleanChains). The pass 2 fix the review names, the trigger WHEN comparison erasing arithmetic or call parentheses, lives in test/helpers/schema-history.ts."
+    },
+    "garrytan/gstack#3494@96927f2d4c55": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'hasHeader looks for a header line anywhere in the file, so a blank or hand-written trail gets exactly one header rather than one per append', and adds a test that appends twice to a blank trail. At the reviewed head hasHeader (lines 96-97) compared only the first line, which stays blank or a hand-written row after the first append, so every append added another header.",
+      "line": 96,
+      "summary": "gstack-decision-trail's hasHeader checked only the first line, so a trail that began blank or with hand-written rows got a new header line on every append instead of one.",
+      "severity": {
+        "deserved": "INFORMATIONAL",
+        "basis": "the extra lines are repeated headers, which readRows skips wherever they sit (its own comment), so no row is lost or miscounted; the fix states no failing test or break."
+      },
+      "in_history": [
+        {
+          "by": "#3494's Pre-Landing Review",
+          "rated": "no review excerpt names it; the fix commit's subject marks it a pass 3 pre-landing review fix"
+        }
+      ],
+      "needs_human_check": [],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "0cab97447cd0 (#3583) moves the trail append rules into lib/decision-trail.ts; its hasHeader is the decoy's logic unchanged, so it is a refactor, not a fix."
+        }
+      }
+    },
+    "garrytan/gstack#3381@8a52c271ad81": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix's subject says it keeps 'a dangling ancestor symlink off the no-store fast path'. At the reviewed head hasRepoPolicyStore (line 60) read ENOENT or ENOTDIR on the store path as confirmed absence, so a dangling symlink above the store, or a file in its path, took the no-policy fast path and skipped the script's fail-closed checks, though its own comment says a path that cannot be checked counts as a store.",
+      "line": 60,
+      "summary": "hasRepoPolicyStore treated ENOENT under a dangling ancestor symlink, and ENOTDIR, as no store, so the Memorable recall veto skipped the policy script and failed open instead of applying its fail-closed rules.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: a security review fix for a fail-open privacy veto; the evidence names no failing test, production break or leak for this commit."
+      },
+      "in_history": [
+        {
+          "by": "#3381's Pre-Landing Review",
+          "rated": "no review excerpt names it; the fix commit's subject marks it a security review fix, third pass"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "fail-open veto from a security review with no stated test failure or leak."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@23b55ab96644",
+            "fixed": "the decoy trimmed each NUL-delimited origin URL, so a local-path origin with edge whitespace was looked up under another key and its deny did not hold"
+          },
+          "reason": "23b55ab96644 (security review, fourth pass) replaces the decoy's .map(u => u.trim()) on hook line 408 with verbatim URLs and widens the test to edge-whitespace names; the CHANGELOG lists 'origin URLs ... trimmed' as a mutation that turns a test red."
+        }
+      }
+    },
+    "garrytan/gstack#3381@23b55ab96644": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix uses 'each NUL-delimited origin URL verbatim'. At the reviewed head policyVeto (line 408) trimmed each URL; the policy script's normalize() does not trim, so an origin such as 'remote.git ' (a valid local path) was looked up under a different key and its deny missed. The fix's CHANGELOG says the hook must refuse a deny remote 'whose local-path URL contains a newline or edge whitespace' and lists 'origin URLs split on newlines or trimmed' among mutations that turn a test red.",
+      "line": 408,
+      "summary": "The Memorable prompt hook trimmed each origin URL before the policy lookup, so a deny set on a local-path origin with leading or trailing whitespace was never found and recall went ahead.",
+      "severity": {
+        "deserved": "CRITICAL",
+        "basis": "the fix's CHANGELOG says the trimmed-URL mutation turns at least one focused test red, and the defect fails open a privacy deny."
+      },
+      "in_history": [
+        {
+          "by": "#3381's Pre-Landing Review",
+          "rated": "no review excerpt names it; the fix commit's subject marks it a security review fix, fourth pass"
+        }
+      ],
+      "needs_human_check": []
+    },
+    "garrytan/gstack#3475@761a22b38b54": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says 'the floor reader is whitespace-insensitive'; the review's pass 2 says 'the floor sed missed a value on the line after its field (Codex P2)'. At the reviewed head line 495 ran a line-based sed, so a valid ship-policy.json with the value on the next line read as no floor and the row said SKIP 'null or absent' (line 497) instead of WARN for an installed gstack below the floor.",
+      "line": 495,
+      "summary": "The doctor's project floor reader used a line-based sed, so a valid policy file with min_gstack_version's value on the next line read as no floor, and a machine below the project's floor got SKIP instead of WARN.",
+      "severity": {
+        "deserved": "INFORMATIONAL",
+        "basis": "the review rated it P2, and the floor row is PASS, SKIP or WARN and never fails a run (its header comment), so the defect hides a warning."
+      },
+      "in_history": [
+        {
+          "by": "#3475's Pre-Landing Review, pass 2 (Codex)",
+          "rated": "P2: 'the floor sed missed a value on the line after its field'; fixes in 761a22b38 and b01754469"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "decoys[0]",
+          "reason": "b01754469dd4 rewrites the decoy's floor reader lines; whether its changes fix defects or harden and reword is the same question an earlier audit left unclear for that commit."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "unsettled",
+          "later_fix": null,
+          "reason": "b01754469dd4 rewrites decoy lines 495-499: it bounds the read to 64 KiB (the review's 'slurped through tr (95 MB -> 2 GB RSS, Medium)'), takes the first field occurrence, and drops the SKIP text's claim that ship-queue rejects the value (review: Low); an earlier audit rejected that commit as unclear, so whether it fixes a defect in the decoy is not settled. e814e2d5dbc9 only moves a test marker out of /tmp."
+        }
+      }
+    },
+    "garrytan/gstack#3461": {
+      "at": "2026-10-30",
+      "verdict": "rejected",
+      "notes": "not-a-defect: the fix adds a new waiver class (version-stamp-only manifests) so restamp PRs stop failing PREGATE_NO_LANE under a base policy with no lane for them. That is a feature on top of #3306's lane rules, and the located lines (describe() and the no-tests detail at lines 233, 320-323) only print the classes; the fix rewrites them to name the new class, not to correct their output."
+    },
+    "garrytan/gstack#3501@0a741933beb6": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the receipt says pass 2 found 'an inline-code <!-- opened a comment and blanked the rest of the file' and 'a ## heading inside a fence re-selected sections'. At the reviewed head maskProse ran the <!-- tail check (lines 113-114) before masking inline code, and sectionsOnly (174-176) matched ## headings with no fence state. The fix reorders the masking, adds fence tracking, and adds tests (a `<!--` code span, a fenced ## Summary) that the old code fails.",
+      "line": 113,
+      "summary": "maskProse looked for an unclosed <!-- before masking inline code, so a code span holding <!-- opened a comment and every later line went unlinted. sectionsOnly read ## headings inside fenced blocks, so a fenced heading switched the gated sections.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the gate fails open on the rest of the file and the fix adds tests the old code fails, but the receipt gives pass 2 no rating and names no production break."
+      },
+      "in_history": [
+        {
+          "by": "pass 2 of gstack /ship review on #3501",
+          "rated": "found and fixed; the receipt gives no rating"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "the receipt does not rate the pass 2 findings, and no failing test or production break is named beyond the tests the fix adds."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "holds-defect",
+          "later_fix": {
+            "ref": "garrytan/gstack@cc5ff0fea2e5",
+            "fixed": "a fence line with an info string closed the fence early and a fence or comment left open silently masked everything after it; sectionsOnly also read ## headings inside HTML comments"
+          },
+          "reason": "cc5ff0fea2e5 replaces the decoy's tail-comment lines (118-119) and its sectionsOnly fence lines (175-179) with walkBlocks, which closes a fence only on a bare fence line, reports an unclosed block, and skips headings in comments; its new tests say the old fence test 'pinned the fail-open behaviour'."
+        }
+      }
+    },
+    "garrytan/gstack#3501@cc5ff0fea2e5": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: at the reviewed head (0a741933beb6) gstack-prose-lint with --sections and --gate printed PROSE_LINT: none and exited 0 when a file had none of the named headings, and the head's test pinned that ('--sections Nope --gate' gives none). The fix adds a check after the lintFiles call (lines 56-57) that exits 2 so 'a renamed heading cannot pass unread', and rewrites the test to expect exit 2. The /ship compose gate runs this command with --sections ... --gate, so a draft that lost its headings published unlinted.",
+      "line": 56,
+      "summary": "With --sections and --gate, gstack-prose-lint passed (exit 0, PROSE_LINT: none) when the file had none of the named headings, so the /ship compose gate let a draft with a renamed or missing heading through without reading it.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the gate fails open, but the receipt does not say which of pass 4's five issues this was or how it was rated, and no production break is named."
+      },
+      "in_history": [
+        {
+          "by": "Step 11 / pass 4 outside voices (Claude adversarial, GPT openai/gpt-6.1-sol) on #3501",
+          "rated": "the receipt says pass 4 found 5 issues, one P1, fixed in cc5ff0f; it does not say which issue this was or its rating"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no rating for this issue in the receipt, and no failing test or production break named beyond the test the fix rewrites."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "clean",
+          "later_fix": null,
+          "reason": "136080d44b69 fixes the publication-gates test fixture, which did not stage gstack-prose-lint, and adds >&2 to the line 191 gate so the ok trailer leaves stdout, not a defect in the line's gating; 2876f377765c (merge of main) only re-measures the carve-guard size cap."
+        }
+      }
+    },
+    "garrytan/gstack#3471@cacc6003ea5d": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix commit says 'trend.csv keeps one row set per repo and window (a rerun replaces its rows)'. At the reviewed head lines 100-101 appended every run's rows to trend.csv, so rerunning a window duplicated its rows in the trend the header says lines the weeks up. The same commit also fixes --help text that kept the comment decoration (line 35), a --pass-marker with no capture group (58-59) and a local-path origin read as owner/name (67-68).",
+      "line": 101,
+      "summary": "gstack-factory-scorecard appended each run's rows to trend.csv, so a rerun of the same window wrote duplicate rows into the weekly trend. The same review pass also found that a local-path origin remote was parsed as a GitHub owner/name.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names wrong output (duplicate trend rows, a wrong repo from a local origin) but no failing test, production break or data loss."
+      },
+      "in_history": [
+        {
+          "by": "#3471's PR body",
+          "rated": "no review receipt (no Pre-Landing Review section); the fix commit's subject marks it a review pass 2 fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no failing test, production break or data loss is named for these defects."
+        }
+      ]
+    },
+    "garrytan/gstack#3430@fb1a8f8d3776": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Confirmed: the fix says the capture.json test is replaced 'so the rerun after MOTION_CONTRACT_MISSING or a crash works'. At the reviewed head lines 82-85 refused any --out holding frames/ without capture.json, and line 88 created frames/ before the contract check that exits with MOTION_CONTRACT_MISSING, so every rerun after that error was refused. The same commit bounds the font and image wait at lines 64-67, which hung on offscreen lazy images ('bounded at 30 s instead of hanging'), and adds a 'retry after a refused page' test.",
+      "line": 84,
+      "summary": "gstack-motion-capture created frames/ before checking the page's capture contract and refused any --out with frames/ but no capture.json, so after MOTION_CONTRACT_MISSING or a crash the rerun into the same --out was refused. Its font and image wait could also hang on offscreen lazy images.",
+      "severity": {
+        "deserved": null,
+        "basis": "needs human check: the fix names a refused valid rerun and a hang, but no failing test, production break or data loss beyond the tests it adds."
+      },
+      "in_history": [
+        {
+          "by": "#3430's Pre-Landing Review",
+          "rated": "not named in the review section, which says earlier passes found and fixed the defects listed under What changed; the fix commit's subject marks it a third review cycle and adversarial fix"
+        }
+      ],
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "no rating or failing test is named for this defect."
+        },
+        {
+          "item": "decoy",
+          "reason": "078fb60583da extends the manifest validator this decoy added (fps/windowFrames >= 1, window fits the frames); whether that fixes a defect in the decoy's validator was not read before the token cap."
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "unsettled",
+          "later_fix": null,
+          "reason": "078fb60583da's hits are an import line in bin/gstack-motion-encode and test-helper lines (splitting the --out ownership test, a mask parameter), which are not fixes; but the same commit adds missing checks to manifestError, which this decoy added, and its lib diff was not read before the token cap."
+        }
+      }
+    }
+  }
+}

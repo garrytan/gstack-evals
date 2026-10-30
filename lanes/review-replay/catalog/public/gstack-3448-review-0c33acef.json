@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3448-review-0c33acef",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3448,
+  "reviewed_head": "b476ae9e4b66ad4c94f924aedeb12dacbd6810a7",
+  "merge_base": "8d9501373b55897447ae30f1d281c4dbc8a1369e",
+  "diff_range": {
+    "from": "8d9501373b55897447ae30f1d281c4dbc8a1369e",
+    "to": "b476ae9e4b66ad4c94f924aedeb12dacbd6810a7",
+    "note": "#3448's full diff at the commit before its review fix 0c33acefdeac."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "browse/src/proxy-config.ts",
+    "line": 324,
+    "summary": "A proxy value with a backslash in the login (DOMAIN\\user) or a / in the password was parsed into the URL path, which is not redacted, so the password was printed in the clear on the start line, in the daemon log and in the state file."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "The fix message says the credential was printed in the clear in the daemon log and the state file: a secret exposure.",
+    "in_history": [
+      {
+        "by": "#3448's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "0c33acefdeaca190152ad00e8f8a821255121752",
+    "pr": 3448
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3448,
+      "range": {
+        "from": "b476ae9e4b66ad4c94f924aedeb12dacbd6810a7",
+        "to": "0c33acefdeaca190152ad00e8f8a821255121752"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 7 later commits on the PR branch and 82 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 28 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 8ca299f2c7e7 browse/src/proxy-config.ts:92; 8ca299f2c7e7 browse/test/proxy-env.test.ts:103; c0205373677c browse/src/proxy-config.ts:332,333,334. Hand check: 8ca299f2c7e7 also refuses an empty ? or #, which carries no credential, and edits a test list; c0205373677c is docs wording only."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3448, review-fix commit 0c33acefdeac, which rewrote lines that #3448's own earlier commits added",
+    "evidence": [
+      "git diff -U0 b476ae9e4b66..0c33acefdeac -- browse/src/proxy-config.ts rewrites 6 old lines; git blame b476ae9e4b66 gives 4 of them to #3448's commits (b476ae9e4b66)",
+      "browse/src/proxy-config.ts lines 320,321,322,324 are added lines of 8d9501373b55..b476ae9e4b66",
+      "commit 0c33acefdeac subject: fix: pre-landing review fixes"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix adds a backslash to SCHEMELESS_PROXY_RE and refuses any proxy URL with a path, query or fragment, because a DOMAIN\\user login or a / in a password \"landed in the path, which the redactor does not mask\". The reviewed regex at line 324 let a backslash through to the URL parser."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gstack#3440 (an issue it names) created_at 2026-10-26T01:31:58Z; garrytan/gstack#3448 (the fix PR) created_at 2026-10-26T02:20:05Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3448's own review and fixed in 0c33acefdeac (author garrytan); #3448 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

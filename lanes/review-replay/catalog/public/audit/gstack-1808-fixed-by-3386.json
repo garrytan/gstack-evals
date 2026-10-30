@@ -1,0 +1,98 @@
+{
+  "id": "gstack-1808-fixed-by-3386",
+  "candidate": "garrytan/gstack#3386",
+  "kind": "escaped",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3386 merged into main at 2026-10-25T16:35:46Z as 64d82101cac1"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "b88223677b8d is an ancestor of b17f340a457a"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-gbrain-sync.ts lines 763,764,765,766,767,768,769 are added lines of b88223677b8d..b17f340a457a"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 5ac0f569347f..64d82101cac1 -- bin/gstack-gbrain-sync.ts rewrote 9 old lines; git blame 5ac0f569347f gives 7 to #1808"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1297 and decoy 70 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-gbrain-sync.ts",
+    "fix_file": "bin/gstack-gbrain-sync.ts",
+    "lines": [
+      763,
+      764,
+      765,
+      766,
+      767,
+      768,
+      769
+    ],
+    "blamed": 9,
+    "owned": 7,
+    "insertion_only": false,
+    "introduced_by": [
+      "3bef43bc5ad85a3e46ce54db5ae6d0f7f181fef3"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1297,
+    "decoy_lines": 70
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": {
+      "by": "gstack Pre-Landing Review in #1808's PR body",
+      "rated": "not raised: the review section does not name gstack-gbrain-sync.ts"
+    }
+  },
+  "decoy_search": {
+    "from": "5ac0f569347f20a7f2c1fef9f276f1eb97ba8afd",
+    "to": "64d82101cac149125d28df888e3f2ea14a444dc5",
+    "files": [
+      "bin/gstack-gbrain-sync.ts",
+      "test/gstack-gbrain-sync.test.ts"
+    ],
+    "added_lines": 63,
+    "searched": {
+      "branch": 0,
+      "default": 114,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix PR says the autopilot check ran 'only right before its destructive walk', after legacy cleanup, a rename and 'gbrain sources add', so 'a refused run still registered a source it never synced'; its new test fails on main. The located lines are that late check in runCodeImport, added by #1808.",
+    "summary": "/sync-gbrain's code stage checked for a running gbrain autopilot only right before the walk, so a refused run had already renamed sources and run gbrain sources add, leaving a registered source that was never synced.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the fix PR's evidence says the new test fails on main and the refused run changed the brain's source list"
+    }
+  },
+  "needs_human_check": []
+}

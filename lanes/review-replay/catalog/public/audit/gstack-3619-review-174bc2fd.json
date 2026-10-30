@@ -1,0 +1,128 @@
+{
+  "id": "gstack-3619-review-174bc2fd",
+  "candidate": "garrytan/gstack#3619@174bc2fd7b57",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3619 merged into main at 2026-10-30T03:14:00Z; review fix 174bc2fd7b57 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "4729f4752ba6 is an ancestor of 9b3540bbeead"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": ".github/workflows/evals.yml lines 572,573 are added lines of 4729f4752ba6..9b3540bbeead"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 9b3540bbeead..174bc2fd7b57 -- .github/workflows/evals.yml rewrote 4 old lines; git blame 9b3540bbeead gives 2 to #3619's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 115 and decoy 45 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": ".github/workflows/evals.yml",
+    "fix_file": ".github/workflows/evals.yml",
+    "lines": [
+      572,
+      573
+    ],
+    "blamed": 4,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 115,
+    "decoy_lines": 45
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb",
+    "to": "174bc2fd7b57fa0e463d1d99ff0d9f335f790a8a",
+    "files": [
+      ".github/workflows/evals.yml",
+      "lib/ship-queue-train-ready.ts",
+      "scripts/test-pr-profile.ts",
+      "test/pr-dependencies.test.ts"
+    ],
+    "added_lines": 30,
+    "searched": {
+      "branch": 8,
+      "default": 1,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "5348c15ec3c6bdfd959c1a90597dae5fa55698a8",
+        "where": "branch",
+        "pr": null,
+        "subject": "ship-queue: screen only when the selector restores every case; unscreened PRs fill train seats (GSTA-165 1a)",
+        "file": "lib/ship-queue-train-ready.ts",
+        "lines": [
+          52,
+          59
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'pull_request runs stay broad'. At the base the manifest step set no EVALS_SCREEN_POLICY, and paid-select.ts treats unset as broad; the reviewed head's line 573 defaulted it to 'narrow' for every event, including the pull_request run that is the merge gate when no train block exists.",
+    "summary": "The evals workflow defaulted the screen policy to narrow on pull_request runs too, so the merge gate on a PR without a train dropped derived dependent cases that a broad run keeps.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the merge gate ran fewer cases, but the evidence names no missed failure, and the review section rates its four noted items informational without saying this was one"
+    },
+    "in_history": [
+      {
+        "by": "#3619's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "gate narrowing with no stated missed failure; review rating for this item not given"
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "5348c15ec3c6 only rewrites a doc comment and the selection reporting in lib/ship-queue-train-ready.ts (screen only on full-fallback), a feature that does not correct the fix's lines."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "gate narrowing with no stated missed failure; review rating for this item not given"
+    }
+  ]
+}

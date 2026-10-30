@@ -1,0 +1,131 @@
+{
+  "id": "gbrain-7134-review-db68fd89",
+  "candidate": "garrytan/gbrain#7134@db68fd899c0e",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7134 merged into master at 2026-10-20T20:32:59Z; review fix db68fd899c0e is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "6e1086492dbd is an ancestor of f833ab957c09"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/think/sanitize.ts lines 78,79,80,81,82,83,88,90,91,97,98,99,101,102,103,104,105,106,107,108,110,111 are added lines of 6e1086492dbd..f833ab957c09"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 f833ab957c09..db68fd899c0e -- src/core/think/sanitize.ts rewrote 22 old lines; git blame f833ab957c09 gives 22 to #7134's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 862 and decoy 146 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/think/sanitize.ts",
+    "fix_file": "src/core/think/sanitize.ts",
+    "lines": [
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      88,
+      90,
+      91,
+      97,
+      98,
+      99,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      110,
+      111
+    ],
+    "blamed": 22,
+    "owned": 22,
+    "insertion_only": false,
+    "introduced_by": [
+      "f833ab957c0900fbeefaf6707a61ed11523e3914"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 862,
+    "decoy_lines": 146
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "f833ab957c0900fbeefaf6707a61ed11523e3914",
+    "to": "db68fd899c0ef196ae0045bfb1e0e5c077130f5e",
+    "files": [
+      "src/core/repair/redacted-facts.ts",
+      "src/core/think/sanitize.ts",
+      "test/facts-extract.test.ts",
+      "test/repair-redacted-facts.test.ts",
+      "test/sanitize-redaction-7125.test.ts"
+    ],
+    "added_lines": 110,
+    "searched": {
+      "branch": 13,
+      "default": 176,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix asks for a 'two-sided restoration proof'. Its tests show the old one-sided fallbacks ([4,0,16], [0,4,16] at line 101) restored a marker from a paraphrased lead-in or an unrelated sentence sharing one side's words.",
+    "line": 101,
+    "summary": "restoreNeutralized accepted words on one side of a marker as proof, so it could write a raw span into a stored fact when the other side did not match. It also built regexes from output text at a cost the fix calls non-linear.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the fix commit names no failing test, break or loss; there is no review section."
+    },
+    "in_history": [
+      {
+        "by": "#7134's Pre-Landing Review",
+        "rated": "no Pre-Landing Review section; the fix commit's subject marks it a #7125 review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "no rating or named failure in the evidence."
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "no rating or named failure in the evidence."
+    }
+  ]
+}

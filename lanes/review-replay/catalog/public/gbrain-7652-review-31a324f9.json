@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7652-review-31a324f9",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7652,
+  "reviewed_head": "1d571022e2512ae41483df0d61494981a9e324f3",
+  "merge_base": "9fc3daac1e417d98b00d885b8e63e85a38dc0188",
+  "diff_range": {
+    "from": "9fc3daac1e417d98b00d885b8e63e85a38dc0188",
+    "to": "1d571022e2512ae41483df0d61494981a9e324f3",
+    "note": "#7652's full diff at the commit before its review fix 31a324f9403b."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/persistence/sync-pass-run.ts",
+    "line": 1005,
+    "summary": "A sync pass stopped by a permission refusal ended its row resumable, so a plain sync would retry it forever instead of the row reading interrupted, then abandoned, for an operator to act on."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the reviewed PR has no review section and the fix names no failing test or production break.",
+    "in_history": [
+      {
+        "by": "#7652's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "31a324f9403ba010cd1067125cf3338bd5de61d0",
+    "pr": 7652
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7652,
+      "range": {
+        "from": "1d571022e2512ae41483df0d61494981a9e324f3",
+        "to": "31a324f9403ba010cd1067125cf3338bd5de61d0"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 4 later commits on the PR branch and 0 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 24 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits b3a4a172e267 src/core/persistence/sync-pass-run.ts:1005. Hand check: b3a4a172e267 passes onlyOpen to the save on line 1005 so a stop never rewrites a row its pass already ended; that save predates the decoy, which only swapped the classifier."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7652, review-fix commit 31a324f9403b, which rewrote lines that #7652's own earlier commits added",
+    "evidence": [
+      "git diff -U0 1d571022e251..31a324f9403b -- src/core/persistence/sync-pass-run.ts rewrites 2 old lines; git blame 1d571022e251 gives 2 of them to #7652's commits (618d0a25d027)",
+      "src/core/persistence/sync-pass-run.ts lines 26,1005 are added lines of 9fc3daac1e41..1d571022e251",
+      "commit 31a324f9403b subject: fix(sync): a permission refusal keeps the pass row open so it still reads interrupted, then abandoned (review of #7614)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix switches line 1005 from unrecordedStop to resumableRowStop so \"a permission refusal keeps the pass row open\"; its new doc says otherwise a plain sync would retry the resumable pass forever. The reviewed catch path ended a permission refusal resumable. Needs human check: severity (No review receipt and no failure class in the fix text.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gbrain#7611 (an issue it names) created_at 2026-10-26T01:53:25Z; garrytan/gbrain#7612 (an issue it names) created_at 2026-10-26T01:53:26Z; garrytan/gbrain#7614 (an issue it names) created_at 2026-10-26T02:08:00Z; garrytan/gbrain#7652 (the fix PR) created_at 2026-10-26T09:45:49Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7652's own review and fixed in 31a324f9403b (author garrytan); #7652 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

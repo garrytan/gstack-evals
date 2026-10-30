@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7511-review-55279fb3",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7511,
+  "reviewed_head": "6b01f793f2bcd86437e227f7de042ab59b8952e1",
+  "merge_base": "ade6d63879f9fe3736f77266c5958ff461a897cd",
+  "diff_range": {
+    "from": "ade6d63879f9fe3736f77266c5958ff461a897cd",
+    "to": "6b01f793f2bcd86437e227f7de042ab59b8952e1",
+    "note": "#7511's full diff at the commit before its review fix 55279fb3180d."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/commands/trust.ts",
+    "line": 181,
+    "summary": "`gbrain trust review --accept-all` exited 10 on a pending write even with --accept-pending, and its poll command dropped the CLI's --brain routing and the envelope fix."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "the fix commit says its exit-code test is red at HEAD (exit 10).",
+    "in_history": [
+      {
+        "by": "#7511's Pre-Landing Review",
+        "rated": "not named in the part of the review section the dossier shows; the fix commit's subject marks it a review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "55279fb3180d5abef9f9e2bd172bfd4207f3760f",
+    "pr": 7511
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7511,
+      "range": {
+        "from": "6b01f793f2bcd86437e227f7de042ab59b8952e1",
+        "to": "55279fb3180d5abef9f9e2bd172bfd4207f3760f"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 7 later commits on the PR branch and 38 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 40 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7511, review-fix commit 55279fb3180d, which rewrote lines that #7511's own earlier commits added",
+    "evidence": [
+      "git diff -U0 6b01f793f2bc..55279fb3180d -- src/commands/trust.ts rewrites 3 old lines; git blame 6b01f793f2bc gives 3 of them to #7511's commits (e24695d43191)",
+      "src/commands/trust.ts lines 32,170,181 are added lines of ade6d63879f9..6b01f793f2bc",
+      "commit 55279fb3180d subject: fix: pre-landing review fixes (accept-all pending: routed poll command, --accept-pending exits 0, exit precedence tested)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says --accept-pending (GBRAIN_ACCEPT_PENDING) should exit 0 in accept-all as on the single-write path, 'red at HEAD: exit 10', and the poll command lacked the --brain routing. Lines 170 and 181 hold both at the reviewed head."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-24",
+    "source": "GitHub API: garrytan/gbrain#7511 (the fix PR) created_at 2026-10-24T21:51:54Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7511's own review and fixed in 55279fb3180d (author garrytan); #7511 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

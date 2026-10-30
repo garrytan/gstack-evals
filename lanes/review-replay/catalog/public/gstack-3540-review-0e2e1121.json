@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3540-review-0e2e1121",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3540,
+  "reviewed_head": "115355a38bd60322d9452d9f9ac9c58d2709470a",
+  "merge_base": "9e3308f65adf547b7e4776e5ed22467a2649d2ee",
+  "diff_range": {
+    "from": "9e3308f65adf547b7e4776e5ed22467a2649d2ee",
+    "to": "115355a38bd60322d9452d9f9ac9c58d2709470a",
+    "note": "#3540's full diff at the commit before its review fix 0e2e112182f7."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "bin/gstack-doctor",
+    "line": 103,
+    "summary": "The doctor's in-process config read reselected the state root after the doctor set GSTACK_STATE_ROOT, so the --check and --json state-root row always said it was selected by GSTACK_STATE_ROOT."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "the review rates it CRITICAL (REVIEW_LOOP blocking_found=1) and the fix adds a regression test, with a gate note that the behavioural check goes red when the config read breaks.",
+    "in_history": [
+      {
+        "by": "pass 1, gstack /ship review on #3540",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "0e2e112182f79c424d789bdc988de8408643058b",
+    "pr": 3540
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3540,
+      "range": {
+        "from": "115355a38bd60322d9452d9f9ac9c58d2709470a",
+        "to": "0e2e112182f79c424d789bdc988de8408643058b"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 3 later commits on the PR branch and 35 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 24 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3540, review-fix commit 0e2e112182f7, which rewrote lines that #3540's own earlier commits added",
+    "evidence": [
+      "git diff -U0 115355a38bd6..0e2e112182f7 -- bin/gstack-doctor rewrites 2 old lines; git blame 115355a38bd6 gives 2 of them to #3540's commits (115355a38bd6)",
+      "bin/gstack-doctor lines 96,103 are added lines of 9e3308f65adf..115355a38bd6",
+      "commit 0e2e112182f7 subject: fix: pre-landing review fixes",
+      "#3540 Pre-Landing Review: - [CRITICAL, fixed] `bin/gstack-doctor:103` `cfg()` reselected the state root, so the `--check`/`--json` state-root row named `GSTACK_STATE_ROOT` whatever selected the root.",
+      "#3540 Pre-Landing Review: - [INFORMATIONAL, fixed] `bin/gstack-doctor:96` clamp comment said every caller pipes into it."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review lists [CRITICAL, fixed] bin/gstack-doctor:103, where cfg() \"reselected the state root\", so --check and --json printed selected by GSTACK_STATE_ROOT whatever selected it; the fix keeps _gstack_sr_var across gstack_config_select and adds a regression test. Needs human check: line 96 (the clamp comment fix there is an informational wording item, not the defect)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-28",
+    "source": "GitHub API: garrytan/gstack#3540 (the fix PR) created_at 2026-10-28T11:38:05Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3540's own review and fixed in 0e2e112182f7 (author garrytan); #3540 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

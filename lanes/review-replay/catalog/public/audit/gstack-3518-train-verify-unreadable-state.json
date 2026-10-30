@@ -1,0 +1,107 @@
+{
+  "id": "gstack-3518-train-verify-unreadable-state",
+  "kind": "seed",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "1f246e3505ea is an ancestor of a2077ff70eed"
+    },
+    {
+      "name": "line-at-head",
+      "pass": true,
+      "detail": "lib/ship-queue-train-verify.ts has 216 lines at a2077ff70eed"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "line 150 is an added line of 2114d7ab3330..a2077ff70eed"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "fix ada2accea064's parent is a2077ff70eed; its diff rewrites line 150"
+    },
+    {
+      "name": "line-from-the-pr",
+      "pass": true,
+      "detail": "git blame a2077ff70eed -- lib/ship-queue-train-verify.ts:150 gives a2077ff70eed, a commit of #3518"
+    }
+  ],
+  "decoy_search": [
+    {
+      "from": "a2077ff70eede03d4a1b3269a7ebfd685f219143",
+      "to": "ada2accea064f814071330f97f61c03db84180a8",
+      "files": [
+        "lib/ship-queue-train-verify.ts",
+        "test/ship-queue-train.test.ts"
+      ],
+      "added_lines": 18,
+      "searched": {
+        "branch": 8,
+        "default": 48,
+        "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+        "through_date": "2026-10-30"
+      },
+      "hits": [
+        {
+          "commit": "73a678eb89723d0a6335b2fc09d42eadbc9d6a65",
+          "where": "branch",
+          "pr": null,
+          "subject": "test: type the saved fixture PR row for the test-code ratchet (GSTA-129)",
+          "file": "test/ship-queue-train.test.ts",
+          "lines": [
+            1036
+          ]
+        },
+        {
+          "commit": "5905c768f72e8ae980733c3b2cff1c19c0dafda4",
+          "where": "branch",
+          "pr": null,
+          "subject": "ship-queue verify: build the freeze record from the one GitHub read that decided to freeze",
+          "file": "lib/ship-queue-train-verify.ts",
+          "lines": [
+            151,
+            152,
+            153
+          ]
+        }
+      ],
+      "unresolved": []
+    }
+  ],
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Fix ada2acc's message says stopped() read prState's 'unreadable' as not merged, so a slot-1 squash already on main while gh pr view failed answered that nothing merged and the queue is not frozen; line 150 at a2077ff is that read, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 2.",
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "every reviewer rated it INFORMATIONAL and the panel names no failing test or production break, so deserved severity stays null"
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "unsettled",
+        "later_fix": null,
+        "reason": "5905c76 (later on #3518's branch) rewrote the decoy's states/landed/unreadable lines in stopped() to fix a two-read race: freezeQueue re-read prState and could file a slot that read MERGED as unmerged. Both reads came in with pass 1's fix, before this decoy, so the decoy did not introduce the race but carries it in the lines it rewrote; a reviewer who flags it would be right, so it is not clean, and it is not this decoy's own defect either. The other hit, 73a678eb8972, only casts a test fixture row to any for the typecheck ratchet (test line 1036), not a defect fix."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "every reviewer rated it INFORMATIONAL and the panel names no failing test or production break, so deserved severity stays null"
+    },
+    {
+      "item": "decoy 0",
+      "reason": "hand read could not settle it, so its audit stays null: 5905c76 (later on #3518's branch) rewrote the decoy's states/landed/unreadable lines in stopped() to fix a two-read race: freezeQueue re-read prState and could file a slot that read MERGED as unmerged. Both reads came in with pass 1's fix, before this decoy, so the decoy did not introduce the race but carries it in the lines it rewrote; a reviewer who flags it would be right, so it is not clean, and it is not this decoy's own defect either. The other hit, 73a678eb8972, only casts a test fixture row to any for the typecheck ratchet (test line 1036), not a defect fix."
+    }
+  ]
+}

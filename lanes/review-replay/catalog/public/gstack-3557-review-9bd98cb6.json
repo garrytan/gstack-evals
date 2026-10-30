@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3557-review-9bd98cb6",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3557,
+  "reviewed_head": "7459bb48317d795f3aca605743b2b7d0e06d1fab",
+  "merge_base": "415e343b5242ab0f3c1f5f69984767b0681e73b6",
+  "diff_range": {
+    "from": "415e343b5242ab0f3c1f5f69984767b0681e73b6",
+    "to": "7459bb48317d795f3aca605743b2b7d0e06d1fab",
+    "note": "#3557's full diff at the commit before its review fix 9bd98cb6490d."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/restamp.ts",
+    "line": 228,
+    "summary": "gstack-restamp decided whether package.json keeps a four-part version from the branch's own copy, so a branch an older restamp had cut to three parts stayed at three parts instead of the repo's four-part form."
+  },
+  "severity": {
+    "deserved": "INFORMATIONAL",
+    "basis": "the review section reports no blocking findings and four informational items, three fixed in the diff including reading the manifest form at the base",
+    "in_history": [
+      {
+        "by": "pass 1 reviewers (six specialist lenses, adversarial, outside voice), gstack /ship review on #3557",
+        "rated": "informational"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "9bd98cb6490dc2f901e4bee9fee697ad4e8752ca",
+    "pr": 3557
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3557,
+      "range": {
+        "from": "7459bb48317d795f3aca605743b2b7d0e06d1fab",
+        "to": "9bd98cb6490dc2f901e4bee9fee697ad4e8752ca"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 1 later commits on the PR branch and 21 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 30 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3557, review-fix commit 9bd98cb6490d, which rewrote lines that #3557's own earlier commits added",
+    "evidence": [
+      "git diff -U0 7459bb48317d..9bd98cb6490d -- lib/restamp.ts rewrites 5 old lines; git blame 7459bb48317d gives 5 of them to #3557's commits (810631a04016)",
+      "lib/restamp.ts lines 228,234,235,236,473 are added lines of 415e343b5242..7459bb48317d",
+      "commit 9bd98cb6490d subject: fix: pre-landing review fixes (base manifest sets the form, flag validated first, stamp_paths test)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix reads the manifest form 'at the base, like the policy, so a branch an older restamp cut to three parts heals'. At the head manifestKeepsFourParts read the working-tree manifest, so a branch already cut to three parts kept writing three parts in a repo whose convention is four."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-28",
+    "source": "GitHub API: garrytan/gstack#3557 (the fix PR) created_at 2026-10-28T20:24:08Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3557's own review and fixed in 9bd98cb6490d (author garrytan); #3557 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

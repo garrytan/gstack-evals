@@ -1,0 +1,158 @@
+{
+  "id": "gstack-3475-review-761a22b3",
+  "candidate": "garrytan/gstack#3475@761a22b38b54",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3475 merged into main at 2026-10-26T23:27:11Z; review fix 761a22b38b54 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "5755601dac5d is an ancestor of fc69d3ff0bfe"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-doctor-check.sh lines 495,497 are added lines of 5755601dac5d..fc69d3ff0bfe"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 fc69d3ff0bfe..761a22b38b54 -- bin/gstack-doctor-check.sh rewrote 2 old lines; git blame fc69d3ff0bfe gives 2 to #3475's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 618 and decoy 25 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-doctor-check.sh",
+    "fix_file": "bin/gstack-doctor-check.sh",
+    "lines": [
+      495,
+      497
+    ],
+    "blamed": 2,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "6a0f9e47bb4ce46ad21d7d28b22d4b743e7f7af5"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 618,
+    "decoy_lines": 25
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "Fixes in 761a22b38 and b01754469.",
+      "- **Other deferred findings** (advisory, out of the blocking floor): install.sh:107 `--for none` still fetches before the trailer; install.sh:122 `ok not-needed` printed before the remote_min comparison; lib/doctor-components.ts:100 NOT_NEEDED_REVISION duplication; bin/gstack-capy-install:606/627..."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "fc69d3ff0bfea41eeaed0d567001cb4d7bd1c54e",
+    "to": "761a22b38b5445c7a4cd3585819399cb5e3d629f",
+    "files": [
+      "bin/gstack-capy-install",
+      "bin/gstack-doctor-check.sh",
+      "test/gstack-capy-install.test.ts",
+      "test/gstack-doctor.test.ts"
+    ],
+    "added_lines": 20,
+    "searched": {
+      "branch": 6,
+      "default": 72,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "b01754469dd44f983e2f952d3f0b405acc566ddf",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: review pass 2 fixes (floor reader bounds, cso start is resumed not retried)",
+        "file": "bin/gstack-doctor-check.sh",
+        "lines": [
+          495,
+          496,
+          498,
+          499
+        ]
+      },
+      {
+        "commit": "b01754469dd44f983e2f952d3f0b405acc566ddf",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: review pass 2 fixes (floor reader bounds, cso start is resumed not retried)",
+        "file": "test/gstack-doctor.test.ts",
+        "lines": [
+          677
+        ]
+      },
+      {
+        "commit": "e814e2d5dbc97746770c7f2f6cb94a6e8d5033da",
+        "where": "branch",
+        "pr": null,
+        "subject": "test: the floor evaluation marker lives in the fixture, not /tmp",
+        "file": "test/gstack-doctor.test.ts",
+        "lines": [
+          676
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'the floor reader is whitespace-insensitive'; the review's pass 2 says 'the floor sed missed a value on the line after its field (Codex P2)'. At the reviewed head line 495 ran a line-based sed, so a valid ship-policy.json with the value on the next line read as no floor and the row said SKIP 'null or absent' (line 497) instead of WARN for an installed gstack below the floor.",
+    "line": 495,
+    "summary": "The doctor's project floor reader used a line-based sed, so a valid policy file with min_gstack_version's value on the next line read as no floor, and a machine below the project's floor got SKIP instead of WARN.",
+    "severity": {
+      "deserved": "INFORMATIONAL",
+      "basis": "the review rated it P2, and the floor row is PASS, SKIP or WARN and never fails a run (its header comment), so the defect hides a warning."
+    },
+    "in_history": [
+      {
+        "by": "#3475's Pre-Landing Review, pass 2 (Codex)",
+        "rated": "P2: 'the floor sed missed a value on the line after its field'; fixes in 761a22b38 and b01754469"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "decoys[0]",
+        "reason": "b01754469dd4 rewrites the decoy's floor reader lines; whether its changes fix defects or harden and reword is the same question an earlier audit left unclear for that commit."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "unsettled",
+        "later_fix": null,
+        "reason": "b01754469dd4 rewrites decoy lines 495-499: it bounds the read to 64 KiB (the review's 'slurped through tr (95 MB -> 2 GB RSS, Medium)'), takes the first field occurrence, and drops the SKIP text's claim that ship-queue rejects the value (review: Low); an earlier audit rejected that commit as unclear, so whether it fixes a defect in the decoy is not settled. e814e2d5dbc9 only moves a test marker out of /tmp."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "decoys[0]",
+      "reason": "b01754469dd4 rewrites the decoy's floor reader lines; whether its changes fix defects or harden and reword is the same question an earlier audit left unclear for that commit."
+    },
+    {
+      "item": "decoy 0",
+      "reason": "hand read could not settle it, so its audit stays null: b01754469dd4 rewrites decoy lines 495-499: it bounds the read to 64 KiB (the review's 'slurped through tr (95 MB -> 2 GB RSS, Medium)'), takes the first field occurrence, and drops the SKIP text's claim that ship-queue rejects the value (review: Low); an earlier audit rejected that commit as unclear, so whether it fixes a defect in the decoy is not settled. e814e2d5dbc9 only moves a test marker out of /tmp."
+    }
+  ]
+}

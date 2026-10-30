@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7878-review-748bf631",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7878,
+  "reviewed_head": "d43d2497a65cb4b5fec162cd7460225c1769488a",
+  "merge_base": "5af37ba4445547b150ba1a4432f07fafe01c43c6",
+  "diff_range": {
+    "from": "5af37ba4445547b150ba1a4432f07fafe01c43c6",
+    "to": "d43d2497a65cb4b5fec162cd7460225c1769488a",
+    "note": "#7878's full diff at the commit before its review fix 748bf63162fc."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/cycle/synthesize-source-routing.ts",
+    "line": 69,
+    "summary": "corpusLocation held any transcript whose real path was missing as corpus_path_unresolvable, even one outside the corpus, so a missing non-corpus file was held instead of routed by its spelled path."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "the review says all five pass 1 issues were fixed with revert-red tests, so the defect fails a test.",
+    "in_history": [
+      {
+        "by": "pass 1 of gstack /ship review on #7878 (six specialists, red team)",
+        "rated": "one of five fixed with revert-red tests; REVIEW_LOOP counts 3 blocking without saying which"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "748bf63162fc29fdcde6048e770c724601d82da8",
+    "pr": 7878
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7878,
+      "range": {
+        "from": "d43d2497a65cb4b5fec162cd7460225c1769488a",
+        "to": "748bf63162fc29fdcde6048e770c724601d82da8"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 1 later commits on the PR branch and 20 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 124 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 331193f8d3e8 src/core/behavior-change-notice.ts:1333,1337. Hand check: 331193f8d3e8 is the release restamp: it replaces since 'TBD' with '0.60.483.0' in BEHAVIOR_CHANGES rows."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7878, review-fix commit 748bf63162fc, which rewrote lines that #7878's own earlier commits added",
+    "evidence": [
+      "git diff -U0 d43d2497a65c..748bf63162fc -- src/core/cycle/synthesize-source-routing.ts rewrites 4 old lines; git blame d43d2497a65c gives 4 of them to #7878's commits (13e447335f14)",
+      "src/core/cycle/synthesize-source-routing.ts lines 29,68,69,122 are added lines of 5af37ba44455..d43d2497a65c",
+      "commit 748bf63162fc subject: fix: pre-landing review fixes (#7848, #7850, #7871)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'a path outside the corpus that no longer exists is located by its spelled path, not held as corpus_path_unresolvable'. Line 69 returned unresolvable for any missing real path."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-28",
+    "source": "GitHub API: garrytan/gbrain#7848 (an issue it names) created_at 2026-10-28T09:10:10Z; garrytan/gbrain#7850 (an issue it names) created_at 2026-10-28T09:38:05Z; garrytan/gbrain#7868 (an issue it names) created_at 2026-10-28T13:42:07Z; garrytan/gbrain#7869 (an issue it names) created_at 2026-10-28T13:42:10Z; garrytan/gbrain#7870 (an issue it names) created_at 2026-10-28T13:42:13Z; garrytan/gbrain#7871 (an issue it names) created_at 2026-10-28T13:42:16Z; garrytan/gbrain#7878 (the fix PR) created_at 2026-10-28T17:59:08Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7878's own review and fixed in 748bf63162fc (author garrytan); #7878 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

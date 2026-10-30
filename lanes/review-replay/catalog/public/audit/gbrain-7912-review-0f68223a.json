@@ -1,0 +1,112 @@
+{
+  "id": "gbrain-7912-review-0f68223a",
+  "candidate": "garrytan/gbrain#7912@0f68223ab7d9",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7912 merged into master at 2026-10-29T09:06:56Z; review fix 0f68223ab7d9 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "968f737088e4 is an ancestor of 421748d06a3a"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/repair/content-receipt-root.ts lines 53,78 are added lines of 968f737088e4..421748d06a3a"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 421748d06a3a..0f68223ab7d9 -- src/core/repair/content-receipt-root.ts rewrote 4 old lines; git blame 421748d06a3a gives 2 to #7912's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 160 and decoy 131 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/repair/content-receipt-root.ts",
+    "fix_file": "src/core/repair/content-receipt-root.ts",
+    "lines": [
+      53,
+      78
+    ],
+    "blamed": 4,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "1ad8b893207b03d9d14ba01c829e2fd86efe1c32"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 160,
+    "decoy_lines": 131
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "Fixed 11: 9 CRITICAL untested state-matrix cells on the new unfinished-checkpoint input (new revert-red test above); `src/core/repair/content-receipt-root.ts` now reads `skill_bundles_enabled` lazily in the `tree_mismatch` branch so older schemas don't fail the preview; a missing blank line in CH...",
+      "Pass 2 (range 421748d0..0f68223a): no findings, state matrix 10/10 tested.",
+      "Outside review: native adversarial pass (Claude Opus 5.5) over 421748d0..0f68223a found nothing."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "421748d06a3a1f43b69ba97ff687078012359fab",
+    "to": "0f68223ab7d9625a8055600b3e38778c70989e12",
+    "files": [
+      "src/core/repair/content-receipt-root.ts",
+      "test/migration-0-53-host-move-7900.test.ts"
+    ],
+    "added_lines": 125,
+    "searched": {
+      "branch": 3,
+      "default": 15,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix moves the eager SELECT skill_bundles_enabled at line 53 into the tree_mismatch branch through the tolerant reader, \"so older schemas don't fail the preview\" (review section). At the reviewed head every repair preview ran that query, even on a brain whose schema lacks the column.",
+    "line": 53,
+    "summary": "content-receipt-root read skill_bundles_enabled from persistence_brain up front for every repair preview, so on an older schema without that column the preview failed instead of listing its verdicts.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the review section does not rate this finding (REVIEW_LOOP blocking_found=0, while the same pass names 9 CRITICAL test gaps), and no test failure or production break is named for it."
+    },
+    "in_history": [
+      {
+        "by": "pass 1 batched specialist, gstack /ship review on #7912",
+        "rated": "not named in the review section; listed among the 11 fixed findings, REVIEW_LOOP blocking_found=0"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "no rating is given for this finding and no failure beyond the preview error is named"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "no rating is given for this finding and no failure beyond the preview error is named"
+    }
+  ]
+}

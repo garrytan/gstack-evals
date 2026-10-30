@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3515-review-8c12f8d3",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3515,
+  "reviewed_head": "f7eeda8aa304ce210e0aac2fd56da98fa30bd3eb",
+  "merge_base": "a1934a1498ec91688b6245d5b05b1cdf66d5c98a",
+  "diff_range": {
+    "from": "a1934a1498ec91688b6245d5b05b1cdf66d5c98a",
+    "to": "f7eeda8aa304ce210e0aac2fd56da98fa30bd3eb",
+    "note": "#3515's full diff at the commit before its review fix 8c12f8d3fce2."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "scripts/ubicloud/ubi-runner.sh",
+    "line": 637,
+    "summary": "cmd_pack packed only the blobs from `diff --cached HEAD`, which drops intent-to-add and unmerged-stage blobs. The copied index then names objects the VM snapshot lacks, so the VM's write-tree and fsck cannot read them."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the fix names the missing blobs and adds a VM fsck assertion, but says nothing of a failing test or production break.",
+    "in_history": [
+      {
+        "by": "#3515's Pre-Landing Review",
+        "rated": "not named in the review section (it names an earlier staged-blob defect, already fixed); the fix commit's subject marks it a pass 5 review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "8c12f8d3fce27b0eefcd276f0b5cfde83e05708e",
+    "pr": 3515
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3515,
+      "range": {
+        "from": "f7eeda8aa304ce210e0aac2fd56da98fa30bd3eb",
+        "to": "8c12f8d3fce27b0eefcd276f0b5cfde83e05708e"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 2 later commits on the PR branch and 51 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 7 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3515, review-fix commit 8c12f8d3fce2, which rewrote lines that #3515's own earlier commits added",
+    "evidence": [
+      "git diff -U0 f7eeda8aa304..8c12f8d3fce2 -- scripts/ubicloud/ubi-runner.sh rewrites 3 old lines; git blame f7eeda8aa304 gives 3 of them to #3515's commits (f7eeda8aa304)",
+      "scripts/ubicloud/ubi-runner.sh lines 630,637,638 are added lines of a1934a1498ec..f7eeda8aa304",
+      "commit 8c12f8d3fce2 subject: fix: pre-landing review fixes (pass 5)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says the pack's blob list came from a HEAD-only diff that dropped an intent-to-add entry's empty blob and the stages of an unmerged entry, so the copied index named blobs the VM lacked. Lines 637-638 build that list at the reviewed head. Needs human check: severity (no failing test, production break or data loss is named for this defect.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gstack#3485 (an issue it names) created_at 2026-10-26T16:22:21Z; garrytan/gstack#3499 (an issue it names) created_at 2026-10-26T22:10:21Z; garrytan/gstack#3504 (an issue it names) created_at 2026-10-26T23:42:58Z; garrytan/gstack#3515 (the fix PR) created_at 2026-10-27T14:01:43Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3515's own review and fixed in 8c12f8d3fce2 (author garrytan); #3515 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

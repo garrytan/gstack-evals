@@ -1,0 +1,165 @@
+{
+  "id": "gbrain-7684-review-de9eb9dd",
+  "candidate": "garrytan/gbrain#7684@de9eb9dd86fb",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7684 merged into master at 2026-10-27T03:06:21Z; review fix de9eb9dd86fb is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "a642d5d891d9 is an ancestor of ac3c2af65960"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/persistence/git-door.ts lines 23,24,289,290,369,372,405,406,407,409,410,411,412,413,414 are added lines of a642d5d891d9..ac3c2af65960"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 ac3c2af65960..de9eb9dd86fb -- src/core/persistence/git-door.ts rewrote 15 old lines; git blame ac3c2af65960 gives 15 to #7684's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1880 and decoy 181 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/persistence/git-door.ts",
+    "fix_file": "src/core/persistence/git-door.ts",
+    "lines": [
+      23,
+      24,
+      289,
+      290,
+      369,
+      372,
+      405,
+      406,
+      407,
+      409,
+      410,
+      411,
+      412,
+      413,
+      414
+    ],
+    "blamed": 15,
+    "owned": 15,
+    "insertion_only": false,
+    "introduced_by": [
+      "19083f99ba931ceb84d81feaa88d4aeb3a2cd621",
+      "7d997be0761a420e3aa93fcc203fd610f0c36ac8"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1880,
+    "decoy_lines": 181
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "ac3c2af65960dc401988daf6600c849bce2344ce",
+    "to": "de9eb9dd86fb90563a6d2126c534c4445787eb5c",
+    "files": [
+      "src/core/behavior-change-notice.ts",
+      "src/core/error-registry.ts",
+      "src/core/persistence/git-door.ts",
+      "test/git-door-planned-state.test.ts",
+      "test/git-door-write-cost.test.ts",
+      "test/ignore-rules.test.ts"
+    ],
+    "added_lines": 121,
+    "searched": {
+      "branch": 10,
+      "default": 32,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "c7440036c1fc23800aef452bfcc1f4ec366ecdc0",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes (pass 2)",
+        "file": "src/core/error-registry.ts",
+        "lines": [
+          332
+        ]
+      },
+      {
+        "commit": "c7440036c1fc23800aef452bfcc1f4ec366ecdc0",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes (pass 2)",
+        "file": "src/core/persistence/git-door.ts",
+        "lines": [
+          370
+        ]
+      },
+      {
+        "commit": "c7440036c1fc23800aef452bfcc1f4ec366ecdc0",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes (pass 2)",
+        "file": "test/git-door-planned-state.test.ts",
+        "lines": [
+          328
+        ]
+      },
+      {
+        "commit": "82c419b6bbff5b2e719b399e95941253aa505045",
+        "where": "default",
+        "pr": 7775,
+        "subject": "Merge pull request #7775 from garrytan/capy/gbra176-literal-pathspec-7759",
+        "file": "src/core/persistence/git-door.ts",
+        "lines": [
+          415,
+          418
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says self-heal only accepted HEAD^'s version, so after commits of other paths a failed index refresh 'wedges writes of that page with git_index_conflict (red before: the next write refused)'. parentEntries (lines 405-414) and its call at 289-290 read only commit^.",
+    "line": 407,
+    "summary": "The door's self-heal treated a stale index entry as clean only if it matched HEAD's first parent. After a failed index refresh and later commits of other paths, every write of that page refused with git_index_conflict.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the fix commit says the new test was red before: the next write refused."
+    },
+    "in_history": [
+      {
+        "by": "#7684's Pre-Landing Review",
+        "rated": "not named in the review section (its CRITICAL is the 100664 tree-mode case); the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "c7440036c1fc rewords the git_target_changed advice, adds an actor and restores PATH in a test shim; 82c419b6bbff (#7775) swaps bare paths for literalPathspecs across the door for repository hooks, not a fix to this logic."
+      }
+    }
+  },
+  "needs_human_check": []
+}

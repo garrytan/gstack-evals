@@ -1,0 +1,97 @@
+{
+  "id": "gstack-3381-review-23b55ab9",
+  "candidate": "garrytan/gstack#3381@23b55ab96644",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3381 merged into main at 2026-10-25T05:06:30Z; review fix 23b55ab96644 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "00100f1598dc is an ancestor of 8a52c271ad81"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "hosts/claude/hooks/memorable-user-prompt-hook.ts lines 408 are added lines of 00100f1598dc..8a52c271ad81"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 8a52c271ad81..23b55ab96644 -- hosts/claude/hooks/memorable-user-prompt-hook.ts rewrote 1 old lines; git blame 8a52c271ad81 gives 1 to #3381's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 687 and decoy 37 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "hosts/claude/hooks/memorable-user-prompt-hook.ts",
+    "fix_file": "hosts/claude/hooks/memorable-user-prompt-hook.ts",
+    "lines": [
+      408
+    ],
+    "blamed": 1,
+    "owned": 1,
+    "insertion_only": false,
+    "introduced_by": [
+      "8a52c271ad8160394a266fd2e5cec0e1967d8049"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 687,
+    "decoy_lines": 37
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "8a52c271ad8160394a266fd2e5cec0e1967d8049",
+    "to": "23b55ab966448d96de130bdfa8ed74ad6d671dd7",
+    "files": [
+      "hosts/claude/hooks/memorable-user-prompt-hook.ts",
+      "test/memorable-user-prompt-hook.test.ts"
+    ],
+    "added_lines": 20,
+    "searched": {
+      "branch": 1,
+      "default": 136,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix uses 'each NUL-delimited origin URL verbatim'. At the reviewed head policyVeto (line 408) trimmed each URL; the policy script's normalize() does not trim, so an origin such as 'remote.git ' (a valid local path) was looked up under a different key and its deny missed. The fix's CHANGELOG says the hook must refuse a deny remote 'whose local-path URL contains a newline or edge whitespace' and lists 'origin URLs split on newlines or trimmed' among mutations that turn a test red.",
+    "line": 408,
+    "summary": "The Memorable prompt hook trimmed each origin URL before the policy lookup, so a deny set on a local-path origin with leading or trailing whitespace was never found and recall went ahead.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the fix's CHANGELOG says the trimmed-URL mutation turns at least one focused test red, and the defect fails open a privacy deny."
+    },
+    "in_history": [
+      {
+        "by": "#3381's Pre-Landing Review",
+        "rated": "no review excerpt names it; the fix commit's subject marks it a security review fix, fourth pass"
+      }
+    ],
+    "needs_human_check": []
+  },
+  "needs_human_check": []
+}

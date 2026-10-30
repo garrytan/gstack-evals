@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3501-review-cc5ff0fe",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3501,
+  "reviewed_head": "0a741933beb6a82989de2a9358af1f76a2b89ea4",
+  "merge_base": "576839cb8ce73c08a05a71efa91e80ca19fa630b",
+  "diff_range": {
+    "from": "576839cb8ce73c08a05a71efa91e80ca19fa630b",
+    "to": "0a741933beb6a82989de2a9358af1f76a2b89ea4",
+    "note": "#3501's full diff at the commit before its review fix cc5ff0fea2e5."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "bin/gstack-prose-lint",
+    "line": 56,
+    "summary": "With --sections and --gate, gstack-prose-lint passed (exit 0, PROSE_LINT: none) when the file had none of the named headings, so the /ship compose gate let a draft with a renamed or missing heading through without reading it."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the gate fails open, but the receipt does not say which of pass 4's five issues this was or how it was rated, and no production break is named.",
+    "in_history": [
+      {
+        "by": "Step 11 / pass 4 outside voices (Claude adversarial, GPT openai/gpt-6.1-sol) on #3501",
+        "rated": "the receipt says pass 4 found 5 issues, one P1, fixed in cc5ff0f; it does not say which issue this was or its rating"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "cc5ff0fea2e5599e4b2579d4877cdd419fe76924",
+    "pr": 3501
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3501,
+      "range": {
+        "from": "0a741933beb6a82989de2a9358af1f76a2b89ea4",
+        "to": "cc5ff0fea2e5599e4b2579d4877cdd419fe76924"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 8 later commits on the PR branch and 57 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 122 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 136080d44b69 ship/sections/pr-body.md.tmpl:191; 2876f377765c test/helpers/carve-guards.ts:171. Hand check: 136080d44b69 fixes the publication-gates test fixture, which did not stage gstack-prose-lint, and adds >&2 to the line 191 gate so the ok trailer leaves stdout, not a defect in the line's gating; 2876f377765c (merge of main) only re-measures the carve-guard size cap."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3501, review-fix commit cc5ff0fea2e5, which rewrote lines that #3501's own earlier commits added",
+    "evidence": [
+      "git diff -U0 0a741933beb6..cc5ff0fea2e5 -- bin/gstack-prose-lint rewrites 4 old lines; git blame 0a741933beb6 gives 4 of them to #3501's commits (4ded8efad266)",
+      "bin/gstack-prose-lint lines 8,33,56,57 are added lines of 576839cb8ce7..0a741933beb6",
+      "commit cc5ff0fea2e5 subject: fix: pre-landing review fixes",
+      "#3501 Pre-Landing Review: Outside review: GPT (openai/gpt-6.1-sol) as the outside voice on passes 4 to 8; pass 4 found 5 issues (one P1, fixed in cc5ff0f), passes 5 to 8 NO FINDINGS."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: at the reviewed head (0a741933beb6) gstack-prose-lint with --sections and --gate printed PROSE_LINT: none and exited 0 when a file had none of the named headings, and the head's test pinned that ('--sections Nope --gate' gives none). The fix adds a check after the lintFiles call (lines 56-57) that exits 2 so 'a renamed heading cannot pass unread', and rewrites the test to expect exit 2. The /ship compose gate runs this command with --sections ... --gate, so a draft that lost its headings published unlinted. Needs human check: severity (no rating for this issue in the receipt, and no failing test or production break named beyond the test the fix rewrites.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gstack#3501 (the fix PR) created_at 2026-10-26T23:11:41Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3501's own review and fixed in cc5ff0fea2e5 (author garrytan); #3501 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

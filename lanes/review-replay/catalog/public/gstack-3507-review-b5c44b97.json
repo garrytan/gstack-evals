@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3507-review-b5c44b97",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3507,
+  "reviewed_head": "8c021d1242204f36d248980e3af1a0998a882d12",
+  "merge_base": "c2e01e4ba7c4aa00f54bdf23bef84859ef30f5a1",
+  "diff_range": {
+    "from": "c2e01e4ba7c4aa00f54bdf23bef84859ef30f5a1",
+    "to": "8c021d1242204f36d248980e3af1a0998a882d12",
+    "note": "#3507's full diff at the commit before its review fix b5c44b972aa2."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/design-lint/rules/copy.ts",
+    "line": 91,
+    "summary": "The copy tier placed inline-handler code at the start of the on... attribute instead of its value, so a tell inside a handler reported at the wrong position and could name the wrong line."
+  },
+  "severity": {
+    "deserved": "INFORMATIONAL",
+    "basis": "the outside review (openai/gpt-6.1-sol) rated the inline-handler line finding P3, and the review's one blocking finding is a different item (saved-page CSS).",
+    "in_history": [
+      {
+        "by": "outside review by openai/gpt-6.1-sol, gstack /ship review on #3507",
+        "rated": "P3"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "b5c44b972aa215a7b574ab8eafc6d2279f3f0fc4",
+    "pr": 3507
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3507,
+      "range": {
+        "from": "8c021d1242204f36d248980e3af1a0998a882d12",
+        "to": "b5c44b972aa215a7b574ab8eafc6d2279f3f0fc4"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 5 later commits on the PR branch and 56 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 36 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3507, review-fix commit b5c44b972aa2, which rewrote lines that #3507's own earlier commits added",
+    "evidence": [
+      "git diff -U0 8c021d124220..b5c44b972aa2 -- lib/design-lint/rules/copy.ts rewrites 6 old lines; git blame 8c021d124220 gives 6 of them to #3507's commits (018eedb13703)",
+      "lib/design-lint/rules/copy.ts lines 91,132,133,134,135,137 are added lines of c2e01e4ba7c4..8c021d124220",
+      "commit b5c44b972aa2 subject: fix: pre-landing review fixes",
+      "#3507 Pre-Landing Review: It and 7 others were fixed in b5c44b972.",
+      "#3507 Pre-Landing Review: Pass 2 (8c021d124..b5c44b972): testing and maintainability clean; one informational adversarial note (below)."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says \"inline-handler tells report at the value's line\"; at the reviewed head codeOf at line 91 gave an inline handler's code the position of the attribute match, not of the value, so tells in it reported at the wrong offset. The GPT outside pass rated it P3. Needs human check: lines 132 to 137 (the superlinear nav count fixed there is a performance change with no failure named; line 91 is the defect site)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-27",
+    "source": "GitHub API: garrytan/gstack#3507 (the fix PR) created_at 2026-10-27T03:23:09Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3507's own review and fixed in b5c44b972aa2 (author garrytan); #3507 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

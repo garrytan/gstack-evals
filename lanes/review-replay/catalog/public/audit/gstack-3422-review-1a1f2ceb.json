@@ -1,0 +1,200 @@
+{
+  "id": "gstack-3422-review-1a1f2ceb",
+  "candidate": "garrytan/gstack#3422@1a1f2cebdc72",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3422 merged into main at 2026-10-26T06:07:07Z; review fix 1a1f2cebdc72 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "7bd3fb4a402c is an ancestor of 3570a6e5153f"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-design-craft lines 10,11,12,13,39,40,44,45,50 are added lines of 7bd3fb4a402c..3570a6e5153f"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 3570a6e5153f..1a1f2cebdc72 -- bin/gstack-design-craft rewrote 9 old lines; git blame 3570a6e5153f gives 9 to #3422's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 201 and decoy 44 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-design-craft",
+    "fix_file": "bin/gstack-design-craft",
+    "lines": [
+      10,
+      11,
+      12,
+      13,
+      39,
+      40,
+      44,
+      45,
+      50
+    ],
+    "blamed": 9,
+    "owned": 9,
+    "insertion_only": false,
+    "introduced_by": [
+      "98316193c63b09cf219b7b49b04efdaea0bca330"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 201,
+    "decoy_lines": 44
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "3570a6e5153f3c84507cba5d8600b7e298e80270",
+    "to": "1a1f2cebdc72808759fd4b4b92c0e8a43e76f7f0",
+    "files": [
+      "bin/gstack-design-craft",
+      "design-html/sections/craft.md.tmpl",
+      "test/design-craft.test.ts"
+    ],
+    "added_lines": 31,
+    "searched": {
+      "branch": 3,
+      "default": 100,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "cdb3b2b6521c9ee359c95a100b8a3e5eb4bfea44",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: scope --accepted to the same page; record current counts (GSTA-92)",
+        "file": "design-html/sections/craft.md.tmpl",
+        "lines": [
+          68
+        ]
+      },
+      {
+        "commit": "6c5b2d46123c6a06154b15e8e6e98559c73ea954",
+        "where": "default",
+        "pr": 3433,
+        "subject": "v1.91.260.0 feat(design-review,plan-design-review): craft audit and Persuade plan checks; craft tells as checker-only catalog entries (GSTA-92 phase 2) (#3433)",
+        "file": "test/design-craft.test.ts",
+        "lines": [
+          8,
+          209
+        ]
+      },
+      {
+        "commit": "d87eec950a64940ec0d5af050397b5ece52ca085",
+        "where": "default",
+        "pr": 3507,
+        "subject": "v1.91.274.0 feat(design-html,design-review): run gstack-design-lint; copy tier at its lines; waivers replace craft_exceptions (hallmark phase 2) (#3507)",
+        "file": "bin/gstack-design-craft",
+        "lines": [
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          44,
+          49,
+          50,
+          55
+        ]
+      },
+      {
+        "commit": "d87eec950a64940ec0d5af050397b5ece52ca085",
+        "where": "default",
+        "pr": 3507,
+        "subject": "v1.91.274.0 feat(design-html,design-review): run gstack-design-lint; copy tier at its lines; waivers replace craft_exceptions (hallmark phase 2) (#3507)",
+        "file": "design-html/sections/craft.md.tmpl",
+        "lines": [
+          66
+        ]
+      },
+      {
+        "commit": "d87eec950a64940ec0d5af050397b5ece52ca085",
+        "where": "default",
+        "pr": 3507,
+        "subject": "v1.91.274.0 feat(design-html,design-review): run gstack-design-lint; copy tier at its lines; waivers replace craft_exceptions (hallmark phase 2) (#3507)",
+        "file": "test/design-craft.test.ts",
+        "lines": [
+          8,
+          164,
+          165,
+          166,
+          167,
+          185,
+          207,
+          208,
+          209,
+          210,
+          212,
+          263,
+          265,
+          266,
+          267,
+          268
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says a malformed or missing --accepted file \"printed nothing\", and the craft section reads a missing CRAFT_RESULT as check unavailable, \"so one bad finalized.json switched the gate off\". The process.exit(2) in the catch at lines 44 and 45 of the reviewed head is where the check failed open.",
+    "line": 44,
+    "summary": "When the --accepted exceptions file was missing or malformed, gstack-design-craft exited 2 before printing any CRAFT_RESULT line, so the craft section treated the check as unavailable and one bad finalized.json switched the gate off.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: both adversarial voices found it, but the review section gives no rating for it (the structured outside review reports no P0 or P1 on any pass), and no test failure or production break is named."
+    },
+    "in_history": [
+      {
+        "by": "native adversarial (Claude) and outside voice (openai/gpt-6.1-sol), gstack /ship review on #3422",
+        "rated": "not named in the review section; the structured outside review reports GATE PASS (no P0/P1) on every pass"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "a check that fails open, but no rating or named failure puts it on either side of the floor"
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "cdb3b2b6521c fixes Start fresh inheriting old exceptions, from the 'whenever a finalized.json sits beside the page' instruction that predates the fix (the fix only appended the cannot-use-exceptions sentence); 6c5b2d46123c is a test tweak adding touchfiles; d87eec950a64 replaces the craft check with gstack-design-lint as a feature."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "a check that fails open, but no rating or named failure puts it on either side of the floor"
+    }
+  ]
+}

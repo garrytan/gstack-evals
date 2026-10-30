@@ -1,0 +1,182 @@
+{
+  "id": "gbrain-7681-review-a36534bf",
+  "candidate": "garrytan/gbrain#7681@a36534bf8f9c",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7681 merged into master at 2026-10-27T05:00:18Z; review fix a36534bf8f9c is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "a642d5d891d9 is an ancestor of d1db331b34b2"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/persistence/worktree-refresh.ts lines 232,599,648,772 are added lines of a642d5d891d9..d1db331b34b2"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 d1db331b34b2..a36534bf8f9c -- src/core/persistence/worktree-refresh.ts rewrote 7 old lines; git blame d1db331b34b2 gives 4 to #7681's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 491 and decoy 152 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/persistence/worktree-refresh.ts",
+    "fix_file": "src/core/persistence/worktree-refresh.ts",
+    "lines": [
+      232,
+      599,
+      648,
+      772
+    ],
+    "blamed": 7,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "57571c3071ce5212cf7de6be8fbf4fd7e5a59d71",
+      "8d421436af0353c0ec7671944d0ad55e8d37a1b8"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 491,
+    "decoy_lines": 152
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "d1db331b34b23a28fdd7d00c9e4e4d47e5e576e6",
+    "to": "a36534bf8f9c1af1ab3dfacbc652d361675adf18",
+    "files": [
+      "src/core/behavior-change-notice.ts",
+      "src/core/persistence/worktree-refresh.ts",
+      "test/persistence-worktree-refresh.test.ts",
+      "test/worktree-refresh-orphan-7679.test.ts"
+    ],
+    "added_lines": 144,
+    "searched": {
+      "branch": 14,
+      "default": 31,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "4755341734a733a9186c286a6a431f86a91e93c9",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: adversarial review fixes (#7679): unreadable HEAD never escalates an adopted orphan, scan checks member progress before topology locks, unknown refresh liveness is next's last fallback, one refresh_in_progress suggestion",
+        "file": "src/core/persistence/worktree-refresh.ts",
+        "lines": [
+          509,
+          654
+        ]
+      },
+      {
+        "commit": "84b96abc481cd8de9a535e743e79812b0290244f",
+        "where": "branch",
+        "pr": null,
+        "subject": "Merge remote-tracking branch 'origin/master' into capy/gbra210-orphaned-refresh",
+        "file": "src/core/behavior-change-notice.ts",
+        "lines": [
+          1318
+        ]
+      },
+      {
+        "commit": "57bbfdc8277bc24c596003b25da43db75a584832",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes (#7679): state-matrix tests for every orphan kind, holder bookkeeping, unattended owner scan, status fix/next agreement",
+        "file": "test/persistence-worktree-refresh.test.ts",
+        "lines": [
+          367,
+          369,
+          370,
+          371,
+          372,
+          377,
+          382,
+          383,
+          384,
+          385,
+          386,
+          391,
+          392,
+          393,
+          398,
+          406,
+          407,
+          411,
+          422
+        ]
+      },
+      {
+        "commit": "26be70f71b2b27543a5e63545ac4cd53d47ed1e1",
+        "where": "branch",
+        "pr": null,
+        "subject": "test: state-matrix cell for an orphaned syncing refresh at a descendant HEAD (#7679)",
+        "file": "test/persistence-worktree-refresh.test.ts",
+        "lines": [
+          445,
+          446,
+          447
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'A plain refresh of a recovery_required row refuses refresh_recovery_required with its stored fix instead of refresh_in_progress'. At the reviewed head precheck line 232 threw inProgress for any active row, recovery_required included, and inProgress's structured fix says 'a live one finishes on its own; an orphaned one names ... --resume, which the next plain refresh also runs by itself', which is false for a row the plain refresh never adopts (adoptOrphanedRefresh returns null for recovery_required, and its own comment says 'the precheck refuses each case by name'). The other located lines are a scan tuning (599) and message wording (648, 772).",
+    "line": 232,
+    "summary": "A plain gbrain sources refresh of a worktree whose refresh needs a reset decision refused refresh_in_progress, with a fix saying the refresh finishes on its own or by the next plain refresh. Neither happens: the row waits for the user, and the right refusal is refresh_recovery_required with its stored fix.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: wrong refusal code and misleading fix advice; the fix adds a state-matrix test but does not say it was red before, and names no production break."
+    },
+    "in_history": [
+      {
+        "by": "#7681's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a pre-landing review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "wrong refusal code with no stated failing test, production break or data loss."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "4755341734a7 drops inProgress's prose suggestion argument for one shared suggestion (lines 509, 654), a consolidation of wording; 84b96abc481c is a master merge that restamps the BEHAVIOR_CHANGES since version; 57bbfdc8277b and 26be70f71b2b extend the 7c state-matrix test with more kinds. None fixes a defect in the decoy's lines."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "wrong refusal code with no stated failing test, production break or data loss."
+    }
+  ]
+}

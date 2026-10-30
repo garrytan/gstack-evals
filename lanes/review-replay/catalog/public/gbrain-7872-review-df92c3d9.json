@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7872-review-df92c3d9",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7872,
+  "reviewed_head": "f61d1a5fd5fa6ae68c7ecfd4a6207d493eba8d39",
+  "merge_base": "5b94dca630d3af7a8eb2e42eacfafd9db52672f1",
+  "diff_range": {
+    "from": "5b94dca630d3af7a8eb2e42eacfafd9db52672f1",
+    "to": "f61d1a5fd5fa6ae68c7ecfd4a6207d493eba8d39",
+    "note": "#7872's full diff at the commit before its review fix df92c3d9946d."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/persistence/noop-kernel.ts",
+    "line": 129,
+    "summary": "chunksEmbeddedAsIs treated a page as embedded without checking that its text projection was sealed at its revision and above the safe-chunk fence, so a content no-op with pending projection work queued no embedding effect."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "the review rates it CRITICAL and says the fix is revert-red proven, so the old code fails a test.",
+    "in_history": [
+      {
+        "by": "full run pass 1 (6 specialists, red team, QA), gstack /ship review on #7872",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "df92c3d9946dc8636d7a66098aaf9b0809585a96",
+    "pr": 7872
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7872,
+      "range": {
+        "from": "f61d1a5fd5fa6ae68c7ecfd4a6207d493eba8d39",
+        "to": "df92c3d9946dc8636d7a66098aaf9b0809585a96"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 5 later commits on the PR branch and 19 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 99 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 6658e606911b (#7896) test/git-canonical-conversion-strict-pass-7866.test.ts:141. Hand check: 6658e606911b (#7896) parametrizes the strict-pass test over both passes and scales its waits, a test change that does not correct the fix."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7872, review-fix commit df92c3d9946d, which rewrote lines that #7872's own earlier commits added",
+    "evidence": [
+      "git diff -U0 f61d1a5fd5fa..df92c3d9946d -- src/core/persistence/noop-kernel.ts rewrites 9 old lines; git blame f61d1a5fd5fa gives 8 of them to #7872's commits (20be27233bda)",
+      "src/core/persistence/noop-kernel.ts lines 120,121,122,123,127,128,129,130 are added lines of 5b94dca630d3..f61d1a5fd5fa",
+      "commit df92c3d9946d subject: fix: pre-landing review fixes",
+      "#7872 Pre-Landing Review: `src/core/persistence/noop-kernel.ts:129` `chunksEmbeddedAsIs` called a page embedded without checking that its text projection was sealed at the page revision and above the safe-chunk fence, so a no-op with pending projection work would have queued no embedding effect."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review names it 1 CRITICAL, revert-red proven: chunksEmbeddedAsIs \"called a page embedded without checking that its text projection was sealed\" at the page revision and above the safe-chunk fence, so a no-op with pending projection work queued no embedding effect. The query is at lines 127 to 130."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-28",
+    "source": "GitHub API: garrytan/gbrain#7866 (an issue it names) created_at 2026-10-28T13:27:11Z; garrytan/gbrain#7872 (the fix PR) created_at 2026-10-28T14:18:13Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7872's own review and fixed in df92c3d9946d (author garrytan); #7872 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

@@ -1,0 +1,122 @@
+{
+  "id": "gstack-3494-review-96927f2d",
+  "candidate": "garrytan/gstack#3494@96927f2d4c55",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3494 merged into main at 2026-10-27T06:36:56Z; review fix 96927f2d4c55 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "576839cb8ce7 is an ancestor of c555ce3a8324"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-decision-trail lines 85,86,96,97 are added lines of 576839cb8ce7..c555ce3a8324"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 c555ce3a8324..96927f2d4c55 -- bin/gstack-decision-trail rewrote 4 old lines; git blame c555ce3a8324 gives 4 to #3494's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 934 and decoy 14 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-decision-trail",
+    "fix_file": "bin/gstack-decision-trail",
+    "lines": [
+      85,
+      86,
+      96,
+      97
+    ],
+    "blamed": 4,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "c555ce3a8324bf497f82e686ab6092f9c0406c4f"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 934,
+    "decoy_lines": 14
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "c555ce3a8324bf497f82e686ab6092f9c0406c4f",
+    "to": "96927f2d4c554f15869e0104220039ef0741f4cc",
+    "files": [
+      "bin/gstack-decision-trail",
+      "bin/gstack-worktree-audit",
+      "test/decision-trail.test.ts"
+    ],
+    "added_lines": 9,
+    "searched": {
+      "branch": 4,
+      "default": 62,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "0cab97447cd020d4b86c45e67f4a3bbb0b0335c3",
+        "where": "default",
+        "pr": 3583,
+        "subject": "v1.91.314.0 feat(autoplan): carry the owner's answer forward, gate ELI5 field, stacked approvals import (#3583)",
+        "file": "bin/gstack-decision-trail",
+        "lines": [
+          85,
+          86,
+          96,
+          97
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'hasHeader looks for a header line anywhere in the file, so a blank or hand-written trail gets exactly one header rather than one per append', and adds a test that appends twice to a blank trail. At the reviewed head hasHeader (lines 96-97) compared only the first line, which stays blank or a hand-written row after the first append, so every append added another header.",
+    "line": 96,
+    "summary": "gstack-decision-trail's hasHeader checked only the first line, so a trail that began blank or with hand-written rows got a new header line on every append instead of one.",
+    "severity": {
+      "deserved": "INFORMATIONAL",
+      "basis": "the extra lines are repeated headers, which readRows skips wherever they sit (its own comment), so no row is lost or miscounted; the fix states no failing test or break."
+    },
+    "in_history": [
+      {
+        "by": "#3494's Pre-Landing Review",
+        "rated": "no review excerpt names it; the fix commit's subject marks it a pass 3 pre-landing review fix"
+      }
+    ],
+    "needs_human_check": [],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "0cab97447cd0 (#3583) moves the trail append rules into lib/decision-trail.ts; its hasHeader is the decoy's logic unchanged, so it is a refactor, not a fix."
+      }
+    }
+  },
+  "needs_human_check": []
+}

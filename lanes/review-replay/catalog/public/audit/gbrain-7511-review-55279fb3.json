@@ -1,0 +1,99 @@
+{
+  "id": "gbrain-7511-review-55279fb3",
+  "candidate": "garrytan/gbrain#7511@55279fb3180d",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7511 merged into master at 2026-10-26T10:17:03Z; review fix 55279fb3180d is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "ade6d63879f9 is an ancestor of 6b01f793f2bc"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/commands/trust.ts lines 32,170,181 are added lines of ade6d63879f9..6b01f793f2bc"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 6b01f793f2bc..55279fb3180d -- src/commands/trust.ts rewrote 3 old lines; git blame 6b01f793f2bc gives 3 to #7511's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 992 and decoy 65 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/commands/trust.ts",
+    "fix_file": "src/commands/trust.ts",
+    "lines": [
+      32,
+      170,
+      181
+    ],
+    "blamed": 3,
+    "owned": 3,
+    "insertion_only": false,
+    "introduced_by": [
+      "e24695d43191dcb0cbef6c995f37bc1c1133e436"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 992,
+    "decoy_lines": 65
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "6b01f793f2bcd86437e227f7de042ab59b8952e1",
+    "to": "55279fb3180d5abef9f9e2bd172bfd4207f3760f",
+    "files": [
+      "src/commands/trust.ts",
+      "test/trust-owner-actions.test.ts"
+    ],
+    "added_lines": 40,
+    "searched": {
+      "branch": 7,
+      "default": 38,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says --accept-pending (GBRAIN_ACCEPT_PENDING) should exit 0 in accept-all as on the single-write path, 'red at HEAD: exit 10', and the poll command lacked the --brain routing. Lines 170 and 181 hold both at the reviewed head.",
+    "line": 181,
+    "summary": "`gbrain trust review --accept-all` exited 10 on a pending write even with --accept-pending, and its poll command dropped the CLI's --brain routing and the envelope fix.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the fix commit says its exit-code test is red at HEAD (exit 10)."
+    },
+    "in_history": [
+      {
+        "by": "#7511's Pre-Landing Review",
+        "rated": "not named in the part of the review section the dossier shows; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": []
+  },
+  "needs_human_check": []
+}

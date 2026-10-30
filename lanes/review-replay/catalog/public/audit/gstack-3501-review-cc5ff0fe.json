@@ -1,0 +1,143 @@
+{
+  "id": "gstack-3501-review-cc5ff0fe",
+  "candidate": "garrytan/gstack#3501@cc5ff0fea2e5",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3501 merged into main at 2026-10-27T10:16:09Z; review fix cc5ff0fea2e5 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "576839cb8ce7 is an ancestor of 0a741933beb6"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-prose-lint lines 8,33,56,57 are added lines of 576839cb8ce7..0a741933beb6"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 0a741933beb6..cc5ff0fea2e5 -- bin/gstack-prose-lint rewrote 4 old lines; git blame 0a741933beb6 gives 4 to #3501's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 755 and decoy 196 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-prose-lint",
+    "fix_file": "bin/gstack-prose-lint",
+    "lines": [
+      8,
+      33,
+      56,
+      57
+    ],
+    "blamed": 4,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "4ded8efad266cfb996ff3dc793dfed4af6491621"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 755,
+    "decoy_lines": 196
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "Outside review: GPT (openai/gpt-6.1-sol) as the outside voice on passes 4 to 8; pass 4 found 5 issues (one P1, fixed in cc5ff0f), passes 5 to 8 NO FINDINGS."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "0a741933beb6a82989de2a9358af1f76a2b89ea4",
+    "to": "cc5ff0fea2e5599e4b2579d4877cdd419fe76924",
+    "files": [
+      "bin/gstack-prose-lint",
+      "lib/prose-lint.ts",
+      "ship/sections/pr-body.md.tmpl",
+      "test/helpers/carve-guards.ts",
+      "test/prose-lint.test.ts"
+    ],
+    "added_lines": 122,
+    "searched": {
+      "branch": 8,
+      "default": 57,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "136080d44b696c150ac8be3f94c35bb72e500e1a",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(ship): the compose block's prose-lint trailer goes to stderr, and the publication-gates fixture stages gstack-prose-lint beside gstack-post",
+        "file": "ship/sections/pr-body.md.tmpl",
+        "lines": [
+          191
+        ]
+      },
+      {
+        "commit": "2876f377765c4655cf2f4aee1f328bfbf4c54a68",
+        "where": "branch",
+        "pr": null,
+        "subject": "Merge origin/main (f27a7605, v1.91.270.0) into absorb-b-pr-body-blast-radius-prose-lint (rule 19 grant 3, GSTA-36)",
+        "file": "test/helpers/carve-guards.ts",
+        "lines": [
+          171
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: at the reviewed head (0a741933beb6) gstack-prose-lint with --sections and --gate printed PROSE_LINT: none and exited 0 when a file had none of the named headings, and the head's test pinned that ('--sections Nope --gate' gives none). The fix adds a check after the lintFiles call (lines 56-57) that exits 2 so 'a renamed heading cannot pass unread', and rewrites the test to expect exit 2. The /ship compose gate runs this command with --sections ... --gate, so a draft that lost its headings published unlinted.",
+    "line": 56,
+    "summary": "With --sections and --gate, gstack-prose-lint passed (exit 0, PROSE_LINT: none) when the file had none of the named headings, so the /ship compose gate let a draft with a renamed or missing heading through without reading it.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the gate fails open, but the receipt does not say which of pass 4's five issues this was or how it was rated, and no production break is named."
+    },
+    "in_history": [
+      {
+        "by": "Step 11 / pass 4 outside voices (Claude adversarial, GPT openai/gpt-6.1-sol) on #3501",
+        "rated": "the receipt says pass 4 found 5 issues, one P1, fixed in cc5ff0f; it does not say which issue this was or its rating"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "no rating for this issue in the receipt, and no failing test or production break named beyond the test the fix rewrites."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "136080d44b69 fixes the publication-gates test fixture, which did not stage gstack-prose-lint, and adds >&2 to the line 191 gate so the ok trailer leaves stdout, not a defect in the line's gating; 2876f377765c (merge of main) only re-measures the carve-guard size cap."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "no rating for this issue in the receipt, and no failing test or production break named beyond the test the fix rewrites."
+    }
+  ]
+}

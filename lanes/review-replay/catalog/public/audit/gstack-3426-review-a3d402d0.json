@@ -1,0 +1,184 @@
+{
+  "id": "gstack-3426-review-a3d402d0",
+  "candidate": "garrytan/gstack#3426@a3d402d07e85",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3426 merged into main at 2026-10-26T06:41:23Z; review fix a3d402d07e85 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "c23d7d48fe27 is an ancestor of 748c45a4a48e"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "setup lines 1718,1719,1720 are added lines of c23d7d48fe27..748c45a4a48e"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 748c45a4a48e..a3d402d07e85 -- setup rewrote 3 old lines; git blame 748c45a4a48e gives 3 to #3426's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 216 and decoy 196 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "setup",
+    "fix_file": "setup",
+    "lines": [
+      1718,
+      1719,
+      1720
+    ],
+    "blamed": 3,
+    "owned": 3,
+    "insertion_only": false,
+    "introduced_by": [
+      "e09d245d65210bc203ea9fbd4b615d117d232795"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 216,
+    "decoy_lines": 196
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "- *Existing installs never get smaller* (product question, logged, not fixed): installs made before this PR already have `node_modules/typescript`, so later `./setup` runs take the full-install branch.",
+      "- `bin/dev-setup`'s non-frozen `bun install` aborts dev-setup offline (low; follow-up)."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "748c45a4a48ed2b593f155d643caf23272b5be17",
+    "to": "a3d402d07e850f112ef422fd99e021e98bb8994c",
+    "files": [
+      "bin/gstack-browser-ensure",
+      "setup",
+      "test/gstack-browser-ensure.test.ts",
+      "test/setup-production-deps.test.ts"
+    ],
+    "added_lines": 184,
+    "searched": {
+      "branch": 6,
+      "default": 99,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "b5b8820df8863ebfc7582cbde8d00a460e598d92",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes, pass 2 (GSTA-97)",
+        "file": "bin/gstack-browser-ensure",
+        "lines": [
+          76
+        ]
+      },
+      {
+        "commit": "b5b8820df8863ebfc7582cbde8d00a460e598d92",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes, pass 2 (GSTA-97)",
+        "file": "test/gstack-browser-ensure.test.ts",
+        "lines": [
+          182
+        ]
+      },
+      {
+        "commit": "b5b8820df8863ebfc7582cbde8d00a460e598d92",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes, pass 2 (GSTA-97)",
+        "file": "test/setup-production-deps.test.ts",
+        "lines": [
+          90
+        ]
+      },
+      {
+        "commit": "9773f6844f8db4e1797fd2a459f3ecd036b242b3",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(setup): keep a contributor checkout's dev packages on bun.lock's versions (GSTA-97)",
+        "file": "test/setup-production-deps.test.ts",
+        "lines": [
+          71,
+          269
+        ]
+      },
+      {
+        "commit": "394f3fd233d1a66bf3edd1622eb8313dd44661d1",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes, ship invocation 2 (GSTA-97)",
+        "file": "test/setup-production-deps.test.ts",
+        "lines": [
+          154,
+          194,
+          279,
+          284
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says \"Bun treats --production as frozen, so the old fallback could never recover a stale lockfile\" and refreshes it with --lockfile-only first. Line 1720 is the reviewed install_runtime_deps fallback.",
+    "line": 1720,
+    "summary": "setup's fallback after a failed frozen production install ran bun install --production, which Bun also treats as frozen, so a fork or local edit with a stale bun.lock could never install.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the review section details only the second /ship invocation; this fix's rating is not named and no failing test or production break is stated."
+    },
+    "in_history": [
+      {
+        "by": "#3426's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "Invocation 1's findings are not rated in the review section."
+      },
+      {
+        "item": "H2",
+        "reason": "The defect rests on Bun's --production implying a frozen lockfile, a tool fact the fix asserts and a real-Bun test pins."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "b5b8820df886 rewords the browser-ensure failure hint and its tests; 9773f6844f8d adds a contributor full-install branch before the decoy's line without rewriting it and edits tests; 394f3fd233d1 is test isolation only."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "Invocation 1's findings are not rated in the review section."
+    },
+    {
+      "item": "H2",
+      "reason": "The defect rests on Bun's --production implying a frozen lockfile, a tool fact the fix asserts and a real-Bun test pins."
+    }
+  ]
+}

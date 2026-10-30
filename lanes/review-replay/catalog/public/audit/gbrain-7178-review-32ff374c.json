@@ -1,0 +1,115 @@
+{
+  "id": "gbrain-7178-review-32ff374c",
+  "candidate": "garrytan/gbrain#7178@32ff374c3a63",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7178 merged into master at 2026-10-21T01:31:05Z; review fix 32ff374c3a63 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "6e1086492dbd is an ancestor of 903bd0b4cc8e"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/persistence/coordinator.ts lines 114,115,116,118,450,650,651,652 are added lines of 6e1086492dbd..903bd0b4cc8e"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 903bd0b4cc8e..32ff374c3a63 -- src/core/persistence/coordinator.ts rewrote 11 old lines; git blame 903bd0b4cc8e gives 8 to #7178's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1192 and decoy 126 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/persistence/coordinator.ts",
+    "fix_file": "src/core/persistence/coordinator.ts",
+    "lines": [
+      114,
+      115,
+      116,
+      118,
+      450,
+      650,
+      651,
+      652
+    ],
+    "blamed": 11,
+    "owned": 8,
+    "insertion_only": false,
+    "introduced_by": [
+      "1d32c8f939f064492af3eeab282757bcb9c8e31b"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1192,
+    "decoy_lines": 126
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "903bd0b4cc8e6d2adcdbf45be91da759e3698ea5",
+    "to": "32ff374c3a63e33dc285e6748d9158faf2eef9b0",
+    "files": [
+      "src/core/persistence/consumer.ts",
+      "src/core/persistence/coordinator.ts",
+      "test/large-pages/managed-import-projection-pending.test.ts"
+    ],
+    "added_lines": 114,
+    "searched": {
+      "branch": 17,
+      "default": 172,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says a pending commit's projection build started \"outside the consumer's limits\" (M1), edits detached their build too (L3), and the hook keyed on searchable 'pending', so a quarantined new page over 4 MiB did not reply at commit (L5). All three come from the finally block at lines 650 to 652 and the hook type at 114 to 118.",
+    "line": 651,
+    "summary": "The coordinator started every detached projection build at once, outside the consumer's limits, detached builds for edits as well as new pages, and keyed the hook on searchable 'pending', so a quarantined new page over 4 MiB still waited for its build before replying.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the fix labels the items M1, L3 and L5 but the reviewed PR has no Pre-Landing Review section, and no test failure, production break or data loss is named."
+    },
+    "in_history": [
+      {
+        "by": "#7178's Pre-Landing Review",
+        "rated": "no Pre-Landing Review section; the fix commit's subject marks it a #7106 review fix (items M1, L3, L5)"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "M and L labels suggest medium and low ratings, but no floor rating is stated"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "M and L labels suggest medium and low ratings, but no floor rating is stated"
+    }
+  ]
+}

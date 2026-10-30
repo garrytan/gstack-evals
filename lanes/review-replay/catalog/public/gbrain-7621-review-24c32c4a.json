@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7621-review-24c32c4a",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7621,
+  "reviewed_head": "9e3ba6d1e36c954883245f02c323acfa5bfcb282",
+  "merge_base": "e7bdf107bbedb44a3a147d71bda669a73dd4f838",
+  "diff_range": {
+    "from": "e7bdf107bbedb44a3a147d71bda669a73dd4f838",
+    "to": "9e3ba6d1e36c954883245f02c323acfa5bfcb282",
+    "note": "#7621's full diff at the commit before its review fix 24c32c4a32c2."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/cli/flag-equals.ts",
+    "line": 288,
+    "summary": "directEntryArgs ran the = rule and unknown-flag check on raw argv without stripping global flags, so a direct entry refused global flags main accepts. Without a command table, a true/false value on a value flag got advice to write it as a bare switch."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the fix names no failing test or production break.",
+    "in_history": [
+      {
+        "by": "#7621's Pre-Landing Review",
+        "rated": "not named in the review section (invocation 7); the fix commit's subject marks it a cycle-3 red team fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "24c32c4a32c254e6e17ac072d534657053ca79bc",
+    "pr": 7621
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7621,
+      "range": {
+        "from": "9e3ba6d1e36c954883245f02c323acfa5bfcb282",
+        "to": "24c32c4a32c254e6e17ac072d534657053ca79bc"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 19 later commits on the PR branch and 36 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 30 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 90a2994b51d3 src/cli/flag-equals.ts:305. Hand check: 90a2994b51d3 only narrows the directEntryArgs docstring at line 305; its code changes are in other files."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7621, review-fix commit 24c32c4a32c2, which rewrote lines that #7621's own earlier commits added",
+    "evidence": [
+      "git diff -U0 9e3ba6d1e36c..24c32c4a32c2 -- src/cli/flag-equals.ts rewrites 13 old lines; git blame 9e3ba6d1e36c gives 13 of them to #7621's commits (98dd756690fc, 9e3ba6d1e36c, a1cf98397530, b67f35dd2a3c)",
+      "src/cli/flag-equals.ts lines 15,16,17,18,48,49,252,253,254,255,285,287,288 are added lines of e7bdf107bbed..9e3ba6d1e36c",
+      "commit 24c32c4a32c2 subject: fix(cli): #7619 cycle-3 red team: hedged advice for boolean-looking values without switch evidence, direct entry strips global flags and validates local-writer like main"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix (cycle-3 red team) makes the direct entry strip global flags 'like main' and hedges advice for true/false or 0/1 values. Its new tests show `auth list --quiet --timeout 5s` must pass and `--expect=on` must get the value reading; lines 252-255 and 287-288 held the old behaviour. Needs human check: severity (no failure is rated in the evidence.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gbrain#7619 (an issue it names) created_at 2026-10-26T02:59:12Z; garrytan/gbrain#7621 (the fix PR) created_at 2026-10-26T03:16:40Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7621's own review and fixed in 24c32c4a32c2 (author garrytan); #7621 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

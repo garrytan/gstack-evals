@@ -1,0 +1,102 @@
+{
+  "id": "gstack-3556-review-5e63f0f8",
+  "candidate": "garrytan/gstack#3556@5e63f0f8ea31",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3556 merged into main at 2026-10-29T08:26:31Z; review fix 5e63f0f8ea31 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "fb30ed1047f2 is an ancestor of 95d9c6d06ef1"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "lib/sealed-guard.ts lines 53,60,70,289,290 are added lines of fb30ed1047f2..95d9c6d06ef1"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 95d9c6d06ef1..5e63f0f8ea31 -- lib/sealed-guard.ts rewrote 5 old lines; git blame 95d9c6d06ef1 gives 5 to #3556's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 257 and decoy 24 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "lib/sealed-guard.ts",
+    "fix_file": "lib/sealed-guard.ts",
+    "lines": [
+      53,
+      60,
+      70,
+      289,
+      290
+    ],
+    "blamed": 5,
+    "owned": 5,
+    "insertion_only": false,
+    "introduced_by": [
+      "19c74ffff36073c2a544f965f19a092e92e31875"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 257,
+    "decoy_lines": 24
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "95d9c6d06ef1d4f42b43c51e893d46c92e7b5d20",
+    "to": "5e63f0f8ea3137a88c9ee0526ef6a31b1bbf1000",
+    "files": [
+      "lib/sealed-guard.ts",
+      "test/pregate-guards.test.ts",
+      "test/sealed-guard.test.ts"
+    ],
+    "added_lines": 8,
+    "searched": {
+      "branch": 3,
+      "default": 18,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review says the allow_paths check \"also refuses ** in the name and extension-only wildcards\"; the reviewed line 70 caught only a wildcard-only last segment, so a glob like **/*.json passed validation.",
+    "line": 70,
+    "summary": "The sealed.allow_paths validator accepted a file name with ** or an extension-only wildcard, so one exception could exempt whole directories or file types from the sealed guard.",
+    "severity": {
+      "deserved": "INFORMATIONAL",
+      "basis": "The review rates all six pass 1 findings INFORMATIONAL with 0 CRITICAL, and no failure beyond the loose check is named."
+    },
+    "in_history": [
+      {
+        "by": "pass 1 testing and security specialists, gstack /ship review on #3556",
+        "rated": "INFORMATIONAL"
+      }
+    ],
+    "needs_human_check": []
+  },
+  "needs_human_check": []
+}

@@ -1,0 +1,140 @@
+{
+  "id": "gstack-3448-review-0c33acef",
+  "candidate": "garrytan/gstack#3448@0c33acefdeac",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3448 merged into main at 2026-10-26T13:56:13Z; review fix 0c33acefdeac is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "8d9501373b55 is an ancestor of b476ae9e4b66"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "browse/src/proxy-config.ts lines 320,321,322,324 are added lines of 8d9501373b55..b476ae9e4b66"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 b476ae9e4b66..0c33acefdeac -- browse/src/proxy-config.ts rewrote 6 old lines; git blame b476ae9e4b66 gives 4 to #3448's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 848 and decoy 39 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "browse/src/proxy-config.ts",
+    "fix_file": "browse/src/proxy-config.ts",
+    "lines": [
+      320,
+      321,
+      322,
+      324
+    ],
+    "blamed": 6,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "b476ae9e4b66ad4c94f924aedeb12dacbd6810a7"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 848,
+    "decoy_lines": 39
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "b476ae9e4b66ad4c94f924aedeb12dacbd6810a7",
+    "to": "0c33acefdeaca190152ad00e8f8a821255121752",
+    "files": [
+      "browse/src/proxy-config.ts",
+      "browse/test/proxy-env.test.ts"
+    ],
+    "added_lines": 28,
+    "searched": {
+      "branch": 7,
+      "default": 82,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "8ca299f2c7e7f167b7d7c2ed5eda671f00ba65de",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(browse): keep a slash-less scheme spelling, refuse a bare ? or #, and tighten the proxy docs",
+        "file": "browse/src/proxy-config.ts",
+        "lines": [
+          92
+        ]
+      },
+      {
+        "commit": "8ca299f2c7e7f167b7d7c2ed5eda671f00ba65de",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(browse): keep a slash-less scheme spelling, refuse a bare ? or #, and tighten the proxy docs",
+        "file": "browse/test/proxy-env.test.ts",
+        "lines": [
+          103
+        ]
+      },
+      {
+        "commit": "c0205373677c96aa8480df9b6a6d6a6ca8b4d63d",
+        "where": "branch",
+        "pr": null,
+        "subject": "docs(browse): the one-slash http:/host:3128 spelling was never a diagnostic; say what the parser does with it",
+        "file": "browse/src/proxy-config.ts",
+        "lines": [
+          332,
+          333,
+          334
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix adds a backslash to SCHEMELESS_PROXY_RE and refuses any proxy URL with a path, query or fragment, because a DOMAIN\\user login or a / in a password \"landed in the path, which the redactor does not mask\". The reviewed regex at line 324 let a backslash through to the URL parser.",
+    "line": 324,
+    "summary": "A proxy value with a backslash in the login (DOMAIN\\user) or a / in the password was parsed into the URL path, which is not redacted, so the password was printed in the clear on the start line, in the daemon log and in the state file.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "The fix message says the credential was printed in the clear in the daemon log and the state file: a secret exposure."
+    },
+    "in_history": [
+      {
+        "by": "#3448's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "8ca299f2c7e7 also refuses an empty ? or #, which carries no credential, and edits a test list; c0205373677c is docs wording only."
+      }
+    }
+  },
+  "needs_human_check": []
+}

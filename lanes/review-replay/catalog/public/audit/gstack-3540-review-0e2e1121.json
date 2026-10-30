@@ -1,0 +1,112 @@
+{
+  "id": "gstack-3540-review-0e2e1121",
+  "candidate": "garrytan/gstack#3540@0e2e112182f7",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3540 merged into main at 2026-10-28T13:05:02Z; review fix 0e2e112182f7 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "9e3308f65adf is an ancestor of 115355a38bd6"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-doctor lines 96,103 are added lines of 9e3308f65adf..115355a38bd6"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 115355a38bd6..0e2e112182f7 -- bin/gstack-doctor rewrote 2 old lines; git blame 115355a38bd6 gives 2 to #3540's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 65 and decoy 26 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-doctor",
+    "fix_file": "bin/gstack-doctor",
+    "lines": [
+      96,
+      103
+    ],
+    "blamed": 2,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "115355a38bd60322d9452d9f9ac9c58d2709470a"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 65,
+    "decoy_lines": 26
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=false SCOPE_PROMPTS=false SCOPE_TESTS=false SCOPE_DOCS=false SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false SCOPE_ERROR=unmatched",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "- [CRITICAL, fixed] `bin/gstack-doctor:103` `cfg()` reselected the state root, so the `--check`/`--json` state-root row named `GSTACK_STATE_ROOT` whatever selected the root.",
+      "- [INFORMATIONAL, fixed] `bin/gstack-doctor:96` clamp comment said every caller pipes into it."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "115355a38bd60322d9452d9f9ac9c58d2709470a",
+    "to": "0e2e112182f79c424d789bdc988de8408643058b",
+    "files": [
+      "bin/gstack-doctor",
+      "test/gstack-doctor.test.ts",
+      "test/gstack-launch-probe.test.ts"
+    ],
+    "added_lines": 24,
+    "searched": {
+      "branch": 3,
+      "default": 35,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review lists [CRITICAL, fixed] bin/gstack-doctor:103, where cfg() \"reselected the state root\", so --check and --json printed selected by GSTACK_STATE_ROOT whatever selected it; the fix keeps _gstack_sr_var across gstack_config_select and adds a regression test.",
+    "line": 103,
+    "summary": "The doctor's in-process config read reselected the state root after the doctor set GSTACK_STATE_ROOT, so the --check and --json state-root row always said it was selected by GSTACK_STATE_ROOT.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the review rates it CRITICAL (REVIEW_LOOP blocking_found=1) and the fix adds a regression test, with a gate note that the behavioural check goes red when the config read breaks."
+    },
+    "in_history": [
+      {
+        "by": "pass 1, gstack /ship review on #3540",
+        "rated": "CRITICAL"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "line 96",
+        "reason": "the clamp comment fix there is an informational wording item, not the defect"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "line 96",
+      "reason": "the clamp comment fix there is an informational wording item, not the defect"
+    }
+  ]
+}

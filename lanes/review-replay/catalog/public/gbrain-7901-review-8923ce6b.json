@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7901-review-8923ce6b",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7901,
+  "reviewed_head": "40461c875975d8e6673632acfb6c2104c17519db",
+  "merge_base": "7a929e2b21ea960fb5f596ca68e06e3351d4103b",
+  "diff_range": {
+    "from": "7a929e2b21ea960fb5f596ca68e06e3351d4103b",
+    "to": "40461c875975d8e6673632acfb6c2104c17519db",
+    "note": "#7901's full diff at the commit before its review fix 8923ce6bdd02."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "scripts/pregate-remote-gate.sh",
+    "line": 21,
+    "summary": "The remote-gate reuse guard did not refuse a tree that changes scripts/lib/gh-issue.ts, a helper ci-reuse.ts imports, so such a tree could have reused its own CI runs as proof."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "reviewers rated it CRITICAL and fixed it red-first, so a test fails on the old guard; the guard failed open",
+    "in_history": [
+      {
+        "by": "pass 1 (6 specialists, red team), gstack /ship review on #7901",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "8923ce6bdd027fd586a8374ce1087e45afe736bd",
+    "pr": 7901
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7901,
+      "range": {
+        "from": "40461c875975d8e6673632acfb6c2104c17519db",
+        "to": "8923ce6bdd027fd586a8374ce1087e45afe736bd"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 3 later commits on the PR branch and 11 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 6 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7901, review-fix commit 8923ce6bdd02, which rewrote lines that #7901's own earlier commits added",
+    "evidence": [
+      "git diff -U0 40461c875975..8923ce6bdd02 -- scripts/pregate-remote-gate.sh rewrites 4 old lines; git blame 40461c875975 gives 4 of them to #7901's commits (063646590053, e9ab90cc3170)",
+      "scripts/pregate-remote-gate.sh lines 21,22,23,87 are added lines of 7a929e2b21ea..40461c875975",
+      "commit 8923ce6bdd02 subject: fix: pre-landing review fixes (remote-gate reuse also refuses a tree that changes scripts/lib/gh-issue.ts; header comment lists every guarded path)",
+      "#7901 Pre-Landing Review: - [FIXED, CRITICAL] `scripts/pregate-remote-gate.sh`: the self-attestation guard did not cover `scripts/lib/gh-issue.ts`, which `scripts/ci-reuse.ts` imports, so a tree changing that helper could have reused its own runs."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review section's FIXED, CRITICAL item says the self-attestation guard 'did not cover scripts/lib/gh-issue.ts, which scripts/ci-reuse.ts imports', fixed red-first. At the head scripts/ci-reuse.ts line 42 imports ./lib/gh-issue.ts and the guard loop on line 87 omitted it."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gbrain#7901 (the fix PR) created_at 2026-10-29T03:56:57Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7901's own review and fixed in 8923ce6bdd02 (author garrytan); #7901 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

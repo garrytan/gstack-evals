@@ -12,12 +12,28 @@
     "note": "The panel's replay range: pass 1's fixes (build.ts items c2-*). The defect came in with those fixes."
   },
   "roles": [
-    { "role": "specialist", "checklist": "testing" },
-    { "role": "specialist", "checklist": "security" },
-    { "role": "specialist", "checklist": "maintainability" },
-    { "role": "specialist", "checklist": "state-machines" },
-    { "role": "red-team" },
-    { "role": "fix-check" }
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    },
+    {
+      "role": "fix-check"
+    }
   ],
   "defect": {
     "file": "lib/ship-queue-train-verify.ts",
@@ -34,13 +50,19 @@
       }
     ]
   },
-  "fix": { "commit": "ada2accea064f814071330f97f61c03db84180a8", "pr": 3518 },
+  "fix": {
+    "commit": "ada2accea064f814071330f97f61c03db84180a8",
+    "pr": 3518
+  },
   "decoys": [
     {
       "kind": "fix-commit",
       "repo": "garrytan/gstack",
       "pr": 3518,
-      "range": { "from": "a2077ff70eede03d4a1b3269a7ebfd685f219143", "to": "ada2accea064f814071330f97f61c03db84180a8" },
+      "range": {
+        "from": "a2077ff70eede03d4a1b3269a7ebfd685f219143",
+        "to": "ada2accea064f814071330f97f61c03db84180a8"
+      },
       "audit": null
     }
   ],
@@ -55,7 +77,12 @@
       "2114d7ab3330 parent 1f246e3505ea (fork point)"
     ]
   },
-  "answer_key_audit": null,
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Fix ada2acc's message says stopped() read prState's 'unreadable' as not merged, so a slot-1 squash already on main while gh pr view failed answered that nothing merged and the queue is not frozen; line 150 at a2077ff is that read, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 2. Needs human check: severity (every reviewer rated it INFORMATIONAL and the panel names no failing test or production break, so deserved severity stays null)."
+  },
   "shelf_life": {
     "first_appeared": "2026-10-27",
     "source": "GitHub API repos/garrytan/gstack/pulls/3518 created_at 2026-10-27T16:53:25Z",
