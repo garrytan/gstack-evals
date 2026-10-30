@@ -9,7 +9,7 @@ import { clusteredPairedDelta, holmAdjusted, type PairedItem } from "../../src/r
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { mapSeverity, type Arm, type CostRow, type Grade, type Judgment } from "./contract.ts";
 import { POWER_GOAL, simulate, spreadValue, suiteClusters } from "./power.ts";
-import { decide, pairedTests, type SignFlip, type Verdict } from "./stats.ts";
+import { ALPHA, decide, pairedTests, type SignFlip, type Verdict } from "./stats.ts";
 import type { Blocker, FrozenBar, Suite, Unit } from "./suite.ts";
 
 export const SCORE_VERSION = 1;
@@ -137,6 +137,11 @@ function meter(arm: Arm): { units: Map<string, Metered>; aggregates: Array<Meter
     const m: Metered = { tokens: sum("total_tokens")!, wall: sum("wall_seconds"), usd: sum("usd"), grade: g.rows.map((r) => r.grade).reduce(weaker) };
     if (g.aggregate) aggregates.push({ ...m, units: g.units });
     else units.set(g.units[0]!, m);
+  }
+  const overlapping = aggregates.filter((a) => aggregates.some((b) => b !== a && b.units.some((u) => a.units.includes(u))));
+  for (const a of overlapping) {
+    aggregates.splice(aggregates.indexOf(a), 1);
+    note("pr * rows whose covers overlap another pr * row, which would count shared units twice, so not metered");
   }
   for (const a of aggregates)
     for (const u of a.units)
@@ -309,6 +314,8 @@ export interface FrozenBarResult {
 
 function frozenBar(suite: Suite, bar: FrozenBar, v: Arm, arms: Map<string, ScoredArm>): FrozenBarResult {
   const base = { round: bar.round, text: bar.text, arm: v.arm.id };
+  const unfit = (a: Arm) => a.arm.status === "stopped" || a.judgments!.some((j) => j.coverage === "incomplete");
+  if (unfit(v)) return { ...base, result: null, detail: "arm " + v.arm.id + " stopped or has blockers recorded with coverage incomplete" };
   if (v.arm.passes !== 1) return { ...base, result: null, detail: "the bar was frozen for one pass; arm " + v.arm.id + " has " + v.arm.passes };
   const js = byBlocker(v);
   const isF = (a: Arm, m: Map<string, Map<number, Judgment>>, u: Unit, b: Blocker) => m.get(key(u, b))?.get(1)?.outcome === "F";
@@ -321,6 +328,7 @@ function frozenBar(suite: Suite, bar: FrozenBar, v: Arm, arms: Map<string, Score
   }
   const ref = arms.get(bar.reference)?.arm;
   if (!ref) return { ...base, result: null, detail: "reference arm " + bar.reference + " is not loaded" };
+  if (unfit(ref)) return { ...base, result: null, detail: "reference arm " + ref.arm.id + " stopped or has blockers recorded with coverage incomplete" };
   if (ref.arm.passes !== 1) return { ...base, result: null, detail: "the bar was frozen for one reference pass; arm " + ref.arm.id + " has " + ref.arm.passes };
   const rjs = byBlocker(ref);
   const refFound = suite.units.flatMap((u) => u.blockers.filter(blocking).filter((b) => isF(ref, rjs, u, b)).map((b) => ({ u, b })));
@@ -392,13 +400,13 @@ function agreement(suite: Suite, v: Arm, r: Arm): ScoreRecord["agreement"] {
   return { shared: n, table: t, agreement: round(po), kappa: pe < 1 ? round((po - pe) / (1 - pe)) : null, reason: pe < 1 ? null : "every shared match has the same severity in both arms, so kappa is undefined" };
 }
 
-function sizeRule(suite: Suite, spec: SizeRuleSpec | undefined, v: Arm, r: Arm, refRecall: number, margin: number, seed: number): ScoreRecord["size_rule"] {
+function sizeRule(suite: Suite, spec: SizeRuleSpec | undefined, v: Arm, r: Arm, refRecall: number, margin: number, seed: number, family: number): ScoreRecord["size_rule"] {
   if (!spec) return { source: "unchecked", power: null, goal: POWER_GOAL, met: null, detail: "no size rule was given (--power or --power-sims)" };
   if ("power" in spec) return { source: "declared", power: spec.power, goal: POWER_GOAL, met: spec.power >= POWER_GOAL, detail: "declared power " + spec.power + " from " + spec.source };
   if (!(refRecall > 0 && refRecall < 1)) return { source: "unchecked", power: null, goal: POWER_GOAL, met: null, detail: "the reference's blocking recall is " + refRecall + ", so the simulation has no rate to draw around" };
   const spread = spec.spread ?? "wide";
-  const res = simulate({ clusters: suiteClusters(suite), passes_variant: v.arm.passes, passes_reference: r.arm.passes, recall: refRecall, spread: spreadValue(spread), margin_points: margin, delta_points: 0, sims: spec.power_sims, seed });
-  return { source: "simulated", power: round(res.no_loss), goal: POWER_GOAL, met: res.no_loss >= POWER_GOAL, detail: "an arm as good as the reference gets NO_LOSS in " + round(res.no_loss * 100, 1) + "% of " + spec.power_sims + " simulations (spread " + spread + ", recall " + round(refRecall, 3) + ", seed " + seed + ")" };
+  const res = simulate({ clusters: suiteClusters(suite), passes_variant: v.arm.passes, passes_reference: r.arm.passes, recall: refRecall, spread: spreadValue(spread), margin_points: margin, delta_points: 0, sims: spec.power_sims, seed, alpha_no_loss: ALPHA / family });
+  return { source: "simulated", power: round(res.no_loss), goal: POWER_GOAL, met: res.no_loss >= POWER_GOAL, detail: "an arm as good as the reference gets NO_LOSS in " + round(res.no_loss * 100, 1) + "% of " + spec.power_sims + " simulations (spread " + spread + ", recall " + round(refRecall, 3) + ", seed " + seed + (family > 1 ? ", no-loss alpha 0.05/" + family + ", Holm's strictest step" : "") + ")" };
 }
 
 /** Scores comparisons as one family: their no-loss p-values are Holm-adjusted together. */
@@ -437,15 +445,21 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
     const { c, V, R, pairs, stats, tests } = d;
     const v = V.arm;
     const r = R.arm;
-    const pHolm = d.noVerdict === null && tests.no_loss.p !== null ? round(holm[i]!, 6) : null;
-    const verdict = d.noVerdict === null ? decide(pHolm, tests.loss.p) : null;
+    const attempted = d.noVerdict === null && tests.no_loss.p !== null;
+    const verdict = d.noVerdict === null ? decide(attempted ? holm[i]! : null, tests.loss.p) : null;
+    const pHolm = attempted ? round(holm[i]!, 6) : null;
+    const labelled = v.judgments![0]!.saw_label;
     const bar = c.frozen_bar === null ? null : suite.frozen_bars.find((b) => b.round === c.frozen_bar);
     if (c.frozen_bar !== null && !bar) throw new ScoreError("E_NOLOSS_SUITE", "comparison " + c.id + " names frozen bar round " + c.frozen_bar + ", which suite " + suite.id + " does not have");
-    const size = sizeRule(suite, c.size_rule, v, r, stats.mean_a, c.margin_points, opts.seed);
+    for (const other of [bar?.kind === "reference-misses" ? bar.reference : null, c.reference_repeat ?? null]) {
+      if (other !== null && get(other).arm.judgments![0]!.saw_label !== labelled) throw new ScoreError("E_NOLOSS_BLIND", "comparison " + c.id + " would pool labelled and blind judgments through arm " + other + "; they are never pooled");
+    }
+    const barResult = bar ? frozenBar(suite, bar, v, arms) : null;
+    const size = sizeRule(suite, c.size_rule, v, r, stats.mean_a, c.margin_points, opts.seed, comparisons.length);
     const warnings = verdict === "NO_LOSS" && size.met !== true ? ["NOLOSS_UNDERPOWERED"] : [];
-    const labelled = v.judgments![0]!.saw_label;
     const claim = "non-inferior within " + c.margin_points + " points of blocking recall";
     const reasons: string[] = [];
+    if (barResult && barResult.result !== "PASS") reasons.push("frozen bar, round " + barResult.round + ": " + (barResult.result ?? "not scored") + " (" + barResult.detail + ")");
     if (verdict !== "NO_LOSS") reasons.push(verdict === null ? d.noVerdict! : "the verdict is " + verdict);
     if (verdict === "NO_LOSS" && size.met !== true) reasons.push(size.met === null ? "the size rule is unchecked" : "below the size rule: power " + size.power + " is under " + POWER_GOAL);
     if (c.post_hoc) reasons.push("post hoc: the comparison was not preregistered before the arms ran");
@@ -453,10 +467,10 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
     if (suite.development_only) reasons.push("suite " + suite.id + " is development-only: it ranks variants but cannot confirm a release on its own");
     if (!v.findings) reasons.push("the variant is transcribed, so its unmatched blocking findings cannot be adjudicated");
     else if (newBlockingFindings(suite, v)!.per_pass > 0) reasons.push("the variant's unmatched blocking findings are not adjudicated, so there is no false-blocking bound");
-    if (bar && bar.kind === "reference-misses" && arms.get(bar.reference) === undefined) reasons.push("frozen bar reference " + bar.reference + " is not loaded");
     const repeat = c.reference_repeat ? get(c.reference_repeat) : null;
     let noise: ScoreRecord["noise_floor"] = { repeat: null, reason: "no same-window repeat of reference " + r.arm.id + " is named" };
-    if (repeat) {
+    if (repeat?.arm.arm.status === "stopped") noise = { repeat: null, reason: "repeat arm " + repeat.arm.arm.id + " stopped" };
+    else if (repeat) {
       const rp = pairsOf(suite, repeat.arm, r);
       const byCluster = new Map<string, number>();
       for (const p of rp) byCluster.set(p.cluster, (byCluster.get(p.cluster) ?? 0) + p.b - p.a);
@@ -474,7 +488,7 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
       reference: side(R),
       margin: { points: c.margin_points, reason: c.margin_reason },
       post_hoc: c.post_hoc,
-      frozen_bar: bar ? frozenBar(suite, bar, v, arms) : null,
+      frozen_bar: barResult,
       judging: {
         labelled,
         blind_share: { variant: round(v.judgments!.filter((j) => !j.saw_label).length / v.judgments!.length), reference: round(r.judgments!.filter((j) => !j.saw_label).length / r.judgments!.length) },

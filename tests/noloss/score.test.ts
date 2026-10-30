@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArm } from "../../lanes/review-noloss/contract.ts";
-import { buildExport, COMPARISONS_DIR, loadArms, renderExport } from "../../lanes/review-noloss/export.ts";
+import { buildExport, loadArms, renderExport } from "../../lanes/review-noloss/export.ts";
 import { ARMS_ROOT, readIngested, snapshot } from "../../lanes/review-noloss/ingest.ts";
 import { armMetrics, pairedCost, scoreComparisons, ScoreError, type Comparison, type ScoredArm } from "../../lanes/review-noloss/score.ts";
 import { loadSuite, REPO_ROOT } from "../../lanes/review-noloss/suite.ts";
@@ -10,6 +10,7 @@ import { cleanup, editArm, editJudgments, run, tmp, writeArm } from "./helpers.t
 
 afterAll(cleanup);
 const { suite, sha256 } = loadSuite("gsta167-14pr");
+const COMPARISONS = join(REPO_ROOT, "lanes/review-noloss/comparisons/gsta167-14pr.json");
 const legacy = loadArms(ARMS_ROOT, suite, sha256);
 const files = (id: string) => readIngested(join(ARMS_ROOT, "gsta167-14pr", id), suite, sha256).files;
 const scored = (f: Map<string, Buffer>): ScoredArm => ({ arm: parseArm(f, suite, sha256), tree_sha256: "test" });
@@ -34,7 +35,7 @@ describe("legacy arms, as the scorer reports them", () => {
   });
 
   test("A', A and B each LOSS against C at 10 points, and B against A NOT_DISTINGUISHED", () => {
-    const file = JSON.parse(readFileSync(join(COMPARISONS_DIR, "gsta167-14pr.json"), "utf8"));
+    const file = JSON.parse(readFileSync(COMPARISONS, "utf8"));
     const recs = scoreComparisons(suite, sha256, legacy, file.comparisons, opts);
     expect(recs.map((r) => [r.id, r.result.verdict, r.result.losses, r.result.gains, r.result.p_no_loss, r.result.p_loss, r.exit])).toEqual([
       ["A2-vs-C", "LOSS", 9, 2, 0.931091, 0.03125, 1],
@@ -49,6 +50,7 @@ describe("legacy arms, as the scorer reports them", () => {
       ["FAIL", "1 of 4 group (a) blockers found (needs all); 2 of 12 group (b) PRs hit (needs 11)"],
       ["FAIL", "1 of 4 group (a) blockers found (needs all); 2 of 12 group (b) PRs hit (needs 11)"],
     ]);
+    expect(recs[0]!.eligibility.reasons[0]).toBe("frozen bar, round 3: FAIL (misses 9 of the 19 blockers C found (allows 1))");
     for (const r of recs) {
       expect(r.judging.labelled).toBe(true);
       expect(r.eligibility.eligible).toBe(false);
@@ -169,6 +171,8 @@ describe("cost arithmetic", () => {
     const dbl = armMetrics(suite, { arm: withCost("V", [...prs.map((pr) => row(pr, 100)), row("*", 50, "proxy-journal", "3593 3596")]), tree_sha256: "t" }, opts).cost!;
     expect([dbl.units, dbl.tokens_per_pass]).toEqual([14, 1250]);
     expect(dbl.notes[0]).toContain("2 units with their own total inside a pr * row");
+    const overlap = armMetrics(suite, { arm: withCost("O", [row("*", 200, "proxy-journal", "3593 3596"), row("*", 200, "proxy-journal", "3596 3516"), row(3524, 100)]), tree_sha256: "t" }, opts).cost!;
+    expect([overlap.units, overlap.tokens_per_pass]).toEqual([1, 100]);
     const two = armMetrics(suite, { arm: withCost("P", [row(3593, 100, "proxy-journal", "", "1"), row(3593, 300, "proxy-journal", "", "2"), row(3596, 1000), row(3516, 70, "proxy-journal", "", "1")], 2), tree_sha256: "t" }, opts).cost!;
     expect([two.units, two.tokens_per_pass, two.per_unit_median]).toEqual([2, 700, 350]);
     expect(two.notes).toContain("1 units with totals for only some passes, so not metered");
@@ -179,8 +183,9 @@ describe("noloss score and export commands", () => {
   test("exit 1 on LOSS, 2 on NOT_DISTINGUISHED, and no default margin", async () => {
     const loss = await run(["score", "--suite", "gsta167-14pr", "--variant", "B", "--reference", "C", "--margin", "10", "--margin-reason", "test", "--json"]);
     expect([loss.code, JSON.parse(loss.out).result.verdict, JSON.parse(loss.out).version]).toEqual([1, "LOSS", 1]);
-    const nd = await run(["score", "--suite", "gsta167-14pr", "--variant", "B", "--reference", "A", "--prereg", join(COMPARISONS_DIR, "gsta167-14pr.json")]);
+    const nd = await run(["score", "--suite", "gsta167-14pr", "--variant", "B", "--reference", "A", "--prereg", COMPARISONS]);
     expect(nd.code).toBe(2);
+    expect(nd.out).toContain("(Holm 1.000 over 4)");
     expect(nd.out.split("\n")[0]).toStartWith("labelled judging, transcribed (B, A), post hoc: frozen bar, round 2: B FAIL");
     const none = await run(["score", "--suite", "gsta167-14pr", "--variant", "B", "--reference", "A"]);
     expect([none.code, none.err.split("\n")[0]]).toEqual([2, expect.stringContaining("E_USAGE noloss score needs --margin")]);
@@ -192,12 +197,12 @@ describe("noloss score and export commands", () => {
     writeFileSync(stale, readFileSync(join(REPO_ROOT, "tables/review-noloss.json"), "utf8").replace('"seed": 1', '"seed": 2'));
     const r = await run(["export", "--check", "--table", stale]);
     expect([r.code, r.err.split("\n")[0]]).toEqual([2, expect.stringMatching(/^E_NOLOSS_STALE/)]);
-    const md = renderExport(buildExport({ comparisons: join(COMPARISONS_DIR, "gsta167-14pr.json"), root: ARMS_ROOT }));
+    const md = renderExport(buildExport({ comparisons: COMPARISONS, root: ARMS_ROOT }));
     expect(md).not.toMatch(/\bno loss\b/i);
     const verdictLines = md.split("\n").filter((l) => / vs [A-Z]/.test(l) && l.includes("margin"));
     expect(verdictLines.length).toBe(4);
     for (const l of verdictLines) expect(l).toStartWith("- labelled judging");
-  });
+  }, 60_000);
 
   test("a sealed suite: arms, records and tables inside the repo are refused, and the table outside holds no unit ids", async () => {
     const dir = tmp();

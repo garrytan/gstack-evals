@@ -4,7 +4,7 @@
 // the variant's rates are the reference's scaled so its mean recall moves by exactly delta. Each arm's passes are
 // independent draws, and every simulated comparison runs the exact tests in stats.ts. No model is called.
 import { seededRandom } from "../../src/runner/stats/paired.ts";
-import { decide, pairedTests } from "./stats.ts";
+import { ALPHA, decide, pairedTests } from "./stats.ts";
 import type { Suite } from "./suite.ts";
 
 /** Beta concentration (alpha + beta) of the per-blocker detection rates: wide puts many blockers near 0 or 1. */
@@ -22,6 +22,8 @@ export interface PowerInput {
   delta_points: number;
   sims: number;
   seed: number;
+  /** The no-loss test's alpha; an export's Holm family faces 0.05 / its size at the strictest step. */
+  alpha_no_loss?: number;
 }
 
 export interface PowerResult {
@@ -93,7 +95,7 @@ export function simulate(input: PowerInput): PowerResult {
     const scale = mean > 0 ? Math.max(0, mean + input.delta_points / 100) / mean : 1;
     const pairs = rates.map((r, i) => ({ id: String(i), cluster: cluster[i]!, a: share(r, input.passes_reference), b: share(Math.min(1, r * scale), input.passes_variant) }));
     const t = pairedTests(pairs, input.margin_points, passes);
-    const v = decide(t.no_loss.p, t.loss.p);
+    const v = decide(t.no_loss.p, t.loss.p, input.alpha_no_loss ?? ALPHA);
     if (v === "NO_LOSS") noLoss++;
     else if (v === "LOSS") loss++;
   }

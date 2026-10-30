@@ -84,8 +84,8 @@ export function shiftedSignFlip(pairs: readonly PairedItem[], marginPoints: numb
 export type Verdict = "NO_LOSS" | "LOSS" | "NOT_DISTINGUISHED";
 
 /** Plan section 5: NO_LOSS when the margin test rejects at 0.05, else LOSS when the swapped margin-0 test does, else NOT_DISTINGUISHED. */
-export function decide(pNoLoss: number | null, pLoss: number | null): Verdict {
-  if (pNoLoss !== null && pNoLoss < ALPHA) return "NO_LOSS";
+export function decide(pNoLoss: number | null, pLoss: number | null, alphaNoLoss = ALPHA): Verdict {
+  if (pNoLoss !== null && pNoLoss < alphaNoLoss) return "NO_LOSS";
   if (pLoss !== null && pLoss < ALPHA) return "LOSS";
   return "NOT_DISTINGUISHED";
 }

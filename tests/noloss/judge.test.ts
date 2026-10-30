@@ -89,12 +89,15 @@ describe("blinded judging: register, packet, reply, join and score", () => {
     expect([wait2.code, wait2.err]).toEqual([2, expect.stringContaining("scoring waits for the second judge")]);
     const need2 = named(wait2.err);
     expect(need2.has("packets/3593.json B1")).toBe(true);
+    expect((await join_(["--reply", p1, "--second", save("same.json", reply(key, "judge one", primary, need2))])).err).toContain("a second read needs another judge");
     const flipped = [...need2][0]!;
-    const p2 = save("second.json", reply(key, "judge two", { ...primary, [flipped]: [] }, need2));
+    const sameOutcome = [...need2].find((k) => k !== flipped && primary[k]!.length > 0);
+    const p2 = save("second.json", reply(key, "judge two", { ...primary, [flipped]: [], ...(sameOutcome ? { [sameOutcome]: primary[sameOutcome]!.slice(0, 1) } : {}) }, need2));
     const wait3 = await join_(["--reply", p1, "--second", p2]);
     expect([wait3.code, wait3.err]).toEqual([2, expect.stringContaining("scoring waits for a third read")]);
-    expect(named(wait3.err)).toEqual(new Set([flipped]));
-    const p3 = save("third.json", reply(key, "judge three", primary, new Set([flipped])));
+    const need3 = new Set([flipped, ...(sameOutcome && primary[sameOutcome]!.length > 1 ? [sameOutcome] : [])]);
+    expect(named(wait3.err)).toEqual(need3);
+    const p3 = save("third.json", reply(key, "judge three", primary, need3));
     const done = await join_(["--reply", p1, "--second", p2, "--third", p3]);
     expect(done.code).toBe(0);
     const tsv = readFileSync(join(out, "alpha", "judgments.tsv"), "utf8");
@@ -113,6 +116,10 @@ describe("blinded judging: register, packet, reply, join and score", () => {
     swapped.packets[0]!.sha256 = "0".repeat(64);
     expect((await join_(["--reply", save("s.json", swapped)])).err).toContain("stale or swapped packet");
     expect((await join_(["--reply", save("b.json", { ...reply(key, "j", primary), batch: "f".repeat(64) })])).err).toContain("not this key's batch");
+    const tampered = JSON.parse(readFileSync(keyPath, "utf8"));
+    tampered.packets[0].sha256 = "0".repeat(64);
+    const r = await run(["judge-join", "--suite", "gsta167-14pr", "--key", save("tampered.json", tampered), "--out", out, "--arm", armDir("alpha"), "--arm", armDir("beta"), "--reply", save("t.json", reply(key, "j", primary))]);
+    expect(r.err).toContain("does not hash to its own batch digest");
   });
 
   test("the judged arms ingest and score as blind judging", async () => {

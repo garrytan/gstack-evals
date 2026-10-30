@@ -5,14 +5,14 @@
 // binds the suite, each arm's tree digest, the seed and the key's mapping, and every reply must name that batch and each
 // packet's digest. judge-join applies severity mechanically (the highest mapped severity among a blocker's matches
 // wins), requires the second judge on every blocker where the arms disagree plus a seeded 20% sample, and a third read
-// wherever the two judges disagree, before it writes judgments.tsv (saw_label no) for every arm at once. No model is
+// wherever the two judges match different findings, before it writes judgments.tsv (saw_label no) for every arm at once. No model is
 // called here; the judges are paid work under their own preregistration.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
 import { JUDGMENT_COLUMNS, mapSeverity, parseArm, type Arm, type Finding, type Mapped, type Outcome } from "./contract.ts";
 import { ScoreError } from "./score.ts";
-import { sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
+import { insideRepo, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
 
 export const JUDGE_VERSION = 1;
 export const SECOND_SAMPLE = 0.2;
@@ -50,7 +50,7 @@ export interface JudgeKey {
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const wholeWord = (s: string, flags = "i") => new RegExp("(?<![A-Za-z0-9_])" + escape(s) + "(?![A-Za-z0-9_])", flags);
 const fileName = (suite: Suite, u: Unit) => "packets/" + unitRef(suite, u).replace(/\//g, "__") + ".json";
-const batchDigest = (k: Pick<JudgeKey, "suite" | "arms" | "seed" | "mapping_sha256">) => sha256(JSON.stringify({ version: JUDGE_VERSION, suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256 }));
+const batchDigest = (k: Pick<JudgeKey, "suite" | "arms" | "seed" | "mapping_sha256" | "packets">) => sha256(JSON.stringify({ version: JUDGE_VERSION, suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
 const inside = (child: string, dir: string) => resolve(child) === resolve(dir) || resolve(child).startsWith(resolve(dir) + sep);
 
 /** Texts a packet must never carry: arm ids and labels (3 or more characters), "arm <id>", model ids, and reader names with a hyphen or digit. */
@@ -90,6 +90,7 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
 /** Writes one packet per unit and batch.json under out, and the key file at key, which must sit outside out. */
 export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: LoadedArm[]; seed: number; out: string; key: string }): { batch: string; packets: number; findings: number } {
   const { suite, arms } = o;
+  if (suite.sealed && (insideRepo(o.out) || insideRepo(o.key))) blind("suite " + suite.id + " is sealed, so its packets and key must be written outside the repo");
   if (inside(o.key, o.out)) blind("--key " + o.key + " is inside --out " + o.out + "; the key maps opaque ids back to arms and must never travel with the packets");
   if (existsSync(o.key)) blind("--key " + o.key + " already exists; give each batch a new key path");
   if (existsSync(o.out) && readdirSync(o.out).length) blind("--out " + o.out + " is not empty; write each batch to a new directory");
@@ -122,7 +123,6 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   }
   if (problems.length) blind("the packets would leak what blinding hides:\n" + problems.join("\n") + "\nremove it from the source arm's findings and ingest it again");
   const head = { suite: { id: suite.id, sha256: o.suiteSha256 }, arms: arms.map((a) => ({ id: a.arm.arm.id, tree_sha256: a.treeSha256 })).sort((x, y) => (x.id < y.id ? -1 : 1)), seed: o.seed, mapping_sha256: sha256(JSON.stringify(entries)) };
-  const batch = batchDigest(head);
   const staging = resolve(o.out) + ".staging-" + process.pid;
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(join(staging, "packets"), { recursive: true });
@@ -130,7 +130,7 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   for (const b of bodies) {
     const packet = {
       version: JUDGE_VERSION,
-      batch,
+      suite: head.suite.id,
       unit: { repo: b.unit.repo, pr: b.unit.pr, head: b.unit.head, base: b.unit.base },
       blockers: b.unit.blockers.map((x) => ({ id: x.id, paths: x.paths, file: x.file, line: x.line, cause: cases.get(x.case)?.defect.summary ?? "" })),
       findings: b.findings,
@@ -139,15 +139,16 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
     writeFileSync(join(staging, b.file), bytes);
     packets.push({ file: b.file, unit: b.unit.id, sha256: sha256(bytes) });
   }
+  const batch = batchDigest({ ...head, packets });
   const reply = { batch, judge: "<judge name and model>", packets: packets.slice(0, 1).map((p) => ({ file: p.file, sha256: p.sha256, blockers: [{ id: "B1", matches: bodies[0]!.findings.slice(0, 1).map((f) => f.id) }] })) };
   writeFileSync(
     join(staging, "batch.json"),
     JSON.stringify({ version: JUDGE_VERSION, batch, suite: head.suite, judging_rule: suite.judging_rule, packets, adjudication: "A second judge answers every blocker where the arms' outcomes differ plus a seeded " + SECOND_SAMPLE * 100 + "% sample of the rest; a third read answers every blocker where the two judges differ. judge-join names each set.", reply_format: reply, reply_rules: "One JSON reply per judge: batch, judge, and for each packet its file, its sha256 and every blocker you answer with the ids of the findings that name the same defect (an empty list when none does). Judge the defect, not the severity: severity is applied mechanically." }, null, 2) + "\n",
   );
+  writeFileSync(o.key, JSON.stringify({ version: JUDGE_VERSION, batch, ...head, packets, entries } satisfies JudgeKey, null, 2) + "\n", { mode: 0o600 });
   mkdirSync(resolve(o.out, ".."), { recursive: true });
   rmSync(o.out, { recursive: true, force: true });
   renameSync(staging, o.out);
-  writeFileSync(o.key, JSON.stringify({ version: JUDGE_VERSION, batch, ...head, packets, entries } satisfies JudgeKey, null, 2) + "\n", { mode: 0o600 });
   return { batch, packets: packets.length, findings: entries.length };
 }
 
@@ -208,8 +209,6 @@ function cellsFor(key: JudgeKey, arms: Map<string, Arm>, unit: Unit, matches: Se
   return cells;
 }
 
-const sameOutcomes = (a: Map<string, Cell>, b: Map<string, Cell>) => [...a].every(([k, c]) => b.get(k)?.outcome === c.outcome);
-
 function kappa(pairs: Array<[Outcome, Outcome]>): number | null {
   if (!pairs.length) return null;
   const po = pairs.filter(([x, y]) => x === y).length / pairs.length;
@@ -232,6 +231,7 @@ export interface JoinResult {
  */
 export function judgeJoin(o: { suite: Suite; suiteSha256: string; key: string; primary: string; second: string | null; third: string | null; arms: LoadedArm[]; out: string; replace: string | null }): JoinResult {
   const { suite } = o;
+  if (suite.sealed && insideRepo(o.out)) blind("suite " + suite.id + " is sealed, so judged arms must be written outside the repo");
   let key: JudgeKey;
   try {
     key = JSON.parse(readFileSync(o.key, "utf8"));
@@ -261,15 +261,18 @@ export function judgeJoin(o: { suite: Suite; suiteSha256: string; key: string; p
   const list = (ks: Set<string>) => cellKeys.filter((c) => ks.has(c.k)).map((c) => fileName(suite, c.u) + " " + c.b.id).join(", ");
   if (!o.second) blind("scoring waits for the second judge: send these " + secondSet.size + " blockers (every one where the arms differ, plus a seeded " + SECOND_SAMPLE * 100 + "% sample) with the same packets, then pass --second: " + list(secondSet));
   const second = readReply(o.second!, key, suite, "second");
+  if (second.judge === primary.judge) blind("the second reply is from " + second.judge + ", the primary judge; a second read needs another judge");
   const extra = [...second.answers.keys()].filter((k) => !secondSet.has(k)).length;
   const short = [...secondSet].filter((k) => !second.answers.has(k)).length;
   if (extra || short) blind("the second reply must answer exactly the " + secondSet.size + " blockers judge-join named (" + short + " missing, " + extra + " extra): " + list(secondSet));
   const secondCells = new Map([...secondSet].map((k) => { const c = cellKeys.find((x) => x.k === k)!; return [k, cellsFor(key, arms, c.u, second.answers.get(k)!, c.packet)]; }));
-  const thirdSet = new Set([...secondSet].filter((k) => !sameOutcomes(first.get(k)!, secondCells.get(k)!)));
+  const sameMatches = (k: string) => [...primary.answers.get(k)!].sort().join(",") === [...second.answers.get(k)!].sort().join(",");
+  const thirdSet = new Set([...secondSet].filter((k) => !sameMatches(k)));
   let third: Reply | null = null;
   if (thirdSet.size) {
     if (!o.third) blind("scoring waits for a third read: the two judges differ on these " + thirdSet.size + " blockers; send them with the same packets, then pass --third: " + list(thirdSet));
     third = readReply(o.third!, key, suite, "third");
+    if (third.judge === primary.judge || third.judge === second.judge) blind("the third read is from " + third.judge + ", who already judged these blockers; a third read needs a third judge");
     const x = [...third.answers.keys()].filter((k) => !thirdSet.has(k)).length;
     const s = [...thirdSet].filter((k) => !third!.answers.has(k)).length;
     if (x || s) blind("the third reply must answer exactly the " + thirdSet.size + " blockers judge-join named (" + s + " missing, " + x + " extra): " + list(thirdSet));

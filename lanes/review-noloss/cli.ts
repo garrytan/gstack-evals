@@ -40,7 +40,7 @@ Scores review variants on the blockers a reference review catches. No command ca
       Compare a variant with a reference on blocking recall, paired by blocker, with PRs as clusters. A margin and its
       reason are required; there is no default. --margin names a post hoc comparison; --prereg reads the comparison
       with this variant and reference from a comparisons file (lanes/review-noloss/comparisons/<suite>.json), with its
-      margin, frozen bar and size rule. The frozen bar prints first, then the verdict, delta, its PR-clustered bootstrap
+      margin, frozen bar and size rule, and scores the file's whole Holm family. The frozen bar prints first, then the verdict, delta, its PR-clustered bootstrap
       interval, losses, gains, both p-values and the minimum reachable p, the size rule, cost and claim eligibility.
       Lines from labelled judging open with "labelled judging". --json prints the versioned record instead; --out also
       writes it to a file. Defaults: --root lanes/review-noloss/arms, --seed ${DEFAULT_SEED}, --draws ${DEFAULT_DRAWS}.
@@ -182,6 +182,7 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   const variant = need("--variant");
   const reference = need("--reference");
   let c: Comparison;
+  let family: Comparison[] = [];
   let seed = DEFAULT_SEED;
   let draws = DEFAULT_DRAWS;
   if (flags.has("--prereg")) {
@@ -191,6 +192,7 @@ function scoreCmd(argv: string[], io: NolossIo): number {
     const found = file.comparisons.find((x) => x.variant === variant && x.reference === reference);
     if (!found) throw new Usage("--prereg has no comparison of " + variant + " against " + reference);
     c = found;
+    family = file.comparisons;
     seed = file.seed;
     draws = file.draws;
   } else {
@@ -206,7 +208,7 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   const out = flags.get("--out")?.[0];
   if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write sealed records outside it");
   const arms = loadArms(resolve(flags.get("--root")?.[0] ?? ARMS_ROOT), suite, sha256);
-  const rec = scoreComparisons(suite, sha256, arms, [c], { seed, draws })[0]!;
+  const rec = scoreComparisons(suite, sha256, arms, family.length ? family.map((x) => (x.id === c.id ? c : x)) : [c], { seed, draws }).find((x) => x.id === c.id)!;
   const json = JSON.stringify(rec, null, 2);
   if (out) writeFileSync(out, json + "\n");
   io.out(flags.has("--json") ? json : renderRecord(rec).join("\n"));

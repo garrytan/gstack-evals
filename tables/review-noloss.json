@@ -406,10 +406,10 @@
       },
       "size_rule": {
         "source": "simulated",
-        "power": 0.221,
+        "power": 0.0695,
         "goal": 0.8,
         "met": false,
-        "detail": "an arm as good as the reference gets NO_LOSS in 22.1% of 2000 simulations (spread wide, recall 0.655, seed 1)"
+        "detail": "an arm as good as the reference gets NO_LOSS in 7% of 2000 simulations (spread wide, recall 0.655, seed 1, no-loss alpha 0.05/4, Holm's strictest step)"
       },
       "agreement": {
         "shared": 15,
@@ -459,6 +459,7 @@
         "claim": "non-inferior within 10 points of blocking recall",
         "eligible": false,
         "reasons": [
+          "frozen bar, round 3: FAIL (misses 9 of the 19 blockers C found (allows 1))",
           "the verdict is LOSS",
           "post hoc: the comparison was not preregistered before the arms ran",
           "labelled judging: the judge saw arm labels",
@@ -546,10 +547,10 @@
       },
       "size_rule": {
         "source": "simulated",
-        "power": 0.221,
+        "power": 0.0695,
         "goal": 0.8,
         "met": false,
-        "detail": "an arm as good as the reference gets NO_LOSS in 22.1% of 2000 simulations (spread wide, recall 0.655, seed 1)"
+        "detail": "an arm as good as the reference gets NO_LOSS in 7% of 2000 simulations (spread wide, recall 0.655, seed 1, no-loss alpha 0.05/4, Holm's strictest step)"
       },
       "agreement": {
         "shared": 12,
@@ -575,6 +576,7 @@
         "claim": "non-inferior within 10 points of blocking recall",
         "eligible": false,
         "reasons": [
+          "frozen bar, round 2: FAIL (2 of 4 group (a) blockers found (needs all); 3 of 12 group (b) PRs hit (needs 11))",
           "the verdict is LOSS",
           "post hoc: the comparison was not preregistered before the arms ran",
           "labelled judging: the judge saw arm labels",
@@ -662,10 +664,10 @@
       },
       "size_rule": {
         "source": "simulated",
-        "power": 0.221,
+        "power": 0.0695,
         "goal": 0.8,
         "met": false,
-        "detail": "an arm as good as the reference gets NO_LOSS in 22.1% of 2000 simulations (spread wide, recall 0.655, seed 1)"
+        "detail": "an arm as good as the reference gets NO_LOSS in 7% of 2000 simulations (spread wide, recall 0.655, seed 1, no-loss alpha 0.05/4, Holm's strictest step)"
       },
       "agreement": {
         "shared": 15,
@@ -691,6 +693,7 @@
         "claim": "non-inferior within 10 points of blocking recall",
         "eligible": false,
         "reasons": [
+          "frozen bar, round 2: FAIL (1 of 4 group (a) blockers found (needs all); 2 of 12 group (b) PRs hit (needs 11))",
           "the verdict is LOSS",
           "post hoc: the comparison was not preregistered before the arms ran",
           "labelled judging: the judge saw arm labels",
@@ -778,10 +781,10 @@
       },
       "size_rule": {
         "source": "simulated",
-        "power": 0.2225,
+        "power": 0.0615,
         "goal": 0.8,
         "met": false,
-        "detail": "an arm as good as the reference gets NO_LOSS in 22.3% of 2000 simulations (spread wide, recall 0.379, seed 1)"
+        "detail": "an arm as good as the reference gets NO_LOSS in 6.2% of 2000 simulations (spread wide, recall 0.379, seed 1, no-loss alpha 0.05/4, Holm's strictest step)"
       },
       "agreement": {
         "shared": 13,
@@ -807,6 +810,7 @@
         "claim": "non-inferior within 10 points of blocking recall",
         "eligible": false,
         "reasons": [
+          "frozen bar, round 2: FAIL (1 of 4 group (a) blockers found (needs all); 2 of 12 group (b) PRs hit (needs 11))",
           "the verdict is NOT_DISTINGUISHED",
           "post hoc: the comparison was not preregistered before the arms ran",
           "labelled judging: the judge saw arm labels",
