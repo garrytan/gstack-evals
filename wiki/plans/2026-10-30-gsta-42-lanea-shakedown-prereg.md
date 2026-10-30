@@ -7,7 +7,7 @@ author: GSTA-42
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-30
-status: open
+status: superseded
 links:
   - 2026-10-29-gsta-30-laneb-quick-3-prereg
   - 2026-10-28-gsta-13-lanea-quick-office-hours-diet-prereg
