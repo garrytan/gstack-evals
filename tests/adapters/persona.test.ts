@@ -84,10 +84,11 @@ describe("the persona's free-form source in the Claude Code adapter", () => {
   // Value: protects=two AskUserQuestion calls from one assistant message, answered by the persona at the same time, keep the session's clock stopped until the last answer returns; fails_when=the first answer to return restarts the clock while the second is pending, so a healthy cell ends as a timeout; why_new=Capy's review of #69; seam=claudeCodeDriver's freeform pause over a stand-in SDK that calls canUseTool twice without awaiting the first; no_claim=whether the CLI sends two permission requests at once
   test("two persona answers in flight at once keep the clock stopped until the last one returns", async () => {
     // gstack-timing-ok: the first answer takes a tenth of the session's limit and the second twice the limit, so a clock the first answer restarts ends the cell as a timeout; the stand-in session's own work takes milliseconds
+    const freeform = async (_p: string, q: string): Promise<PersonaAnswer> => (await Bun.sleep(q.startsWith("Which approach") ? 100 : 2_000), { text: "B, on Postgres." });
     const overlap = await drive([async (options) => {
       await Promise.all([options.canUseTool("AskUserQuestion", ASK, { toolUseID: "toolu_q" }), options.canUseTool("AskUserQuestion", DB_ASK, { toolUseID: "toolu_r" })]);
       return [bothAsks, answered("answered"), answered("answered", false, "toolu_r"), said("FINAL: B on Postgres."), done];
-    }], { timeoutMs: 1_000, freeform: async (_p, q) => (await Bun.sleep(q.startsWith("Which approach") ? 100 : 2_000), { text: "B, on Postgres." }) });
+    }], { timeoutMs: 1_000, freeform });
     expect(overlap.outcome.termination).toEqual({ kind: "completed" });
     expect(overlap.events.filter((e) => e.kind === "ask").length).toBe(2);
   });
