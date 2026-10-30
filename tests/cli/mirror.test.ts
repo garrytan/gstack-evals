@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveCall } from "../../src/skill-eval/cli/call.ts";
@@ -66,6 +66,27 @@ describe("--mirror's scrub", () => {
     expect(mirrorRun(next, dest).length).toBe(1);
     expect(readdirSync(dest)).toEqual(["calibration.json"]);
     expect(existsSync(join(dest, "verdict.json"))).toBe(false);
+  });
+
+  // Value: protects=a mirror file that is a symlink or a hardlink to a source receipt is replaced by a new file, so the scrubbed copy never writes through it into the out directory; fails_when=a per-file alias in the mirror directory rewrites a source receipt; why_new=Capy's review of #69; seam=mirrorRun; no_claim=none beyond protects
+  test("a mirror file that links to a source receipt is replaced, not written through", () => {
+    const root = mkdtempSync(join(tmpdir(), "gse-mirror-link-"));
+    const out = join(root, "out");
+    mkdirSync(out);
+    const raw = JSON.stringify({ record: { turns: ["kept in the source"] } }) + "\n";
+    writeFileSync(join(out, "cells.ndjson"), raw);
+    writeFileSync(join(out, "verdict.json"), JSON.stringify({ dir: "/kept/in/the/source" }));
+    const dest = join(root, "public");
+    mkdirSync(dest);
+    symlinkSync(join(out, "cells.ndjson"), join(dest, "cells.ndjson"));
+    linkSync(join(out, "verdict.json"), join(dest, "verdict.json"));
+    expect(mirrorRun(out, dest).length).toBe(2);
+    expect(readFileSync(join(out, "cells.ndjson"), "utf8")).toBe(raw);
+    expect(readFileSync(join(out, "verdict.json"), "utf8")).toContain("/kept/in/the/source");
+    expect(lstatSync(join(dest, "cells.ndjson")).isSymbolicLink()).toBe(false);
+    expect(lstatSync(join(dest, "verdict.json")).nlink).toBe(1);
+    expect(readFileSync(join(dest, "cells.ndjson"), "utf8")).not.toContain("kept in the source");
+    expect(readFileSync(join(dest, "verdict.json"), "utf8")).not.toContain("/kept/in/the/source");
   });
 
   // Value: protects=a mirror directory that became the out directory after the call resolved (a symlink made mid-run) stops the CLI's run layer with a coded E_USAGE line and a failed call, and writes nothing; fails_when=mirrorRun's alias refusal reaches the CLI uncoded, where skill-eval reports it as E_INTERNAL; why_new=Capy's review of #69; seam=mirrorReceipts over resolveCall; no_claim=the refusal before the run (tests/cli/call.test.ts)

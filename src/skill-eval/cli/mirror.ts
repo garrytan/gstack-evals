@@ -7,8 +7,9 @@
 // - In every other string, the out dir and each root the caller names become <out> or <path>, any other absolute path
 //   becomes <path> (an API route under /v1/ stays), and a meter id becomes <meter>.
 // - A journal line that does not parse is dropped, not copied.
-// A mirror directory that resolves to the out directory, through a symlink or not, is refused, and a record the run did
-// not write is removed from a reused mirror directory, so a mirror never overwrites its source or mixes two runs.
+// A mirror directory that resolves to the out directory, through a symlink or not, is refused, a record the run did not
+// write is removed from a reused mirror directory, and each record replaces whatever file or link held its name (never
+// writing through a symlink or hardlink), so a mirror never overwrites its source or mixes two runs.
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -88,6 +89,7 @@ export function mirrorRun(out: string, dest: string, roots: readonly string[] = 
       }
     }
     mkdirSync(dest, { recursive: true });
+    rmSync(join(dest, name), { force: true });
     writeFileSync(join(dest, name), body);
     written.push(join(dest, name));
   }
