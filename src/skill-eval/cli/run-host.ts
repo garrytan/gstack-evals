@@ -8,26 +8,30 @@
 // - Calibration (src/adapters/calibration.ts) runs per model before any trial; a failed check skips every trial, and
 //   U6's verdict exits 3 with its code.
 // - progress.json is rewritten after every session.
-// - The Docker rig builds one arm image per arm (and one per calibration copy), opens the lease, starts the proxy
-//   container on the trial network (createTrialNetwork) and binds slots over its management socket. close() keeps
-//   resume's order: stop the proxy, reconcile its journal, settle the lease.
+// - The Docker rig installs every arm (src/arms/install.ts), builds one arm image per arm and one per calibration copy,
+//   keeps each layer tree and the trial image by digest, opens the lease, starts the proxy container on the trial
+//   network (createTrialNetwork) and binds slots over its management socket. close() keeps resume's order: stop the
+//   proxy, reconcile its journal, settle the lease.
 // - A task with a judge rubric sends each completed run to blinded cross-family adjudication (src/grade/adjudicate.ts);
 //   a judge that cannot run leaves the run unjudged and stops the verdict with JUDGE_UNAVAILABLE.
 // - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts); a judged
 //   session is journaled only with its judgment, so --resume reruns one whose judge failed or hit the cap. --resume reuses
 //   a journaled cell whose key still matches; a changed key refuses before any spend (E_CACHE_STALE) unless --repair
 //   names the repair, which reruns those cells.
-// - Arms on a real host are loose skill folders, none and bare. A gstack base at a sha, a stack and a placebo arm are
-//   GST-272's, and a loadout arm has no installer yet; hostReadiness refuses them with E_USAGE before anything is spent.
+// - Arms on a real host are loose skill folders, a gstack base at a sha with the target skill overlaid or removed, stacks,
+//   placebo, none and bare. A loadout arm has no installer yet; hostReadiness refuses it with E_USAGE before anything is
+//   spent.
 // - A task with a persona gets one usersim slot per session on Claude Code, bound at its first free-form question under
 //   the run's lease for the call's usersim model (src/usersim/persona.ts). Each answer is one request with no tools from
 //   the judge's sandbox, its meter adds to the run's spend and to <out>/usersim.ndjson, and a round's worst case counts a
 //   usersim allowance per persona session. The usersim model comes from the policy, whose sha256 is in the session key.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, posix, resolve } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
-import { hostDriver, SKILL_DIRS, skillRoot } from "../../adapters/host.ts";
+import { dockerInstaller, installArms, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
+import { hostDriver, skillRoot } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
 import { openLocalLedger } from "../../runner/ledger/local.ts";
@@ -36,7 +40,7 @@ import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, s
 import { judgePrompt, parseJudgment, redact } from "../../grade/adjudicate.ts";
 import { JUDGE_ROUTE, judgeDriver } from "../../adapters/judge.ts";
 import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_TIMEOUT_S, personaAnswer, personaPrompt, type PersonaAnswer } from "../../usersim/persona.ts";
-import { buildArmImage, checkImagePin, stateRoot } from "../../trial/image.ts";
+import { buildArmImage, checkImagePin, dockerRun, retainImage, retainTree, stateRoot } from "../../trial/image.ts";
 import { createTrialNetwork, recoverRun, removeTrialNetwork, startProxyContainer } from "../../trial/proxy.ts";
 import { dockerSandbox, type Sandbox } from "../../trial/sandbox.ts";
 import { runTrial, type TrialRun } from "../../trial/trial.ts";
@@ -61,6 +65,8 @@ export interface HostRig {
   imageDigest: string | null;
   bind(request: BindRequest): Promise<Binding>;
   finalize(meterId: string): Promise<Meter>;
+  /** Each arm's install: its session key tree, the target skill's paths under HOME and gstack-skill-start, if any. */
+  arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack">>>;
   /** The sandbox whose agent HOME holds the arm, or the arm's calibration copy. */
   sandbox(arm: string, calibration: boolean): Sandbox;
   /** A sandbox with no skill installed, for judge sessions. */
@@ -150,7 +156,8 @@ export interface HostRun {
   stale: CacheStop[];
 }
 
-const holdsSkill = (arm: ArmSpec): arm is Extract<ArmSpec, { kind: "overlay" }> & { dir: string } => arm.kind === "overlay" && arm.dir !== null;
+/** The arm installs the target skill: a skill folder, alone or on a base, a stack that holds it, or its placebo. */
+const holdsSkill = (arm: ArmSpec): boolean => (arm.kind === "overlay" && arm.dir !== null) || arm.kind === "stack" || arm.kind === "placebo";
 
 /** Each arm's calibration sentinel, for the arms that hold the skill. */
 export const sentinels = (arms: readonly ArmSpec[], nonce: string): Record<string, string> => Object.fromEntries(arms.filter(holdsSkill).map((a) => [a.name, sentinelFor(nonce, a.name)]));
@@ -158,8 +165,6 @@ export const sentinels = (arms: readonly ArmSpec[], nonce: string): Record<strin
 /** Why this call cannot run on a real host yet, or null. */
 export function hostReadiness(call: Pick<Call, "host" | "arms" | "isolation" | "item" | "spendCap">, tasks: readonly { id: string }[], entries: Readonly<Record<string, SidecarTask>> = {}): Stop & { message: string } | null {
   const stop = (message: string) => ({ code: "E_USAGE" as const, model: null, subject: null, message });
-  const later = call.arms.arms.filter((a) => a.kind === "stack" || a.kind === "placebo" || (a.kind === "overlay" && a.base !== null));
-  if (later.length) return stop("arm" + (later.length > 1 ? "s " : " ") + later.map((a) => a.name).join(", ") + " need" + (later.length > 1 ? "" : "s") + " a gstack base, stack or placebo install on a real host, which lands with GST-272; use loose skill folders, none and bare");
   const loadouts = call.arms.arms.filter((a) => a.kind === "loadout");
   if (loadouts.length) return stop("loadout arm" + (loadouts.length > 1 ? "s " : " ") + loadouts.map((a) => a.name).join(", ") + ": a real host has no loadout install yet; use loose skill folders, none and bare");
   if (call.isolation !== "docker") return stop("a real host runs under --isolation docker only; process isolation has no arm install");
@@ -219,7 +224,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   const fixtureTree = dirTreeSha256(o.tasksDir);
   const keyOf = (model: string, arm: ArmSpec, task: ContractTask): SessionKey => {
     const entry = o.entries[task.id];
-    return sessionKey({ ...o.keyBase, arm_tree: holdsSkill(arm) ? dirTreeSha256(arm.dir) : arm.kind + ":" + arm.name, task, sidecar_entry: entry ?? null, fixture_tree: fixtureTree, model, timeout_s: o.timeoutS, env_values: envValuesHash(entry?.env ?? [], process.env), judge_model: entry?.judge ? o.judgeModel : null, policy: o.policy.sha256 });
+    return sessionKey({ ...o.keyBase, arm_tree: rig.arms[arm.name]!.tree_sha256, task, sidecar_entry: entry ?? null, fixture_tree: fixtureTree, model, timeout_s: o.timeoutS, env_values: envValuesHash(entry?.env ?? [], process.env), judge_model: entry?.judge ? o.judgeModel : null, policy: o.policy.sha256 });
   };
 
   const reuse = new Map<string, JournalEntry>();
@@ -268,8 +273,9 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const armName = s.arm?.name ?? JUDGE_ARM;
     const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: [provider + ":" + s.model], allowance_micros: s.allowance });
     const home = s.sandbox.homePath(s.dir);
-    const holds = s.arm !== null && holdsSkill(s.arm);
-    const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: [skillRoot(s.host, home, o.skill)], home, dir: holds ? (s.arm as { dir: string }).dir : null } : null;
+    const installed = s.arm ? rig.arms[s.arm.name]!.skill : null;
+    const holds = installed !== null;
+    const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
     const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}) });
@@ -289,7 +295,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   const interactive = o.verdict.some((t) => t.interactive && (o.entries[t.id]?.user?.replies || o.entries[t.id]?.user?.persona));
   const egress = rig.egress();
   for (const model of o.models) {
-    const probes = calibrationProbes({ host: o.host, skill: o.skill ?? "target", arms: o.arms.map((a) => ({ name: a.name, holdsSkill: holdsSkill(a) })), interactive, nonce: o.nonce });
+    const probes = calibrationProbes({ host: o.host, skill: o.skill ?? "target", arms: o.arms.map((a) => ({ name: a.name, holdsSkill: rig.arms[a.name]!.skill !== null, gstack: rig.arms[a.name]!.gstack })), interactive, nonce: o.nonce });
     const runs = await pool(probes, o.parallel, async (probe): Promise<ProbeRun> => {
       const arm = o.arms.find((a) => a.name === probe.arm)!;
       const run = await session({ host: o.host, model, arm, round: 1, trial: 0, task: probe.task, ...(probe.entry ? { entry: probe.entry } : {}), interactive: probe.interactive, sandbox: rig.sandbox(arm.name, true), allowance: allowance(model), watchSkill: true, dir: join(o.out, "calibration", model.replaceAll("/", "_"), probe.task.id), tasksDir: empty });
@@ -384,33 +390,59 @@ export function adapterSha256(host: Host): string {
 
 const PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"];
 
-/** The Docker rig: arm images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it. */
+/**
+ * Builds each arm's image from its install on the trial image, and its calibration copy (the arm image plus its
+ * SKILL.md with the sentinel appended). A base arm's first layer is built once as its own image, so every arm on one
+ * base shares it. With retain, every layer tree is kept there by digest. Writes <out>/arms.json; returns each image tag
+ * by arm name, and by name#calibration for the copies.
+ */
+export function armImages(o: { trialImage: string; home: string; installs: readonly ArmInstall[]; marks: Readonly<Record<string, string>>; tasksDir: string; state: string; docker: string; out: string; retain: string | null; noCache?: boolean }): Map<string, string> {
+  const images = new Map<string, string>();
+  const shared = new Map<string, string>();
+  const record: Record<string, unknown>[] = [];
+  const build = (base: string, layers: readonly Layer[]) => {
+    const built = buildArmImage({ base, layers: layers.map((l) => ({ src: l.src, dest: l.dest ? posix.join(o.home, l.dest) : o.home })), tasksDir: o.tasksDir, state: o.state, docker: o.docker, ...(o.noCache ? { noCache: true } : {}) });
+    if (!built.ok) throw new Error(built.code + ": " + built.message);
+    return built;
+  };
+  for (const arm of o.installs) {
+    let base = o.trialImage;
+    let rest = arm.layers;
+    if (arm.layers.length > 1) {
+      const first = arm.layers[0]!.src;
+      if (!shared.has(first)) shared.set(first, build(o.trialImage, [arm.layers[0]!]).tag);
+      base = shared.get(first)!;
+      rest = arm.layers.slice(1);
+    }
+    const image = build(base, rest);
+    images.set(arm.name, image.tag);
+    let calibration = image;
+    if (arm.skill) {
+      const dir = join(o.out, "calibration", "arms", arm.name);
+      rmSync(dir, { recursive: true, force: true });
+      calibration = build(image.tag, [sentinelLayer(arm, withSentinel(readFileSync(arm.skill.file, "utf8"), o.marks[arm.name]!), dir)]);
+    }
+    images.set(arm.name + "#calibration", calibration.tag);
+    const layers = arm.layers.map((l) => ({ dest: l.dest, ...(o.retain ? { retained: retainTree(l.src, o.retain) } : { tree_sha256: dirTreeSha256(l.src) }) }));
+    record.push({ name: arm.name, provenance: arm.provenance, tree_sha256: arm.tree_sha256, layers, image: { tag: image.tag, digest: image.digest, dropped: image.dropped }, calibration_image: { tag: calibration.tag, digest: calibration.digest } });
+  }
+  mkdirSync(o.out, { recursive: true });
+  writeFileSync(join(o.out, "arms.json"), JSON.stringify({ schema_version: 1, trial_image: o.trialImage, arms: record }, null, 2) + "\n");
+  return images;
+}
+
+/** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it. */
 export function dockerRig(call: Call, o: { env: Env; skill: string | null; nonce: string; cap: number }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
-  const pin = checkImagePin({ state });
+  const pin = checkImagePin({ state, docker: bin });
   if (!pin.ok) throw new Error(pin.code + ": " + pin.message);
-  const tasksDir = dirname(resolve(call.tasks));
-  const marks = sentinels(call.arms.arms, o.nonce);
-  const images = new Map<string, string>();
   const home = dockerSandbox({ trialImage: pin.pin.tag, docker: bin }).homePath("");
-  for (const arm of call.arms.arms) {
-    for (const calibration of [false, true]) {
-      const layers = [];
-      if (holdsSkill(arm) && o.skill) {
-        let src = arm.dir;
-        if (calibration) {
-          src = join(call.out.path, "calibration", "arms", arm.name);
-          cpSync(arm.dir, src, { recursive: true });
-          writeFileSync(join(src, "SKILL.md"), withSentinel(readFileSync(join(arm.dir, "SKILL.md"), "utf8"), marks[arm.name]!));
-        }
-        layers.push({ src, dest: home + "/" + SKILL_DIRS[call.host] + "/" + o.skill });
-      }
-      const built = buildArmImage({ base: pin.pin.tag, layers, tasksDir, state });
-      if (!built.ok) throw new Error(built.code + ": " + built.message);
-      images.set(arm.name + (calibration ? "#calibration" : ""), built.tag);
-    }
-  }
+  const installs = installArms({ host: call.host, arms: call.arms.arms, skill: o.skill, base: call.arms.base, sources: stackSources({ root: call.arms.base?.root ?? null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state });
+  const retain = join(state, "retained");
+  const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
+  if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
+  const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain });
   const local = openLocalLedger(call.ledger);
   const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap });
   let net: ReturnType<typeof createTrialNetwork> | null = null;
@@ -428,6 +460,7 @@ export function dockerRig(call: Call, o: { env: Env; skill: string | null; nonce
       recovery: { lease_id: lease.lease_id, proxy_container: proxy.container, journal: proxy.journal },
       bind: (request) => control.bind(request),
       finalize: (meterId) => control.finalize(meterId),
+      arms: Object.fromEntries(installs.map((i) => [i.name, i])),
       sandbox: (arm, calibration) => dockerSandbox({ trialImage: pin.pin.tag, armImage: images.get(arm + (calibration ? "#calibration" : ""))!, docker: bin }),
       judgeSandbox: () => dockerSandbox({ trialImage: pin.pin.tag, docker: bin }),
       egress() {

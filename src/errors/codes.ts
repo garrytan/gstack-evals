@@ -689,6 +689,24 @@ export const CODES = {
     fix: "Remove the named path as its owner or as root. Give cleanup an image (the trial image) so it can remove root-owned files from a container with no network.",
     owner: "U9",
   },
+  E_STACK_SOURCE: {
+    exit: 2,
+    meaning: "A --base or <repo>@<sha> arm names a commit that no local repository holds: not the checkout the base was inferred from, a gstack checkout on this machine, or a repository under <state>/sources/. The rig never fetches.",
+    fix: "Fetch the commit into a gstack checkout (git -C ~/.local/share/gstack fetch origin <sha>) or clone the repository under <state>/sources/, then run again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
+  E_STACK_DIGEST: {
+    exit: 2,
+    meaning: "A stack tree did not verify by digest: the bytes git archive extracted do not hash to the commit's tree id, or a cached install or layer under <state>/installs/ no longer hashes to its recorded digest. Nothing from it was installed.",
+    fix: "Run git fsck on the source repository and check the tree for export-ignore, export-subst or filter attributes, which change what git archive writes. For a cached install, remove the directory the message names; it is rebuilt from the verified tree.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

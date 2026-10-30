@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, `none` and `bare`. A gstack base at a sha (including the one inferred from a rendered gstack skill), a stack arm and a placebo arm come with GST-272; until then such a call stops with E_USAGE naming GST-272 before anything is spent. A task with a persona runs on Claude Code, and the questions its replies do not cover go to the policy's usersim model (docs/adapters.md, User simulator). A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
+Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, a gstack base at a sha (`--base`, or the one inferred from a rendered gstack skill) with the target skill overlaid or removed, stack arms (`<repo>@<sha>`), `placebo`, `none` and `bare` (docs/adapters.md, Arm installs). A task with a persona runs on Claude Code, and the questions its replies do not cover go to the policy's usersim model (docs/adapters.md, User simulator). A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
 
 ## Quickstart
 
@@ -92,7 +92,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 6. **Lock.** `tasks.lock.json` must be committed and clean at HEAD (LOCK_MISSING prints the exact `--lock` command and git steps). A changed tasks file, sidecar, policy, before copy or extractor, or a hand-edited row, is LOCK_DRIFT.
 7. **Ledger and cap.** The line item needs an approved cap on record, and `--spend-cap` must fit within it and what is left (E_LEDGER_MISSING, E_ITEM_BOUND). A cap below one arm-balanced round is E_CAP_TOO_LOW. With no `--spend-cap`, the stop prints the dry-run matrix and never a cap to copy.
 8. **PDF flag.** A task that sends a PDF gets the PDF_INPUT warning.
-9. **Host adapter.** The fake host is ready. A real host is ready for loose skill folders, `none` and `bare` under `--isolation docker`; other arms stop here with E_USAGE naming GST-272.
+9. **Host adapter.** The fake host is ready. A real host is ready for every arm kind but loadout under `--isolation docker`; a loadout arm or a persona task stops here with E_USAGE.
 
 `skill-eval --lock` runs the contract and vacuity checks first and refuses to lock a set that fails them, so a rebuilt task set is checked and locked fresh. It runs the controls in containers on the pinned trial image when Docker answers, and otherwise as you with the trial's env allowlist; its vacuity line says which.
 
