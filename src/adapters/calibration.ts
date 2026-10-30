@@ -3,7 +3,8 @@
 // what was read and a fix.
 //
 // - CALIBRATION_SKILL: each arm that holds the skill runs on a calibration copy whose SKILL.md ends with a sentinel line
-//   only that copy holds. The session must quote its own sentinel, quote no other arm's, and show a read of the copy.
+//   only that copy holds. The session must quote its own sentinel, quote no other arm's, and show a read of the copy: a
+//   successful call that names or reads it, or a call whose output quotes its sentinel (skillUse in src/grade/transcript.ts).
 // - CALIBRATION_NONE_LEAK: each arm without the skill (none, bare) must answer NO-SKILL, quote no sentinel and read no
 //   copy, so nothing leaks into the trial HOME.
 // - CALIBRATION_SHELL: a shell command's output (computed by the shell, not in the prompt) comes back in the answer,
@@ -17,7 +18,7 @@
 //   decline and the session kind the adapters leave gstack to resolve (CONFIG_EXPECTED), and the command must show as a
 //   call that succeeded. With no such arm the check is null.
 import type { ReasonCode } from "../errors/codes.ts";
-import type { Call } from "../grade/transcript.ts";
+import { quotes, type Call } from "../grade/transcript.ts";
 import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
 import type { ContractTask } from "../skill-eval/contract/tasks.ts";
 import type { AgentOutcome } from "../trial/trial.ts";
@@ -29,8 +30,7 @@ export const NO_SKILL = "NO-SKILL";
 /** The line only one arm's calibration copy holds. */
 export const sentinelFor = (nonce: string, arm: string): string => SENTINEL + ": " + nonce + "-" + arm;
 
-/** The text quotes this exact sentinel: the next character cannot extend it into another arm's (before into before2). */
-export const quotes = (text: string, sentinel: string): boolean => new RegExp(sentinel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])").test(text);
+export { quotes };
 
 /** A calibration copy's SKILL.md: the arm's own text, then its sentinel line as an HTML comment. */
 export const withSentinel = (skillMd: string, line: string): string => skillMd.replace(/\n*$/, "\n") + "\n<!-- " + line + " -->\n";

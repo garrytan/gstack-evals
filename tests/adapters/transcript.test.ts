@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { sentinelFor } from "../../src/adapters/calibration.ts";
 import { askTurn, parseClaudeCode, parseCodex, shellReads, skillUse, type Call } from "../../src/grade/transcript.ts";
 import { gradeTrial, type VerdictTask } from "../../src/skill-eval/verdict/grade.ts";
 import type { TrialRecord } from "../../src/types.ts";
@@ -125,5 +126,64 @@ describe("turns and calls from Codex's exec --json events", () => {
     expect(skillUse(calls, { name: "learn", roots: ["/h/.codex/skills/learn"] })).toEqual({ opened: true, files: ["SKILL.md"] });
     expect(gradeTrial(task({ interactive: false, must: ["done"] }), record(turns)).outcome).toBe("pass");
     expect(gradeTrial(task({ interactive: false, must: ["TOOL-OUTPUT-ONLY|REASONING-ONLY"] }), record(turns)).outcome).toBe("fail");
+  });
+});
+
+describe("calibration's sentinel proof of a skill read", () => {
+  const home = "/home/agent";
+  const sentinel = (arm: string) => sentinelFor("0da2e120", arm);
+  const grepLine = (arm: string) => "272:<!-- " + sentinel(arm) + " -->";
+  const ref = (arm: string | null) => ({ name: "learn", roots: [home + "/.claude/skills/learn", home + "/.claude/skills/gstack/learn"], home, ...(arm ? { sentinel: sentinel(arm) } : {}) });
+  const call = (command: string, ok: boolean | null = true): Call => ({ id: "c1", tool: "Bash", input: { command }, ok, subagent: false });
+  const use = (c: Call, output: string, arm: string | null = "before2") => skillUse([c], ref(arm), new Map([[c.id, output]]));
+  const U11 = "for f in " + home + '/.claude/skills/learn/SKILL.md; do grep -n "gstack-evals-sentinel" "$f"; done';
+
+  // Value: protects=a read of the arm's calibration copy counts whenever a call's output quotes the arm's own sentinel, however the path reached the command (U11 row 3's for loop, a loop whose last grep misses so the host marks the call failed, a glob, xargs, $(...), a variable, a cd and a relative path), and the command parser alone still misses each of them, so trials keep today's opened signal; fails_when=any of these reads leaves opened false and stops calibration with CALIBRATION_SKILL; why_new=U11 row 3 (GEVA-54, /learn on Haiku 5.5): before2 read its copy through a for loop and calibration reported no read; seam=skillUse's sentinel proof; no_claim=a real host's output format, which tests/adapters/run-host.test.ts covers
+  test("U11 row 3's for loop and other shell indirection read the arm's copy when the output quotes its sentinel", () => {
+    const indirect = [
+      U11,
+      "for f in " + home + "/.claude/skills/learn/SKILL.md " + home + '/.claude/skills/gstack/learn/missing.md; do grep -n "gstack-evals-sentinel" "$f"; done',
+      "grep -n gstack-evals-sentinel ~/.claude/skills/*/SKILL.md",
+      "find ~/.claude/skills -name SKILL.md | xargs grep -n gstack-evals-sentinel",
+      "tail -n 2 $(find ~/.claude/skills -name SKILL.md)",
+      'f=~/.claude/skills/learn/SKILL.md; cat "$f"',
+      "cd ~/.claude/skills/learn && cat SKILL.md",
+    ];
+    for (const command of indirect) {
+      expect([command, use(call(command), grepLine("before2"), null).opened]).toEqual([command, false]);
+      expect([command, use(call(command), grepLine("before2"))]).toEqual([command, { opened: true, files: ["SKILL.md"] }]);
+    }
+    expect(use(call(indirect[1]!, false), grepLine("before2") + "\ngrep: " + home + "/.claude/skills/gstack/learn/missing.md: No such file or directory")).toEqual({ opened: true, files: ["SKILL.md"] });
+  });
+
+  // Value: protects=the proof never over-accepts: the sentinel only in the model's own text, an echo whose input already quotes it, another arm's sentinel (before and before2 in both directions, after), a read of the repo's copy or another arm's copy, a failed read whose output carries no sentinel, a failed Skill call and a subagent's report are not reads; fails_when=any of them sets opened, so a session that never read its copy passes CALIBRATION_SKILL; why_new=GEVA-58 brief (it must not over-accept); seam=skillUse's sentinel proof, parseClaudeCode; no_claim=none beyond protects
+  test("a typed sentinel, another arm's sentinel, another copy, a failed read and a subagent's report are not reads", () => {
+    const { calls, outputs } = parseClaudeCode([
+      assistant([{ type: "tool_use", id: "ls", name: "Bash", input: { command: "ls ~/.claude/skills/learn" } }]),
+      user([{ type: "tool_result", tool_use_id: "ls", content: "SKILL.md" }]),
+      assistant([{ type: "text", text: sentinel("before2") }]),
+    ]);
+    expect(skillUse(calls, ref("before2"), outputs)).toEqual({ opened: false, files: [] });
+    expect(use(call('echo "' + sentinel("before2") + '"'), sentinel("before2") + "\n").opened).toBe(false);
+    expect(use(call(U11), grepLine("before"), "before2").opened).toBe(false);
+    expect(use(call(U11), grepLine("before2"), "before").opened).toBe(false);
+    expect(use(call(U11), grepLine("after"), "before2").opened).toBe(false);
+    expect(use(call("cat /workspace/gstack/learn/SKILL.md"), "---\nname: learn\n---\n# Learn\n").opened).toBe(false);
+    expect(use(call("grep -rn gstack-evals-sentinel /calibration/after/learn"), "/calibration/after/learn/SKILL.md:" + grepLine("after")).opened).toBe(false);
+    expect(use(call("cat ~/.claude/skills/learn/SKILL.md", false), "cat: " + home + "/.claude/skills/learn/SKILL.md: No such file or directory").opened).toBe(false);
+    expect(use({ id: "c1", tool: "Skill", input: { skill: "learn" }, ok: false, subagent: false }, "<tool_use_error>Unknown skill: learn</tool_use_error>").opened).toBe(false);
+    expect(use({ id: "c1", tool: "Task", input: { description: "find the sentinel" }, ok: true, subagent: false }, "The line is " + sentinel("before2")).opened).toBe(false);
+  });
+
+  // Value: protects=both parsers keep each call's output for the proof: Claude Code's tool_result content as a string or text blocks, failed results included, and Codex's aggregated_output of a command that exited 1; fails_when=an output is dropped, so the proof never sees the sentinel; why_new=GEVA-58 (the proof reads tool output, which calls[] does not carry); seam=parseClaudeCode, parseCodex; no_claim=none beyond protects
+  test("each host's parser keeps every call's output, failed calls included", () => {
+    const claude = parseClaudeCode([
+      assistant([{ type: "tool_use", id: "a", name: "Bash", input: { command: U11 } }, { type: "tool_use", id: "b", name: "Read", input: { file_path: "/x" } }]),
+      user([{ type: "tool_result", tool_use_id: "a", is_error: true, content: "Exit code 2\n" + grepLine("before2") }, { type: "tool_result", tool_use_id: "b", content: [{ type: "text", text: "1\tx" }] }]),
+    ]);
+    expect([...claude.outputs]).toEqual([["a", "Exit code 2\n" + grepLine("before2")], ["b", "1\tx"]]);
+    const codex = parseCodex([{ type: "item.completed", item: { id: "c0", type: "command_execution", command: "/bin/bash -lc 'grep -n gstack-evals-sentinel ~/.codex/skills/*/SKILL.md'", aggregated_output: grepLine("before2") + "\n", exit_code: 1, status: "failed" } }]);
+    expect(codex.calls.map((c) => c.ok)).toEqual([false]);
+    expect(skillUse(codex.calls, { name: "learn", roots: [home + "/.codex/skills/learn"], sentinel: sentinel("before2") }, codex.outputs)).toEqual({ opened: true, files: ["SKILL.md"] });
   });
 });
