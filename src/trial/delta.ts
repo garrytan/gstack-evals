@@ -133,6 +133,9 @@ export function importDelta(baseline: string, after: string, grade: string, path
     }
     (old ? delta.changed : delta.added).push(p);
   }
-  for (const [path, mode] of [...modes].sort(([a], [b]) => depth(b) - depth(a))) if (lstatSync(path, { throwIfNoEntry: false })?.isDirectory()) chmodSync(path, mode);
+  for (const path of [...dirModes(grade).keys()].sort((a, b) => depth(b) - depth(a))) {
+    const mode = modes.get(path);
+    if (mode !== undefined) chmodSync(path, mode);
+  }
   return delta;
 }

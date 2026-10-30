@@ -234,6 +234,25 @@ describe("delta import", () => {
     importDelta(baseline, after, grade);
     expect([statSync(join(grade, "bin")).mode & 0o777, statSync(join(grade, "target")).mode & 0o777]).toEqual([0o755, 0o644]);
   });
+
+  // Value: protects=modes are restored by walking the grade tree's real directories, never through a link that replaced a parent; fails_when=a recorded mode for a/b lands on c/b after a becomes a -> c; why_new=#59 review; seam=importDelta; no_claim=the mode of a directory the import creates only as a parent
+  test("a directory replaced by a symlink to another directory does not pass its children's modes through the link", () => {
+    const root = scratch("relinked");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    mkdirSync(join(baseline, "a", "b"), { recursive: true });
+    mkdirSync(join(baseline, "c"), { recursive: true });
+    chmodSync(join(baseline, "a", "b"), 0o700);
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    removeTree(join(after, "a"));
+    symlinkSync("c", join(after, "a"));
+    mkdirSync(join(after, "c", "b"));
+    chmodSync(join(after, "c", "b"), 0o755);
+    writeFileSync(join(after, "c", "b", "x"), "x");
+    importDelta(baseline, after, grade, ["a", "c/b/x"]);
+    expect(readFileSync(join(grade, "a", "b", "x"), "utf8")).toBe("x");
+    expect(statSync(join(grade, "c", "b")).mode & 0o777).not.toBe(0o700);
+  });
 });
 
 test("--isolation process refuses without bubblewrap", () => {
