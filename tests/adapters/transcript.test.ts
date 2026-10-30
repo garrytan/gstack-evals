@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { askTurn, parseClaudeCode, skillUse, type Call } from "../../src/grade/transcript.ts";
+import { askTurn, parseClaudeCode, shellReads, skillUse, type Call } from "../../src/grade/transcript.ts";
 import { gradeTrial, type VerdictTask } from "../../src/skill-eval/verdict/grade.ts";
 import type { TrialRecord } from "../../src/types.ts";
 
@@ -76,5 +76,21 @@ describe("GST-109: user-visible turns from a Claude Code transcript", () => {
     expect(skillUse([c("Bash", { command: "cat '/h/.claude/skills/learn/SKILL.md' | head" })], skill)).toEqual({ opened: true, files: ["SKILL.md"] });
     expect(skillUse([c("Read", { file_path: "/h/.claude/skills/other/SKILL.md" }), c("Bash", { command: "ls /h/.claude/skills/learn/" })], skill)).toEqual({ opened: false, files: [] });
     expect(skillUse([c("Skill", { skill: "learn" })], null)).toEqual({ opened: false, files: [] });
+  });
+
+  // Value: protects=only a real read counts: a read command's file operands, an input redirection and a read inside sh -c, never a path inside text that echo or printf prints, a write target or a command that only lists; fails_when=printing a suggested cat command marks the skill opened and moves UNOPENED or NOT_MEASURABLE; why_new=review of #64 (quoted shell text could mark an unread skill as opened); seam=shellReads, skillUse; no_claim=every shell construct, such as command substitution or xargs, which are not reads here
+  test("a shell read is a read command's operand, never text a command prints", () => {
+    const skill = { name: "learn", roots: ["/h/.claude/skills/learn"] };
+    const bash = (command: string): Call => ({ id: "b", tool: "Bash", input: { command }, ok: true, subagent: false });
+    const opened = (command: string) => skillUse([bash(command)], skill).opened;
+    expect(opened("echo 'cat /h/.claude/skills/learn/SKILL.md'")).toBe(false);
+    expect(opened('printf "%s\\n" "head /h/.claude/skills/learn/SKILL.md"')).toBe(false);
+    expect(opened("echo hi > /h/.claude/skills/learn/notes.md")).toBe(false);
+    expect(opened("ls /h/.claude/skills/learn/ && echo done")).toBe(false);
+    expect(opened('cd /tmp && cat "/h/.claude/skills/learn/SKILL.md" | head -5')).toBe(true);
+    expect(opened("wc -l < /h/.claude/skills/learn/SKILL.md")).toBe(true);
+    expect(opened("/bin/bash -lc 'sed -n 1,20p /h/.claude/skills/learn/refs/a.md'")).toBe(true);
+    expect(opened("LC_ALL=C grep -n step /h/.claude/skills/learn/SKILL.md")).toBe(true);
+    expect(shellReads("cat a b; echo 'cat c' && bash -c \"head -3 d\" | tail -1 e")).toEqual(["a", "b", "d", "e"]);
   });
 });

@@ -10,7 +10,8 @@
 //
 // calls[] lists every tool call, the main agent's and its subagents', with its tool, a short input and whether its
 // result came back without an error. The skill counts as opened only on a call whose result succeeded: a Skill call
-// naming it, a Read of a file under one of its roots, or a shell command that reads a file there. A failed Skill call
+// naming it, a Read of a file under one of its roots, or a shell command that reads a file there: a file operand of a
+// read command (cat, head, sed, grep, ...) or an input redirection, also inside sh -c, never text a command only prints. A failed Skill call
 // (the none arm asking for a skill it does not hold) is not an open.
 import type { AskQuestion } from "../usersim/classifier.ts";
 
@@ -94,7 +95,72 @@ export function parseClaudeCode(messages: readonly unknown[]): ClaudeTranscript 
   return { turns, calls };
 }
 
-const SHELL_READ = /\b(cat|head|tail|sed|less|more|awk|grep|nl|bat)\b/;
+const READERS = new Set(["cat", "head", "tail", "sed", "less", "more", "awk", "grep", "nl", "bat"]);
+const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
+
+/** A shell line's simple commands, each as its words with quotes removed; ;, &, |, newlines and parentheses split commands, and < and > are words of their own. */
+export function shellCommands(line: string): string[][] {
+  const cmds: string[][] = [[]];
+  let word = "";
+  let inWord = false;
+  const flush = () => {
+    if (inWord) cmds.at(-1)!.push(word);
+    word = "";
+    inWord = false;
+  };
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === "'") {
+      const end = line.indexOf("'", i + 1);
+      word += end < 0 ? line.slice(i + 1) : line.slice(i + 1, end);
+      i = end < 0 ? line.length : end;
+      inWord = true;
+    } else if (ch === '"') {
+      let j = i + 1;
+      for (; j < line.length && line[j] !== '"'; j++) word += line[j] === "\\" && j + 1 < line.length ? line[++j] : line[j];
+      i = j;
+      inWord = true;
+    } else if (ch === "\\" && i + 1 < line.length) {
+      word += line[++i];
+      inWord = true;
+    } else if (ch === ";" || ch === "&" || ch === "|" || ch === "\n" || ch === "(" || ch === ")") {
+      flush();
+      if (cmds.at(-1)!.length) cmds.push([]);
+    } else if (ch === "<" || ch === ">") {
+      flush();
+      cmds.at(-1)!.push(ch);
+    } else if (/\s/.test(ch)) flush();
+    else {
+      word += ch;
+      inWord = true;
+    }
+  }
+  flush();
+  return cmds.filter((c) => c.length);
+}
+
+/** The files a shell line reads: operands of a read command (cat, head, sed, grep, ...), input redirections, and the same inside sh -c. Text a command only prints is not a read. */
+export function shellReads(line: string, depth = 0): string[] {
+  const paths: string[] = [];
+  for (const words of shellCommands(line)) {
+    const start = words.findIndex((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+    if (start < 0) continue;
+    const cmd = words.slice(start);
+    const name = cmd[0]!.split("/").pop()!;
+    for (let i = 0; i < cmd.length; i++) if (cmd[i] === "<" && cmd[i + 1]) paths.push(cmd[i + 1]!);
+    if (SHELLS.has(name) && depth < 2) {
+      const flag = cmd.findIndex((w, i) => i > 0 && /^-[a-z]*c[a-z]*$/.test(w));
+      if (flag > 0 && cmd[flag + 1]) paths.push(...shellReads(cmd[flag + 1]!, depth + 1));
+      continue;
+    }
+    if (!READERS.has(name)) continue;
+    for (let i = 1; i < cmd.length; i++) {
+      if (cmd[i] === ">" || cmd[i] === "<") i++;
+      else if (!cmd[i]!.startsWith("-")) paths.push(cmd[i]!);
+    }
+  }
+  return paths;
+}
 
 /** Whether the calls opened the skill, and which of its files they read. */
 export function skillUse(calls: readonly Call[], skill: SkillRef | null): SkillUse {
@@ -112,7 +178,7 @@ export function skillUse(calls: readonly Call[], skill: SkillRef | null): SkillU
       read("SKILL.md");
       continue;
     }
-    const paths = c.tool === "Read" ? [c.input.file_path ?? c.input.path ?? ""] : SHELL_READ.test(c.input.command ?? "") ? (c.input.command ?? "").split(/[\s'"]+/) : [];
+    const paths = c.tool === "Read" ? [c.input.file_path ?? c.input.path ?? ""] : c.input.command ? shellReads(c.input.command) : [];
     for (const p of paths) {
       const root = roots.find((r) => p.startsWith(r));
       if (!root || p.length === root.length) continue;

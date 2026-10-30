@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { UserScript } from "../../src/skill-eval/contract/sidecar.ts";
 import type { AskQuestion } from "../../src/usersim/classifier.ts";
-import { effectsOf, FALLBACK, isApproving, isOrdinal, NON_APPROVING, UserSim, USERSIM_SHA256 } from "../../src/usersim/sim.ts";
+import { effectsOf, FALLBACK, isApproving, isOrdinal, isRefusal, NON_APPROVING, UserSim, USERSIM_SHA256 } from "../../src/usersim/sim.ts";
 
 const TMP = mkdtempSync(join(tmpdir(), "gse-usersim-"));
 afterAll(() => rmSync(TMP, { recursive: true, force: true }));
@@ -67,6 +67,21 @@ describe("the user simulator: approvals bound to category and effect", () => {
     expect("answers" in r && r.answers[APPROVAL.question!]).toBe(NON_APPROVING);
     const ungated = await persona.answerAsk([q("Stage", "Where are you with paying customers?")]);
     expect("answers" in ungated && ungated.answers["Where are you with paying customers?"]).toBe("Yes, go ahead and write it.");
+  });
+
+  // Value: protects=a reply that approves without an affirmative word ("Please write the design doc.", "1") never slips past the binding rules: a free-form answer to a gated question goes out only when it refuses, and a scripted one only when it refuses or passes the category, effect and ambiguity checks; fails_when=a persona's "please write it" or an option number reaches the agent as an answer to a gated question; why_new=review of #64 (free-form replies could authorize gated effects); seam=UserSim.reply, isRefusal; no_claim=none beyond protects
+  test("a reply that approves without saying yes is held to the binding rules; only a refusal passes as written", async () => {
+    for (const [text, sent] of [["Please write the design doc.", NON_APPROVING], ["1", NON_APPROVING], ["Write it to docs/design.md.", NON_APPROVING], ["No, hold off for now.", "No, hold off for now."]] as const) {
+      const r = await sim({ persona: "A founder." }, async () => text).answerAsk([APPROVAL]);
+      expect([text, "answers" in r && r.answers[APPROVAL.question!]]).toEqual([text, sent]);
+    }
+    const mixed = q("Design doc approach", "Shall I write the design doc for approach A?");
+    const ambiguous = await answers({ replies: { design_doc: "Please write the design doc." } }, [mixed]);
+    expect(ambiguous.out).toEqual([NON_APPROVING]);
+    expect(ambiguous.s.misaligned).toHaveLength(1);
+    expect((await answers({ replies: { design_doc: "Please write the design doc." } }, [APPROVAL])).out).toEqual(["Please write the design doc."]);
+    expect((await answers({ replies: { design_doc: "Please draft it." } }, [APPROVAL])).out).toEqual([NON_APPROVING]);
+    expect([isRefusal("No, not yet."), isRefusal("Not now"), isRefusal("Yes, no rush."), isRefusal("Please write it.")]).toEqual([true, true, false, false]);
   });
 
   // Value: protects=a category's scripted reply is used at most twice, then the fallback; the run-time catch names the question; the log records the rule versions and every reply's source; fails_when=a reply repeats without bound, a missing-replies task gets answers, or the log drops a field; why_new=U10 (event log, reply source, E_USER_TURNS_MISSING); seam=UserSim; no_claim=none beyond protects
