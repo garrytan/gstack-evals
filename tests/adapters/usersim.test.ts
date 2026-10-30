@@ -84,8 +84,8 @@ describe("the user simulator: approvals bound to category and effect", () => {
     expect((await answers({ replies: { design_doc: "Please write the design doc." } }, [APPROVAL])).out).toEqual(["Please write the design doc."]);
     expect((await answers({ replies: { design_doc: "Please draft it." } }, [APPROVAL])).out).toEqual([NON_APPROVING]);
     expect([isRefusal("No, not yet."), isRefusal("Not now"), isRefusal("Yes, no rush."), isRefusal("Please write it.")]).toEqual([true, true, false, false]);
-    expect(["No problem, go ahead and write it.", "No rush, write it whenever you like.", "Stop hesitating and write the doc.", "No, write it.", "Wait, okay, do it."].map(isRefusal)).toEqual([false, false, false, false, false]);
-    expect(["No, don't write it yet.", "Not yet, do not push anything.", "Hold off for now."].map(isRefusal)).toEqual([true, true, true]);
+    expect(["No problem, go ahead and write it.", "No rush, write it whenever you like.", "Stop hesitating and write the doc.", "No, write it.", "Wait, okay, do it."].map((t) => isRefusal(t))).toEqual([false, false, false, false, false]);
+    expect(["No, don't write it yet.", "Not yet, do not push anything.", "Hold off for now."].map((t) => isRefusal(t))).toEqual([true, true, true]);
     for (const text of ["No problem, go ahead and write it.", "No rush, write it whenever you like."]) {
       const r = await sim({ persona: "A founder." }, async () => text).answerAsk([APPROVAL]);
       expect([text, "answers" in r && r.answers[APPROVAL.question!]]).toEqual([text, NON_APPROVING]);
@@ -112,8 +112,12 @@ describe("the user simulator: approvals bound to category and effect", () => {
     expect(scripted.out).toEqual([NON_APPROVING]);
     expect(scripted.s.misaligned[0]).toContain("names push, which the question does not");
     expect((await answers({ replies: { approach: "Approach A, but don't push anything yet." } }, [APPROACH])).out).toEqual([NON_APPROVING]);
-    expect(["Don't hesitate to push it.", "Do not wait to merge it.", "Never forget to deploy."].map(isRefusal)).toEqual([false, false, false]);
-    expect(["No, don't push or merge it.", "Don't ever push.", "Not yet, do not push anything."].map(isRefusal)).toEqual([true, true, true]);
+    expect(["Don't hesitate to push it.", "Do not wait to merge it.", "Never forget to deploy."].map((t) => isRefusal(t))).toEqual([false, false, false]);
+    expect(["No, don't push or merge it.", "Don't ever push.", "Not yet, do not push anything."].map((t) => isRefusal(t))).toEqual([true, true, true]);
+    expect(["No objection.", "No concerns.", "No blockers.", "No reason to wait.", "Don't hesitate.", "Don't wait on me.", "No, carry on."].map((t) => isRefusal(t, ["push"]))).toEqual([false, false, false, false, false, false, false]);
+    expect([isRefusal("No, don't push.", ["write"]), isRefusal("No, don't push.", ["push"]), isRefusal("No, hold off for now.", ["push"])]).toEqual([false, true, true]);
+    const objection = await sim({ persona: "A founder." }, async () => "No objection.").answerAsk([q("Push", "Should I push to main?")]);
+    expect("answers" in objection && objection.answers["Should I push to main?"]).toBe(NON_APPROVING);
     const hesitate = await sim({ persona: "A founder." }, async () => "Don't hesitate to push it.").answerAsk([q("Push", "Should I push to main?")]);
     expect("answers" in hesitate && hesitate.answers["Should I push to main?"]).toBe(NON_APPROVING);
   });

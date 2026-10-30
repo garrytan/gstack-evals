@@ -97,5 +97,6 @@ describe("GST-109: user-visible turns from a Claude Code transcript", () => {
     expect(opened("awk '{print}' /h/.claude/skills/learn/SKILL.md")).toBe(true);
     expect(opened("grep -e step /h/.claude/skills/learn/SKILL.md")).toBe(true);
     expect(shellReads("sed -n 1,5p f; grep -rn x d1 d2; a#b; cat g#h")).toEqual(["f", "d1", "d2", "g#h"]);
+    expect(shellReads("grep -f /h/s/SKILL.md c.json; awk -f /h/s/scan.awk d.txt; grep --file=p.txt /h/s/a.md; grep -fp /h/s/b.md; grep -e x /h/s/c.md; sed -f /h/s/x.sed e")).toEqual(["/h/s/SKILL.md", "c.json", "/h/s/scan.awk", "d.txt", "p.txt", "/h/s/a.md", "p", "/h/s/b.md", "/h/s/c.md", "/h/s/x.sed", "e"]);
   });
 });

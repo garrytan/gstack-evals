@@ -144,7 +144,7 @@ export function shellCommands(line: string): string[][] {
   return cmds.filter((c) => c.length);
 }
 
-/** The files a shell line reads: file operands of a read command (cat, head, sed, grep, ...; grep's, sed's and awk's pattern or program is not one), input redirections, and the same inside sh -c. Text a command only prints, and comments, are not reads. */
+/** The files a shell line reads: file operands of a read command (cat, head, sed, grep, ...; grep's, sed's and awk's pattern or program is not one, but a file it is read from with -f is), input redirections, and the same inside sh -c. Text a command only prints, and comments, are not reads. */
 export function shellReads(line: string, depth = 0): string[] {
   const paths: string[] = [];
   for (const words of shellCommands(line)) {
@@ -159,10 +159,15 @@ export function shellReads(line: string, depth = 0): string[] {
       continue;
     }
     if (!READERS.has(name)) continue;
-    let script = PATTERN_FIRST.has(name) && !cmd.some((w) => w === "-e" || w === "-f" || w === "--file" || w.startsWith("--regexp") || w.startsWith("--expression"));
+    const pattern = PATTERN_FIRST.has(name);
+    let script = pattern && !cmd.some((w) => /^(-[ef]|--file|--regexp|--expression)/.test(w));
     for (let i = 1; i < cmd.length; i++) {
       const w = cmd[i]!;
-      if (w === ">" || w === "<" || (PATTERN_FIRST.has(name) && (w === "-e" || w === "-f"))) i++;
+      if (w === ">" || w === "<" || (pattern && w === "-e")) i++;
+      else if (pattern && (w === "-f" || w === "--file")) {
+        if (cmd[i + 1]) paths.push(cmd[i + 1]!);
+        i++;
+      } else if (pattern && /^(-f|--file=)./.test(w)) paths.push(w.replace(/^(-f|--file=)/, ""));
       else if (w.startsWith("-")) continue;
       else if (script) script = false;
       else paths.push(w);
