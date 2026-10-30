@@ -55,7 +55,7 @@ describe("the Docker tier (U20)", () => {
     const c = tierCase();
     expect(c.run).toStartWith("GSTACK_EVALS_DOCKER=1 bun test ");
     for (const dir of ["./tests/trial", "./tests/adapters", "./tests/proxy", "./tests/rig"]) expect(c.run).toContain(" " + dir + " ");
-    for (const f of ["admission", "entry", "pins", "probes", "tier"]) expect(c.tests).toContain("tests/rig/" + f + ".test.ts");
+    for (const f of ["admission", "entry", "pins", "rig-probes", "tier"]) expect(c.tests).toContain("tests/rig/" + f + ".test.ts");
   });
 
   test("the tier runs keyless and writes a record bound to the commit, tree and recipe; the annotation carries its summary", () => {
@@ -79,8 +79,8 @@ describe("the Docker tier (U20)", () => {
     const red = runTier({ out: out(), root: r.root });
     expect(red).toMatchObject({ verdict: "RED", counts: { pass: 1, fail: 0, skip: 1 }, problems: ["skipped: tests/rig/x.test.ts > b"], clean: true });
     const before = { a: process.env.ANTHROPIC_API_KEY, t: process.env.SOME_TOKEN };
-    process.env.ANTHROPIC_API_KEY = "sk-ant-not-a-real-key";
-    process.env.SOME_TOKEN = "not-a-real-token";
+    process.env.ANTHROPIC_API_KEY = "x";
+    process.env.SOME_TOKEN = "x";
     try {
       write('<testcase name="a" />', true);
       const dir = out();

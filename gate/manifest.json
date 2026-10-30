@@ -64,7 +64,7 @@
           "tests/rig/admission.test.ts",
           "tests/rig/entry.test.ts",
           "tests/rig/pins.test.ts",
-          "tests/rig/probes.test.ts",
+          "tests/rig/rig-probes.test.ts",
           "tests/rig/tier.test.ts"
         ]
       }

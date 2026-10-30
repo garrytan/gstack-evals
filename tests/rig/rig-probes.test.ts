@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { admit, REQUIRED_PROBES, rigAdmission } from "../../src/rig/admission.ts";
-import { agentProbes, openProbeRig, replayProbe, rigProbes, type ProbeRig } from "../../src/rig/probes.ts";
+import { agentProbes, openProbeRig, replayProbe, rigProbes, type ProbeRig } from "../../src/rig/rig-probes.ts";
 import { openLease } from "../../src/runner/ledger/ledger.ts";
 import type { AgentSession } from "../../src/trial/sandbox.ts";
 import { buildTrialImage, stateRoot } from "../../src/trial/image.ts";
@@ -57,22 +57,39 @@ describe("the replay lane's fake-upstream probe", () => {
 describe("R5 and R6 probe commands that do not finish", () => {
   const DONE = "__gse_probe_done__";
   const ctx = { work: "/tmp", workPath: "/work/t", baseUrl: "http://127.0.0.1:1", socket: "/run/probe.sock", gateway: "127.0.0.1", bridge: "127.0.0.1", hostPort: 1, outside: null, fakeKey: "k", managementToken: "t", canary: "c", sealedDir: "/s", agentEnv: {} } as unknown as Parameters<typeof agentProbes>[1];
+  const done = (status: number) => DONE + " " + status;
   const fake = (answer: (command: string) => { stdout: string; exitCode: number | null; timedOut?: boolean }) =>
     ({ exec: (command: string) => ({ timedOut: false, error: undefined, ...answer(command) }), spawn: () => { throw new Error("unused"); }, stop: () => {} }) as unknown as AgentSession;
 
   test("fail instead of reading an empty answer as clean: a non-zero exit, a timeout, a missing tool or unreadable output", () => {
     const ids = REQUIRED_PROBES.trial.filter((id) => id !== "r6.workflows");
-    const failed = agentProbes(fake((c) => (c.startsWith("for t in") ? { stdout: DONE, exitCode: 0 } : c.includes("grep -rlFa") ? { stdout: "", exitCode: null, timedOut: true } : { stdout: "", exitCode: 1 })), ctx);
+    const failed = agentProbes(fake((c) => (c.startsWith("for t in") ? { stdout: done(0), exitCode: 0 } : c.includes("grep -rlFa") ? { stdout: "", exitCode: null, timedOut: true } : { stdout: "", exitCode: 1 })), ctx);
     expect(failed.map((p) => p.id)).toEqual([...ids]);
     expect(failed.filter((p) => p.pass)).toEqual([]);
     expect(failed.find((p) => p.id === "r6.history")!.detail).toContain("did not finish (exit 1)");
     expect(failed.find((p) => p.id === "r6.canary")!.detail).toContain("did not finish (timed out)");
-    const lacking = agentProbes(fake((c) => ({ stdout: (c.startsWith("for t in") ? "find " : "") + DONE, exitCode: 0 })), ctx);
+    const lacking = agentProbes(fake((c) => ({ stdout: (c.startsWith("for t in") ? "find " : "") + done(0), exitCode: 0 })), ctx);
     expect(lacking.every((p) => !p.pass && p.detail === "the agent image lacks find, so the probes cannot run")).toBe(true);
-    const empty = agentProbes(fake(() => ({ stdout: DONE, exitCode: 0 })), ctx);
+    const empty = agentProbes(fake(() => ({ stdout: done(0), exitCode: 0 })), ctx);
     expect(empty.filter((p) => ["r5.sockets", "r6.mounts", "r6.env"].includes(p.id)).map((p) => p.pass)).toEqual([false, false, false]);
     const unmarked = agentProbes(fake(() => ({ stdout: "", exitCode: 0 })), ctx);
     expect(unmarked.every((p) => !p.pass)).toBe(true);
+  });
+
+  test("judge the command's own exit status, and a scan only when it reaches the control it planted", () => {
+    const toolCheck = (c: string) => c.startsWith("for t in");
+    const killed = agentProbes(fake((c) => ({ stdout: toolCheck(c) ? done(0) : done(137), exitCode: 0 })), ctx);
+    expect(killed.filter((p) => p.pass)).toEqual([]);
+    expect(killed.find((p) => p.id === "r6.canary")!.detail).toContain("did not finish (exit 137)");
+    expect(killed.find((p) => p.id === "r5.keys")!.detail).toContain("did not finish (exit 137)");
+    const blind = agentProbes(fake((c) => ({ stdout: toolCheck(c) ? done(0) : c.includes("grep -rlFa") ? done(2) : c.includes(" -print ") ? done(1) : done(0), exitCode: 0 })), ctx);
+    for (const id of ["r5.sockets", "r6.canary", "r6.history"]) expect(blind.find((p) => p.id === id)!.detail).toContain("never reached the control");
+    const scanned = (canary: string) => agentProbes(fake((c) => ({ stdout: toolCheck(c) ? done(0) : c.includes("grep -rlFa") ? canary + done(2) : c.includes(" -print ") ? "/work/t/.gse-probe-control\n" + done(1) : done(0), exitCode: 0 })), ctx);
+    const clean = scanned("/work/t/.gse-probe-canary\n");
+    expect(clean.filter((p) => p.id === "r6.canary" || p.id === "r6.history").map((p) => p.pass)).toEqual([true, true]);
+    const reached = scanned("/work/t/.gse-probe-canary\n/sealed/canary.txt\n").find((p) => p.id === "r6.canary")!;
+    expect(reached.pass).toBe(false);
+    expect(reached.detail).toContain("at /sealed/canary.txt");
   });
 });
 

@@ -92,21 +92,32 @@ export function openProbeRig(o: { image: string; docker?: string }): ProbeRig {
   }
 }
 
-/** A marker the agent prints after each probe command, so a command cut short reads as unfinished, not as empty. */
+/** A marker the agent prints after each probe command, with the command's exit status, so a command cut short reads as unfinished, not as empty. */
 const DONE = "__gse_probe_done__";
 
 /**
- * The R5 and R6 checks from inside one agent session. A probe whose command did not finish (a non-zero exit, a timeout,
- * a failed exec, no completion marker) fails, and so does every probe when the agent image lacks a tool they use, so an
- * empty answer counts as clean only when the search really ran.
+ * The R5 and R6 checks from inside one agent session. A probe whose command did not finish (an exit status a clean run
+ * does not give, a timeout, a failed exec, no completion marker) fails, and so does every probe when the agent image lacks
+ * a tool they use. A filesystem scan must also find a control the agent planted in its work dir, so an empty answer
+ * counts as clean only when the search really ran.
  */
 export function agentProbes(agent: AgentSession, ctx: ProbeContext): ProbeResult[] {
-  const sh = (command: string, timeoutMs = 60_000) => {
-    const r = agent.exec(command + "\necho " + DONE, timeoutMs);
+  const sh = (command: string, timeoutMs = 60_000, ok: number[] = [0]) => {
+    const r = agent.exec(command + "\necho " + DONE + " $?", timeoutMs);
     const text = r.stdout.trim();
-    if (r.timedOut || r.error || r.exitCode !== 0 || !text.endsWith(DONE)) throw new Error("the agent's command did not finish (" + (r.timedOut ? "timed out" : r.error ? String(r.error) : "exit " + r.exitCode) + "), so this probe proves nothing: " + command.split("\n")[0]!.slice(0, 80));
-    return text.slice(0, -DONE.length).trim();
+    const marker = new RegExp(DONE + " (\\d+)$").exec(text);
+    const status = marker ? Number(marker[1]) : null;
+    if (r.timedOut || r.error || r.exitCode !== 0 || status === null || !ok.includes(status)) throw new Error("the agent's command did not finish (" + (r.timedOut ? "timed out" : r.error ? String(r.error) : r.exitCode !== 0 ? "exit " + r.exitCode : status === null ? "no completion marker" : "exit " + status) + "), so this probe proves nothing: " + command.split("\n")[0]!.slice(0, 80));
+    return text.slice(0, marker!.index).trim();
   };
+  const scan = (command: string, control: string, timeoutMs: number, ok: number[]) => {
+    const seen = sh(command, timeoutMs, ok).split("\n").filter(Boolean);
+    if (!seen.includes(control)) throw new Error("the agent's scan never reached the control it planted at " + control + ", so this probe proves nothing");
+    return seen.filter((path) => path !== control);
+  };
+  const control = ctx.workPath + "/.gse-probe-control";
+  const findScan = (predicate: string, timeoutMs: number) =>
+    scan(": > " + JSON.stringify(control) + " && " + PRUNE + "\\( " + predicate + " -o -path " + JSON.stringify(control) + " \\) -print 2>/dev/null", control, timeoutMs, [0, 1]);
   let broken = "";
   try {
     const missing = sh("for t in cat curl env find getent grep head test; do command -v \"$t\" >/dev/null || printf '%s ' \"$t\"; done");
@@ -146,8 +157,8 @@ export function agentProbes(agent: AgentSession, ctx: ProbeContext): ProbeResult
   });
   probe("R5", "r5.sockets", () => {
     const socket = sh("test -e " + JSON.stringify(ctx.socket) + " && echo PRESENT || echo ABSENT");
-    const sockets = sh(PRUNE + "-type s -print 2>/dev/null | head -5", 120_000);
-    return [socket === "ABSENT" && sockets === "", "the proxy's management socket is " + socket.toLowerCase() + " in the agent; unix sockets it can see: " + (sockets.replace(/\n/g, ", ") || "none")];
+    const sockets = findScan("-type s", 120_000);
+    return [socket === "ABSENT" && sockets.length === 0, "the proxy's management socket is " + socket.toLowerCase() + " in the agent; unix sockets it can see: " + (sockets.slice(0, 5).join(", ") || "none")];
   });
   probe("R5", "r5.keys", () => {
     const env = sh("env");
@@ -169,12 +180,13 @@ export function agentProbes(agent: AgentSession, ctx: ProbeContext): ProbeResult
     return [off.length === 0, off.length ? "the agent's env has names off its allowlist: " + off.join(", ") : "every name in the agent's env is on its allowlist"];
   });
   probe("R6", "r6.canary", () => {
-    const found = sh("grep -rlFa " + JSON.stringify(ctx.canary) + " / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null | head -1", 600_000);
-    return [found === "", found ? "the agent can read the canary planted in " + ctx.sealedDir + ", at " + found : "the canary planted beside the work dir is out of the agent's reach"];
+    const copy = ctx.workPath + "/.gse-probe-canary";
+    const found = scan("printf '%s' " + JSON.stringify(ctx.canary) + " > " + JSON.stringify(copy) + " && grep -rlFa " + JSON.stringify(ctx.canary) + " / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null", copy, 600_000, [0, 1, 2]);
+    return [found.length === 0, found.length ? "the agent can read the canary planted in " + ctx.sealedDir + ", at " + found[0] : "the canary planted beside the work dir is out of the agent's reach"];
   });
   probe("R6", "r6.history", () => {
-    const repos = sh(PRUNE + "\\( -name .git -o -name '*.pack' -o -name packed-refs \\) -print 2>/dev/null | head -5", 120_000);
-    return [repos === "", repos ? "the agent sees git history outside a task's work: " + repos.replace(/\n/g, ", ") : "no git repository, pack or packed-refs is visible to the agent"];
+    const repos = findScan("-name .git -o -name '*.pack' -o -name packed-refs", 120_000);
+    return [repos.length === 0, repos.length ? "the agent sees git history outside a task's work: " + repos.slice(0, 5).join(", ") : "no git repository, pack or packed-refs is visible to the agent"];
   });
   return out;
 }

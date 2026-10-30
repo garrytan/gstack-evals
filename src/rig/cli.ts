@@ -7,7 +7,7 @@ import { recordPath } from "../runner/ledger/paths.ts";
 import { LedgerError } from "../runner/ledger/record.ts";
 import { buildTrialImage, stateRoot } from "../trial/image.ts";
 import { admit, ghCli, hostFingerprint, redness, RigError, type AdmissionRecord, type ProbeResult, type ProofKind } from "./admission.ts";
-import { replayProbe, rigProbes } from "./probes.ts";
+import { replayProbe, rigProbes } from "./rig-probes.ts";
 import { RIG_ROOT } from "./recipe.ts";
 import { runTier, tierAnnotation } from "./tier.ts";
 

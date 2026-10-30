@@ -1,5 +1,5 @@
 # The Docker tier (CI plan v5, U20; stage m1b of gate/manifest.json): the Docker-backed tests of U3, U9 and U10, the R5
-# egress and R6 sealed-store probes (tests/rig/probes.test.ts) and the test refusing unpinned installs under docker/, run
+# egress and R6 sealed-store probes (tests/rig/rig-probes.test.ts) and the test refusing unpinned installs under docker/, run
 # with GSTACK_EVALS_DOCKER=1 and no credential in the env. gstack-evals rig tier counts a skipped or failing case, or an
 # expected test file missing from the report, as RED and exits 2 (E_RIG_RED).
 # It runs on pull requests and pushes to main that touch the rig, and on workflow_dispatch. Train records cover stage m0

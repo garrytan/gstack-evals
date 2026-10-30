@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admissionPath, admit, rigAdmission, writeAdmission, type AdmitInput, type ProofKind } from "../../src/rig/admission.ts";
-import { workflowProbe } from "../../src/rig/probes.ts";
+import { HELP, rigCli } from "../../src/rig/cli.ts";
+import { workflowProbe } from "../../src/rig/rig-probes.ts";
 import { openLease, reconcileLease, recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { failing, fakeGitHub, FP, fingerprint, git, greenProbes, greenTier, initItem, REPO, scratchRepo, type FakeRun } from "./helpers.ts";
@@ -247,4 +248,14 @@ describe("rig admit (U20)", () => {
     writeFileSync(join(dir, "bad.yml"), "env:\n  K: ${{ secrets.SEALED_STORE_KEY }}\n");
     expect(workflowProbe(root)).toMatchObject({ pass: false, detail: expect.stringContaining("bad.yml reads secrets.") });
   });
+});
+
+test("rig with no command prints its help and exits 2, and an unknown command is E_USAGE", async () => {
+  const out: string[] = [];
+  const err: string[] = [];
+  const io = { out: (text: string) => out.push(text), err: (text: string) => err.push(text) };
+  expect(await rigCli([], io)).toBe(2);
+  expect(out).toEqual([HELP]);
+  expect(await rigCli(["nope"], io)).toBe(2);
+  expect(err.join("\n").split("\n").every((line) => line.startsWith("E_USAGE "))).toBe(true);
 });

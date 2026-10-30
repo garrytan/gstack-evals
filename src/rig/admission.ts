@@ -6,7 +6,7 @@
 // record is missing, red or stale.
 // - trial, for arms in src/trial (Lane A on a real host): a green rig.yml push or dispatch run, the Docker tier, whose
 //   commit has this checkout's tree, and the tier summary its job annotated (title gstack-evals-rig-tier) at the same tree
-//   and recipe hash; plus the R5 and R6 probes run on the machine that spends (src/rig/probes.ts). A push or dispatch run
+//   and recipe hash; plus the R5 and R6 probes run on the machine that spends (src/rig/rig-probes.ts). A push or dispatch run
 //   takes its workflow file from the commit it tests, so the steps that wrote the annotation sit inside the tree being
 //   proven. A pull request's run takes its workflow file from the PR's merge commit, whose base can be any branch, so it
 //   gives reviewers a signal and never admits. Annotations are read through the REST API, which a proxy that refuses
@@ -40,7 +40,7 @@ export interface ProbeResult {
   detail: string;
 }
 
-/** The probes each proof set needs, every one passing, in a green admission record (src/rig/probes.ts runs them). */
+/** The probes each proof set needs, every one passing, in a green admission record (src/rig/rig-probes.ts runs them). */
 export const REQUIRED_PROBES: Record<ProofKind, readonly string[]> = {
   trial: ["r5.proxy", "r5.outside", "r5.dns", "r5.gateway", "r5.sockets", "r5.keys", "r6.mounts", "r6.env", "r6.canary", "r6.history", "r6.workflows"],
   direct: ["replay.fake-upstream"],
