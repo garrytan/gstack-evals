@@ -221,7 +221,7 @@ A command was called wrong: an unknown command or flag, a bad value, a missing -
 
 Fix: Read the message and gstack-evals &lt;command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
 
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U1.
+Exit 2. Side effects: Usually none: the command is refused before it spends or records anything. Two ledger commands can fail after they record: lease --export once the lease is in the record, and settle --artifact once the close is staged in the local ledger. Both keep that record, and the message names the command that writes the file. Retry safe: yes. Resumable: no. Owner: U1.
 
 ### E_KEY_MISSING
 

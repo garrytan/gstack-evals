@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../../src/cli.ts";
+import { CODES } from "../../src/errors/codes.ts";
 import { ledgerCli } from "../../src/runner/ledger/cli.ts";
 import { machineId } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -235,6 +236,7 @@ describe("lease exports", () => {
     expect(missing.code).toBe(2);
     expect(everyLine(missing.err, "E_USAGE")).toBe(true);
     expect(missing.err).toContain("the lease is staged to close in this ledger; run the same settle again with another --artifact file");
+    expect(CODES.E_USAGE.side_effects).toContain("settle --artifact once the close is staged in the local ledger");
     const artifact = join(workflow.dir, "settle.json");
     expect((await workflow.cli("settle", "--lease", lease.lease_id, "--artifact", artifact)).code).toBe(0);
     expect((await w.cli("settle", "--from", artifact)).out).toStartWith("SETTLED: " + lease.lease_id);
