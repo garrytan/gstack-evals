@@ -357,7 +357,7 @@ describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex 
     writeFileSync(tasks, JSON.stringify([{ id: "hello", prompt: "Say hello.", must: ["hello"] }]));
     const out = join(root, "out");
     const env = { OPENAI_API_KEY: "fake-openai-value" };
-    const argv = (extra: string[]) => ["--arms", "before=" + armDir(root, "before") + ",after=" + after + ",none", "--tasks", tasks, "--host", "codex", "--model", MODELS.codex, "--trials", "1", "--spend-cap", "15", "--item", "resume-test", "--isolation", "docker", "--no-noise-floor", "--out", out, ...extra];
+    const argv = (extra: string[]) => ["--arms", "before=" + armDir(root, "before") + ",after=" + after + ",none", "--tasks", tasks, "--host", "codex", "--model", MODELS.codex, "--trials", "1", "--spend-cap", "25", "--item", "resume-test", "--isolation", "docker", "--no-noise-floor", "--out", out, ...extra];
     const call = (extra: string[]) => {
       const parsed = parseFlags(argv(extra), SKILL_EVAL_FLAGS, env);
       if (typeof parsed === "string") throw new Error(parsed);
@@ -423,7 +423,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("--mirror through the CLI's run layer, on Claud
     const out = join(root, "out");
     const mirror = join(root, "mirror");
     const env = { ANTHROPIC_API_KEY: "fake-anthropic-value", OPENAI_API_KEY: "fake-openai-value" };
-    const parsed = parseFlags(["--arms", "before=" + armDir(root, "before") + ",after=" + armDir(root, "after") + ",none", "--tasks", tasks, "--host", "claude", "--model", MODELS.claude, "--trials", "1", "--spend-cap", "5", "--item", "mirror-test", "--isolation", "docker", "--no-noise-floor", "--out", out, "--mirror", mirror], SKILL_EVAL_FLAGS, env);
+    const parsed = parseFlags(["--arms", "before=" + armDir(root, "before") + ",after=" + armDir(root, "after") + ",none", "--tasks", tasks, "--host", "claude", "--model", MODELS.claude, "--trials", "1", "--spend-cap", "10", "--item", "mirror-test", "--isolation", "docker", "--no-noise-floor", "--out", out, "--mirror", mirror], SKILL_EVAL_FLAGS, env);
     if (typeof parsed === "string") throw new Error(parsed);
     const call = resolveCall(parsed, env);
     if ("code" in call) throw new Error(call.code + " " + call.message);

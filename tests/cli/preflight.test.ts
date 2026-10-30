@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { REPO_ROOT } from "../../src/cli.ts";
 import { lockCommand } from "../../src/skill-eval/lock/cli.ts";
 import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
-import { DEFAULT_POLICY } from "../../src/skill-eval/cli/policy.ts";
+import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
+import { allowanceMicros, JUDGE_ALLOWANCE, SESSION_ALLOWANCE } from "../../src/skill-eval/cli/dry-run.ts";
+import { priceRequest, reservationMicros } from "../../src/runner/pricing/prices.ts";
 import { buildTrialImage } from "../../src/trial/image.ts";
 import { approvalRecord, collect, commitAll, git, learnRepo, TMP, tree } from "./helpers.ts";
 
@@ -259,5 +261,22 @@ describe("preflight's ledger, key and host steps", () => {
     const r = await run(["--arms", "before=" + join(root, "demo") + ",after=" + join(root, "demo"), "--tasks", join(root, "missing.json"), "--host", "claude", "--model", "claude-opus-5-5", "--dry-run", "--json", "--out", out]);
     expect(r.code).toBe(2);
     expect(JSON.parse(readFileSync(join(out, "error.json"), "utf8"))).toMatchObject({ code: "E_TASKS_INVALID", operation: "preflight" });
+  });
+});
+
+describe("the session allowance", () => {
+  // Value: protects=a model with a long-prompt row gets its session allowance at that row, so a request past the threshold fits in a fresh session; fails_when=the allowance is priced at base rates and the proxy's long-rate reservation of a 190 KB Haiku 5.5 request is larger than it (E_ALLOWANCE with nothing spent); why_new=PR #71 review; seam=allowanceMicros, reservationMicros; no_claim=the body sizes of real sessions
+  test("a long-row model's allowance is priced at its long row, so a request past the threshold fits", () => {
+    const policy = loadPolicy(DEFAULT_POLICY);
+    if ("problem" in policy) throw new Error(policy.problem);
+    const haiku = allowanceMicros({ policy }, "claude-haiku-5-5", SESSION_ALLOWANCE)!;
+    expect(haiku).toBe(1_600_000 * 0.5 + 32_000 * 2.5);
+    expect(allowanceMicros({ policy }, "gpt-6.1-sol", SESSION_ALLOWANCE)).toBe(1_600_000 * 4 + 32_000 * 15);
+    expect(allowanceMicros({ policy }, "claude-opus-5-5", SESSION_ALLOWANCE)).toBe(1_600_000 * 4 + 32_000 * 20);
+    expect(allowanceMicros({ policy }, "gpt-6.1-sol", JUDGE_ALLOWANCE)).toBe(200_000 * 2 + 40_000 * 10);
+    const body = { model: "claude-haiku-5-5", system: [{ type: "text", text: "x".repeat(190_000), cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: "hi" }] };
+    const reserved = reservationMicros(priceRequest("anthropic", body, 32_768, "/v1/messages"));
+    expect(reserved).toBeGreaterThan(1_600_000 * 0.1 + 32_000 * 0.5);
+    expect(reserved).toBeLessThan(haiku);
   });
 });
