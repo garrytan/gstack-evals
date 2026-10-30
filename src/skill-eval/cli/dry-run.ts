@@ -4,8 +4,10 @@
 //
 // The worst case prices every session at its allowance, the most the metering proxy lets one session spend before it
 // refuses the next call. An allowance is a token budget priced at the model's list price, uncached input included:
-// 400k input and 32k output tokens per agent session, five times the high end of interface v0.4's typical Opus 5.5 cost
-// ($120 over 144 sessions). Judges get 60k and 4k per judged run, and the user simulator 80k and 5k per interactive
+// 1.6M input and 32k output tokens per agent session. The proxy refuses a call whose bound (one token per body byte
+// plus the output cap) would take the session past its allowance, so the allowance must hold a session's spend and its
+// next request's bound: replaying GSTA-13's metered office-hours sessions on Opus 5.5, 400k refused about 97% of
+// skill-arm sessions before they finished and 1.6M refused none ($7.04 on Opus, near GSTA-13's $7.25 reservation). Judges get 60k and 4k per judged run, and the user simulator 80k and 5k per interactive
 // session. The rerun stage can rerun every task in every arm once, so it doubles the agent, judge and user simulator parts.
 import { chatPrice } from "../../runner/pricing/prices.ts";
 import { usd } from "../../runner/ledger/money.ts";
@@ -17,7 +19,7 @@ export interface Allowance {
   output: number;
 }
 
-export const SESSION_ALLOWANCE: Allowance = { input: 400_000, output: 32_000 };
+export const SESSION_ALLOWANCE: Allowance = { input: 1_600_000, output: 32_000 };
 /**
  * A judge is one request with no tools. The proxy writes its 32,768-token output cap into a request that names none and
  * reserves for it, so the output allowance must cover that cap (a reasoning judge thinks before its one line). The input
