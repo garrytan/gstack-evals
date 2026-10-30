@@ -92,43 +92,90 @@ export function openProbeRig(o: { image: string; docker?: string }): ProbeRig {
   }
 }
 
-/** The R5 and R6 checks from inside one agent session. */
-export function agentProbes(agent: AgentSession, ctx: ProbeContext): ProbeResult[] {
-  const sh = (command: string, timeoutMs = 60_000) => agent.exec(command, timeoutMs).stdout.trim();
-  const out: ProbeResult[] = [];
-  const add = (requirement: ProbeResult["requirement"], id: string, pass: boolean, detail: string) => out.push({ id, requirement, pass, detail });
+/** A marker the agent prints after each probe command, so a command cut short reads as unfinished, not as empty. */
+const DONE = "__gse_probe_done__";
 
-  const proxy = sh('curl -s -m 10 -o /dev/null -w "%{http_code}" -H "x-api-key: $ANTHROPIC_API_KEY" "$ANTHROPIC_BASE_URL/v1/models"; true');
-  add("R5", "r5.proxy", /^40[13]$/.test(proxy), "the proxy answered an unbound bearer with " + proxy + " (401 or 403 expected)");
-  if (!ctx.outside) add("R5", "r5.outside", false, "this machine resolves no outside address for example.com, so the egress probe has no control");
-  else {
+/**
+ * The R5 and R6 checks from inside one agent session. A probe whose command did not finish (a non-zero exit, a timeout,
+ * a failed exec, no completion marker) fails, and so does every probe when the agent image lacks a tool they use, so an
+ * empty answer counts as clean only when the search really ran.
+ */
+export function agentProbes(agent: AgentSession, ctx: ProbeContext): ProbeResult[] {
+  const sh = (command: string, timeoutMs = 60_000) => {
+    const r = agent.exec(command + "\necho " + DONE, timeoutMs);
+    const text = r.stdout.trim();
+    if (r.timedOut || r.error || r.exitCode !== 0 || !text.endsWith(DONE)) throw new Error("the agent's command did not finish (" + (r.timedOut ? "timed out" : r.error ? String(r.error) : "exit " + r.exitCode) + "), so this probe proves nothing: " + command.split("\n")[0]!.slice(0, 80));
+    return text.slice(0, -DONE.length).trim();
+  };
+  let broken = "";
+  try {
+    const missing = sh("for t in cat curl env find getent grep head test; do command -v \"$t\" >/dev/null || printf '%s ' \"$t\"; done");
+    if (missing) broken = "the agent image lacks " + missing.trim() + ", so the probes cannot run";
+  } catch (error) {
+    broken = (error as Error).message;
+  }
+  const out: ProbeResult[] = [];
+  const probe = (requirement: ProbeResult["requirement"], id: string, check: () => [boolean, string]) => {
+    if (broken) return out.push({ id, requirement, pass: false, detail: broken });
+    try {
+      const [pass, detail] = check();
+      out.push({ id, requirement, pass, detail });
+    } catch (error) {
+      out.push({ id, requirement, pass: false, detail: (error as Error).message });
+    }
+  };
+
+  probe("R5", "r5.proxy", () => {
+    const proxy = sh('curl -s -m 10 -o /dev/null -w "%{http_code}" -H "x-api-key: $ANTHROPIC_API_KEY" "$ANTHROPIC_BASE_URL/v1/models"; true');
+    return [/^40[13]$/.test(proxy), "the proxy answered an unbound bearer with " + proxy + " (401 or 403 expected)"];
+  });
+  probe("R5", "r5.outside", () => {
+    if (!ctx.outside) return [false, "this machine resolves no outside address for example.com, so the egress probe has no control"];
     const control = hostCode("http://" + ctx.outside + "/");
     const seen = sh(curlCode("http://" + ctx.outside + "/"));
-    add("R5", "r5.outside", control !== "000" && control !== "" && seen === "000", "this machine reaches " + ctx.outside + " (" + control + "); the agent got " + seen + " (000 expected)");
-  }
-  const dns = sh("getent hosts example.com >/dev/null && echo RESOLVED || echo NODNS");
-  add("R5", "r5.dns", dns === "NODNS", "the agent's lookup of example.com: " + dns);
-  const control = hostCode("http://" + ctx.gateway + ":" + ctx.hostPort + "/");
-  const seen = [sh(curlCode("http://" + ctx.gateway + "/")), sh(curlCode("http://" + ctx.gateway + ":" + ctx.hostPort + "/")), sh(curlCode("http://" + ctx.bridge + ":" + ctx.hostPort + "/"))];
-  add("R5", "r5.gateway", control === "200" && seen.every((c) => c === "000"), "this machine serves port " + ctx.hostPort + " on " + ctx.gateway + " (" + control + "); the agent got " + seen.join(", ") + " from the egress gateway, that port on it and that port on the internal bridge " + ctx.bridge + " (000 expected)");
-  const socket = sh("test -e " + JSON.stringify(ctx.socket) + " && echo PRESENT || echo ABSENT");
-  const sockets = sh(PRUNE + "-type s -print 2>/dev/null | head -5", 120_000);
-  add("R5", "r5.sockets", socket === "ABSENT" && sockets === "", "the proxy's management socket is " + socket.toLowerCase() + " in the agent; unix sockets it can see: " + (sockets.replace(/\n/g, ", ") || "none"));
-  const env = sh("env");
-  const leaked = [ctx.fakeKey, ctx.managementToken, "GSTACK_EVALS_PROXY_TOKEN"].filter((s) => env.includes(s));
-  add("R5", "r5.keys", leaked.length === 0, leaked.length ? "the agent's env holds " + leaked.length + " of the provider key, the management token and its name" : "the agent's env holds no provider key and no management token");
+    return [control !== "000" && control !== "" && seen === "000", "this machine reaches " + ctx.outside + " (" + control + "); the agent got " + seen + " (000 expected)"];
+  });
+  probe("R5", "r5.dns", () => {
+    const dns = sh("getent hosts example.com >/dev/null && echo RESOLVED || echo NODNS");
+    return [dns === "NODNS", "the agent's lookup of example.com: " + dns];
+  });
+  probe("R5", "r5.gateway", () => {
+    const control = hostCode("http://" + ctx.gateway + ":" + ctx.hostPort + "/");
+    const seen = [sh(curlCode("http://" + ctx.gateway + "/")), sh(curlCode("http://" + ctx.gateway + ":" + ctx.hostPort + "/")), sh(curlCode("http://" + ctx.bridge + ":" + ctx.hostPort + "/"))];
+    return [control === "200" && seen.every((c) => c === "000"), "this machine serves port " + ctx.hostPort + " on " + ctx.gateway + " (" + control + "); the agent got " + seen.join(", ") + " from the egress gateway, that port on it and that port on the internal bridge " + ctx.bridge + " (000 expected)"];
+  });
+  probe("R5", "r5.sockets", () => {
+    const socket = sh("test -e " + JSON.stringify(ctx.socket) + " && echo PRESENT || echo ABSENT");
+    const sockets = sh(PRUNE + "-type s -print 2>/dev/null | head -5", 120_000);
+    return [socket === "ABSENT" && sockets === "", "the proxy's management socket is " + socket.toLowerCase() + " in the agent; unix sockets it can see: " + (sockets.replace(/\n/g, ", ") || "none")];
+  });
+  probe("R5", "r5.keys", () => {
+    const env = sh("env");
+    const leaked = [ctx.fakeKey, ctx.managementToken, "GSTACK_EVALS_PROXY_TOKEN"].filter((s) => env.includes(s));
+    return [leaked.length === 0, leaked.length ? "the agent's env holds " + leaked.length + " of the provider key, the management token and its name" : "the agent's env holds no provider key and no management token"];
+  });
 
-  const mounts = sh("cat /proc/self/mountinfo").split("\n").map((l) => (l.split(" ")[4] ?? "").replace(/\\(\d{3})/g, (_, o: string) => String.fromCharCode(parseInt(o, 8)))).filter(Boolean);
-  const extra = mounts.filter((p) => p !== "/" && p !== ctx.workPath && !/^\/(proc|dev|sys)(\/|$)/.test(p) && !["/etc/hosts", "/etc/hostname", "/etc/resolv.conf"].includes(p));
-  add("R6", "r6.mounts", extra.length === 0, extra.length ? "the agent sees mounts besides its work dir: " + extra.join(", ") : "the agent's only mount is its work dir " + ctx.workPath);
-  const allowed = new Set<string>([...ROLE_ENV.agent, "HOSTNAME", "PWD", "OLDPWD", "SHLVL", "_"]);
-  const names = env.split("\n").map((l) => l.split("=")[0]!).filter((n) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(n));
-  const off = names.filter((n) => !allowed.has(n));
-  add("R6", "r6.env", off.length === 0, off.length ? "the agent's env has names off its allowlist: " + off.join(", ") : "every name in the agent's env is on its allowlist");
-  const found = sh("grep -rlFa " + JSON.stringify(ctx.canary) + " / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null | head -1", 600_000);
-  add("R6", "r6.canary", found === "", found ? "the agent can read the canary planted in " + ctx.sealedDir + ", at " + found : "the canary planted beside the work dir is out of the agent's reach");
-  const repos = sh(PRUNE + "\\( -name .git -o -name '*.pack' -o -name packed-refs \\) -print 2>/dev/null | head -5", 120_000);
-  add("R6", "r6.history", repos === "", repos ? "the agent sees git history outside a task's work: " + repos.replace(/\n/g, ", ") : "no git repository, pack or packed-refs is visible to the agent");
+  probe("R6", "r6.mounts", () => {
+    const mounts = sh("cat /proc/self/mountinfo").split("\n").map((l) => (l.split(" ")[4] ?? "").replace(/\\(\d{3})/g, (_, o: string) => String.fromCharCode(parseInt(o, 8)))).filter(Boolean);
+    if (!mounts.includes("/")) return [false, "the agent's mountinfo lists no root mount, so its mounts could not be read"];
+    const extra = mounts.filter((p) => p !== "/" && p !== ctx.workPath && !/^\/(proc|dev|sys)(\/|$)/.test(p) && !["/etc/hosts", "/etc/hostname", "/etc/resolv.conf"].includes(p));
+    return [extra.length === 0, extra.length ? "the agent sees mounts besides its work dir: " + extra.join(", ") : "the agent's only mount is its work dir " + ctx.workPath];
+  });
+  probe("R6", "r6.env", () => {
+    const allowed = new Set<string>([...ROLE_ENV.agent, "HOSTNAME", "PWD", "OLDPWD", "SHLVL", "_"]);
+    const names = sh("env").split("\n").map((l) => l.split("=")[0]!).filter((n) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(n));
+    if (!names.includes("PATH")) return [false, "the agent's env lists no PATH, so its env could not be read"];
+    const off = names.filter((n) => !allowed.has(n));
+    return [off.length === 0, off.length ? "the agent's env has names off its allowlist: " + off.join(", ") : "every name in the agent's env is on its allowlist"];
+  });
+  probe("R6", "r6.canary", () => {
+    const found = sh("grep -rlFa " + JSON.stringify(ctx.canary) + " / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null | head -1", 600_000);
+    return [found === "", found ? "the agent can read the canary planted in " + ctx.sealedDir + ", at " + found : "the canary planted beside the work dir is out of the agent's reach"];
+  });
+  probe("R6", "r6.history", () => {
+    const repos = sh(PRUNE + "\\( -name .git -o -name '*.pack' -o -name packed-refs \\) -print 2>/dev/null | head -5", 120_000);
+    return [repos === "", repos ? "the agent sees git history outside a task's work: " + repos.replace(/\n/g, ", ") : "no git repository, pack or packed-refs is visible to the agent"];
+  });
   return out;
 }
 

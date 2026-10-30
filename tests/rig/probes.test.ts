@@ -54,6 +54,28 @@ describe("the replay lane's fake-upstream probe", () => {
   }, 600_000);
 });
 
+describe("R5 and R6 probe commands that do not finish", () => {
+  const DONE = "__gse_probe_done__";
+  const ctx = { work: "/tmp", workPath: "/work/t", baseUrl: "http://127.0.0.1:1", socket: "/run/probe.sock", gateway: "127.0.0.1", bridge: "127.0.0.1", hostPort: 1, outside: null, fakeKey: "k", managementToken: "t", canary: "c", sealedDir: "/s", agentEnv: {} } as unknown as Parameters<typeof agentProbes>[1];
+  const fake = (answer: (command: string) => { stdout: string; exitCode: number | null; timedOut?: boolean }) =>
+    ({ exec: (command: string) => ({ timedOut: false, error: undefined, ...answer(command) }), spawn: () => { throw new Error("unused"); }, stop: () => {} }) as unknown as AgentSession;
+
+  test("fail instead of reading an empty answer as clean: a non-zero exit, a timeout, a missing tool or unreadable output", () => {
+    const ids = REQUIRED_PROBES.trial.filter((id) => id !== "r6.workflows");
+    const failed = agentProbes(fake((c) => (c.startsWith("for t in") ? { stdout: DONE, exitCode: 0 } : c.includes("grep -rlFa") ? { stdout: "", exitCode: null, timedOut: true } : { stdout: "", exitCode: 1 })), ctx);
+    expect(failed.map((p) => p.id)).toEqual([...ids]);
+    expect(failed.filter((p) => p.pass)).toEqual([]);
+    expect(failed.find((p) => p.id === "r6.history")!.detail).toContain("did not finish (exit 1)");
+    expect(failed.find((p) => p.id === "r6.canary")!.detail).toContain("did not finish (timed out)");
+    const lacking = agentProbes(fake((c) => ({ stdout: (c.startsWith("for t in") ? "find " : "") + DONE, exitCode: 0 })), ctx);
+    expect(lacking.every((p) => !p.pass && p.detail === "the agent image lacks find, so the probes cannot run")).toBe(true);
+    const empty = agentProbes(fake(() => ({ stdout: DONE, exitCode: 0 })), ctx);
+    expect(empty.filter((p) => ["r5.sockets", "r6.mounts", "r6.env"].includes(p.id)).map((p) => p.pass)).toEqual([false, false, false]);
+    const unmarked = agentProbes(fake(() => ({ stdout: "", exitCode: 0 })), ctx);
+    expect(unmarked.every((p) => !p.pass)).toBe(true);
+  });
+});
+
 describe.skipIf(!DOCKER)("R5 and R6 probes (Docker tier, GSTACK_EVALS_DOCKER=1)", () => {
   let image = "";
   const rigFor = () => {

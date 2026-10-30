@@ -6,7 +6,7 @@
 // JUnit cases match bare test names, and m1b's are full keys, file > describe > test.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parseManifest } from "../../scripts/gate.ts";
 import { looksLikeCredential } from "../trial/env.ts";
 import { checkout } from "./checkout.ts";
@@ -99,8 +99,9 @@ export function tierCase(root: string = RIG_ROOT): { run: string; tests: string[
 export function runTier(o: { out: string; root?: string }): TierRecord {
   const root = o.root ?? RIG_ROOT;
   const c = tierCase(root);
-  mkdirSync(o.out, { recursive: true });
-  const junit = join(o.out, "junit.xml");
+  const out = resolve(o.out);
+  mkdirSync(out, { recursive: true });
+  const junit = join(out, "junit.xml");
   const started = new Date().toISOString();
   const r = spawnSync("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", c.run], { cwd: root, env: keylessEnv({ GATE_JUNIT: junit }), stdio: ["ignore", "inherit", "inherit"], timeout: TIER_TIMEOUT_MS });
   const cases = existsSync(junit) ? junitCases(readFileSync(junit, "utf8")) : [];
@@ -124,6 +125,6 @@ export function runTier(o: { out: string; root?: string }): TierRecord {
     started_at: started,
     finished_at: new Date().toISOString(),
   };
-  writeFileSync(join(o.out, TIER_FILE), JSON.stringify(record, null, 2) + "\n");
+  writeFileSync(join(out, TIER_FILE), JSON.stringify(record, null, 2) + "\n");
   return record;
 }
