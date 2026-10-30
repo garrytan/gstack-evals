@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NO_SKILL, withSentinel } from "../../src/adapters/calibration.ts";
+import { NO_SKILL, sentinelFor, withSentinel } from "../../src/adapters/calibration.ts";
 import { JUDGE_REASONING_EFFORT, judgeDriver } from "../../src/adapters/judge.ts";
 import { SKILL_DIRS } from "../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
@@ -292,6 +292,41 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
       expect(run.input.records.map((r) => [r.arm, r.termination.kind])).toEqual([["before", "completed"], ["after", "completed"], ["none", "completed"], ["placebo", "completed"], ["bare", "completed"]]);
     }, 300_000);
   }
+
+  // Value: protects=on Claude Code's real CLI, calibration sees a read of the arm's copy through a for loop whose last grep misses (so the host marks the call failed, as a loop over more than one path does) and through $(...), proven by the arm's sentinel in the call's output, while a sentinel the model only types, in its answer or in an echo, still stops the run with CALIBRATION_SKILL; fails_when=a shell-indirect read fails calibration, or a typed sentinel passes it; why_new=U11 row 3 (GEVA-54): Haiku 5.5 read before2's copy through a for loop and calibration reported no read; seam=parseClaudeCode, skillUse's sentinel proof, runOnHost's calibration sessions; no_claim=every shell form a model might use, which tests/adapters/transcript.test.ts covers further
+  test("a read through a shell loop or substitution passes calibration on claude, and a typed sentinel does not", async () => {
+    const loop = "for f in ~/.claude/skills/" + SKILL + "/SKILL.md ~/.claude/skills/gstack/" + SKILL + '/SKILL.md; do grep -n "gstack-evals-sentinel" "$f"; done';
+    const indirect: Script = (turn) => {
+      if (!firstUser(turn.body).includes("gstack-evals-sentinel")) return claudeModel(turn);
+      if (!turn.results.has("toolu_read")) return [{ type: "tool_use", id: "toolu_read", name: "Bash", input: { command: JSON.stringify(turn.body).includes("arm after") ? "tail -n 2 $(find ~/.claude/skills -name SKILL.md)" : loop, description: "Find the sentinel" } }];
+      return [{ type: "text", text: turn.results.get("toolu_read")!.text.match(SENTINEL_RE)?.[0] ?? NO_SKILL }];
+    };
+    const read = await runHost("claude", { script: indirect, calibrateOnly: true });
+    expect(read.run.calibrationFailures).toEqual([]);
+    expect(read.run.input.calibration[MODELS.claude]?.skill).toBe(true);
+    const typed: Script = (turn) => {
+      if (!firstUser(turn.body).includes("gstack-evals-sentinel")) return claudeModel(turn);
+      const body = JSON.stringify(turn.body);
+      const arm = body.includes("arm after") ? "after" : body.includes("arm before") ? "before" : null;
+      if (!arm) return [{ type: "text", text: NO_SKILL }];
+      if (arm === "after" && !turn.results.has("toolu_echo")) return [{ type: "tool_use", id: "toolu_echo", name: "Bash", input: { command: "echo '" + sentinelFor(NONCE, arm) + "'", description: "Echo" } }];
+      return [{ type: "text", text: sentinelFor(NONCE, arm) }];
+    };
+    const guessed = await runHost("claude", { script: typed, calibrateOnly: true });
+    expect(guessed.run.calibrationFailures.map((f) => f.code + " " + f.message)).toEqual(["before", "after"].map((arm) => "CALIBRATION_SKILL arm " + arm + " on claude, model " + MODELS.claude + ": the calls show no read of the arm's copy; read: nothing"));
+  }, 300_000);
+
+  // Value: protects=on Codex's real CLI, calibration sees a read of the arm's copy through a for loop over a glob, proven by the arm's sentinel in the command's output; fails_when=a shell-indirect read fails calibration on Codex; why_new=U11 row 3 (GEVA-54); seam=parseCodex, skillUse's sentinel proof, runOnHost's calibration sessions; no_claim=every shell form a model might use
+  test("a read through a shell loop over a glob passes calibration on codex", async () => {
+    const loop: ResponsesScript = (turn) => {
+      if (!firstUser(turn.body).includes("gstack-evals-sentinel")) return codexModel(turn);
+      if (!turn.outputs.has("call_loop")) return [{ type: "shell", id: "call_loop", cmd: 'for f in ~/.codex/skills/*/SKILL.md; do grep -n "gstack-evals-sentinel" "$f"; done' }];
+      return [{ type: "message", text: turn.outputs.get("call_loop")!.match(SENTINEL_RE)?.[0] ?? NO_SKILL }];
+    };
+    const { run } = await runHost("codex", { responses: loop, calibrateOnly: true });
+    expect(run.calibrationFailures).toEqual([]);
+    expect(run.input.calibration[MODELS.codex]?.skill).toBe(true);
+  }, 300_000);
 
   // Value: protects=a leak into the none arm's HOME and an open egress path each stop the run with exit 3 and the check's code, naming the arm, host and model, and no trial runs; fails_when=a leak or open egress still runs trials or exits anything but 3; why_new=U10 scope (calibration checks and their CALIBRATION_* codes); seam=judgeCalibration, runOnHost; no_claim=none beyond protects
   test("a leak into none and an open egress path stop the run with exit 3 before any trial", async () => {

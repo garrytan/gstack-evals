@@ -200,6 +200,8 @@ interface SessionSpec {
   allowance: number;
   /** Count reads of the target skill even in an arm that does not hold it (calibration's none check). */
   watchSkill: boolean;
+  /** The arm's calibration sentinel, so a call whose output quotes it shows a read of the calibration copy. */
+  sentinel?: string;
   dir: string;
   tasksDir: string;
 }
@@ -276,7 +278,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const home = s.sandbox.homePath(s.dir);
     const installed = s.arm ? rig.arms[s.arm.name]!.skill : null;
     const holds = installed !== null;
-    const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null } : null;
+    const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null, ...(s.sentinel ? { sentinel: s.sentinel } : {}) } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
     const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}) });
@@ -299,7 +301,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const probes = calibrationProbes({ host: o.host, skill: o.skill ?? "target", arms: o.arms.map((a) => ({ name: a.name, holdsSkill: rig.arms[a.name]!.skill !== null, gstack: rig.arms[a.name]!.gstack })), interactive, nonce: o.nonce });
     const runs = await pool(probes, o.parallel, async (probe): Promise<ProbeRun> => {
       const arm = o.arms.find((a) => a.name === probe.arm)!;
-      const run = await session({ host: o.host, model, arm, round: 1, trial: 0, task: probe.task, ...(probe.entry ? { entry: probe.entry } : {}), interactive: probe.interactive, sandbox: rig.sandbox(arm.name, true), allowance: allowance(model), watchSkill: true, dir: join(o.out, "calibration", model.replaceAll("/", "_"), probe.task.id), tasksDir: empty });
+      const run = await session({ host: o.host, model, arm, round: 1, trial: 0, task: probe.task, ...(probe.entry ? { entry: probe.entry } : {}), interactive: probe.interactive, sandbox: rig.sandbox(arm.name, true), allowance: allowance(model), watchSkill: true, ...(marks[arm.name] ? { sentinel: marks[arm.name] } : {}), dir: join(o.out, "calibration", model.replaceAll("/", "_"), probe.task.id), tasksDir: empty });
       return { probe, outcome: run.record, calls: run.calls };
     });
     const judged = judgeCalibration({ host: o.host, model, nonce: o.nonce, sentinels: marks, runs, egress, usersim: interactive && o.host === "claude" });

@@ -144,8 +144,8 @@ export function codexDriver(o: CodexOptions): CodexDriver {
       const exit = await Promise.race([closed, spawnError.then((err) => ({ code: null, signal: null, err }))]);
       clearTimeout(timer);
       if ("err" in exit) appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + String(exit.err.message) + "\n");
-      const { turns, calls } = parseCodex(events);
-      const use = skillUse(calls, o.skill);
+      const { turns, calls, outputs } = parseCodex(events);
+      const use = skillUse(calls, o.skill, outputs);
       writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files }, null, 2) + "\n");
       const exited = !("err" in exit) && exit.signal === null;
       const refusal = refusalIn(failed ?? lastError ?? "");

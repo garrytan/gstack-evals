@@ -14,6 +14,12 @@
 // read command (cat, head, sed, grep, ...) or an input redirection, also inside sh -c, never text a command only prints. A failed Skill call
 // (the none arm asking for a skill it does not hold) is not an open.
 //
+// Calibration adds a proof that needs no command parsing. The arm's calibration copy ends with a sentinel only that copy
+// holds, so a call whose output quotes it read that copy's SKILL.md, however the command reached the file (a loop
+// variable, a glob, xargs, $(...)) and whatever its exit status: a loop's status is its last step's, not the read's. The
+// output proves nothing when the call's own input quotes the sentinel (an echo) or the call launched a subagent, whose
+// result is that agent's own text.
+//
 // Codex (`codex exec --json`) runs non-interactive tasks only. Its turns are its agent messages, the last being the final
 // answer; reasoning is not a turn. Its calls are its shell commands (ok on exit 0), file changes and MCP calls, so the
 // skill opens only on a shell read under one of the skill's roots that exits 0.
@@ -36,6 +42,8 @@ export interface SkillRef {
   roots: string[];
   /** The agent's HOME, so a shell read through ~ or $HOME counts. */
   home?: string;
+  /** In calibration, the sentinel only this arm's copy holds: a call whose output quotes it read the copy's SKILL.md. */
+  sentinel?: string;
 }
 
 export interface SkillUse {
@@ -60,7 +68,7 @@ const short = (input: unknown): Record<string, string> => {
   return out;
 };
 
-type Block = { type?: string; text?: string; id?: string; name?: string; input?: unknown; tool_use_id?: string; is_error?: boolean };
+type Block = { type?: string; text?: string; id?: string; name?: string; input?: unknown; tool_use_id?: string; is_error?: boolean; content?: unknown };
 type Message = { type?: string; parent_tool_use_id?: string | null; error?: string; is_api_error_message?: boolean; message?: { content?: unknown } };
 
 const blocks = (m: Message): Block[] => (Array.isArray(m.message?.content) ? (m.message!.content as Block[]) : []);
@@ -68,12 +76,15 @@ const blocks = (m: Message): Block[] => (Array.isArray(m.message?.content) ? (m.
 export interface HostTranscript {
   turns: string[];
   calls: Call[];
+  /** Each call's output text by call id, for skillUse's sentinel proof; never written to calls.json. */
+  outputs: Map<string, string>;
 }
 
 /** Turns and calls from Claude Code's stream-json messages (the Agent SDK's SDKMessage objects), in arrival order. */
 export function parseClaudeCode(messages: readonly unknown[]): HostTranscript {
   const turns: string[] = [];
   const calls: Call[] = [];
+  const outputs = new Map<string, string>();
   const byId = new Map<string, Call>();
   for (const raw of messages) {
     const m = raw as Message;
@@ -94,19 +105,22 @@ export function parseClaudeCode(messages: readonly unknown[]): HostTranscript {
     } else if (m.type === "user") {
       for (const b of blocks(m)) {
         const call = b.type === "tool_result" && b.tool_use_id ? byId.get(b.tool_use_id) : undefined;
-        if (call) call.ok = b.is_error !== true;
+        if (!call) continue;
+        call.ok = b.is_error !== true;
+        outputs.set(call.id, typeof b.content === "string" ? b.content : Array.isArray(b.content) ? (b.content as Block[]).map((x) => x.text ?? "").join("\n") : "");
       }
     }
   }
-  return { turns, calls };
+  return { turns, calls, outputs };
 }
 
-type CodexEvent = { type?: string; item?: { id?: string; type?: string; text?: string; command?: string; exit_code?: number | null; status?: string; changes?: { path?: string }[]; server?: string; tool?: string; error?: unknown; query?: string } };
+type CodexEvent = { type?: string; item?: { id?: string; type?: string; text?: string; command?: string; aggregated_output?: string; exit_code?: number | null; status?: string; changes?: { path?: string }[]; server?: string; tool?: string; error?: unknown; query?: string } };
 
 /** Turns and calls from Codex's `exec --json` events, in arrival order. A completed item replaces its started form. */
 export function parseCodex(events: readonly unknown[]): HostTranscript {
   const turns: string[] = [];
   const calls: Call[] = [];
+  const outputs = new Map<string, string>();
   const byId = new Map<string, Call>();
   for (const raw of events) {
     const ev = raw as CodexEvent;
@@ -124,6 +138,7 @@ export function parseCodex(events: readonly unknown[]): HostTranscript {
     else if (it.type === "web_search") call = { tool: "web_search", input: short({ pattern: it.query }), ok: done ? true : null };
     if (!call) continue;
     const id = it.id ?? String(calls.length);
+    if (it.aggregated_output) outputs.set(id, it.aggregated_output);
     const seen = byId.get(id);
     if (seen) Object.assign(seen, call);
     else {
@@ -132,7 +147,7 @@ export function parseCodex(events: readonly unknown[]): HostTranscript {
       calls.push(c);
     }
   }
-  return { turns, calls };
+  return { turns, calls, outputs };
 }
 
 const READERS = new Set(["cat", "head", "tail", "sed", "less", "more", "awk", "grep", "nl", "bat"]);
@@ -216,8 +231,14 @@ export function shellReads(line: string, depth = 0): string[] {
   return paths;
 }
 
-/** Whether the calls opened the skill, and which of its files they read. */
-export function skillUse(calls: readonly Call[], skill: SkillRef | null): SkillUse {
+/** The text quotes this exact sentinel: the next character cannot extend it into another arm's (before into before2). */
+export const quotes = (text: string, sentinel: string): boolean => new RegExp(sentinel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])").test(text);
+
+/** Tools whose result is a subagent's own text, not what a tool read. */
+const SUBAGENT_LAUNCHES = new Set(["Task", "Agent"]);
+
+/** Whether the calls opened the skill, and which of its files they read. With the arm's sentinel, a call's output that quotes it opens SKILL.md (see the header). */
+export function skillUse(calls: readonly Call[], skill: SkillRef | null, outputs: ReadonlyMap<string, string> = new Map()): SkillUse {
   if (!skill) return { opened: false, files: [] };
   const roots = skill.roots.map((r) => r.replace(/\/+$/, "") + "/");
   const files: string[] = [];
@@ -225,7 +246,12 @@ export function skillUse(calls: readonly Call[], skill: SkillRef | null): SkillU
     if (!files.includes(rel)) files.push(rel);
   };
   let opened = false;
+  const sentinel = skill.sentinel;
   for (const c of calls) {
+    if (sentinel && !SUBAGENT_LAUNCHES.has(c.tool) && quotes(outputs.get(c.id) ?? "", sentinel) && !Object.values(c.input).some((v) => quotes(v, sentinel))) {
+      opened = true;
+      read("SKILL.md");
+    }
     if (c.ok !== true) continue;
     if (c.tool === "Skill" && [skill.name, "gstack:" + skill.name].includes(c.input.skill ?? "")) {
       opened = true;

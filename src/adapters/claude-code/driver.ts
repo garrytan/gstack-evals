@@ -287,8 +287,8 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         if (!abort.signal.aborted) abort.abort();
       }
       if (unapprovedAsks(messages, approved, hooked).length && (stop as Termination | null)?.kind !== "cap_stop") stop = { kind: "missing", code: "E_APPROVAL_BYPASS" };
-      const { turns, calls } = parseClaudeCode(messages);
-      const use = skillUse(calls, o.skill);
+      const { turns, calls, outputs } = parseClaudeCode(messages);
+      const use = skillUse(calls, o.skill, outputs);
       writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files, missing_question: missingQuestion }, null, 2) + "\n");
       const size = (f: string) => {
         try {
