@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/garrytan/gstack-evals/blob/main/lanes/review-replay/catalog/schema.json",
+  "$comment": "Version 1. One case per file, named <id>.json. loadCatalog in catalog.ts also checks what a schema cannot: unique ids, file names, no sealed case in the repo tree, and no decoy whose audit found a defect.",
+  "title": "Review replay case",
+  "description": "A historical defect a gstack reviewer role caught or missed, with the range to replay, the answer key, its decoys and its provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "visibility",
+    "repo",
+    "pr",
+    "reviewed_head",
+    "merge_base",
+    "diff_range",
+    "roles",
+    "defect",
+    "severity",
+    "fix",
+    "decoys",
+    "receipt",
+    "answer_key_audit",
+    "shelf_life",
+    "credit"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Unique across the catalog; also the file name without .json."
+    },
+    "visibility": { "enum": ["public", "sealed"], "description": "sealed cases live only in the sealed store, never in this repo." },
+    "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "pr": { "type": "integer", "minimum": 1, "description": "The PR whose review the case replays." },
+    "reviewed_head": { "$ref": "#/$defs/sha", "description": "The head the historical reviewer read." },
+    "merge_base": { "$ref": "#/$defs/sha", "description": "The PR's merge base or fork point at that head." },
+    "diff_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "description": "The range the replayed reviewer reads: git diff from..to.",
+      "properties": { "from": { "$ref": "#/$defs/sha" }, "to": { "$ref": "#/$defs/sha" }, "note": { "$ref": "#/$defs/text" } }
+    },
+    "roles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "The reviewer roles the case replays. A specialist names its checklist, gstack's review/specialists/<checklist>.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role"],
+        "properties": {
+          "role": { "enum": ["specialist", "red-team", "fix-check"] },
+          "checklist": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+        },
+        "if": { "properties": { "role": { "const": "specialist" } } },
+        "then": { "required": ["role", "checklist"] }
+      }
+    },
+    "defect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line", "summary"],
+      "description": "The answer key. A catch names this file and this defect.",
+      "properties": {
+        "file": { "$ref": "#/$defs/text" },
+        "line": { "type": "integer", "minimum": 1 },
+        "summary": { "$ref": "#/$defs/text" }
+      }
+    },
+    "severity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deserved", "basis", "in_history"],
+      "description": "Scored apart from detection. deserved uses gstack's floor: CRITICAL fails a test, breaks production, or loses data or secrets. null means the evidence does not settle it, and basis says why.",
+      "properties": {
+        "deserved": { "enum": ["CRITICAL", "INFORMATIONAL", null] },
+        "basis": { "$ref": "#/$defs/text" },
+        "in_history": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["by", "rated"],
+            "properties": { "by": { "$ref": "#/$defs/text" }, "rated": { "$ref": "#/$defs/text" } }
+          }
+        }
+      }
+    },
+    "fix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "pr"],
+      "properties": { "commit": { "$ref": "#/$defs/sha" }, "pr": { "type": "integer", "minimum": 1 } }
+    },
+    "decoys": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The fix commit on the same range, plus clean PRs. A decoy is scorable as clean only when its audit's verdict is clean.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "repo", "pr", "range", "audit"],
+        "properties": {
+          "kind": { "enum": ["fix-commit", "clean-pr"] },
+          "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+          "pr": { "type": "integer", "minimum": 1 },
+          "range": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": { "from": { "$ref": "#/$defs/sha" }, "to": { "$ref": "#/$defs/sha" } }
+          },
+          "audit": {
+            "description": "null: nobody has audited it, so it is never scored as clean. holds-defect: it is not a decoy; make it a defect case.",
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["later_fix_checked", "later_fix", "verdict", "by", "at", "method"],
+                "properties": {
+                  "later_fix_checked": { "const": true },
+                  "later_fix": {
+                    "description": "A later commit or PR that fixed something in the decoy's code, or null when the search found none.",
+                    "oneOf": [
+                      { "type": "null" },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["ref", "fixed"],
+                        "properties": { "ref": { "$ref": "#/$defs/text" }, "fixed": { "$ref": "#/$defs/text" } }
+                      }
+                    ]
+                  },
+                  "verdict": { "enum": ["clean", "holds-defect"] },
+                  "by": { "$ref": "#/$defs/text" },
+                  "at": { "$ref": "#/$defs/date" },
+                  "method": { "$ref": "#/$defs/text" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "evidence"],
+      "description": "Where the case came from and the lines that establish it.",
+      "properties": {
+        "source": { "$ref": "#/$defs/text" },
+        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
+      }
+    },
+    "answer_key_audit": {
+      "description": "null until U14 audits the answer key.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["by", "at", "verdict", "notes"],
+          "properties": {
+            "by": { "$ref": "#/$defs/text" },
+            "at": { "$ref": "#/$defs/date" },
+            "verdict": { "enum": ["confirmed", "rejected"] },
+            "notes": { "$ref": "#/$defs/text" }
+          }
+        }
+      ]
+    },
+    "shelf_life": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_appeared", "source", "short"],
+      "description": "A short-shelf-life case counts only for models released before the fix PR first appeared.",
+      "properties": {
+        "first_appeared": { "$ref": "#/$defs/date" },
+        "source": { "$ref": "#/$defs/text" },
+        "short": { "type": "boolean" }
+      }
+    },
+    "credit": { "$ref": "#/$defs/text" }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "text": { "type": "string", "minLength": 1 }
+  }
+}

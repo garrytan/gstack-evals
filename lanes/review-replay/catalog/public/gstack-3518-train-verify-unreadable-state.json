@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3518-train-verify-unreadable-state",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3518,
+  "reviewed_head": "a2077ff70eede03d4a1b3269a7ebfd685f219143",
+  "merge_base": "1f246e3505eac788abf570d1e3f552ef939bee7f",
+  "diff_range": {
+    "from": "2114d7ab3330f9ba6fe9bad238d7f378efd47d30",
+    "to": "a2077ff70eede03d4a1b3269a7ebfd685f219143",
+    "note": "The panel's replay range: pass 1's fixes (build.ts items c2-*). The defect came in with those fixes."
+  },
+  "roles": [
+    { "role": "specialist", "checklist": "testing" },
+    { "role": "specialist", "checklist": "security" },
+    { "role": "specialist", "checklist": "maintainability" },
+    { "role": "specialist", "checklist": "state-machines" },
+    { "role": "red-team" },
+    { "role": "fix-check" }
+  ],
+  "defect": {
+    "file": "lib/ship-queue-train-verify.ts",
+    "line": 150,
+    "summary": "stopped() read prState()'s 'unreadable' (gh pr view failure) as 'not merged': with t.merged empty, a slot-1 squash already on main while gh failed answered 'nothing of train N merged, so the queue is not frozen' while main held an unverified squash. Introduced by pass 1's fix (GitHub-merged slot-1 freeze); fixed as a QUEUE_PROOF_MISSING refusal."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "Every reviewer rated it INFORMATIONAL and the lane put it below the floor (receipt blocking_found=0). The panel names no failing test or production break, so it does not settle whether it deserved CRITICAL.",
+    "in_history": [
+      {
+        "by": "Testing, security, maintainability, state-machines and Red Team specialists, pass 2 at a2077ff7 (anthropic/claude-sonnet-5-5); performance and simplification did not raise it",
+        "rated": "INFORMATIONAL"
+      }
+    ]
+  },
+  "fix": { "commit": "ada2accea064f814071330f97f61c03db84180a8", "pr": 3518 },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3518,
+      "range": { "from": "a2077ff70eede03d4a1b3269a7ebfd685f219143", "to": "ada2accea064f814071330f97f61c03db84180a8" },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "gstack #3518 PR body, Pre-Landing Review (GSTA-129's /ship review loop), via GSTA-131's panel case 2-GSTA-129-3518-fail-open",
+    "evidence": [
+      "gh pr view 3518 --repo garrytan/gstack body, '## Pre-Landing Review' (Pass 2 (seven reviewers): nothing blocking; five of them independently flagged ...)",
+      "git show ada2accea064 (message: raised independently by five pass-2 reviewers)",
+      "git show a2077ff70eed:lib/ship-queue-train-verify.ts:150",
+      "tools.subagent.get GSTA-129 paths 11-17 (titles 'Review pass 2: <specialist>'); Subagent 17 fingerprint lib/ship-queue-train-verify.ts:150:red-team; thread search hits from Subagents 11, 12, 15, 16",
+      "captain-gstack-minder/reports/GSTA-129-decisions.tsv rows 18, 22",
+      "2114d7ab3330 parent 1f246e3505ea (fork point)"
+    ]
+  },
+  "answer_key_audit": null,
+  "shelf_life": {
+    "first_appeared": "2026-10-27",
+    "source": "GitHub API repos/garrytan/gstack/pulls/3518 created_at 2026-10-27T16:53:25Z",
+    "short": true
+  },
+  "credit": "GSTA-131's review replay panel (lanes/review-replay/panel/panel-cases.json, case 2-GSTA-129-3518-fail-open); the defect was raised in GSTA-129's pass-2 review."
+}

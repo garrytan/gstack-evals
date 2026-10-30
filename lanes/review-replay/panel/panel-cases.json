@@ -1,0 +1,51 @@
+[
+  {
+    "case": "1-GSTA-128-3516-recall-regression",
+    "repo": "garrytan/gstack",
+    "pr": 3516,
+    "reviewed_head": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+    "merge_base": "3e4240a76f301e5bb5afbd2476233345c2d20dc4",
+    "found_pass": 2,
+    "found_by": "State Machines specialist (CRITICAL); PR body and fix commit say every other pass-2 reviewer flagged the same site (the dead contraction alternative). Reviewer models not established.",
+    "introduced_by_fix": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+    "finding": {
+      "path": "test/helpers/ship-hook-actor.ts",
+      "line": 146,
+      "summary": "Pass-1 negation guard in ownersOwnHand() scanned the whole sentence prefix before the reflexive, so an honest request after a negated subordinate clause ('Since the installer did not run, the repo owner needs to add the guard to the existing hooks themselves') was refused: a recall regression vs ee73419 that would red the paid ship-local-hook-preservation case. The contraction alternative also never matched (behind a word boundary)."
+    },
+    "fix_commit": "27a1b1fdb5109f6d7812e55616cdf2bb3001e10b",
+    "evidence": [
+      "gh pr view 3516 --repo garrytan/gstack body, '## Pre-Landing Review' (Pass 2 (full, 3712b79): State Machines CRITICAL ...)",
+      "git show 27a1b1fdb510 (message: review pass 2, State Machines, recall regression against ee73419)",
+      "git show 3712b7971126:test/helpers/ship-hook-actor.ts:146",
+      "79ac33c96e2d parent 3e4240a76f30 (fork point)",
+      "captain-gstack-minder/reports/GSTA-128-decisions.tsv row 56 (SHIP_RECEIPT passes=3 blocking_found=2)"
+    ],
+    "unknowns": "Pass 1 (candidate ee73419 + audit tests) also found two CRITICALs in the original diff (Testing: two-attempt retained-edit filter; Red Team: circular Scope Check prerequisite), both fixed in 3712b79; usable as extra original-diff panel items. Receipt blocking_found=2 vs three CRITICALs named across passes is inconsistent. Per-reviewer models and the raw pass-2 review log (Subagent 1's fresh machine) not read. merge_base is the branch fork point; main was not merged into the branch until 889c66a, after the loop."
+  },
+  {
+    "case": "2-GSTA-129-3518-fail-open",
+    "repo": "garrytan/gstack",
+    "pr": 3518,
+    "reviewed_head": "a2077ff70eede03d4a1b3269a7ebfd685f219143",
+    "merge_base": "1f246e3505eac788abf570d1e3f552ef939bee7f",
+    "found_pass": 2,
+    "found_by": "Five of seven pass-2 specialists independently: testing, security, maintainability, state-machines, Red Team (GSTA-129 Subagents 11, 12, 15, 16, 17; all anthropic/claude-sonnet-5-5). Performance and simplification did not raise it.",
+    "introduced_by_fix": "a2077ff70eede03d4a1b3269a7ebfd685f219143",
+    "finding": {
+      "path": "lib/ship-queue-train-verify.ts",
+      "line": 150,
+      "summary": "stopped() read prState()'s 'unreadable' (gh pr view failure) as 'not merged': with t.merged empty, a slot-1 squash already on main while gh failed answered 'nothing of train N merged, so the queue is not frozen' while main held an unverified squash. Introduced by pass 1's fix (GitHub-merged slot-1 freeze); fixed as a QUEUE_PROOF_MISSING refusal."
+    },
+    "fix_commit": "ada2accea064f814071330f97f61c03db84180a8",
+    "evidence": [
+      "gh pr view 3518 --repo garrytan/gstack body, '## Pre-Landing Review' (Pass 2 (seven reviewers): nothing blocking; five of them independently flagged ...)",
+      "git show ada2accea064 (message: raised independently by five pass-2 reviewers)",
+      "git show a2077ff70eed:lib/ship-queue-train-verify.ts:150",
+      "tools.subagent.get GSTA-129 paths 11-17 (titles 'Review pass 2: <specialist>'); Subagent 17 fingerprint lib/ship-queue-train-verify.ts:150:red-team; thread search hits from Subagents 11, 12, 15, 16",
+      "captain-gstack-minder/reports/GSTA-129-decisions.tsv rows 18, 22",
+      "2114d7ab3330 parent 1f246e3505ea (fork point)"
+    ],
+    "unknowns": "Severity caveat: every reviewer rated it INFORMATIONAL and the lane classified it below the rule-23 floor (receipt blocking_found=0); it was fixed only because it sat in pass 1's own fix. Pass 1 found six INFORMATIONAL, 0 blocking, so under 'second pass only after a floor finding' pass 2 would not have run at all. Pass-2 scope ambiguous (maintainability: fix range vs 2114d7ab; state-machines: git diff 1f246e35); review-log-p2.json on the GSTA-129 machine not read."
+  }
+]
