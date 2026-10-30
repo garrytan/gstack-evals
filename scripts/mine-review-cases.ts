@@ -240,21 +240,27 @@ export class Git {
   }
 }
 
-export interface Api { get(path: string): Promise<any>; calls(): number }
+/** fresh skips the cache read, for answers that can change between runs: a repo's visibility and the PR lists. */
+export interface Api { get(path: string, opts?: { fresh?: boolean }): Promise<any>; calls(): number }
+export type Fetcher = (path: string) => { out: string; stderr: string };
+export const ghCli: Fetcher = (path) => {
+  const r = spawnSync("gh", ["api", "-i", path], { encoding: "utf8", maxBuffer: 1 << 28 });
+  return { out: r.stdout ?? "", stderr: r.stderr ?? "" };
+};
 
 /** GitHub REST reads through gh api, cached on disk by path, one at a time, sleeping when the rate limit runs low. */
-export function ghApi(cacheDir: string): Api {
+export function ghApi(cacheDir: string, fetcher: Fetcher = ghCli): Api {
   mkdirSync(cacheDir, { recursive: true });
   let calls = 0;
   return {
     calls: () => calls,
-    async get(path: string) {
+    async get(path: string, opts: { fresh?: boolean } = {}) {
       const file = join(cacheDir, sha256(path).slice(0, 40) + ".json");
-      if (existsSync(file)) return JSON.parse(readFileSync(file, "utf8")).body;
+      if (!opts.fresh && existsSync(file)) return JSON.parse(readFileSync(file, "utf8")).body;
       for (let attempt = 0; ; attempt++) {
-        const r = spawnSync("gh", ["api", "-i", path], { encoding: "utf8", maxBuffer: 1 << 28 });
+        const r = fetcher(path);
         calls++;
-        const out = r.stdout ?? "";
+        const out = r.out;
         const cut = out.search(/\r?\n\r?\n/);
         const head = cut < 0 ? out : out.slice(0, cut);
         const status = +(/^HTTP\/[\d.]+ (\d+)/.exec(head)?.[1] ?? 0);
@@ -272,16 +278,16 @@ export function ghApi(cacheDir: string): Api {
           await Bun.sleep(Math.min(3_600_000, after));
           continue;
         }
-        throw new Error("GET " + path + " answered " + (status || "nothing") + ": " + (r.stderr ?? "").slice(0, 200));
+        throw new Error("GET " + path + " answered " + (status || "nothing") + ": " + r.stderr.slice(0, 200));
       }
     },
   };
 }
 
-async function pages(api: Api, path: string, stop: (items: any[]) => boolean = () => false): Promise<any[]> {
+async function pages(api: Api, path: string, stop: (items: any[]) => boolean = () => false, fresh = false): Promise<any[]> {
   const out: any[] = [];
   for (let page = 1; page <= 50; page++) {
-    const items = ((await api.get(path + (path.includes("?") ? "&" : "?") + "per_page=100&page=" + page)) ?? []) as any[];
+    const items = ((await api.get(path + (path.includes("?") ? "&" : "?") + "per_page=100&page=" + page, { fresh })) ?? []) as any[];
     out.push(...items);
     if (items.length < 100 || stop(items)) break;
   }
@@ -297,6 +303,8 @@ export interface DecoyHit { commit: string; where: "branch" | "default"; pr: num
 export interface DecoySearch {
   from: string; to: string; files: string[]; added_lines: number;
   searched: { branch: number; default: number; through: string; through_date: string }; hits: DecoyHit[];
+  /** Lines that survived to the PR head but could not be followed into its squash commit, so the search cannot vouch for them. */
+  unresolved: string[];
 }
 export interface Candidate {
   key: string; repo: string; kind: Kind;
@@ -426,42 +434,47 @@ export class RepoMiner {
       paths.add(f.newPath);
       for (const b of this.git.blame(to, f.newPath, toRanges(lines))) targets.add(id(b));
     }
+    const hits: DecoyHit[] = [];
+    const scan = async (commits: string[], where: "branch" | "default") => {
+      for (const c of commits) {
+        if (!paths.size) return;
+        const files = where === "default" ? this.changedBy(c) : this.git.diff(this.git.parents(c)[0]!, c);
+        if (!files.some((f) => f.oldPath && paths.has(f.oldPath))) continue;
+        const parent = this.git.parents(c)[0]!;
+        for (const f of files) {
+          if (!f.oldPath || !paths.has(f.oldPath)) continue;
+          if (f.newPath && f.newPath !== f.oldPath) paths.add(f.newPath);
+          const hit = this.git.blame(parent, f.oldPath, rewrittenRanges(f.hunks)).filter((x) => targets.has(id(x)));
+          if (!hit.length) continue;
+          hits.push({
+            commit: c, where, pr: where === "default" ? await this.prOfMerge(c) : null, subject: subjectOf(this.git.run(["log", "-1", "--format=%B", c])),
+            file: f.oldPath, lines: hit.map((x) => x.final),
+          });
+        }
+      }
+    };
+    await scan(branchLater, "branch");
+    const unresolved: string[] = [];
     if (squash) {
       for (const p of paths) {
         const n = this.git.lineCount(squash.head, p);
         if (!n) continue;
         const hunks = this.git.fileDiff(squash.head, squash.merge, p);
-        for (const b of this.git.blame(squash.head, p, [[1, n]])) {
-          if (!targets.has(id(b))) continue;
-          const m = mapLine(hunks, b.final, "old");
-          if (m !== null) targets.add(id({ sha: squash.merge, path: p, orig: m }));
+        for (const x of this.git.blame(squash.head, p, [[1, n]])) {
+          if (!targets.has(id(x))) continue;
+          const m = mapLine(hunks, x.final, "old");
+          if (m === null) unresolved.push(p + ":" + x.final);
+          else targets.add(id({ sha: squash.merge, path: p, orig: m }));
         }
       }
     }
     const i = this.fpIndex.get(after);
-    const later = [...branchLater.map((c) => ({ c, where: "branch" as const })), ...(i === undefined ? [] : this.fp.slice(i + 1)).map((c) => ({ c, where: "default" as const }))];
-    const hits: DecoyHit[] = [];
-    for (const { c, where } of later) {
-      if (!paths.size) break;
-      const files = where === "default" ? this.changedBy(c) : this.git.diff(this.git.parents(c)[0]!, c);
-      if (!files.some((f) => f.oldPath && paths.has(f.oldPath))) continue;
-      const parent = this.git.parents(c)[0]!;
-      for (const f of files) {
-        if (!f.oldPath || !paths.has(f.oldPath)) continue;
-        if (f.newPath && f.newPath !== f.oldPath) paths.add(f.newPath);
-        const ranges = rewrittenRanges(f.hunks);
-        const hit = this.git.blame(parent, f.oldPath, ranges).filter((b) => targets.has(id(b)));
-        if (!hit.length) continue;
-        hits.push({
-          commit: c, where, pr: where === "default" ? await this.prOfMerge(c) : null, subject: subjectOf(this.git.run(["log", "-1", "--format=%B", c])),
-          file: f.oldPath, lines: hit.map((b) => b.final),
-        });
-      }
-    }
+    const later = i === undefined ? [] : this.fp.slice(i + 1);
+    await scan(later, "default");
     return {
       from, to, files: [...paths].sort(), added_lines: added,
-      searched: { branch: branchLater.length, default: later.length - branchLater.length, through: this.headSha, through_date: day(this.headDate) },
-      hits,
+      searched: { branch: branchLater.length, default: later.length, through: this.headSha, through_date: day(this.headDate) },
+      hits, unresolved,
     };
   }
 
@@ -681,7 +694,7 @@ export async function mine(o: MineOptions): Promise<Mined> {
   let gstackSha: string | null = null;
   const seeds = readdirSync(o.catalog).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(o.catalog, f), "utf8")) as ReplayCase).filter((c) => !MINED_ID.test(c.id));
   for (const repo of o.repos) {
-    const meta = await o.api.get("repos/" + repo);
+    const meta = await o.api.get("repos/" + repo, { fresh: true });
     if (!meta || meta.private !== false || meta.visibility !== "public") {
       drops.push({ key: repo, repo, kind: null, pr: null, fix_pr: null, fix_commit: null, stage: "mine", code: "repo-not-public", detail: "GET /repos/" + repo + " says " + (meta ? "visibility " + meta.visibility : "not found") + "; nothing from it is mined" });
       repos.push({ repo, visibility: meta?.visibility ?? "not found", default_branch: meta?.default_branch ?? "", head: "", head_date: "", merged_prs: 0, fix_prs: 0, review_fix_commits: 0 });
@@ -689,7 +702,7 @@ export async function mine(o: MineOptions): Promise<Mined> {
     }
     const m = new RepoMiner(repo, o);
     await m.prepare(meta.default_branch);
-    const list = await pages(o.api, "repos/" + repo + "/pulls?state=closed&base=" + meta.default_branch + "&sort=updated&direction=desc", (items) => items[items.length - 1].updated_at < RULES.since);
+    const list = await pages(o.api, "repos/" + repo + "/pulls?state=closed&base=" + meta.default_branch + "&sort=updated&direction=desc", (items) => items[items.length - 1].updated_at < RULES.since, true);
     const merged = list.filter((p) => p.merged_at && p.merged_at >= RULES.since && p.merged_at <= o.until).sort((a, b) => a.number - b.number);
     const fixes = merged.filter((p) => isFixTitle(p.title));
     let reviewFixes = 0;
@@ -741,10 +754,11 @@ const searchMethod = (s: DecoySearch, def: string): string =>
   "Searched " + (s.searched.branch ? s.searched.branch + " later commits on the PR branch and " : "") + s.searched.default + " later first-parent commits on " + def + " through " + short(s.searched.through) + " (" + s.searched.through_date + ") for a change to any of the " + s.added_lines + " lines this decoy added in source and test files (" + RULES_POST + ", Rule 3)";
 
 export function decoyAudit(s: DecoySearch, def: string, hand: HandDecoy | undefined, auditor: string, at: string, runDate: string): DecoyAudit | null {
-  if (!s.hits.length) return { later_fix_checked: true, later_fix: null, verdict: "clean", by: MINER, at: runDate, method: searchMethod(s, def) + "; none changed them." };
+  if (!s.hits.length && !s.unresolved.length) return { later_fix_checked: true, later_fix: null, verdict: "clean", by: MINER, at: runDate, method: searchMethod(s, def) + "; none changed them." };
   if (!hand) return null;
   const hits = s.hits.map((h) => short(h.commit) + (h.pr ? " (#" + h.pr + ")" : "") + " " + h.file + ":" + h.lines.join(",")).join("; ");
-  return { later_fix_checked: true, later_fix: hand.later_fix, verdict: hand.verdict, by: auditor, at, method: searchMethod(s, def) + "; hits " + hits + ". Hand check: " + hand.reason };
+  const open = s.unresolved.length ? "; lines not followed into the squash commit " + s.unresolved.join(", ") : "";
+  return { later_fix_checked: true, later_fix: hand.later_fix, verdict: hand.verdict, by: auditor, at, method: searchMethod(s, def) + (hits ? "; hits " + hits : "") + open + ". Hand check: " + hand.reason };
 }
 
 function handProblems(c: Candidate, h: HandAudit): string[] {
@@ -756,7 +770,7 @@ function handProblems(c: Candidate, h: HandAudit): string[] {
   if (!h.severity || !h.severity.basis) p.push("a confirmed audit needs severity.deserved and its basis");
   if (h.line !== undefined && !c.lines.includes(h.line)) p.push("line " + h.line + " is not a located line (" + c.lines.join(",") + ")");
   if (!c.history.default && !h.in_history?.length) p.push("the script could not settle in_history, so the hand audit must");
-  if (c.decoy.hits.length && !h.decoys?.["0"]) p.push("the decoy has later changes, so decoys[\"0\"] needs a hand verdict");
+  if ((c.decoy.hits.length || c.decoy.unresolved.length) && !h.decoys?.["0"]) p.push("the decoy has later changes or unfollowed lines, so decoys[\"0\"] needs a hand verdict");
   return p;
 }
 
@@ -842,19 +856,20 @@ function needs(h: HandAudit | undefined, searches: DecoySearch[]): Array<{ item:
   const out = [...(h?.needs_human_check ?? [])];
   searches.forEach((s, i) => {
     if (s.hits.length && !h?.decoys?.[String(i)]) out.push({ item: "decoy " + i, reason: s.hits.length + " later commits changed lines it added; nobody has read them, so its audit stays null" });
+    if (s.unresolved.length && !h?.decoys?.[String(i)]) out.push({ item: "decoy " + i, reason: s.unresolved.length + " of its lines could not be followed into the squash commit, so the search cannot vouch for them and its audit stays null" });
   });
   return out;
 }
 
 const needsNote = (h: HandAudit): string => (h.needs_human_check?.length ? " Needs human check: " + h.needs_human_check.map((n) => n.item + " (" + n.reason + ")").join("; ") + "." : "");
 
-/** The generated files build owns: every case except the seeds, every audit record and drops.json. */
-function generatedPaths(catalog: string, mined: Mined): string[] {
-  const seeds = new Set(mined.existing.map((e) => e.id + ".json"));
+/** The files build owns and may remove: mined cases (by their id's shape, never a seed) and their audit records. */
+function generatedPaths(catalog: string): string[] {
   const audit = join(catalog, "audit");
+  const mined = (f: string) => f.endsWith(".json") && MINED_ID.test(f.slice(0, -5));
   return [
-    ...readdirSync(catalog).filter((f) => f.endsWith(".json") && !seeds.has(f)).map((f) => join(catalog, f)),
-    ...(existsSync(audit) ? readdirSync(audit).filter((f) => f.endsWith(".json")).map((f) => join(audit, f)) : []),
+    ...readdirSync(catalog).filter(mined).map((f) => join(catalog, f)),
+    ...(existsSync(audit) ? readdirSync(audit).filter(mined).map((f) => join(audit, f)) : []),
   ];
 }
 
@@ -969,7 +984,7 @@ export async function main(argv: string[]): Promise<void> {
       return;
     }
     const stale = [...b.files].filter(([p, t]) => !existsSync(p) || readFileSync(p, "utf8") !== t).map(([p]) => p);
-    const extra = generatedPaths(catalog, mined).filter((p) => !b.files.has(p));
+    const extra = generatedPaths(catalog).filter((p) => !b.files.has(p));
     if (f.set.has("--check")) {
       if (stale.length || extra.length) fail("E_MINE_STALE", [...stale.map((p) => p + " differs from what build computes"), ...extra.map((p) => p + " is not a file build writes")]);
       console.log("mine-review-cases: " + b.files.size + " files match; " + b.confirmed + " mined cases confirmed, " + b.pending.length + " awaiting a hand audit");

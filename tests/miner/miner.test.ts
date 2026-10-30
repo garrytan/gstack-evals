@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCatalog } from "../../lanes/review-replay/catalog/catalog.ts";
 import {
-  type Api, auditOrder, blameRanges, build, canHoldDefect, caseId, type Hand, isFixTitle, mapLine, mentions, mine, type Mined, namedIssues, parseBlame, parseDiff,
+  type Api, auditOrder, blameRanges, build, canHoldDefect, caseId, ghApi, type Hand, isFixTitle, mapLine, mentions, mine, type Mined, namedIssues, parseBlame, parseDiff,
   reviewSection, rewrittenRanges,
 } from "../../scripts/mine-review-cases.ts";
 
@@ -63,8 +63,8 @@ function fakeApi(responses: Record<string, unknown>): Api & { seen: string[] } {
   return {
     seen,
     calls: () => seen.length,
-    async get(path: string) {
-      seen.push(path);
+    async get(path: string, opts?: { fresh?: boolean }) {
+      seen.push(path + (opts?.fresh ? " fresh" : ""));
       if (path.startsWith("repos/o/") && path.includes("/issues/")) return null;
       if (!(path in responses)) throw new Error("unexpected GET " + path);
       return structuredClone(responses[path]);
@@ -181,6 +181,7 @@ describe("scripts/mine-review-cases.ts", () => {
     expect(caught.shelf).toEqual({ first_appeared: "2026-10-20", source: "GitHub API: o/r#1 (the fix PR) created_at 2026-10-20T08:00:00Z" });
     expect(mined.drops.map((d) => [d.key, d.code])).toEqual([["o/r#5", "no-source-file"]]);
     expect(mined.run.repos[0]).toMatchObject({ repo: "o/r", visibility: "public", merged_prs: 5, fix_prs: 2, review_fix_commits: 1 });
+    expect(r.api.seen.filter((p) => p.endsWith(" fresh"))).toEqual(["repos/o/r fresh", "repos/o/r/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=1 fresh"]);
   });
 
   test("mine follows a merge-commit repo's blame through the branch commit to its PR", async () => {
@@ -212,12 +213,66 @@ describe("scripts/mine-review-cases.ts", () => {
     expect(mined.candidates[0]!.decoy.hits.map((h) => [h.commit, h.pr])).toEqual([[p3.m, 3]]);
   });
 
+  test("the API cache serves repeat reads, but a fresh read always asks GitHub", async () => {
+    let n = 0;
+    const api = ghApi(mkdtempSync(join(tmp, "cache-")), () => ({ out: "HTTP/2.0 200 OK\r\nX-Ratelimit-Remaining: 5000\r\n\r\n{\"n\":" + ++n + "}", stderr: "" }));
+    expect([await api.get("repos/o/r/pulls/1"), await api.get("repos/o/r/pulls/1")]).toEqual([{ n: 1 }, { n: 1 }]);
+    expect([await api.get("repos/o/r", { fresh: true }), await api.get("repos/o/r", { fresh: true })]).toEqual([{ n: 2 }, { n: 3 }]);
+    expect(api.calls()).toBe(3);
+  });
+
+  test("the decoy search follows a rename on the PR branch into the squash commit", async () => {
+    const f = new Fixture("n");
+    const c0 = f.commit({ "src/app.ts": lines(BASE) }, "init");
+    git(f.work, "checkout", "-q", "-b", "b1");
+    const k1 = f.commit({ "src/app.ts": lines([...BASE, ...FEAT]) }, "feat: things");
+    const k2 = f.commit({ "src/app.ts": lines([...BASE, ...FEAT.map((l) => (l === "bug c" ? "fixed c" : l))]) }, "Pre-landing review fix: guard c");
+    git(f.work, "mv", "src/app.ts", "src/main.ts");
+    git(f.work, "commit", "-q", "-m", "move app");
+    const k3 = git(f.work, "rev-parse", "HEAD");
+    git(f.work, "update-ref", "refs/pull/1/head", k3);
+    git(f.work, "checkout", "-q", "main");
+    const s1 = f.squash(k3, c0, "feat: things (#1)");
+    git(f.work, "checkout", "-q", "-b", "b2");
+    const k4 = f.commit({ "src/main.ts": lines([...BASE, ...FEAT.map((l) => (l === "bug c" ? "renamed c" : l))]) }, "chore: c");
+    git(f.work, "checkout", "-q", "main");
+    const s2 = f.squash(k4, s1, "chore: c (#2)");
+    const clones = f.clone();
+    const prs = [pr(1, "feat: things", "2026-10-20T12:00:00Z", s1, k3), pr(2, "chore: c", "2026-10-21T12:00:00Z", s2, k4)];
+    const commit = (sha: string, parent: string, message: string) => ({ sha, parents: [{ sha: parent }], commit: { message, author: { name: "t" } }, author: null });
+    const api = fakeApi({
+      "repos/o/n": { visibility: "public", private: false, default_branch: "main" },
+      "repos/o/n/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=1": prs,
+      ...Object.fromEntries(prs.map((p) => ["repos/o/n/pulls/" + p.number, p])),
+      ...Object.fromEntries(prs.map((p) => ["repos/o/n/commits/" + p.merge_commit_sha + "/pulls", [p]])),
+      "repos/o/n/pulls/1/commits?per_page=100&page=1": [commit(k1, c0, "feat: things"), commit(k2, k1, "Pre-landing review fix: guard c"), commit(k3, k2, "move app")],
+      "repos/o/n/pulls/2/commits?per_page=100&page=1": [commit(k4, s1, "chore: c")],
+    });
+    const mined = await mine({ clones, repos: ["o/n"], api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
+    expect(mined.candidates.map((c) => c.key)).toEqual(["o/n#1@" + k2.slice(0, 12)]);
+    const d = mined.candidates[0]!.decoy;
+    expect([d.files, d.hits.map((h) => [h.commit, h.pr, h.file, h.lines]), d.unresolved]).toEqual([["src/app.ts", "src/main.ts"], [[s2, 2, "src/main.ts", [13]]], []]);
+  });
+
+  test("build never removes a seed, even when a partial mine did not audit it", async () => {
+    const r = squashRepo("t");
+    const mined = await mine({ clones: r.clones, repos: ["o/t"], api: r.api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
+    const catalog = catalogDir();
+    const seed = "gstack-3516-ship-hook-actor-negation-guard.json";
+    writeFileSync(join(catalog, seed), readFileSync(join(ROOT, "lanes/review-replay/catalog/public", seed)));
+    mkdirSync(join(catalog, "mining"), { recursive: true });
+    writeFileSync(join(catalog, "mining", "mined.json"), JSON.stringify(mined));
+    const run = spawnSync("bun", ["scripts/mine-review-cases.ts", "build", "--catalog", catalog], { cwd: ROOT, encoding: "utf8" });
+    expect(run.status).toBe(0);
+    expect(readFileSync(join(catalog, seed), "utf8")).toBe(readFileSync(join(ROOT, "lanes/review-replay/catalog/public", seed), "utf8"));
+  });
+
   test("a repo that is not public yields nothing", async () => {
     const api = fakeApi({ "repos/o/p": { visibility: "private", private: true, default_branch: "main" } });
     const mined = await mine({ clones: tmp, repos: ["o/p"], api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
     expect(mined.candidates).toEqual([]);
     expect(mined.drops.map((d) => d.code)).toEqual(["repo-not-public"]);
-    expect(api.seen).toEqual(["repos/o/p"]);
+    expect(api.seen).toEqual(["repos/o/p fresh"]);
   });
 
   test("build writes valid cases in audit order, one per PR, drops a case whose decoy holds a defect, and stops at the target", async () => {
