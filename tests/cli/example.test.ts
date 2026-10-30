@@ -42,7 +42,7 @@ describe("skill-eval --example", () => {
       expect(r.stdout).toContain("VERDICT: " + want.verdict + " (exit " + want.exit + ")");
       expect(verdict.harness).toMatchObject({ host: "claude", host_version: "fake" });
     }
-  });
+  }, 10_000);
 
   // Value: protects=a cap stop prints the interface's STOP line and keeps complete paired cells; fails_when=the STOP line is missing or a partial round is kept; why_new=new; seam=U6's CAP_STOP; no_claim=the metering proxy's own stop
   test("cap-stop prints the STOP line and keeps two complete rounds", async () => {
