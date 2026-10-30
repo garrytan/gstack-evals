@@ -235,13 +235,13 @@ describe("delta import", () => {
     expect([statSync(join(grade, "bin")).mode & 0o777, statSync(join(grade, "target")).mode & 0o777]).toEqual([0o755, 0o644]);
   });
 
-  // Value: protects=modes are restored by walking the grade tree's real directories, never through a link that replaced a parent; fails_when=a recorded mode for a/b lands on c/b after a becomes a -> c; why_new=#59 review; seam=importDelta; no_claim=the mode of a directory the import creates only as a parent
+  // Value: protects=modes are restored by walking the grade tree's real directories, never through a link that replaced a parent; fails_when=a recorded mode for a/b (sticky, which no umask default gives) lands on c/b after a becomes a -> c; why_new=#59 review; seam=importDelta; no_claim=the mode of a directory the import creates only as a parent
   test("a directory replaced by a symlink to another directory does not pass its children's modes through the link", () => {
     const root = scratch("relinked");
     const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
     mkdirSync(join(baseline, "a", "b"), { recursive: true });
     mkdirSync(join(baseline, "c"), { recursive: true });
-    chmodSync(join(baseline, "a", "b"), 0o700);
+    chmodSync(join(baseline, "a", "b"), 0o1755);
     snapshot(baseline, after);
     snapshot(baseline, grade);
     removeTree(join(after, "a"));
@@ -251,7 +251,7 @@ describe("delta import", () => {
     writeFileSync(join(after, "c", "b", "x"), "x");
     importDelta(baseline, after, grade, ["a", "c/b/x"]);
     expect(readFileSync(join(grade, "a", "b", "x"), "utf8")).toBe("x");
-    expect(statSync(join(grade, "c", "b")).mode & 0o777).not.toBe(0o700);
+    expect(statSync(join(grade, "c", "b")).mode & 0o1000).toBe(0);
   });
 });
 
