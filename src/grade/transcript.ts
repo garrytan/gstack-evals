@@ -97,8 +97,10 @@ export function parseClaudeCode(messages: readonly unknown[]): ClaudeTranscript 
 
 const READERS = new Set(["cat", "head", "tail", "sed", "less", "more", "awk", "grep", "nl", "bat"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
+/** Readers whose first operand is a pattern or program, not a file, unless -e or -f carries it. */
+const PATTERN_FIRST = new Set(["grep", "sed", "awk"]);
 
-/** A shell line's simple commands, each as its words with quotes removed; ;, &, |, newlines and parentheses split commands, and < and > are words of their own. */
+/** A shell line's simple commands, each as its words with quotes removed; ;, &, |, newlines and parentheses split commands, < and > are words of their own, and a # that starts a word comments out the rest of its line. */
 export function shellCommands(line: string): string[][] {
   const cmds: string[][] = [[]];
   let word = "";
@@ -129,6 +131,9 @@ export function shellCommands(line: string): string[][] {
     } else if (ch === "<" || ch === ">") {
       flush();
       cmds.at(-1)!.push(ch);
+    } else if (ch === "#" && !inWord) {
+      const end = line.indexOf("\n", i);
+      i = end < 0 ? line.length : end - 1;
     } else if (/\s/.test(ch)) flush();
     else {
       word += ch;
@@ -139,7 +144,7 @@ export function shellCommands(line: string): string[][] {
   return cmds.filter((c) => c.length);
 }
 
-/** The files a shell line reads: operands of a read command (cat, head, sed, grep, ...), input redirections, and the same inside sh -c. Text a command only prints is not a read. */
+/** The files a shell line reads: file operands of a read command (cat, head, sed, grep, ...; grep's, sed's and awk's pattern or program is not one), input redirections, and the same inside sh -c. Text a command only prints, and comments, are not reads. */
 export function shellReads(line: string, depth = 0): string[] {
   const paths: string[] = [];
   for (const words of shellCommands(line)) {
@@ -154,9 +159,13 @@ export function shellReads(line: string, depth = 0): string[] {
       continue;
     }
     if (!READERS.has(name)) continue;
+    let script = PATTERN_FIRST.has(name) && !cmd.some((w) => w === "-e" || w === "-f" || w === "--file" || w.startsWith("--regexp") || w.startsWith("--expression"));
     for (let i = 1; i < cmd.length; i++) {
-      if (cmd[i] === ">" || cmd[i] === "<") i++;
-      else if (!cmd[i]!.startsWith("-")) paths.push(cmd[i]!);
+      const w = cmd[i]!;
+      if (w === ">" || w === "<" || (PATTERN_FIRST.has(name) && (w === "-e" || w === "-f"))) i++;
+      else if (w.startsWith("-")) continue;
+      else if (script) script = false;
+      else paths.push(w);
     }
   }
   return paths;

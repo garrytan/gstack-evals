@@ -82,6 +82,18 @@ describe("the user simulator: approvals bound to category and effect", () => {
     expect((await answers({ replies: { design_doc: "Please write the design doc." } }, [APPROVAL])).out).toEqual(["Please write the design doc."]);
     expect((await answers({ replies: { design_doc: "Please draft it." } }, [APPROVAL])).out).toEqual([NON_APPROVING]);
     expect([isRefusal("No, not yet."), isRefusal("Not now"), isRefusal("Yes, no rush."), isRefusal("Please write it.")]).toEqual([true, true, false, false]);
+    expect(["No problem, go ahead and write it.", "No rush, write it whenever you like.", "Stop hesitating and write the doc.", "No, write it.", "Wait, okay, do it."].map(isRefusal)).toEqual([false, false, false, false, false]);
+    expect(["No, don't write it yet.", "Not yet, do not push anything.", "Hold off for now."].map(isRefusal)).toEqual([true, true, true]);
+    for (const text of ["No problem, go ahead and write it.", "No rush, write it whenever you like."]) {
+      const r = await sim({ persona: "A founder." }, async () => text).answerAsk([APPROVAL]);
+      expect([text, "answers" in r && r.answers[APPROVAL.question!]]).toEqual([text, NON_APPROVING]);
+    }
+    const stop = await answers({ replies: { design_doc: "Stop hesitating and write the doc." } }, [APPROVAL]);
+    expect(stop.out).toEqual([NON_APPROVING]);
+    const negated = sim({ replies: { design_doc: "Please don't write it." } });
+    const nr = await negated.answerAsk([APPROVAL]);
+    expect("answers" in nr && nr.answers[APPROVAL.question!]).toBe(NON_APPROVING);
+    expect(negated.misaligned).toEqual(["design_doc: the reply negates part of what it says"]);
   });
 
   // Value: protects=a category's scripted reply is used at most twice, then the fallback; the run-time catch names the question; the log records the rule versions and every reply's source; fails_when=a reply repeats without bound, a missing-replies task gets answers, or the log drops a field; why_new=U10 (event log, reply source, E_USER_TURNS_MISSING); seam=UserSim; no_claim=none beyond protects

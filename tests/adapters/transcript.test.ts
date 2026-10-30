@@ -92,5 +92,10 @@ describe("GST-109: user-visible turns from a Claude Code transcript", () => {
     expect(opened("/bin/bash -lc 'sed -n 1,20p /h/.claude/skills/learn/refs/a.md'")).toBe(true);
     expect(opened("LC_ALL=C grep -n step /h/.claude/skills/learn/SKILL.md")).toBe(true);
     expect(shellReads("cat a b; echo 'cat c' && bash -c \"head -3 d\" | tail -1 e")).toEqual(["a", "b", "d", "e"]);
+    expect(opened("grep /h/.claude/skills/learn/SKILL.md config.json")).toBe(false);
+    expect(opened("cat manifest.json # wired /h/.claude/skills/learn/SKILL.md")).toBe(false);
+    expect(opened("awk '{print}' /h/.claude/skills/learn/SKILL.md")).toBe(true);
+    expect(opened("grep -e step /h/.claude/skills/learn/SKILL.md")).toBe(true);
+    expect(shellReads("sed -n 1,5p f; grep -rn x d1 d2; a#b; cat g#h")).toEqual(["f", "d1", "d2", "g#h"]);
   });
 });

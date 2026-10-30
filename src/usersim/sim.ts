@@ -4,9 +4,9 @@
 //
 // Each question is classified by U5's deterministic classifier (src/usersim/classifier.ts) and answered from the task's
 // sidecar replies, keyed by category. A question that names a gated effect (writing, committing, pushing, deleting,
-// running, ...) gets its scripted reply as written only when the reply refuses ("no", "not yet", ...). Any other reply
-// may authorize the effect, so it is sent only when it names every effect the question names, is not an ordinal ("2",
-// "option B"), and the classification is unambiguous. Otherwise a fixed non-approving answer goes instead and the reply
+// running, ...) gets its scripted reply as written only when the reply refuses and grants nothing (isRefusal). Any other
+// reply may authorize the effect, so it is sent only when it holds no negation, names every effect the question names,
+// is not an ordinal ("2", "option B"), and the classification is unambiguous. Otherwise a fixed non-approving answer goes instead and the reply
 // is recorded as misaligned (REPLY_MISALIGNED). So a question inserted, removed or moved in front of an approval cannot
 // take the approval meant for another effect, and a reply that approves without saying "yes" is held to the same rules.
 //
@@ -58,9 +58,11 @@ const APPROVING = /^(yes|yep|yeah|sure|ok|okay|approve|approved|go ahead|do it|s
 const NEGATED = /\b(no|not|don't|do not|never|wait|hold off|stop)\b/;
 const ORDINAL = /^(\(?[0-9]+[.)]?|[a-d][.)]?|option [0-9a-d]+|the (first|second|third|fourth|last) (one|option)|(first|second|third|fourth|last))[.!]?$/;
 const REFUSING = /^(no|nope|not yet|not now|don't|do not|never|wait|hold off|stop|skip)\b/;
+const GRANTING = /\b(yes|yep|yeah|sure|ok|okay|go ahead|go for it|do it|please|proceed|approve|approved|lgtm|sounds good|fine|problem|worries|rush)\b/;
+const NEGATION_BEFORE = /\b(don't|do not|not|never|without)\s+(\w+\s+){0,2}$/;
 
 /** sha256 over the rules a reply depends on, beside the classifier's: the verdict and the event log record both. */
-export const USERSIM_SHA256 = createHash("sha256").update(JSON.stringify({ version: USERSIM_VERSION, limits: LIMITS, non_approving: NON_APPROVING, fallback: FALLBACK, effects: EFFECTS, approving: APPROVING.source, negated: NEGATED.source, ordinal: ORDINAL.source, refusing: REFUSING.source, classifier: CLASSIFIER_SHA256 })).digest("hex");
+export const USERSIM_SHA256 = createHash("sha256").update(JSON.stringify({ version: USERSIM_VERSION, limits: LIMITS, non_approving: NON_APPROVING, fallback: FALLBACK, effects: EFFECTS, approving: APPROVING.source, negated: NEGATED.source, ordinal: ORDINAL.source, refusing: REFUSING.source, granting: GRANTING.source, negation_before: NEGATION_BEFORE.source, classifier: CLASSIFIER_SHA256 })).digest("hex");
 
 /** A reply that says yes: it starts with an affirmative and holds no negation. */
 export const isApproving = (reply: string): boolean => {
@@ -68,10 +70,16 @@ export const isApproving = (reply: string): boolean => {
   return APPROVING.test(t) && !NEGATED.test(t);
 };
 
-/** A reply that says no: it starts with a refusal and does not start with an affirmative. */
+/**
+ * A reply that refuses and grants nothing: it starts with a refusal, holds no granting word ("go ahead", "please",
+ * "no problem"), and every gated effect it names comes right after a negation ("don't write"). "No, write it." and
+ * "Stop hesitating and write the doc." are not refusals.
+ */
 export const isRefusal = (reply: string): boolean => {
   const t = reply.trim().toLowerCase();
-  return REFUSING.test(t) && !APPROVING.test(t);
+  if (!REFUSING.test(t) || APPROVING.test(t) || GRANTING.test(t)) return false;
+  for (const m of t.matchAll(/[a-z]+/g)) if (WORD_TO_EFFECT.has(m[0]) && !NEGATION_BEFORE.test(t.slice(0, m.index))) return false;
+  return true;
 };
 
 /** A reply that picks an option by its place, not its content. */
@@ -137,7 +145,8 @@ export class UserSim {
       if (!effects.length && !(approving && c.ambiguous)) return this.take(c.category!, { text: scripted, source: "scripted", approves: false, misaligned: null });
       if (effects.length && isRefusal(scripted)) return this.take(c.category!, { text: scripted, source: "scripted", approves: false, misaligned: null });
       const covered = effectsOf(scripted);
-      const why = c.ambiguous ? "the question matched " + c.matched.join(" and ") : isOrdinal(scripted) ? "the reply picks an option by its place" : effects.filter((e) => !covered.includes(e)).length ? "the reply does not name " + effects.filter((e) => !covered.includes(e)).join(", ") : null;
+      const why = NEGATED.test(scripted.toLowerCase()) ? "the reply negates part of what it says"
+        : c.ambiguous ? "the question matched " + c.matched.join(" and ") : isOrdinal(scripted) ? "the reply picks an option by its place" : effects.filter((e) => !covered.includes(e)).length ? "the reply does not name " + effects.filter((e) => !covered.includes(e)).join(", ") : null;
       if (why === null) return this.take(c.category!, { text: scripted, source: "scripted", approves: true, misaligned: null });
       this.misaligned.push(c.category + ": " + why);
       return { text: NON_APPROVING, source: "non_approving", approves: false, misaligned: why };
