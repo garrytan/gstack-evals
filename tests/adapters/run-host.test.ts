@@ -99,7 +99,7 @@ const codexModel: ResponsesScript = ({ outputs, body }) => {
   return [{ type: "message", text: "HELLO from the task." }];
 };
 
-async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null } = {}) {
+async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; calibrateOnly?: boolean } = {}) {
   const h = host === "claude" ? harness(claudeModel) : harness(() => [], { responses: codexModel });
   open.push(h);
   const root = mkdtempSync(join(tmpdir(), "gse-runhost-"));
@@ -116,6 +116,7 @@ async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: bool
     tasks: [{ id: "hello", prompt: "Say hello." }],
     verdict: [{ id: "hello", safety: false, interactive, judge: false, must: ["hello"], must_not: [], check: false }],
     entries: interactive ? { hello: { interactive: true, user: { replies: { mode: "Building a startup" } } } } : {},
+    ...(o.calibrateOnly ? { calibrateOnly: true } : {}),
   }, rig(h, host, arms, o));
   return { run, root, h };
 }
@@ -142,6 +143,17 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect(run.calibrationFailures[0]!.message).toContain("arm none on codex, model gpt-6.1-sol: the answer quoted the sentinel of after");
     expect(run.input.records).toEqual([]);
     expect(decide(run.input, DEFAULT_OPTIONS).exit_code).toBe(3);
+  }, 300_000);
+
+  // Value: protects=--calibrate's run stops after calibration on both hosts: every check passes and no trial runs; fails_when=a trial runs after calibration or the result is lost; why_new=--calibrate (U10's unbuilt flag); seam=runOnHost's calibrateOnly; no_claim=the CLI's calibration.json, which tests/cli/fake-host.test.ts covers
+  test("calibrateOnly runs calibration on both hosts and no trial", async () => {
+    for (const host of ["claude", "codex"] as const) {
+      const { run, root } = await runHost(host, { interactive: host === "claude", calibrateOnly: true });
+      expect(run.calibrationFailures).toEqual([]);
+      expect(run.input.calibration[MODELS[host]]).toEqual({ skill: true, none: true, shell: true, config: null, usersim: host === "claude" ? true : null, egress: true });
+      expect([run.input.records, run.stopped, existsSync(join(root, "out", "runs"))]).toEqual([[], false, false]);
+      expect(run.spent).toBeGreaterThan(0);
+    }
   }, 300_000);
 
   // Value: protects=a round whose worst case passes the cap is not started, so a cap stop keeps only complete paired cells and the run stops with CAP_STOP; fails_when=a partial round runs or the stop is lost; why_new=U10 conformance (cap stop) in the real-host loop; seam=runOnHost's round guard; no_claim=none beyond protects

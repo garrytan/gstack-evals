@@ -204,7 +204,7 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
       else report.passed.push("ledger: line item " + call.item + " approved at " + usd(status.cap_micros) + " (" + words + "); --spend-cap " + usd(call.spendCap) + " is within it");
     }
   }
-  if (call.spendCap !== null && report.plan.round !== null && call.spendCap < report.plan.round) stop("E_CAP_TOO_LOW", "--spend-cap " + usd(call.spendCap) + " is below one arm-balanced round, " + usd(report.plan.round) + " at the session allowance; read the worst case in parts with --dry-run");
+  if (call.spendCap !== null && report.plan.round !== null && call.spendCap < report.plan.round) stop("E_CAP_TOO_LOW", "--spend-cap " + usd(call.spendCap) + " is below " + (call.calibrate ? "the calibration sessions, " : "one arm-balanced round, ") + usd(report.plan.round) + " at the session allowance; read the worst case in parts with --dry-run");
 
   const pdf = pdfTasks(contract, tasks);
   if (pdf.length) report.warnings.push({ code: "PDF_INPUT", message: "these tasks may send a PDF, which the metering proxy reserves loosely when it is inline base64: " + pdf.join(", ") });

@@ -26,7 +26,7 @@ import type { VerdictContext } from "../verdict/verdict.ts";
 import { effectiveLines, resolveCall, SKILL_EVAL_HELP, type Call } from "./call.ts";
 import { planLines } from "./dry-run.ts";
 import { runExample, type ExampleMode } from "./example.ts";
-import { FAKE_ADAPTER_SHA256, finishRun, runFake } from "./run.ts";
+import { FAKE_ADAPTER_SHA256, finishCalibration, finishRun, runFake } from "./run.ts";
 import { adapterSha256, dockerRig, hostReadiness, runOnHost, type HostRig } from "./run-host.ts";
 import { skillName } from "./arms.ts";
 import { isReasonCode } from "../../errors/codes.ts";
@@ -169,12 +169,13 @@ function runOnFakeHost(call: Call, report: PreflightReport, io: Io, env: Env, js
   const tasks = verdictTasks(report.contract!).filter((t) => ids.has(t.id));
   let run;
   try {
-    run = runFake({ models: call.models, arms: call.arms.arms.map((a) => a.name), tasks, trials: call.trials, cap: call.spendCap, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, loadScript(env.GSTACK_EVALS_FAKE_HOST!));
+    run = runFake({ models: call.models, arms: call.arms.arms.map((a) => a.name), tasks, trials: call.trials, cap: call.spendCap, calibrateOnly: call.calibrate, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, loadScript(env.GSTACK_EVALS_FAKE_HOST!));
   } catch (error) {
     if (!(error instanceof FakeHostError)) throw error;
     io.err(codeLines("E_USAGE", ["skill-eval: " + error.message], HINT));
     return 2;
   }
+  if (call.calibrate) return finishCalibration(run, [], { committed: run.spent, unknown: 0, lease_id: null, cap: call.spendCap! }, call.out.path, io, json);
   const judged = tasks.some((t) => t.judge);
   const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
   const context: VerdictContext = {
@@ -221,11 +222,12 @@ async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: E
   let run;
   let spend: Awaited<ReturnType<HostRig["close"]>>;
   try {
-    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap: call.spendCap, runId: call.runId, out: call.out.path, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
+    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap: call.spendCap, runId: call.runId, out: call.out.path, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, calibrateOnly: call.calibrate, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
   } finally {
     spend = await rig.close();
   }
   for (const f of run.calibrationFailures) io.err(codeLines(f.code, [f.message], f.fix));
+  if (call.calibrate) return finishCalibration(run, run.calibrationFailures, { committed: spend.committed, unknown: spend.unknown, lease_id: spend.lease_id, cap: call.spendCap! }, call.out.path, io, json);
   const judged = tasks.some((t) => t.judge);
   const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
   const pins = JSON.parse(readFileSync(join(REPO_ROOT, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;

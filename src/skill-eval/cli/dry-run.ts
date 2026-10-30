@@ -49,6 +49,8 @@ export interface Plan {
   round: number | null;
   /** Every agent session at its timeout, both rounds and calibration, spread over --parallel slots. */
   worst_wall_s: number;
+  /** --calibrate: the parts are the calibration sessions alone. */
+  calibrate: boolean;
 }
 
 /** A session's allowance at the model's list price, in micro-dollars: $/M tokens is micro-dollars per token. */
@@ -60,34 +62,42 @@ export function allowanceMicros(call: Pick<Call, "policy">, model: string, a: Al
 
 const describe = (model: string, a: Allowance) => model + ": " + a.input / 1000 + "k input + " + a.output / 1000 + "k output tokens at list price";
 
-export function plan(call: Pick<Call, "policy" | "models" | "arms" | "trials" | "parallel" | "timeoutS" | "judgeModel" | "usersimModel">, tasks: readonly PlanTask[]): Plan {
+/** The worst case in parts. With --calibrate it holds only the calibration sessions, and `round` is all of them. */
+export function plan(call: Pick<Call, "policy" | "models" | "arms" | "trials" | "parallel" | "timeoutS" | "judgeModel" | "usersimModel"> & Partial<Pick<Call, "calibrate">>, tasks: readonly PlanTask[]): Plan {
   const arms = call.arms.arms.map((a) => a.name);
-  const perModel = arms.length * tasks.length * call.trials;
+  const perModel = call.calibrate ? 0 : arms.length * tasks.length * call.trials;
   const parts: Part[] = [];
   const add = (name: string, sessions: number, each: number | null, detail: string) => parts.push({ name, sessions, each, total: each === null ? null : each * sessions, detail });
   for (const model of call.models) {
     const each = allowanceMicros(call, model, SESSION_ALLOWANCE);
-    add("sessions " + model, perModel, each, describe(model, SESSION_ALLOWANCE));
-    add("rerun stage " + model, perModel, each, "up to every task in every arm once more, if a task goes red in round 1");
+    if (!call.calibrate) {
+      add("sessions " + model, perModel, each, describe(model, SESSION_ALLOWANCE));
+      add("rerun stage " + model, perModel, each, "up to every task in every arm once more, if a task goes red in round 1");
+    }
     const calibration = arms.length + 3 + (call.arms.base ? 1 : 0) + (tasks.some((t) => t.interactive) ? 1 : 0);
     add("calibration " + model, calibration, each, "one per arm, plus shell, config, egress, base and user-simulator checks");
   }
-  const judged = tasks.filter((t) => t.judge).length * arms.length * call.trials * call.models.length * 2;
-  add("judge " + call.judgeModel, judged, judged ? allowanceMicros(call, call.judgeModel, JUDGE_ALLOWANCE) : 0, judged ? describe(call.judgeModel, JUDGE_ALLOWANCE) + ", both rounds" : "no task has a judge rubric");
-  const simulated = tasks.filter((t) => t.interactive).length * arms.length * call.trials * call.models.length * 2;
-  add("usersim " + call.usersimModel, simulated, simulated ? allowanceMicros(call, call.usersimModel, USERSIM_ALLOWANCE) : 0, simulated ? describe(call.usersimModel, USERSIM_ALLOWANCE) + " per interactive session, both rounds" : "no interactive task");
+  if (!call.calibrate) {
+    const judged = tasks.filter((t) => t.judge).length * arms.length * call.trials * call.models.length * 2;
+    add("judge " + call.judgeModel, judged, judged ? allowanceMicros(call, call.judgeModel, JUDGE_ALLOWANCE) : 0, judged ? describe(call.judgeModel, JUDGE_ALLOWANCE) + ", both rounds" : "no task has a judge rubric");
+    const simulated = tasks.filter((t) => t.interactive).length * arms.length * call.trials * call.models.length * 2;
+    add("usersim " + call.usersimModel, simulated, simulated ? allowanceMicros(call, call.usersimModel, USERSIM_ALLOWANCE) : 0, simulated ? describe(call.usersimModel, USERSIM_ALLOWANCE) + " per interactive session, both rounds" : "no interactive task");
+  }
   const totals = parts.map((p) => p.total);
+  const total = totals.includes(null) ? null : (totals as number[]).reduce((s, x) => s + x, 0);
   const roundParts = call.models.map((m) => allowanceMicros(call, m, SESSION_ALLOWANCE));
-  const taskSeconds = tasks.reduce((s, t) => s + t.timeout_s, 0) * arms.length * call.trials * 2;
+  const taskSeconds = call.calibrate ? 0 : tasks.reduce((s, t) => s + t.timeout_s, 0) * arms.length * call.trials * 2;
   const calibrationSeconds = parts.filter((p) => p.name.startsWith("calibration ")).reduce((s, p) => s + p.sessions, 0) * call.timeoutS;
-  const longest = Math.max(call.timeoutS, ...tasks.map((t) => t.timeout_s));
+  const longest = call.calibrate ? call.timeoutS : Math.max(call.timeoutS, ...tasks.map((t) => t.timeout_s));
+  const models = call.models.length + " model" + (call.models.length > 1 ? "s" : "") + " x " + arms.length + " arms (" + arms.join(", ") + ")";
   return {
-    matrix: call.models.length + " model" + (call.models.length > 1 ? "s" : "") + " x " + arms.length + " arms (" + arms.join(", ") + ") x " + tasks.length + " tasks x " + call.trials + " trials = " + perModel * call.models.length + " sessions",
+    matrix: call.calibrate ? models + ": calibration only (--calibrate), no trial sessions" : models + " x " + tasks.length + " tasks x " + call.trials + " trials = " + perModel * call.models.length + " sessions",
     sessions: perModel * call.models.length,
     parts,
-    total: totals.includes(null) ? null : (totals as number[]).reduce((s, x) => s + x, 0),
-    round: roundParts.includes(null) ? null : (roundParts as number[]).reduce((s, x) => s + x * arms.length * tasks.length, 0),
+    total,
+    round: call.calibrate ? total : roundParts.includes(null) ? null : (roundParts as number[]).reduce((s, x) => s + x * arms.length * tasks.length, 0),
     worst_wall_s: Math.ceil((taskSeconds * call.models.length + calibrationSeconds) / call.parallel) + longest,
+    calibrate: call.calibrate === true,
   };
 }
 
@@ -99,7 +109,7 @@ export function planLines(p: Plan, parallel: number): string[] {
     "worst case, each session at its allowance (the proxy refuses a call past it):",
     ...p.parts.map((x) => "  " + x.name.padEnd(width) + "  " + x.sessions + " x " + money(x.each) + " = " + money(x.total) + "  (" + x.detail + ")"),
     "  " + "total".padEnd(width) + "  " + money(p.total),
-    "one arm-balanced round: " + money(p.round) + "; a smaller --spend-cap is refused (E_CAP_TOO_LOW)",
-    "parallel " + parallel + "; worst-case wall time " + (p.worst_wall_s / 3600).toFixed(1) + " h (every agent session at its timeout, task timeouts, rerun stage and calibration included; judge calls not counted)",
+    (p.calibrate ? "the calibration sessions: " : "one arm-balanced round: ") + money(p.round) + "; a smaller --spend-cap is refused (E_CAP_TOO_LOW)",
+    "parallel " + parallel + "; worst-case wall time " + (p.worst_wall_s / 3600).toFixed(1) + " h (" + (p.calibrate ? "every calibration session at its timeout" : "every agent session at its timeout, task timeouts, rerun stage and calibration included; judge calls not counted") + ")",
   ];
 }

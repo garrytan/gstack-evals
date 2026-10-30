@@ -77,6 +77,8 @@ export interface HostRunInput {
   gate?: GateEvidence;
   /** The calibration nonce; the sentinels derive from it. */
   nonce: string;
+  /** --calibrate: stop after calibration, before any trial. */
+  calibrateOnly?: boolean;
 }
 
 export interface HostRun {
@@ -177,7 +179,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   for (const f of calibrationFailures) log(f.code + " " + f.message);
 
   const input: VerdictInput = { tasks: o.verdict, models: o.models, arms: o.arms.map((a) => a.name), records, calibration, stops, ...(o.gate ? { gate: o.gate } : {}) };
-  if (calibrationFailures.length || stops.length) return { input, spent, stopped: stops.length > 0, calibrationFailures };
+  if (o.calibrateOnly || calibrationFailures.length || stops.length) return { input, spent, stopped: stops.length > 0, calibrationFailures };
 
   const byId = new Map(o.tasks.map((t) => [t.id, t]));
   const total = o.models.length * o.verdict.length * o.arms.length * o.trials;

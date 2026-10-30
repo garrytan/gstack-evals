@@ -57,7 +57,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--item` | `GSTACK_EVALS_ITEM` | The ledger line item; never implied. |
 | `--out` | `~/.capy/work/gstack-evals/runs/<run id>` on Capy, else `$XDG_STATE_HOME/gstack-evals/runs/<run id>` | The run directory: verdict.json, error.json and trace files. Never the OS temp dir or the tasks repo. |
 | `--dry-run` | off | Print the matrix, the worst case in parts and the wall time; needs no key, ledger or lock. |
-| `--calibrate` | off | Run only the calibration checks. Not built (U10). |
+| `--calibrate` | off | Run only the calibration checks: per model, one session per arm, the shell check, the user simulator check when a task has scripted replies, and the egress probe. It writes calibration.json and no verdict, and exits 3 when a check fails. `--dry-run` then prices only these sessions, and the spend cap must cover them. |
 | `--tasks-only` | all tasks | Run only these task ids. |
 | `--base` | inferred | `gstack@<sha>`: overlay the arms on this gstack tree; needs `--skill`. |
 | `--skill` | inferred | The target skill's name inside the base. |
