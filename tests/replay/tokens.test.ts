@@ -60,6 +60,7 @@ function expectError(r: { code: number; out: string; err: string }, code: string
 describe("the review token table", () => {
   test("the committed table validates and holds GSTA-131's eval 1 specialist rows", () => {
     const table = loadTable();
+    expect(TABLE_PATH).toBe(join(REPO_ROOT, "tables/review-tokens.json"));
     expect(tableProblems(committed())).toEqual([]);
     expect(table.rows.map((r) => [r.model, r.role, r.effort, r.provider_effort, r.n, r.output_tokens.median, r.output_tokens.p90, r.as_of])).toEqual([
       ["claude-opus-5-5", "specialist", "full", "high", 6, 6929, 13566, "2026-10-27"],
