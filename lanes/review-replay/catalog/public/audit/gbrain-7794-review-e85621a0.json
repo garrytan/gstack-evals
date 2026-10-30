@@ -1,6 +1,6 @@
 {
   "id": "gbrain-7794-review-e85621a0",
-  "key": "garrytan/gbrain#7794@e85621a010bb",
+  "candidate": "garrytan/gbrain#7794@e85621a010bb",
   "kind": "review-caught",
   "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
   "checks": [
@@ -93,26 +93,15 @@
     "line": 111,
     "summary": "The trust release preview kept bidi and format characters and left quotes and commas unescaped in the claim, source and context, so a held row could fake a field and show the owner something it does not have before they confirm.",
     "severity": {
-      "deserved": null,
-      "basis": "needs human check: a preview spoofing gap is a security matter, but the review records REVIEW_LOOP blocking_found=0 and does not rate this finding."
+      "deserved": "CRITICAL",
+      "basis": "H4: the #7794 review receipt says the spoofing gap was fixed in e85621a0 with a test that was red before, so the defect fails a test; the review loop rated no blocking finding, which is recorded separately in in_history."
     },
     "in_history": [
       {
         "by": "Opus 5.5 adversarial pass, gstack /ship review on #7794",
         "rated": "not named in the review section; REVIEW_LOOP blocking_found=0"
       }
-    ],
-    "needs_human_check": [
-      {
-        "item": "severity",
-        "reason": "security exposure versus a review that counts no blocking finding"
-      }
     ]
   },
-  "needs_human_check": [
-    {
-      "item": "severity",
-      "reason": "security exposure versus a review that counts no blocking finding"
-    }
-  ]
+  "needs_human_check": []
 }

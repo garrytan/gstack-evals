@@ -46,8 +46,8 @@
     "summary": "The trust release preview kept bidi and format characters and left quotes and commas unescaped in the claim, source and context, so a held row could fake a field and show the owner something it does not have before they confirm."
   },
   "severity": {
-    "deserved": null,
-    "basis": "needs human check: a preview spoofing gap is a security matter, but the review records REVIEW_LOOP blocking_found=0 and does not rate this finding.",
+    "deserved": "CRITICAL",
+    "basis": "H4: the #7794 review receipt says the spoofing gap was fixed in e85621a0 with a test that was red before, so the defect fails a test; the review loop rated no blocking finding, which is recorded separately in in_history.",
     "in_history": [
       {
         "by": "Opus 5.5 adversarial pass, gstack /ship review on #7794",
@@ -91,7 +91,7 @@
     "by": "GSTA-33 (Opus 5.5)",
     "at": "2026-10-30",
     "verdict": "confirmed",
-    "notes": "Confirmed: the fix says the release preview now strips bidi and format characters and escapes a quote or comma \"so a held row cannot show the owner a field it does not have\"; at the reviewed head printable at line 111 kept \\p{Cf} characters and releasedFields and the summary printed raw quotes and commas. Needs human check: severity (security exposure versus a review that counts no blocking finding)."
+    "notes": "Confirmed: the fix says the release preview now strips bidi and format characters and escapes a quote or comma \"so a held row cannot show the owner a field it does not have\"; at the reviewed head printable at line 111 kept \\p{Cf} characters and releasedFields and the summary printed raw quotes and commas."
   },
   "shelf_life": {
     "first_appeared": "2026-10-26",

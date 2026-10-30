@@ -1,6 +1,6 @@
 {
   "id": "gstack-1808-fixed-by-3386",
-  "key": "garrytan/gstack#3386",
+  "candidate": "garrytan/gstack#3386",
   "kind": "escaped",
   "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
   "checks": [

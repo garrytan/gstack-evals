@@ -178,7 +178,7 @@ describe("scripts/mine-review-cases.ts", () => {
     const r = squashRepo();
     const catalog = catalogDir();
     const mined = await mine({ clones: r.clones, repos: ["o/r"], api: r.api, until: "2026-10-29T00:00:00Z", catalog, scope });
-    expect(mined.candidates.map((c) => c.key)).toEqual(["o/r#1@" + r.k2.slice(0, 12), "o/r#2"]);
+    expect(mined.candidates.map((c) => c.candidate)).toEqual(["o/r#1@" + r.k2.slice(0, 12), "o/r#2"]);
     const [caught, escaped] = mined.candidates as [Mined["candidates"][0], Mined["candidates"][0]];
     expect([escaped.kind, escaped.pr, escaped.reviewed_head, escaped.merge_base, escaped.file, escaped.lines, escaped.fix.commit]).toEqual(["escaped", 1, r.k2, r.c0, "src/app.ts", [12], r.p2.s]);
     expect(escaped.decoy.hits.map((h) => [h.commit, h.pr, h.lines])).toEqual([[r.p3.s, 3, [12]]]);
@@ -188,7 +188,7 @@ describe("scripts/mine-review-cases.ts", () => {
     expect(caught.history.excerpt).toEqual(["Pass 1 found a guard gap, fixed in " + r.k2.slice(0, 7) + "."]);
     expect(caught.roles).toEqual([{ role: "specialist", checklist: "state-machines" }, { role: "red-team" }]);
     expect(caught.shelf).toEqual({ first_appeared: "2026-10-20", source: "GitHub API: o/r#1 (the fix PR) created_at 2026-10-20T08:00:00Z" });
-    expect(mined.drops.map((d) => [d.key, d.code])).toEqual([["o/r#5", "no-source-file"]]);
+    expect(mined.drops.map((d) => [d.candidate, d.code])).toEqual([["o/r#5", "no-source-file"]]);
     expect(mined.run.repos[0]).toMatchObject({ repo: "o/r", visibility: "public", merged_prs: 5, fix_prs: 2, review_fix_commits: 1 });
     expect(r.api.seen.filter((p) => p.endsWith(" fresh"))).toEqual(["repos/o/r fresh", "repos/o/r/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=1 fresh"]);
   });
@@ -218,7 +218,7 @@ describe("scripts/mine-review-cases.ts", () => {
       "repos/o/m/pulls/1/commits?per_page=100&page=1": one(p1, c0), "repos/o/m/pulls/2/commits?per_page=100&page=1": one(p2, p1.m), "repos/o/m/pulls/3/commits?per_page=100&page=1": one(p3, p2.m),
     });
     const mined = await mine({ clones, repos: ["o/m"], api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
-    expect(mined.candidates.map((c) => [c.key, c.pr, c.reviewed_head, c.merge_base, c.lines, c.introduced_by])).toEqual([["o/m#2", 1, p1.k, c0, [12], [p1.k]]]);
+    expect(mined.candidates.map((c) => [c.candidate, c.pr, c.reviewed_head, c.merge_base, c.lines, c.introduced_by])).toEqual([["o/m#2", 1, p1.k, c0, [12], [p1.k]]]);
     expect(mined.candidates[0]!.decoy.hits.map((h) => [h.commit, h.pr])).toEqual([[p3.m, 3]]);
   });
 
@@ -258,7 +258,7 @@ describe("scripts/mine-review-cases.ts", () => {
       "repos/o/n/pulls/2/commits?per_page=100&page=1": [commit(k4, s1, "chore: c")],
     });
     const mined = await mine({ clones, repos: ["o/n"], api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
-    expect(mined.candidates.map((c) => c.key)).toEqual(["o/n#1@" + k2.slice(0, 12)]);
+    expect(mined.candidates.map((c) => c.candidate)).toEqual(["o/n#1@" + k2.slice(0, 12)]);
     const d = mined.candidates[0]!.decoy;
     expect([d.files, d.hits.map((h) => [h.commit, h.pr, h.file, h.lines]), d.unresolved]).toEqual([["src/app.ts", "src/main.ts"], [[s2, 2, "src/main.ts", [13]]], []]);
   });
@@ -292,16 +292,16 @@ describe("scripts/mine-review-cases.ts", () => {
     const hand: Hand = {
       auditor: "test auditor",
       audits: {
-        [escaped.key]: confirmed({ decoys: { "0": { verdict: "clean", later_fix: null, reason: "a rename" } }, needs_human_check: [{ item: "severity", reason: "no failing test named" }] }),
-        [caught.key]: confirmed({ in_history: [{ by: "pass 1", rated: "blocking" }], decoys: { "0": { verdict: "holds-defect", later_fix: { ref: "o/s#4", fixed: "c" }, reason: "a later fix" } } }),
+        [escaped.candidate]: confirmed({ decoys: { "0": { verdict: "clean", later_fix: null, reason: "a rename" } }, needs_human_check: [{ item: "severity", reason: "no failing test named" }] }),
+        [caught.candidate]: confirmed({ in_history: [{ by: "pass 1", rated: "blocking" }], decoys: { "0": { verdict: "holds-defect", later_fix: { ref: "o/s#4", fixed: "c" }, reason: "a later fix" } } }),
       },
     };
     const catalog = catalogDir();
     const b = build(catalog, mined, hand);
     expect(b.problems).toEqual([]);
-    const order = auditOrder(mined.candidates).map((c) => c.key);
-    const drops = JSON.parse(b.files.get(join(catalog, "mining", "drops.json"))!).map((d: { key: string; code: string }) => [d.key, d.code]);
-    expect(drops).toContainEqual([caught.key, order[0] === caught.key ? "decoy-holds-defect" : "one-case-per-pr"]);
+    const order = auditOrder(mined.candidates).map((c) => c.candidate);
+    const drops = JSON.parse(b.files.get(join(catalog, "mining", "drops.json"))!).map((d: { candidate: string; code: string }) => [d.candidate, d.code]);
+    expect(drops).toContainEqual([caught.candidate, order[0] === caught.candidate ? "decoy-holds-defect" : "one-case-per-pr"]);
     for (const [p, t] of b.files) { mkdirSync(join(p, ".."), { recursive: true }); writeFileSync(p, t); }
     const loaded = loadCatalog(catalog);
     expect(loaded.problems).toEqual([]);
@@ -313,7 +313,7 @@ describe("scripts/mine-review-cases.ts", () => {
     const record = JSON.parse(readFileSync(join(catalog, "audit", c.id + ".json"), "utf8"));
     expect(record.needs_human_check).toEqual([{ item: "severity", reason: "no failing test named" }]);
 
-    const incomplete: Hand = { auditor: "t", audits: { [escaped.key]: confirmed({}) } };
+    const incomplete: Hand = { auditor: "t", audits: { [escaped.candidate]: confirmed({}) } };
     expect(build(catalogDir(), mined, incomplete).problems.join("\n")).toContain("decoys[\"0\"] needs a hand verdict");
     const none = build(catalogDir(), mined, hand, 0);
     expect(none.confirmed).toBe(0);

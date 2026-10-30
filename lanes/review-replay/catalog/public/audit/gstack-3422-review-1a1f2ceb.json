@@ -1,6 +1,6 @@
 {
   "id": "gstack-3422-review-1a1f2ceb",
-  "key": "garrytan/gstack#3422@1a1f2cebdc72",
+  "candidate": "garrytan/gstack#3422@1a1f2cebdc72",
   "kind": "review-caught",
   "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
   "checks": [

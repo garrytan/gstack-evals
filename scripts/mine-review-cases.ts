@@ -341,7 +341,7 @@ export interface DecoySearch {
   unresolved: string[];
 }
 export interface Candidate {
-  key: string; repo: string; kind: Kind;
+  candidate: string; repo: string; kind: Kind;
   pr: number; pr_title: string; pr_author: string; pr_merged_at: string;
   fix: { pr: number; commit: string; parent: string; subject: string; author: string; merged_at: string };
   reviewed_head: string; merge_base: string; default_branch: string;
@@ -352,7 +352,7 @@ export interface Candidate {
   history: { receipt: boolean; excerpt: string[]; default: { by: string; rated: string } | null };
   checks: Check[];
 }
-export interface Drop { key: string; repo: string; kind: Kind | null; pr: number | null; fix_pr: number | null; fix_commit: string | null; stage: "mine" | "build"; code: string; detail: string }
+export interface Drop { candidate: string; repo: string; kind: Kind | null; pr: number | null; fix_pr: number | null; fix_commit: string | null; stage: "mine" | "build"; code: string; detail: string }
 export interface Existing { id: string; decoys: DecoySearch[]; checks: Check[] }
 export interface RepoRun { repo: string; visibility: string; default_branch: string; head: string; head_date: string; merged_prs: number; fix_prs: number; review_fix_commits: number }
 export interface Mined {
@@ -456,7 +456,7 @@ export class RepoMiner {
     const paths = new Set<string>();
     let added = 0;
     const named = this.git.changed(from, to).filter((f) => f.new && decoyFile(f.new, "") && decoyFile(f.new, this.git.head(to, f.new)));
-    for (const f of named.length ? this.git.diff(from, to, named.map((x) => x.new!)) : []) {
+    for (const f of named.length ? this.git.diff(from, to, [...new Set(named.flatMap((x) => [x.old ?? x.new!, x.new!]))]) : []) {
       if (!f.newPath || f.binary) continue;
       const lines = [...addedLines(f.hunks)];
       if (!lines.length) continue;
@@ -531,7 +531,7 @@ export class RepoMiner {
   }
 
   private drop(key: string, kind: Kind, pr: number | null, fixPr: number | null, fixCommit: string | null, code: string, detail: string): void {
-    this.drops.push({ key, repo: this.repo, kind, pr, fix_pr: fixPr, fix_commit: fixCommit, stage: "mine", code, detail });
+    this.drops.push({ candidate: key, repo: this.repo, kind, pr, fix_pr: fixPr, fix_commit: fixCommit, stage: "mine", code, detail });
   }
 
   /** Rule 1.1 to 1.3 on one fix: the source files it rewrote, each with its blamed lines. */
@@ -604,7 +604,7 @@ export class RepoMiner {
     const excerpt = mentions(section, [basename(path)]);
     const r = this.roles(base, head, size.reviewed);
     this.candidates.push({
-      key, repo: this.repo, kind: "escaped",
+      candidate: key, repo: this.repo, kind: "escaped",
       pr: X.number, pr_title: X.title, pr_author: X.user?.login ?? "unknown", pr_merged_at: X.merged_at,
       fix: { pr: F.number, commit: S, parent: P1, subject: F.title, author: F.user?.login ?? "unknown", merged_at: F.merged_at },
       reviewed_head: head, merge_base: base, default_branch: this.def,
@@ -659,7 +659,7 @@ export class RepoMiner {
       const section = reviewSection(X.body);
       const squash = this.git.parents(MX).length === 1 ? { head: X.head.sha as string, merge: MX } : null;
       this.candidates.push({
-        key, repo: this.repo, kind: "review-caught",
+        candidate: key, repo: this.repo, kind: "review-caught",
         pr: X.number, pr_title: X.title, pr_author: X.user?.login ?? "unknown", pr_merged_at: X.merged_at,
         fix: { pr: X.number, commit: c.sha, parent: P, subject: subjectOf(c.commit.message), author: c.author?.login ?? c.commit.author?.name ?? "unknown", merged_at: X.merged_at },
         reviewed_head: P, merge_base: base, default_branch: this.def,
@@ -727,7 +727,7 @@ export async function mine(o: MineOptions): Promise<Mined> {
   for (const repo of o.repos) {
     const meta = await o.api.get("repos/" + repo, { fresh: true });
     if (!meta || meta.private !== false || meta.visibility !== "public") {
-      drops.push({ key: repo, repo, kind: null, pr: null, fix_pr: null, fix_commit: null, stage: "mine", code: "repo-not-public", detail: "GET /repos/" + repo + " says " + (meta ? "visibility " + meta.visibility : "not found") + "; nothing from it is mined" });
+      drops.push({ candidate: repo, repo, kind: null, pr: null, fix_pr: null, fix_commit: null, stage: "mine", code: "repo-not-public", detail: "GET /repos/" + repo + " says " + (meta ? "visibility " + meta.visibility : "not found") + "; nothing from it is mined" });
       repos.push({ repo, visibility: meta?.visibility ?? "not found", default_branch: meta?.default_branch ?? "", head: "", head_date: "", merged_prs: 0, fix_prs: 0, review_fix_commits: 0 });
       continue;
     }
@@ -752,8 +752,8 @@ export async function mine(o: MineOptions): Promise<Mined> {
     schema: 1, rules: RULES_POST,
     run: { at: new Date().toISOString(), since: RULES.since, until: o.until, gstack_sha: gstackSha, repos, api_calls: o.api.calls() },
     existing: existing.sort((a, b) => a.id.localeCompare(b.id)),
-    candidates: candidates.sort((a, b) => a.key.localeCompare(b.key)),
-    drops: drops.sort((a, b) => a.key.localeCompare(b.key)),
+    candidates: candidates.sort((a, b) => a.candidate.localeCompare(b.candidate)),
+    drops: drops.sort((a, b) => a.candidate.localeCompare(b.candidate)),
   };
 }
 
@@ -780,7 +780,7 @@ export interface Hand { auditor: string; audits: Record<string, HandAudit> }
 /** The id build gives a mined case; any other id in the catalog is a case the miner did not write (U13's seeds). */
 export const MINED_ID = /^[a-z0-9.-]+-\d+-(?:fixed-by-\d+|review-[0-9a-f]{8})$/;
 export const caseId = (c: Candidate): string => c.repo.split("/")[1]!.toLowerCase() + "-" + c.pr + (c.kind === "escaped" ? "-fixed-by-" + c.fix.pr : "-review-" + c.fix.commit.slice(0, 8));
-export const auditOrder = (cs: Candidate[]): Candidate[] => [...cs].sort((a, b) => sha256(a.key).localeCompare(sha256(b.key)));
+export const auditOrder = (cs: Candidate[]): Candidate[] => [...cs].sort((a, b) => sha256(a.candidate).localeCompare(sha256(b.candidate)));
 
 const searchMethod = (s: DecoySearch, def: string): string =>
   "Searched " + (s.searched.branch ? s.searched.branch + " later commits on the PR branch and " : "") + s.searched.default + " later first-parent commits on " + def + " through " + short(s.searched.through) + " (" + s.searched.through_date + ") for a change to any of the " + s.added_lines + " lines this decoy added in source and test files (" + RULES_POST + ", Rule 3)";
@@ -834,14 +834,14 @@ export function build(catalog: string, mined: Mined, hand: Hand, target = RULES.
   let confirmed = 0;
   const pending: string[] = [];
   for (const c of auditOrder(mined.candidates)) {
-    const dropIt = (code: string, detail: string) => drops.push({ key: c.key, repo: c.repo, kind: c.kind, pr: c.pr, fix_pr: c.fix.pr, fix_commit: c.fix.commit, stage: "build", code, detail });
+    const dropIt = (code: string, detail: string) => drops.push({ candidate: c.candidate, repo: c.repo, kind: c.kind, pr: c.pr, fix_pr: c.fix.pr, fix_commit: c.fix.commit, stage: "build", code, detail });
     if (confirmed >= target) { dropIt("not-audited", "the audit stopped at " + target + " confirmed cases before reaching this candidate (Rule 5); this says nothing about its quality"); continue; }
-    const taken = [c.repo + "#" + c.pr, c.repo + "#" + c.fix.pr].find((k) => used.has(k));
+    const taken = [c.repo + "#" + c.pr, c.repo + "#" + c.fix.pr, c.repo + "@" + c.fix.commit].find((k) => used.has(k));
     if (taken) { dropIt("one-case-per-pr", taken + " already appears in a case (Rule 5)"); continue; }
-    const h = hand.audits[c.key];
-    if (!h) { pending.push(c.key); dropIt("not-audited", "no hand audit yet"); continue; }
+    const h = hand.audits[c.candidate];
+    if (!h) { pending.push(c.candidate); dropIt("not-audited", "no hand audit yet"); continue; }
     const p = handProblems(c, h);
-    if (p.length) { problems.push(c.key + ": " + p.join("; ")); continue; }
+    if (p.length) { problems.push(c.candidate + ": " + p.join("; ")); continue; }
     if (h.verdict === "rejected") { dropIt("rejected", h.notes); continue; }
     const hd = h.decoys?.["0"];
     if (hd?.verdict === "holds-defect") { dropIt("decoy-holds-defect", "the only decoy holds a defect (" + (hd.later_fix?.ref ?? "later fix") + ": " + (hd.later_fix?.fixed ?? hd.reason) + "), so the case has no decoy left (Rule 3)"); continue; }
@@ -872,15 +872,15 @@ export function build(catalog: string, mined: Mined, hand: Hand, target = RULES.
     };
     write(join(catalog, id + ".json"), out);
     write(join(catalog, "audit", id + ".json"), {
-      id, key: c.key, kind: c.kind, rules: RULES_POST, checks: c.checks,
+      id, candidate: c.candidate, kind: c.kind, rules: RULES_POST, checks: c.checks,
       located: { file: c.file, fix_file: c.fix_file, lines: c.lines, blamed: c.blamed, owned: c.owned, insertion_only: c.insertion_only, introduced_by: c.introduced_by },
       sizes: { reviewed_lines: c.reviewed_lines, decoy_lines: c.decoy_lines }, scope: c.scope, history: c.history, decoy_search: c.decoy,
       hand: h, needs_human_check: needs(h, [c.decoy]),
     });
-    used.add(c.repo + "#" + c.pr).add(c.repo + "#" + c.fix.pr);
+    used.add(c.repo + "#" + c.pr).add(c.repo + "#" + c.fix.pr).add(c.repo + "@" + c.fix.commit);
     confirmed++;
   }
-  write(join(catalog, "mining", "drops.json"), drops.sort((a, b) => a.repo.localeCompare(b.repo) || (a.fix_pr ?? 0) - (b.fix_pr ?? 0) || a.key.localeCompare(b.key)));
+  write(join(catalog, "mining", "drops.json"), drops.sort((a, b) => a.repo.localeCompare(b.repo) || (a.fix_pr ?? 0) - (b.fix_pr ?? 0) || a.candidate.localeCompare(b.candidate)));
   return { files, confirmed, pending, problems };
 }
 
@@ -916,7 +916,7 @@ export async function dossier(c: Candidate, git: Git, api: Api): Promise<string>
   const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "\n[... " + (s.length - n) + " more characters]" : s);
   const lines = (s: string, n: number) => { const l = s.split("\n"); return l.length > n ? l.slice(0, n).join("\n") + "\n[... " + (l.length - n) + " more lines]" : s; };
   const out = [
-    "KEY " + c.key + " (" + c.kind + ")",
+    "KEY " + c.candidate + " (" + c.kind + ")",
     "REVIEWED " + c.repo + "#" + c.pr + " \"" + c.pr_title + "\" by @" + c.pr_author + ", merged " + c.pr_merged_at + "; head " + short(c.reviewed_head) + ", base " + short(c.merge_base) + ", " + c.reviewed_lines + " filtered lines",
     "FIX " + (c.kind === "escaped" ? c.repo + "#" + c.fix.pr + " \"" + c.fix.subject + "\" by @" + c.fix.author + ", merged " + c.fix.merged_at : "commit " + short(c.fix.commit) + " \"" + c.fix.subject + "\" by " + c.fix.author),
     "LOCATED " + c.file + " lines " + c.lines.join(",") + " (" + c.owned + " of " + c.blamed + " blamed lines" + (c.insertion_only ? ", insertions only" : "") + ")",
@@ -1011,7 +1011,7 @@ export async function main(argv: string[]): Promise<void> {
   } else if (cmd === "build" || cmd === "next") {
     const mined = readJson<Mined>(minedPath, "E_MINE_STALE");
     const hand = existsSync(handPath) ? readJson<Hand>(handPath, "E_MINE_HAND") : { auditor: "", audits: {} };
-    const known = new Set([...mined.candidates.map((c) => c.key), ...mined.existing.map((e) => e.id)]);
+    const known = new Set([...mined.candidates.map((c) => c.candidate), ...mined.existing.map((e) => e.id)]);
     const unknown = Object.keys(hand.audits).filter((k) => !known.has(k));
     if (unknown.length) fail("E_MINE_HAND", unknown.map((k) => handPath + " audits " + k + ", which mined.json does not hold"));
     const b = (() => { try { return build(catalog, mined, hand); } catch (e) { return fail("E_MINE_STALE", [reason(e)]); } })();
@@ -1034,7 +1034,7 @@ export async function main(argv: string[]): Promise<void> {
     console.log("mine-review-cases: wrote " + b.files.size + " files (" + stale.length + " changed, " + extra.length + " removed); " + b.confirmed + " mined cases confirmed, " + b.pending.length + " awaiting a hand audit");
   } else if (cmd === "show" && f.pos[0]) {
     const mined = readJson<Mined>(minedPath, "E_MINE_STALE");
-    const c = mined.candidates.find((x) => x.key === f.pos[0]) ?? fail("E_USAGE", ["mined.json holds no candidate " + f.pos[0]], USAGE);
+    const c = mined.candidates.find((x) => x.candidate === f.pos[0]) ?? fail("E_USAGE", ["mined.json holds no candidate " + f.pos[0]], USAGE);
     const clones = f.one.get("--clones") ?? fail("E_USAGE", ["show needs --clones <dir>"], USAGE);
     try { console.log(await dossier(c, new Git(join(clones, c.repo.split("/")[1]!)), ghApi(cache))); } catch (e) { fail("E_MINE_SOURCE", [reason(e)]); }
   } else {

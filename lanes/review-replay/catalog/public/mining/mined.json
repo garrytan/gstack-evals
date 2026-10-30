@@ -165,7 +165,7 @@
   ],
   "candidates": [
     {
-      "key": "garrytan/gbrain#7032@e3ffda5e26cc",
+      "candidate": "garrytan/gbrain#7032@e3ffda5e26cc",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7032,
@@ -306,7 +306,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7134@db68fd899c0e",
+      "candidate": "garrytan/gbrain#7134@db68fd899c0e",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7134,
@@ -451,7 +451,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7141@aa79e14a2874",
+      "candidate": "garrytan/gbrain#7141@aa79e14a2874",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7141,
@@ -593,7 +593,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7178@32ff374c3a63",
+      "candidate": "garrytan/gbrain#7178@32ff374c3a63",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7178,
@@ -722,7 +722,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7476@d77b2a37c2ad",
+      "candidate": "garrytan/gbrain#7476@d77b2a37c2ad",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7476,
@@ -860,7 +860,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7485@4c4493455e6c",
+      "candidate": "garrytan/gbrain#7485@4c4493455e6c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7485,
@@ -1006,7 +1006,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@32ab534acf43",
+      "candidate": "garrytan/gbrain#7511@32ab534acf43",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -1152,7 +1152,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@4616bc575343",
+      "candidate": "garrytan/gbrain#7511@4616bc575343",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -1304,7 +1304,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@4a979abac791",
+      "candidate": "garrytan/gbrain#7511@4a979abac791",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -1451,7 +1451,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@55279fb3180d",
+      "candidate": "garrytan/gbrain#7511@55279fb3180d",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -1574,7 +1574,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@591ec59bcadd",
+      "candidate": "garrytan/gbrain#7511@591ec59bcadd",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -1734,7 +1734,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@6b01f793f2bc",
+      "candidate": "garrytan/gbrain#7511@6b01f793f2bc",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -1858,7 +1858,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@70dd6dd1870e",
+      "candidate": "garrytan/gbrain#7511@70dd6dd1870e",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -2008,7 +2008,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@916c3c8f51cc",
+      "candidate": "garrytan/gbrain#7511@916c3c8f51cc",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -2145,7 +2145,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@b28d97c534ee",
+      "candidate": "garrytan/gbrain#7511@b28d97c534ee",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -2274,7 +2274,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@b7eb095fafa2",
+      "candidate": "garrytan/gbrain#7511@b7eb095fafa2",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -2402,7 +2402,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@bd71e93c1f4f",
+      "candidate": "garrytan/gbrain#7511@bd71e93c1f4f",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -2529,7 +2529,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7511@c2ea2af63657",
+      "candidate": "garrytan/gbrain#7511@c2ea2af63657",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -2651,7 +2651,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7603@6cfabf3b2a9d",
+      "candidate": "garrytan/gbrain#7603@6cfabf3b2a9d",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7603,
@@ -2793,7 +2793,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7603@f91a9be53afd",
+      "candidate": "garrytan/gbrain#7603@f91a9be53afd",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7603,
@@ -2931,7 +2931,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7606@049fdee3dbcd",
+      "candidate": "garrytan/gbrain#7606@049fdee3dbcd",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -3143,7 +3143,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7606@52dae8474bf5",
+      "candidate": "garrytan/gbrain#7606@52dae8474bf5",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -3284,7 +3284,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7606@9ae7bb5c4c8c",
+      "candidate": "garrytan/gbrain#7606@9ae7bb5c4c8c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -3506,7 +3506,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7606@cacd075279cd",
+      "candidate": "garrytan/gbrain#7606@cacd075279cd",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -3694,7 +3694,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7606@d571f0b72c04",
+      "candidate": "garrytan/gbrain#7606@d571f0b72c04",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -3823,7 +3823,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7610@398377611bff",
+      "candidate": "garrytan/gbrain#7610@398377611bff",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7610,
@@ -3960,7 +3960,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@24c32c4a32c2",
+      "candidate": "garrytan/gbrain#7621@24c32c4a32c2",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -4109,7 +4109,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@560e400f32a9",
+      "candidate": "garrytan/gbrain#7621@560e400f32a9",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -4259,7 +4259,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@74a658b19f3a",
+      "candidate": "garrytan/gbrain#7621@74a658b19f3a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -4486,7 +4486,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@9e3ba6d1e36c",
+      "candidate": "garrytan/gbrain#7621@9e3ba6d1e36c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -4687,7 +4687,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@b67f35dd2a3c",
+      "candidate": "garrytan/gbrain#7621@b67f35dd2a3c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -4901,7 +4901,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@ce66a4a49b2e",
+      "candidate": "garrytan/gbrain#7621@ce66a4a49b2e",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -5049,7 +5049,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7621@f72f9a2d3035",
+      "candidate": "garrytan/gbrain#7621@f72f9a2d3035",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -5227,7 +5227,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7640@126c1e8ac1b8",
+      "candidate": "garrytan/gbrain#7640@126c1e8ac1b8",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7640,
@@ -5391,7 +5391,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7640@578193ed3fa3",
+      "candidate": "garrytan/gbrain#7640@578193ed3fa3",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7640,
@@ -5513,7 +5513,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7643@af9cfeeec615",
+      "candidate": "garrytan/gbrain#7643@af9cfeeec615",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7643,
@@ -5643,7 +5643,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7652@31a324f9403b",
+      "candidate": "garrytan/gbrain#7652@31a324f9403b",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7652,
@@ -5777,7 +5777,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7660@0e4d51d21932",
+      "candidate": "garrytan/gbrain#7660@0e4d51d21932",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7660,
@@ -5906,7 +5906,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7660@bd39dc6282b8",
+      "candidate": "garrytan/gbrain#7660@bd39dc6282b8",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7660,
@@ -6085,7 +6085,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7674@31f010f10ee5",
+      "candidate": "garrytan/gbrain#7674@31f010f10ee5",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7674,
@@ -6234,7 +6234,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7674@70ce87afb50b",
+      "candidate": "garrytan/gbrain#7674@70ce87afb50b",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7674,
@@ -6398,7 +6398,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7674@71d49156b517",
+      "candidate": "garrytan/gbrain#7674@71d49156b517",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7674,
@@ -6533,7 +6533,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7681@4755341734a7",
+      "candidate": "garrytan/gbrain#7681@4755341734a7",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7681,
@@ -6679,7 +6679,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7681@57bbfdc8277b",
+      "candidate": "garrytan/gbrain#7681@57bbfdc8277b",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7681,
@@ -6833,7 +6833,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7681@a36534bf8f9c",
+      "candidate": "garrytan/gbrain#7681@a36534bf8f9c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7681,
@@ -7022,7 +7022,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7684@c7440036c1fc",
+      "candidate": "garrytan/gbrain#7684@c7440036c1fc",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7684,
@@ -7166,7 +7166,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7684@de9eb9dd86fb",
+      "candidate": "garrytan/gbrain#7684@de9eb9dd86fb",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7684,
@@ -7348,7 +7348,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7789@751f6d541fd5",
+      "candidate": "garrytan/gbrain#7789@751f6d541fd5",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7789,
@@ -7480,7 +7480,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7794@e85621a010bb",
+      "candidate": "garrytan/gbrain#7794@e85621a010bb",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7794,
@@ -7612,7 +7612,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7829@643991cf2164",
+      "candidate": "garrytan/gbrain#7829@643991cf2164",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7829,
@@ -7748,7 +7748,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7872@df92c3d9946d",
+      "candidate": "garrytan/gbrain#7872@df92c3d9946d",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7872,
@@ -7890,7 +7890,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7878@748bf63162fc",
+      "candidate": "garrytan/gbrain#7878@748bf63162fc",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7878,
@@ -8032,7 +8032,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7884@f95f181afb01",
+      "candidate": "garrytan/gbrain#7884@f95f181afb01",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7884,
@@ -8155,7 +8155,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7892@ac7f6aa99af0",
+      "candidate": "garrytan/gbrain#7892@ac7f6aa99af0",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7892,
@@ -8295,7 +8295,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7896@ddd54a9743c4",
+      "candidate": "garrytan/gbrain#7896@ddd54a9743c4",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7896,
@@ -8422,7 +8422,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7898@95195da3682a",
+      "candidate": "garrytan/gbrain#7898@95195da3682a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7898,
@@ -8562,7 +8562,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7901@8923ce6bdd02",
+      "candidate": "garrytan/gbrain#7901@8923ce6bdd02",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7901,
@@ -8689,7 +8689,7 @@
       ]
     },
     {
-      "key": "garrytan/gbrain#7912@0f68223ab7d9",
+      "candidate": "garrytan/gbrain#7912@0f68223ab7d9",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7912,
@@ -8815,7 +8815,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3265",
+      "candidate": "garrytan/gstack#3265",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3111,
@@ -8951,7 +8951,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3303",
+      "candidate": "garrytan/gstack#3303",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3230,
@@ -9093,7 +9093,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3304@5e9996666fdd",
+      "candidate": "garrytan/gstack#3304@5e9996666fdd",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3304,
@@ -9229,7 +9229,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3304@da1a9687f4d0",
+      "candidate": "garrytan/gstack#3304@da1a9687f4d0",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3304,
@@ -9351,7 +9351,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3376",
+      "candidate": "garrytan/gstack#3376",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3143,
@@ -9475,7 +9475,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3377",
+      "candidate": "garrytan/gstack#3377",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1808,
@@ -9613,7 +9613,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3380",
+      "candidate": "garrytan/gstack#3380",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3306,
@@ -9756,7 +9756,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3381@23b55ab96644",
+      "candidate": "garrytan/gstack#3381@23b55ab96644",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3381,
@@ -9877,7 +9877,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3381@4a0aaaf8ed64",
+      "candidate": "garrytan/gstack#3381@4a0aaaf8ed64",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3381,
@@ -10085,7 +10085,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3381@668d6391ae50",
+      "candidate": "garrytan/gstack#3381@668d6391ae50",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3381,
@@ -10230,7 +10230,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3381@8a52c271ad81",
+      "candidate": "garrytan/gstack#3381@8a52c271ad81",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3381,
@@ -10399,7 +10399,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3386",
+      "candidate": "garrytan/gstack#3386",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1808,
@@ -10529,7 +10529,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3387",
+      "candidate": "garrytan/gstack#3387",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3136,
@@ -10655,7 +10655,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3390",
+      "candidate": "garrytan/gstack#3390",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1252,
@@ -10780,7 +10780,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3397@0fb865b9292c",
+      "candidate": "garrytan/gstack#3397@0fb865b9292c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3397,
@@ -10977,7 +10977,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3397@65d4890a95f0",
+      "candidate": "garrytan/gstack#3397@65d4890a95f0",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3397,
@@ -11152,7 +11152,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3397@b2ab7a8d93c8",
+      "candidate": "garrytan/gstack#3397@b2ab7a8d93c8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3397,
@@ -11279,7 +11279,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3397@ffdedba75b02",
+      "candidate": "garrytan/gstack#3397@ffdedba75b02",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3397,
@@ -11439,7 +11439,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3398@065317461094",
+      "candidate": "garrytan/gstack#3398@065317461094",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3398,
@@ -11627,7 +11627,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3402",
+      "candidate": "garrytan/gstack#3402",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3358,
@@ -11754,7 +11754,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3404",
+      "candidate": "garrytan/gstack#3404",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2875,
@@ -11959,7 +11959,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3422@1a1f2cebdc72",
+      "candidate": "garrytan/gstack#3422@1a1f2cebdc72",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3422,
@@ -12166,7 +12166,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3423@c44548413d84",
+      "candidate": "garrytan/gstack#3423@c44548413d84",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3423,
@@ -12345,7 +12345,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3423@f9d4ab449059",
+      "candidate": "garrytan/gstack#3423@f9d4ab449059",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3423,
@@ -12474,7 +12474,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3426@a3d402d07e85",
+      "candidate": "garrytan/gstack#3426@a3d402d07e85",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3426,
@@ -12657,7 +12657,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3426@b5b8820df886",
+      "candidate": "garrytan/gstack#3426@b5b8820df886",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3426,
@@ -12779,7 +12779,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3430@c7ec40bc194c",
+      "candidate": "garrytan/gstack#3430@c7ec40bc194c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3430,
@@ -12951,7 +12951,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3430@fb1a8f8d3776",
+      "candidate": "garrytan/gstack#3430@fb1a8f8d3776",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3430,
@@ -13125,7 +13125,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3431@9a79ceefaa0b",
+      "candidate": "garrytan/gstack#3431@9a79ceefaa0b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3431,
@@ -13262,7 +13262,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3433@1a1f2cebdc72",
+      "candidate": "garrytan/gstack#3433@1a1f2cebdc72",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -13433,7 +13433,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3433@236869adf3cc",
+      "candidate": "garrytan/gstack#3433@236869adf3cc",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -13608,7 +13608,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3433@31ee45039918",
+      "candidate": "garrytan/gstack#3433@31ee45039918",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -13829,7 +13829,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3433@51a117a83879",
+      "candidate": "garrytan/gstack#3433@51a117a83879",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -13966,7 +13966,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3433@a65d492cf833",
+      "candidate": "garrytan/gstack#3433@a65d492cf833",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -14134,7 +14134,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3434@b8fd2850026a",
+      "candidate": "garrytan/gstack#3434@b8fd2850026a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -14259,7 +14259,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3438@4afaa98f54e9",
+      "candidate": "garrytan/gstack#3438@4afaa98f54e9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3438,
@@ -14445,7 +14445,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3448",
+      "candidate": "garrytan/gstack#3448",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3135,
@@ -14584,7 +14584,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3448@0c33acefdeac",
+      "candidate": "garrytan/gstack#3448@0c33acefdeac",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -14741,7 +14741,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3448@82a552b548f0",
+      "candidate": "garrytan/gstack#3448@82a552b548f0",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -14897,7 +14897,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3448@b476ae9e4b66",
+      "candidate": "garrytan/gstack#3448@b476ae9e4b66",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -15088,7 +15088,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3448@bd2203291cb7",
+      "candidate": "garrytan/gstack#3448@bd2203291cb7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -15214,7 +15214,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3448@e283642df1cb",
+      "candidate": "garrytan/gstack#3448@e283642df1cb",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -15376,7 +15376,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3451",
+      "candidate": "garrytan/gstack#3451",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3323,
@@ -15509,7 +15509,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3453@b8fd2850026a",
+      "candidate": "garrytan/gstack#3453@b8fd2850026a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -15634,7 +15634,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3461",
+      "candidate": "garrytan/gstack#3461",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3306,
@@ -15781,7 +15781,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3463@96df9eaa8adf",
+      "candidate": "garrytan/gstack#3463@96df9eaa8adf",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3463,
@@ -15909,7 +15909,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3471@2219c78ebe48",
+      "candidate": "garrytan/gstack#3471@2219c78ebe48",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3471,
@@ -16072,7 +16072,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3471@cacc6003ea5d",
+      "candidate": "garrytan/gstack#3471@cacc6003ea5d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3471,
@@ -16201,7 +16201,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3473@02ac865411f3",
+      "candidate": "garrytan/gstack#3473@02ac865411f3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3473,
@@ -16332,7 +16332,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3475@761a22b38b54",
+      "candidate": "garrytan/gstack#3475@761a22b38b54",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3475,
@@ -16493,7 +16493,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3475@b01754469dd4",
+      "candidate": "garrytan/gstack#3475@b01754469dd4",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3475,
@@ -16644,7 +16644,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3478",
+      "candidate": "garrytan/gstack#3478",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3317,
@@ -16754,7 +16754,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3481@6f5782b5fddb",
+      "candidate": "garrytan/gstack#3481@6f5782b5fddb",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3481,
@@ -16891,7 +16891,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3483@90f08a3eb3a5",
+      "candidate": "garrytan/gstack#3483@90f08a3eb3a5",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3483,
@@ -17196,7 +17196,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3483@b8373e2bfc66",
+      "candidate": "garrytan/gstack#3483@b8373e2bfc66",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3483,
@@ -17333,7 +17333,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3491@646947248396",
+      "candidate": "garrytan/gstack#3491@646947248396",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3491,
@@ -17494,7 +17494,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3494@0d372b73493f",
+      "candidate": "garrytan/gstack#3494@0d372b73493f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3494,
@@ -17615,7 +17615,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3494@96927f2d4c55",
+      "candidate": "garrytan/gstack#3494@96927f2d4c55",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3494,
@@ -17754,7 +17754,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3494@c555ce3a8324",
+      "candidate": "garrytan/gstack#3494@c555ce3a8324",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3494,
@@ -17934,7 +17934,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3495@13c57847674a",
+      "candidate": "garrytan/gstack#3495@13c57847674a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3495,
@@ -18134,7 +18134,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3495@c26e7401379b",
+      "candidate": "garrytan/gstack#3495@c26e7401379b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3495,
@@ -18272,7 +18272,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3500@3c6e0c446f57",
+      "candidate": "garrytan/gstack#3500@3c6e0c446f57",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3500,
@@ -18406,7 +18406,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3501@0a741933beb6",
+      "candidate": "garrytan/gstack#3501@0a741933beb6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3501,
@@ -18552,7 +18552,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3501@a681c00a2bec",
+      "candidate": "garrytan/gstack#3501@a681c00a2bec",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3501,
@@ -18780,7 +18780,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3501@cc5ff0fea2e5",
+      "candidate": "garrytan/gstack#3501@cc5ff0fea2e5",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3501,
@@ -18930,7 +18930,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3507@b5c44b972aa2",
+      "candidate": "garrytan/gstack#3507@b5c44b972aa2",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3507,
@@ -19064,7 +19064,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3515@1f77181596c4",
+      "candidate": "garrytan/gstack#3515@1f77181596c4",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3515,
@@ -19254,7 +19254,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3515@8c12f8d3fce2",
+      "candidate": "garrytan/gstack#3515@8c12f8d3fce2",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3515,
@@ -19377,7 +19377,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3515@ecf3ad78e6d8",
+      "candidate": "garrytan/gstack#3515@ecf3ad78e6d8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3515,
@@ -19546,7 +19546,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3515@f1635d0f6311",
+      "candidate": "garrytan/gstack#3515@f1635d0f6311",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3515,
@@ -19667,7 +19667,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3515@f7eeda8aa304",
+      "candidate": "garrytan/gstack#3515@f7eeda8aa304",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3515,
@@ -19806,7 +19806,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3516@3712b7971126",
+      "candidate": "garrytan/gstack#3516@3712b7971126",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3516,
@@ -19977,7 +19977,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3517",
+      "candidate": "garrytan/gstack#3517",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3482,
@@ -20106,7 +20106,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3518",
+      "candidate": "garrytan/gstack#3518",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3374,
@@ -20266,7 +20266,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3518@a2077ff70eed",
+      "candidate": "garrytan/gstack#3518@a2077ff70eed",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3518,
@@ -20431,7 +20431,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3518@ada2accea064",
+      "candidate": "garrytan/gstack#3518@ada2accea064",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3518,
@@ -20578,7 +20578,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3521@ead576d45c0b",
+      "candidate": "garrytan/gstack#3521@ead576d45c0b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3521,
@@ -20699,7 +20699,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3527@636776fcf6be",
+      "candidate": "garrytan/gstack#3527@636776fcf6be",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -20946,7 +20946,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3532",
+      "candidate": "garrytan/gstack#3532",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3526,
@@ -21076,7 +21076,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3534",
+      "candidate": "garrytan/gstack#3534",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3480,
@@ -21205,7 +21205,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3540@0e2e112182f7",
+      "candidate": "garrytan/gstack#3540@0e2e112182f7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3540,
@@ -21319,7 +21319,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3544@3d372db3ef7b",
+      "candidate": "garrytan/gstack#3544@3d372db3ef7b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3544,
@@ -21447,7 +21447,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3556@5e63f0f8ea31",
+      "candidate": "garrytan/gstack#3556@5e63f0f8ea31",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3556,
@@ -21573,7 +21573,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3557@9bd98cb6490d",
+      "candidate": "garrytan/gstack#3557@9bd98cb6490d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3557,
@@ -21699,7 +21699,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3567@4ad8a6bfd925",
+      "candidate": "garrytan/gstack#3567@4ad8a6bfd925",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3567,
@@ -21830,7 +21830,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3572@4ad8a6bfd925",
+      "candidate": "garrytan/gstack#3572@4ad8a6bfd925",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3572,
@@ -21959,7 +21959,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3573",
+      "candidate": "garrytan/gstack#3573",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3173,
@@ -22085,7 +22085,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3579",
+      "candidate": "garrytan/gstack#3579",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3483,
@@ -22216,7 +22216,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3587@174bc2fd7b57",
+      "candidate": "garrytan/gstack#3587@174bc2fd7b57",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3587,
@@ -22352,7 +22352,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3614@00aba4e13cb6",
+      "candidate": "garrytan/gstack#3614@00aba4e13cb6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3614,
@@ -22487,7 +22487,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3619@174bc2fd7b57",
+      "candidate": "garrytan/gstack#3619@174bc2fd7b57",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3619,
@@ -22623,7 +22623,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3620@00aba4e13cb6",
+      "candidate": "garrytan/gstack#3620@00aba4e13cb6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3620,
@@ -22758,7 +22758,7 @@
       ]
     },
     {
-      "key": "garrytan/gstack#3621@1d460c6e1c49",
+      "candidate": "garrytan/gstack#3621@1d460c6e1c49",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3621,
@@ -22887,7 +22887,7 @@
   ],
   "drops": [
     {
-      "key": "garrytan/gbrain#6947",
+      "candidate": "garrytan/gbrain#6947",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -22898,7 +22898,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#6955",
+      "candidate": "garrytan/gbrain#6955",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -22909,7 +22909,7 @@
       "detail": "the fix rewrote 63 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#6956",
+      "candidate": "garrytan/gbrain#6956",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -22920,7 +22920,7 @@
       "detail": "the fix rewrote 32 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#6964",
+      "candidate": "garrytan/gbrain#6964",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -22931,7 +22931,7 @@
       "detail": "the fix rewrote 84 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#6964@a9149aff5306",
+      "candidate": "garrytan/gbrain#6964@a9149aff5306",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 6964,
@@ -22942,7 +22942,7 @@
       "detail": "the filtered reviewed diff has 9023 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#6987",
+      "candidate": "garrytan/gbrain#6987",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -22953,7 +22953,7 @@
       "detail": "the fix rewrote 88 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#6987@352c374a6529",
+      "candidate": "garrytan/gbrain#6987@352c374a6529",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 6987,
@@ -22964,7 +22964,7 @@
       "detail": "the filtered reviewed diff has 7287 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#6987@69cb1fd983b2",
+      "candidate": "garrytan/gbrain#6987@69cb1fd983b2",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 6987,
@@ -22975,7 +22975,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#6987@6a22c2a0f0da",
+      "candidate": "garrytan/gbrain#6987@6a22c2a0f0da",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 6987,
@@ -22986,7 +22986,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): src/core/enrichment-service.ts (10 hunks, 12 old lines)"
     },
     {
-      "key": "garrytan/gbrain#6987@7b817cdde371",
+      "candidate": "garrytan/gbrain#6987@7b817cdde371",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 6987,
@@ -22997,7 +22997,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): src/core/repair/url-clone-fences.ts (12 hunks, 18 old lines)"
     },
     {
-      "key": "garrytan/gbrain#6987@aced9e4f6cd7",
+      "candidate": "garrytan/gbrain#6987@aced9e4f6cd7",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 6987,
@@ -23008,7 +23008,7 @@
       "detail": "the filtered reviewed diff has 7287 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#7000",
+      "candidate": "garrytan/gbrain#7000",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23019,7 +23019,7 @@
       "detail": "the fix rewrote 41 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7017",
+      "candidate": "garrytan/gbrain#7017",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23030,7 +23030,7 @@
       "detail": "the fix rewrote 36 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7018",
+      "candidate": "garrytan/gbrain#7018",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23041,7 +23041,7 @@
       "detail": "the fix rewrote 15 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7022",
+      "candidate": "garrytan/gbrain#7022",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23052,7 +23052,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7025",
+      "candidate": "garrytan/gbrain#7025",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23063,7 +23063,7 @@
       "detail": "the fix rewrote 49 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7029",
+      "candidate": "garrytan/gbrain#7029",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23074,7 +23074,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7032",
+      "candidate": "garrytan/gbrain#7032",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23085,7 +23085,7 @@
       "detail": "the fix rewrote 120 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7054",
+      "candidate": "garrytan/gbrain#7054",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23096,7 +23096,7 @@
       "detail": "the fix rewrote 14 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7081@8c787f6929de",
+      "candidate": "garrytan/gbrain#7081@8c787f6929de",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7081,
@@ -23107,7 +23107,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7081@c19907386ab5",
+      "candidate": "garrytan/gbrain#7081@c19907386ab5",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7081,
@@ -23118,7 +23118,7 @@
       "detail": "the filtered reviewed diff has 2688 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#7092",
+      "candidate": "garrytan/gbrain#7092",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23129,7 +23129,7 @@
       "detail": "the fix rewrote 20 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7097",
+      "candidate": "garrytan/gbrain#7097",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23140,7 +23140,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7104@929814a8179a",
+      "candidate": "garrytan/gbrain#7104@929814a8179a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7104,
@@ -23151,7 +23151,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7104@caad7219b21f",
+      "candidate": "garrytan/gbrain#7104@caad7219b21f",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7104,
@@ -23162,7 +23162,7 @@
       "detail": "the filtered reviewed diff has 5054 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#7111",
+      "candidate": "garrytan/gbrain#7111",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23173,7 +23173,7 @@
       "detail": "the fix rewrote 69 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7114",
+      "candidate": "garrytan/gbrain#7114",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23184,7 +23184,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7114@5b9774d67913",
+      "candidate": "garrytan/gbrain#7114@5b9774d67913",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7114,
@@ -23195,7 +23195,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7131",
+      "candidate": "garrytan/gbrain#7131",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23206,7 +23206,7 @@
       "detail": "the fix rewrote 22 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7134",
+      "candidate": "garrytan/gbrain#7134",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23217,7 +23217,7 @@
       "detail": "the fix rewrote 36 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7134@2e48c5366b72",
+      "candidate": "garrytan/gbrain#7134@2e48c5366b72",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7134,
@@ -23228,7 +23228,7 @@
       "detail": "no source file has at least half its blamed lines from #7134's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7139",
+      "candidate": "garrytan/gbrain#7139",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23239,7 +23239,7 @@
       "detail": "the fix rewrote 21 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7141",
+      "candidate": "garrytan/gbrain#7141",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23250,7 +23250,7 @@
       "detail": "the fix rewrote 38 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7141@7402473938c2",
+      "candidate": "garrytan/gbrain#7141@7402473938c2",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7141,
@@ -23261,7 +23261,7 @@
       "detail": "the fix rewrote 10 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7151",
+      "candidate": "garrytan/gbrain#7151",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23272,7 +23272,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7152",
+      "candidate": "garrytan/gbrain#7152",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23283,7 +23283,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7169",
+      "candidate": "garrytan/gbrain#7169",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23294,7 +23294,7 @@
       "detail": "the fix rewrote 62 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7169@d70ce8d682fa",
+      "candidate": "garrytan/gbrain#7169@d70ce8d682fa",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7169,
@@ -23305,7 +23305,7 @@
       "detail": "the filtered reviewed diff has 2320 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#7178",
+      "candidate": "garrytan/gbrain#7178",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23316,7 +23316,7 @@
       "detail": "the fix rewrote 32 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7181",
+      "candidate": "garrytan/gbrain#7181",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23327,7 +23327,7 @@
       "detail": "the fix rewrote 29 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7186",
+      "candidate": "garrytan/gbrain#7186",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23338,7 +23338,7 @@
       "detail": "the fix rewrote 23 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7197",
+      "candidate": "garrytan/gbrain#7197",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23349,7 +23349,7 @@
       "detail": "the fix rewrote 26 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7202",
+      "candidate": "garrytan/gbrain#7202",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23360,7 +23360,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7216",
+      "candidate": "garrytan/gbrain#7216",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23371,7 +23371,7 @@
       "detail": "the fix rewrote 31 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7217",
+      "candidate": "garrytan/gbrain#7217",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23382,7 +23382,7 @@
       "detail": "the fix rewrote 20 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7218@c4b9cbf6c768",
+      "candidate": "garrytan/gbrain#7218@c4b9cbf6c768",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7218,
@@ -23393,7 +23393,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7218@cfb38feb36a1",
+      "candidate": "garrytan/gbrain#7218@cfb38feb36a1",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7218,
@@ -23404,7 +23404,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7219",
+      "candidate": "garrytan/gbrain#7219",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23415,7 +23415,7 @@
       "detail": "the fix rewrote 14 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7229",
+      "candidate": "garrytan/gbrain#7229",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23426,7 +23426,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7232",
+      "candidate": "garrytan/gbrain#7232",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23437,7 +23437,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7244",
+      "candidate": "garrytan/gbrain#7244",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23448,7 +23448,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7249",
+      "candidate": "garrytan/gbrain#7249",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23459,7 +23459,7 @@
       "detail": "the fix rewrote 32 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7251",
+      "candidate": "garrytan/gbrain#7251",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23470,7 +23470,7 @@
       "detail": "the fix rewrote 15 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7252@19d79fc3a3bd",
+      "candidate": "garrytan/gbrain#7252@19d79fc3a3bd",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7252,
@@ -23481,7 +23481,7 @@
       "detail": "the filtered reviewed diff has 2481 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#7255",
+      "candidate": "garrytan/gbrain#7255",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23492,7 +23492,7 @@
       "detail": "the fix rewrote 35 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7258",
+      "candidate": "garrytan/gbrain#7258",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23503,7 +23503,7 @@
       "detail": "the fix rewrote 19 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7275",
+      "candidate": "garrytan/gbrain#7275",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23514,7 +23514,7 @@
       "detail": "the fix rewrote 39 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7277",
+      "candidate": "garrytan/gbrain#7277",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23525,7 +23525,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7279",
+      "candidate": "garrytan/gbrain#7279",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23536,7 +23536,7 @@
       "detail": "the fix rewrote 14 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7280",
+      "candidate": "garrytan/gbrain#7280",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23547,7 +23547,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7283",
+      "candidate": "garrytan/gbrain#7283",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23558,7 +23558,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7284",
+      "candidate": "garrytan/gbrain#7284",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23569,7 +23569,7 @@
       "detail": "the fix rewrote 39 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7294",
+      "candidate": "garrytan/gbrain#7294",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23580,7 +23580,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7300",
+      "candidate": "garrytan/gbrain#7300",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23591,7 +23591,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7310",
+      "candidate": "garrytan/gbrain#7310",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23602,7 +23602,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7317@77499cc48f3a",
+      "candidate": "garrytan/gbrain#7317@77499cc48f3a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7317,
@@ -23613,7 +23613,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7318",
+      "candidate": "garrytan/gbrain#7318",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23624,7 +23624,7 @@
       "detail": "the fix rewrote 10 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7320",
+      "candidate": "garrytan/gbrain#7320",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23635,7 +23635,7 @@
       "detail": "the fix rewrote 41 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7331",
+      "candidate": "garrytan/gbrain#7331",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23646,7 +23646,7 @@
       "detail": "the fix rewrote 10 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7344",
+      "candidate": "garrytan/gbrain#7344",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23657,7 +23657,7 @@
       "detail": "the fix rewrote 14 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7365",
+      "candidate": "garrytan/gbrain#7365",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23668,7 +23668,7 @@
       "detail": "the fix rewrote 18 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7382",
+      "candidate": "garrytan/gbrain#7382",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23679,7 +23679,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7383",
+      "candidate": "garrytan/gbrain#7383",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23690,7 +23690,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7384",
+      "candidate": "garrytan/gbrain#7384",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23701,7 +23701,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7386",
+      "candidate": "garrytan/gbrain#7386",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23712,7 +23712,7 @@
       "detail": "the fix rewrote 10 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7397",
+      "candidate": "garrytan/gbrain#7397",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23723,7 +23723,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7408",
+      "candidate": "garrytan/gbrain#7408",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23734,7 +23734,7 @@
       "detail": "the fix rewrote 26 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7419",
+      "candidate": "garrytan/gbrain#7419",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23745,7 +23745,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7430",
+      "candidate": "garrytan/gbrain#7430",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23756,7 +23756,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7437",
+      "candidate": "garrytan/gbrain#7437",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23767,7 +23767,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7441",
+      "candidate": "garrytan/gbrain#7441",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23778,7 +23778,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7444",
+      "candidate": "garrytan/gbrain#7444",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23789,7 +23789,7 @@
       "detail": "the fix rewrote 22 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7454",
+      "candidate": "garrytan/gbrain#7454",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23800,7 +23800,7 @@
       "detail": "the fix rewrote 32 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7456",
+      "candidate": "garrytan/gbrain#7456",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23811,7 +23811,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7459",
+      "candidate": "garrytan/gbrain#7459",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23822,7 +23822,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7467",
+      "candidate": "garrytan/gbrain#7467",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23833,7 +23833,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7468",
+      "candidate": "garrytan/gbrain#7468",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23844,7 +23844,7 @@
       "detail": "the fix rewrote 35 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7472",
+      "candidate": "garrytan/gbrain#7472",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23855,7 +23855,7 @@
       "detail": "the fix rewrote 19 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7479",
+      "candidate": "garrytan/gbrain#7479",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23866,7 +23866,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7485",
+      "candidate": "garrytan/gbrain#7485",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23877,7 +23877,7 @@
       "detail": "the fix rewrote 19 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7485@4b113dd1ea6c",
+      "candidate": "garrytan/gbrain#7485@4b113dd1ea6c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7485,
@@ -23888,7 +23888,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7489@4f7b1084e196",
+      "candidate": "garrytan/gbrain#7489@4f7b1084e196",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7489,
@@ -23899,7 +23899,7 @@
       "detail": "the filtered reviewed diff has 2665 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gbrain#7489@c17d80c7ff9c",
+      "candidate": "garrytan/gbrain#7489@c17d80c7ff9c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7489,
@@ -23910,7 +23910,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7499",
+      "candidate": "garrytan/gbrain#7499",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23921,7 +23921,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7504",
+      "candidate": "garrytan/gbrain#7504",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23932,7 +23932,7 @@
       "detail": "the fix rewrote 18 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7508",
+      "candidate": "garrytan/gbrain#7508",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -23943,7 +23943,7 @@
       "detail": "the fix rewrote 21 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7511@20ebebb33375",
+      "candidate": "garrytan/gbrain#7511@20ebebb33375",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -23954,7 +23954,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@4b8830a1eb9c",
+      "candidate": "garrytan/gbrain#7511@4b8830a1eb9c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -23965,7 +23965,7 @@
       "detail": "no source file has at least half its blamed lines from #7511's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7511@617ad6e989f2",
+      "candidate": "garrytan/gbrain#7511@617ad6e989f2",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -23976,7 +23976,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@625fa1276f29",
+      "candidate": "garrytan/gbrain#7511@625fa1276f29",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -23987,7 +23987,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@7568c475353b",
+      "candidate": "garrytan/gbrain#7511@7568c475353b",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -23998,7 +23998,7 @@
       "detail": "no source file has at least half its blamed lines from #7511's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7511@9b1810771f31",
+      "candidate": "garrytan/gbrain#7511@9b1810771f31",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24009,7 +24009,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@a419b689c37b",
+      "candidate": "garrytan/gbrain#7511@a419b689c37b",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24020,7 +24020,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@a584095b3239",
+      "candidate": "garrytan/gbrain#7511@a584095b3239",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24031,7 +24031,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@c41190f5d186",
+      "candidate": "garrytan/gbrain#7511@c41190f5d186",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24042,7 +24042,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@d70e4d61403d",
+      "candidate": "garrytan/gbrain#7511@d70e4d61403d",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24053,7 +24053,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7511@e24695d43191",
+      "candidate": "garrytan/gbrain#7511@e24695d43191",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24064,7 +24064,7 @@
       "detail": "no source file has at least half its blamed lines from #7511's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7511@e7e4e69b490f",
+      "candidate": "garrytan/gbrain#7511@e7e4e69b490f",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7511,
@@ -24075,7 +24075,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7513",
+      "candidate": "garrytan/gbrain#7513",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24086,7 +24086,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7517",
+      "candidate": "garrytan/gbrain#7517",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24097,7 +24097,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7524",
+      "candidate": "garrytan/gbrain#7524",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24108,7 +24108,7 @@
       "detail": "the fix rewrote 22 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7589",
+      "candidate": "garrytan/gbrain#7589",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24119,7 +24119,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7603",
+      "candidate": "garrytan/gbrain#7603",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24130,7 +24130,7 @@
       "detail": "the fix rewrote 25 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7603@122b2f2b146a",
+      "candidate": "garrytan/gbrain#7603@122b2f2b146a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7603,
@@ -24141,7 +24141,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7603@947ee9aab65b",
+      "candidate": "garrytan/gbrain#7603@947ee9aab65b",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7603,
@@ -24152,7 +24152,7 @@
       "detail": "no source file has at least half its blamed lines from #7603's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7603@f2cb416273ca",
+      "candidate": "garrytan/gbrain#7603@f2cb416273ca",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7603,
@@ -24163,7 +24163,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7606",
+      "candidate": "garrytan/gbrain#7606",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24174,7 +24174,7 @@
       "detail": "the fix rewrote 18 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7606@4a35e0986f86",
+      "candidate": "garrytan/gbrain#7606@4a35e0986f86",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -24185,7 +24185,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7606@91cc63c05bb5",
+      "candidate": "garrytan/gbrain#7606@91cc63c05bb5",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -24196,7 +24196,7 @@
       "detail": "no source file has at least half its blamed lines from #7606's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7606@9d536f14647a",
+      "candidate": "garrytan/gbrain#7606@9d536f14647a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7606,
@@ -24207,7 +24207,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7608",
+      "candidate": "garrytan/gbrain#7608",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24218,7 +24218,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7621",
+      "candidate": "garrytan/gbrain#7621",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24229,7 +24229,7 @@
       "detail": "the fix rewrote 20 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7621@1c4966d96157",
+      "candidate": "garrytan/gbrain#7621@1c4966d96157",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -24240,7 +24240,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7621@98dd756690fc",
+      "candidate": "garrytan/gbrain#7621@98dd756690fc",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7621,
@@ -24251,7 +24251,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7640",
+      "candidate": "garrytan/gbrain#7640",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24262,7 +24262,7 @@
       "detail": "the fix rewrote 56 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7640@8b01b934006c",
+      "candidate": "garrytan/gbrain#7640@8b01b934006c",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7640,
@@ -24273,7 +24273,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7640@92abed469816",
+      "candidate": "garrytan/gbrain#7640@92abed469816",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7640,
@@ -24284,7 +24284,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7640@b56f569affd2",
+      "candidate": "garrytan/gbrain#7640@b56f569affd2",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7640,
@@ -24295,7 +24295,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7642",
+      "candidate": "garrytan/gbrain#7642",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24306,7 +24306,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7643",
+      "candidate": "garrytan/gbrain#7643",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24317,7 +24317,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7652",
+      "candidate": "garrytan/gbrain#7652",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24328,7 +24328,7 @@
       "detail": "the fix rewrote 29 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7660",
+      "candidate": "garrytan/gbrain#7660",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24339,7 +24339,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7674",
+      "candidate": "garrytan/gbrain#7674",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24350,7 +24350,7 @@
       "detail": "the fix rewrote 34 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7674@45af9c0e9cd3",
+      "candidate": "garrytan/gbrain#7674@45af9c0e9cd3",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7674,
@@ -24361,7 +24361,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7681",
+      "candidate": "garrytan/gbrain#7681",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24372,7 +24372,7 @@
       "detail": "the fix rewrote 15 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7744@5bc70a29e27a",
+      "candidate": "garrytan/gbrain#7744@5bc70a29e27a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7744,
@@ -24383,7 +24383,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): src/core/search/saved-facts-match.ts (13 hunks, 18 old lines)"
     },
     {
-      "key": "garrytan/gbrain#7746",
+      "candidate": "garrytan/gbrain#7746",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24394,7 +24394,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7746@3688d30ee836",
+      "candidate": "garrytan/gbrain#7746@3688d30ee836",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7746,
@@ -24405,7 +24405,7 @@
       "detail": "no source file has at least half its blamed lines from #7746's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gbrain#7749",
+      "candidate": "garrytan/gbrain#7749",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24416,7 +24416,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7775",
+      "candidate": "garrytan/gbrain#7775",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24427,7 +24427,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7806",
+      "candidate": "garrytan/gbrain#7806",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24438,7 +24438,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7829",
+      "candidate": "garrytan/gbrain#7829",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24449,7 +24449,7 @@
       "detail": "the fix rewrote 18 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7844",
+      "candidate": "garrytan/gbrain#7844",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24460,7 +24460,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7851",
+      "candidate": "garrytan/gbrain#7851",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24471,7 +24471,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7872",
+      "candidate": "garrytan/gbrain#7872",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24482,7 +24482,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7878",
+      "candidate": "garrytan/gbrain#7878",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24493,7 +24493,7 @@
       "detail": "the fix rewrote 36 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7884",
+      "candidate": "garrytan/gbrain#7884",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24504,7 +24504,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7892",
+      "candidate": "garrytan/gbrain#7892",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24515,7 +24515,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7896",
+      "candidate": "garrytan/gbrain#7896",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24526,7 +24526,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7901@02940d1ce627",
+      "candidate": "garrytan/gbrain#7901@02940d1ce627",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7901,
@@ -24537,7 +24537,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7907",
+      "candidate": "garrytan/gbrain#7907",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24548,7 +24548,7 @@
       "detail": "the fix rewrote 15 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7909",
+      "candidate": "garrytan/gbrain#7909",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24559,7 +24559,7 @@
       "detail": "the fix rewrote 18 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7912",
+      "candidate": "garrytan/gbrain#7912",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24570,7 +24570,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7914",
+      "candidate": "garrytan/gbrain#7914",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24581,7 +24581,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gbrain#7914@4f4d0cad684a",
+      "candidate": "garrytan/gbrain#7914@4f4d0cad684a",
       "repo": "garrytan/gbrain",
       "kind": "review-caught",
       "pr": 7914,
@@ -24592,7 +24592,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gbrain#7976",
+      "candidate": "garrytan/gbrain#7976",
       "repo": "garrytan/gbrain",
       "kind": "escaped",
       "pr": null,
@@ -24603,7 +24603,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3132",
+      "candidate": "garrytan/gstack#3132",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1574,
@@ -24614,7 +24614,7 @@
       "detail": "the filtered reviewed diff has 11480 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3257",
+      "candidate": "garrytan/gstack#3257",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3031,
@@ -24625,7 +24625,7 @@
       "detail": "the filtered reviewed diff has 23354 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3260",
+      "candidate": "garrytan/gstack#3260",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24636,7 +24636,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3260@47f45434656e",
+      "candidate": "garrytan/gstack#3260@47f45434656e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3260,
@@ -24647,7 +24647,7 @@
       "detail": "the filtered reviewed diff has 3486 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3260@7bbb730da5ff",
+      "candidate": "garrytan/gstack#3260@7bbb730da5ff",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3260,
@@ -24658,7 +24658,7 @@
       "detail": "no source file has at least half its blamed lines from #3260's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3260@d9cfa873ecd4",
+      "candidate": "garrytan/gstack#3260@d9cfa873ecd4",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3260,
@@ -24669,7 +24669,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3260@dc739be05a63",
+      "candidate": "garrytan/gstack#3260@dc739be05a63",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3260,
@@ -24680,7 +24680,7 @@
       "detail": "the filtered reviewed diff has 3221 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3260@f16dce25f026",
+      "candidate": "garrytan/gstack#3260@f16dce25f026",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3260,
@@ -24691,7 +24691,7 @@
       "detail": "the filtered reviewed diff has 2455 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3262@00f5b5e2c9b8",
+      "candidate": "garrytan/gstack#3262@00f5b5e2c9b8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3262,
@@ -24702,7 +24702,7 @@
       "detail": "no source file has at least half its blamed lines from #3262's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3270",
+      "candidate": "garrytan/gstack#3270",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2852,
@@ -24713,7 +24713,7 @@
       "detail": "the filtered reviewed diff has 25727 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3276",
+      "candidate": "garrytan/gstack#3276",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24724,7 +24724,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3278",
+      "candidate": "garrytan/gstack#3278",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3265,
@@ -24735,7 +24735,7 @@
       "detail": "the filtered reviewed diff has 8 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3279@34de9fb073d4",
+      "candidate": "garrytan/gstack#3279@34de9fb073d4",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3279,
@@ -24746,7 +24746,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3283",
+      "candidate": "garrytan/gstack#3283",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2852,
@@ -24757,7 +24757,7 @@
       "detail": "the filtered reviewed diff has 25727 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3288",
+      "candidate": "garrytan/gstack#3288",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24768,7 +24768,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3289@9957a242c60c",
+      "candidate": "garrytan/gstack#3289@9957a242c60c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3289,
@@ -24779,7 +24779,7 @@
       "detail": "no source file has at least half its blamed lines from #3289's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3292@b839952e38e9",
+      "candidate": "garrytan/gstack#3292@b839952e38e9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3292,
@@ -24790,7 +24790,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3292@be05f299bc97",
+      "candidate": "garrytan/gstack#3292@be05f299bc97",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3292,
@@ -24801,7 +24801,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): scripts/harness-version.json (7 hunks, 9 old lines)"
     },
     {
-      "key": "garrytan/gstack#3295",
+      "candidate": "garrytan/gstack#3295",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24812,7 +24812,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3299",
+      "candidate": "garrytan/gstack#3299",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1039,
@@ -24823,7 +24823,7 @@
       "detail": "the filtered reviewed diff has 12904 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3300",
+      "candidate": "garrytan/gstack#3300",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24834,7 +24834,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3300@ca215b046f23",
+      "candidate": "garrytan/gstack#3300@ca215b046f23",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3300,
@@ -24845,7 +24845,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3301",
+      "candidate": "garrytan/gstack#3301",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3002,
@@ -24856,7 +24856,7 @@
       "detail": "the filtered reviewed diff has 31607 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3302",
+      "candidate": "garrytan/gstack#3302",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24867,7 +24867,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3304",
+      "candidate": "garrytan/gstack#3304",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3069,
@@ -24878,7 +24878,7 @@
       "detail": "the filtered reviewed diff has 13054 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3304@652646ea0a9e",
+      "candidate": "garrytan/gstack#3304@652646ea0a9e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3304,
@@ -24889,7 +24889,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/outside-review-result.ts (8 hunks, 13 old lines)"
     },
     {
-      "key": "garrytan/gstack#3305@c085ddedfd4d",
+      "candidate": "garrytan/gstack#3305@c085ddedfd4d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3305,
@@ -24900,7 +24900,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3306",
+      "candidate": "garrytan/gstack#3306",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24911,7 +24911,7 @@
       "detail": "the fix rewrote 10 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3306@8e5461fdd6d7",
+      "candidate": "garrytan/gstack#3306@8e5461fdd6d7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3306,
@@ -24922,7 +24922,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3309",
+      "candidate": "garrytan/gstack#3309",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24933,7 +24933,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3320",
+      "candidate": "garrytan/gstack#3320",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24944,7 +24944,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3321",
+      "candidate": "garrytan/gstack#3321",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24955,7 +24955,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3323",
+      "candidate": "garrytan/gstack#3323",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1168,
@@ -24966,7 +24966,7 @@
       "detail": "the filtered reviewed diff has 2587 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3325",
+      "candidate": "garrytan/gstack#3325",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -24977,7 +24977,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3326",
+      "candidate": "garrytan/gstack#3326",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3069,
@@ -24988,7 +24988,7 @@
       "detail": "the filtered reviewed diff has 13054 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3327",
+      "candidate": "garrytan/gstack#3327",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3272,
@@ -24999,7 +24999,7 @@
       "detail": "the filtered reviewed diff has 3058 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3331",
+      "candidate": "garrytan/gstack#3331",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25010,7 +25010,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): scripts/test-free-shards.ts (12 hunks, 1 old lines)"
     },
     {
-      "key": "garrytan/gstack#3332",
+      "candidate": "garrytan/gstack#3332",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25021,7 +25021,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3341",
+      "candidate": "garrytan/gstack#3341",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3025,
@@ -25032,7 +25032,7 @@
       "detail": "the filtered reviewed diff has 26316 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3345",
+      "candidate": "garrytan/gstack#3345",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3164,
@@ -25043,7 +25043,7 @@
       "detail": "the filtered reviewed diff has 2588 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3358",
+      "candidate": "garrytan/gstack#3358",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3275,
@@ -25054,7 +25054,7 @@
       "detail": "the filtered reviewed diff has 4830 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3361",
+      "candidate": "garrytan/gstack#3361",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3033,
@@ -25065,7 +25065,7 @@
       "detail": "the filtered reviewed diff has 23319 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3366",
+      "candidate": "garrytan/gstack#3366",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3025,
@@ -25076,7 +25076,7 @@
       "detail": "the filtered reviewed diff has 26316 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3368",
+      "candidate": "garrytan/gstack#3368",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3190,
@@ -25087,7 +25087,7 @@
       "detail": "the filtered reviewed diff has 6792 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3370",
+      "candidate": "garrytan/gstack#3370",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3073,
@@ -25098,7 +25098,7 @@
       "detail": "the filtered reviewed diff has 6588 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3371",
+      "candidate": "garrytan/gstack#3371",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3121,
@@ -25109,7 +25109,7 @@
       "detail": "the filtered reviewed diff has 3369 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3372",
+      "candidate": "garrytan/gstack#3372",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25120,7 +25120,7 @@
       "detail": "no source file has one merged PR holding at least half its blamed lines (Rule 1.4): ship/SKILL.md.tmpl: top owner #3118 holds 5 of 12 blamed lines"
     },
     {
-      "key": "garrytan/gstack#3373",
+      "candidate": "garrytan/gstack#3373",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1183,
@@ -25131,7 +25131,7 @@
       "detail": "the filtered reviewed diff has 5891 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3374",
+      "candidate": "garrytan/gstack#3374",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25142,7 +25142,7 @@
       "detail": "the fix rewrote 10 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3376@66c066d7b242",
+      "candidate": "garrytan/gstack#3376@66c066d7b242",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3376,
@@ -25153,7 +25153,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3378",
+      "candidate": "garrytan/gstack#3378",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3057,
@@ -25164,7 +25164,7 @@
       "detail": "the filtered reviewed diff has 11463 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3379",
+      "candidate": "garrytan/gstack#3379",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25175,7 +25175,7 @@
       "detail": "no source file has one merged PR holding at least half its blamed lines (Rule 1.4): land-and-deploy/SKILL.md.tmpl: top owner #2972 holds 10 of 24 blamed lines"
     },
     {
-      "key": "garrytan/gstack#3380@3d0976fd895a",
+      "candidate": "garrytan/gstack#3380@3d0976fd895a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3380,
@@ -25186,7 +25186,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3380@d96425a41921",
+      "candidate": "garrytan/gstack#3380@d96425a41921",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3380,
@@ -25197,7 +25197,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3382",
+      "candidate": "garrytan/gstack#3382",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2604,
@@ -25208,7 +25208,7 @@
       "detail": "the filtered reviewed diff has 14080 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3383",
+      "candidate": "garrytan/gstack#3383",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3013,
@@ -25219,7 +25219,7 @@
       "detail": "the filtered reviewed diff has 6357 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3385",
+      "candidate": "garrytan/gstack#3385",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3209,
@@ -25230,7 +25230,7 @@
       "detail": "the filtered reviewed diff has 8602 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3388",
+      "candidate": "garrytan/gstack#3388",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2964,
@@ -25241,7 +25241,7 @@
       "detail": "the filtered reviewed diff has 15919 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3389",
+      "candidate": "garrytan/gstack#3389",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25252,7 +25252,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): careful/bin/check-careful.sh (10 hunks, 10 old lines)"
     },
     {
-      "key": "garrytan/gstack#3391",
+      "candidate": "garrytan/gstack#3391",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3031,
@@ -25263,7 +25263,7 @@
       "detail": "the filtered reviewed diff has 23354 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3392",
+      "candidate": "garrytan/gstack#3392",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3115,
@@ -25274,7 +25274,7 @@
       "detail": "the filtered reviewed diff has 5606 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3393",
+      "candidate": "garrytan/gstack#3393",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25285,7 +25285,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-team-init (9 hunks, 8 old lines)"
     },
     {
-      "key": "garrytan/gstack#3394",
+      "candidate": "garrytan/gstack#3394",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1039,
@@ -25296,7 +25296,7 @@
       "detail": "the filtered reviewed diff has 12904 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3395",
+      "candidate": "garrytan/gstack#3395",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1040,
@@ -25307,7 +25307,7 @@
       "detail": "the filtered reviewed diff has 12855 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3396",
+      "candidate": "garrytan/gstack#3396",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3069,
@@ -25318,7 +25318,7 @@
       "detail": "the filtered reviewed diff has 13054 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3397",
+      "candidate": "garrytan/gstack#3397",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25329,7 +25329,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-developer-profile (9 hunks, 36 old lines)"
     },
     {
-      "key": "garrytan/gstack#3398@3d0976fd895a",
+      "candidate": "garrytan/gstack#3398@3d0976fd895a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3398,
@@ -25340,7 +25340,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3398@d96425a41921",
+      "candidate": "garrytan/gstack#3398@d96425a41921",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3398,
@@ -25351,7 +25351,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3400",
+      "candidate": "garrytan/gstack#3400",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2989,
@@ -25362,7 +25362,7 @@
       "detail": "the filtered reviewed diff has 4233 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3402@3a15cb0f405d",
+      "candidate": "garrytan/gstack#3402@3a15cb0f405d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3402,
@@ -25373,7 +25373,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3402@e549d90cb3bf",
+      "candidate": "garrytan/gstack#3402@e549d90cb3bf",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3402,
@@ -25384,7 +25384,7 @@
       "detail": "no source file has at least half its blamed lines from #3402's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3403@1d165851c7ed",
+      "candidate": "garrytan/gstack#3403@1d165851c7ed",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25395,7 +25395,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@476e8205c1c0",
+      "candidate": "garrytan/gstack#3403@476e8205c1c0",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25406,7 +25406,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@6b6f05998244",
+      "candidate": "garrytan/gstack#3403@6b6f05998244",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25417,7 +25417,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@6d0d2691d538",
+      "candidate": "garrytan/gstack#3403@6d0d2691d538",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25428,7 +25428,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@845e8221f1ed",
+      "candidate": "garrytan/gstack#3403@845e8221f1ed",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25439,7 +25439,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@992fb32993c5",
+      "candidate": "garrytan/gstack#3403@992fb32993c5",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25450,7 +25450,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@a7926750c255",
+      "candidate": "garrytan/gstack#3403@a7926750c255",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25461,7 +25461,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@c6fc8b169876",
+      "candidate": "garrytan/gstack#3403@c6fc8b169876",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25472,7 +25472,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3403@e965b6cc5fd3",
+      "candidate": "garrytan/gstack#3403@e965b6cc5fd3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3403,
@@ -25483,7 +25483,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3404@a0b7ca7c6c71",
+      "candidate": "garrytan/gstack#3404@a0b7ca7c6c71",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3404,
@@ -25494,7 +25494,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/review-evidence.ts (7 hunks, 13 old lines)"
     },
     {
-      "key": "garrytan/gstack#3405",
+      "candidate": "garrytan/gstack#3405",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3087,
@@ -25505,7 +25505,7 @@
       "detail": "the filtered reviewed diff has 3675 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3408",
+      "candidate": "garrytan/gstack#3408",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3023,
@@ -25516,7 +25516,7 @@
       "detail": "the filtered reviewed diff has 25523 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3409",
+      "candidate": "garrytan/gstack#3409",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25527,7 +25527,7 @@
       "detail": "no source file has one merged PR holding at least half its blamed lines (Rule 1.4): bin/gstack-skill-start: top owner #2691 holds 1 of 3 blamed lines; ship/sections/handoff.md.tmpl: top owner #3123 holds 1 of 3 blamed lines"
     },
     {
-      "key": "garrytan/gstack#3412",
+      "candidate": "garrytan/gstack#3412",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 809,
@@ -25538,7 +25538,7 @@
       "detail": "the filtered reviewed diff has 2049 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3413",
+      "candidate": "garrytan/gstack#3413",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3275,
@@ -25549,7 +25549,7 @@
       "detail": "the filtered reviewed diff has 4830 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3414",
+      "candidate": "garrytan/gstack#3414",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25560,7 +25560,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): review/SKILL.md.tmpl (13 hunks, 26 old lines)"
     },
     {
-      "key": "garrytan/gstack#3414@1ea548bff457",
+      "candidate": "garrytan/gstack#3414@1ea548bff457",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3414,
@@ -25571,7 +25571,7 @@
       "detail": "no source file has at least half its blamed lines from #3414's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3414@ca2bc785e028",
+      "candidate": "garrytan/gstack#3414@ca2bc785e028",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3414,
@@ -25582,7 +25582,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3416@171d7a92a2be",
+      "candidate": "garrytan/gstack#3416@171d7a92a2be",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3416,
@@ -25593,7 +25593,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3416@38955634b7b8",
+      "candidate": "garrytan/gstack#3416@38955634b7b8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3416,
@@ -25604,7 +25604,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3421",
+      "candidate": "garrytan/gstack#3421",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3115,
@@ -25615,7 +25615,7 @@
       "detail": "the filtered reviewed diff has 5606 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3421@0d88a721536d",
+      "candidate": "garrytan/gstack#3421@0d88a721536d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25626,7 +25626,7 @@
       "detail": "no source file has at least half its blamed lines from #3421's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3421@1ba225eb9cc9",
+      "candidate": "garrytan/gstack#3421@1ba225eb9cc9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25637,7 +25637,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3421@1fa45de75403",
+      "candidate": "garrytan/gstack#3421@1fa45de75403",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25648,7 +25648,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3421@55563a02a7e6",
+      "candidate": "garrytan/gstack#3421@55563a02a7e6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25659,7 +25659,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3421@7fb0de8c2f49",
+      "candidate": "garrytan/gstack#3421@7fb0de8c2f49",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25670,7 +25670,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3421@f00c84d95cb3",
+      "candidate": "garrytan/gstack#3421@f00c84d95cb3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25681,7 +25681,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3421@f1f2b6998799",
+      "candidate": "garrytan/gstack#3421@f1f2b6998799",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3421,
@@ -25692,7 +25692,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3423",
+      "candidate": "garrytan/gstack#3423",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25703,7 +25703,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/context-bill.ts (55 hunks, 118 old lines)"
     },
     {
-      "key": "garrytan/gstack#3423@214eb68d8195",
+      "candidate": "garrytan/gstack#3423@214eb68d8195",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3423,
@@ -25714,7 +25714,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/context-bill.ts (22 hunks, 38 old lines)"
     },
     {
-      "key": "garrytan/gstack#3423@2c1f74195f44",
+      "candidate": "garrytan/gstack#3423@2c1f74195f44",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3423,
@@ -25725,7 +25725,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/context-bill.ts (33 hunks, 47 old lines)"
     },
     {
-      "key": "garrytan/gstack#3423@35f7374775be",
+      "candidate": "garrytan/gstack#3423@35f7374775be",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3423,
@@ -25736,7 +25736,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/context-bill.ts (13 hunks, 58 old lines)"
     },
     {
-      "key": "garrytan/gstack#3424",
+      "candidate": "garrytan/gstack#3424",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25747,7 +25747,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-lease (12 hunks, 32 old lines)"
     },
     {
-      "key": "garrytan/gstack#3424@3f6ebca2a555",
+      "candidate": "garrytan/gstack#3424@3f6ebca2a555",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3424,
@@ -25758,7 +25758,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-lease (13 hunks, 15 old lines)"
     },
     {
-      "key": "garrytan/gstack#3424@681e92f72f22",
+      "candidate": "garrytan/gstack#3424@681e92f72f22",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3424,
@@ -25769,7 +25769,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-lease (12 hunks, 14 old lines)"
     },
     {
-      "key": "garrytan/gstack#3424@a94c167598b4",
+      "candidate": "garrytan/gstack#3424@a94c167598b4",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3424,
@@ -25780,7 +25780,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-lease (11 hunks, 19 old lines)"
     },
     {
-      "key": "garrytan/gstack#3426",
+      "candidate": "garrytan/gstack#3426",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 41,
@@ -25791,7 +25791,7 @@
       "detail": "the filtered reviewed diff has 2557 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3426@394f3fd233d1",
+      "candidate": "garrytan/gstack#3426@394f3fd233d1",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3426,
@@ -25802,7 +25802,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3427",
+      "candidate": "garrytan/gstack#3427",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25813,7 +25813,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3428@0879aaa8f160",
+      "candidate": "garrytan/gstack#3428@0879aaa8f160",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3428,
@@ -25824,7 +25824,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3428@85b456280edf",
+      "candidate": "garrytan/gstack#3428@85b456280edf",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3428,
@@ -25835,7 +25835,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3428@9239d74c2b43",
+      "candidate": "garrytan/gstack#3428@9239d74c2b43",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3428,
@@ -25846,7 +25846,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3430@41a720dac40b",
+      "candidate": "garrytan/gstack#3430@41a720dac40b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3430,
@@ -25857,7 +25857,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3431",
+      "candidate": "garrytan/gstack#3431",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -25868,7 +25868,7 @@
       "detail": "the fix rewrote 42 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3431@8f4cbb8db01c",
+      "candidate": "garrytan/gstack#3431@8f4cbb8db01c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3431,
@@ -25879,7 +25879,7 @@
       "detail": "the fix rewrote 42 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3433@d0fde6a6e7d7",
+      "candidate": "garrytan/gstack#3433@d0fde6a6e7d7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -25890,7 +25890,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3433@f9d825bee68a",
+      "candidate": "garrytan/gstack#3433@f9d825bee68a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3433,
@@ -25901,7 +25901,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3434@11579a5fead6",
+      "candidate": "garrytan/gstack#3434@11579a5fead6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25912,7 +25912,7 @@
       "detail": "the filtered reviewed diff has 3973 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3434@3839d9bb1245",
+      "candidate": "garrytan/gstack#3434@3839d9bb1245",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25923,7 +25923,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@3858703ac9a8",
+      "candidate": "garrytan/gstack#3434@3858703ac9a8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25934,7 +25934,7 @@
       "detail": "the filtered reviewed diff has 4487 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3434@44eacaf532f3",
+      "candidate": "garrytan/gstack#3434@44eacaf532f3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25945,7 +25945,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@4510ad3e6347",
+      "candidate": "garrytan/gstack#3434@4510ad3e6347",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25956,7 +25956,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@4699573a92d7",
+      "candidate": "garrytan/gstack#3434@4699573a92d7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25967,7 +25967,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@53545c616503",
+      "candidate": "garrytan/gstack#3434@53545c616503",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25978,7 +25978,7 @@
       "detail": "no source file has at least half its blamed lines from #3434's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3434@5c29dac28792",
+      "candidate": "garrytan/gstack#3434@5c29dac28792",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -25989,7 +25989,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@8527857e114a",
+      "candidate": "garrytan/gstack#3434@8527857e114a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -26000,7 +26000,7 @@
       "detail": "the filtered reviewed diff has 4321 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3434@88e3cc026b6f",
+      "candidate": "garrytan/gstack#3434@88e3cc026b6f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -26011,7 +26011,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@92d6045f99fc",
+      "candidate": "garrytan/gstack#3434@92d6045f99fc",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -26022,7 +26022,7 @@
       "detail": "no source file has at least half its blamed lines from #3434's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3434@a1f41ee9f399",
+      "candidate": "garrytan/gstack#3434@a1f41ee9f399",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -26033,7 +26033,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@e13bee14908c",
+      "candidate": "garrytan/gstack#3434@e13bee14908c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -26044,7 +26044,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3434@e9b2bc353ae1",
+      "candidate": "garrytan/gstack#3434@e9b2bc353ae1",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3434,
@@ -26055,7 +26055,7 @@
       "detail": "the filtered reviewed diff has 4455 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3438@1490d9d438b6",
+      "candidate": "garrytan/gstack#3438@1490d9d438b6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3438,
@@ -26066,7 +26066,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3439",
+      "candidate": "garrytan/gstack#3439",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -26077,7 +26077,7 @@
       "detail": "the fix rewrote 8 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3448@745b9b401987",
+      "candidate": "garrytan/gstack#3448@745b9b401987",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -26088,7 +26088,7 @@
       "detail": "no source file has at least half its blamed lines from #3448's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3448@c0ddffa3e2de",
+      "candidate": "garrytan/gstack#3448@c0ddffa3e2de",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -26099,7 +26099,7 @@
       "detail": "no source file has at least half its blamed lines from #3448's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3448@cadf2bcb9233",
+      "candidate": "garrytan/gstack#3448@cadf2bcb9233",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3448,
@@ -26110,7 +26110,7 @@
       "detail": "no source file has at least half its blamed lines from #3448's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3449",
+      "candidate": "garrytan/gstack#3449",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -26121,7 +26121,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3449@c56f462b6ccb",
+      "candidate": "garrytan/gstack#3449@c56f462b6ccb",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3449,
@@ -26132,7 +26132,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@11579a5fead6",
+      "candidate": "garrytan/gstack#3453@11579a5fead6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26143,7 +26143,7 @@
       "detail": "the filtered reviewed diff has 3973 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3453@3839d9bb1245",
+      "candidate": "garrytan/gstack#3453@3839d9bb1245",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26154,7 +26154,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@3858703ac9a8",
+      "candidate": "garrytan/gstack#3453@3858703ac9a8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26165,7 +26165,7 @@
       "detail": "the filtered reviewed diff has 4487 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3453@44eacaf532f3",
+      "candidate": "garrytan/gstack#3453@44eacaf532f3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26176,7 +26176,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@4510ad3e6347",
+      "candidate": "garrytan/gstack#3453@4510ad3e6347",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26187,7 +26187,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@4699573a92d7",
+      "candidate": "garrytan/gstack#3453@4699573a92d7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26198,7 +26198,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@53545c616503",
+      "candidate": "garrytan/gstack#3453@53545c616503",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26209,7 +26209,7 @@
       "detail": "no source file has at least half its blamed lines from #3453's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3453@5c29dac28792",
+      "candidate": "garrytan/gstack#3453@5c29dac28792",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26220,7 +26220,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@8527857e114a",
+      "candidate": "garrytan/gstack#3453@8527857e114a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26231,7 +26231,7 @@
       "detail": "the filtered reviewed diff has 4321 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3453@88e3cc026b6f",
+      "candidate": "garrytan/gstack#3453@88e3cc026b6f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26242,7 +26242,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@92ce20825b4d",
+      "candidate": "garrytan/gstack#3453@92ce20825b4d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26253,7 +26253,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@92d6045f99fc",
+      "candidate": "garrytan/gstack#3453@92d6045f99fc",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26264,7 +26264,7 @@
       "detail": "no source file has at least half its blamed lines from #3453's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3453@a1f41ee9f399",
+      "candidate": "garrytan/gstack#3453@a1f41ee9f399",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26275,7 +26275,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@e13bee14908c",
+      "candidate": "garrytan/gstack#3453@e13bee14908c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26286,7 +26286,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@e9a1cba34968",
+      "candidate": "garrytan/gstack#3453@e9a1cba34968",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26297,7 +26297,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3453@e9b2bc353ae1",
+      "candidate": "garrytan/gstack#3453@e9b2bc353ae1",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3453,
@@ -26308,7 +26308,7 @@
       "detail": "the filtered reviewed diff has 4455 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3459@0fb23304a6ae",
+      "candidate": "garrytan/gstack#3459@0fb23304a6ae",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26319,7 +26319,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@1595ff68c297",
+      "candidate": "garrytan/gstack#3459@1595ff68c297",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26330,7 +26330,7 @@
       "detail": "the fix rewrote 17 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@31682440fe45",
+      "candidate": "garrytan/gstack#3459@31682440fe45",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26341,7 +26341,7 @@
       "detail": "the fix rewrote 16 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@3f0c62582c20",
+      "candidate": "garrytan/gstack#3459@3f0c62582c20",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26352,7 +26352,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@504806efbb31",
+      "candidate": "garrytan/gstack#3459@504806efbb31",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26363,7 +26363,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@50b1190241ad",
+      "candidate": "garrytan/gstack#3459@50b1190241ad",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26374,7 +26374,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@5afec19d5c7e",
+      "candidate": "garrytan/gstack#3459@5afec19d5c7e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26385,7 +26385,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@6100d6e94dc0",
+      "candidate": "garrytan/gstack#3459@6100d6e94dc0",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26396,7 +26396,7 @@
       "detail": "the fix rewrote 14 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@6d01b1f3cdb4",
+      "candidate": "garrytan/gstack#3459@6d01b1f3cdb4",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26407,7 +26407,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@734e07f0a509",
+      "candidate": "garrytan/gstack#3459@734e07f0a509",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26418,7 +26418,7 @@
       "detail": "the filtered reviewed diff has 13096 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3459@7c9dab30efc8",
+      "candidate": "garrytan/gstack#3459@7c9dab30efc8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26429,7 +26429,7 @@
       "detail": "the filtered reviewed diff has 13086 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3459@7da881d6e387",
+      "candidate": "garrytan/gstack#3459@7da881d6e387",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26440,7 +26440,7 @@
       "detail": "the fix rewrote 14 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@a088fc3d8c6d",
+      "candidate": "garrytan/gstack#3459@a088fc3d8c6d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26451,7 +26451,7 @@
       "detail": "the filtered reviewed diff has 10171 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3459@a84b030ca064",
+      "candidate": "garrytan/gstack#3459@a84b030ca064",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26462,7 +26462,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@b101f64951df",
+      "candidate": "garrytan/gstack#3459@b101f64951df",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26473,7 +26473,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@b1c5dc066f4e",
+      "candidate": "garrytan/gstack#3459@b1c5dc066f4e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26484,7 +26484,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@bd2a86fdf7a3",
+      "candidate": "garrytan/gstack#3459@bd2a86fdf7a3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26495,7 +26495,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@be4086e03b56",
+      "candidate": "garrytan/gstack#3459@be4086e03b56",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26506,7 +26506,7 @@
       "detail": "the fix rewrote 15 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@d4bb11356f2f",
+      "candidate": "garrytan/gstack#3459@d4bb11356f2f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26517,7 +26517,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@df6cd725c208",
+      "candidate": "garrytan/gstack#3459@df6cd725c208",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26528,7 +26528,7 @@
       "detail": "the fix rewrote 19 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@e4a6adbf3aa8",
+      "candidate": "garrytan/gstack#3459@e4a6adbf3aa8",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26539,7 +26539,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@e501dc8589f9",
+      "candidate": "garrytan/gstack#3459@e501dc8589f9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26550,7 +26550,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@e6ed269add8a",
+      "candidate": "garrytan/gstack#3459@e6ed269add8a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26561,7 +26561,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@e997d6fb4d70",
+      "candidate": "garrytan/gstack#3459@e997d6fb4d70",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26572,7 +26572,7 @@
       "detail": "the filtered reviewed diff has 13122 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3459@f16be82fd323",
+      "candidate": "garrytan/gstack#3459@f16be82fd323",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26583,7 +26583,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@f1dcdea65ce2",
+      "candidate": "garrytan/gstack#3459@f1dcdea65ce2",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26594,7 +26594,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@f5134ae2dbca",
+      "candidate": "garrytan/gstack#3459@f5134ae2dbca",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26605,7 +26605,7 @@
       "detail": "the fix rewrote 15 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3459@fc2685b52850",
+      "candidate": "garrytan/gstack#3459@fc2685b52850",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26616,7 +26616,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3459@fd67b88c5edf",
+      "candidate": "garrytan/gstack#3459@fd67b88c5edf",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3459,
@@ -26627,7 +26627,7 @@
       "detail": "the filtered reviewed diff has 13127 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3460",
+      "candidate": "garrytan/gstack#3460",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -26638,7 +26638,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/ship-queue.ts (8 hunks, 8 old lines)"
     },
     {
-      "key": "garrytan/gstack#3463",
+      "candidate": "garrytan/gstack#3463",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 1990,
@@ -26649,7 +26649,7 @@
       "detail": "the filtered reviewed diff has 10205 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3472",
+      "candidate": "garrytan/gstack#3472",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -26660,7 +26660,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3472@470ac550c273",
+      "candidate": "garrytan/gstack#3472@470ac550c273",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3472,
@@ -26671,7 +26671,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3472@8c106d642b1b",
+      "candidate": "garrytan/gstack#3472@8c106d642b1b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3472,
@@ -26682,7 +26682,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3474",
+      "candidate": "garrytan/gstack#3474",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -26693,7 +26693,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3474@4dcd7f3ca3ca",
+      "candidate": "garrytan/gstack#3474@4dcd7f3ca3ca",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3474,
@@ -26704,7 +26704,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3475@fc69d3ff0bfe",
+      "candidate": "garrytan/gstack#3475@fc69d3ff0bfe",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3475,
@@ -26715,7 +26715,7 @@
       "detail": "no source file has at least half its blamed lines from #3475's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3480@213ffe9d2e2f",
+      "candidate": "garrytan/gstack#3480@213ffe9d2e2f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3480,
@@ -26726,7 +26726,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3481@107b076ab42f",
+      "candidate": "garrytan/gstack#3481@107b076ab42f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3481,
@@ -26737,7 +26737,7 @@
       "detail": "the filtered reviewed diff has 2261 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3481@5bace0f5ba2d",
+      "candidate": "garrytan/gstack#3481@5bace0f5ba2d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3481,
@@ -26748,7 +26748,7 @@
       "detail": "the filtered reviewed diff has 2226 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3481@8eae4db8d376",
+      "candidate": "garrytan/gstack#3481@8eae4db8d376",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3481,
@@ -26759,7 +26759,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3481@c3e27fc2b86c",
+      "candidate": "garrytan/gstack#3481@c3e27fc2b86c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3481,
@@ -26770,7 +26770,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3483",
+      "candidate": "garrytan/gstack#3483",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3121,
@@ -26781,7 +26781,7 @@
       "detail": "the filtered reviewed diff has 3369 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3486@727eb6c137c9",
+      "candidate": "garrytan/gstack#3486@727eb6c137c9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3486,
@@ -26792,7 +26792,7 @@
       "detail": "no source file has at least half its blamed lines from #3486's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3487@2549a32bad3d",
+      "candidate": "garrytan/gstack#3487@2549a32bad3d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3487,
@@ -26803,7 +26803,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3487@775d9804a9ea",
+      "candidate": "garrytan/gstack#3487@775d9804a9ea",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3487,
@@ -26814,7 +26814,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3487@85cb9aa6b2bb",
+      "candidate": "garrytan/gstack#3487@85cb9aa6b2bb",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3487,
@@ -26825,7 +26825,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3487@d39ea5d6318c",
+      "candidate": "garrytan/gstack#3487@d39ea5d6318c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3487,
@@ -26836,7 +26836,7 @@
       "detail": "the fix rewrote 11 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3491",
+      "candidate": "garrytan/gstack#3491",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3118,
@@ -26847,7 +26847,7 @@
       "detail": "the filtered reviewed diff has 4374 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3491@8f3f6867cd5d",
+      "candidate": "garrytan/gstack#3491@8f3f6867cd5d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3491,
@@ -26858,7 +26858,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/restamp.ts (8 hunks, 8 old lines)"
     },
     {
-      "key": "garrytan/gstack#3494@c9ae99020945",
+      "candidate": "garrytan/gstack#3494@c9ae99020945",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3494,
@@ -26869,7 +26869,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-decision-trail (7 hunks, 6 old lines), bin/gstack-worktree-audit (15 hunks, 18 old lines)"
     },
     {
-      "key": "garrytan/gstack#3496@4d49667ef90f",
+      "candidate": "garrytan/gstack#3496@4d49667ef90f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3496,
@@ -26880,7 +26880,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3496@ee2ce02e58b6",
+      "candidate": "garrytan/gstack#3496@ee2ce02e58b6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3496,
@@ -26891,7 +26891,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3496@ff2bcd86861a",
+      "candidate": "garrytan/gstack#3496@ff2bcd86861a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3496,
@@ -26902,7 +26902,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3497@61a145c5ec19",
+      "candidate": "garrytan/gstack#3497@61a145c5ec19",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3497,
@@ -26913,7 +26913,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3497@ae4b9fdd9b31",
+      "candidate": "garrytan/gstack#3497@ae4b9fdd9b31",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3497,
@@ -26924,7 +26924,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3497@cf49385eff5b",
+      "candidate": "garrytan/gstack#3497@cf49385eff5b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3497,
@@ -26935,7 +26935,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3497@d4793fa9bef6",
+      "candidate": "garrytan/gstack#3497@d4793fa9bef6",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3497,
@@ -26946,7 +26946,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3497@dfb8638902f7",
+      "candidate": "garrytan/gstack#3497@dfb8638902f7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3497,
@@ -26957,7 +26957,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3497@e0b5f5dd7e6e",
+      "candidate": "garrytan/gstack#3497@e0b5f5dd7e6e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3497,
@@ -26968,7 +26968,7 @@
       "detail": "no source file has at least half its blamed lines from #3497's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3500@0119569a6e48",
+      "candidate": "garrytan/gstack#3500@0119569a6e48",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3500,
@@ -26979,7 +26979,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3503@a2e53c772f7f",
+      "candidate": "garrytan/gstack#3503@a2e53c772f7f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3503,
@@ -26990,7 +26990,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3507@17635b6a7033",
+      "candidate": "garrytan/gstack#3507@17635b6a7033",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3507,
@@ -27001,7 +27001,7 @@
       "detail": "no source file has at least half its blamed lines from #3507's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3507@d63573a75751",
+      "candidate": "garrytan/gstack#3507@d63573a75751",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3507,
@@ -27012,7 +27012,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3509",
+      "candidate": "garrytan/gstack#3509",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3279,
@@ -27023,7 +27023,7 @@
       "detail": "the filtered reviewed diff has 2622 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3509@53c40b0a3e50",
+      "candidate": "garrytan/gstack#3509@53c40b0a3e50",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3509,
@@ -27034,7 +27034,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3511",
+      "candidate": "garrytan/gstack#3511",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3487,
@@ -27045,7 +27045,7 @@
       "detail": "the filtered reviewed diff has 2297 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3514",
+      "candidate": "garrytan/gstack#3514",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27056,7 +27056,7 @@
       "detail": "the fix rewrote 12 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3514@957be6393af9",
+      "candidate": "garrytan/gstack#3514@957be6393af9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3514,
@@ -27067,7 +27067,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3516",
+      "candidate": "garrytan/gstack#3516",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27078,7 +27078,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3516@93a41bcc5d9e",
+      "candidate": "garrytan/gstack#3516@93a41bcc5d9e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3516,
@@ -27089,7 +27089,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3520",
+      "candidate": "garrytan/gstack#3520",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27100,7 +27100,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): benchmark/SKILL.md.tmpl (24 hunks, 33 old lines)"
     },
     {
-      "key": "garrytan/gstack#3522@0f6ca6f2541b",
+      "candidate": "garrytan/gstack#3522@0f6ca6f2541b",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3522,
@@ -27111,7 +27111,7 @@
       "detail": "no source file has at least half its blamed lines from #3522's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3524@a57463ad1db3",
+      "candidate": "garrytan/gstack#3524@a57463ad1db3",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3524,
@@ -27122,7 +27122,7 @@
       "detail": "the filtered reviewed diff has 2218 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3525@039e42d6a123",
+      "candidate": "garrytan/gstack#3525@039e42d6a123",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3525,
@@ -27133,7 +27133,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3525@15fdefb1f519",
+      "candidate": "garrytan/gstack#3525@15fdefb1f519",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3525,
@@ -27144,7 +27144,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3525@b0fba22f6c2c",
+      "candidate": "garrytan/gstack#3525@b0fba22f6c2c",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3525,
@@ -27155,7 +27155,7 @@
       "detail": "no source file has at least half its blamed lines from #3525's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3525@f1496a21ab60",
+      "candidate": "garrytan/gstack#3525@f1496a21ab60",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3525,
@@ -27166,7 +27166,7 @@
       "detail": "no source file has at least half its blamed lines from #3525's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3527@0da1b8291267",
+      "candidate": "garrytan/gstack#3527@0da1b8291267",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27177,7 +27177,7 @@
       "detail": "the filtered reviewed diff has 2003 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3527@243ca8ea21e1",
+      "candidate": "garrytan/gstack#3527@243ca8ea21e1",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27188,7 +27188,7 @@
       "detail": "the filtered reviewed diff has 2039 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3527@2684974602c1",
+      "candidate": "garrytan/gstack#3527@2684974602c1",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27199,7 +27199,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3527@6b62227b057e",
+      "candidate": "garrytan/gstack#3527@6b62227b057e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27210,7 +27210,7 @@
       "detail": "the filtered reviewed diff has 2042 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3527@85c1f157866a",
+      "candidate": "garrytan/gstack#3527@85c1f157866a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27221,7 +27221,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3527@9c34fda1f302",
+      "candidate": "garrytan/gstack#3527@9c34fda1f302",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27232,7 +27232,7 @@
       "detail": "the fix rewrote 13 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3527@a94b37c03958",
+      "candidate": "garrytan/gstack#3527@a94b37c03958",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27243,7 +27243,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3527@bdaca7bfe63a",
+      "candidate": "garrytan/gstack#3527@bdaca7bfe63a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27254,7 +27254,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3527@f659bd6d5ca7",
+      "candidate": "garrytan/gstack#3527@f659bd6d5ca7",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3527,
@@ -27265,7 +27265,7 @@
       "detail": "the filtered reviewed diff has 2086 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3534@6e69dc36819d",
+      "candidate": "garrytan/gstack#3534@6e69dc36819d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3534,
@@ -27276,7 +27276,7 @@
       "detail": "no source file has at least half its blamed lines from #3534's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3540",
+      "candidate": "garrytan/gstack#3540",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3069,
@@ -27287,7 +27287,7 @@
       "detail": "the filtered reviewed diff has 13054 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3542",
+      "candidate": "garrytan/gstack#3542",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27298,7 +27298,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3543",
+      "candidate": "garrytan/gstack#3543",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27309,7 +27309,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3543@c5f64b5fda92",
+      "candidate": "garrytan/gstack#3543@c5f64b5fda92",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3543,
@@ -27320,7 +27320,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3544",
+      "candidate": "garrytan/gstack#3544",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2898,
@@ -27331,7 +27331,7 @@
       "detail": "the filtered reviewed diff has 121612 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3544@34632509d769",
+      "candidate": "garrytan/gstack#3544@34632509d769",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3544,
@@ -27342,7 +27342,7 @@
       "detail": "no source file has at least half its blamed lines from #3544's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3545",
+      "candidate": "garrytan/gstack#3545",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 2942,
@@ -27353,7 +27353,7 @@
       "detail": "the filtered reviewed diff has 3038 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3547",
+      "candidate": "garrytan/gstack#3547",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27364,7 +27364,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3547@f28fbdffb933",
+      "candidate": "garrytan/gstack#3547@f28fbdffb933",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3547,
@@ -27375,7 +27375,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3549",
+      "candidate": "garrytan/gstack#3549",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27386,7 +27386,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): lib/captain-brief.ts (7 hunks, 10 old lines)"
     },
     {
-      "key": "garrytan/gstack#3551@edf76265d496",
+      "candidate": "garrytan/gstack#3551@edf76265d496",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3551,
@@ -27397,7 +27397,7 @@
       "detail": "no source file has at least half its blamed lines from #3551's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3553",
+      "candidate": "garrytan/gstack#3553",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3002,
@@ -27408,7 +27408,7 @@
       "detail": "the filtered reviewed diff has 31607 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3553@49f780cef369",
+      "candidate": "garrytan/gstack#3553@49f780cef369",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3553,
@@ -27419,7 +27419,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3553@8ff0f3f6eff5",
+      "candidate": "garrytan/gstack#3553@8ff0f3f6eff5",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3553,
@@ -27430,7 +27430,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3553@ad7e2efbc5c2",
+      "candidate": "garrytan/gstack#3553@ad7e2efbc5c2",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3553,
@@ -27441,7 +27441,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3557",
+      "candidate": "garrytan/gstack#3557",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3118,
@@ -27452,7 +27452,7 @@
       "detail": "the filtered reviewed diff has 4374 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3562",
+      "candidate": "garrytan/gstack#3562",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27463,7 +27463,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): browse/src/config.ts (9 hunks, 23 old lines)"
     },
     {
-      "key": "garrytan/gstack#3563",
+      "candidate": "garrytan/gstack#3563",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3190,
@@ -27474,7 +27474,7 @@
       "detail": "the filtered reviewed diff has 6792 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3566",
+      "candidate": "garrytan/gstack#3566",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3166,
@@ -27485,7 +27485,7 @@
       "detail": "the filtered reviewed diff has 3007 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3567@1ec488583e9d",
+      "candidate": "garrytan/gstack#3567@1ec488583e9d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3567,
@@ -27496,7 +27496,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3567@45d9835d853a",
+      "candidate": "garrytan/gstack#3567@45d9835d853a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3567,
@@ -27507,7 +27507,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3567@d4c68de6351d",
+      "candidate": "garrytan/gstack#3567@d4c68de6351d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3567,
@@ -27518,7 +27518,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3572@1ec488583e9d",
+      "candidate": "garrytan/gstack#3572@1ec488583e9d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3572,
@@ -27529,7 +27529,7 @@
       "detail": "the fix rewrote 7 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3572@45d9835d853a",
+      "candidate": "garrytan/gstack#3572@45d9835d853a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3572,
@@ -27540,7 +27540,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3572@8b9c89306c7f",
+      "candidate": "garrytan/gstack#3572@8b9c89306c7f",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3572,
@@ -27551,7 +27551,7 @@
       "detail": "every source file is past 6 hunks or 120 old lines (Rule 1.3): bin/gstack-ship-receipt (8 hunks, 10 old lines)"
     },
     {
-      "key": "garrytan/gstack#3572@d4c68de6351d",
+      "candidate": "garrytan/gstack#3572@d4c68de6351d",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3572,
@@ -27562,7 +27562,7 @@
       "detail": "the fix rewrote 9 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3578",
+      "candidate": "garrytan/gstack#3578",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27573,7 +27573,7 @@
       "detail": "no source file has one merged PR holding at least half its blamed lines (Rule 1.4): lib/redact-patterns.ts: top owner #1797 holds 2 of 10 blamed lines"
     },
     {
-      "key": "garrytan/gstack#3581",
+      "candidate": "garrytan/gstack#3581",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27584,7 +27584,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3593@586f7d458a7e",
+      "candidate": "garrytan/gstack#3593@586f7d458a7e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3593,
@@ -27595,7 +27595,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3593@ba42df715ae9",
+      "candidate": "garrytan/gstack#3593@ba42df715ae9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3593,
@@ -27606,7 +27606,7 @@
       "detail": "the filtered reviewed diff has 2511 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3596",
+      "candidate": "garrytan/gstack#3596",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3481,
@@ -27617,7 +27617,7 @@
       "detail": "the filtered reviewed diff has 2453 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3596@2e8ed2a91836",
+      "candidate": "garrytan/gstack#3596@2e8ed2a91836",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3596,
@@ -27628,7 +27628,7 @@
       "detail": "the filtered reviewed diff has 2868 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3596@3b207dd8303a",
+      "candidate": "garrytan/gstack#3596@3b207dd8303a",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3596,
@@ -27639,7 +27639,7 @@
       "detail": "no source file has at least half its blamed lines from #3596's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3596@586f7d458a7e",
+      "candidate": "garrytan/gstack#3596@586f7d458a7e",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3596,
@@ -27650,7 +27650,7 @@
       "detail": "the fix rewrote no source file (Rule 1.1)"
     },
     {
-      "key": "garrytan/gstack#3596@7f92b29243de",
+      "candidate": "garrytan/gstack#3596@7f92b29243de",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3596,
@@ -27661,7 +27661,7 @@
       "detail": "the filtered reviewed diff has 2936 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3596@ba42df715ae9",
+      "candidate": "garrytan/gstack#3596@ba42df715ae9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3596,
@@ -27672,7 +27672,7 @@
       "detail": "the filtered reviewed diff has 2511 changed lines, outside 10 to 2000 (Rule 2)"
     },
     {
-      "key": "garrytan/gstack#3596@fc5ef06e13c9",
+      "candidate": "garrytan/gstack#3596@fc5ef06e13c9",
       "repo": "garrytan/gstack",
       "kind": "review-caught",
       "pr": 3596,
@@ -27683,7 +27683,7 @@
       "detail": "no source file has at least half its blamed lines from #3596's own commits (Rule 1.4)"
     },
     {
-      "key": "garrytan/gstack#3614",
+      "candidate": "garrytan/gstack#3614",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": null,
@@ -27694,7 +27694,7 @@
       "detail": "the fix rewrote 6 source files, more than 5 (Rule 1.2)"
     },
     {
-      "key": "garrytan/gstack#3620",
+      "candidate": "garrytan/gstack#3620",
       "repo": "garrytan/gstack",
       "kind": "escaped",
       "pr": 3593,
