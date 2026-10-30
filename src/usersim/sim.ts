@@ -3,15 +3,16 @@
 // the next user message after a turn that ends in a prose question.
 //
 // Each question is classified by U5's deterministic classifier (src/usersim/classifier.ts) and answered from the task's
-// sidecar replies, keyed by category. A question that names a gated effect (writing, committing, pushing, deleting,
-// running, ...) gets its scripted reply as written only when the reply refuses and grants nothing (isRefusal). Any other
+// sidecar replies, keyed by category. A question's effects come from its header, text, option labels and option
+// descriptions. A question that names a gated effect (writing, committing, pushing, deleting, running, ...) gets its scripted reply as written only when the reply refuses and grants nothing (isRefusal). Any other
 // reply may authorize the effect, so it is sent only when it holds no negation, names every effect the question names,
 // is not an ordinal ("2", "option B"), and the classification is unambiguous. Otherwise a fixed non-approving answer goes instead and the reply
 // is recorded as misaligned (REPLY_MISALIGNED). So a question inserted, removed or moved in front of an approval cannot
 // take the approval meant for another effect, and a reply that approves without saying "yes" is held to the same rules.
+// A reply that names a gated effect the question does not name is held back the same way, unless it refuses.
 //
 // A question with no scripted reply gets the persona's free-form answer when the run has a free-form source, else a
-// fixed non-approving fallback. A free-form answer to a gated question is sent only when it refuses; otherwise the
+// fixed non-approving fallback. A free-form answer to a gated question, or one that names a gated effect itself, is sent only when it refuses; otherwise the
 // non-approving answer goes instead, so a free-form answer never approves a gated effect. An AskUserQuestion in a task that
 // declared no user replies is not answered at all: the trial ends as a missing cell (E_USER_TURNS_MISSING) naming the
 // task and the question.
@@ -59,7 +60,7 @@ const NEGATED = /\b(no|not|don't|do not|never|wait|hold off|stop)\b/;
 const ORDINAL = /^(\(?[0-9]+[.)]?|[a-d][.)]?|option [0-9a-d]+|the (first|second|third|fourth|last) (one|option)|(first|second|third|fourth|last))[.!]?$/;
 const REFUSING = /^(no|nope|not yet|not now|don't|do not|never|wait|hold off|stop|skip)\b/;
 const GRANTING = /\b(yes|yep|yeah|sure|ok|okay|go ahead|go for it|do it|please|proceed|approve|approved|lgtm|sounds good|fine|problem|worries|rush)\b/;
-const NEGATION_BEFORE = /\b(don't|do not|not|never|without)\s+(\w+\s+){0,2}$/;
+const NEGATION_BEFORE = new RegExp("\\b(don't|do not|not|never|without)\\s+((ever|yet)\\s+)?((" + [...WORD_TO_EFFECT.keys()].join("|") + ")\\s+(or|and|nor)\\s+)*$");
 
 /** sha256 over the rules a reply depends on, beside the classifier's: the verdict and the event log record both. */
 export const USERSIM_SHA256 = createHash("sha256").update(JSON.stringify({ version: USERSIM_VERSION, limits: LIMITS, non_approving: NON_APPROVING, fallback: FALLBACK, effects: EFFECTS, approving: APPROVING.source, negated: NEGATED.source, ordinal: ORDINAL.source, refusing: REFUSING.source, granting: GRANTING.source, negation_before: NEGATION_BEFORE.source, classifier: CLASSIFIER_SHA256 })).digest("hex");
@@ -72,7 +73,8 @@ export const isApproving = (reply: string): boolean => {
 
 /**
  * A reply that refuses and grants nothing: it starts with a refusal, holds no granting word ("go ahead", "please",
- * "no problem"), and every gated effect it names comes right after a negation ("don't write"). "No, write it." and
+ * "no problem"), and every gated effect it names comes right after a negation ("don't write", "don't ever push",
+ * "do not push or merge"). "Don't hesitate to push it." is not a refusal. "No, write it." and
  * "Stop hesitating and write the doc." are not refusals.
  */
 export const isRefusal = (reply: string): boolean => {
@@ -112,8 +114,8 @@ export type AskResult = { answers: Record<string, string> } | { missing: string 
 
 export type TurnResult = { reply: string } | { end: string };
 
-/** The text a question is matched on for its effects: header, question and option labels. */
-const askText = (q: AskQuestion) => [q.header ?? "", q.question ?? "", ...(q.options ?? []).map((o) => o.label ?? "")].join("\n");
+/** The text a question is matched on for its effects: header, question, option labels and option descriptions. */
+const askText = (q: AskQuestion) => [q.header ?? "", q.question ?? "", ...(q.options ?? []).flatMap((o) => [o.label ?? "", o.description ?? ""])].join("\n");
 
 export class UserSim {
   /** One entry per question asked, its category or null: TrialRecord.asked. */
@@ -142,11 +144,12 @@ export class UserSim {
     const scripted = c.category && (this.used.get(c.category) ?? 0) < LIMITS.replies_per_category ? this.o.script?.replies?.[c.category] : undefined;
     if (scripted !== undefined) {
       const approving = isApproving(scripted);
-      if (!effects.length && !(approving && c.ambiguous)) return this.take(c.category!, { text: scripted, source: "scripted", approves: false, misaligned: null });
-      if (effects.length && isRefusal(scripted)) return this.take(c.category!, { text: scripted, source: "scripted", approves: false, misaligned: null });
       const covered = effectsOf(scripted);
+      if (!effects.length && !(approving && c.ambiguous) && (!covered.length || isRefusal(scripted))) return this.take(c.category!, { text: scripted, source: "scripted", approves: false, misaligned: null });
+      if (effects.length && isRefusal(scripted)) return this.take(c.category!, { text: scripted, source: "scripted", approves: false, misaligned: null });
       const why = NEGATED.test(scripted.toLowerCase()) ? "the reply negates part of what it says"
-        : c.ambiguous ? "the question matched " + c.matched.join(" and ") : isOrdinal(scripted) ? "the reply picks an option by its place" : effects.filter((e) => !covered.includes(e)).length ? "the reply does not name " + effects.filter((e) => !covered.includes(e)).join(", ") : null;
+        : c.ambiguous ? "the question matched " + c.matched.join(" and ") : isOrdinal(scripted) ? "the reply picks an option by its place" : effects.filter((e) => !covered.includes(e)).length ? "the reply does not name " + effects.filter((e) => !covered.includes(e)).join(", ")
+        : !effects.length ? "the reply names " + covered.join(", ") + ", which the question does not" : null;
       if (why === null) return this.take(c.category!, { text: scripted, source: "scripted", approves: true, misaligned: null });
       this.misaligned.push(c.category + ": " + why);
       return { text: NON_APPROVING, source: "non_approving", approves: false, misaligned: why };
@@ -155,7 +158,7 @@ export class UserSim {
     if (persona !== undefined && this.o.freeform) {
       const text = await this.o.freeform(persona, question);
       if (text !== null && text.trim()) {
-        if (effects.length && !isRefusal(text)) return { text: NON_APPROVING, source: "non_approving", approves: false, misaligned: null };
+        if ((effects.length || effectsOf(text).length) && !isRefusal(text)) return { text: NON_APPROVING, source: "non_approving", approves: false, misaligned: null };
         return { text: text.trim(), source: "freeform", approves: false, misaligned: null };
       }
     }

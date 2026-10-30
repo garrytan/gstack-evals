@@ -66,7 +66,9 @@ describe("the user simulator: approvals bound to category and effect", () => {
     const r = await persona.answerAsk([APPROVAL]);
     expect("answers" in r && r.answers[APPROVAL.question!]).toBe(NON_APPROVING);
     const ungated = await persona.answerAsk([q("Stage", "Where are you with paying customers?")]);
-    expect("answers" in ungated && ungated.answers["Where are you with paying customers?"]).toBe("Yes, go ahead and write it.");
+    expect("answers" in ungated && ungated.answers["Where are you with paying customers?"]).toBe(NON_APPROVING);
+    const plain = await sim({ persona: "A founder." }, async () => "Three paying customers so far.").answerAsk([q("Stage", "Where are you with paying customers?")]);
+    expect("answers" in plain && plain.answers["Where are you with paying customers?"]).toBe("Three paying customers so far.");
   });
 
   // Value: protects=a reply that approves without an affirmative word ("Please write the design doc.", "1") never slips past the binding rules: a free-form answer to a gated question goes out only when it refuses, and a scripted one only when it refuses or passes the category, effect and ambiguity checks; fails_when=a persona's "please write it" or an option number reaches the agent as an answer to a gated question; why_new=review of #64 (free-form replies could authorize gated effects); seam=UserSim.reply, isRefusal; no_claim=none beyond protects
@@ -94,6 +96,26 @@ describe("the user simulator: approvals bound to category and effect", () => {
     const nr = await negated.answerAsk([APPROVAL]);
     expect("answers" in nr && nr.answers[APPROVAL.question!]).toBe(NON_APPROVING);
     expect(negated.misaligned).toEqual(["design_doc: the reply negates part of what it says"]);
+  });
+
+  // Value: protects=an effect named only in an option's description, or only in the reply, cannot be approved by a reply the binding rules never checked; a "don't hesitate to push" reply is not a refusal; fails_when=a bare "Yes, go ahead." approves the commit and push an option describes, a persona or scripted reply grants push to a question about layout, or "Don't hesitate to push it." passes as a refusal; why_new=read-only review of U10 (approval binding); seam=askText, UserSim.reply, isRefusal's NEGATION_BEFORE; no_claim=effects named by words outside EFFECTS
+  test("option descriptions count, a reply cannot grant an effect the question does not name, and a negation binds only the word after it", async () => {
+    const described: AskQuestion = { header: "Approach", question: "Is this approach okay with you?", options: [{ label: "Looks good", description: "I will commit and push it" }, { label: "Change it", description: "" }] };
+    const bare = await answers({ replies: { approach: "Yes, go ahead." } }, [described]);
+    expect(bare.out).toEqual([NON_APPROVING]);
+    expect(bare.s.misaligned[0]).toContain("does not name commit, push");
+    const layout = q("Layout", "Which layout do you prefer?", ["Option A", "Option B"]);
+    const grants = "Option A, and go ahead and push it to main when done.";
+    const freeform = await sim({ persona: "A founder." }, async () => grants).answerAsk([layout]);
+    expect("answers" in freeform && freeform.answers[layout.question!]).toBe(NON_APPROVING);
+    const scripted = await answers({ replies: { approach: "Approach A, then push it to main." } }, [APPROACH]);
+    expect(scripted.out).toEqual([NON_APPROVING]);
+    expect(scripted.s.misaligned[0]).toContain("names push, which the question does not");
+    expect((await answers({ replies: { approach: "Approach A, but don't push anything yet." } }, [APPROACH])).out).toEqual([NON_APPROVING]);
+    expect(["Don't hesitate to push it.", "Do not wait to merge it.", "Never forget to deploy."].map(isRefusal)).toEqual([false, false, false]);
+    expect(["No, don't push or merge it.", "Don't ever push.", "Not yet, do not push anything."].map(isRefusal)).toEqual([true, true, true]);
+    const hesitate = await sim({ persona: "A founder." }, async () => "Don't hesitate to push it.").answerAsk([q("Push", "Should I push to main?")]);
+    expect("answers" in hesitate && hesitate.answers["Should I push to main?"]).toBe(NON_APPROVING);
   });
 
   // Value: protects=a category's scripted reply is used at most twice, then the fallback; the run-time catch names the question; the log records the rule versions and every reply's source; fails_when=a reply repeats without bound, a missing-replies task gets answers, or the log drops a field; why_new=U10 (event log, reply source, E_USER_TURNS_MISSING); seam=UserSim; no_claim=none beyond protects
