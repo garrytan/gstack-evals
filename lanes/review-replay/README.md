@@ -2,6 +2,29 @@
 
 This lane asks one question: does a gstack reviewer role catch a known historical defect, at which model and effort, and at what cost (plan v3.2, "Review replay lane"). This folder holds GSTA-131's review replay panel, vendored, and the catalog of historical-defect cases that the lane replays and U14 grows. Nothing here calls a model.
 
+## Running a replay
+
+run.ts replays a frozen plan through the metering proxy and spends only through the program ledger. It needs an approved cap on a ledger line item (docs/budget-ledger.md).
+
+    bun lanes/review-replay/run.ts --plan <plan.json> --out <dir> --item <line item> [--resume] [--dry-run] [--json] [--concurrency <n>] [--policy <models.json>] [--ledger <path>] [--ledger-record <dir>]
+
+**The plan.** `{schema_version: 1, name, prereg: {path, sha256}, max_output_tokens, cut_off: {min_visible_chars}, items: [{id, case, role, arm, model, effort, trial, prompt: {path, sha256}}]}`, with paths relative to the plan file. role is specialist, red-team or fix-check; model is a subject in the policy file; effort is a string or null. cut_off has no default. Before any spend, and in --dry-run, the runner checks the preregistration and every prompt against their sha256, unique ids, the policy and the proxy's routes (E_MODEL_POLICY), and each provider's key by name (E_KEY_MISSING). A failed check is E_REPLAY_PLAN. --dry-run prints each item's worst case and the total, and writes nothing.
+
+**Spend.** Each call reserves its real maximum: the request sets the route's output cap to max_output_tokens. The proxy journals every call in `<out>/journal.ndjson`, and the lease's cap, held by the ledger, stops spend. The runner never retries a call.
+
+**Outcomes.** Each terminal item gets `<out>/items/<id>.json` once, with its Termination, digests, ids, HTTP status, stop reason, text, raw usage, and the priced usage and spend from the journal.
+
+- completed: the reply stopped at end_turn, stop or stop_sequence with text, or was cut off at max_tokens or length with at least min_visible_chars visible characters (truncated true).
+- arm_failure: refusal (an Anthropic refusal or a content_filter finish), empty_response (no choices, no text, or a cut-off fragment under min_visible_chars), context_overflow (a 4xx context-length error), or malformed_output (any other stop reason).
+- missing (E_REPLAY_TRANSPORT): a 503 or 429, or a 200 with an error object, an error finish, a choice error, no usage, or an OpenRouter provider outside the price row's pin. The record keeps the provider's usage and text.
+- unknown: the send may have reached the provider and no outcome came back. It keeps its full charge and is never resent.
+
+The runner never classes an item infra. Only a preregistered incident list in a later scorer may move a missing item to infra.
+
+**Stops and exit codes.** Exit 0 when every item has a durable outcome, arm failures included. Every stop exits 2: in-flight items finish and record, the proxy stops, the journal is reconciled and the lease is settled. The error record goes to stderr, and to `<out>/error.json` with --json. A cap stop (CAP_STOP) also prints `STOP: reason=budget_exhausted spent=<usd> reserved=<usd> unknown=<n> cap=<usd>` without --json. Rejected credentials (E_KEY_REJECTED), a cap stop and a proxy refusal before any send write no item file, so a resume runs that item. A transport failure (E_REPLAY_TRANSPORT) records the item missing or unknown first.
+
+**Resume.** `--resume` with the same --plan, --out and --item continues the run in `<out>/run.json`. It refuses a changed plan, or a recorded item whose prompt digest differs from the plan's (E_REPLAY_PLAN), and keeps every recorded outcome. An item whose intent file has a request line in the journal is recorded unknown and never resent; one with no request line was never sent and runs again. The resume reuses the run's open lease or leases the same item again for the same run. A new run refuses an --out that already holds run.json, and a second runner on the same --out is refused before it spends.
+
 ## The panel
 
 panel/ is the panel GSTA-131 built and ran while sizing gstack's review depth (garrytan/gstack#3527). It replays single reviewer prompts on two public gstack cases.
@@ -65,6 +88,14 @@ catalog/catalog.ts loads a catalog dir. `loadCatalog(dir)` returns the valid cas
 **The decoy rule.** A decoy is the fix commit on the case's range, or a clean PR. It is scorable as clean only when its audit's verdict is clean, which `scorableAsClean(decoy)` implements. An audit records that someone checked for a later fix (later_fix_checked: true), what that later fix was if one exists, the verdict, who, when and how. A null audit means nobody has audited the decoy, and it is never scored as clean. GSTA-20 found why this matters: decoy y09 passed review and still held a real bug, fixed later inside a consolidated release (wiki/board/2026-10-29-gsta-20-review-replay-y09-correction). A decoy whose audit says holds-defect is not a decoy: validation refuses it and says to make it a defect case.
 
 catalog/public/ holds two seeds from panel cases 1 and 2, with full shas resolved from gstack. Each has its fix commit as a decoy with a null audit, since nobody has audited them. Each shelf life starts at the fix PR's creation date from GitHub's API, and both are short: a short-shelf-life case counts only for models released before the PR first appeared. Case 1's deserved severity is CRITICAL, because the panel's evidence says the regression would fail a paid test case. Case 2's is null: every reviewer rated it INFORMATIONAL and the panel names no failing test or production break. Answer-key audits are null until U14 audits them. U14 adds more cases to public/.
+
+## The token table
+
+tables/review-tokens.json holds measured tokens per review dispatch, one row per model, reviewer role and effort (full or light). Each row records provider_effort, input_tokens and output_tokens (median and p90, output counting reasoning tokens), n, source_run_ids, as_of and its trials. A row is flagged when n is under 10 or as_of is more than 30 days old. Only the two Opus 5.5 specialist rows exist so far, at n 6, so both are flagged.
+
+    gstack-evals tokens export --model <id> --stat median|p90 --for review-dispatch-compare [--role <role>]
+
+The export prints exactly the `{role: {full, light}}` object gstack's scripts/review-dispatch-compare.ts reads through --tokens, and lists flagged rows on stderr. A model, role or effort the table lacks exits 2 with E_TOKENS_COVERAGE; the export never fills a default and never calls a model.
 
 ## Credit and changes
 

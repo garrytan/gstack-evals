@@ -63,6 +63,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
 | [E_INTERNAL](#e_internal) | 2 | U1 |
 | [E_TOKENS_COVERAGE](#e_tokens_coverage) | 2 | U13 |
+| [E_REPLAY_PLAN](#e_replay_plan) | 2 | U13 |
+| [E_REPLAY_TRANSPORT](#e_replay_transport) | 2 | U13 |
 | [E_PARITY_SOURCE](#e_parity_source) | 2 | U15 |
 | [E_PARITY_STALE](#e_parity_stale) | 2 | U15 |
 | [CALIBRATION_SKILL](#calibration_skill) | 3 | U10 |
@@ -479,6 +481,22 @@ gstack-evals tokens export was asked for a model, role or effort the token table
 Fix: Add the measured rows the message names from a metered run, or ask for an approved measuring run.
 
 Exit 2. Side effects: None: no export is written and no call is made. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_REPLAY_PLAN
+
+The review replay plan cannot run as preregistered: a prompt or the preregistration file differs from its frozen sha256, the plan is malformed (a missing field, a repeated item id, no cut-off rule), or on --resume the plan or a recorded item's prompt digest differs from the run's.
+
+Fix: Restore the frozen files, or freeze and preregister a new plan and start a new run. A resume never runs a changed plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_REPLAY_TRANSPORT
+
+A review replay call failed between the runner and the model: the connection failed or timed out, the provider answered 429 or 5xx, or it answered 200 with an error, without usage or from an unpinned provider. The runner never retries a call, so it stopped before more items failed the same way.
+
+Fix: Check the provider's status and &lt;out>/journal.ndjson, then --resume &lt;out>. The failed item keeps its outcome, unknown when the send may have reached the provider (its charge is kept) and missing when the provider answered with an error, and neither is sent again.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U13.
 
 ### E_PARITY_SOURCE
 

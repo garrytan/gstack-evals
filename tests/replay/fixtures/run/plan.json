@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "name": "u13c-fixture",
+  "prereg": {"path":"prereg.md","sha256":"91a1ad95a5a29d3c15c57099db89e5fd8b0ced8aafc575657112a016af221516"},
+  "max_output_tokens": 1000,
+  "cut_off": {"min_visible_chars": 20},
+  "items": [
+    {"id":"a","case":"c1","role":"specialist","arm":"gstack","model":"claude-opus-5-5","effort":"medium","trial":1,"prompt":{"path":"prompts/a.md","sha256":"f7d4f8272556b24a64729e7d65b6b51ed4f9e5d26e3807241e64f12ccd3caed3"}},
+    {"id":"b","case":"c1","role":"red-team","arm":"gstack","model":"claude-opus-5-5","effort":"high","trial":1,"prompt":{"path":"prompts/b.md","sha256":"a7c29e460f6925e986d10c3978c5ddc7882e0ca92238d47bfc9f2dd0f275b080"}},
+    {"id":"c","case":"c2","role":"fix-check","arm":"gstack","model":"claude-opus-5-5","effort":null,"trial":1,"prompt":{"path":"prompts/c.md","sha256":"30dfda138d6d6c0ba6964cd2858f0a6195b859b75b51bfb89bf81a6ef3b1a797"}}
+  ]
+}
