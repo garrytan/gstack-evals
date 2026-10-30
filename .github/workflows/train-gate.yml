@@ -1,12 +1,23 @@
+# Known gap (GST-254): GitHub runs this file from the dispatched ref, so on train/<nonce> the train head's own copy runs and
+# its publish job posts the full-gate check. A head that edits this file can change what gets posted. The publish job refuses
+# unless the run's ref is the default branch or a train/ branch and the running file is byte-identical to the default
+# branch's train-gate.yml, but a head that deletes that step deletes the refusal with it. The real fix is for gstack to
+# dispatch trains on the base ref (gstack GST-255).
 # Train gate (U19): the full keyless gate of a merge train, in the shape gstack's merge train reads (gstack 1.91.319.0,
 # docs/ship-policy.md "Run a merge train"). gstack-ship-queue train build pushes train/<nonce>, a chain of
 # "train T<i>: merge #<pr> at <sha12>" merge commits on the train's base, and dispatches this workflow there with evals_all,
 # expected_sha and a nonce. It finds the run by the nonce in the run name. train bisect dispatches it again with cases and
 # prefix_shas.
 # The gate code and its case list come from the train's base (scripts/gate.ts and gate/manifest.json at the first parent of
-# T1), and gate.ts runs from the base's worktree, never from the head's. The cases still run the head's code (its package.json
-# scripts and tests) in the test job, so this does not isolate the train from a hostile head: trains take only reviewed
-# same-repo pull requests. route checks the inputs. test runs the base's cases on the head with a read-only token and uploads a
+# T1), and gate.ts runs from the base's worktree, never from the head's. The test and bisect jobs install the head's
+# dependencies with lifecycle scripts off, so no postinstall or prepare hook in the head's package.json or lockfile runs. They
+# check out the base's worktree only after that install, check that it is the base commit with nothing changed or added, and
+# record a digest of its files. After the cases they recompute the digest and fail on a change, and the test job then
+# uploads no record. That second check catches a case that writes into the base by mistake, not a hostile one: the cases run
+# the head's code (its package.json scripts and tests) as the runner's user, which can put its own tools on PATH through
+# GITHUB_PATH or GITHUB_ENV, or leave a process running past the step to change the base or the record after the check. So
+# this does not isolate the train from a hostile head: trains take only reviewed same-repo pull requests, and isolating the
+# cases needs a separate user (GST-254). route checks the inputs. test runs the base's cases on the head with a read-only token and uploads a
 # TrainGateRecord on every completed run, red or green. bisect runs the named cases on each prefix and uploads one record per
 # prefix. publish is the only job that can write, and only a check run: it posts the policy's full_gate_check on the head for
 # a complete green census bound to this run's nonce, head and tree, and never for a train of two or more pull requests that
@@ -121,12 +132,20 @@ jobs:
           attributes="$(git rev-parse --git-path info/attributes)"
           mkdir -p "$(dirname "$attributes")"
           printf '* diff\n' > "$attributes"
-      - name: Check out the train base's gate code
+      - name: Install (frozen lockfile, no lifecycle scripts)
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Check out the train base's gate code after the install, verify it and record its digest
+        id: base
+        shell: bash
         env:
           BASE: ${{ needs.route.outputs.base }}
-        run: git worktree add -q --detach "$RUNNER_TEMP/base" "$BASE"
-      - name: Install (frozen lockfile)
-        run: bun install --frozen-lockfile
+        run: |
+          git worktree add -q --detach "$RUNNER_TEMP/base" "$BASE"
+          test "$(git -C "$RUNNER_TEMP/base" rev-parse HEAD)" = "$BASE"
+          status="$(git -C "$RUNNER_TEMP/base" status --porcelain --untracked-files=all --ignored)"
+          test -z "$status"
+          digest="$(tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu --exclude=./.git -C "$RUNNER_TEMP/base" -cf - . | sha256sum)"
+          printf 'digest=%s\n' "${digest%% *}" >> "$GITHUB_OUTPUT"
       - name: Run the base's gate on the head
         env:
           BASE: ${{ needs.route.outputs.base }}
@@ -135,8 +154,17 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/base"
           bun --no-env-file --config=/dev/null scripts/gate.ts run --root "$GITHUB_WORKSPACE" --base "$BASE" --nonce "$NONCE" --out "$RUNNER_TEMP/record/train-record.json"
-      - name: Upload the train record
+      - name: Verify the base's gate code is unchanged after the cases
+        id: verify
         if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          digest="$(tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu --exclude=./.git -C "$RUNNER_TEMP/base" -cf - . | sha256sum)"
+          test "${digest%% *}" = "$DIGEST"
+      - name: Upload the train record
+        if: ${{ !cancelled() && steps.verify.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ needs.route.outputs.record_artifact }}
@@ -181,12 +209,20 @@ jobs:
           attributes="$(git rev-parse --git-path info/attributes)"
           mkdir -p "$(dirname "$attributes")"
           printf '* diff\n' > "$attributes"
-      - name: Check out the train base's gate code
+      - name: Install (frozen lockfile, no lifecycle scripts)
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Check out the train base's gate code after the install, verify it and record its digest
+        id: base
+        shell: bash
         env:
           BASE: ${{ needs.route.outputs.base }}
-        run: git worktree add -q --detach "$RUNNER_TEMP/base" "$BASE"
-      - name: Install (frozen lockfile)
-        run: bun install --frozen-lockfile
+        run: |
+          git worktree add -q --detach "$RUNNER_TEMP/base" "$BASE"
+          test "$(git -C "$RUNNER_TEMP/base" rev-parse HEAD)" = "$BASE"
+          status="$(git -C "$RUNNER_TEMP/base" status --porcelain --untracked-files=all --ignored)"
+          test -z "$status"
+          digest="$(tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu --exclude=./.git -C "$RUNNER_TEMP/base" -cf - . | sha256sum)"
+          printf 'digest=%s\n' "${digest%% *}" >> "$GITHUB_OUTPUT"
       - name: Run the named cases on this prefix
         id: bisect
         env:
@@ -200,6 +236,15 @@ jobs:
           cd "$RUNNER_TEMP/base"
           bun --no-env-file --config=/dev/null scripts/gate.ts bisect --root "$GITHUB_WORKSPACE" --base "$BASE" --cases "$CASES" --nonce "$NONCE" --out "$RUNNER_TEMP/record/bisect-record.json"
           printf 'artifact=%s-bisect-%s\n' "$RECORD" "${PREFIX:0:12}" >> "$GITHUB_OUTPUT"
+      - name: Verify the base's gate code is unchanged after the cases
+        id: verify
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          digest="$(tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu --exclude=./.git -C "$RUNNER_TEMP/base" -cf - . | sha256sum)"
+          test "${digest%% *}" = "$DIGEST"
       - name: Upload the prefix record
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -221,6 +266,19 @@ jobs:
           ref: ${{ needs.route.outputs.base }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Refuse unless this run's workflow file is the default branch's train-gate.yml (GST-254)
+        env:
+          RUN_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          case "$RUN_REF" in "refs/heads/$DEFAULT_BRANCH" | refs/heads/train/?*) ;; *) exit 1 ;; esac
+          test "$WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/train-gate.yml@$RUN_REF"
+          test "$WORKFLOW_SHA" = "$GITHUB_SHA"
+          ran="$(git rev-parse --verify "$WORKFLOW_SHA:.github/workflows/train-gate.yml")"
+          reviewed="$(git rev-parse --verify "refs/remotes/origin/$DEFAULT_BRANCH:.github/workflows/train-gate.yml")"
+          test "$ran" = "$reviewed"
       - name: Install Bun, checked against the release's SHA-256
         env:
           BUN_VERSION: 1.4.4

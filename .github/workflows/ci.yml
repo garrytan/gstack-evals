@@ -2,6 +2,8 @@
 # Actions are pinned to commit SHAs. Bun is downloaded at a pinned version and checked against the release's SHA-256.
 # workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19).
 # Later units add tests under tests/; `bun test` picks them up without a change here.
+# gstack is fetched at the commit sealed.yml pins, because tests/ci/sealed-workflow.test.ts runs sealed.yml's steps with
+# gstack's real sealed checker on scratch repositories.
 name: ci
 
 on:
@@ -32,6 +34,14 @@ jobs:
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Install (frozen lockfile)
         run: bun install --frozen-lockfile
+      - name: Fetch gstack at the pinned commit
+        env:
+          GSTACK_SHA: 61e201ec08bcf59163ef2d3a69a26e334a536c04 # gstack v1.91.295.0
+        run: |
+          git init -q "$RUNNER_TEMP/gstack"
+          git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"
+          git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
       - name: Typecheck
         run: bun run typecheck
       - name: Tests
