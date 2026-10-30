@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { JUDGE_ROUTE, judgeAnswer, judgeRequest } from "../../src/adapters/judge.ts";
+import { JUDGE_REASONING_EFFORT, JUDGE_ROUTE, judgeAnswer, judgeRequest } from "../../src/adapters/judge.ts";
 import { judgePrompt, parseJudgment, redact } from "../../src/grade/adjudicate.ts";
 
 describe("blinded adjudication", () => {
@@ -22,6 +22,8 @@ describe("blinded adjudication", () => {
       expect(JSON.stringify(body)).toContain("Grade this.");
     }
     expect(JUDGE_ROUTE).toEqual({ anthropic: "/v1/messages", openai: "/v1/responses", openrouter: "/v1/chat/completions" });
+    expect(judgeRequest("openai", "m", "Grade this.", undefined, JUDGE_REASONING_EFFORT)).toEqual({ model: "m", input: [{ role: "user", content: "Grade this." }], store: false, reasoning: { effort: "medium" } });
+    for (const provider of ["anthropic", "openrouter"] as const) expect(Object.keys(judgeRequest(provider, "m", "Grade this.", undefined, JUDGE_REASONING_EFFORT)).sort()).toEqual(["messages", "model"]);
     expect(judgeAnswer("anthropic", { content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "VERDICT: done" }] })).toBe("VERDICT: done");
     expect(judgeAnswer("openai", { output: [{ type: "reasoning" }, { type: "message", content: [{ type: "output_text", text: "VERDICT: not_done" }] }] })).toBe("VERDICT: not_done");
     expect(judgeAnswer("openrouter", { choices: [{ message: { content: "VERDICT: unknown" } }] })).toBe("VERDICT: unknown");

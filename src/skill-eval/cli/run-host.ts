@@ -38,8 +38,8 @@ import { openLocalLedger } from "../../runner/ledger/local.ts";
 import { ProxyControl, type BindRequest, type Binding, type Meter } from "../../runner/proxy/metering-proxy.ts";
 import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../../trial/cache.ts";
 import { judgePrompt, parseJudgment, redact } from "../../grade/adjudicate.ts";
-import { JUDGE_ROUTE, judgeDriver } from "../../adapters/judge.ts";
-import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_TIMEOUT_S, personaAnswer, personaPrompt, type PersonaAnswer } from "../../usersim/persona.ts";
+import { JUDGE_REASONING_EFFORT, JUDGE_ROUTE, judgeDriver } from "../../adapters/judge.ts";
+import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_REASONING_EFFORT, PERSONA_TIMEOUT_S, personaAnswer, personaPrompt, type PersonaAnswer } from "../../usersim/persona.ts";
 import { buildArmImage, checkImagePin, dockerRun, retainImage, retainTree, stateRoot } from "../../trial/image.ts";
 import { createTrialNetwork, recoverRun, removeTrialNetwork, startProxyContainer } from "../../trial/proxy.ts";
 import { dockerSandbox, type Sandbox } from "../../trial/sandbox.ts";
@@ -249,7 +249,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
       try {
         binding ??= await rig.bind({ cell: { run_id: o.runId, arm, task: s.task.id + "-usersim", model: o.usersimModel, trial: s.trial, attempt: s.round }, models: [provider + ":" + o.usersimModel], allowance_micros: allowance(o.usersimModel, USERSIM_ALLOWANCE) });
         const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
-        const run = await runTrial({ cell: { model: o.usersimModel, arm: USERSIM_ARM, round: s.round, trial: s.trial }, task: { id: s.task.id + "-usersim", prompt: personaPrompt(text, question) }, tasksDir: empty, sandbox: rig.judgeSandbox(), agent: judgeDriver({ provider, model: o.usersimModel, proxy, maxOutputTokens: PERSONA_MAX_OUTPUT_TOKENS }), dir: join(s.dir, "usersim", String(++answers)), timeoutS: PERSONA_TIMEOUT_S, network: rig.network });
+        const run = await runTrial({ cell: { model: o.usersimModel, arm: USERSIM_ARM, round: s.round, trial: s.trial }, task: { id: s.task.id + "-usersim", prompt: personaPrompt(text, question) }, tasksDir: empty, sandbox: rig.judgeSandbox(), agent: judgeDriver({ provider, model: o.usersimModel, proxy, maxOutputTokens: PERSONA_MAX_OUTPUT_TOKENS, effort: PERSONA_REASONING_EFFORT }), dir: join(s.dir, "usersim", String(++answers)), timeoutS: PERSONA_TIMEOUT_S, network: rig.network });
         return personaAnswer(run.record.termination, run.record.turns.at(-1));
       } catch {
         return { stop: { kind: "missing", code: "E_USERSIM" } };
@@ -278,7 +278,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
-    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}) });
+    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}) });
     const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros + (usersim ? await usersim.close() : 0);
@@ -382,7 +382,7 @@ export function verifierSha256(): string {
 /** sha256 over the adapter code a verdict on this host depends on. */
 export function adapterSha256(host: Host): string {
   const src = join(import.meta.dir, "..", "..");
-  const files = [host === "claude" ? "adapters/claude-code/driver.ts" : "adapters/codex/driver.ts", "adapters/host.ts", "adapters/calibration.ts", "grade/transcript.ts", "usersim/sim.ts", "usersim/classifier.ts", "usersim/persona.ts", "skill-eval/cli/run-host.ts"];
+  const files = [host === "claude" ? "adapters/claude-code/driver.ts" : "adapters/codex/driver.ts", "adapters/host.ts", "adapters/calibration.ts", "adapters/judge.ts", "trial/state-root.ts", "grade/transcript.ts", "usersim/sim.ts", "usersim/classifier.ts", "usersim/persona.ts", "skill-eval/cli/run-host.ts"];
   const h = createHash("sha256");
   for (const f of files) h.update(f + "\0" + readFileSync(join(src, f)) + "\0");
   return h.digest("hex");

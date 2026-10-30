@@ -1,6 +1,8 @@
 #!/bin/sh
-# A fake gstack-skill-start: the proactive value from the state root's config, and the session kind.
+# A fake gstack-skill-start: the proactive and routing_declined values from the state root's config, and the session kind.
 root=${GSTACK_STATE_ROOT:-${GSTACK_HOME:-$HOME/.gstack}}
 proactive=$(grep '^proactive:' "$root/config.yaml" 2>/dev/null | tail -1 | sed 's/^proactive: *//')
+routing=$(grep '^routing_declined:' "$root/config.yaml" 2>/dev/null | tail -1 | sed 's/^routing_declined: *//')
 echo "PROACTIVE: ${proactive:-unset}"
+echo "ROUTING_DECLINED: ${routing:-false}"
 echo "SESSION_KIND: ${GSTACK_SESSION_KIND:-interactive}"

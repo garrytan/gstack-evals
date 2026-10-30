@@ -2,7 +2,8 @@
 // GSTACK_STATE_ROOT, then GSTACK_HOME, names. Each work dir gets a .gstack-home, seeded after the task's setup and before
 // the baseline snapshot, so a setup that commits its tree never commits the markers. The seed is an onboarded user: the
 // first-run markers gstack-skill-start checks (gstack 1.91.x), and config with telemetry, update checks, artifact sync
-// and codex reviews off and proactive mode at the run's preregistered value. Both variables point at it through the env
+// and codex reviews off, the CLAUDE.md routing offer declined (routing_declined, so no base arm's preamble asks to add
+// routing rules or injects its routing instruction block), and proactive mode at the run's preregistered value. Both variables point at it through the env
 // allowlist; the agent's changes under it come across in the graded delta, since the import includes git-excluded files.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -18,7 +19,7 @@ export const ONBOARDING_MARKERS: readonly string[] = [
 export type Proactive = "core" | "all" | "off";
 
 export function seedConfig(proactive: Proactive): Record<string, string> {
-  return { telemetry: "off", update_check: "false", artifacts_sync_mode: "off", artifacts_sync_mode_prompted: "true", codex_reviews: "disabled", proactive };
+  return { telemetry: "off", update_check: "false", artifacts_sync_mode: "off", artifacts_sync_mode_prompted: "true", codex_reviews: "disabled", routing_declined: "true", proactive };
 }
 
 /**

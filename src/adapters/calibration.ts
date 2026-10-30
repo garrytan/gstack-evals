@@ -13,9 +13,9 @@
 // - CALIBRATION_EGRESS: the evaluator, not the model, runs an egress probe to a non-model host from an agent session
 //   on the trial network; it must fail.
 // - CALIBRATION_CONFIG: when an arm installs a gstack tree (a base or a gstack stack), one session runs that arm's
-//   gstack-skill-start through the host's shell. The output must carry the seeded proactive value and the session kind
-//   the adapters leave gstack to resolve (CONFIG_EXPECTED), and the command must show as a call that succeeded. With no
-//   such arm the check is null.
+//   gstack-skill-start through the host's shell. The output must carry the seeded proactive value, the seeded routing
+//   decline and the session kind the adapters leave gstack to resolve (CONFIG_EXPECTED), and the command must show as a
+//   call that succeeded. With no such arm the check is null.
 import type { ReasonCode } from "../errors/codes.ts";
 import type { Call } from "../grade/transcript.ts";
 import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
@@ -38,11 +38,12 @@ export const withSentinel = (skillMd: string, line: string): string => skillMd.r
 export type ProbeCheck = "skill" | "none" | "shell" | "config" | "usersim";
 
 /**
- * What a gstack base must print in a trial: proactive at the value the trial seeds (src/trial/state-root.ts), and the
- * session kind gstack 1.91.x resolves under each adapter's env, which sets no GSTACK_SESSION_KIND. A change in either
- * fails calibration, so a preregistration's assumption is checked again before any trial.
+ * What a gstack base must print in a trial: proactive and routing_declined at the values the trial seeds
+ * (src/trial/state-root.ts), and the session kind gstack 1.91.x resolves under each adapter's env, which sets no
+ * GSTACK_SESSION_KIND. A change in any of them fails calibration, so a preregistration's assumption is checked again
+ * before any trial.
  */
-export const CONFIG_EXPECTED: { proactive: string; session_kind: Record<Host, string> } = { proactive: "core", session_kind: { claude: "interactive", codex: "interactive" } };
+export const CONFIG_EXPECTED: { proactive: string; routing_declined: string; session_kind: Record<Host, string> } = { proactive: "core", routing_declined: "true", session_kind: { claude: "interactive", codex: "interactive" } };
 
 export interface Probe {
   check: ProbeCheck;
@@ -69,7 +70,7 @@ export function calibrationProbes(o: { host: Host; skill: string; arms: readonly
   );
   const first = o.arms[0]!.name;
   const gstack = o.arms.find((a) => a.gstack);
-  if (gstack) probes.push({ check: "config", arm: gstack.name, interactive: false, task: { id: "calibration-config", prompt: "Calibration check. Run this shell command and reply with only what it prints: ~/" + gstack.gstack + " --skill " + o.skill + " 2>&1 | grep -E '^(PROACTIVE|SESSION_KIND):'" } });
+  if (gstack) probes.push({ check: "config", arm: gstack.name, interactive: false, task: { id: "calibration-config", prompt: "Calibration check. Run this shell command and reply with only what it prints: ~/" + gstack.gstack + " --skill " + o.skill + " 2>&1 | grep -E '^(PROACTIVE|ROUTING_DECLINED|SESSION_KIND):'" } });
   probes.push({ check: "shell", arm: first, interactive: false, task: { id: "calibration-shell", prompt: "Calibration check. Run this shell command and reply with only what it prints: echo " + o.nonce + "-$((6*7))" } });
   if (o.interactive && o.host === "claude") {
     probes.push({ check: "usersim", arm: first, interactive: true, entry: { user: { replies: { approach: "Approach B" } } }, task: { id: "calibration-usersim", prompt: "Calibration check. Use the AskUserQuestion tool once to ask me \"Which approach should we take?\" with the options \"Approach A\" and \"Approach B\". Then reply with only the label I chose." } });
@@ -119,7 +120,7 @@ function probeProblem(run: ProbeRun, host: Host, nonce: string, sentinels: Reado
     return null;
   }
   if (probe.check === "config") {
-    for (const [key, value] of [["PROACTIVE", CONFIG_EXPECTED.proactive], ["SESSION_KIND", CONFIG_EXPECTED.session_kind[host]]] as const) {
+    for (const [key, value] of [["PROACTIVE", CONFIG_EXPECTED.proactive], ["ROUTING_DECLINED", CONFIG_EXPECTED.routing_declined], ["SESSION_KIND", CONFIG_EXPECTED.session_kind[host]]] as const) {
       const got = new RegExp("\\b" + key + ": *([A-Za-z0-9_.-]+)").exec(text)?.[1];
       if (got !== value) return "gstack-skill-start printed " + key + ": " + (got ?? "nothing") + ", not the pinned " + value;
     }
