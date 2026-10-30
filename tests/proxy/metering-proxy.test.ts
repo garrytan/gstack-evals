@@ -494,21 +494,49 @@ describe("streaming usage", () => {
     expect((await t.proxy.finalize(a.meter_id)).micros).toBe(10 * 2 + 4 * 10);
   });
 
-  test("a stream that breaks after its headers keeps its full reservation as unknown and leaks no key", async () => {
-    const start = `data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 100, output_tokens: 1 } } })}\n\n`;
-    const body = new ReadableStream({
-      start(c) {
-        c.enqueue(new TextEncoder().encode(start));
-        setTimeout(() => c.error(new Error(`connection reset carrying ${KEY}`)), 5);
-      },
-    });
-    const t = setup(() => new Response(body, { headers: { "content-type": "text/event-stream" } }));
-    const a = t.bind();
-    await (await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] })).text().catch(() => "");
-    const meter = await t.proxy.finalize(a.meter_id);
-    expect(meter).toMatchObject({ unknown: 1, undrained: 0, requests: 1 });
+  const brokenStream = (breakAt: Promise<void> | null) => () =>
+    new Response(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 100, output_tokens: 1 } } })}\n\n`));
+          const reset = () => c.error(new Error(`connection reset carrying ${KEY}`));
+          if (breakAt) void breakAt.then(reset);
+          else reset();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+
+  async function expectHeldAsUnknown(t: ReturnType<typeof setup>, meterId: string, clientError: string | null) {
+    expect(clientError).not.toBeNull();
+    expect(clientError).not.toContain(KEY);
+    const meter = await t.proxy.finalize(meterId);
+    const held = t.ledger.reservations.get("res_1")!;
+    expect(held.state).toBe("unknown");
+    expect(meter).toMatchObject({ unknown: 1, undrained: 0, requests: 1, micros: held.max_micros });
     expect(t.ledger.settles).toEqual([["res_1", { kind: "unknown" }]]);
     expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(KEY);
+    expect(t.journal().find(l => l.kind === "outcome")).toMatchObject({ reservation_id: "res_1", outcome: { kind: "unknown" }, reason: "the stream broke: connection reset carrying [redacted]" });
+  }
+
+  test("a stream that breaks after its headers keeps its full reservation as unknown and leaks no key", async () => {
+    let headersSeen!: () => void;
+    const t = setup(brokenStream(new Promise<void>(r => (headersSeen = r))));
+    const a = t.bind();
+    const res = await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] });
+    expect(res.status).toBe(200);
+    headersSeen();
+    await expectHeldAsUnknown(t, a.meter_id, await res.text().then(() => null, e => String(e)));
+  });
+
+  test("a stream already broken when the proxy reads it keeps its full reservation as unknown and leaks no key", async () => {
+    const t = setup(brokenStream(null));
+    const a = t.bind();
+    const clientError = await t
+      .call(a.slot, a.token, undefined, { model: "claude-opus-5-5", stream: true, max_tokens: 1000, messages: [] })
+      .then(res => res.text())
+      .then(() => null, e => String(e));
+    await expectHeldAsUnknown(t, a.meter_id, clientError);
   });
 
   test("a stream cut before its final usage event keeps its full reservation as unknown", async () => {
