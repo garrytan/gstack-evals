@@ -63,7 +63,8 @@ if (import.meta.main) {
     return { name, tar, sha256: got, ...extra };
   });
   const models = modelsCsv.split(",").map((spec) => {
-    const [id, only] = spec.split(":");
+    const [id, only, ...rest] = spec.split(":");
+    if (rest.length) throw new Error(`E_USAGE model spec ${spec}: use model:arm+arm, with one colon`);
     const m = cells.models.find((c: any) => c.id === id);
     if (!m) throw new Error(`unknown model ${id}`);
     if (!only) return m;
