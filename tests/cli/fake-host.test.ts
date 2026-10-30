@@ -1,9 +1,10 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fakeRecord, FakeHostError, loadScript, sampleMatch } from "../../src/adapters/_fake/host.ts";
 import { REPO_ROOT } from "../../src/cli.ts";
+import { finishCalibration } from "../../src/skill-eval/cli/run.ts";
 import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
 import { approvalRecord, collect, git, learnRepo, TMP } from "./helpers.ts";
 
@@ -111,5 +112,29 @@ describe("a run on the fake host", () => {
     const bad = collect();
     expect(await skillEvalCommand(call(join(TMP, "bad-run")), bad, { GSTACK_EVALS_FAKE_HOST: join(TMP, "no-such-script.json"), ...KEYS }, "preflight")).toBe(2);
     expect(bad.text().err).toContain("E_USAGE GSTACK_EVALS_FAKE_HOST is neither 1 nor a readable script file");
+  });
+  // Value: protects=--calibrate runs calibration and no trial: calibration.json holds each model's checks and the spend, no verdict.json is written, and --dry-run prices only the calibration sessions; a failed check exits 3 and names the model and check; fails_when=--calibrate runs trials, writes a verdict, prices the full matrix, or exits 0 on a failed check; why_new=--calibrate was U10's unbuilt flag; seam=skillEvalCommand on the fake host, finishCalibration, plan; no_claim=calibration on a real host, which tests/adapters/run-host.test.ts covers
+  test("--calibrate writes calibration.json and no verdict, and --dry-run prices only calibration", async () => {
+    const { call } = await setup();
+    const out = join(TMP, "calibrate-run");
+    const io = collect();
+    expect(await skillEvalCommand(call(out, ["--calibrate"]), io, { GSTACK_EVALS_FAKE_HOST: "1", ...KEYS })).toBe(0);
+    expect(io.text().out).toMatch(/CALIBRATION: pass for claude-opus-5-5  skill pass  none pass  shell pass  config n\/a  usersim (pass|n\/a)  egress pass/);
+    const record = JSON.parse(readFileSync(join(out, "calibration.json"), "utf8"));
+    expect(record).toMatchObject({ exit_code: 0, failures: [], spend: { committed: 0, unknown: 0, lease_id: null, cap: 100_000_000 } });
+    expect(Object.keys(record.calibration)).toEqual(["claude-opus-5-5"]);
+    expect(existsSync(join(out, "verdict.json"))).toBe(false);
+    const dry = collect();
+    expect(await skillEvalCommand(call(join(TMP, "calibrate-dry"), ["--calibrate", "--dry-run"]), dry, KEYS)).toBe(0);
+    expect(dry.text().out).toContain("calibration only (--calibrate), no trial sessions");
+    expect(dry.text().out).toContain("calibration claude-opus-5-5");
+    expect(dry.text().out).not.toContain("rerun stage");
+    const failed = collect();
+    const calibration = { m: { skill: true, none: true, shell: true, config: null, usersim: null, egress: false } };
+    const failure = { code: "CALIBRATION_EGRESS" as const, message: "an agent session on the trial network reached a non-model host", fix: "rerun with --calibrate" };
+    const failedOut = join(TMP, "calibrate-failed");
+    expect(finishCalibration({ input: { tasks: [], models: ["m"], arms: [], records: [], calibration, stops: [] }, spent: 0, stopped: false }, [failure], { committed: 0, unknown: 0, lease_id: null, cap: 1 }, failedOut, failed, false)).toBe(3);
+    expect(failed.text().out).toContain("CALIBRATION: fail for m  skill pass  none pass  shell pass  config n/a  usersim n/a  egress fail");
+    expect(JSON.parse(readFileSync(join(failedOut, "calibration.json"), "utf8")).failures).toEqual([failure]);
   });
 });

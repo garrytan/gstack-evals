@@ -26,7 +26,10 @@ import type { VerdictContext } from "../verdict/verdict.ts";
 import { effectiveLines, resolveCall, SKILL_EVAL_HELP, type Call } from "./call.ts";
 import { planLines } from "./dry-run.ts";
 import { runExample, type ExampleMode } from "./example.ts";
-import { FAKE_ADAPTER_SHA256, finishRun, runFake } from "./run.ts";
+import { FAKE_ADAPTER_SHA256, finishCalibration, finishRun, runFake } from "./run.ts";
+import { adapterSha256, dockerRig, hostReadiness, runOnHost, type HostRig } from "./run-host.ts";
+import { skillName } from "./arms.ts";
+import { isReasonCode } from "../../errors/codes.ts";
 import { flagHelp, parseFlags, SKILL_EVAL_FLAGS } from "./flags.ts";
 import { preflight, type PreflightReport, type Stop } from "./preflight.ts";
 
@@ -55,7 +58,7 @@ function hostCheck(call: Call, env: Env): () => Stop | null {
       }
     };
   }
-  return () => ({ code: "E_USAGE", message: "the " + call.host + " host adapter (U10) and the trial module (U9) are not built yet, so nothing can run on a real host" });
+  return () => hostReadiness(call, []);
 }
 
 export function errorContext(call: Call | null, env_names: string[], env: Env): ErrorContext {
@@ -153,7 +156,7 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
       io.out(json ? JSON.stringify({ preflight: "pass", steps: report.passed, warnings: report.warnings.map((w) => w.code + " " + w.message) }) : "PREFLIGHT: pass (" + report.passed.length + " steps; nothing was spent)");
       return 0;
     }
-    return runOnFakeHost(call, report, io, env, json);
+    return isFakeHost(env) ? runOnFakeHost(call, report, io, env, json) : await runOnRealHost(call, report, io, env, json);
   } catch (error) {
     return internal(io, call, error, report?.env_names ?? [], env, json, mode);
   }
@@ -166,12 +169,13 @@ function runOnFakeHost(call: Call, report: PreflightReport, io: Io, env: Env, js
   const tasks = verdictTasks(report.contract!).filter((t) => ids.has(t.id));
   let run;
   try {
-    run = runFake({ models: call.models, arms: call.arms.arms.map((a) => a.name), tasks, trials: call.trials, cap: call.spendCap, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, loadScript(env.GSTACK_EVALS_FAKE_HOST!));
+    run = runFake({ models: call.models, arms: call.arms.arms.map((a) => a.name), tasks, trials: call.trials, cap: call.spendCap, calibrateOnly: call.calibrate, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, loadScript(env.GSTACK_EVALS_FAKE_HOST!));
   } catch (error) {
     if (!(error instanceof FakeHostError)) throw error;
     io.err(codeLines("E_USAGE", ["skill-eval: " + error.message], HINT));
     return 2;
   }
+  if (call.calibrate) return finishCalibration(run, [], { committed: run.spent, unknown: 0, lease_id: null, cap: call.spendCap! }, call.out.path, io, json);
   const judged = tasks.some((t) => t.judge);
   const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
   const context: VerdictContext = {
@@ -184,6 +188,59 @@ function runOnFakeHost(call: Call, report: PreflightReport, io: Io, env: Env, js
     lock: report.lock ? { tasks_sha256: report.lock.lock.tasks.sha256, ext_sha256: report.lock.lock.ext?.sha256 ?? null, commit: report.lock.commit, post_hoc: false } : null,
     levels: null,
     spend: { ledger: call.ledger.path, ledger_record: call.record.path, committed: run.spent, reserved: 0, unknown: 0, cap: call.spendCap!, line_item: call.item, lease_id: null, approval: null, caps_history: [call.spendCap!] },
+    adjudication: { blinded: true, judge_model: judged ? call.judgeModel : null },
+    resumed_from: null,
+    wall_s: (Date.now() - started) / 1000,
+    rig: null,
+  };
+  return finishRun(run, context, call.out.path, io, json, { ...DEFAULT_OPTIONS, margin_points: call.margin });
+}
+
+/** After preflight on Claude Code or Codex: the Docker rig, calibration, the trials, then U6's verdict. */
+async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: Env, json: boolean): Promise<number> {
+  const started = Date.now();
+  const ids = new Set(report.tasks.map((t) => t.id));
+  const tasks = verdictTasks(report.contract!).filter((t) => ids.has(t.id));
+  const notReady = hostReadiness(call, tasks, report.contract!.ext?.sidecar?.tasks ?? {});
+  if (notReady) {
+    printStops(io, [notReady]);
+    return 2;
+  }
+  const holder = call.arms.arms.find((a) => a.kind === "overlay" && a.dir !== null);
+  const skill = call.arms.skill?.name ?? (holder && holder.kind === "overlay" && holder.dir ? skillName(holder.dir) : null);
+  const nonce = randomUUID().slice(0, 8);
+  let rig: HostRig;
+  try {
+    rig = dockerRig(call, { env, skill, nonce });
+  } catch (error) {
+    const message = String((error as Error)?.message ?? error);
+    const code = message.split(":")[0]!;
+    if (!isReasonCode(code)) throw error;
+    printStops(io, [{ code, message: message.slice(code.length + 1).trim() }]);
+    return 2;
+  }
+  let run;
+  let spend: Awaited<ReturnType<HostRig["close"]>>;
+  try {
+    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap: call.spendCap, runId: call.runId, out: call.out.path, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, calibrateOnly: call.calibrate, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
+  } finally {
+    spend = await rig.close();
+  }
+  for (const f of run.calibrationFailures) io.err(codeLines(f.code, [f.message], f.fix));
+  if (call.calibrate) return finishCalibration(run, run.calibrationFailures, { committed: spend.committed, unknown: spend.unknown, lease_id: spend.lease_id, cap: call.spendCap! }, call.out.path, io, json);
+  const judged = tasks.some((t) => t.judge);
+  const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
+  const pins = JSON.parse(readFileSync(join(REPO_ROOT, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;
+  const context: VerdictContext = {
+    verdict_id: call.runId,
+    harness_version: version(),
+    trials: call.trials,
+    effective: { noise_floor: call.noiseFloor, parallel: call.parallel, timeout_s: call.timeoutS, judge_model: judged ? call.judgeModel : null, isolation: call.isolation, policy_sha256: call.policy.sha256, base, skill },
+    harness: { host: call.host, host_version: pins[call.host] ?? "unpinned", gstack_evals_version: version(), adapter_sha256: adapterSha256(call.host), image_digest: rig.imageDigest, base },
+    arm_trees: Object.fromEntries(call.arms.arms.flatMap((a) => (a.kind === "overlay" && a.dir ? [[a.name, treeSha256(readSkillFiles(a.dir))]] : []))),
+    lock: report.lock ? { tasks_sha256: report.lock.lock.tasks.sha256, ext_sha256: report.lock.lock.ext?.sha256 ?? null, commit: report.lock.commit, post_hoc: false } : null,
+    levels: null,
+    spend: { ledger: call.ledger.path, ledger_record: call.record.path, committed: spend.committed, reserved: 0, unknown: spend.unknown, cap: call.spendCap!, line_item: call.item, lease_id: spend.lease_id, approval: null, caps_history: [call.spendCap!] },
     adjudication: { blinded: true, judge_model: judged ? call.judgeModel : null },
     resumed_from: null,
     wall_s: (Date.now() - started) / 1000,

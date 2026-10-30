@@ -200,15 +200,15 @@ describe("preflight's ledger, key and host steps", () => {
     expect(r.out + r.err).not.toContain("sk-should-never-print");
   });
 
-  // Value: protects=an interactive task on --host codex is E_INTERACTIVE_HOST naming the ids and both fixes; a real host stops after preflight's own checks; fails_when=codex accepts an interactive task or a real host passes; why_new=new step; seam=the host adapters U10 builds; no_claim=none beyond protects
-  test("an interactive task on codex is E_INTERACTIVE_HOST; a real host is not built yet", async () => {
+  // Value: protects=an interactive task on --host codex is E_INTERACTIVE_HOST naming the ids and both fixes; a real host refuses gstack-base arms after preflight's own checks, naming GST-272; fails_when=codex accepts an interactive task or a gstack-base arm reaches a real host; why_new=new step, then U10's readiness check; seam=hostReadiness; no_claim=none beyond protects
+  test("an interactive task on codex is E_INTERACTIVE_HOST; a real host refuses a gstack base until GST-272", async () => {
     const { repo, args } = await lockedLearn();
     writeFileSync(join(repo.root, "test/fixtures/skill-evals/learn/tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { "prune-stale": { interactive: true } } }));
     const r = await run(args("codex", "gpt-6.1-sol"));
     expect(r.err).toContain("E_INTERACTIVE_HOST --host codex runs only non-interactive tasks in v1; these tasks are declared interactive: prune-stale");
     expect(r.err).toContain("E_INTERACTIVE_HOST fix: Use --host claude, or --tasks-only show,search,stats,export,add,prune-conflict,cross-project,empty,no-code-change");
     const real = await run(args("claude", "claude-opus-5-5"), KEYS);
-    expect(real.err).toContain("E_USAGE the claude host adapter (U10) and the trial module (U9) are not built yet");
+    expect(real.err).toContain("a gstack base, stack or placebo install on a real host, which lands with GST-272");
   });
 
   // Value: protects=brief item 3: preflight flags a task that sends a PDF; fails_when=a PDF in the prompt or fixtures passes silently; why_new=U3 accepted inline base64 PDFs as won't-fix; seam=none; no_claim=how much the reservation is off

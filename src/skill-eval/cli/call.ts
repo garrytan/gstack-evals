@@ -36,6 +36,8 @@ export interface Call {
   /** Micro-dollars; null when --spend-cap was not given. */
   spendCap: number | null;
   dryRun: boolean;
+  /** --calibrate: run the calibration checks and no trial. */
+  calibrate: boolean;
   tasksOnly: string[] | null;
   /** The resolved arms, before2 included when the noise floor is on, in the order before, before2, after, none, placebo, bare. */
   arms: ResolvedArms;
@@ -154,6 +156,7 @@ export function resolveCall(parsed: ParsedFlags, env: Env = process.env, home = 
     trials,
     spendCap,
     dryRun: v.has("--dry-run"),
+    calibrate: v.has("--calibrate"),
     tasksOnly,
     arms,
     noiseFloor,

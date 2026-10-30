@@ -3,9 +3,11 @@
 // started, so a cap stop keeps only complete paired cells (CAP_STOP). U9's trial module and U10's adapters replace the
 // fake records with real sessions; the verdict path stays the same.
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Io } from "../../cli.ts";
 import { fakeRecord, HOST_MODULE, type FakeScript } from "../../adapters/_fake/host.ts";
+import type { CalibrationFailure } from "../../adapters/calibration.ts";
 import { usd } from "../../runner/ledger/money.ts";
 import type { CalibrationResult, TrialRecord } from "../../types.ts";
 import { decide, DEFAULT_OPTIONS, rerunPlan, type Stop, type VerdictInput, type VerdictOptions } from "../verdict/gates.ts";
@@ -21,6 +23,8 @@ export interface RunPlan {
   /** Micro-dollars; null for no cap. */
   cap: number | null;
   gate?: GateEvidence;
+  /** --calibrate: the calibration result and no trial. */
+  calibrateOnly?: boolean;
 }
 
 export interface FakeRun {
@@ -51,7 +55,7 @@ export function runFake(plan: RunPlan, script: FakeScript): FakeRun {
   };
   const calibration: CalibrationResult = { skill: true, none: plan.arms.includes("none") ? true : null, shell: true, config: null, usersim: plan.tasks.some((t) => t.interactive) ? true : null, egress: true };
   const input: VerdictInput = { tasks: plan.tasks, models: plan.models, arms: plan.arms, records, calibration: Object.fromEntries(plan.models.map((m) => [m, calibration])), stops, ...(plan.gate ? { gate: plan.gate } : {}) };
-  if (round(1) && rerunPlan(input).length) round(2);
+  if (!plan.calibrateOnly && round(1) && rerunPlan(input).length) round(2);
   return { input, spent, stopped: stops.length > 0 };
 }
 
@@ -76,4 +80,33 @@ export function finishRun(run: FakeRun, context: VerdictContext, out: string, io
   if (run.stopped && context.spend && !json) io.out("STOP: reason=budget_exhausted spent=" + usd(run.spent) + " reserved=" + usd(context.spend.reserved) + " unknown=" + context.spend.unknown + " cap=" + usd(context.spend.cap));
   io.out(json ? JSON.stringify(verdict) : verdictLines(verdict, path).join("\n"));
   return decision.exit_code;
+}
+
+export interface CalibrationSpend {
+  /** Micro-dollars. */
+  committed: number;
+  unknown: number;
+  lease_id: string | null;
+  /** Micro-dollars. */
+  cap: number;
+}
+
+/** --calibrate: writes <out>/calibration.json (each model's checks, the failures and the spend) and prints one line per model, or the record with --json. No verdict is written. Exit 3 when a check failed, 2 on a cap stop, else 0. */
+export function finishCalibration(run: FakeRun, failures: readonly CalibrationFailure[], spend: CalibrationSpend, out: string, io: Io, json: boolean): number {
+  const exit_code = failures.length ? 3 : run.stopped ? 2 : 0;
+  const record = { exit_code, calibration: run.input.calibration, failures, spend };
+  mkdirSync(out, { recursive: true });
+  const path = join(out, "calibration.json");
+  writeFileSync(path, JSON.stringify(record, null, 2) + "\n");
+  if (json) {
+    io.out(JSON.stringify(record));
+    return exit_code;
+  }
+  const mark = (v: boolean | null) => (v === null ? "n/a" : v ? "pass" : "fail");
+  if (run.stopped) io.out("STOP: reason=budget_exhausted spent=" + usd(spend.committed) + " reserved=$0.00 unknown=" + spend.unknown + " cap=" + usd(spend.cap));
+  io.out([
+    ...Object.entries(run.input.calibration).map(([model, c]) => "CALIBRATION: " + (Object.values(c).includes(false) ? "fail" : "pass") + " for " + model + "  " + Object.entries(c).map(([check, v]) => check + " " + mark(v)).join("  ")),
+    "calibration.json: " + path,
+  ].join("\n"));
+  return exit_code;
 }

@@ -36,7 +36,7 @@ export const SKILL_EVAL_FLAGS: readonly FlagSpec[] = [
   { name: "--spend-cap", kind: "usd", default: null, summary: "The run's spend limit in dollars, required on any call that can spend; at most the approved cap on record.", owner: "U4", built: true },
   { name: "--out", kind: "path", default: null, default_rule: "~/.capy/work/gstack-evals/runs/<run id> on Capy, else $XDG_STATE_HOME/gstack-evals/runs/<run id> (~/.local/state when unset); never the OS temp dir or the tasks repo", summary: "The run directory: verdict.json, error.json, progress.json and runs/.", owner: "U7", built: true },
   { name: "--dry-run", kind: "switch", default: false, summary: "Print the matrix, the worst case in parts, parallelism and an ETA; spend nothing.", owner: "U7", built: true },
-  { name: "--calibrate", kind: "switch", default: false, summary: "Run only the calibration checks.", owner: "U10", built: false },
+  { name: "--calibrate", kind: "switch", default: false, summary: "Run only the calibration checks.", owner: "U10", built: true },
   { name: "--tasks-only", kind: "list", default: null, summary: "Run only these task ids.", owner: "U7", built: true },
   { name: "--base", kind: "string", default: null, default_rule: "inferred from a rendered gstack skill folder (<root>/<skill>/SKILL.md beside <root>/bin/gstack-skill-start)", summary: "gstack@<sha>: overlay the arms on this gstack tree; needs --skill.", owner: "U7", built: true },
   { name: "--skill", kind: "string", default: null, default_rule: "inferred with --base from a rendered gstack skill folder", summary: "The target skill's name inside the base.", owner: "U7", built: true },
