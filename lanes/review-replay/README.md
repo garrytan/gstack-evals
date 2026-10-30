@@ -89,6 +89,17 @@ catalog/catalog.ts loads a catalog dir. `loadCatalog(dir)` returns the valid cas
 
 catalog/public/ holds two seeds from panel cases 1 and 2, with full shas resolved from gstack. Each has its fix commit as a decoy with a null audit, since nobody has audited them. Each shelf life starts at the fix PR's creation date from GitHub's API, and both are short: a short-shelf-life case counts only for models released before the PR first appeared. Case 1's deserved severity is CRITICAL, because the panel's evidence says the regression would fail a paid test case. Case 2's is null: every reviewer rated it INFORMATIONAL and the panel names no failing test or production break. Answer-key audits are null until U14 audits them. U14 adds more cases to public/.
 
+### Mining
+
+scripts/mine-review-cases.ts (U14) grows public/ from gstack and gbrain fixes merged after 2026-10-17, under rules fixed before any case was mined (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md). It makes no model call.
+
+    bun scripts/mine-review-cases.ts mine --clones <dir>   # git history and cached GitHub API reads to public/mining/mined.json
+    bun scripts/mine-review-cases.ts next                  # the candidates the hand audit reads next, in audit order
+    bun scripts/mine-review-cases.ts show <key> --clones <dir>
+    bun scripts/mine-review-cases.ts build [--check]       # cases, public/audit/<id>.json and public/mining/drops.json
+
+mine needs one clone per repo under --clones, named after the repo (`git clone --filter=blob:limit=200k`), and gstack's bin/gstack-diff-scope (--gstack, default ~/.local/share/gstack). It caches every API response under --cache and sleeps when the rate limit runs low. build reads only mined.json and public/mining/hand.json, so `build --check` runs without the network. A candidate is a fix whose diff locates the defect by git blame: a later fix PR (escaped) or a review-fix commit on the PR itself (review-caught). Its decoy is the fix, audited by searching every later commit for a change to the lines the fix added.
+
 ## The token table
 
 tables/review-tokens.json holds measured tokens per review dispatch, one row per model, reviewer role and effort (full or light). Each row records provider_effort, input_tokens and output_tokens (median and p90, output counting reasoning tokens), n, source_run_ids, as_of and its trials. A row is flagged when n is under 10 or as_of is more than 30 days old. Only the two Opus 5.5 specialist rows exist so far, at n 6, so both are flagged.

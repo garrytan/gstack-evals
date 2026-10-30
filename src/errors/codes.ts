@@ -525,6 +525,33 @@ export const CODES = {
     resumable: false,
     owner: "U15",
   },
+  E_MINE_SOURCE: {
+    exit: 2,
+    meaning: "scripts/mine-review-cases.ts could not read a source it mines: a repo clone is missing, a git command failed, a commit stayed missing after fetching its PR's ref, gstack's bin/gstack-diff-scope failed, or the GitHub API answered something other than 200 or 404 after its retries.",
+    fix: "Read the message. Clone a missing repo with git clone --filter=blob:limit=200k, fetch the named ref, or wait for the API's rate limit to reset, then run mine again. Cached API responses under --cache are reused, so a rerun reads only what is missing.",
+    side_effects: "None in the repo: mined.json is written only when mining finishes. API responses fetched so far stay in the --cache dir.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U14",
+  },
+  E_MINE_HAND: {
+    exit: 2,
+    meaning: "The hand audits in the catalog's mining/hand.json cannot be used: the file is unreadable, it audits a candidate mined.json does not hold, or an audit is incomplete (no summary or severity on a confirmed case, a line outside the located lines, no history where the script could not settle it, or no verdict on a decoy whose lines a later commit changed).",
+    fix: "Fix the named audits in hand.json and run build again. Mark what the evidence cannot settle as needs_human_check with its reason rather than guessing.",
+    side_effects: "None: build writes nothing.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U14",
+  },
+  E_MINE_STALE: {
+    exit: 2,
+    meaning: "A generated catalog file differs from what scripts/mine-review-cases.ts build computes from mining/mined.json and mining/hand.json, a file in the catalog is not one build writes, or mined.json is missing or unreadable.",
+    fix: "Run build without --check, review the diff, and commit it only if the change is intended. Restore a missing mined.json from git, or run mine again.",
+    side_effects: "None: --check writes nothing.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U14",
+  },
 
   CALIBRATION_SKILL: {
     exit: 3,
