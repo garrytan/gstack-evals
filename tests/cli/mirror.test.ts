@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIRROR_FILES, mirrorRun, SCRUB_KEYS } from "../../src/skill-eval/cli/mirror.ts";
+import { resolveCall } from "../../src/skill-eval/cli/call.ts";
+import { parseFlags, SKILL_EVAL_FLAGS } from "../../src/skill-eval/cli/flags.ts";
+import { MIRROR_FILES, MirrorAliasError, mirrorRun, SCRUB_KEYS } from "../../src/skill-eval/cli/mirror.ts";
+import { mirrorReceipts } from "../../src/skill-eval/cli/skill-eval.ts";
+import { collect, tree } from "./helpers.ts";
 
 describe("--mirror's scrub", () => {
   // Value: protects=a mirror copies only the top-level verdict and receipts, drops each SCRUB_KEYS value (transcript turns, machine paths, meter, lease and container ids), rewrites the out dir, named roots, other machine paths and meter ids inside any string, drops a journal line that does not parse, and creates nothing for an out dir with no record; fails_when=a transcript, a path under the out dir, a meter id or a file under runs/ or proxy/ reaches the mirror; why_new=GST-273 (U10b builds --mirror); seam=mirrorRun; no_claim=a real run's files (tests/adapters/run-host.test.ts covers one)
@@ -51,7 +55,7 @@ describe("--mirror's scrub", () => {
     mkdirSync(out);
     writeFileSync(join(out, "cells.ndjson"), JSON.stringify({ record: { turns: ["kept in the source"] } }) + "\n");
     symlinkSync(out, join(root, "alias"));
-    expect(() => mirrorRun(out, join(root, "alias"))).toThrow("E_USAGE");
+    expect(() => mirrorRun(out, join(root, "alias"))).toThrow(MirrorAliasError);
     expect(readFileSync(join(out, "cells.ndjson"), "utf8")).toContain("kept in the source");
     const dest = join(root, "public");
     writeFileSync(join(out, "verdict.json"), JSON.stringify({ verdict: "pass" }));
@@ -62,5 +66,26 @@ describe("--mirror's scrub", () => {
     expect(mirrorRun(next, dest).length).toBe(1);
     expect(readdirSync(dest)).toEqual(["calibration.json"]);
     expect(existsSync(join(dest, "verdict.json"))).toBe(false);
+  });
+
+  // Value: protects=a mirror directory that became the out directory after the call resolved (a symlink made mid-run) stops the CLI's run layer with a coded E_USAGE line and a failed call, and writes nothing; fails_when=mirrorRun's alias refusal reaches the CLI uncoded, where skill-eval reports it as E_INTERNAL; why_new=Capy's review of #69; seam=mirrorReceipts over resolveCall; no_claim=the refusal before the run (tests/cli/call.test.ts)
+  test("an alias found at mirror time is a coded E_USAGE stop", () => {
+    const root = mkdtempSync(join(tmpdir(), "gse-mirror-stop-"));
+    const out = join(root, "out");
+    mkdirSync(out);
+    writeFileSync(join(out, "cells.ndjson"), JSON.stringify({ record: { turns: ["kept in the source"] } }) + "\n");
+    const skill = tree({ "SKILL.md": "# demo\n\nNEVER guess.\n" });
+    const parsed = parseFlags(["--arms", "before=" + skill + ",after=" + skill + ",none", "--tasks", join(skill, "tasks.json"), "--host", "claude", "--model", "claude-opus-5-5", "--out", out, "--mirror", join(root, "public")], SKILL_EVAL_FLAGS, {});
+    if (typeof parsed === "string") throw new Error(parsed);
+    const call = resolveCall(parsed, {}, tree({ ".keep": "" }));
+    if ("code" in call) throw new Error(call.code + " " + call.message);
+    symlinkSync(out, join(root, "public"));
+    const io = collect();
+    expect(mirrorReceipts(call, io, false)).toBe(false);
+    const err = io.text().err;
+    expect(err).toStartWith("E_USAGE skill-eval: --mirror: the mirror directory " + join(root, "public") + " is the out directory " + out);
+    expect(err.split("\n").every((line) => line.startsWith("E_USAGE "))).toBe(true);
+    expect(io.text().out).toBe("");
+    expect(readFileSync(join(out, "cells.ndjson"), "utf8")).toContain("kept in the source");
   });
 });

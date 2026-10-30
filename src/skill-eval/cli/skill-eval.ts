@@ -37,7 +37,7 @@ import { skillName } from "./arms.ts";
 import { isReasonCode } from "../../errors/codes.ts";
 import { flagHelp, parseFlags, SKILL_EVAL_FLAGS } from "./flags.ts";
 import { preflight, type PreflightReport, type Stop } from "./preflight.ts";
-import { mirrorRun } from "./mirror.ts";
+import { MirrorAliasError, mirrorRun } from "./mirror.ts";
 import { homedir, tmpdir } from "node:os";
 
 type Env = Record<string, string | undefined>;
@@ -168,19 +168,26 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
       return 2;
     }
     const exit = isFakeHost(env) ? runOnFakeHost(call, report, io, env, json) : await runOnRealHost(call, report, io, env, json);
-    mirrorReceipts(call, io, json);
-    return exit;
+    return mirrorReceipts(call, io, json) ? exit : 2;
   } catch (error) {
     return internal(io, call, error, report?.env_names ?? [], env, json, mode);
   }
 }
 
-/** --mirror: the run's verdict and receipts, scrubbed of transcripts, machine paths and meter ids, copied to the mirror directory. */
-export function mirrorReceipts(call: Call, io: Io, json: boolean): void {
-  if (!call.mirror) return;
+/** --mirror: the run's verdict and receipts, scrubbed of transcripts, machine paths and meter ids, copied to the mirror directory. False when the mirror directory is the out directory, after printing E_USAGE. */
+export function mirrorReceipts(call: Call, io: Io, json: boolean): boolean {
+  if (!call.mirror) return true;
   const roots = [dirname(resolve(call.tasks)), call.ledger.path, call.record.path, REPO_ROOT, homedir(), tmpdir(), process.cwd(), ...call.arms.arms.flatMap((a) => (a.kind === "overlay" && a.dir ? [a.dir] : []))];
-  const written = mirrorRun(call.resume?.dir ?? call.out.path, call.mirror, roots);
+  let written: string[];
+  try {
+    written = mirrorRun(call.resume?.dir ?? call.out.path, call.mirror, roots);
+  } catch (error) {
+    if (!(error instanceof MirrorAliasError)) throw error;
+    io.err(codeLines("E_USAGE", ["skill-eval: --mirror: " + error.message], HINT));
+    return false;
+  }
   if (!json) io.out("mirror: " + written.length + " files in " + call.mirror);
+  return true;
 }
 
 /** After preflight, which stops a real host until U9 and U10 land: the trials on the fake host, then U6's verdict. */

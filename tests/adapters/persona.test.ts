@@ -14,7 +14,9 @@ const said = (text: string): Msg => ({ type: "assistant", message: { content: [{
 const done: Msg = { type: "result", subtype: "success", num_turns: 1, usage: { input_tokens: 1, output_tokens: 1 } };
 const ASK = { questions: [{ question: "Which approach should we take?", header: "Approach", options: [{ label: "Approach A", description: "" }, { label: "Approach B", description: "the smaller change" }] }] };
 const askUse: Msg = { type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_q", name: "AskUserQuestion", input: ASK }] }, parent_tool_use_id: null };
-const answered = (text: string, error = false): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_q", content: text, is_error: error }] }, parent_tool_use_id: null });
+const answered = (text: string, error = false, id = "toolu_q"): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: text, is_error: error }] }, parent_tool_use_id: null });
+const DB_ASK = { questions: [{ question: "Which database should we use?", header: "Database", options: [{ label: "Postgres", description: "" }, { label: "SQLite", description: "" }] }] };
+const bothAsks: Msg = { type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_q", name: "AskUserQuestion", input: ASK }, { type: "tool_use", id: "toolu_r", name: "AskUserQuestion", input: DB_ASK }] }, parent_tool_use_id: null };
 
 /** A stand-in for the Agent SDK's query: each user message the driver sends gets the next scripted turn; a turn may call the driver's options first. */
 function stub(turns: ((options: Msg) => Promise<Msg[]>)[], sent: string[]) {
@@ -77,6 +79,17 @@ describe("the persona's free-form source in the Claude Code adapter", () => {
     }], { freeform: async (_p, q) => (asked.push(q), { text: "Approach B, please." }) });
     expect(asked).toEqual(["Which approach should we take?\n- Approach A\n- Approach B: the smaller change"]);
     expect(answers).toEqual({ "Which approach should we take?": "Approach B, please." });
+  });
+
+  // Value: protects=two AskUserQuestion calls from one assistant message, answered by the persona at the same time, keep the session's clock stopped until the last answer returns; fails_when=the first answer to return restarts the clock while the second is pending, so a healthy cell ends as a timeout; why_new=Capy's review of #69; seam=claudeCodeDriver's freeform pause over a stand-in SDK that calls canUseTool twice without awaiting the first; no_claim=whether the CLI sends two permission requests at once
+  test("two persona answers in flight at once keep the clock stopped until the last one returns", async () => {
+    // gstack-timing-ok: the first answer takes a tenth of the session's limit and the second twice the limit, so a clock the first answer restarts ends the cell as a timeout; the stand-in session's own work takes milliseconds
+    const overlap = await drive([async (options) => {
+      await Promise.all([options.canUseTool("AskUserQuestion", ASK, { toolUseID: "toolu_q" }), options.canUseTool("AskUserQuestion", DB_ASK, { toolUseID: "toolu_r" })]);
+      return [bothAsks, answered("answered"), answered("answered", false, "toolu_r"), said("FINAL: B on Postgres."), done];
+    }], { timeoutMs: 1_000, freeform: async (_p, q) => (await Bun.sleep(q.startsWith("Which approach") ? 100 : 2_000), { text: "B, on Postgres." }) });
+    expect(overlap.outcome.termination).toEqual({ kind: "completed" });
+    expect(overlap.events.filter((e) => e.kind === "ask").length).toBe(2);
   });
 });
 

@@ -15,7 +15,8 @@
 //   first. After the session, an AskUserQuestion whose result canUseTool never gave (an answer, or another hook's deny
 //   reason) ends the cell as a missing cell, E_APPROVAL_BYPASS, unless it was a cap stop: no route answers a question
 //   without the simulator.
-// - The session's clock stops while the persona's free-form source answers, so usersim latency never times the arm out.
+// - The session's clock stops while the persona's free-form source answers, from the first pending answer until the last
+//   one returns, so usersim latency never times the arm out.
 // - A question the sidecar does not answer goes to the persona's free-form source when the run passes one
 //   (src/usersim/persona.ts); a source that cannot answer ends the cell with its termination.
 // - After each turn whose last text ends in a question, the simulator's reply goes in as the next user message; the
@@ -189,13 +190,23 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       };
       let deadline = Date.now() + timeoutMs;
       let timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs);
+      let pauses = 0;
+      let paused = 0;
       const persona = o.freeform;
       const freeform = persona && (async (text: string, question: string) => {
-        clearTimeout(timer);
-        const paused = Date.now();
-        const a = await persona(text, question);
-        deadline += Date.now() - paused;
-        timer = setTimeout(() => end({ kind: "timeout" }), Math.max(0, deadline - Date.now()));
+        if (pauses++ === 0) {
+          clearTimeout(timer);
+          paused = Date.now();
+        }
+        let a: Awaited<ReturnType<typeof persona>>;
+        try {
+          a = await persona(text, question);
+        } finally {
+          if (--pauses === 0) {
+            deadline += Date.now() - paused;
+            timer = setTimeout(() => end({ kind: "timeout" }), Math.max(0, deadline - Date.now()));
+          }
+        }
         if ("text" in a) return a.text;
         end(a.stop);
         return null;

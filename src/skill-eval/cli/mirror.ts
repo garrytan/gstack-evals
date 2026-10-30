@@ -12,6 +12,9 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
+/** A mirror directory that resolves to the out directory; the CLI prints it as E_USAGE. */
+export class MirrorAliasError extends Error {}
+
 export const MIRROR_FILES = ["verdict.json", "calibration.json", "run.json", "progress.json", "cells.ndjson", "adjudication.ndjson", "usersim.ndjson"] as const;
 
 /** Keys whose values a mirror drops, and what each holds. */
@@ -55,7 +58,7 @@ function scrubValue(value: unknown, roots: readonly [string, string][]): unknown
 
 /** Writes the scrubbed records from out into dest and returns the paths written; dest is created only when out holds a record. */
 export function mirrorRun(out: string, dest: string, roots: readonly string[] = []): string[] {
-  if (canonical(dest) === canonical(out)) throw new Error("E_USAGE: the mirror directory " + dest + " is the out directory " + out);
+  if (canonical(dest) === canonical(out)) throw new MirrorAliasError("the mirror directory " + dest + " is the out directory " + out);
   const marks: [string, string][] = [...new Set([resolve(out), canonical(out)])].map((p) => [p, "<out>"]);
   for (const r of roots) for (const p of new Set([resolve(r), canonical(r)])) if (p !== "/" && !marks.some(([m]) => m === p)) marks.push([p, "<path>"]);
   marks.sort((a, b) => b[0].length - a[0].length);
