@@ -15,7 +15,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, relative, sep } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 import { recipeHash, recipeInputs, RIG_ROOT, TRIAL_DOCKERFILE } from "../rig/recipe.ts";
 import { dirTreeSha256 } from "./cache.ts";
@@ -129,7 +129,13 @@ export function fixtureDigests(tasksDir: string): Map<string, string> {
   return out;
 }
 
-export const FIXTURE_PATH = /(^|\/)skill-evals(\/|$)/;
+/** An eval fixture path: any segment spelled like skill-evals (skill_evals, SkillEval, Skill-Evals and so on). */
+export const FIXTURE_PATH = /(^|\/)skill[-_]?evals?(\/|$)/i;
+
+/** Directories under HOME where the host CLIs keep their own state; a layer leaves them writable by the agent's uid. */
+export const WRITABLE = [".claude", ".codex", ".local", ".local/share"];
+
+const AGENT_HOME = "/home/agent";
 
 /** Files in an image that are eval fixtures: a skill-evals path, or bytes equal to a file in the tasks directory. */
 export function imageFixtures(image: string, tasksDir: string, run: Runner = dockerRun, docker = "docker"): { hits: string[] } | ImageStop {
@@ -155,10 +161,14 @@ export interface ArmLayer {
   dest: string;
 }
 
-/** Copies a layer's tree into the build context, dropping .git, skill-evals paths and files with a fixture's bytes; modes become 0755 or 0644 so the agent's uid can read every file, and a sticky directory stays 1777. */
-function stage(src: string, to: string, digests: Map<string, string>, dropped: string[], rel = ""): void {
+/**
+ * Copies a layer's tree into the build context, dropping .git, eval fixture paths and files with a fixture's bytes. Modes
+ * come from policy, never from the source: directories at WRITABLE paths under the agent's HOME become 1777, every other
+ * directory 0755, and files 0755 or 0644, so the agent's uid can read every file and write only where the CLIs keep state.
+ */
+function stage(src: string, to: string, at: string, digests: Map<string, string>, dropped: string[], rel = ""): void {
   mkdirSync(to, { recursive: true });
-  chmodSync(to, lstatSync(src).mode & 0o1000 ? 0o1777 : 0o755);
+  chmodSync(to, WRITABLE.some((w) => posix.join(AGENT_HOME, w) === at) ? 0o1777 : 0o755);
   for (const name of readdirSync(src).sort()) {
     const path = join(src, name);
     const relPath = rel ? rel + "/" + name : name;
@@ -167,7 +177,7 @@ function stage(src: string, to: string, digests: Map<string, string>, dropped: s
       dropped.push(relPath);
       continue;
     }
-    if (st.isDirectory()) stage(path, join(to, name), digests, dropped, relPath);
+    if (st.isDirectory()) stage(path, join(to, name), posix.join(at, name), digests, dropped, relPath);
     else if (st.isFile() && st.size > 0 && digests.has(createHash("sha256").update(readFileSync(path)).digest("hex"))) dropped.push(relPath);
     else {
       cpSync(path, join(to, name), { verbatimSymlinks: true, preserveTimestamps: false });
@@ -195,7 +205,7 @@ export function buildArmImage(opts: { base: string; layers: ArmLayer[]; tasksDir
   const dropped: string[] = [];
   try {
     mkdirSync(context, { recursive: true });
-    opts.layers.forEach((layer, i) => stage(layer.src, join(context, "layer-" + i), digests, dropped));
+    opts.layers.forEach((layer, i) => stage(layer.src, join(context, "layer-" + i), posix.normalize(layer.dest), digests, dropped));
     const tree = dirTreeSha256(context);
     const id = createHash("sha256").update([base.id, tree, ...opts.layers.map((l) => l.dest)].join("\n")).digest("hex");
     const tag = ARM_REPO + ":" + id.slice(0, 16);

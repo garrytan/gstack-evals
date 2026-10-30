@@ -1,12 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installArms, InstallError, localInstaller, stackTree, WRITABLE, type ArmInstall } from "../../src/arms/install.ts";
+import { installArms, InstallError, localInstaller, stackInstall, stackTree, WRITABLE, type ArmInstall } from "../../src/arms/install.ts";
 import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
+import { FIXTURE_PATH } from "../../src/trial/image.ts";
 import type { Host } from "../../src/types.ts";
-import { commitAll } from "../cli/helpers.ts";
-import { fakeStack } from "../adapters/stack.ts";
+import { commitAll, git } from "../cli/helpers.ts";
+import { FAKE_STACK, fakeStack } from "../adapters/stack.ts";
 
 const roots: string[] = [];
 const scratch = (name: string) => {
@@ -58,6 +59,57 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     writeFileSync(join(subst, "VERSION"), "$Format:%H$\n");
     const sha = commitAll(subst);
     expect(stop(() => stackTree({ repo: "subst", sha }, [subst], join(scratch("tree"), "t")))).toBe("E_STACK_DIGEST");
+  });
+
+  // Value: protects=a source repository's replace refs cannot swap another commit's tree in for the pinned sha; fails_when=git cat-file, rev-parse or archive honour refs/replace, so the digest check passes on the replacement's tree; why_new=PR #70 security review; seam=stackTree; no_claim=a partial clone's lazy fetch, which GIT_NO_LAZY_FETCH turns off and this test does not exercise
+  test("stackTree installs the commit's own tree, never a replace ref's", () => {
+    const repo = scratch("replace");
+    writeFileSync(join(repo, "SKILL.md"), "original\n");
+    const original = commitAll(repo, "original");
+    writeFileSync(join(repo, "SKILL.md"), "replacement\n");
+    git(repo, "commit", "-q", "-am", "replacement");
+    git(repo, "replace", original, git(repo, "rev-parse", "HEAD"));
+    expect(git(repo, "show", original + ":SKILL.md")).toBe("replacement");
+    const to = join(scratch("tree"), "t");
+    const got = stackTree({ repo: "replace", sha: original }, [repo], to);
+    expect(readFileSync(join(to, "SKILL.md"), "utf8")).toBe("original\n");
+    expect(got.git_tree).toBe(git(repo, "--no-replace-objects", "rev-parse", original + "^{tree}"));
+  });
+
+  // Value: protects=an eval fixture path of any spelling (skill-evals, Skill_Evals) is removed from the tree before its installer runs and never reaches a layer; fails_when=the filter is case-sensitive or exact, or the installer sees the answer key in its checkout; why_new=PR #70 security review; seam=FIXTURE_PATH, installArms; no_claim=fixtures under other names, which buildArmImage drops by their bytes
+  test("eval fixture paths of any spelling never reach the installer or a layer", () => {
+    expect(["skill-evals", "a/Skill_Evals/b", "SKILLEVAL", "x/skill-eval"].every((p) => FIXTURE_PATH.test(p))).toBe(true);
+    expect(["skills", "skill-evaluator", "evals"].some((p) => FIXTURE_PATH.test(p))).toBe(false);
+    const root = scratch("decoys");
+    cpSync(FAKE_STACK, root, { recursive: true });
+    mkdirSync(join(root, "test", "Skill_Evals"), { recursive: true });
+    writeFileSync(join(root, "test", "Skill_Evals", "answer.md"), "the answer key\n");
+    const sha = commitAll(root, "decoys");
+    const command = "if find . -iname '*skill*eval*' | grep -q .; then echo the installer saw an eval fixture >&2; exit 1; fi; " + stackInstall("claude");
+    const [arm] = installArms({ host: "claude", arms: [{ name: "after", kind: "stack", stack: { repo: "fake-stack", sha }, install: { claude: command } }], skill: "demo", base: null, sources: [root], runner: localInstaller(scratch("runner")), state: scratch("state") });
+    expect(arm!.skill).not.toBeNull();
+    for (const [path] of entries(arm!.layers[0]!.src)) expect(path).not.toMatch(/skill[-_]?evals?/i);
+  });
+
+  // Value: protects=a --skill that is not a plain name is refused before any path is built from it; fails_when=--skill ../../.. reaches rmSync(join(stage, skill)) and deletes outside the stage directory; why_new=PR #70 security review; seam=resolveArms, installArms; no_claim=none
+  test("a --skill that is not a plain name is refused before it touches the filesystem", () => {
+    const state = scratch("state");
+    writeFileSync(join(state, "keep"), "keep\n");
+    expect(stop(() => installArms({ host: "claude", arms: resolved.arms, skill: "../../..", base: resolved.base, sources: [stack.root], runner: localInstaller(scratch("runner")), state }))).toBe("E_USAGE");
+    expect(existsSync(join(state, "keep"))).toBe(true);
+    expect(resolveArms(["before=" + join(stack.root, "demo"), "after=fake-stack@" + stack.edited], { skill: "../demo" })).toMatchObject({ code: "E_USAGE" });
+  });
+
+  // Value: protects=a loose arm cannot pull a file from the build host into its image through a link; fails_when=a loose SKILL.md that is an absolute link, or a relative link out of the folder, is copied and later read through; why_new=PR #70 security review; seam=installArms (loose overlay arm); no_claim=links inside the folder, which are kept
+  test("a loose arm holding a link out of its folder is refused", () => {
+    const secret = join(scratch("host"), "secret.md");
+    writeFileSync(secret, "---\nname: loose\n---\nhost file\n");
+    for (const target of [secret, "../" + secret.split("/").slice(-2).join("/")]) {
+      const dir = join(scratch("loose"), "loose");
+      mkdirSync(dir);
+      symlinkSync(target, join(dir, "SKILL.md"));
+      expect(stop(() => installArms({ host: "claude", arms: [{ name: "before", kind: "overlay", base: null, skill: "loose", dir }], skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state: scratch("state") }))).toBe("E_IMAGE_BUILD");
+    }
   });
 
   for (const host of ["claude", "codex"] as const) {

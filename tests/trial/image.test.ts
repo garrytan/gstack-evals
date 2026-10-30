@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recipeHash } from "../../src/rig/recipe.ts";
@@ -86,6 +86,28 @@ describe("arm images without a daemon", () => {
   test("an arm with no layers builds on its base", () => {
     const r = buildArmImage({ base: "base:test", layers: [], tasksDir: LEARN, state: scratch("empty-arm"), run: fakeDocker({ status: 0, stdout: "", stderr: "" }) });
     expect(r).toMatchObject({ ok: true, dropped: [] });
+  });
+
+  // Value: protects=an arm image's modes come from policy (1777 only for the CLI state directories under HOME, 0755 or 0644 elsewhere, no setuid, setgid or sticky bit) and a fixture path of any spelling is dropped; fails_when=a sticky, setgid or setuid bit on a cached layer, which the tree digest does not hash, reaches the image; why_new=PR #70 security review; seam=buildArmImage's stage; no_claim=modes inside the base image
+  test("staged modes come from policy, never from the layer's tree", () => {
+    const src = scratch("modes");
+    mkdirSync(join(src, ".claude", "skills"), { recursive: true });
+    mkdirSync(join(src, "bin"));
+    mkdirSync(join(src, "Skill_Evals"));
+    writeFileSync(join(src, "Skill_Evals", "key.md"), "answer\n");
+    writeFileSync(join(src, "bin", "tool"), "#!/bin/sh\n");
+    chmodSync(join(src, "bin", "tool"), 0o4755);
+    chmodSync(join(src, "bin"), 0o1777);
+    chmodSync(join(src, ".claude", "skills"), 0o3777);
+    chmodSync(src, 0o1777);
+    const modes: Record<string, string> = {};
+    const fake = fakeDocker({ status: 0, stdout: "", stderr: "" });
+    const run: Runner = (command, args, opts) => {
+      if (args[0] === "build") for (const p of ["", ".claude", ".claude/skills", "bin", "bin/tool"]) modes[p] = (lstatSync(join(args.at(-1)!, "layer-0", p)).mode & 0o7777).toString(8);
+      return fake(command, args, opts);
+    };
+    expect(buildArmImage({ base: "base:test", layers: [{ src, dest: "/home/agent" }], tasksDir: LEARN, state: scratch("modes-arm"), run })).toMatchObject({ ok: true, dropped: ["Skill_Evals"] });
+    expect(modes).toEqual({ "": "755", ".claude": "1777", ".claude/skills": "755", bin: "755", "bin/tool": "755" });
   });
 
   // Value: protects=an arm build, its fixture scan and retention run the docker binary GSTACK_EVALS_DOCKER_BIN names, never a bare docker, and the build asks for a reproducible image (no provenance attestation, SOURCE_DATE_EPOCH=0, layer timestamps rewritten); fails_when=any step calls docker directly when another binary was given, or a flag that makes the image digest stable is dropped; why_new=GST-272 (carried from U9: arm builds and retention called docker directly; the image for a base sha and overlay is byte-identical across builds); seam=buildArmImage, imageFixtures, retainImage; no_claim=the digests themselves, which the Docker tier compares

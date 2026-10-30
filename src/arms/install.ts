@@ -10,7 +10,8 @@
 //   with the checkout at ~/.local/share/<repo>. The Docker rig runs it in a builder container from the pinned trial
 //   image, with egress at build time and never in a trial; the keyless rig runs it in a scratch HOME. The kept output is
 //   the checkout, the host's skills directory and Claude Code's settings.json. ~/.gstack, ~/.bun and the host's own
-//   state are dropped (each trial seeds its own state root), and so are .git and skill-evals paths. Links into HOME
+//   state are dropped (each trial seeds its own state root), and so are .git and eval fixture paths (FIXTURE_PATH), which
+//   are also removed from the tree before its installer runs. Links into HOME
 //   become relative and modes become 0755 or 0644, except the host config and data directories the CLIs write their
 //   own state into (~/.claude, ~/.codex, ~/.local, ~/.local/share), which become 1777 like HOME itself, so the agent's
 //   uid can add files there but cannot change the root-owned install. Every layer is laid out from HOME. Each install
@@ -28,14 +29,14 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_SEED, placeboSkill } from "../../quick/laneb/arms/placebo/placebo.ts";
 import { SKILL_DIRS } from "../adapters/host.ts";
 import type { ReasonCode } from "../errors/codes.ts";
-import { gstackCheckouts } from "../skill-eval/cli/arms.ts";
+import { gstackCheckouts, NAME } from "../skill-eval/cli/arms.ts";
 import { dirTreeSha256 } from "../trial/cache.ts";
-import { FIXTURE_PATH } from "../trial/image.ts";
+import { FIXTURE_PATH, WRITABLE } from "../trial/image.ts";
 import type { ArmSpec, Host, StackRef } from "../types.ts";
 
 /** A directory on this machine and where it lands, relative to the agent's HOME ("" for HOME itself). */
@@ -90,6 +91,7 @@ export const stackInstall = (host: Host): string => "./setup --host " + host + "
 const sha = (text: string | Buffer): string => createHash("sha256").update(text).digest("hex");
 const cleanEnv = (): Record<string, string> => Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !e[0].startsWith("GIT_")));
 const git = (cwd: string, args: string[], env: Record<string, string> = cleanEnv()) => spawnSync("git", args, { cwd, env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const sourceGit = (cwd: string, args: string[]) => git(cwd, ["--no-replace-objects", ...args], { ...cleanEnv(), GIT_NO_LAZY_FETCH: "1" });
 const quote = (s: string): string => "'" + s.replaceAll("'", "'\\''") + "'";
 const checkoutName = (ref: StackRef): string => ref.repo.split("/").pop()!;
 const kept = (host: Host, name: string): string[] => [".local/share/" + name, SKILL_DIRS[host], ...(host === "claude" ? [".claude/settings.json"] : [])];
@@ -101,23 +103,25 @@ export function stackSources(o: { root: string | null; home: string; state: stri
   return [...new Set([...(o.root ? [o.root] : []), ...gstackCheckouts(o.home).map(([root]) => root), ...dirs])];
 }
 
-/** Directories under HOME where the host CLIs keep their own state; a layer leaves them writable by the agent's uid. */
-export const WRITABLE = [".claude", ".codex", ".local", ".local/share"];
+export { WRITABLE };
+
+/** The install recipe: bump it when canonicalize, WRITABLE or FIXTURE_PATH changes, so no install cached under an older recipe is reused. */
+const INSTALL_RECIPE = 2;
 
 const NO_ATTRIBUTES = "* -text -eol -crlf -filter -ident -diff -merge -export-subst -export-ignore -working-tree-encoding\n";
 
 /** The tree at ref.sha from the first source that holds the commit, extracted into to and verified against the commit's tree id. */
 export function stackTree(ref: StackRef, sources: readonly string[], to: string): { source: string; git_tree: string; tree_sha256: string } {
   const name = ref.repo + "@" + ref.sha;
-  const source = sources.find((s) => existsSync(s) && git(s, ["cat-file", "-e", ref.sha + "^{commit}"]).status === 0);
+  const source = sources.find((s) => existsSync(s) && sourceGit(s, ["cat-file", "-e", ref.sha + "^{commit}"]).status === 0);
   if (!source) throw new InstallError("E_STACK_SOURCE", name + " is in no local repository (searched: " + (sources.join(", ") || "none") + ")", "Fetch the commit into a gstack checkout (git -C ~/.local/share/gstack fetch origin " + ref.sha + ") or clone the repository under <state>/sources/, then run again. The rig never fetches.");
-  const gitTree = git(source, ["rev-parse", ref.sha + "^{tree}"]).stdout.trim();
+  const gitTree = sourceGit(source, ["rev-parse", ref.sha + "^{tree}"]).stdout.trim();
   const scratch = to + ".x-" + randomBytes(4).toString("hex");
   const tree = join(scratch, "tree");
   mkdirSync(tree, { recursive: true });
   try {
     const tar = join(scratch, "tree.tar");
-    const archived = git(source, ["archive", "--format=tar", "-o", tar, ref.sha]);
+    const archived = sourceGit(source, ["archive", "--format=tar", "-o", tar, ref.sha]);
     const extracted = archived.status === 0 ? spawnSync("tar", ["-x", "-f", tar, "-C", tree], { encoding: "utf8" }) : archived;
     if (extracted.status !== 0) throw new InstallError("E_STACK_SOURCE", "cannot extract " + name + " from " + source + ": " + (extracted.stderr || "").trim());
     rmSync(tar);
@@ -148,18 +152,23 @@ const SCRIPT = (src: string, out: string, o: { name: string; command: string; ke
     "for p in " + o.keep.map(quote).join(" ") + '; do if [ -e "$p" ] || [ -L "$p" ]; then mkdir -p ' + quote(out) + '/"$(dirname "$p")"; cp -R -P "$p" ' + quote(out) + '/"$p"; fi; done',
   ].join("\n");
 
-/** The Docker rig's runner: the installer runs in a builder container from the pinned trial image as the caller's uid, with a shared Bun cache. */
-export function dockerInstaller(o: { image: string; digest: string; docker: string; home: string; cache: string }): InstallRunner {
+/** The Docker rig's runner: the installer runs in a builder container from the pinned trial image as the caller's uid, with a fresh Bun cache of its own beside out, removed afterwards. */
+export function dockerInstaller(o: { image: string; digest: string; docker: string; home: string }): InstallRunner {
   return {
     id: "docker " + o.digest,
     home: o.home,
     run(src, r) {
-      mkdirSync(o.cache, { recursive: true });
+      const cache = join(dirname(r.out), "bun-cache");
+      mkdirSync(cache, { recursive: true });
       mkdirSync(r.out, { recursive: true });
-      const user = (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000);
-      const res = spawnSync(o.docker, ["run", "--rm", "--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "HOME=" + o.home, "-v", src + ":/gse-src:ro", "-v", r.out + ":/gse-out", "-v", o.cache + ":" + o.home + "/.bun/install/cache", "--entrypoint", "sh", o.image, "-c", SCRIPT("/gse-src", "/gse-out", r)], { encoding: "utf8", timeout: 1_800_000, maxBuffer: 256 * 1024 * 1024 });
-      writeFileSync(r.log, (res.stdout ?? "") + (res.stderr ?? "") + (res.error ? String(res.error.message) : ""));
-      return res.status === 0 ? null : "the builder exited " + res.status + " (log: " + r.log + ")";
+      try {
+        const user = (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000);
+        const res = spawnSync(o.docker, ["run", "--rm", "--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "HOME=" + o.home, "-v", src + ":/gse-src:ro", "-v", r.out + ":/gse-out", "-v", cache + ":" + o.home + "/.bun/install/cache", "--entrypoint", "sh", o.image, "-c", SCRIPT("/gse-src", "/gse-out", r)], { encoding: "utf8", timeout: 1_800_000, maxBuffer: 256 * 1024 * 1024 });
+        writeFileSync(r.log, (res.stdout ?? "") + (res.stderr ?? "") + (res.error ? String(res.error.message) : ""));
+        return res.status === 0 ? null : "the builder exited " + res.status + " (log: " + r.log + ")";
+      } finally {
+        rmSync(cache, { recursive: true, force: true });
+      }
     },
   };
 }
@@ -203,6 +212,28 @@ export function canonicalize(root: string, home: string | null): void {
     }
   };
   walk(root, "");
+}
+
+/** Removes every eval fixture path (FIXTURE_PATH) under root. */
+function dropFixtures(root: string, rel = ""): void {
+  for (const name of readdirSync(join(root, rel))) {
+    const r = rel ? rel + "/" + name : name;
+    if (FIXTURE_PATH.test(r)) rmSync(join(root, r), { recursive: true, force: true });
+    else if (lstatSync(join(root, r)).isDirectory()) dropFixtures(root, r);
+  }
+}
+
+/** The first link under a loose folder that is absolute, dangling or leaves the folder, or null. */
+function outsideLink(dir: string, rel = ""): string | null {
+  for (const name of readdirSync(join(dir, rel)).sort()) {
+    const r = rel ? rel + "/" + name : name;
+    const st = lstatSync(join(dir, r));
+    if (name === ".git") continue;
+    if (st.isSymbolicLink() && resolveIn(dir, r) === null) return r;
+    const inner = st.isDirectory() ? outsideLink(dir, r) : null;
+    if (inner) return inner;
+  }
+  return null;
 }
 
 /** A content-addressed directory under <state>/installs: built once into home/, reused only while it still hashes to its recorded digest. */
@@ -325,10 +356,11 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
       rmSync(join(src, o.skill!), { recursive: true, force: true });
       if (folder !== null) cpSync(folder, join(src, o.skill!), { recursive: true, verbatimSymlinks: true, filter: (from) => !from.split("/").includes(".git") });
     }
+    dropFixtures(src);
     const name = checkoutName(ref);
     const keep = kept(o.host, name);
     const srcTree = dirTreeSha256(src);
-    const key = sha(JSON.stringify({ src: srcTree, host: o.host, name, command, keep, runner: o.runner.id }));
+    const key = sha(JSON.stringify({ recipe: INSTALL_RECIPE, src: srcTree, host: o.host, name, command, keep, runner: o.runner.id }));
     return cached(o.state, key, { src_tree_sha256: srcTree, host: o.host, name, command, runner: o.runner.id }, (home) => {
       const failed = o.runner.run(src, { name, command, keep, out: home, log: join(o.state, "installs", key.slice(0, 32) + ".log") });
       if (failed) throw new InstallError("E_IMAGE_BUILD", "installing " + label + " for " + o.host + " with `" + command + "` failed: " + failed);
@@ -345,6 +377,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
   const done: ArmInstall[] = [];
   const fulls = new Map<string, string>();
   if (!o.skill && o.arms.some((a) => a.kind === "stack" || a.kind === "placebo" || (a.kind === "overlay" && a.base !== null))) throw new InstallError("E_USAGE", "a base, stack or placebo arm needs the target skill's name (--skill)");
+  if (o.skill && !NAME.test(o.skill)) throw new InstallError("E_USAGE", "--skill " + JSON.stringify(o.skill) + " is not a skill name: a lowercase letter, then lowercase letters, digits, - or _");
   try {
     for (const arm of o.arms) {
       const empty = (provenance: Record<string, unknown>): ArmInstall => ({ name: arm.name, layers: [], tree_sha256: arm.kind + ":" + arm.name, skill: null, gstack: null, provenance });
@@ -354,7 +387,9 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         throw new InstallError("E_USAGE", "loadout arm " + arm.name + ": a real host has no loadout install yet");
       } else if (arm.kind === "overlay" && arm.base === null) {
         const at = skillsDir + "/" + arm.skill;
-        const made = cached(o.state, sha(JSON.stringify({ loose: dirTreeSha256(arm.dir!), at })), { loose: arm.dir, at }, (home) => {
+        const link = outsideLink(arm.dir!);
+        if (link) throw new InstallError("E_IMAGE_BUILD", "loose arm " + arm.name + ": " + join(arm.dir!, link) + " is a link that is absolute, dangling or leaves the folder, so it could carry a file from this machine into the arm image", "Replace the link with the file it points to, or with a relative link to a file inside the folder.");
+        const made = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, loose: dirTreeSha256(arm.dir!), at })), { loose: arm.dir, at }, (home) => {
           cpSync(arm.dir!, join(home, at), { recursive: true, verbatimSymlinks: true, filter: (from) => !from.split("/").includes(".git") });
           canonicalize(home, null);
         });
@@ -375,7 +410,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
           continue;
         }
         const full = install(ref, arm.dir, command, arm.name + " on " + ref.repo + "@" + ref.sha.slice(0, 12));
-        const top = cached(o.state, sha(JSON.stringify({ overlay: full.tree_sha256, on: none.tree_sha256 })), { overlay_of: full.tree_sha256, on: none.tree_sha256 }, (home) => {
+        const top = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, overlay: full.tree_sha256, on: none.tree_sha256 })), { overlay_of: full.tree_sha256, on: none.tree_sha256 }, (home) => {
           const lost = overlay(full.dir, none.dir, home);
           if (lost.length) throw new InstallError("E_IMAGE_BUILD", "installing arm " + arm.name + "'s skill folder on the base removes " + lost.slice(0, 5).join(", ") + (lost.length > 5 ? " and " + (lost.length - 5) + " more" : "") + ", which a layer on the base cannot remove");
         });
@@ -394,7 +429,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         if (!of?.skill) throw new InstallError("E_USAGE", "placebo arm " + arm.name + " is generated from arm " + arm.of + ", which installs no skill");
         const tree = fulls.get(of.name)!;
         const generator = sha(readFileSync(PLACEBO_GENERATOR));
-        const made = cached(o.state, sha(JSON.stringify({ placebo: of.tree_sha256, generator, seed: DEFAULT_SEED, skillsDir })), { placebo_of: of.tree_sha256, generator_sha256: generator, seed: DEFAULT_SEED }, (home) => {
+        const made = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, placebo: of.tree_sha256, generator, seed: DEFAULT_SEED, skillsDir })), { placebo_of: of.tree_sha256, generator_sha256: generator, seed: DEFAULT_SEED }, (home) => {
           const folders = readdirSync(join(tree, skillsDir)).sort().flatMap((e) => {
             const real = resolveIn(tree, skillsDir + "/" + e + "/SKILL.md");
             return isFile(tree, real) ? [[e, join(tree, real)] as const] : [];

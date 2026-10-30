@@ -430,7 +430,7 @@ describe.skipIf(!DOCKER)("the Docker rig (Docker tier, GSTACK_EVALS_DOCKER=1)", 
     const home = dockerSandbox({ trialImage: trial.tag }).homePath("");
     for (const host of ["claude", "codex"] as const) {
       const state = temp("docker-state");
-      const stack = stackArms(host, (s) => dockerInstaller({ image: trial.tag, digest: trial.digest, docker: "docker", home, cache: join(s, "bun-cache") }), state);
+      const stack = stackArms(host, () => dockerInstaller({ image: trial.tag, digest: trial.digest, docker: "docker", home }), state);
       const root = temp("docker-run");
       mkdirSync(join(root, "tasks"), { recursive: true });
       const build = (out: string, noCache: boolean) => armImages({ trialImage: trial.tag, home, installs: stack.installs, marks: sentinels(stack.arms, NONCE), tasksDir: join(root, "tasks"), state, docker: "docker", out: join(root, out), retain: noCache ? null : join(root, "retained"), noCache });
