@@ -89,6 +89,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 | [LEASE_OVERSPENT](#lease_overspent) | warning | U4 |
 | [CLEANUP_INCOMPLETE](#cleanup_incomplete) | warning | U9 |
+| [E_STACK_SOURCE](#e_stack_source) | 2 | U10 |
+| [E_STACK_DIGEST](#e_stack_digest) | 2 | U10 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -549,6 +551,22 @@ A generated catalog file differs from what scripts/mine-review-cases.ts build co
 Fix: Run build without --check, review the diff, and commit it only if the change is intended. Restore a missing mined.json from git, or run mine again.
 
 Exit 2. Side effects: None: --check writes nothing. Retry safe: yes. Resumable: no. Owner: U14.
+
+### E_STACK_SOURCE
+
+A --base or &lt;repo>@&lt;sha> arm names a commit that no local repository holds: not the checkout the base was inferred from, a gstack checkout on this machine, or a repository under &lt;state>/sources/. The rig never fetches.
+
+Fix: Fetch the commit into a gstack checkout (git -C ~/.local/share/gstack fetch origin &lt;sha>) or clone the repository under &lt;state>/sources/, then run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_STACK_DIGEST
+
+A stack tree did not verify by digest: the bytes git archive extracted do not hash to the commit's tree id, or a cached install or layer under &lt;state>/installs/ no longer hashes to its recorded digest. Nothing from it was installed.
+
+Fix: Run git fsck on the source repository and check the tree for export-ignore, export-subst or filter attributes, which change what git archive writes. For a cached install, remove the directory the message names; it is rebuilt from the verified tree.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

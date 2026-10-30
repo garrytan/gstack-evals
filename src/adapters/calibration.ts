@@ -12,7 +12,10 @@
 //   completes with the scripted answer.
 // - CALIBRATION_EGRESS: the evaluator, not the model, runs an egress probe to a non-model host from an agent session
 //   on the trial network; it must fail.
-// - CALIBRATION_CONFIG needs a gstack base, which real hosts do not install until GST-272, so it stays null.
+// - CALIBRATION_CONFIG: when an arm installs a gstack tree (a base or a gstack stack), one session runs that arm's
+//   gstack-skill-start through the host's shell. The output must carry the seeded proactive value and the session kind
+//   the adapters leave gstack to resolve (CONFIG_EXPECTED), and the command must show as a call that succeeded. With no
+//   such arm the check is null.
 import type { ReasonCode } from "../errors/codes.ts";
 import type { Call } from "../grade/transcript.ts";
 import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
@@ -32,7 +35,14 @@ export const quotes = (text: string, sentinel: string): boolean => new RegExp(se
 /** A calibration copy's SKILL.md: the arm's own text, then its sentinel line as an HTML comment. */
 export const withSentinel = (skillMd: string, line: string): string => skillMd.replace(/\n*$/, "\n") + "\n<!-- " + line + " -->\n";
 
-export type ProbeCheck = "skill" | "none" | "shell" | "usersim";
+export type ProbeCheck = "skill" | "none" | "shell" | "config" | "usersim";
+
+/**
+ * What a gstack base must print in a trial: proactive at the value the trial seeds (src/trial/state-root.ts), and the
+ * session kind gstack 1.91.x resolves under each adapter's env, which sets no GSTACK_SESSION_KIND. A change in either
+ * fails calibration, so a preregistration's assumption is checked again before any trial.
+ */
+export const CONFIG_EXPECTED: { proactive: string; session_kind: Record<Host, string> } = { proactive: "core", session_kind: { claude: "interactive", codex: "interactive" } };
 
 export interface Probe {
   check: ProbeCheck;
@@ -46,6 +56,8 @@ export interface CalibrationArm {
   name: string;
   /** The arm installs the target skill. */
   holdsSkill: boolean;
+  /** gstack-skill-start relative to HOME, when the arm installs a gstack tree. */
+  gstack?: string | null;
 }
 
 /** The model sessions calibration runs for one model: one per arm, then the shell check and, when needed, the user simulator check. */
@@ -56,6 +68,8 @@ export function calibrationProbes(o: { host: Host; skill: string; arms: readonly
       : { check: "none", arm: arm.name, interactive: false, task: { id: "calibration-none-" + arm.name, prompt: "Calibration check. If a skill named " + o.skill + " is installed for you, open it and reply with only the line in its SKILL.md that contains \"" + SENTINEL + ":\". If no such skill is installed, reply with exactly " + NO_SKILL + "." } },
   );
   const first = o.arms[0]!.name;
+  const gstack = o.arms.find((a) => a.gstack);
+  if (gstack) probes.push({ check: "config", arm: gstack.name, interactive: false, task: { id: "calibration-config", prompt: "Calibration check. Run this shell command and reply with only what it prints: ~/" + gstack.gstack + " --skill " + o.skill + " 2>&1 | grep -E '^(PROACTIVE|SESSION_KIND):'" } });
   probes.push({ check: "shell", arm: first, interactive: false, task: { id: "calibration-shell", prompt: "Calibration check. Run this shell command and reply with only what it prints: echo " + o.nonce + "-$((6*7))" } });
   if (o.interactive && o.host === "claude") {
     probes.push({ check: "usersim", arm: first, interactive: true, entry: { user: { replies: { approach: "Approach B" } } }, task: { id: "calibration-usersim", prompt: "Calibration check. Use the AskUserQuestion tool once to ask me \"Which approach should we take?\" with the options \"Approach A\" and \"Approach B\". Then reply with only the label I chose." } });
@@ -79,14 +93,15 @@ const FIX: Record<ProbeCheck | "egress", string> = {
   skill: "Check that the arm installs the skill where the host reads it (~/.claude/skills/<name> for Claude Code, ~/.codex/skills/<name> for Codex) and that the model can open it; rerun with --calibrate.",
   none: "Something reaches the trial HOME beyond the arm: check the arm image's layers and the host's config dirs; rerun with --calibrate.",
   shell: "Check that the host's shell tool runs in the agent container and that the adapter records its calls; rerun with --calibrate.",
+  config: "Check the seeded onboarding markers and config in the work dir's .gstack-home (GSTACK_STATE_ROOT and GSTACK_HOME both name it), and that no adapter sets GSTACK_SESSION_KIND; rerun with --calibrate.",
   usersim: "Check that AskUserQuestion reaches the adapter's canUseTool and that the simulator answers it; rerun with --calibrate.",
   egress: "Check that the agent runs on the trial network from createTrialNetwork with the isolated gateway (Docker Engine 28 or newer); rerun with --calibrate.",
 };
 
-const CODE: Record<ProbeCheck, ReasonCode> = { skill: "CALIBRATION_SKILL", none: "CALIBRATION_NONE_LEAK", shell: "CALIBRATION_SHELL", usersim: "CALIBRATION_USERSIM" };
+const CODE: Record<ProbeCheck, ReasonCode> = { skill: "CALIBRATION_SKILL", none: "CALIBRATION_NONE_LEAK", shell: "CALIBRATION_SHELL", config: "CALIBRATION_CONFIG", usersim: "CALIBRATION_USERSIM" };
 
 /** Why one probe failed, or null when it passed. */
-function probeProblem(run: ProbeRun, nonce: string, sentinels: Readonly<Record<string, string>>): string | null {
+function probeProblem(run: ProbeRun, host: Host, nonce: string, sentinels: Readonly<Record<string, string>>): string | null {
   const { probe, outcome, calls } = run;
   if (outcome.termination.kind !== "completed") return "the session ended as " + outcome.termination.kind + ("code" in outcome.termination ? " " + outcome.termination.code : "");
   const text = outcome.turns.join("\n");
@@ -101,6 +116,14 @@ function probeProblem(run: ProbeRun, nonce: string, sentinels: Readonly<Record<s
     if (quoted.length) return "the answer quoted the sentinel of " + quoted.join(", ");
     if (outcome.opened === true) return "the calls show a read of a skill copy";
     if (!text.includes(NO_SKILL)) return "the answer did not say " + NO_SKILL;
+    return null;
+  }
+  if (probe.check === "config") {
+    for (const [key, value] of [["PROACTIVE", CONFIG_EXPECTED.proactive], ["SESSION_KIND", CONFIG_EXPECTED.session_kind[host]]] as const) {
+      const got = new RegExp("\\b" + key + ": *([A-Za-z0-9_.-]+)").exec(text)?.[1];
+      if (got !== value) return "gstack-skill-start printed " + key + ": " + (got ?? "nothing") + ", not the pinned " + value;
+    }
+    if (!calls.some((c) => c.ok === true && (c.input.command ?? "").includes("gstack-skill-start"))) return "no successful shell call that runs gstack-skill-start shows in the host's calls";
     return null;
   }
   if (probe.check === "shell") {
@@ -121,14 +144,14 @@ export function judgeCalibration(o: { host: Host; model: string; nonce: string; 
     if (!runs.length) return null;
     let ok = true;
     for (const run of runs) {
-      const why = probeProblem(run, o.nonce, o.sentinels);
+      const why = probeProblem(run, o.host, o.nonce, o.sentinels);
       if (why === null) continue;
       ok = false;
       failures.push({ code: CODE[check], message: "arm " + run.probe.arm + " on " + o.host + ", model " + o.model + ": " + why + "; read: " + (run.outcome.files_read.length ? run.outcome.files_read.join(", ") : "nothing"), fix: FIX[check] });
     }
     return ok;
   };
-  const result: CalibrationResult = { skill: passed("skill"), none: passed("none"), shell: passed("shell"), config: null, usersim: o.usersim ? passed("usersim") ?? false : null, egress: o.egress ? !o.egress.open : null };
+  const result: CalibrationResult = { skill: passed("skill"), none: passed("none"), shell: passed("shell"), config: passed("config"), usersim: o.usersim ? passed("usersim") ?? false : null, egress: o.egress ? !o.egress.open : null };
   if (o.usersim && !o.runs.some((r) => r.probe.check === "usersim")) failures.push({ code: "CALIBRATION_USERSIM", message: "a task has scripted user replies but no user simulator check ran on " + o.host + ", model " + o.model, fix: FIX.usersim });
   if (o.egress?.open) failures.push({ code: "CALIBRATION_EGRESS", message: "an agent session on the trial network reached a non-model host on " + o.host + ", model " + o.model + ": " + o.egress.detail, fix: FIX.egress });
   return { result, failures };

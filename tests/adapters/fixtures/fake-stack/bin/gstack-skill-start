@@ -1,0 +1,6 @@
+#!/bin/sh
+# A fake gstack-skill-start: the proactive value from the state root's config, and the session kind.
+root=${GSTACK_STATE_ROOT:-${GSTACK_HOME:-$HOME/.gstack}}
+proactive=$(grep '^proactive:' "$root/config.yaml" 2>/dev/null | tail -1 | sed 's/^proactive: *//')
+echo "PROACTIVE: ${proactive:-unset}"
+echo "SESSION_KIND: ${GSTACK_SESSION_KIND:-interactive}"

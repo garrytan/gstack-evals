@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# A fake stack installer for the arm install tests. It lays out the host's skills directory the way gstack's setup does:
+# on Claude Code a link to the checkout and one folder per skill whose SKILL.md links into it; on Codex a runtime root
+# and a gstack-<skill> render per skill. It writes absolute links, owner-only modes and volatile state, which the rig
+# must canonicalize or drop.
+set -eu
+host=claude
+while [ $# -gt 0 ]; do case "$1" in --host) host=$2; shift 2 ;; *) shift ;; esac; done
+umask 077
+root=$(pwd -P)
+mkdir -p "$HOME/.gstack"
+date +%s%N > "$HOME/.gstack/installs.tsv"
+if [ "$host" = claude ]; then
+  dir="$HOME/.claude/skills"
+  mkdir -p "$dir"
+  ln -s "$root" "$dir/gstack"
+  for s in */; do
+    s=${s%/}
+    [ -f "$s/SKILL.md" ] || continue
+    mkdir -p "$dir/$s"
+    ln -s "$root/$s/SKILL.md" "$dir/$s/SKILL.md"
+  done
+  mkdir -p "$dir/_gstack-command"
+  cp SKILL.md "$dir/_gstack-command/SKILL.md"
+  printf '{"hooks":{}}\n' > "$HOME/.claude/settings.json"
+  date +%s%N > "$HOME/.claude.json"
+else
+  dir="$HOME/.codex/skills"
+  mkdir -p "$dir/gstack" .agents/skills
+  ln -s "$root/bin" "$dir/gstack/bin"
+  cp SKILL.md "$dir/gstack/SKILL.md"
+  for s in */; do
+    s=${s%/}
+    [ -f "$s/SKILL.md" ] || continue
+    mkdir -p ".agents/skills/gstack-$s"
+    sed 's#claude/skills#codex/skills#g' "$s/SKILL.md" > ".agents/skills/gstack-$s/SKILL.md"
+    printf '\nRendered for Codex.\n' >> ".agents/skills/gstack-$s/SKILL.md"
+    ln -s "$root/.agents/skills/gstack-$s/" "$dir/gstack-$s"
+  done
+fi

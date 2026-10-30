@@ -6,14 +6,18 @@ import { NO_SKILL, withSentinel } from "../../src/adapters/calibration.ts";
 import { judgeDriver } from "../../src/adapters/judge.ts";
 import { SKILL_DIRS } from "../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
-import { dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
+import { armImages, dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
 import { resolveCall, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS } from "../../src/skill-eval/cli/flags.ts";
 import { preflight } from "../../src/skill-eval/cli/preflight.ts";
 import { runOnRealHost } from "../../src/skill-eval/cli/skill-eval.ts";
 import { collect } from "../cli/helpers.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
-import { buildTrialImage, stateRoot } from "../../src/trial/image.ts";
+import { buildTrialImage, checkImagePin, stateRoot } from "../../src/trial/image.ts";
+import { copyLayers, dockerInstaller, installArms, localInstaller, sentinelLayer, type ArmInstall, type InstallRunner } from "../../src/arms/install.ts";
+import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
+import { dockerSandbox } from "../../src/trial/sandbox.ts";
+import { fakeStack } from "./stack.ts";
 import { decide, DEFAULT_OPTIONS } from "../../src/skill-eval/verdict/gates.ts";
 import type { ArmSpec, Host } from "../../src/types.ts";
 import { HAS_CLAUDE_CLI, HAS_CODEX_CLI, harness, localSandbox, type Harness, type Item, type ResponsesScript, type Script } from "./harness.ts";
@@ -38,14 +42,23 @@ function armDir(root: string, name: string): string {
   return dir;
 }
 
-/** The test rig: the harness's in-process proxy, local sandboxes that install each arm (or its calibration copy) in the trial HOME. */
-function rig(h: Harness, host: Host, arms: ArmSpec[], o: { egressOpen?: boolean; leakInto?: string; nonce?: string } = {}): HostRig {
+const temp = (name: string) => mkdtempSync(join(tmpdir(), "gse-" + name + "-"));
+
+/** The fake stack's arms as a rendered-skill call resolves them: before on the inferred base, after a stack at the edit, none, placebo and bare. */
+function stackArms(host: Host, runner: (state: string) => InstallRunner = () => localInstaller(temp("runner")), state = temp("state")): { arms: ArmSpec[]; installs: ArmInstall[] } {
+  const stack = fakeStack();
+  const resolved = resolveArms(["before=" + join(stack.root, SKILL), "after=fake-stack@" + stack.edited, "none", "placebo", "bare"], {}) as ResolvedArms;
+  return { arms: resolved.arms, installs: installArms({ host, arms: resolved.arms, skill: SKILL, base: resolved.base, sources: [stack.root], runner: runner(state), state }) };
+}
+
+/** The test rig: the harness's in-process proxy, local sandboxes that copy each arm's layers (and its calibration copy's sentinel layer) into the trial HOME. */
+function rig(h: Harness, host: Host, arms: ArmSpec[], o: { egressOpen?: boolean; leakInto?: string; nonce?: string; installs?: ArmInstall[] } = {}): HostRig {
   const marks = sentinels(arms, o.nonce ?? NONCE);
-  const copy = (arm: ArmSpec, home: string, calibration: boolean) => {
-    if (arm.kind !== "overlay" || !arm.dir) return;
-    const to = join(home, SKILL_DIRS[host], SKILL);
-    cpSync(arm.dir, to, { recursive: true });
-    if (calibration) writeFileSync(join(to, "SKILL.md"), withSentinel(readFileSync(join(arm.dir, "SKILL.md"), "utf8"), marks[arm.name]!));
+  const installs = Object.fromEntries((o.installs ?? installArms({ host, arms, skill: SKILL, base: null, sources: [], runner: localInstaller(temp("runner")), state: temp("state") })).map((i) => [i.name, i]));
+  const copy = (name: string, home: string, calibration: boolean) => {
+    const arm = installs[name]!;
+    copyLayers(arm.layers, home);
+    if (calibration && arm.skill) copyLayers([sentinelLayer(arm, withSentinel(readFileSync(arm.skill.file, "utf8"), marks[name]!), temp("sentinel"))], home);
   };
   return {
     baseUrl: h.baseUrl,
@@ -53,9 +66,10 @@ function rig(h: Harness, host: Host, arms: ArmSpec[], o: { egressOpen?: boolean;
     imageDigest: null,
     bind: async (request) => h.proxy.bind(request),
     finalize: (meterId) => h.proxy.finalize(meterId),
+    arms: installs,
     sandbox: (name, calibration) => localSandbox((home) => {
-      copy(arms.find((a) => a.name === name)!, home, calibration);
-      if (calibration && o.leakInto === name) copy(arms.find((a) => a.name === "after")!, home, true);
+      copy(name, home, calibration);
+      if (calibration && o.leakInto === name) copy("after", home, true);
     }),
     judgeSandbox: () => localSandbox(() => {}),
     egress: () => ({ open: o.egressOpen ?? false, detail: "the test rig's probe" }),
@@ -99,21 +113,23 @@ const codexModel: ResponsesScript = ({ outputs, body }) => {
   const prompt = firstUser(body);
   const all = [...outputs.values()].join("\n");
   if (prompt.includes("gstack-evals-sentinel")) {
-    if (!outputs.has("call_cat")) return [{ type: "shell", id: "call_cat", cmd: "cat ~/.codex/skills/" + SKILL + "/SKILL.md" }];
+    if (!outputs.has("call_ls")) return [{ type: "shell", id: "call_ls", cmd: "ls ~/.codex/skills" }];
+    const folder = outputs.get("call_ls")!.split(/\s+/).find((f) => f === SKILL || f === "gstack-" + SKILL);
+    if (folder && !outputs.has("call_cat")) return [{ type: "shell", id: "call_cat", cmd: "cat ~/.codex/skills/" + folder + "/SKILL.md" }];
     return [{ type: "message", text: all.match(SENTINEL_RE)?.[0] ?? NO_SKILL }];
   }
   if (prompt.includes("Run this shell command")) {
     if (!outputs.has("call_echo")) return [{ type: "shell", id: "call_echo", cmd: prompt.split("prints: ")[1]! }];
-    return [{ type: "message", text: all.match(/[A-Za-z0-9]+-\d+/)?.[0] ?? "no output" }];
+    return [{ type: "message", text: prompt.includes("gstack-skill-start") ? outputs.get("call_echo")!.trim() : all.match(/[A-Za-z0-9]+-\d+/)?.[0] ?? "no output" }];
   }
   return [{ type: "message", text: "HELLO from the task." }];
 };
 
-async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; root?: string; judge?: boolean; responses?: ResponsesScript; extra?: Partial<HostRunInput>; calibrateOnly?: boolean; models?: string[] } = {}) {
+async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; root?: string; judge?: boolean; responses?: ResponsesScript; extra?: Partial<HostRunInput>; calibrateOnly?: boolean; models?: string[]; stack?: { arms: ArmSpec[]; installs: ArmInstall[] }; rigOf?: (h: Harness, arms: ArmSpec[]) => HostRig } = {}) {
   const h = harness(host === "claude" ? claudeModel : () => [], { responses: o.responses ?? codexModel });
   open.push(h);
   const root = o.root ?? mkdtempSync(join(tmpdir(), "gse-runhost-"));
-  const arms: ArmSpec[] = [
+  const arms: ArmSpec[] = o.stack?.arms ?? [
     { name: "before", kind: "overlay", base: null, skill: SKILL, dir: armDir(root, "before") },
     { name: "after", kind: "overlay", base: null, skill: SKILL, dir: armDir(root, "after") },
     { name: "none", kind: "overlay", base: null, skill: SKILL, dir: null },
@@ -129,7 +145,7 @@ async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: bool
     entries: interactive ? { hello: { interactive: true, user: { replies: { mode: "Building a startup" } } } } : o.judge ? { hello: { judge: "The answer greets the user." } } : {},
     ...(o.calibrateOnly ? { calibrateOnly: true } : {}),
     ...o.extra,
-  }, rig(h, host, arms, o));
+  }, o.rigOf ? o.rigOf(h, arms) : rig(h, host, arms, { ...o, ...(o.stack ? { installs: o.stack.installs } : {}) }));
   return { run, root, h };
 }
 
@@ -221,6 +237,16 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
       expect(run.spent).toBeGreaterThan(0);
       expect(decide(run.input, DEFAULT_OPTIONS).exit_code).not.toBe(3);
       expect(existsSync(join(root, "out", "progress.json"))).toBe(true);
+    }, 300_000);
+  }
+
+  // Value: protects=on both hosts a base arm (inferred from a rendered skill folder, the base minus the skill plus the skill's overlay), a stack arm at the edit, none (the base minus the skill), a placebo and bare calibrate against the fake upstream (each skill-holding arm quotes its own sentinel where the host reads it, including Codex's gstack-<skill> render, none and bare answer NO-SKILL, and the base's gstack-skill-start prints the pinned proactive and session-kind values through the host's shell) and then run every trial; fails_when=an arm misses its skill or sees another arm's, CALIBRATION_CONFIG stays null with a base, or a trial is skipped; why_new=GST-272 done criteria (base, stack and placebo arms end to end on both hosts; calibration passes with a base arm); seam=installArms, runOnHost's arm installs, calibrationProbes' config check; no_claim=gstack's real setup or Docker isolation, which the Docker tier covers
+  for (const host of ["claude", "codex"] as const) {
+    test("base, stack and placebo arms calibrate and run on " + host, async () => {
+      const { run } = await runHost(host, { interactive: host === "claude", stack: stackArms(host) });
+      expect(run.calibrationFailures).toEqual([]);
+      expect(run.input.calibration[MODELS[host]]).toEqual({ skill: true, none: true, shell: true, config: true, usersim: host === "claude" ? true : null, egress: true });
+      expect(run.input.records.map((r) => [r.arm, r.termination.kind])).toEqual([["before", "completed"], ["after", "completed"], ["none", "completed"], ["placebo", "completed"], ["bare", "completed"]]);
     }, 300_000);
   }
 
@@ -394,4 +420,40 @@ describe.skipIf(!DOCKER)("the Docker rig (Docker tier, GSTACK_EVALS_DOCKER=1)", 
       expect(closed).toMatchObject({ committed: 0, unknown: 0 });
     }
   }, 600_000);
+
+  // Value: protects=on both hosts, base, stack and placebo arm images built by the Docker rig's own path (the stack's installer in a builder container from the trial image, a shared base-layer image, the overlay, the calibration copy on top of the arm image) calibrate and run every trial in their containers against the fake upstream, and every arm image rebuilt with no build cache has the same digest; fails_when=an arm image misses its skill or links, gstack-skill-start fails in the container, a calibration copy is not built on its arm image, or a rebuild gives another digest; why_new=GST-272 done criteria (arms end to end in the Docker tier; the image for a base sha and overlay is byte-identical across two builds); seam=dockerInstaller, armImages, buildArmImage's reproducible build; no_claim=the proxy container and the egress lock, which the test above covers, so these sessions reach the harness's proxy over the host network
+  test("base, stack and placebo arm images calibrate and run on both hosts, and rebuild byte-identically", async () => {
+    expect(buildTrialImage({ state: stateRoot() }).ok).toBe(true);
+    const pin = checkImagePin({ state: stateRoot() });
+    if (!pin.ok) throw new Error(pin.message);
+    const trial = pin.pin;
+    const home = dockerSandbox({ trialImage: trial.tag }).homePath("");
+    for (const host of ["claude", "codex"] as const) {
+      const state = temp("docker-state");
+      const stack = stackArms(host, () => dockerInstaller({ image: trial.tag, digest: trial.digest, docker: "docker", home }), state);
+      const root = temp("docker-run");
+      mkdirSync(join(root, "tasks"), { recursive: true });
+      const build = (out: string, noCache: boolean) => armImages({ trialImage: trial.tag, home, installs: stack.installs, marks: sentinels(stack.arms, NONCE), tasksDir: join(root, "tasks"), state, docker: "docker", out: join(root, out), retain: noCache ? null : join(root, "retained"), noCache });
+      const images = build("images", false);
+      const rigOf = (h: Harness): HostRig => ({
+        baseUrl: h.baseUrl, network: "host", imageDigest: trial.digest, recovery: null,
+        bind: async (request) => h.proxy.bind(request),
+        finalize: (meterId) => h.proxy.finalize(meterId),
+        arms: Object.fromEntries(stack.installs.map((i) => [i.name, i])),
+        sandbox: (arm, calibration) => dockerSandbox({ trialImage: trial.tag, armImage: images.get(arm + (calibration ? "#calibration" : ""))!, docker: "docker" }),
+        judgeSandbox: () => dockerSandbox({ trialImage: trial.tag, docker: "docker" }),
+        egress: () => ({ open: false, detail: "the host-network test rig" }),
+        close: async () => ({ committed: 0, unknown: 0, lease_id: null }),
+      });
+      const { run } = await runHost(host, { root, interactive: host === "claude", stack, rigOf });
+      expect(run.calibrationFailures).toEqual([]);
+      expect(run.input.calibration[MODELS[host]]).toEqual({ skill: true, none: true, shell: true, config: true, usersim: host === "claude" ? true : null, egress: true });
+      expect(run.input.records.map((r) => [r.arm, r.termination.kind])).toEqual([["before", "completed"], ["after", "completed"], ["none", "completed"], ["placebo", "completed"], ["bare", "completed"]]);
+      const digests = (out: string) => (JSON.parse(readFileSync(join(root, out, "arms.json"), "utf8")) as { arms: { name: string; image: { digest: string }; calibration_image: { digest: string } }[] }).arms.map((a) => [a.name, a.image.digest, a.calibration_image.digest]);
+      build("rebuilt", true);
+      expect(digests("rebuilt")).toEqual(digests("images"));
+      expect(readFileSync(join(root, "retained", "MANIFEST.jsonl"), "utf8").trim().split("\n").length).toBeGreaterThanOrEqual(4);
+    }
+  }, 1_800_000);
 });
+

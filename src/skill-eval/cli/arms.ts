@@ -25,6 +25,8 @@ const WORD_ARMS = ["none", "placebo", "bare"];
 
 const REPO = /^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)?$/;
 const SHA = /^[0-9a-f]{40}$/;
+/** An arm or skill name. It holds no slash or dot, so it is safe as one path segment. */
+export const NAME = /^[a-z][a-z0-9_-]*$/;
 /** A call to a gstack bin, as rendered skills write it (~/.claude/skills/gstack/bin/gstack-learnings-search). */
 export const GSTACK_BIN_CALL = /\bbin\/gstack-[a-z0-9][a-z0-9-]*/;
 
@@ -114,7 +116,7 @@ function loadout(path: string): LoadoutManifest | string {
   const kinds = ["skill", "section", "overlay", "preamble-tier"];
   const ok =
     typeof v === "object" && v !== null && Object.keys(v).every((k) => ["name", "base", "modules"].includes(k)) &&
-    typeof v.name === "string" && /^[a-z][a-z0-9_-]*$/.test(v.name) && typeof v.base === "string" && typeof parseStackRef(v.base) === "object" &&
+    typeof v.name === "string" && NAME.test(v.name) && typeof v.base === "string" && typeof parseStackRef(v.base) === "object" &&
     Array.isArray(v.modules) && v.modules.length > 0 && v.modules.every((m: any) => typeof m === "object" && m && Object.keys(m).every((k) => k === "kind" || k === "id") && kinds.includes(m.kind) && typeof m.id === "string" && m.id.length > 0);
   return ok ? (v as LoadoutManifest) : path + " is not a loadout manifest {name, base: \"gstack@<sha>\", modules: [{kind, id}]} (schema/arms.schema.json#/$defs/loadout)";
 }
@@ -155,6 +157,7 @@ export function resolveArms(spec: readonly string[], flags: { base?: string; ski
 
   const notes: string[] = [];
   let base: Base | null = null;
+  if (flags.skill && !NAME.test(flags.skill)) return { code: "E_USAGE", message: "--skill " + JSON.stringify(flags.skill) + " is not a skill name: a lowercase letter, then lowercase letters, digits, - or _" };
   let skill: ResolvedArms["skill"] = flags.skill ? { name: flags.skill, source: "--skill" } : null;
   if (flags.base) {
     const ref = parseStackRef(flags.base);
