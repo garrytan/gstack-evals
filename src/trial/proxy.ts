@@ -11,7 +11,7 @@
 // unknown at its full reservation.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { reconcileJournal, type RetryBudget } from "../runner/proxy/metering-proxy.ts";
 import type { ReservationLedger } from "../types.ts";
@@ -34,8 +34,13 @@ export class TrialNetworkError extends Error {}
 
 const docker = (bin: string, args: string[], env?: Record<string, string>) => spawnSync(bin, args, { encoding: "utf8", timeout: 120_000, ...(env ? { env } : {}) });
 
-/** Creates the internal network on a free 10.231.x.0/24 and the egress network. */
+/**
+ * Creates the internal network on a free 10.231.x.0/24 and the egress network. The internal bridge uses Docker's isolated
+ * gateway mode (Engine 28 or newer), so the host gets no address on it and an agent cannot reach host services there.
+ */
 export function createTrialNetwork(bin = "docker"): TrialNetwork {
+  const version = docker(bin, ["version", "--format", "{{.Server.Version}}"]).stdout.trim();
+  if (Number(version.split(".")[0]) < 28) throw new TrialNetworkError("the trial network needs Docker Engine 28 or newer for an isolated gateway, so the host has no address agents can reach; this daemon is " + (version || "unknown"));
   const id = randomBytes(5).toString("hex");
   const egress = "gse-egress-" + id;
   const made = docker(bin, ["network", "create", egress]);
@@ -44,7 +49,7 @@ export function createTrialNetwork(bin = "docker"): TrialNetwork {
     const octet = randomBytes(1)[0]!;
     const subnet = "10.231." + octet + ".0/24";
     const name = "gse-trial-" + id;
-    const r = docker(bin, ["network", "create", "--internal", "--subnet", subnet, name]);
+    const r = docker(bin, ["network", "create", "--internal", "-o", "com.docker.network.bridge.gateway_mode_ipv4=isolated", "--subnet", subnet, name]);
     if (r.status === 0) return { name, egress, subnet, proxyIp: "10.231." + octet + ".2" };
     if (!/overlap|in use/i.test(r.stderr)) {
       docker(bin, ["network", "rm", egress]);
@@ -79,6 +84,7 @@ export function startProxyContainer(opts: { image: string; net: TrialNetwork; di
   mkdirSync(opts.dir, { recursive: true });
   const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry };
   writeFileSync(join(opts.dir, "config.json"), JSON.stringify(config, null, 2) + "\n");
+  rmSync(config.socket, { force: true });
   const env = trialEnv("proxy", { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/tmp", LANG: "C.UTF-8", GSTACK_EVALS_PROXY_TOKEN: opts.managementToken, ...opts.providerKeys });
   const { args: envArgs, clientEnv } = dockerEnvArgs(env);
   const name = "gse-proxy-" + randomBytes(5).toString("hex");
@@ -86,7 +92,7 @@ export function startProxyContainer(opts: { image: string; net: TrialNetwork; di
   const ledgerDir = dirname(opts.ledger);
   const r = docker(bin, ["run", "-d", "--name", name, "--network", opts.net.name, "--ip", opts.net.proxyIp, "--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only", "--tmpfs", "/tmp",
     "-v", opts.dir + ":" + opts.dir, "-v", ledgerDir + ":" + ledgerDir, "-v", SRC + ":/opt/gstack-evals/src:ro", ...envArgs, "--entrypoint", "bun", opts.image, "/opt/gstack-evals/src/trial/proxy-entry.ts", join(opts.dir, "config.json")],
-    { ...Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : []))), ...clientEnv });
+    { ...Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : []))), ...clientEnv });
   let stopped = false;
   const handle: ProxyHandle = {
     container: name,
@@ -101,8 +107,11 @@ export function startProxyContainer(opts: { image: string; net: TrialNetwork; di
   if (r.status !== 0) throw new TrialNetworkError("could not start the proxy container: " + r.stderr.trim());
   const connect = docker(bin, ["network", "connect", opts.net.egress, name]);
   const deadline = Date.now() + (opts.timeoutMs ?? 30_000);
-  while (connect.status === 0 && !existsSync(config.socket) && Date.now() < deadline) Bun.sleepSync(200);
-  if (connect.status !== 0 || !existsSync(config.socket)) {
+  const ready = () => docker(bin, ["logs", name]).stdout.includes("PROXY_READY ") && existsSync(config.socket);
+  const running = () => docker(bin, ["inspect", "-f", "{{.State.Running}}", name]).stdout.trim() === "true";
+  let up = false;
+  while (connect.status === 0 && Date.now() < deadline && running() && !(up = ready())) Bun.sleepSync(200);
+  if (!up) {
     const logs = docker(bin, ["logs", "--tail", "5", name]);
     handle.stop();
     throw new TrialNetworkError("the proxy container did not come up: " + (connect.status !== 0 ? connect.stderr : logs.stdout + logs.stderr).trim().split("\n").slice(-3).join(" | "));

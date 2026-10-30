@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MeteringProxy, reconcileJournal } from "../../src/runner/proxy/metering-proxy.ts";
@@ -56,7 +56,7 @@ describe("resume order", () => {
 });
 
 describe.skipIf(!DOCKER)("trial network (Docker tier, GSTACK_EVALS_DOCKER=1)", () => {
-  // Value: protects=an agent container reaches the metering proxy and nothing else: no outside IP this machine reaches, no DNS, no gateway, no management socket, no provider key; and the proxy container holds its journal's flock; fails_when=any probe gets out, the key or management token enters the agent env, or reconcile runs beside the containerized proxy; why_new=U9 scope (internal network, dual-homed proxy) and Captain brief items 9 and 10; seam=createTrialNetwork, startProxyContainer, recoverRun; no_claim=metered calls through the container, which U3's fake-upstream tests cover in process
+  // Value: protects=an agent container reaches the metering proxy and nothing else: no outside IP this machine reaches, no DNS, no gateway, no host service on the internal bridge, no management socket, no provider key; and the proxy container holds its journal's flock; fails_when=any probe gets out, the key or management token enters the agent env, reconcile runs beside the containerized proxy, or a stale management socket passes for a proxy that failed to start; why_new=U9 scope (internal network, dual-homed proxy) and Captain brief items 9 and 10; seam=createTrialNetwork, startProxyContainer, recoverRun; no_claim=metered calls through the container, which U3's fake-upstream tests cover in process
   test("the agent reaches only the proxy, which is dual-homed and holds its journal", async () => {
     const state = scratch("net-state");
     const built = buildTrialImage({ state });
@@ -78,6 +78,17 @@ describe.skipIf(!DOCKER)("trial network (Docker tier, GSTACK_EVALS_DOCKER=1)", (
       expect(spawnSync("curl", ["-s", "-m", "10", "-o", "/dev/null", "-w", "%{http_code}", "http://" + outside + "/"], { encoding: "utf8" }).stdout).not.toBe("000");
       expect(probe("curl -s -m 5 -o /dev/null -w '%{http_code}' http://" + outside + "/; true")).toBe("000");
       expect(probe("curl -s -m 5 -o /dev/null -w '%{http_code}' http://" + gateway + "/; true")).toBe("000");
+      const port = 20_000 + Math.floor(Math.random() * 10_000);
+      const host = spawn(process.execPath, ["-e", "Bun.serve({ hostname: '0.0.0.0', port: " + port + ", fetch: () => new Response('host') }); setInterval(() => {}, 1e6)"], { stdio: "ignore" });
+      try {
+        let served = "";
+        for (let i = 0; i < 50 && served !== "200"; i++, Bun.sleepSync(100)) served = spawnSync("curl", ["-s", "-m", "2", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:" + port + "/"], { encoding: "utf8" }).stdout;
+        expect(served).toBe("200");
+        const bridge = net.subnet.replace(/0\/24$/, "1");
+        expect(probe("curl -s -m 5 -o /dev/null -w '%{http_code}' http://" + bridge + ":" + port + "/; true")).toBe("000");
+      } finally {
+        host.kill();
+      }
       expect(probe("getent hosts example.com >/dev/null && echo RESOLVED || echo NODNS")).toBe("NODNS");
       expect(probe("ls " + JSON.stringify(proxy.socket) + " 2>&1; true")).toContain("No such file or directory");
       const env = probe("env");
@@ -90,6 +101,8 @@ describe.skipIf(!DOCKER)("trial network (Docker tier, GSTACK_EVALS_DOCKER=1)", (
       await expect(reconcileJournal(proxy.journal, ledger)).rejects.toThrow(/held by another proxy or reconcile/);
       const r = await recoverRun({ stopProxy: () => proxy.stop(), journal: proxy.journal, ledger, settle: () => "closed" });
       expect(r.settled).toBe("closed");
+      expect(existsSync(proxy.socket)).toBe(true);
+      expect(() => startProxyContainer({ image: built.tag, net, dir: join(dir, "proxy"), ledger: join(dir, "ledger", "missing", "ledger.sqlite"), leaseId: "lease_test", managementToken: "m".repeat(32), retry: { attempts: 1, elapsed_ms: 1000 }, timeoutMs: 20_000 })).toThrow(/the proxy container did not come up/);
     } finally {
       agent.stop();
       proxy.stop();
