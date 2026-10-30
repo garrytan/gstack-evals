@@ -11,7 +11,7 @@ import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "run");
-const KEYS = { ANTHROPIC_API_KEY: "sk-ant-fake-replay-key-0123456789", OPENAI_API_KEY: "sk-openai-fake-replay-key-0123456789", OPENROUTER_API_KEY: "sk-or-v1-fake-replay-key-0123456789" };
+const KEYS = { ANTHROPIC_API_KEY: "fake-anthropic-value-for-replay-tests", OPENAI_API_KEY: "fake-openai-value-for-replay-tests", OPENROUTER_API_KEY: "fake-openrouter-value-for-replay-tests" };
 const QUOTE = { words: "Approve the keyless test cap", by: "test", source: "tests/replay/run.test.ts" };
 const LONG = "Finding: lib/ship-queue.ts reads an unreadable GitHub state as not merged.";
 
