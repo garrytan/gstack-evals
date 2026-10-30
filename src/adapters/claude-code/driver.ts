@@ -121,7 +121,8 @@ export function refusalIn(text: string): ReasonCode | null {
   return REFUSALS.find((code) => new RegExp("\\b" + code + "\\b").test(text)) ?? null;
 }
 
-function termination(refusal: ReasonCode): Termination {
+/** The termination a proxy refusal ends the cell with. */
+export function refusalTermination(refusal: ReasonCode): Termination {
   if (refusal === "CAP_STOP") return { kind: "cap_stop" };
   if (refusal === "E_KEY_REJECTED") return { kind: "credentials_rejected" };
   return { kind: "missing", code: refusal };
@@ -195,7 +196,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
             if (m.error || m.is_api_error_message) {
               const refusal = refusalIn(text);
-              if (refusal) end(termination(refusal));
+              if (refusal) end(refusalTermination(refusal));
               else if (m.error === "authentication_failed") end({ kind: "credentials_rejected" });
               else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
             } else {

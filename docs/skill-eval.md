@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex need the host adapters and the run loop (U10). The trial module (U9) and the Claude Code adapter (src/adapters/claude-code/) are built; until the rest lands, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
+Real runs on Claude Code and Codex need the host adapters and the run loop (U10). The trial module (U9) and both host adapters (src/adapters/claude-code/ and src/adapters/codex/) are built; until the rest lands, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
 
 ## Quickstart
 

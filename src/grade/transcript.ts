@@ -13,6 +13,10 @@
 // naming it, a Read of a file under one of its roots, or a shell command that reads a file there: a file operand of a
 // read command (cat, head, sed, grep, ...) or an input redirection, also inside sh -c, never text a command only prints. A failed Skill call
 // (the none arm asking for a skill it does not hold) is not an open.
+//
+// Codex (`codex exec --json`) runs non-interactive tasks only. Its turns are its agent messages, the last being the final
+// answer; reasoning is not a turn. Its calls are its shell commands (ok on exit 0), file changes and MCP calls, so the
+// skill opens only on a shell read under one of the skill's roots that exits 0.
 import type { AskQuestion } from "../usersim/classifier.ts";
 
 export interface Call {
@@ -59,13 +63,13 @@ type Message = { type?: string; parent_tool_use_id?: string | null; error?: stri
 
 const blocks = (m: Message): Block[] => (Array.isArray(m.message?.content) ? (m.message!.content as Block[]) : []);
 
-export interface ClaudeTranscript {
+export interface HostTranscript {
   turns: string[];
   calls: Call[];
 }
 
 /** Turns and calls from Claude Code's stream-json messages (the Agent SDK's SDKMessage objects), in arrival order. */
-export function parseClaudeCode(messages: readonly unknown[]): ClaudeTranscript {
+export function parseClaudeCode(messages: readonly unknown[]): HostTranscript {
   const turns: string[] = [];
   const calls: Call[] = [];
   const byId = new Map<string, Call>();
@@ -90,6 +94,40 @@ export function parseClaudeCode(messages: readonly unknown[]): ClaudeTranscript 
         const call = b.type === "tool_result" && b.tool_use_id ? byId.get(b.tool_use_id) : undefined;
         if (call) call.ok = b.is_error !== true;
       }
+    }
+  }
+  return { turns, calls };
+}
+
+type CodexEvent = { type?: string; item?: { id?: string; type?: string; text?: string; command?: string; exit_code?: number | null; status?: string; changes?: { path?: string }[]; server?: string; tool?: string; error?: unknown; query?: string } };
+
+/** Turns and calls from Codex's `exec --json` events, in arrival order. A completed item replaces its started form. */
+export function parseCodex(events: readonly unknown[]): HostTranscript {
+  const turns: string[] = [];
+  const calls: Call[] = [];
+  const byId = new Map<string, Call>();
+  for (const raw of events) {
+    const ev = raw as CodexEvent;
+    const it = ev.item;
+    if (!it || (ev.type !== "item.started" && ev.type !== "item.completed")) continue;
+    const done = ev.type === "item.completed";
+    if (it.type === "agent_message") {
+      if (done && it.text?.trim()) turns.push(it.text);
+      continue;
+    }
+    let call: Omit<Call, "id" | "subagent"> | null = null;
+    if (it.type === "command_execution") call = { tool: "shell", input: short({ command: it.command }), ok: done ? it.status === "completed" && it.exit_code === 0 : null };
+    else if (it.type === "file_change") call = { tool: "apply_patch", input: short({ path: (it.changes ?? []).map((c) => c.path ?? "").join(" ") }), ok: done ? it.status === "completed" : null };
+    else if (it.type === "mcp_tool_call") call = { tool: "mcp:" + (it.server ?? "") + "." + (it.tool ?? ""), input: {}, ok: done ? it.status === "completed" && !it.error : null };
+    else if (it.type === "web_search") call = { tool: "web_search", input: short({ pattern: it.query }), ok: done ? true : null };
+    if (!call) continue;
+    const id = it.id ?? String(calls.length);
+    const seen = byId.get(id);
+    if (seen) Object.assign(seen, call);
+    else {
+      const c = { id, ...call, subagent: false };
+      byId.set(id, c);
+      calls.push(c);
     }
   }
   return { turns, calls };

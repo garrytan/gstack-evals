@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { askTurn, parseClaudeCode, shellReads, skillUse, type Call } from "../../src/grade/transcript.ts";
+import { askTurn, parseClaudeCode, parseCodex, shellReads, skillUse, type Call } from "../../src/grade/transcript.ts";
 import { gradeTrial, type VerdictTask } from "../../src/skill-eval/verdict/grade.ts";
 import type { TrialRecord } from "../../src/types.ts";
 
@@ -98,5 +98,32 @@ describe("GST-109: user-visible turns from a Claude Code transcript", () => {
     expect(opened("grep -e step /h/.claude/skills/learn/SKILL.md")).toBe(true);
     expect(shellReads("sed -n 1,5p f; grep -rn x d1 d2; a#b; cat g#h")).toEqual(["f", "d1", "d2", "g#h"]);
     expect(shellReads("grep -f /h/s/SKILL.md c.json; awk -f /h/s/scan.awk d.txt; grep --file=p.txt /h/s/a.md; grep -fp /h/s/b.md; grep -e x /h/s/c.md; sed -f /h/s/x.sed e")).toEqual(["/h/s/SKILL.md", "c.json", "/h/s/scan.awk", "d.txt", "p.txt", "/h/s/a.md", "p", "/h/s/b.md", "/h/s/c.md", "/h/s/x.sed", "e"]);
+  });
+});
+
+describe("turns and calls from Codex's exec --json events", () => {
+  // Value: protects=Codex's turns are its agent messages in order with the final answer last, reasoning and command output never count, and each command, file change or MCP call is a call whose completed form replaces its started one, ok on exit 0; fails_when=reasoning or tool output is graded, a started item doubles a call, or a failing command counts as ok; why_new=U10 scope (the Codex adapter); seam=parseCodex; no_claim=none beyond protects
+  test("agent messages are the turns; commands, file changes and MCP calls are calls", () => {
+    const item = (type: string, item: Record<string, unknown>) => ({ type, item });
+    const { turns, calls } = parseCodex([
+      { type: "thread.started", thread_id: "x" },
+      { type: "turn.started" },
+      item("item.completed", { id: "r0", type: "reasoning", text: "REASONING-ONLY" }),
+      item("item.completed", { id: "m0", type: "agent_message", text: "Reading the skill." }),
+      item("item.started", { id: "c0", type: "command_execution", command: "/bin/bash -lc 'cat /h/.codex/skills/learn/SKILL.md'", aggregated_output: "", exit_code: null, status: "in_progress" }),
+      item("item.completed", { id: "c0", type: "command_execution", command: "/bin/bash -lc 'cat /h/.codex/skills/learn/SKILL.md'", aggregated_output: "TOOL-OUTPUT-ONLY", exit_code: 0, status: "completed" }),
+      item("item.completed", { id: "c1", type: "command_execution", command: "/bin/bash -lc 'cat /h/.codex/skills/learn/missing.md'", aggregated_output: "", exit_code: 1, status: "failed" }),
+      item("item.completed", { id: "f0", type: "file_change", changes: [{ path: "/w/a.ts", kind: "update" }, { path: "/w/b.ts", kind: "add" }], status: "completed" }),
+      item("item.completed", { id: "p0", type: "mcp_tool_call", server: "docs", tool: "search", status: "failed", error: { message: "no" } }),
+      item("item.started", { id: "c2", type: "command_execution", command: "sleep 100", exit_code: null, status: "in_progress" }),
+      item("item.completed", { id: "m1", type: "agent_message", text: "FINAL: done." }),
+      { type: "turn.completed", usage: { input_tokens: 1, output_tokens: 1 } },
+    ]);
+    expect(turns).toEqual(["Reading the skill.", "FINAL: done."]);
+    expect(calls.map((c) => [c.id, c.tool, c.ok])).toEqual([["c0", "shell", true], ["c1", "shell", false], ["f0", "apply_patch", true], ["p0", "mcp:docs.search", false], ["c2", "shell", null]]);
+    expect(calls[2]!.input).toEqual({ path: "/w/a.ts /w/b.ts" });
+    expect(skillUse(calls, { name: "learn", roots: ["/h/.codex/skills/learn"] })).toEqual({ opened: true, files: ["SKILL.md"] });
+    expect(gradeTrial(task({ interactive: false, must: ["done"] }), record(turns)).outcome).toBe("pass");
+    expect(gradeTrial(task({ interactive: false, must: ["TOOL-OUTPUT-ONLY|REASONING-ONLY"] }), record(turns)).outcome).toBe("fail");
   });
 });
