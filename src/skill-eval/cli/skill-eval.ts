@@ -7,7 +7,7 @@
 // literal call (diet.md's) runs in tests. The real Claude Code and Codex adapters are U10's and the trial module U9's;
 // until they land, a call on a real host stops after preflight's own checks.
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { FakeHostError, loadScript } from "../../adapters/_fake/host.ts";
 import { containerRunner } from "../../trial/sandbox.ts";
@@ -27,7 +27,12 @@ import { effectiveLines, resolveCall, SKILL_EVAL_HELP, type Call } from "./call.
 import { planLines } from "./dry-run.ts";
 import { runExample, type ExampleMode } from "./example.ts";
 import { FAKE_ADAPTER_SHA256, finishCalibration, finishRun, runFake } from "./run.ts";
-import { adapterSha256, dockerRig, hostReadiness, runOnHost, type HostRig } from "./run-host.ts";
+import { adapterSha256, dockerRig, hostReadiness, readJournal, runOnHost, verifierSha256, type HostRig } from "./run-host.ts";
+import { recipeHash } from "../../rig/recipe.ts";
+import { openLocalLedger } from "../../runner/ledger/local.ts";
+import { settleLease } from "../../runner/ledger/ledger.ts";
+import { recoverRun } from "../../trial/proxy.ts";
+import { spawnSync } from "node:child_process";
 import { skillName } from "./arms.ts";
 import { isReasonCode } from "../../errors/codes.ts";
 import { flagHelp, parseFlags, SKILL_EVAL_FLAGS } from "./flags.ts";
@@ -156,6 +161,10 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
       io.out(json ? JSON.stringify({ preflight: "pass", steps: report.passed, warnings: report.warnings.map((w) => w.code + " " + w.message) }) : "PREFLIGHT: pass (" + report.passed.length + " steps; nothing was spent)");
       return 0;
     }
+    if (isFakeHost(env) && call.resume) {
+      io.err(codeLines("E_USAGE", ["skill-eval: --resume continues a run on Claude Code or Codex; the fake host keeps no journal to resume"], HINT));
+      return 2;
+    }
     return isFakeHost(env) ? runOnFakeHost(call, report, io, env, json) : await runOnRealHost(call, report, io, env, json);
   } catch (error) {
     return internal(io, call, error, report?.env_names ?? [], env, json, mode);
@@ -196,8 +205,24 @@ function runOnFakeHost(call: Call, report: PreflightReport, io: Io, env: Env, js
   return finishRun(run, context, call.out.path, io, json, { ...DEFAULT_OPTIONS, margin_points: call.margin });
 }
 
-/** After preflight on Claude Code or Codex: the Docker rig, calibration, the trials, then U6's verdict. */
-async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: Env, json: boolean): Promise<number> {
+/** Stop codes after which --resume refuses (E_NOT_RESUMABLE): the run cannot get further by continuing. */
+const TERMINAL = ["NOT_MEASURABLE", "MARGIN_NOT_ATTEMPTED", "VACUOUS_CHECK", "LOCK_MISSING", "LOCK_DRIFT", "E_USER_TURNS_MISSING", "E_INTERACTIVE_HOST", "E_LOOSE_GSTACK"];
+
+interface RunFile {
+  schema_version: 1;
+  run_id: string;
+  verdict_id: string;
+  started_at: string;
+  /** Micro-dollars committed by earlier attempts of this run, before this one started. */
+  committed_before: number;
+  repair: string | null;
+  recovery: { lease_id: string; proxy_container: string; journal: string } | null;
+  ended?: { exit_code: number; reasons: string[]; committed: number };
+}
+
+/** After preflight on Claude Code or Codex: the Docker rig, calibration, the trials, then U6's verdict. makeRig is the Docker rig except in tests. --resume continues the run in its out directory; --repair reruns the cells whose key changed under a new verdict id. */
+export async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: Env, json: boolean, makeRig: typeof dockerRig = dockerRig): Promise<number> {
+  const resume = call.resume;
   const started = Date.now();
   const ids = new Set(report.tasks.map((t) => t.id));
   const tasks = verdictTasks(report.contract!).filter((t) => ids.has(t.id));
@@ -206,12 +231,37 @@ async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: E
     printStops(io, [notReady]);
     return 2;
   }
+  const out = resume?.dir ?? call.out.path;
+  const runFile = join(out, "run.json");
+  let prior: RunFile | null = null;
+  if (resume) {
+    if (!existsSync(runFile)) {
+      printStops(io, [{ code: "E_NOT_RESUMABLE", message: out + " holds no run.json, so there is no real-host run to resume", fix: "Point --resume at the out directory of a run on --host claude or codex." }]);
+      return 2;
+    }
+    prior = JSON.parse(readFileSync(runFile, "utf8")) as RunFile;
+    const terminal = (prior.ended?.reasons ?? []).filter((r) => TERMINAL.includes(r));
+    if (terminal.length) {
+      printStops(io, [{ code: "E_NOT_RESUMABLE", message: "the run ended on " + terminal.join(", ") + ", which continuing cannot change" }]);
+      return 2;
+    }
+    if (prior.recovery && !prior.ended) {
+      const bin = env.GSTACK_EVALS_DOCKER_BIN || "docker";
+      const local = openLocalLedger(call.ledger);
+      const recovery = prior.recovery;
+      const { settled } = await recoverRun({ stopProxy: () => void spawnSync(bin, ["rm", "-f", recovery.proxy_container], { stdio: "ignore" }), journal: recovery.journal, ledger: local, settle: () => settleLease(call.record.path, local, recovery.lease_id) });
+      prior.ended = { exit_code: 2, reasons: [], committed: settled.spent_micros };
+    }
+  }
+  const committedBefore = prior ? prior.committed_before + (prior.ended?.committed ?? 0) : 0;
+  const runId = prior && !resume?.repair ? prior.run_id : call.runId;
+  const cap = Math.max(0, call.spendCap! - committedBefore);
   const holder = call.arms.arms.find((a) => a.kind === "overlay" && a.dir !== null);
   const skill = call.arms.skill?.name ?? (holder && holder.kind === "overlay" && holder.dir ? skillName(holder.dir) : null);
   const nonce = randomUUID().slice(0, 8);
   let rig: HostRig;
   try {
-    rig = dockerRig(call, { env, skill, nonce });
+    rig = makeRig({ ...call, runId, out: { ...call.out, path: out } }, { env, skill, nonce, cap });
   } catch (error) {
     const message = String((error as Error)?.message ?? error);
     const code = message.split(":")[0]!;
@@ -219,20 +269,32 @@ async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: E
     printStops(io, [{ code, message: message.slice(code.length + 1).trim() }]);
     return 2;
   }
+  const record: RunFile = { schema_version: 1, run_id: prior?.run_id ?? runId, verdict_id: runId, started_at: new Date(started).toISOString(), committed_before: committedBefore, repair: resume?.repair ?? null, recovery: rig.recovery };
+  mkdirSync(out, { recursive: true });
+  writeFileSync(runFile, JSON.stringify(record, null, 2) + "\n");
+  const pins = JSON.parse(readFileSync(join(REPO_ROOT, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;
   let run;
   let spend: Awaited<ReturnType<HostRig["close"]>>;
   try {
-    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap: call.spendCap, runId: call.runId, out: call.out.path, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, calibrateOnly: call.calibrate, ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
+    run = await runOnHost({ host: call.host, models: call.models, trials: call.trials, parallel: call.parallel, timeoutS: call.timeoutS, cap, runId, out, tasksDir: dirname(resolve(call.tasks)), policy: call.policy, arms: call.arms.arms, skill, tasks: report.tasks, verdict: tasks, entries: report.contract!.ext?.sidecar?.tasks ?? {}, nonce, calibrateOnly: call.calibrate, judgeModel: call.judgeModel, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(), host_version: pins[call.host] ?? null, adapter_sha256: adapterSha256(call.host), isolation: call.isolation, verifier: verifierSha256() }, ...(resume ? { reuse: readJournal(out), repair: resume.repair !== null } : {}), ...(report.lock?.gate ? { gate: report.lock.gate } : {}) }, rig, (line) => io.err(line));
   } finally {
     spend = await rig.close();
   }
+  if (run.stale.length) {
+    printStops(io, run.stale);
+    writeFileSync(runFile, JSON.stringify({ ...record, ended: { exit_code: 2, reasons: ["E_CACHE_STALE"], committed: spend.committed } }, null, 2) + "\n");
+    return 2;
+  }
   for (const f of run.calibrationFailures) io.err(codeLines(f.code, [f.message], f.fix));
-  if (call.calibrate) return finishCalibration(run, run.calibrationFailures, { committed: spend.committed, unknown: spend.unknown, lease_id: spend.lease_id, cap: call.spendCap! }, call.out.path, io, json);
+  if (call.calibrate) {
+    const exit = finishCalibration(run, run.calibrationFailures, { committed: committedBefore + spend.committed, unknown: spend.unknown, lease_id: spend.lease_id, cap: call.spendCap! }, out, io, json);
+    writeFileSync(runFile, JSON.stringify({ ...record, ended: { exit_code: exit, reasons: run.calibrationFailures.map((f) => f.code), committed: spend.committed } }, null, 2) + "\n");
+    return exit;
+  }
   const judged = tasks.some((t) => t.judge);
   const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
-  const pins = JSON.parse(readFileSync(join(REPO_ROOT, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;
   const context: VerdictContext = {
-    verdict_id: call.runId,
+    verdict_id: runId,
     harness_version: version(),
     trials: call.trials,
     effective: { noise_floor: call.noiseFloor, parallel: call.parallel, timeout_s: call.timeoutS, judge_model: judged ? call.judgeModel : null, isolation: call.isolation, policy_sha256: call.policy.sha256, base, skill },
@@ -240,13 +302,16 @@ async function runOnRealHost(call: Call, report: PreflightReport, io: Io, env: E
     arm_trees: Object.fromEntries(call.arms.arms.flatMap((a) => (a.kind === "overlay" && a.dir ? [[a.name, treeSha256(readSkillFiles(a.dir))]] : []))),
     lock: report.lock ? { tasks_sha256: report.lock.lock.tasks.sha256, ext_sha256: report.lock.lock.ext?.sha256 ?? null, commit: report.lock.commit, post_hoc: false } : null,
     levels: null,
-    spend: { ledger: call.ledger.path, ledger_record: call.record.path, committed: spend.committed, reserved: 0, unknown: spend.unknown, cap: call.spendCap!, line_item: call.item, lease_id: spend.lease_id, approval: null, caps_history: [call.spendCap!] },
+    spend: { ledger: call.ledger.path, ledger_record: call.record.path, committed: committedBefore + spend.committed, reserved: 0, unknown: spend.unknown, cap: call.spendCap!, line_item: call.item, lease_id: spend.lease_id, approval: null, caps_history: [call.spendCap!] },
     adjudication: { blinded: true, judge_model: judged ? call.judgeModel : null },
-    resumed_from: null,
+    resumed_from: prior ? prior.verdict_id : null,
     wall_s: (Date.now() - started) / 1000,
     rig: null,
   };
-  return finishRun(run, context, call.out.path, io, json, { ...DEFAULT_OPTIONS, margin_points: call.margin });
+  const exit = finishRun(run, context, out, io, json, { ...DEFAULT_OPTIONS, margin_points: call.margin });
+  const verdict = JSON.parse(readFileSync(join(out, "verdict.json"), "utf8")) as { reasons?: string[] };
+  writeFileSync(runFile, JSON.stringify({ ...record, ended: { exit_code: exit, reasons: verdict.reasons ?? [], committed: spend.committed } }, null, 2) + "\n");
+  return exit;
 }
 
 /** An unexpected error: an E_INTERNAL record with secrets scrubbed, a correlation id and a trace file in <out>. */

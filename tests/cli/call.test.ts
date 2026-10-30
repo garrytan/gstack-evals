@@ -73,7 +73,7 @@ describe("effective defaults", () => {
   // Value: protects=a call missing a required flag, using an unbuilt flag, or naming a bad policy is refused before anything runs; fails_when=one of these passes resolveCall; why_new=new; seam=none; no_claim=none beyond protects
   test("missing required flags, unbuilt flags and a bad policy are refused", () => {
     expect(call(BASE.slice(0, 6))).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("needs --model") });
-    expect(call([...BASE, "--resume", "/x"])).toMatchObject({ code: "E_USAGE", message: "--resume is not built yet (U10)" });
+    expect(call([...BASE, "--mirror", "/x"])).toMatchObject({ code: "E_USAGE", message: "--mirror is not built yet (U10)" });
     expect(call([...BASE, "--policy", "/no/such/policy.json"])).toMatchObject({ code: "E_MODEL_POLICY", message: expect.stringContaining("cannot read the policy file") });
     expect(call([...BASE.slice(0, 6), "--model", "a,a"])).toMatchObject({ code: "E_USAGE", message: "--model names a model twice" });
   });

@@ -36,6 +36,8 @@ export interface Call {
   /** Micro-dollars; null when --spend-cap was not given. */
   spendCap: number | null;
   dryRun: boolean;
+  /** --resume: the earlier run's out directory, and the --repair note when cells are to be rerun. */
+  resume: { dir: string; repair: string | null } | null;
   /** --calibrate: run the calibration checks and no trial. */
   calibrate: boolean;
   tasksOnly: string[] | null;
@@ -95,6 +97,7 @@ export function resolveCall(parsed: ParsedFlags, env: Env = process.env, home = 
   const models = v.get("--model") as string[];
   if (new Set(models).size !== models.length) return usage("--model names a model twice");
   const tasksOnly = (v.get("--tasks-only") as string[] | undefined) ?? null;
+  if (v.has("--repair") && !v.has("--resume")) return usage("--repair reruns cells of an earlier run; give that run's out directory with --resume <out>");
 
   const arms = resolveArms(v.get("--arms") as string[], { base: v.get("--base") as string | undefined, skill: v.get("--skill") as string | undefined }, home);
   if ("code" in arms) return arms;
@@ -156,6 +159,7 @@ export function resolveCall(parsed: ParsedFlags, env: Env = process.env, home = 
     trials,
     spendCap,
     dryRun: v.has("--dry-run"),
+    resume: v.has("--resume") ? { dir: resolve(v.get("--resume") as string), repair: (v.get("--repair") as string | undefined) ?? null } : null,
     calibrate: v.has("--calibrate"),
     tasksOnly,
     arms,

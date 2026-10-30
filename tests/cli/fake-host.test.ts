@@ -137,4 +137,13 @@ describe("a run on the fake host", () => {
     expect(failed.text().out).toContain("CALIBRATION: fail for m  skill pass  none pass  shell pass  config n/a  usersim n/a  egress fail");
     expect(JSON.parse(readFileSync(join(failedOut, "calibration.json"), "utf8")).failures).toEqual([failure]);
   });
+  // Value: protects=--resume on the fake host is refused with E_USAGE, since the fake host keeps no journal, instead of starting a fresh run; fails_when=--resume runs silently on the fake host; why_new=--resume is built for real hosts (U10); seam=skillEvalCommand; no_claim=--resume on a real host, which tests/adapters/run-host.test.ts covers
+  test("--resume on the fake host is refused", async () => {
+    const { call } = await setup();
+    const out = join(TMP, "resume-fake");
+    const io = collect();
+    expect(await skillEvalCommand(call(out, ["--resume", out]), io, { GSTACK_EVALS_FAKE_HOST: "1", ...KEYS })).toBe(2);
+    expect(io.text().err).toContain("--resume continues a run on Claude Code or Codex; the fake host keeps no journal to resume");
+    expect(existsSync(join(out, "verdict.json"))).toBe(false);
+  });
 });
