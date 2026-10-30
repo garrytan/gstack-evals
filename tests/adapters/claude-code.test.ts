@@ -200,3 +200,35 @@ describe("Claude Code adapter pieces", () => {
     expect(refusalIn("API Error: 500 something else")).toBeNull();
   });
 });
+
+describe.skipIf(!HAS_CLAUDE_CLI)("the PreToolUse hook on the real CLI, with a fixture's allow rules", () => {
+  // Value: protects=every tool call reaches canUseTool even when the fixture's .claude/settings.json allows it, adds a settings hook that answers allow, and asks for bypassPermissions, so an allow rule cannot make AskUserQuestion skip the simulator and canUseTool stays the one approval path; fails_when=a call the fixture allows skips canUseTool (without the hook, Bash and Write do on CLI 2.1.314), or the question is answered by anything but the simulator; why_new=GST-273 (U10b; GSTA-35's open item on allow rules); seam=claudeCodeDriver's PreToolUse hook and canUseTool, with the SDK's query wrapped only to record canUseTool's calls; no_claim=settings the agent writes mid-session
+  test("a fixture allow rule, settings hook and permission mode cannot route a tool call around canUseTool", async () => {
+    const script: Script = ({ results }) => {
+      if (!results.has("toolu_ask")) return [{ type: "tool_use", id: "toolu_ask", name: "AskUserQuestion", input: { questions: [{ question: "Which approach should we take?", header: "Approach", multiSelect: false, options: [{ label: "Approach A", description: "" }, { label: "Approach B", description: "" }] }] } }];
+      if (!results.has("toolu_bash")) return [{ type: "tool_use", id: "toolu_bash", name: "Bash", input: { command: "echo routed", description: "Echo" } }];
+      if (!results.has("toolu_write")) return [{ type: "tool_use", id: "toolu_write", name: "Write", input: { file_path: "notes.txt", content: "x" } }];
+      return [{ type: "text", text: "FINAL: done." }];
+    };
+    const h = harness(script);
+    open.push(h);
+    const binding = h.bind(MODEL);
+    const work = join(h.dir, "work", "t");
+    mkdirSync(join(work, ".claude"), { recursive: true });
+    const allow = 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}\'';
+    writeFileSync(join(work, ".claude", "settings.json"), JSON.stringify({ permissions: { allow: ["AskUserQuestion", "Bash", "Write"], defaultMode: "bypassPermissions" }, hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: allow }] }] } }));
+    const seen: string[] = [];
+    const recorded = (args: { prompt: unknown; options: Record<string, any> }) => {
+      const can = args.options.canUseTool;
+      return (query as any)({ ...args, options: { ...args.options, canUseTool: (name: string, input: unknown, opts: { toolUseID?: string }) => (seen.push(name + " " + opts?.toolUseID), can(name, input, opts)) } });
+    };
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, entry: { user: { replies: { approach: "Approach B" } } }, skill: null, out: join(h.dir, "host"), query: recorded as never });
+    const outcome = await driver.run(h.session(work, join(h.dir, "home"), driver.env!), { id: "t", prompt: "Go." }, 120_000);
+    expect(outcome.termination).toEqual({ kind: "completed" });
+    expect(seen).toEqual(["AskUserQuestion toolu_ask", "Bash toolu_bash", "Write toolu_write"]);
+    const ask = readFileSync(join(h.dir, "host", "usersim.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((e) => e.kind === "ask");
+    expect(ask).toMatchObject({ category: "approach", source: "scripted", reply: "Approach B" });
+    const answered = h.upstream.map((u) => JSON.stringify(u.body.messages ?? [])).find((m) => m.includes("toolu_ask") && m.includes("tool_result"));
+    expect(answered).toContain("Approach B");
+  }, 180_000);
+});

@@ -54,7 +54,7 @@ export const SKILL_EVAL_FLAGS: readonly FlagSpec[] = [
   { name: "--margin", kind: "number", default: null, summary: "Non-inferiority margin in percentage points; needed for noninferior: true.", owner: "U6", built: true },
   { name: "--resume", kind: "path", default: null, summary: "Continue a stopped run from its out directory.", owner: "U10", built: true },
   { name: "--repair", kind: "string", default: null, summary: "Rerun the cells a named repair affects, under a new verdict id.", owner: "U10", built: true },
-  { name: "--mirror", kind: "path", default: null, summary: "Copy the verdict and receipts, without transcripts, machine paths or meter ids.", owner: "U10", built: false },
+  { name: "--mirror", kind: "path", default: null, summary: "Copy the verdict and receipts, without transcripts, machine paths or meter ids.", owner: "U10", built: true },
   { name: "--arms-file", kind: "path", default: null, summary: "The full arm manifest (schema/arms.schema.json) with an install command per host.", owner: "U9", built: false },
   { name: "--json", kind: "switch", default: false, summary: "Print JSON; every failure writes <out>/error.json.", owner: "U7", built: true },
   { name: "--example", kind: "optional-enum", values: ["miss", "safety", "unopened", "not-measurable", "cap-stop"], default: null, summary: "Run a keyless example on the fake host and write a real verdict.json; --example alone passes.", owner: "U7", built: true },

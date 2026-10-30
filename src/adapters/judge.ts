@@ -1,4 +1,5 @@
-// The judge's session (U10): one model request that declares no tools. No host CLI runs, so the judge cannot run a
+// The judge's session (U10): one model request that declares no tools. The persona's free-form answers use the same
+// request (src/usersim/persona.ts), with a smaller output cap. No host CLI runs, so the judge cannot run a
 // command, read a file or open a skill: it can only answer from the prompt it is sent. The request leaves from the
 // judge's own container on the trial network, which holds no skill and no copy of the agent's work, through its own
 // proxy slot; the proxy writes the cell's output cap into it and meters it like any session.
@@ -10,10 +11,11 @@ import { refusalIn, refusalTermination } from "./claude-code/driver.ts";
 /** The route a judge model's one request takes on its provider. */
 export const JUDGE_ROUTE: Record<Provider, string> = { anthropic: "/v1/messages", openai: "/v1/responses", openrouter: "/v1/chat/completions" };
 
-/** The request body: the model and one user message, and no tools, tool choice or system prompt. */
-export function judgeRequest(provider: Provider, model: string, prompt: string): Record<string, unknown> {
+/** The request body: the model and one user message, and no tools, tool choice or system prompt; with maxOutputTokens, the output cap a smaller request asks for. */
+export function judgeRequest(provider: Provider, model: string, prompt: string, maxOutputTokens?: number): Record<string, unknown> {
   const messages = [{ role: "user", content: prompt }];
-  return provider === "openai" ? { model, input: messages, store: false } : { model, messages };
+  const cap = maxOutputTokens === undefined ? {} : { [provider === "openai" ? "max_output_tokens" : "max_tokens"]: maxOutputTokens };
+  return provider === "openai" ? { model, input: messages, store: false, ...cap } : { model, messages, ...cap };
 }
 
 /** The text of the model's answer in the provider's response shape. */
@@ -27,7 +29,7 @@ export function judgeAnswer(provider: Provider, body: any): string {
 const send = (route: string): string =>
   "const r = await fetch((process.env.ANTHROPIC_BASE_URL ?? process.env.OPENAI_BASE_URL) + " + JSON.stringify(route) + ", { method: 'POST', headers: { 'content-type': 'application/json', 'anthropic-version': '2023-06-01', authorization: 'Bearer ' + (process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.OPENAI_API_KEY) }, body: await Bun.stdin.text() }); process.stdout.write(JSON.stringify({ status: r.status, body: await r.text() }));";
 
-export function judgeDriver(o: { provider: Provider; model: string; proxy: { baseUrl: string; slot: string; token: string } }): AgentDriver {
+export function judgeDriver(o: { provider: Provider; model: string; proxy: { baseUrl: string; slot: string; token: string }; maxOutputTokens?: number }): AgentDriver {
   const base = o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider;
   return {
     env: o.provider === "anthropic" ? { ANTHROPIC_BASE_URL: base, ANTHROPIC_AUTH_TOKEN: o.proxy.token } : { OPENAI_BASE_URL: base, OPENAI_API_KEY: o.proxy.token },
@@ -41,7 +43,7 @@ export function judgeDriver(o: { provider: Provider; model: string; proxy: { bas
       });
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timedOut = new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), timeoutMs)));
-      child.stdin?.end(JSON.stringify(judgeRequest(o.provider, o.model, task.prompt)));
+      child.stdin?.end(JSON.stringify(judgeRequest(o.provider, o.model, task.prompt, o.maxOutputTokens)));
       const done = await Promise.race([closed, timedOut]);
       clearTimeout(timer);
       if (!done) child.kill("SIGKILL");

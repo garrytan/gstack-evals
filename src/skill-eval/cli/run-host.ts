@@ -17,9 +17,12 @@
 //   session is journaled only with its judgment, so --resume reruns one whose judge failed or hit the cap. --resume reuses
 //   a journaled cell whose key still matches; a changed key refuses before any spend (E_CACHE_STALE) unless --repair
 //   names the repair, which reruns those cells.
-// - Arms on a real host are loose skill folders, none and bare. A gstack base at a sha, a stack and a placebo arm, and
-//   the persona's free-form model, are GST-272's, and a loadout arm has no installer yet; hostReadiness refuses them
-//   with E_USAGE before anything is spent.
+// - Arms on a real host are loose skill folders, none and bare. A gstack base at a sha, a stack and a placebo arm are
+//   GST-272's, and a loadout arm has no installer yet; hostReadiness refuses them with E_USAGE before anything is spent.
+// - A task with a persona gets one usersim slot per session on Claude Code, bound at its first free-form question under
+//   the run's lease for the call's usersim model (src/usersim/persona.ts). Each answer is one request with no tools from
+//   the judge's sandbox, its meter adds to the run's spend and to <out>/usersim.ndjson, and a round's worst case counts a
+//   usersim allowance per persona session. The usersim model comes from the policy, whose sha256 is in the session key.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -32,6 +35,7 @@ import { ProxyControl, type BindRequest, type Binding, type Meter } from "../../
 import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../../trial/cache.ts";
 import { judgePrompt, parseJudgment, redact } from "../../grade/adjudicate.ts";
 import { JUDGE_ROUTE, judgeDriver } from "../../adapters/judge.ts";
+import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_TIMEOUT_S, personaAnswer, personaPrompt, type PersonaAnswer } from "../../usersim/persona.ts";
 import { buildArmImage, checkImagePin, stateRoot } from "../../trial/image.ts";
 import { createTrialNetwork, recoverRun, removeTrialNetwork, startProxyContainer } from "../../trial/proxy.ts";
 import { dockerSandbox, type Sandbox } from "../../trial/sandbox.ts";
@@ -43,7 +47,7 @@ import { rerunPlan, type Stop, type VerdictInput } from "../verdict/gates.ts";
 import { gradeScope, gradeTrial, type VerdictTask } from "../verdict/grade.ts";
 import type { GateEvidence } from "../verdict/lock.ts";
 import type { Call } from "./call.ts";
-import { allowanceMicros, JUDGE_ALLOWANCE, SESSION_ALLOWANCE } from "./dry-run.ts";
+import { allowanceMicros, JUDGE_ALLOWANCE, SESSION_ALLOWANCE, USERSIM_ALLOWANCE } from "./dry-run.ts";
 import { providerOf, type LoadedPolicy } from "./policy.ts";
 
 type Env = Record<string, string | undefined>;
@@ -91,6 +95,8 @@ export interface HostRunInput {
   /** The calibration nonce; the sentinels derive from it. */
   nonce: string;
   judgeModel: string;
+  /** The model behind the persona's free-form answers: the policy's usersim default. */
+  usersimModel: string;
   /** The session key parts that do not vary by cell. */
   keyBase: { image_digest: string | null; recipe: string; host_version: string | null; adapter_sha256: string; isolation: string; verifier: string };
   /** Journaled cells from the run being resumed, keyed by cellId. */
@@ -156,8 +162,6 @@ export function hostReadiness(call: Pick<Call, "host" | "arms" | "isolation" | "
   if (later.length) return stop("arm" + (later.length > 1 ? "s " : " ") + later.map((a) => a.name).join(", ") + " need" + (later.length > 1 ? "" : "s") + " a gstack base, stack or placebo install on a real host, which lands with GST-272; use loose skill folders, none and bare");
   const loadouts = call.arms.arms.filter((a) => a.kind === "loadout");
   if (loadouts.length) return stop("loadout arm" + (loadouts.length > 1 ? "s " : " ") + loadouts.map((a) => a.name).join(", ") + ": a real host has no loadout install yet; use loose skill folders, none and bare");
-  const personas = tasks.filter((t) => entries[t.id]?.user?.persona !== undefined).map((t) => t.id);
-  if (personas.length) return stop("task" + (personas.length > 1 ? "s " : " ") + personas.join(", ") + " declare" + (personas.length > 1 ? "" : "s") + " a user persona, whose free-form answers land with GST-272; a real host runs scripted replies only");
   if (call.isolation !== "docker") return stop("a real host runs under --isolation docker only; process isolation has no arm install");
   if (call.item === null || call.spendCap === null) return stop("a real host run needs a ledger line item and --spend-cap");
   return null;
@@ -195,6 +199,7 @@ interface SessionSpec {
 }
 
 const JUDGE_ARM = "judge";
+const USERSIM_ARM = "usersim";
 
 export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: string) => void = () => {}): Promise<HostRun> {
   const records: TrialRecord[] = [];
@@ -228,6 +233,36 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   }
   if (stale.length) return result();
 
+  const usersimLog = join(o.out, "usersim.ndjson");
+  const persona = (s: SessionSpec, arm: string) => {
+    const provider = providerOf(o.policy, o.usersimModel);
+    if (!provider) throw new Error("E_INTERNAL: the usersim model " + o.usersimModel + " passed preflight with no provider");
+    let binding: Binding | null = null;
+    let answers = 0;
+    let pending: Promise<PersonaAnswer> | null = null;
+    const ask = async (text: string, question: string): Promise<PersonaAnswer> => {
+      try {
+        binding ??= await rig.bind({ cell: { run_id: o.runId, arm, task: s.task.id + "-usersim", model: o.usersimModel, trial: s.trial, attempt: s.round }, models: [provider + ":" + o.usersimModel], allowance_micros: allowance(o.usersimModel, USERSIM_ALLOWANCE) });
+        const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
+        const run = await runTrial({ cell: { model: o.usersimModel, arm: USERSIM_ARM, round: s.round, trial: s.trial }, task: { id: s.task.id + "-usersim", prompt: personaPrompt(text, question) }, tasksDir: empty, sandbox: rig.judgeSandbox(), agent: judgeDriver({ provider, model: o.usersimModel, proxy, maxOutputTokens: PERSONA_MAX_OUTPUT_TOKENS }), dir: join(s.dir, "usersim", String(++answers)), timeoutS: PERSONA_TIMEOUT_S, network: rig.network });
+        return personaAnswer(run.record.termination, run.record.turns.at(-1));
+      } catch {
+        return { stop: { kind: "missing", code: "E_USERSIM" } };
+      }
+    };
+    return {
+      answer: (text: string, question: string): Promise<PersonaAnswer> => (pending = ask(text, question)),
+      close: async (): Promise<number> => {
+        await pending;
+        if (!binding) return 0;
+        const meter = await rig.finalize(binding.meter_id);
+        appendFileSync(usersimLog, JSON.stringify({ cell: { model: s.model, arm, task: s.task.id, round: s.round, trial: s.trial }, usersim_model: o.usersimModel, usersim_route: provider + " " + JUDGE_ROUTE[provider], answers, cost_micros: meter.micros }) + "\n");
+        return meter.micros;
+      },
+    };
+  };
+  const hasPersona = (taskId: string) => o.host === "claude" && o.entries[taskId]?.user?.persona !== undefined;
+
   const session = async (s: SessionSpec): Promise<TrialRun & { calls: HostCall[] }> => {
     const provider = providerOf(o.policy, s.model)!;
     const armName = s.arm?.name ?? JUDGE_ARM;
@@ -236,10 +271,11 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const holds = s.arm !== null && holdsSkill(s.arm);
     const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: [skillRoot(s.host, home, o.skill)], home, dir: holds ? (s.arm as { dir: string }).dir : null } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
-    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}) });
+    const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
+    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}) });
     const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network });
     const meter = await rig.finalize(binding.meter_id);
-    spent += meter.micros;
+    spent += meter.micros + (usersim ? await usersim.close() : 0);
     run.record.cost_micros = meter.micros;
     if (!holds && !s.watchSkill) run.record.opened = null;
     const callsFile = join(s.dir, "host", "calls.json");
@@ -250,7 +286,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   const empty = join(o.out, "calibration", "fixtures");
   mkdirSync(empty, { recursive: true });
   const marks = sentinels(o.arms, o.nonce);
-  const interactive = o.verdict.some((t) => t.interactive && o.entries[t.id]?.user?.replies);
+  const interactive = o.verdict.some((t) => t.interactive && (o.entries[t.id]?.user?.replies || o.entries[t.id]?.user?.persona));
   const egress = rig.egress();
   for (const model of o.models) {
     const probes = calibrationProbes({ host: o.host, skill: o.skill ?? "target", arms: o.arms.map((a) => ({ name: a.name, holdsSkill: holdsSkill(a) })), interactive, nonce: o.nonce });
@@ -297,7 +333,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     for (let trial = 0; trial < o.trials; trial++) {
       const batch = models.flatMap((model) => o.verdict.flatMap((task) => o.arms.map((arm) => ({ cell: { model, arm: arm.name, task: task.id, round: r, trial } as Cell, task, arm }))));
       const fresh = batch.filter((c) => !reuse.has(cellId(c.cell)));
-      const worst = fresh.reduce((s, c) => s + allowance(c.cell.model) + (judges(c.task) ? judgeAllowance : 0), 0);
+      const worst = fresh.reduce((s, c) => s + allowance(c.cell.model) + (judges(c.task) ? judgeAllowance : 0) + (hasPersona(c.task.id) ? allowance(o.usersimModel, USERSIM_ALLOWANCE) : 0), 0);
       if (o.cap !== null && spent + worst > o.cap) {
         stops.push({ code: "CAP_STOP", model: null, subject: null });
         return false;
@@ -340,7 +376,7 @@ export function verifierSha256(): string {
 /** sha256 over the adapter code a verdict on this host depends on. */
 export function adapterSha256(host: Host): string {
   const src = join(import.meta.dir, "..", "..");
-  const files = [host === "claude" ? "adapters/claude-code/driver.ts" : "adapters/codex/driver.ts", "adapters/host.ts", "adapters/calibration.ts", "grade/transcript.ts", "usersim/sim.ts", "usersim/classifier.ts", "skill-eval/cli/run-host.ts"];
+  const files = [host === "claude" ? "adapters/claude-code/driver.ts" : "adapters/codex/driver.ts", "adapters/host.ts", "adapters/calibration.ts", "grade/transcript.ts", "usersim/sim.ts", "usersim/classifier.ts", "usersim/persona.ts", "skill-eval/cli/run-host.ts"];
   const h = createHash("sha256");
   for (const f of files) h.update(f + "\0" + readFileSync(join(src, f)) + "\0");
   return h.digest("hex");

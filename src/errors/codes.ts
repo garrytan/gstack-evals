@@ -318,6 +318,15 @@ export const CODES = {
     resumable: false,
     owner: "U10",
   },
+  E_APPROVAL_BYPASS: {
+    exit: 2,
+    meaning: "An AskUserQuestion call got an answer that did not come from the user simulator through the adapter's canUseTool, so that trial ended as a missing cell. The Claude Code adapter routes every tool call to canUseTool with a PreToolUse hook, so this means the pinned CLI found another route.",
+    fix: "Read the trial's host/transcript.ndjson and host/usersim.ndjson to see which question was answered and how, then fix the adapter or the CLI pin before any counted run. Do not --resume.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
   E_INTERACTIVE_HOST: {
     exit: 2,
     meaning: "A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.",

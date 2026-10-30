@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NO_SKILL, withSentinel } from "../../src/adapters/calibration.ts";
@@ -10,7 +10,8 @@ import { dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostR
 import { resolveCall, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS } from "../../src/skill-eval/cli/flags.ts";
 import { preflight } from "../../src/skill-eval/cli/preflight.ts";
-import { runOnRealHost } from "../../src/skill-eval/cli/skill-eval.ts";
+import { mirrorReceipts, runOnRealHost } from "../../src/skill-eval/cli/skill-eval.ts";
+import { PERSONA_MAX_OUTPUT_TOKENS } from "../../src/usersim/persona.ts";
 import { collect } from "../cli/helpers.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { buildTrialImage, stateRoot } from "../../src/trial/image.ts";
@@ -94,6 +95,19 @@ const claudeModel: Script = ({ results, body }) => {
   return [{ type: "text", text: "HELLO from the task." }];
 };
 
+const PERSONA = "PERSONA-TEXT: a dentist-software founder in a hurry.";
+const PERSONA_ANSWER = "PERSONA-ANSWER: three dentists paid a deposit.";
+
+/** The Claude Code model for a task with a persona: it asks a question no reply covers, then greets once it has an answer. */
+const personaModel: Script = (turn) => {
+  if (!firstUser(turn.body).includes("Say hello")) return claudeModel(turn);
+  if (turn.users.length < 2) return [{ type: "text", text: "Before I greet you: what's the strongest evidence you have that someone actually wants this?" }];
+  return [{ type: "text", text: "HELLO from the task, noted." }];
+};
+
+/** The usersim model answers a persona prompt; any other Responses request (the judge) gets its verdict line. */
+const personaResponses: ResponsesScript = ({ body }) => (JSON.stringify(body.input).includes("<persona>") ? [{ type: "message", text: PERSONA_ANSWER }] : [{ type: "message", text: "VERDICT: done" }]);
+
 /** The same model for Codex, through exec_command. */
 const codexModel: ResponsesScript = ({ outputs, body }) => {
   const prompt = firstUser(body);
@@ -109,8 +123,8 @@ const codexModel: ResponsesScript = ({ outputs, body }) => {
   return [{ type: "message", text: "HELLO from the task." }];
 };
 
-async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; root?: string; judge?: boolean; responses?: ResponsesScript; extra?: Partial<HostRunInput>; calibrateOnly?: boolean; models?: string[] } = {}) {
-  const h = harness(host === "claude" ? claudeModel : () => [], { responses: o.responses ?? codexModel });
+async function runHost(host: Host, o: { script?: Script; persona?: boolean; interactive?: boolean; egressOpen?: boolean; leakInto?: string; cap?: number | null; root?: string; judge?: boolean; responses?: ResponsesScript; extra?: Partial<HostRunInput>; calibrateOnly?: boolean; models?: string[] } = {}) {
+  const h = harness(o.script ?? (host === "claude" ? claudeModel : () => []), { responses: o.responses ?? codexModel });
   open.push(h);
   const root = o.root ?? mkdtempSync(join(tmpdir(), "gse-runhost-"));
   const arms: ArmSpec[] = [
@@ -120,13 +134,13 @@ async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: bool
   ];
   const tasksDir = join(root, "tasks");
   mkdirSync(tasksDir, { recursive: true });
-  const interactive = o.interactive ?? false;
+  const interactive = o.interactive ?? o.persona ?? false;
   const run = await runOnHost({
     host, models: o.models ?? [MODELS[host]], trials: 1, parallel: 2, timeoutS: 120, cap: o.cap === undefined ? null : o.cap, runId: "run-test", out: join(root, "out"), tasksDir, policy, arms, skill: SKILL, nonce: NONCE,
-    judgeModel: host === "claude" ? "gpt-6.1-sol" : "claude-opus-5-5", keyBase: { image_digest: null, recipe: "test", host_version: "test", adapter_sha256: "test", isolation: "process", verifier: "test" },
+    judgeModel: host === "claude" ? "gpt-6.1-sol" : "claude-opus-5-5", usersimModel: policy.policy.defaults.usersim, keyBase: { image_digest: null, recipe: "test", host_version: "test", adapter_sha256: "test", isolation: "process", verifier: "test" },
     tasks: [{ id: "hello", prompt: "Say hello." }],
     verdict: [{ id: "hello", safety: false, interactive, judge: o.judge ?? false, must: ["hello"], must_not: [], check: false }],
-    entries: interactive ? { hello: { interactive: true, user: { replies: { mode: "Building a startup" } } } } : o.judge ? { hello: { judge: "The answer greets the user." } } : {},
+    entries: o.persona ? { hello: { interactive: true, user: { persona: PERSONA } } } : interactive ? { hello: { interactive: true, user: { replies: { mode: "Building a startup" } } } } : o.judge ? { hello: { judge: "The answer greets the user." } } : {},
     ...(o.calibrateOnly ? { calibrateOnly: true } : {}),
     ...o.extra,
   }, rig(h, host, arms, o));
@@ -176,6 +190,35 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
   }, 300_000);
 
   // Value: protects=--resume reuses every journaled session whose key still matches and spends nothing on it; a changed key stops with E_CACHE_STALE naming the changed part before any session runs; --repair reruns exactly the stale cells and journals them; fails_when=resume reruns a finished cell, runs over a changed key, or repair skips a stale cell; why_new=U10 done criterion (stale-cache conformance, --resume and --repair); seam=runOnHost's reuse and staleParts, readJournal, cells.ndjson; no_claim=the CLI's proxy recovery order, which recoverRun's own tests cover
+  // Value: protects=a task with a persona runs end to end on Claude Code: the question no reply covers goes to the policy's usersim model as one request with no tools and a small output cap, through its own slot under the run's lease, the answer reaches the agent as its next user message, the persona never reaches the agent's requests, and the usersim meter adds to the run's spend and to usersim.ndjson; fails_when=the persona task gets the fallback, the usersim request bypasses the proxy or the lease, its spend goes uncounted, or the persona reaches the agent; why_new=GST-273 (U10b) done criterion; seam=runOnHost's usersim slot, hostDriver's freeform, personaPrompt; no_claim=a real usersim model's answers
+  test("a persona task gets the usersim model's free-form answer, metered under the run's lease", async () => {
+    const { run, root, h } = await runHost("claude", { persona: true, script: personaModel, responses: personaResponses });
+    expect(run.calibrationFailures).toEqual([]);
+    expect(run.input.records.map((r) => [r.arm, r.termination.kind, r.turns.at(-1)])).toEqual(["before", "after", "none"].map((arm) => [arm, "completed", "HELLO from the task, noted."]));
+    const usersim = policy.policy.defaults.usersim;
+    const asks = h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/responses"));
+    expect(asks).toHaveLength(3);
+    for (const u of asks) {
+      expect([u.body.model, u.body.tools, u.body.max_output_tokens]).toEqual([usersim, undefined, PERSONA_MAX_OUTPUT_TOKENS]);
+      expect(JSON.stringify(u.body.input)).toContain(PERSONA);
+      expect(JSON.stringify(u.body.input)).toContain("strongest evidence");
+    }
+    const agent = h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/messages")).map((u) => JSON.stringify(u.body));
+    expect(agent.filter((b) => b.includes(PERSONA_ANSWER)).length).toBeGreaterThan(0);
+    expect(agent.some((b) => b.includes(PERSONA))).toBe(false);
+    for (const arm of ["before", "after", "none"]) {
+      const events = readFileSync(join(root, "out", "runs", MODELS.claude, arm, "hello", "r1-t0", "host", "usersim.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(events.find((e) => e.kind === "prose")).toMatchObject({ source: "freeform", reply: PERSONA_ANSWER, approves: false });
+    }
+    const metered = readFileSync(join(root, "out", "usersim.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(metered.map((m) => [m.cell.arm, m.usersim_model, m.usersim_route, m.answers]).sort()).toEqual(["after", "before", "none"].map((arm) => [arm, usersim, "openai /v1/responses", 1]));
+    expect(metered.every((m) => m.cost_micros > 0)).toBe(true);
+    const leased = [...h.ledger.reservations.values()].filter((r) => r.cell.model === usersim);
+    expect(leased.map((r) => [r.lease_id, r.state, r.cell.task])).toEqual(Array(3).fill(["lease-test", "settled", "hello-usersim"]));
+    expect(leased.reduce((n, r) => n + r.spent_micros!, 0)).toBe(metered.reduce((n, m) => n + m.cost_micros, 0));
+    expect(run.spent).toBe([...h.ledger.reservations.values()].reduce((n, r) => n + (r.spent_micros ?? 0), 0));
+  }, 300_000);
+
   test("--resume reuses matching cells, a changed key stops with E_CACHE_STALE, and --repair reruns the stale cells", async () => {
     let sessions = 0;
     const responses: ResponsesScript = (turn) => {
@@ -264,14 +307,14 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
 });
 
 describe("real-host readiness", () => {
-  // Value: protects=a call a real host cannot run as asked is refused before the rig opens: a loadout arm (no installer, so it would run as an empty arm and pass calibration on NO-SKILL) and a task with a user persona (no free-form source until GST-272, so the simulator would answer with its fallback); fails_when=either reaches the rig; why_new=Capy's review of #67; seam=hostReadiness; no_claim=the base, stack and placebo refusals, which tests/cli/preflight.test.ts covers
-  test("a loadout arm and a persona task are refused with E_USAGE", () => {
+  // Value: protects=a call a real host cannot run as asked is refused before the rig opens: a loadout arm (no installer, so it would run as an empty arm and pass calibration on NO-SKILL); a task with a user persona now runs, since the run loop gives it a free-form source (GST-273); fails_when=a loadout arm reaches the rig, or a persona task is still refused; why_new=Capy's review of #67, then GST-273 lifting the persona refusal; seam=hostReadiness; no_claim=the base, stack and placebo refusals, which tests/cli/preflight.test.ts covers
+  test("a loadout arm is refused with E_USAGE, and a persona task is ready", () => {
     const call = (arms: ArmSpec[]) => ({ host: "claude" as const, arms: { arms, base: null, skill: null, notes: [] }, isolation: "docker" as const, item: "x", spendCap: 1 }) as unknown as Parameters<typeof hostReadiness>[0];
     const loose: ArmSpec = { name: "after", kind: "overlay", base: null, skill: SKILL, dir: "/tmp/after" };
     const loadout: ArmSpec = { name: "kit", kind: "loadout", manifest: { name: "kit", base: "gstack@" + "a".repeat(40), modules: [] } } as unknown as ArmSpec;
     expect(hostReadiness(call([loose, loadout]), [])?.message).toBe("loadout arm kit: a real host has no loadout install yet; use loose skill folders, none and bare");
     const tasks = [{ id: "ask", judge: false }, { id: "plain", judge: false }];
-    expect(hostReadiness(call([loose]), tasks, { ask: { interactive: true, user: { persona: "A founder in a hurry." } } })?.message).toBe("task ask declares a user persona, whose free-form answers land with GST-272; a real host runs scripted replies only");
+    expect(hostReadiness(call([loose]), tasks, { ask: { interactive: true, user: { persona: "A founder in a hurry." } } })).toBeNull();
     expect(hostReadiness(call([loose]), tasks, { ask: { interactive: true, user: { replies: { approach: "Approach B" } } } })).toBeNull();
   });
 });
@@ -338,6 +381,53 @@ describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex 
     const loneFlags = parseFlags(argv(["--repair", "x"]), SKILL_EVAL_FLAGS, env);
     const lone = typeof loneFlags === "string" ? loneFlags : resolveCall(loneFlags, env);
     expect(lone).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("give that run's out directory with --resume <out>") });
+  }, 300_000);
+});
+
+describe.skipIf(!HAS_CLAUDE_CLI)("--mirror through the CLI's run layer, on Claude Code against a fake upstream", () => {
+  // Value: protects=a real run's mirror holds its verdict and receipts (the cells, adjudication and usersim journals among them) with no path under the out dir or the temp root, no meter id and no transcript text, while the out dir's own receipts did carry such paths and text; the documented call's persona path runs through the CLI's run layer too; fails_when=a transcript turn, the persona, a judge dir, a meter id or any out-dir path reaches the mirror; why_new=GST-273 (U10b builds --mirror; GSTA-36's lesson to test the documented call's layer); seam=resolveCall, runOnRealHost with the keyless rig, mirrorReceipts; no_claim=preflight on a real host and the Docker rig
+  test("a mirror holds no path under the out dir, no meter id and no transcript text", async () => {
+    const h = harness(personaModel, { responses: personaResponses });
+    open.push(h);
+    const root = mkdtempSync(join(tmpdir(), "gse-mirror-cli-"));
+    const tasks = join(root, "tasks", "tasks.json");
+    mkdirSync(join(root, "tasks"), { recursive: true });
+    writeFileSync(tasks, JSON.stringify([{ id: "hello", prompt: "Say hello.", must: ["hello"] }]));
+    writeFileSync(join(root, "tasks", "tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { hello: { user: { persona: PERSONA }, judge: "The answer greets the user." } } }));
+    const out = join(root, "out");
+    const mirror = join(root, "mirror");
+    const env = { ANTHROPIC_API_KEY: "fake-anthropic-value", OPENAI_API_KEY: "fake-openai-value" };
+    const parsed = parseFlags(["--arms", "before=" + armDir(root, "before") + ",after=" + armDir(root, "after") + ",none", "--tasks", tasks, "--host", "claude", "--model", MODELS.claude, "--trials", "1", "--spend-cap", "5", "--item", "mirror-test", "--isolation", "docker", "--no-noise-floor", "--out", out, "--mirror", mirror], SKILL_EVAL_FLAGS, env);
+    if (typeof parsed === "string") throw new Error(parsed);
+    const call = resolveCall(parsed, env);
+    if ("code" in call) throw new Error(call.code + " " + call.message);
+    const report = preflight(call, { env, dryRun: true, host: () => null });
+    const io = collect();
+    const code = await runOnRealHost(call, report, io, env, false, (c, o) => rig(h, "claude", c.arms.arms, { nonce: o.nonce }));
+    mirrorReceipts(call, io, false);
+    expect([code, io.text().out]).toEqual([JSON.parse(readFileSync(join(out, "verdict.json"), "utf8")).exit_code, expect.stringContaining("mirror: 6 files in " + mirror)]);
+    const files = readdirSync(mirror).sort();
+    expect(files).toEqual(["adjudication.ndjson", "cells.ndjson", "progress.json", "run.json", "usersim.ndjson", "verdict.json"]);
+    const text = files.map((f) => readFileSync(join(mirror, f), "utf8")).join("\n");
+    const raw = files.map((f) => readFileSync(join(out, f), "utf8")).join("\n");
+    expect(raw).toContain(out);
+    expect(raw).toContain("HELLO from the task, noted.");
+    const said = new Set<string>();
+    for (const arm of ["before", "after", "none"]) {
+      for (const line of readFileSync(join(out, "runs", MODELS.claude, arm, "hello", "r1-t0", "host", "transcript.ndjson"), "utf8").trim().split("\n")) {
+        const m = JSON.parse(line);
+        const content = m.message?.content;
+        if (typeof content === "string") said.add(content);
+        for (const b of Array.isArray(content) ? content : []) if (b.type === "text" && b.text) said.add(b.text);
+      }
+    }
+    expect([...said]).toEqual(expect.arrayContaining([expect.stringContaining("strongest evidence"), "HELLO from the task, noted."]));
+    for (const leak of [out, realpathSync(out), root, realpathSync(root), tmpdir(), "Say hello.", PERSONA, PERSONA_ANSWER, ...said]) expect(text).not.toContain(leak);
+    expect(text).not.toMatch(/\bm_[0-9a-f]{24}\b/);
+    for (const r of h.ledger.reservations.values()) expect(text).not.toContain(r.cell.meter_id);
+    const verdict = JSON.parse(readFileSync(join(mirror, "verdict.json"), "utf8"));
+    expect(verdict.tasks.hello).toEqual(JSON.parse(readFileSync(join(out, "verdict.json"), "utf8")).tasks.hello);
+    expect(verdict.spend).toMatchObject({ ledger: null, ledger_record: null, lease_id: null });
   }, 300_000);
 });
 

@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, `none` and `bare`. A gstack base at a sha (including the one inferred from a rendered gstack skill), a stack arm, a placebo arm and the persona's free-form model come with GST-272; until then such a call stops with E_USAGE naming GST-272 before anything is spent. A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
+Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, `none` and `bare`. A gstack base at a sha (including the one inferred from a rendered gstack skill), a stack arm and a placebo arm come with GST-272; until then such a call stops with E_USAGE naming GST-272 before anything is spent. A task with a persona runs on Claude Code, and the questions its replies do not cover go to the policy's usersim model (docs/adapters.md, User simulator). A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
 
 ## Quickstart
 
@@ -74,7 +74,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--margin` | none | A non-inferiority margin in percentage points; needed for `noninferior: true`. |
 | `--resume` | none | Continue a stopped run on Claude Code or Codex from its out directory: finished sessions whose key still matches are reused. The fake host refuses it (E_USAGE). |
 | `--repair` | none | With `--resume <out>`: rerun the cells whose key changed under a new verdict id; the value names the repair. |
-| `--mirror` | none | Copy the verdict and receipts without transcripts. Not built (U10). |
+| `--mirror` | none | Copy verdict.json, calibration.json, run.json, progress.json and the cells, adjudication and usersim journals to this directory, with transcript turns, machine paths and meter, lease and container ids scrubbed (src/skill-eval/cli/mirror.ts). Nothing under runs/, judge/ or proxy/ is copied. It may not be the out directory. |
 | `--arms-file` | none | The full arm manifest. Not built (U9). |
 | `--json` | off | Stdout carries JSON only: the verdict, the plan or the preflight result. Every failure writes `<out>/error.json`. |
 | `--example` | off | A keyless fake-host example; takes only `--out` and `--json`. |
