@@ -16,6 +16,7 @@ import type { Host } from "../../types.ts";
 import { resolveArms, type ResolvedArms } from "./arms.ts";
 import { unbuiltFlags, type ParsedFlags } from "./flags.ts";
 import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy, type PolicyProvider } from "./policy.ts";
+import { canonical } from "./mirror.ts";
 
 /** The providers whose models each host runs: Claude Code runs Anthropic models; Codex runs OpenAI and OpenAI-compatible (OpenRouter) ones. */
 export const HOST_PROVIDERS: Record<Host, readonly PolicyProvider[]> = { claude: ["anthropic", "openrouter"], codex: ["openai", "openrouter"] };
@@ -130,7 +131,7 @@ export function resolveCall(parsed: ParsedFlags, env: Env = process.env, home = 
   const root = runsRoot(env, home);
   const out: Resolved = v.has("--out") ? { path: resolve(v.get("--out") as string), rule: "--out" } : { path: join(root.path, runId), rule: root.rule };
   const mirror = v.has("--mirror") ? resolve(v.get("--mirror") as string) : null;
-  if (mirror !== null && (mirror === out.path || (v.has("--resume") && mirror === resolve(v.get("--resume") as string)))) return usage("--mirror must name a directory other than the run's out directory, since the mirror is a scrubbed copy of it");
+  if (mirror !== null && [out.path, ...(v.has("--resume") ? [v.get("--resume") as string] : [])].some((dir) => canonical(dir) === canonical(mirror))) return usage("--mirror must name a directory other than the run's out directory, since the mirror is a scrubbed copy of it");
 
   set("tasks", show(tasks), "flag");
   set("host", host + " (runs " + HOST_PROVIDERS[host].join(" and ") + " models)", "flag");

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveCall, runsRoot, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS, type ParsedFlags } from "../../src/skill-eval/cli/flags.ts";
@@ -84,5 +86,9 @@ describe("effective defaults", () => {
     expect(call([...BASE, "--out", "/runs/one", "--mirror", "/runs/one/"])).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("--mirror must name a directory other than the run's out directory") });
     expect(call([...BASE, "--resume", "/runs/old", "--mirror", "/runs/old"])).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("--mirror must name a directory other than") });
     expect(call(BASE)).toMatchObject({ mirror: null });
+    const root = mkdtempSync(join(tmpdir(), "gse-call-mirror-"));
+    mkdirSync(join(root, "out"));
+    symlinkSync(join(root, "out"), join(root, "alias"));
+    expect(call([...BASE, "--out", join(root, "out"), "--mirror", join(root, "alias")])).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("--mirror must name a directory other than") });
   });
 });

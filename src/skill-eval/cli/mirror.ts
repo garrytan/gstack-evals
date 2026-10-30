@@ -7,8 +7,10 @@
 // - In every other string, the out dir and each root the caller names become <out> or <path>, any other absolute path
 //   under a machine root becomes <path>, and a meter id becomes <meter>.
 // - A journal line that does not parse is dropped, not copied.
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+// A mirror directory that resolves to the out directory, through a symlink or not, is refused, and a record the run did
+// not write is removed from a reused mirror directory, so a mirror never overwrites its source or mixes two runs.
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 
 export const MIRROR_FILES = ["verdict.json", "calibration.json", "run.json", "progress.json", "cells.ndjson", "adjudication.ndjson", "usersim.ndjson"] as const;
 
@@ -29,13 +31,12 @@ export const SCRUB_KEYS: Readonly<Record<string, string>> = {
 const METER_ID = /\bm_[0-9a-f]{24}\b/g;
 const MACHINE_PATH = /(?<![\w.~:/-])(?:~\/[^\s"'`,;)<>]*|\/(?:home|Users|root|tmp|var|private|workspace|mnt|opt|srv|data|media|Volumes|run|nix)(?![\w.-])(?:\/[^\s"'`,;)<>]*)?)/g;
 
-const real = (path: string): string => {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-};
+/** The path with every symlink in its longest existing prefix resolved, so two names for one directory compare equal. */
+export function canonical(path: string): string {
+  const p = resolve(path);
+  if (existsSync(p)) return realpathSync(p);
+  return dirname(p) === p ? p : join(canonical(dirname(p)), basename(p));
+}
 
 /** Replaces the out dir, the named roots, other machine paths and meter ids in one string. */
 function scrubText(text: string, roots: readonly [string, string][]): string {
@@ -53,13 +54,17 @@ function scrubValue(value: unknown, roots: readonly [string, string][]): unknown
 
 /** Writes the scrubbed records from out into dest and returns the paths written; dest is created only when out holds a record. */
 export function mirrorRun(out: string, dest: string, roots: readonly string[] = []): string[] {
-  const marks: [string, string][] = [...new Set([out, real(out)].map((p) => resolve(p)))].map((p) => [p, "<out>"]);
-  for (const r of roots) for (const p of new Set([resolve(r), real(r)])) if (p !== "/" && !marks.some(([m]) => m === p)) marks.push([p, "<path>"]);
+  if (canonical(dest) === canonical(out)) throw new Error("E_USAGE: the mirror directory " + dest + " is the out directory " + out);
+  const marks: [string, string][] = [...new Set([resolve(out), canonical(out)])].map((p) => [p, "<out>"]);
+  for (const r of roots) for (const p of new Set([resolve(r), canonical(r)])) if (p !== "/" && !marks.some(([m]) => m === p)) marks.push([p, "<path>"]);
   marks.sort((a, b) => b[0].length - a[0].length);
   const written: string[] = [];
   for (const name of MIRROR_FILES) {
     const src = join(out, name);
-    if (!existsSync(src)) continue;
+    if (!existsSync(src)) {
+      rmSync(join(dest, name), { force: true });
+      continue;
+    }
     const text = readFileSync(src, "utf8");
     let body: string;
     if (name.endsWith(".ndjson")) {

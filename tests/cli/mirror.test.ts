@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MIRROR_FILES, mirrorRun, SCRUB_KEYS } from "../../src/skill-eval/cli/mirror.ts";
@@ -40,5 +40,25 @@ describe("--mirror's scrub", () => {
     mkdirSync(nothing);
     expect(mirrorRun(nothing, join(root, "mirror2"))).toEqual([]);
     expect(() => readdirSync(join(root, "mirror2"))).toThrow();
+  });
+
+  // Value: protects=a mirror directory that is the out directory under another name (a symlink) is refused before any write, and a reused mirror directory loses the records the new run did not write, so a mirror never overwrites its receipts or mixes two runs; fails_when=a symlinked destination rewrites the source, or an earlier run's verdict or journals survive beside a later run's records; why_new=Capy's review of #69; seam=mirrorRun, canonical; no_claim=none beyond protects
+  test("an aliased destination is refused and a reused one keeps only this run's records", () => {
+    const root = mkdtempSync(join(tmpdir(), "gse-mirror-alias-"));
+    const out = join(root, "out");
+    mkdirSync(out);
+    writeFileSync(join(out, "cells.ndjson"), JSON.stringify({ record: { turns: ["kept in the source"] } }) + "\n");
+    symlinkSync(out, join(root, "alias"));
+    expect(() => mirrorRun(out, join(root, "alias"))).toThrow("E_USAGE");
+    expect(readFileSync(join(out, "cells.ndjson"), "utf8")).toContain("kept in the source");
+    const dest = join(root, "public");
+    writeFileSync(join(out, "verdict.json"), JSON.stringify({ verdict: "pass" }));
+    expect(mirrorRun(out, dest).length).toBe(2);
+    const next = join(root, "out2");
+    mkdirSync(next);
+    writeFileSync(join(next, "calibration.json"), JSON.stringify({ exit_code: 0 }));
+    expect(mirrorRun(next, dest).length).toBe(1);
+    expect(readdirSync(dest)).toEqual(["calibration.json"]);
+    expect(existsSync(join(dest, "verdict.json"))).toBe(false);
   });
 });
