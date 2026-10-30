@@ -48,7 +48,14 @@ const localRun: Runner = (command, args) => {
 
 /** Why SQLite could not open or create the ledger file here, or null: it must not be a directory, and its directory (or the nearest one that exists) must take new files, since SQLite writes its WAL files beside it. */
 function ledgerFileProblem(path: string): string | null {
-  if (existsSync(path) && statSync(path).isDirectory()) return "is a directory, not a SQLite file";
+  if (existsSync(path)) {
+    if (statSync(path).isDirectory()) return "is a directory, not a SQLite file";
+    try {
+      accessSync(path, constants.R_OK | constants.W_OK);
+    } catch {
+      return "exists but is not readable and writable by this user";
+    }
+  }
   let dir = dirname(resolve(path));
   while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
   try {

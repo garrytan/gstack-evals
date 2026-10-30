@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "../../src/cli.ts";
 import { doctorChecks, doctorCommand, type Runner } from "../../src/skill-eval/cli/doctor.ts";
@@ -45,6 +46,14 @@ describe("gstack-evals doctor", () => {
     expect(byName.ledger).toEqual(["E_LEDGER_PATH", join(odd, "ledger-dir") + " (--ledger) is a directory, not a SQLite file"]);
     expect(byName["ledger record"]![0]).toBe("E_LEDGER_RECORD");
     expect(byName["gstack-approvals"]).toEqual(["E_APPROVAL_RECORD", join(gstack, "bin/gone") + " does not exist; ledger init and raise mirror approvals through it"]);
+  });
+
+  // Value: protects=doctor fails a ledger file that exists but this user cannot read and write, before a run dies opening it; fails_when=a 0444 ledger file in a writable directory passes; why_new=Capy's review of #51; seam=ledgerFileProblem; no_claim=root, who passes every access check
+  test.skipIf(process.getuid?.() === 0)("a ledger file this user cannot write fails with E_LEDGER_PATH", () => {
+    const dir = tree({ "ledger.sqlite": "" });
+    chmodSync(join(dir, "ledger.sqlite"), 0o444);
+    const ledger = doctorChecks({ env: env(), hosts: ["claude"], ledger: join(dir, "ledger.sqlite"), record: join(dir, "record"), run: healthy }).find((c) => c.name === "ledger")!;
+    expect([ledger.status, ledger.code, ledger.detail]).toEqual(["fail", "E_LEDGER_PATH", join(dir, "ledger.sqlite") + " (--ledger) exists but is not readable and writable by this user"]);
   });
 
   // Value: protects=bin/gstack-evals runs doctor, without --host it checks both host CLIs, and --json prints one object; fails_when=the doctor row stops resolving or --json mixes in text; why_new=the doctor row printed not built yet; seam=src/cli.ts; no_claim=none beyond protects

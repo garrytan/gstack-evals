@@ -42,21 +42,23 @@ describe("the default model policy", () => {
     for (const m of ["claude-opus-5-5", "gpt-6.1-sol"]) expect(judge(def, m)).toBeNull();
   });
 
-  // Value: protects=particle-1 is listed as a subject (GST-225) and is refused, with the reason, until the proxy can meter OpenRouter; fails_when=particle-1 passes while no price row or route exists, or is missing from the policy; why_new=new; seam=the proxy's OpenRouter route (M2a); no_claim=that particle-1 runs today
-  test("it lists particle-1 as a subject, refused until the metering proxy can route OpenRouter", () => {
+  // Value: protects=particle-1 is a subject (GST-225) that passes now the proxy routes and prices OpenRouter (GST-227), and a model the proxy cannot route is still refused; fails_when=particle-1 is refused or missing, or an unroutable OpenRouter row passes; why_new=the proxy's OpenRouter route landed in #50; seam=routable() in the metering proxy; no_claim=what particle-1 scores
+  test("it lists particle-1 as a subject, allowed now the metering proxy routes OpenRouter", () => {
     expect(def.policy.models["particle-ai/particle-1"]).toEqual({ provider: "openrouter", roles: ["subject"] });
-    expect(subject(def, "particle-ai/particle-1")).toContain("cannot route or price OpenRouter models yet");
+    expect(subject(def, "particle-ai/particle-1")).toBeNull();
+    const unrouted = custom("unrouted", { ...def.policy.models, "someone/unpriced-model": { provider: "openrouter", roles: ["subject"] } });
+    expect(subject(unrouted, "someone/unpriced-model")).toBe("someone/unpriced-model as a model under test: the metering proxy has no route or no price row for openrouter:someone/unpriced-model, so its spend could not be held against a cap");
   });
 
-  // Value: protects=DeepSeek V4.1 Flash, particle-1's base and a fixed ladder rung (CREW.md), is listed beside it as a subject and refused the same way until the proxy routes OpenRouter; fails_when=the row is missing or passes early; why_new=GSTA-28's note on GST-227; seam=the proxy's OpenRouter route (PR #50); no_claim=that it runs today
-  test("it lists DeepSeek V4.1 Flash beside particle-1, refused the same way", () => {
+  // Value: protects=DeepSeek V4.1 Flash, particle-1's base and a fixed ladder rung (CREW.md), is listed beside it as a subject and passes the same way; fails_when=the row is missing or refused; why_new=GSTA-28's note on GST-227; seam=routable() in the metering proxy; no_claim=what it scores
+  test("it lists DeepSeek V4.1 Flash beside particle-1, allowed the same way", () => {
     expect(def.policy.models["deepseek/deepseek-v4.1-flash-1017"]).toEqual({ provider: "openrouter", roles: ["subject"] });
-    expect(subject(def, "deepseek/deepseek-v4.1-flash-1017")).toBe("deepseek/deepseek-v4.1-flash-1017 as a model under test: the metering proxy cannot route or price OpenRouter models yet (M2a), so its spend could not be held against a cap");
+    expect(subject(def, "deepseek/deepseek-v4.1-flash-1017")).toBeNull();
   });
 
   // Value: protects=every model the default lets a run call can be held against a cap; fails_when=a row the policy allows has no price table row; why_new=new; seam=U3's price table; no_claim=prices are current
-  test("every model it allows for any role, except OpenRouter's, has a price row, and its defaults are allowed", () => {
-    for (const [id, m] of Object.entries(def.policy.models)) if (m.roles.length && m.provider !== "openrouter") expect(chatPrice(m.provider + ":" + id)).toBeDefined();
+  test("every model it allows for any role has a price row, and its defaults are allowed", () => {
+    for (const [id, m] of Object.entries(def.policy.models)) if (m.roles.length) expect([id, chatPrice(m.provider + ":" + id) !== undefined]).toEqual([id, true]);
     for (const role of ["judge", "adjudicator"] as const) for (const model of Object.values(def.policy.defaults[role])) expect(modelProblem(def, model, role, { smoke: false })).toBeNull();
     expect(modelProblem(def, def.policy.defaults.usersim, "usersim", { smoke: false })).toBeNull();
     expect(ROLES).toEqual(["subject", "judge", "adjudicator", "usersim"]);

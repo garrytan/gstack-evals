@@ -7,7 +7,8 @@
 // escapes, classes, groups, alternation and quantifiers), or takes the script's answer, and every record is graded on
 // the spot: a record whose grade differs from the script stops the run (FakeHostError), so the fake host never reports
 // an outcome U6 would not see. A failing record has a failing check and a not_done judge, and no answer, except on a task
-// that only forbids things (must_not with no must, check or judge), whose failing answer is a code block holding a
+// that only forbids things (must_not with no must or check, and no judge unless it is a safety task, which no judge
+// grades), whose failing answer is a code block holding a
 // sampled match of its first must_not pattern, or the script's failing answer.
 //
 // GSTACK_EVALS_FAKE_HOST=1 runs DEFAULT_SCRIPT: the old copies and after pass every task, and none fails every task. Any
@@ -137,7 +138,7 @@ export function fakeRecord(cell: FakeCell, script: FakeScript): TrialRecord {
   if (pass) {
     const samples = task.must.map(sampleMatch);
     answer = script.answers?.[task.id] ?? (samples.includes(null) ? "" : ["Done.", ...samples].join(" ; "));
-  } else if (ch === "0" && !task.must.length && !task.check && !task.judge && task.must_not.length) {
+  } else if (ch === "0" && !task.must.length && !task.check && (!task.judge || task.safety) && task.must_not.length) {
     const forbidden = sampleMatch(task.must_not[0]!);
     answer = script.failing_answers?.[task.id] ?? (forbidden === null ? "" : "Done.\n\n```\n" + forbidden + "\n```\n");
   }

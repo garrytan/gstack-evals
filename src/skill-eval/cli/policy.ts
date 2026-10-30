@@ -8,8 +8,8 @@
 //
 // A model the policy does not list is refused, so a policy allows only what it names (the newest generation of each
 // family, in the default). A row with refused_because prints that reason. A smoke_only model runs only with --smoke.
-// Every model must also have a row in the metering proxy's price table, or its spend could not be held against a cap;
-// OpenRouter models wait for the proxy's OpenRouter route (M2a), so a policy may list one before it can run.
+// Every model must also be routable by the metering proxy (a route for its provider and a price row), or its spend could
+// not be held against a cap; a policy may list a model before the proxy can route it.
 //
 // The default gives Sonnet 5.5 the roles of the other current models, judge included (Garry, 2026-10-29). The judge is
 // chosen per preregistration; the Opus 5.5 preference is stated in docs/skill-eval.md, not enforced here. A caller's
@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "../../cli.ts";
-import { chatPrice } from "../../runner/pricing/prices.ts";
+import { routable } from "../../runner/proxy/metering-proxy.ts";
 
 export const ROLES = ["subject", "judge", "adjudicator", "usersim"] as const;
 export type Role = (typeof ROLES)[number];
@@ -111,8 +111,7 @@ export function modelProblem(loaded: LoadedPolicy, model: string, role: Role, op
   if (row.refused_because) return where + ": refused by the policy " + loaded.policy.name + ": " + row.refused_because;
   if (!row.roles.includes(role)) return where + ": the policy " + loaded.policy.name + " allows it only as " + (row.roles.join(", ") || "nothing");
   if (row.smoke_only && !options.smoke) return where + ": the policy allows it only in smoke runs (--smoke)";
-  if (row.provider === "openrouter") return where + ": the metering proxy cannot route or price OpenRouter models yet (M2a), so its spend could not be held against a cap";
-  if (!chatPrice(row.provider + ":" + model)) return where + ": the price table has no row for " + row.provider + ":" + model + ", so its spend could not be held against a cap";
+  if (!routable(row.provider, model)) return where + ": the metering proxy has no route or no price row for " + row.provider + ":" + model + ", so its spend could not be held against a cap";
   return null;
 }
 
