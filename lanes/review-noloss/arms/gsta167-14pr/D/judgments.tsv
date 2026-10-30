@@ -1,0 +1,30 @@
+pr	blocker_id	outcome	matched_finding	raw_severity	mapped_severity	judge	saw_label	note
+3593	B1	F	3593-p1-23;3593-p1-21	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3593	B2	D	3593-p1-40	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C's outside voice rated the same defect High
+3596	B1	F	3596-p1-5	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3596	B2	D	3596-p1-8	INVESTIGATE	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest match; names the scope gap but at INVESTIGATE
+3516	B1	F	3516-p1-0;3516-p1-10	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3516	B2	F	3516-p1-5	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	same finding C was credited with
+3524	B1	D	3524-p1-23;3524-p1-14	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3526	B1	F	3526-p1-8;3526-p1-15;3526-p1-26	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3526	B2	F	3526-p1-19;3526-p1-28	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3526	B3	F	3526-p1-9;3526-p1-14;3526-p1-27	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3526	B4	F	3526-p1-16	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C had this at INFORMATIONAL only
+3527	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3527-p1-18 red-team / 3527-p1-22 adversarial-native lib/autoplan-revise.ts:169 (quiet revise path, no owner sign-off); judged MISSED for consistency with round 3: names the capped path's owner gate only as a contrast, not the quiet-after-capped sequence 9c34fda fixed
+3527	B2	D	3527-p1-5	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C's adversarial and outside voices raised it at FIXABLE/High
+3527	B3	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest none; no finding on Step 11.5 binding a fix-check or planned adversarial skip
+3527	B4	D	3527-p1-33	INVESTIGATE	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3534	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3534-p1-3 red-team / 3534-p1-6 adversarial lib/pregate/lane-selection.ts:116 (deleted non-test source with untested importers); different class from manifests/config/fixtures/goldens/workflows; C had the same CRITICAL and was judged MISSED
+3534	B2	D	3534-p1-13	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3534	B3	D	3534-p1-12	Medium	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C's outside voice rated the same defect High
+3534	B4	D	3534-p1-5	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3540	B1	F	3540-p1-1	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3545	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest none; no finding on test 5's zero-PowerShell assertion
+3564	B1	F	3564-p1-5;3564-p1-6;3564-p1-15	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3567	B1	D	3567-p1-14	INVESTIGATE	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C's adversarial voice raised the same text at FIXABLE
+3567	B2	D	3567-p1-14;3567-p1-6	INVESTIGATE	INFORMATIONAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	C's adversarial voice raised the same text at FIXABLE
+3567	B3	F	3567-p1-10;3567-p1-20	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3573	B1	F	3573-p1-1;3573-p1-3	CRITICAL	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3578	B1	F	3578-p1-0	FIXABLE	CRITICAL	anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	
+3583	B1	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest 3583-p1-10 red-team lib/autoplan-carry.ts:213 (agent recommend edits between CARRY_CHECK and check); different defect: agent recommendation, not a newer owner answer at the same gate
+3583	B2	M				anthropic/claude-opus-5-5 (GSTA-167 lane, unblinded)	yes	nearest none

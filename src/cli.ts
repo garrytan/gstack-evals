@@ -29,7 +29,7 @@ export const COMMANDS: Command[] = [
   { name: "ledger", summary: "Record approved caps and line items with the owner's words; settle and reconcile leases.", module: "src/runner/ledger/cli.ts", owner: "U4, M0" },
   { name: "rig", summary: "Run the Docker tier, run the keyless rig probes, and admit a line item's next lease (docs/rig.md).", module: "src/rig/cli.ts", owner: "U20, M1b" },
   { name: "tokens", summary: "Export the review token table for gstack's review-dispatch-compare.", module: "lanes/review-replay/tokens-cli.ts", owner: "U13, M1c" },
-  { name: "noloss", summary: "Review no-loss category: check suites and ingest review arms (arm contract v1).", module: "lanes/review-noloss/cli.ts", owner: "U13, GSTA-43" },
+  { name: "noloss", summary: "Review no-loss category: suites, arm ingest, paired scoring, export, power and blinded judge packets.", module: "lanes/review-noloss/cli.ts", owner: "U13, GSTA-43, GSTA-45" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },

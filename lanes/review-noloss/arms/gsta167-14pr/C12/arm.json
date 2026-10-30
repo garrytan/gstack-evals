@@ -1,0 +1,63 @@
+{
+ "contract_version": 1,
+ "id": "C12",
+ "label": "C12: C pooled over both passes (round 3 and round 4b), pre-#3621 /ship reviewers rendered at dcd62c389d73",
+ "suite": "gsta167-14pr",
+ "suite_sha256": "20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789",
+ "date": "2026-10-30",
+ "passes": 2,
+ "kind": "reference",
+ "provenance": "live",
+ "status": "complete",
+ "coverage_gaps": [
+  "Codex structured review: no Codex CLI on the lane machine"
+ ],
+ "source": {
+  "repo": "garrytan/gstack",
+  "ref": "main",
+  "sha": "dcd62c389d732502272fe940c75c4126b3e7ce7a"
+ },
+ "prereg": {
+  "path": "org-gstack-gbrain/handoffs/GSTA-167/noloss-prereg.md",
+  "sha256": "790d2038efb2b6d015b39f1349694a285696723da4fe89eaaa59bde8c34c63ac"
+ },
+ "models": [
+  {
+   "role": "specialist",
+   "model": "anthropic/claude-opus-5-5",
+   "effort": "medium"
+  },
+  {
+   "role": "red-team",
+   "model": "anthropic/claude-opus-5-5",
+   "effort": "high"
+  },
+  {
+   "role": "adversarial-native",
+   "model": "anthropic/claude-opus-5-5",
+   "effort": "high"
+  },
+  {
+   "role": "outside-voice",
+   "model": "openai/gpt-6.1-sol",
+   "effort": "medium"
+  },
+  {
+   "role": "normalizer",
+   "model": "anthropic/claude-opus-5-5",
+   "effort": "medium"
+  }
+ ],
+ "run_by": "GSTA-167 no-loss lane (Capy, anthropic/claude-opus-5-5)",
+ "notes": "GSTA-48 changed only the id (C to C12) and label of GSTA-167's two-pass arm C, so it can sit beside the round 3 arm C. GSTA-167's notes follow. Pass 1 is round 3 (2026-10-30 03:33-~10:00Z; prereg prefix sha256 123faa47...). Pass 2 is round 4b (C2, a same-window rerun with byte-identical briefs, 2026-10-30 ~15:00-~19:00Z; addendum sha256 0fad73cf...). One pass per PR at the round-3 pass-1 heads. Pass-1 judgments are round 3's outcomes; their matched findings and raw labels were looked up again for this file. Pass-1 cost for 3540 and 3573 is unavailable (programs lost). Pass-2 3583 had one infrastructure redispatch: the adversarial-native create failed before output and was dispatched once more. Findings are each merge's merged.jsonl lines with the original fields kept, plus id (<pr>-p<pass>-<0-based line in that pass's merged.jsonl>), pass and reader. For adversarial-native, label holds the FIXABLE or INVESTIGATE token the voice wrote and label_verbatim holds its whole label (for example \"MEDIUM, FIXABLE\"), because the contract reads the raw label only up to its first comma, and \"MEDIUM, FIXABLE\" and \"MEDIUM, INVESTIGATE\" both occur. Outside-voice labels (High, Medium) are verbatim. The severity map is the preregistered normalizer rule. Judgments were made by the lane with labels in view (saw_label yes). Cost: total_tokens is the GSTA-167 root thread counter read before and after each PR window (an upper bound: it includes orchestration turns, the normalizer and, in round 3, other lanes); reader:<name> rows carry only that reader's wall seconds, because the tools expose no per-reader tokens.",
+ "severity_map": {
+  "default": {
+   "FIXABLE": "CRITICAL",
+   "INVESTIGATE": "INFORMATIONAL",
+   "High": "CRITICAL",
+   "Critical": "CRITICAL",
+   "Medium": "INFORMATIONAL",
+   "Low": "INFORMATIONAL"
+  }
+ }
+}

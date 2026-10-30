@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "suite": "gsta167-14pr",
+  "decision_rule": "Plan section 5 (wiki/plans/2026-10-30-gsta-40-review-noloss-plan). Each blocking blocker's value is the share of an arm's passes that FOUND it; PRs are the clusters. NO_LOSS when the margin-shifted exact sign-flip test over PR clusters rejects 'V is worse than R by at least the margin' at one-sided 0.05, its p Holm-adjusted across the comparisons in this file. Otherwise LOSS when the same test at margin 0, oriented the other way, gives p < 0.05 (not adjusted). Otherwise NOT_DISTINGUISHED. When no blocker differs and the reference is off ceiling and floor, the statistic is computed directly, p = 2^-k over k PRs ('no discordant blocker'); at a true ceiling or floor it stays null and the verdict is NOT_DISTINGUISHED. A NO_LOSS below the 80% size rule, or with the size rule unchecked, exits 2 with NOLOSS_UNDERPOWERED. A frozen bar, when a round froze one, is scored first and exactly as written.",
+  "seed": 1,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "A2-vs-C",
+      "variant": "A2",
+      "reference": "C",
+      "margin_points": 10,
+      "margin_reason": "GSTA-40 plan, Big decision 1: 10 points of blocking recall",
+      "post_hoc": true,
+      "frozen_bar": "3",
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "note": "Round 3: A' and C ran in the same round on the same cohort."
+    },
+    {
+      "id": "A-vs-C",
+      "variant": "A",
+      "reference": "C",
+      "margin_points": 10,
+      "margin_reason": "GSTA-40 plan, Big decision 1: 10 points of blocking recall",
+      "post_hoc": true,
+      "frozen_bar": "2",
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "note": "A ran in round 2 and C in round 3: same cohort and blockers, different days and builds."
+    },
+    {
+      "id": "B-vs-C",
+      "variant": "B",
+      "reference": "C",
+      "margin_points": 10,
+      "margin_reason": "GSTA-40 plan, Big decision 1: 10 points of blocking recall",
+      "post_hoc": true,
+      "frozen_bar": "2",
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "note": "B ran in round 2 and C in round 3: same cohort and blockers, different days and builds."
+    },
+    {
+      "id": "B-vs-A",
+      "variant": "B",
+      "reference": "A",
+      "margin_points": 10,
+      "margin_reason": "GSTA-40 plan, Big decision 1: 10 points of blocking recall",
+      "post_hoc": true,
+      "frozen_bar": "2",
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "note": "Both ran in round 2."
+    },
+    {
+      "id": "D-vs-C12",
+      "variant": "D",
+      "reference": "C12",
+      "margin_points": 10,
+      "margin_reason": "GSTA-40 plan, Big decision 1: 10 points of blocking recall",
+      "post_hoc": true,
+      "frozen_bar": "4",
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "note": "Round 4 (D) against C pooled over round 3 and round 4b (C2), as GSTA-167 scored it. Frozen bar 4 is measured against C's round 3 pass."
+    }
+  ],
+  "power": {
+    "what": "The plan's power table (section 5), regenerated: wide spread of per-blocker detection rates (beta concentration 2), reference recall 0.65, seeded. Designs name a suite, optional catalog dirs merged into it with their --released date, and optional hypothetical one-blocker PRs.",
+    "recall": 0.65,
+    "spread": "wide",
+    "margins": [
+      10,
+      15
+    ],
+    "loss_points": 23,
+    "sims": 2000,
+    "seed": 1,
+    "designs": [
+      {
+        "label": "14 PRs, 29 blockers",
+        "suite": "gsta167-14pr",
+        "passes": 1
+      },
+      {
+        "label": "14 PRs, 29 blockers",
+        "suite": "gsta167-14pr",
+        "passes": 2
+      },
+      {
+        "label": "plus the other CRITICAL catalog cases",
+        "suite": "gsta167-14pr",
+        "catalogs": [
+          "lanes/review-replay/catalog/public"
+        ],
+        "released": "2026-01-01",
+        "passes": 2
+      },
+      {
+        "label": "if the pool grows by 30 one-blocker PRs",
+        "suite": "gsta167-14pr",
+        "catalogs": [
+          "lanes/review-replay/catalog/public"
+        ],
+        "released": "2026-01-01",
+        "extra_single_blocker_prs": 30,
+        "passes": 2
+      }
+    ]
+  }
+}

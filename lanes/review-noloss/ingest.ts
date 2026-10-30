@@ -75,7 +75,7 @@ const leaks = (out: Map<string, Buffer>, fix: string): Problem[] =>
       }),
   );
 
-const treeDigest = (files: Map<string, Buffer>): string => sha256([...files].filter(([k]) => k !== INGEST_RECORD).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => k + "\0" + sha256(v)).join("\n"));
+export const treeDigest = (files: Map<string, Buffer>): string => sha256([...files].filter(([k]) => k !== INGEST_RECORD).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => k + "\0" + sha256(v)).join("\n"));
 
 /**
  * Validates and scans the snapshot. digestOnly names findings (by id, or "all") whose text is replaced by the digest of
@@ -176,4 +176,37 @@ export function publish(p: Prepared, suite: Suite, root: string, replace: string
   }
   renameSync(staging, dest);
   return { dest, status: "published" };
+}
+
+/**
+ * Reads an arm ingest published: its files without ingest.json, checked against the tree digest and suite digest the
+ * record holds. A sealed suite's arms are never read from inside the repo.
+ */
+export function readIngested(dir: string, suite: Suite, suiteSha256: string): { arm: Arm; files: Map<string, Buffer>; treeSha256: string } {
+  if (suite.sealed && insideRepo(dir)) fail(dir, "suite " + suite.id + " is sealed, and its arms are inside the repo", "keep sealed arms under a --root outside the repo");
+  let record: { tree_sha256?: string; suite_sha256?: string };
+  try {
+    record = JSON.parse(readFileSync(join(dir, INGEST_RECORD), "utf8"));
+  } catch (e) {
+    return fail(join(dir, INGEST_RECORD), "cannot read: " + (e as Error).message, "ingest the arm first: gstack-evals noloss ingest <arm dir> --suite " + suite.id);
+  }
+  const files = readTree(dir);
+  files.delete(INGEST_RECORD);
+  const tree = treeDigest(files);
+  if (tree !== record.tree_sha256) fail(dir, "its files hash to tree " + tree + ", not the " + record.tree_sha256 + " ingest recorded", "never edit an ingested arm; ingest the source again with --replace");
+  if (record.suite_sha256 !== suiteSha256) fail(join(dir, INGEST_RECORD) + " suite_sha256", "the arm was ingested against suite digest " + record.suite_sha256 + ", but suite " + suite.id + " now hashes to " + suiteSha256, "score against the suite revision it was ingested on, or ingest the arm again against this one");
+  return { arm: parseArm(files, suite, suiteSha256), files, treeSha256: tree };
+}
+
+/** An arm directory as judging reads it: an ingested arm (with ingest.json), or a source arm directory. */
+export function readArmDir(dir: string, suite: Suite, suiteSha256: string): { arm: Arm; files: Map<string, Buffer>; treeSha256: string } {
+  let ingested = false;
+  try {
+    ingested = lstatSync(join(dir, INGEST_RECORD)).isFile();
+  } catch {
+    ingested = false;
+  }
+  if (ingested) return readIngested(dir, suite, suiteSha256);
+  const files = snapshot(dir);
+  return { arm: parseArm(files, suite, suiteSha256), files, treeSha256: treeDigest(files) };
 }

@@ -1,0 +1,15 @@
+pr	scope	input	output	cache_read	cache_write	reasoning	total_tokens	usd	wall_seconds	meter_source	covers
+3593	all	unavailable	unavailable	unavailable	unavailable	unavailable	28332497	unavailable	1110	root-counter-delta	
+3596	all	unavailable	unavailable	unavailable	unavailable	unavailable	18292280	unavailable	758	root-counter-delta	
+3516	all	unavailable	unavailable	unavailable	unavailable	unavailable	20945454	unavailable	594	root-counter-delta	
+3524	all	unavailable	unavailable	unavailable	unavailable	unavailable	22720533	unavailable	732	root-counter-delta	
+3526	all	unavailable	unavailable	unavailable	unavailable	unavailable	25144485	unavailable	1013	root-counter-delta	
+3527	all	unavailable	unavailable	unavailable	unavailable	unavailable	30873206	unavailable	918	root-counter-delta	
+3534	all	unavailable	unavailable	unavailable	unavailable	unavailable	21072418	unavailable	755	root-counter-delta	
+3540	all	unavailable	unavailable	unavailable	unavailable	unavailable	21709945	unavailable	964	root-counter-delta	
+3545	all	unavailable	unavailable	unavailable	unavailable	unavailable	6928119	unavailable	548	root-counter-delta	
+3564	all	unavailable	unavailable	unavailable	unavailable	unavailable	26208663	unavailable	1149	root-counter-delta	
+3567	all	unavailable	unavailable	unavailable	unavailable	unavailable	36085530	unavailable	1258	root-counter-delta	
+3573	all	unavailable	unavailable	unavailable	unavailable	unavailable	15363066	unavailable	681	root-counter-delta	
+3578	all	unavailable	unavailable	unavailable	unavailable	unavailable	25300326	unavailable	761	root-counter-delta	
+3583	all	unavailable	unavailable	unavailable	unavailable	unavailable	51953414	unavailable	1190	root-counter-delta	

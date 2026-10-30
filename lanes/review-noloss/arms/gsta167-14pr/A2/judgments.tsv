@@ -1,0 +1,30 @@
+pr	blocker_id	outcome	matched_finding	raw_severity	mapped_severity	judge	saw_label	note
+3593	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3593	B2	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3596	B1	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3596	B2	M	-			GSTA-167 lane (labels in view)	yes	
+3516	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3516	B2	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3524	B1	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3526	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3526	B2	M	-			GSTA-167 lane (labels in view)	yes	Judged MISSED: the finding names a symlinked temp file, not unregister following a symlinked folder.
+3526	B3	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3526	B4	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3527	B1	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3527	B2	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3527	B3	M	-			GSTA-167 lane (labels in view)	yes	
+3527	B4	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3534	B1	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3534	B2	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3534	B3	M	-			GSTA-167 lane (labels in view)	yes	
+3534	B4	M	-			GSTA-167 lane (labels in view)	yes	
+3540	B1	M	-			GSTA-167 lane (labels in view)	yes	
+3545	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3564	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3567	B1	M	-			GSTA-167 lane (labels in view)	yes	
+3567	B2	D	-	INFORMATIONAL	INFORMATIONAL	GSTA-167 lane (labels in view)	yes	
+3567	B3	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3573	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3578	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3583	B1	F	-	CRITICAL	CRITICAL	GSTA-167 lane (labels in view)	yes	
+3583	B2	M	-			GSTA-167 lane (labels in view)	yes	

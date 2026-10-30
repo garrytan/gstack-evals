@@ -12,7 +12,11 @@ No command here calls a model; running an arm or a judge is paid work that needs
   cohort and each blocker in our own words. GSTA-167's documents stay in the org drive; the suite pins their digests.
 - `arm.schema.json`: arm contract version 1 for `arm.json` and one findings line.
 - `example/arm-example/`: a synthetic arm that uses every contract field. `noloss ingest --check` passes on it.
-- `arms/<suite>/<arm id>/`: ingested arms.
+- `arms/<suite>/<arm id>/`: ingested arms. `arms/gsta167-14pr/` holds GSTA-167's legacy arms A, B, C and A2 (A'),
+  transcribed with labels in view.
+- `comparisons/<suite>.json`: the comparisons `noloss export` scores, each with its margin and reason, post hoc
+  status and frozen bar, plus the power table's inputs.
+- `../../tables/review-noloss.json`: the export, generated. CI fails when it is stale.
 
 ## Commands
 
@@ -20,10 +24,16 @@ No command here calls a model; running an arm or a judge is paid work that needs
 gstack-evals noloss suite --check [--suite <id|path>] [--prereg <file>]
 gstack-evals noloss suite --from-catalog <dir>... --id <id> --released <YYYY-MM-DD> [--with <suite>] [--out <path>]
 gstack-evals noloss ingest <arm dir> --suite <id|path> [--check] [--root <dir>] [--digest-only <finding id>|all]... [--replace <reason>]
+gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--json]
+gstack-evals noloss export [--check]
+gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>]
+gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file>
+gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] --arm <dir>... --out <dir>
 ```
 
 `gstack-evals noloss --help` has the details. Every refusal starts with its reason code (E_NOLOSS_SUITE, E_NOLOSS_ARM,
-E_NOLOSS_JUDGMENT, E_NOLOSS_COST) and names the file, row and field.
+E_NOLOSS_JUDGMENT, E_NOLOSS_COST, E_NOLOSS_BLIND, E_NOLOSS_STALE) and names the file, row and field. `score` exits 0 on
+NO_LOSS with the size rule met, 1 on LOSS and 2 otherwise.
 
 ## Arm contract v1
 
@@ -60,3 +70,46 @@ once its judgments exist.
 1. Write the directory above. Use bare finding ids in `matched_finding`, put prose in `note`, and keep machine paths out.
 2. `gstack-evals noloss ingest <dir> --suite gsta167-14pr --check` until it passes. It writes nothing.
 3. `gstack-evals noloss ingest <dir> --suite gsta167-14pr` publishes it under `arms/`, in a pull request.
+
+## Scoring
+
+Each blocking blocker gets one value per arm: the share of the arm's passes that FOUND it. PRs are the clusters.
+`noloss score` and `noloss export` print, for each comparison of a variant V against a reference R:
+
+1. The frozen bar first, when the round froze one, scored exactly as written.
+2. The verdict. NO_LOSS when the margin-shifted exact sign-flip test over PRs rejects "V is worse than R by at least
+   the margin" at one-sided 0.05. Otherwise LOSS when the margin-0 test, oriented the other way, gives p < 0.05.
+   Otherwise NOT_DISTINGUISHED. The test is exact at any number of PRs (stats.ts) and equals the kit's
+   marginShiftedSignFlipP where the kit enumerates. When no blocker differs and R is off ceiling and floor, p is 2^-k
+   over k PRs ("no discordant blocker"); a true ceiling or floor stays null. An export Holm-adjusts the no-loss p
+   across its comparisons; the LOSS test is not adjusted. Every verdict line gives delta with its PR-clustered
+   bootstrap interval, losses, gains, both p-values and the minimum reachable p.
+3. The size rule: the share of simulated runs in which an arm exactly as good as R gets NO_LOSS (`--power-sims`, or
+   the prereg's `--power`). A NO_LOSS below 80%, or unchecked, exits 2 with NOLOSS_UNDERPOWERED and is not a claim.
+4. Cost on the units metered in both arms, at the weaker meter grade. A pr * row is never split and gives no median.
+5. Whether the claim "non-inferior within the margin" may be made, and every reason it may not: the verdict, the size
+   rule, post hoc status, labelled judging, a development-only suite, unadjudicated unmatched blocking findings.
+
+Labelled and blind judgments are never pooled, and lines from labelled judging open with "labelled judging". A
+stopped arm, or one with blockers recorded as coverage incomplete, gets no verdict.
+
+## Legacy arms
+
+On `comparisons/gsta167-14pr.json`, labelled judging and post hoc: blocking recall C 19/29, A' 12/29, A 11/29 and B
+8/29. At the 10-point margin A' (9 losses, 2 gains), A (11 losses, 3 gains) and B (13 losses, 2 gains) are each LOSS
+against C, with p_loss 0.031, 0.031 and 0.0039. B against A is NOT_DISTINGUISHED: 3 discordant PRs cannot reach p
+below 0.125. Every frozen bar fails. With 4 comparisons in the family, a Holm adjustment of the LOSS test would leave
+only B against C below 0.05. Cost rows are root-counter deltas, upper bounds: on the 11 PRs metered in both, C spends
+28.3M tokens per PR and A' 17.7M, and both about 19.5M per blocker found.
+
+## Blinded judging
+
+`judge-packet` pools every arm's findings for a unit, from every pass, in a seeded shuffle under opaque ids. A packet
+keeps only path, line and text, with severity words masked, and refuses a text that names an arm id or label,
+"arm <id>", a model id or a hyphenated reader. The key that maps ids back to arms is written outside the packets.
+The batch digest binds the suite, each arm's tree digest, the seed and the key's mapping.
+
+`judge-join` takes each judge's JSON reply, which names the batch and each packet's digest, and applies severity
+mechanically: the highest mapped severity among a blocker's matches wins. It names and waits for a second judge on
+every blocker where the arms differ plus a seeded 20% sample, and a third read wherever the judges differ. Then it
+writes `<out>/<arm id>/` with judgments.tsv (saw_label no) for every arm at once; ingest each with `--replace`.
