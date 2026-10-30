@@ -4,10 +4,13 @@
 // later attempt at the same slot, so a red or stale record never strands an item; the latest attempt decides. openLease
 // reads it at lease time through rigAdmission, its default requireAdmission, and refuses with E_RIG_UNPROVEN when the
 // record is missing, red or stale.
-// - trial, for arms in src/trial (Lane A on a real host): a green rig.yml run, the Docker tier, whose commit has this
-//   checkout's tree, and the tier summary its job annotated (title gstack-evals-rig-tier) at the same tree and recipe
-//   hash; plus the R5 and R6 probes run on the machine that spends (src/rig/probes.ts). Annotations are read through the
-//   REST API, which a proxy that refuses artifact downloads (as on Capy) still serves.
+// - trial, for arms in src/trial (Lane A on a real host): a green rig.yml push or dispatch run, the Docker tier, whose
+//   commit has this checkout's tree, and the tier summary its job annotated (title gstack-evals-rig-tier) at the same tree
+//   and recipe hash; plus the R5 and R6 probes run on the machine that spends (src/rig/probes.ts). A push or dispatch run
+//   takes its workflow file from the commit it tests, so the steps that wrote the annotation sit inside the tree being
+//   proven. A pull request's run takes its workflow file from the PR's merge commit, whose base can be any branch, so it
+//   gives reviewers a signal and never admits. Annotations are read through the REST API, which a proxy that refuses
+//   artifact downloads (as on Capy) still serves.
 // - direct, for direct-API runs and judge calibration: a green ci.yml run on a push or a dispatch (a pull request's run
 //   tests a merge commit, not a tree the run can name) whose commit has this tree; plus the replay lane's fake-upstream
 //   tests run on the machine that spends.
@@ -44,9 +47,9 @@ export const REQUIRED_PROBES: Record<ProofKind, readonly string[]> = {
 };
 export const ADMISSION_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** The workflow each proof set reads, and the events whose run tests the commit's own tree. */
+/** The workflow each proof set reads, and the events whose run takes its workflow file from the commit it tests. */
 export const PROOF_WORKFLOWS: Record<ProofKind, { file: string; events: readonly string[] }> = {
-  trial: { file: "rig.yml", events: ["pull_request", "push", "workflow_dispatch"] },
+  trial: { file: "rig.yml", events: ["push", "workflow_dispatch"] },
   direct: { file: "ci.yml", events: ["push", "workflow_dispatch"] },
 };
 
@@ -131,18 +134,21 @@ export function admissionPath(record: string, item: string, seq: number, attempt
   return attempt === 1 ? first : first.replace(/\.json$/, "." + attempt + ".json");
 }
 
-function parseAdmission(text: string, item: string, seq: number): AdmissionRecord | null {
+function parseAdmission(text: string, item: string, seq: number, attempt: number): AdmissionRecord | null {
   let a: AdmissionRecord;
   try {
     a = JSON.parse(text) as AdmissionRecord;
   } catch {
     return null;
   }
-  const ok = a && a.schema === 1 && a.kind === "admission" && a.item === item && a.seq === seq && Number.isSafeInteger(a.attempt) && (a.proof === "trial" || a.proof === "direct") && (a.run_id === null || typeof a.run_id === "string") && typeof a.machine_id === "string" && typeof a.tree === "string" && Array.isArray(a.checks) && Array.isArray(a.probes) && Array.isArray(a.problems) && typeof a.host_sha256 === "string" && typeof a.expires_at === "string";
+  const ok = a && a.schema === 1 && a.kind === "admission" && a.item === item && a.seq === seq && a.attempt === attempt && (a.proof === "trial" || a.proof === "direct") && (a.run_id === null || typeof a.run_id === "string") && typeof a.machine_id === "string" && typeof a.tree === "string" && Array.isArray(a.checks) && Array.isArray(a.probes) && Array.isArray(a.problems) && typeof a.host_sha256 === "string" && typeof a.expires_at === "string";
   return ok ? a : null;
 }
 
-/** The slot's latest attempt, or null when the slot has none. A file that does not parse is an attempt with no record. */
+/**
+ * The slot's latest attempt, or null when the slot has none. Only the names admissionPath writes count as attempts, and a
+ * file that does not parse, or whose attempt differs from its name's, is an attempt with no record.
+ */
 export function latestAdmission(record: string, item: string, seq: number): { path: string; attempt: number; admission: AdmissionRecord | null } | null {
   const dir = join(record, "items", item);
   if (!existsSync(dir)) return null;
@@ -151,9 +157,10 @@ export function latestAdmission(record: string, item: string, seq: number): { pa
     const m = ADMISSION_FILE.exec(name);
     if (!m || Number(m[1]) !== seq) continue;
     const attempt = m[2] === undefined ? 1 : Number(m[2]);
+    if (m[2] !== undefined && !(Number.isSafeInteger(attempt) && attempt >= 2 && String(attempt) === m[2])) continue;
     if (!latest || attempt > latest.attempt) latest = { path: join(dir, name), attempt };
   }
-  return latest && { ...latest, admission: parseAdmission(readFileSync(latest.path, "utf8"), item, seq) };
+  return latest && { ...latest, admission: parseAdmission(readFileSync(latest.path, "utf8"), item, seq, latest.attempt) };
 }
 
 /** Writes an admission record once, created exclusively and fsynced; a path already taken is E_LEDGER_RECORD. */
@@ -197,20 +204,21 @@ const short = (s: string | null | undefined) => (s ?? "none").slice(0, 12);
  */
 export function rigAdmission(o: { proof?: ProofKind; root?: string; now?: () => Date; fingerprint?: (proof: ProofKind) => HostFingerprint } = {}): RequireAdmission {
   return (record: string, lease: LeaseFile) => {
-    const found = latestAdmission(record, lease.item, lease.seq);
-    if (!found) return "no admission record at " + admissionPath(record, lease.item, lease.seq, 1) + " for slot " + lease.seq + "; run gstack-evals rig admit --item " + lease.item + " on the machine that will spend (docs/rig.md)";
-    const { path, admission: a } = found;
-    const at = "the admission record at " + path;
-    if (!a) return at + " does not parse as one for line item " + lease.item + ", slot " + lease.seq;
-    if (o.proof && a.proof !== o.proof) return at + " holds the " + a.proof + " proof set, and this entry point needs the " + o.proof + " one (docs/rig.md)";
-    if (a.run_id !== null && a.run_id !== lease.run_id) return at + " admits run " + a.run_id + ", not " + lease.run_id;
-    if (a.run_id === null && lease.seq !== 1) return at + " names no run, which only a line item's first lease may take; this is slot " + lease.seq;
-    if (a.machine_id !== lease.machine_id) return at + " was admitted on machine " + a.machine_id + ", not " + lease.machine_id + "; a replaced or other machine admits its own lease with gstack-evals rig admit";
-    const red = redness(a);
-    if (red.length) return at + " is red: " + red.join("; ");
-    const now = (o.now ?? (() => new Date()))();
-    if (!(now.getTime() <= Date.parse(a.expires_at))) return at + " is stale: admitted at " + a.admitted_at + ", it held until " + a.expires_at;
+    let at = "the admission record for slot " + lease.seq + " of line item " + lease.item;
     try {
+      const found = latestAdmission(record, lease.item, lease.seq);
+      if (!found) return "no admission record at " + admissionPath(record, lease.item, lease.seq, 1) + " for slot " + lease.seq + "; run gstack-evals rig admit --item " + lease.item + " on the machine that will spend (docs/rig.md)";
+      const { path, admission: a } = found;
+      at = "the admission record at " + path;
+      if (!a) return at + " does not parse as one for line item " + lease.item + ", slot " + lease.seq;
+      if (o.proof && a.proof !== o.proof) return at + " holds the " + a.proof + " proof set, and this entry point needs the " + o.proof + " one (docs/rig.md)";
+      if (a.run_id !== null && a.run_id !== lease.run_id) return at + " admits run " + a.run_id + ", not " + lease.run_id;
+      if (a.run_id === null && lease.seq !== 1) return at + " names no run, which only a line item's first lease may take; this is slot " + lease.seq;
+      if (a.machine_id !== lease.machine_id) return at + " was admitted on machine " + a.machine_id + ", not " + lease.machine_id + "; a replaced or other machine admits its own lease with gstack-evals rig admit";
+      const red = redness(a);
+      if (red.length) return at + " is red: " + red.join("; ");
+      const now = (o.now ?? (() => new Date()))();
+      if (!(now.getTime() <= Date.parse(a.expires_at))) return at + " is stale: admitted at " + a.admitted_at + ", it held until " + a.expires_at;
       const root = o.root ?? RIG_ROOT;
       const tree = checkout(root).tree;
       if (tree !== a.tree) return at + " is stale: it proves tree " + short(a.tree) + ", and this checkout runs tree " + short(tree) + " (uncommitted changes included)";
@@ -223,10 +231,10 @@ export function rigAdmission(o: { proof?: ProofKind; root?: string; now?: () => 
         const changed = (Object.keys(host) as (keyof HostFingerprint)[]).filter((k) => JSON.stringify(host[k]) !== JSON.stringify(a.host?.[k]));
         return at + " is stale: this host changed since admission (" + (changed.join(", ") || "fingerprint") + ")";
       }
+      return null;
     } catch (error) {
-      return "checking " + at + " against this checkout and host failed: " + (error as Error).message;
+      return "checking " + at + " failed: " + (error as Error).message;
     }
-    return null;
   };
 }
 

@@ -158,6 +158,55 @@ describe("rig admit (U20)", () => {
     expect(w.lease().state).toBe("open");
   });
 
+  test("a pull request's rig.yml run never admits, even with the right path, repo, tree, conclusion and a green tier", () => {
+    const forged = (r: ReturnType<typeof scratchRepo>): FakeRun[] => [{ id: 700, event: "pull_request", head_sha: r.commit, tree: r.tree, tier: greenTier(r) }];
+    const w = world({ runs: forged });
+    expect(codeOf(() => admit(w.input()))).toBe("E_RIG_PROOF");
+    expect(messageOf(() => admit(w.input()))).toContain("no rig.yml run on push, workflow_dispatch");
+    const named = admit(w.input({ checkRun: 700 }));
+    expect(named.admission.verdict).toBe("red");
+    expect(messageOf(() => w.lease())).toContain("rig.yml run 700 ran on pull_request; it proves a tree only on push, workflow_dispatch");
+    const beside = world({ runs: (r) => [...forged(r), { id: 701, event: "push", head_sha: r.commit, tree: r.tree, conclusion: "failure", tier: greenTier(r) }] });
+    expect(admit(beside.input()).admission.checks[0]).toMatchObject({ run_id: 701, conclusion: "failure" });
+    expect(codeOf(() => beside.lease())).toBe("E_RIG_UNPROVEN");
+  });
+
+  test("an older green record copied past a newer red one, or under a name admit never writes, does not admit", () => {
+    const w = world();
+    const green = admit(w.input());
+    expect(w.lease({ run: "run-1" }).state).toBe("open");
+    const v = world();
+    const first = admit(v.input());
+    const red = admit(v.input({ probes: () => failing(greenProbes("trial"), "r5.dns"), now: new Date(NOW.getTime() + 25 * 3600_000) }));
+    expect(red.admission).toMatchObject({ attempt: 2, verdict: "red" });
+    const dir = join(v.record, "items", "u11-lanea");
+    for (const name of ["admission-0001.1.json", "admission-0001.03.json", "admission-0001.99999999999999999999.json"]) writeFileSync(join(dir, name), readFileSync(first.path));
+    expect(messageOf(() => v.lease())).toContain(red.path + " is red: its verdict is red; probe r5.dns failed");
+    writeFileSync(join(dir, "admission-0001.3.json"), readFileSync(first.path));
+    expect(messageOf(() => v.lease())).toContain("admission-0001.3.json does not parse as one for line item u11-lanea, slot 1");
+    expect(green.admission.attempt).toBe(1);
+  });
+
+  test("a record the check cannot read refuses a required lease and warns on a warn item instead of throwing", () => {
+    for (const admission of ["required", "warn"] as const) {
+      const w = world({ admission });
+      mkdirSync(admissionPath(w.record, "u11-lanea", 1, 1), { recursive: true });
+      const warnings: string[] = [];
+      const lease = () => openLease(w.record, null, { item: "u11-lanea", run_id: "run-1", machine_id: MACHINE, now: NOW, requireAdmission: w.check(), warn: (code, m) => warnings.push(code + " " + m) });
+      if (admission === "required") expect(messageOf(lease)).toMatch(/^line item u11-lanea requires admission: checking the admission record .* failed: /);
+      else {
+        expect(lease().state).toBe("open");
+        expect(warnings).toEqual([expect.stringContaining("failed: ")]);
+      }
+    }
+    const v = world();
+    const r = admit(v.input());
+    const a = JSON.parse(readFileSync(r.path, "utf8"));
+    rmSync(r.path);
+    writeFileSync(r.path, JSON.stringify({ ...a, checks: [null] }));
+    expect(codeOf(() => v.lease())).toBe("E_RIG_UNPROVEN");
+  });
+
   test("a record that does not parse, names another run or another proof set refuses", () => {
     const w = world();
     const r = admit(w.input({ runId: "run-9" }));
