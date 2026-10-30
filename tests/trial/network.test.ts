@@ -56,7 +56,7 @@ describe("resume order", () => {
 });
 
 describe.skipIf(!DOCKER)("trial network (Docker tier, GSTACK_EVALS_DOCKER=1)", () => {
-  // Value: protects=an agent container reaches the metering proxy and nothing else: no IP, no DNS, no gateway, no management socket, no provider key; and the proxy container holds its journal's flock; fails_when=any probe gets out, the key or management token enters the agent env, or reconcile runs beside the containerized proxy; why_new=U9 scope (internal network, dual-homed proxy) and Captain brief items 9 and 10; seam=createTrialNetwork, startProxyContainer, recoverRun; no_claim=metered calls through the container, which U3's fake-upstream tests cover in process
+  // Value: protects=an agent container reaches the metering proxy and nothing else: no outside IP this machine reaches, no DNS, no gateway, no management socket, no provider key; and the proxy container holds its journal's flock; fails_when=any probe gets out, the key or management token enters the agent env, or reconcile runs beside the containerized proxy; why_new=U9 scope (internal network, dual-homed proxy) and Captain brief items 9 and 10; seam=createTrialNetwork, startProxyContainer, recoverRun; no_claim=metered calls through the container, which U3's fake-upstream tests cover in process
   test("the agent reaches only the proxy, which is dual-homed and holds its journal", async () => {
     const state = scratch("net-state");
     const built = buildTrialImage({ state });
@@ -73,7 +73,10 @@ describe.skipIf(!DOCKER)("trial network (Docker tier, GSTACK_EVALS_DOCKER=1)", (
       const gateway = spawnSync("docker", ["network", "inspect", "-f", "{{(index .IPAM.Config 0).Gateway}}", net.egress], { encoding: "utf8" }).stdout.trim();
       const probe = (c: string) => agent.exec(c, 60_000).stdout.trim();
       expect(probe('curl -s -m 10 -o /dev/null -w "%{http_code}" -H "x-api-key: $ANTHROPIC_API_KEY" "$ANTHROPIC_BASE_URL/v1/models"')).toMatch(/^40[13]$/);
-      expect(probe("curl -s -m 5 -o /dev/null -w '%{http_code}' https://1.1.1.1/; true")).toBe("000");
+      const outside = spawnSync("getent", ["ahostsv4", "example.com"], { encoding: "utf8" }).stdout.trim().split(/\s+/)[0];
+      expect(outside).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+      expect(spawnSync("curl", ["-s", "-m", "10", "-o", "/dev/null", "-w", "%{http_code}", "http://" + outside + "/"], { encoding: "utf8" }).stdout).not.toBe("000");
+      expect(probe("curl -s -m 5 -o /dev/null -w '%{http_code}' http://" + outside + "/; true")).toBe("000");
       expect(probe("curl -s -m 5 -o /dev/null -w '%{http_code}' http://" + gateway + "/; true")).toBe("000");
       expect(probe("getent hosts example.com >/dev/null && echo RESOLVED || echo NODNS")).toBe("NODNS");
       expect(probe("ls " + JSON.stringify(proxy.socket) + " 2>&1; true")).toContain("No such file or directory");
