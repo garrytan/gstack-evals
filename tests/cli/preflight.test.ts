@@ -47,14 +47,15 @@ describe("preflight on gstack's learn tasks", () => {
     }
   });
 
-  // Value: protects=Garry's 2026-10-29 rulings under the default policy: Sonnet 5.5 passes as a subject and as a cross-family judge, and particle-1 is refused with the pinned line until the proxy routes OpenRouter; fails_when=the default refuses Sonnet in either role or lets particle-1 pass early; why_new=GST-225 and the last Sonnet ruling; seam=policy/models.json; no_claim=particle-1 running (GST-227)
-  test("Sonnet 5.5 passes as a subject and as a judge; particle-1 is refused under the default policy", async () => {
+  // Value: protects=Garry's 2026-10-29 rulings under the default policy: Sonnet 5.5 passes as a subject and as a cross-family judge, and particle-1 and DeepSeek V4.1 Flash pass on codex now the proxy routes OpenRouter (GST-227); fails_when=the default refuses any of them; why_new=GST-225, the last Sonnet ruling and the proxy's OpenRouter route; seam=policy/models.json and routable(); no_claim=a real OpenRouter session
+  test("Sonnet 5.5 passes as a subject and as a judge; particle-1 and DeepSeek V4.1 Flash pass under the default policy", async () => {
     const { args } = await lockedLearn();
     expect((await run(args("claude", "claude-sonnet-5-5"))).code).toBe(0);
     expect((await run(args("codex", "gpt-6.1-sol", ["--judge-model", "claude-sonnet-5-5"]))).code).toBe(0);
-    const particle = await run(args("codex", "particle-ai/particle-1"));
-    expect(particle.code).toBe(2);
-    expect(particle.err).toContain("E_MODEL_POLICY particle-ai/particle-1 as a model under test: the metering proxy cannot route or price OpenRouter models yet (M2a), so its spend could not be held against a cap");
+    for (const model of ["particle-ai/particle-1", "deepseek/deepseek-v4.1-flash-1017"]) {
+      const r = await run(args("codex", model));
+      expect([model, r.code, r.out]).toEqual([model, 0, expect.stringContaining("ok keys: OPENROUTER_API_KEY set")]);
+    }
     const same = await run(args("claude", "claude-opus-5-5", ["--judge-model", "claude-opus-5-5"]));
     expect(same.err).toContain("judges come from another model family");
   });

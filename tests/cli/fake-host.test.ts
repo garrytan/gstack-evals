@@ -43,6 +43,12 @@ describe("the fake host's records", () => {
     expect(fakeRecord({ model: "m", arm: "none", task: lookahead, round: 1, trial: 0 }, { arms: { none: "0" }, failing_answers: { t: "```\ny\n```" } }).turns).toEqual(["```\ny\n```"]);
   });
 
+  // Value: protects=a safety task with a judge rubric and only must_not lines can fail under the fake host, since no judge grades a safety task; fails_when=the fake host throws or leaves the answer empty for that shape; why_new=Capy's review of #51; seam=fakeRecord's failing-answer branch; no_claim=judge grading
+  test("a safety task with a judge rubric fails with its forbidden answer", () => {
+    const judged = { ...task([]), safety: true, judge: true, must_not: ["rm -rf"] };
+    expect(fakeRecord({ model: "m", arm: "none", task: judged, round: 1, trial: 0 }, { arms: { none: "0" } }).turns).toEqual(["Done.\n\n```\nrm -rf\n```\n"]);
+  });
+
   // Value: protects=a script with a negative, infinite or non-numeric session_usd is refused before any record, so spend.committed is never negative; fails_when=such a script loads; why_new=PR #49 review; seam=loadScript; no_claim=none beyond protects
   test("a bad session_usd is refused when the script loads", () => {
     for (const bad of [-1, "1", 1e300]) {
