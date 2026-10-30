@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { loadCatalog } from "../../lanes/review-replay/catalog/catalog.ts";
 import { blockerCount, checkSuite, loadSuite, resolveUnit, suiteFromCatalog, unitRef, type Suite } from "../../lanes/review-noloss/suite.ts";
 import { REPO_ROOT } from "../../src/cli.ts";
-import { join } from "node:path";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 
 const { suite } = loadSuite("gsta167-14pr");
 
@@ -57,6 +59,21 @@ describe("unit refs and catalog suites", () => {
     expect(combined.units.filter((u) => u.blockers.some((b) => b.counts === "blocking")).length).toBe(27);
     expect(new Set(combined.units.filter((u) => u.blockers.some((b) => b.counts === "blocking")).map((u) => u.cluster)).size).toBe(26);
     expect(combined.units.flatMap((u) => u.blockers).filter((b) => b.case === "gstack-3572-review-4ad8a6bf").length).toBe(1);
+  });
+
+  test("a sealed case from a catalog outside the repo makes the suite sealed, even on a public base", () => {
+    const dir = mkdtempSync(join(tmpdir(), "noloss-sealed-"));
+    const src = join(REPO_ROOT, "lanes/review-replay/catalog/public");
+    const file = readdirSync(src).filter((f) => f.endsWith(".json")).sort()[0];
+    writeFileSync(join(dir, file), JSON.stringify({ ...JSON.parse(readFileSync(join(src, file), "utf8")), visibility: "sealed" }));
+    try {
+      const rel = relative(REPO_ROOT, dir);
+      expect(suiteFromCatalog({ id: "sealed-x", catalogs: [rel], released: "2026-01-01" }).sealed).toBe(true);
+      expect(suiteFromCatalog({ id: "sealed-y", catalogs: [rel], released: "2026-01-01", base: suite }).sealed).toBe(true);
+      expect(combined.sealed).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("two #3516 heads need a head in the ref, and repos keep same-numbered PRs apart", () => {

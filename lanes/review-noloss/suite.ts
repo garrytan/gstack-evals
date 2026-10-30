@@ -242,9 +242,11 @@ export function suiteFromCatalog(options: { id: string; catalogs: string[]; rele
   const units: Unit[] = options.base ? options.base.units.map((u) => ({ ...u, blockers: [...u.blockers] })) : [];
   const ineligible = [...(options.base?.ineligible ?? [])];
   const problems: string[] = [];
+  let sealed = options.base?.sealed ?? false;
   for (const dir of options.catalogs) {
     const loaded = loadCatalog(join(repoRoot, dir), repoRoot);
     for (const q of loaded.problems) problems.push(dir + "/" + q.file + ": " + q.message);
+    if (loaded.cases.some((c) => c.visibility === "sealed")) sealed = true;
     for (const c of loaded.cases) {
       if (named.has(c.id)) continue;
       named.add(c.id);
@@ -275,7 +277,7 @@ export function suiteFromCatalog(options: { id: string; catalogs: string[]; rele
     kind: base ? base.kind : "catalog",
     development_only: base?.development_only ?? true,
     purpose: (base ? base.purpose + " " : "") + "Catalog cases add one unit and one blocker each; deserved CRITICAL counts toward blocking recall, INFORMATIONAL toward over-blocking, unsettled toward detection only.",
-    sealed: base?.sealed ?? false,
+    sealed,
     catalogs: [...new Set([...(base?.catalogs ?? []), ...options.catalogs])],
     sources: base?.sources ?? [],
     prereg_freezes: base?.prereg_freezes ?? [],

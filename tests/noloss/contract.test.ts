@@ -152,6 +152,24 @@ describe("noloss ingest", () => {
     expect(() => prepare(files, suite, sha256, ["nope"])).toThrow(/names no finding: nope/);
   });
 
+  test("fields kept under --digest-only and the --replace reason must pass the scan too", () => {
+    const secret = "sk-" + "b".repeat(30);
+    const files = edit(base(), "findings/3593.jsonl", (t) => t.replace('"category":"example"', '"category":"' + secret + '"'));
+    let msg = "";
+    try {
+      prepare(files, suite, sha256, ["all"]);
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    expect(msg).toMatch(/findings\/3593.jsonl line \d+ of the output.*sk-key/);
+    expect(msg).not.toContain(secret);
+    const root = tmp();
+    const first = publish(prepare(base(), suite, sha256, []), suite, root, null);
+    const changed = edit(base(), "cost.tsv", (t) => t.replace("\t60\t", "\t61\t"));
+    expect(() => publish(prepare(changed, suite, sha256, []), suite, root, "rerun with " + secret)).toThrow(/--replace reason without keys/);
+    expect(JSON.parse(readFileSync(join(first.dest, "ingest.json"), "utf8")).replaced).toBeNull();
+  });
+
   test("publish is atomic and idempotent; a different arm needs --replace with a reason", () => {
     const root = tmp();
     const first = publish(prepare(base(), suite, sha256, []), suite, root, null);

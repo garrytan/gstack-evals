@@ -63,6 +63,18 @@ export interface Prepared {
   treeSha256: string;
 }
 
+/** Every line of the output tree that still breaks the publication scan: retained fields, generated records and all. */
+const leaks = (out: Map<string, Buffer>, fix: string): Problem[] =>
+  [...out].flatMap(([name, bytes]) =>
+    bytes
+      .toString("utf8")
+      .split("\n")
+      .flatMap((l, i) => {
+        const hits = scanText(l);
+        return hits.length ? [{ code: "E_NOLOSS_ARM" as const, where: name + " line " + (i + 1) + " of the output", message: "breaks the publication scan (" + hits.join(", ") + ")", fix }] : [];
+      }),
+  );
+
 const treeDigest = (files: Map<string, Buffer>): string => sha256([...files].filter(([k]) => k !== INGEST_RECORD).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => k + "\0" + sha256(v)).join("\n"));
 
 /**
@@ -109,6 +121,8 @@ export function prepare(files: Map<string, Buffer>, suite: Suite, suiteSha256: s
   const treeSha256 = treeDigest(out);
   const record = { contract_version: 1, suite: suite.id, suite_sha256: suiteSha256, arm: arm.arm.id, state: arm.state, provenance: arm.provenance, source_sha256: sources, tree_sha256: treeSha256, digest_only: all ? "all" : [...used].sort(), replaced: null as string | null };
   out.set(INGEST_RECORD, Buffer.from(JSON.stringify(record, null, 2) + "\n"));
+  const left = leaks(out, "remove it in the source arm; digest-only keeps " + KEEP_IN_DIGEST_ONLY.join(", ") + " as given, so they must pass the scan too");
+  if (left.length) throw new ContractError(left);
   return { arm, out, digestOnly: all ? ["all"] : [...used].sort(), treeSha256 };
 }
 
@@ -142,7 +156,10 @@ export function publish(p: Prepared, suite: Suite, root: string, replace: string
     if (replace === null) fail(dest, "already holds arm " + p.arm.arm.id + " with tree digest " + before + "; this ingest would publish " + p.treeSha256, "ingest under a new arm id, or pass --replace \"<reason>\" to replace it with the reason recorded");
     const record = JSON.parse(p.out.get(INGEST_RECORD)!.toString("utf8"));
     record.replaced = replace + " (replaced tree " + before + ")";
-    p.out.set(INGEST_RECORD, Buffer.from(JSON.stringify(record, null, 2) + "\n"));
+    const updated = Buffer.from(JSON.stringify(record, null, 2) + "\n");
+    const left = leaks(new Map([[INGEST_RECORD, updated]]), "give a --replace reason without keys, sealed markers or machine paths");
+    if (left.length) throw new ContractError(left);
+    p.out.set(INGEST_RECORD, updated);
   }
   mkdirSync(parent, { recursive: true });
   const staging = join(parent, "." + p.arm.arm.id + ".staging-" + process.pid);

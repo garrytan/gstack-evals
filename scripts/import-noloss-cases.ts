@@ -156,7 +156,7 @@ export async function importCases(o: { cohort: Cohort; hand: Hand; git: Git; api
   const fail = (code: ImportError["code"], m: string): never => {
     throw new ImportError(code, m);
   };
-  const meta = await api.get("repos/" + cohort.repo).catch((e: Error) => fail("E_NOLOSS_SOURCE", "could not confirm " + cohort.repo + " is public (unverified, not known private): GET repos/" + cohort.repo + " failed: " + e.message));
+  const meta = await api.get("repos/" + cohort.repo, { fresh: true }).catch((e: Error) => fail("E_NOLOSS_SOURCE", "could not confirm " + cohort.repo + " is public (unverified, not known private): GET repos/" + cohort.repo + " failed: " + e.message));
   if (!meta) fail("E_NOLOSS_SOURCE", "GET repos/" + cohort.repo + " answered 404, so its visibility is unverified; import only from a repo the API shows public");
   if (meta.visibility !== "public") fail("E_NOLOSS_SOURCE", cohort.repo + " is " + meta.visibility + ", not public; cases import only from public repos");
   const files = new Map<string, string>();
@@ -276,6 +276,7 @@ export async function main(argv: string[]): Promise<number> {
     if (!existsSync(join(clone, ".git"))) throw new ImportError("E_NOLOSS_SOURCE", "no git clone at " + clone + "; git clone --filter=blob:limit=2m https://github.com/garrytan/gstack.git there and fetch the cohort's PR refs");
     if (!existsSync(join(gstack, "bin", "gstack-diff-scope"))) throw new ImportError("E_NOLOSS_SOURCE", "no bin/gstack-diff-scope under " + gstack);
     const prereg = flag("--prereg");
+    if (prereg && !existsSync(prereg)) throw new ImportError("E_NOLOSS_SOURCE", "no prereg file at " + prereg + "; pass the GSTA-167 prereg the summaries are checked against");
     const reuse = new Map(loadCatalog(join(ROOT, "lanes", "review-replay", "catalog", "public")).cases.map((c) => [c.id, c]));
     const { files } = await importCases({
       cohort: JSON.parse(readFileSync(join(mining, "cohort.json"), "utf8")),
@@ -305,8 +306,9 @@ export async function main(argv: string[]): Promise<number> {
     console.log("import: wrote " + files.size + " files (" + stale.length + " changed)");
     return 0;
   } catch (error) {
-    if (!(error instanceof ImportError)) throw error;
-    console.error(error.message.split("\n").map((l) => error.code + " " + l).join("\n"));
+    const code = error instanceof ImportError ? error.code : "E_NOLOSS_SOURCE";
+    const message = error instanceof ImportError ? error.message : "unexpected failure reading the sources: " + (error instanceof Error ? error.message : String(error));
+    console.error(message.split("\n").map((l) => code + " " + l).join("\n"));
     return 2;
   }
 }

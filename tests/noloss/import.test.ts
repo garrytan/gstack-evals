@@ -1,9 +1,9 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { locate, locationOf, sharedRuns } from "../../scripts/import-noloss-cases.ts";
+import { importCases, locate, locationOf, main, sharedRuns } from "../../scripts/import-noloss-cases.ts";
 import { Git } from "../../scripts/mine-review-cases.ts";
 
 const dirs: string[] = [];
@@ -66,6 +66,29 @@ describe("import line resolution", () => {
     expect(locationOf(g, base, head, "a.ts", 6)).toBe("added");
     expect(locationOf(g, base, head, "a.ts", 2)).toBe("context");
     expect(locationOf(g, base, head, "b.ts", 1)).toBe("outside");
+  });
+
+  test("repo visibility is read fresh, never from the cache, and a private repo is refused", async () => {
+    const calls: unknown[] = [];
+    const api = { get: async (p: string, o?: { fresh?: boolean }) => (calls.push([p, o]), { visibility: "private" }), calls: () => calls.length };
+    const run = importCases({ cohort: { repo: "garrytan/gstack", units: [] } as never, hand: {} as never, git: {} as never, api, scope: {} as never, reuse: new Map(), prereg: null });
+    await expect(run).rejects.toThrow(/is private, not public/);
+    expect(calls[0]).toEqual(["repos/garrytan/gstack", { fresh: true }]);
+  });
+
+  test("a missing prereg file is reported with its reason code, not a stack", async () => {
+    const d = mkdtempSync(join(tmpdir(), "noloss-main-"));
+    dirs.push(d);
+    mkdirSync(join(d, ".git"));
+    mkdirSync(join(d, "bin"));
+    writeFileSync(join(d, "bin", "gstack-diff-scope"), "");
+    const err = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await main(["--clone", d, "--gstack", d, "--cache", d, "--prereg", join(d, "missing.md")])).toBe(2);
+      expect(String(err.mock.calls[0]?.[0])).toMatch(/^E_NOLOSS_SOURCE no prereg file/);
+    } finally {
+      err.mockRestore();
+    }
   });
 
   test("restated summaries share no eight-word run with the source", () => {
