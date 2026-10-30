@@ -1,0 +1,52 @@
+{
+  "contract_version": 1,
+  "id": "A2",
+  "label": "A': relaxed packet reads (gsta-167-review-reads, #3636)",
+  "suite": "gsta167-14pr",
+  "date": "2026-10-30",
+  "passes": 1,
+  "kind": "variant",
+  "provenance": "transcribed",
+  "transcribed_from": [
+    {
+      "name": "GSTA-167 noloss3-results.md",
+      "sha256": "268ffa929092686ff2ffcf9961b0c6054d7195b3f91fe56fb5347e95824b80dc"
+    },
+    {
+      "name": "GSTA-167 arm-Aprime/judgments.tsv",
+      "sha256": "3f02165c74db7b981892bf7cb9f6c79a77b98b39881ba72c6edd8d351b9d696d"
+    },
+    {
+      "name": "GSTA-167 arm-Aprime/cost.tsv",
+      "sha256": "fb911930d35d56e5f229dca6f269a768e7e3541819b541918cf96416d63ea1fd"
+    }
+  ],
+  "status": "complete",
+  "coverage_gaps": [
+    "Codex structured review: no Codex CLI on the lane machine"
+  ],
+  "models": [
+    {
+      "role": "specialist",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "medium"
+    },
+    {
+      "role": "red-team",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "high"
+    },
+    {
+      "role": "adversarial-native",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "high"
+    },
+    {
+      "role": "outside-voice",
+      "model": "openai/gpt-6.1-sol",
+      "effort": "medium"
+    }
+  ],
+  "run_by": "GSTA-167 (GStack Minder), round 3; transcribed by GSTA-43",
+  "notes": "Transcribed from GSTA-167's round 3 per-blocker outcomes, in blocker order. The GSTA-167 lane judged them with arm labels in view, so they are labelled judging and are never pooled with blind judgments. The findings stay in the org drive, not in this repo."
+}

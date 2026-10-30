@@ -74,6 +74,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_NOLOSS_ARM](#e_noloss_arm) | 2 | U13 |
 | [E_NOLOSS_JUDGMENT](#e_noloss_judgment) | 2 | U13 |
 | [E_NOLOSS_COST](#e_noloss_cost) | 2 | U13 |
+| [LOSS](#loss) | 1 | U13 |
+| [NOT_DISTINGUISHED](#not_distinguished) | 2 | U13 |
+| [E_NOLOSS_BLIND](#e_noloss_blind) | 2 | U13 |
+| [E_NOLOSS_STALE](#e_noloss_stale) | 2 | U13 |
 | [E_MINE_SOURCE](#e_mine_source) | 2 | U14 |
 | [E_MINE_HAND](#e_mine_hand) | 2 | U14 |
 | [E_MINE_STALE](#e_mine_stale) | 2 | U14 |
@@ -97,6 +101,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [CLEANUP_INCOMPLETE](#cleanup_incomplete) | warning | U9 |
 | [E_STACK_SOURCE](#e_stack_source) | 2 | U10 |
 | [E_STACK_DIGEST](#e_stack_digest) | 2 | U10 |
+| [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -163,6 +168,14 @@ Exit 1. Side effects: The run finished and its spend is settled in the ledger. R
 Fix: Read the per-model interval in verdict.json. The edit is not shown to be within the margin; restore what it cut or keep the old copy.
 
 Exit 1. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U6.
+
+### LOSS
+
+A review no-loss comparison found the variant worse than the reference: the non-inferiority test at the margin did not pass, and the margin-0 exact sign-flip test over PR clusters, oriented the other way, gave p &lt; 0.05 on blocking recall.
+
+Fix: Read the comparison's losses: the blockers the reference found and the variant missed. Restore what the variant dropped and score a new arm; never rerun the same arm to change a verdict.
+
+Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -544,9 +557,9 @@ Exit 2. Side effects: None: nothing is written. Retry safe: yes. Resumable: no. 
 
 ### E_NOLOSS_SUITE
 
-A review no-loss suite cannot be used: the file is unreadable or malformed, a blocker's catalog case is missing, lacks a confirmed answer-key audit or disagrees with its unit's range, file or line, a prereg freeze digest fails on its byte prefix, or scripts/import-noloss-cases.ts found a blocker it cannot place (a line absent at the pass-1 head, a fix that does not touch it, lineage that rewrote it, or a summary that copies the source).
+A review no-loss suite cannot be used: the file is unreadable or malformed, a blocker's catalog case is missing, lacks a confirmed answer-key audit or disagrees with its unit's range, file or line, a prereg freeze digest fails on its byte prefix, or scripts/import-noloss-cases.ts found a blocker it cannot place (a line absent at the pass-1 head, a fix that does not touch it, lineage that rewrote it, or a summary that copies the source). Also a comparisons file (lanes/review-noloss/comparisons/) that is malformed, lacks a margin with its reason, or names a frozen bar the suite lacks, or a sealed suite whose arms root or table is inside the repo.
 
-Fix: Read the named unit and blocker. Fix the case or the hand audit (lanes/review-replay/catalog/noloss/mining/hand.json) and rerun the import, or regenerate the suite; never edit a digest to make it match.
+Fix: Read the named unit and blocker, or the named comparison. Fix the case or the hand audit (lanes/review-replay/catalog/noloss/mining/hand.json) and rerun the import, or regenerate the suite; never edit a digest to make it match.
 
 Exit 2. Side effects: None: suite --check and import --check write nothing, and import writes cases only when every blocker resolves. Retry safe: yes. Resumable: no. Owner: U13.
 
@@ -581,6 +594,30 @@ An arm's cost.tsv breaks the contract: a required column is missing, a meter_sou
 Fix: Fix the named row. Leave a number blank when it is unknown, use proxy-journal, reader-counter, lane-counter-delta, root-counter-delta or estimate for meter_source, and list the units a pr * row covers.
 
 Exit 2. Side effects: None: refused before anything is published. Retry safe: yes. Resumable: no. Owner: U13.
+
+### NOT_DISTINGUISHED
+
+A review no-loss comparison reached neither NO_LOSS nor LOSS: too few PRs differ between the arms for either test to reach p &lt; 0.05, or no blocker differs at a ceiling or floor. The record prints the minimum reachable p.
+
+Fix: More data decides it: more PRs, more blockers or more passes per arm. noloss power says how many; a new preregistration buys them.
+
+Exit 2. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_BLIND
+
+Blinding would break: a comparison would pool labelled and blind judgments, or one arm mixes them; a judge packet would leak an arm id, label, model or reader name; the key file sits inside the packet directory; or a judge reply or key does not match its batch (another suite, changed arms, a stale or swapped packet, or a missing adjudication).
+
+Fix: Read the named arm, packet or reply. Judge an arm one way only, remove the leaking text from the source arm and ingest it again, keep --key outside --out, and send each judge the packets of the batch its reply names.
+
+Exit 2. Side effects: None: refused before any packet, judgment or score is written. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_STALE
+
+tables/review-noloss.json differs from what noloss export computes from the ingested arms and the comparisons file, or cannot be read.
+
+Fix: Run gstack-evals noloss export without --check, review the diff, and commit it only if the change is intended.
+
+Exit 2. Side effects: None: export --check writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
 
 ### E_MINE_SOURCE
 
@@ -769,3 +806,11 @@ A work dir that a preflight control or a trial used is still on disk, because re
 Fix: Remove the named path as its owner or as root. Give cleanup an image (the trial image) so it can remove root-owned files from a container with no network.
 
 Warning. Owner: U9.
+
+### NOLOSS_UNDERPOWERED
+
+A review no-loss comparison reached NO_LOSS, but the size rule is unchecked or below 80%: an arm exactly as good as the reference would pass less than 80% of the time. The verdict prints with this warning, exits 2, and is not a no-loss claim.
+
+Fix: Check the size rule with --power-sims (or the prereg's --power), and buy more PRs or passes until it reaches 80% before stating the claim.
+
+Warning. Owner: U13.
