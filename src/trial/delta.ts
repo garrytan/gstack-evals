@@ -1,0 +1,96 @@
+// The graded filesystem delta (plan v3.2, "Grader integrity"). Verification starts from the evaluator-owned baseline, the
+// work dir snapshotted after setup with its .git, and imports what the agent changed against it: new, changed and deleted
+// files anywhere in the work tree, untracked and git-excluded files included (so .gstack-home comes across). Excluded:
+// every .git entry (the repository, its config and its hooks stay the baseline's, so an agent's commit cannot move the
+// grader's HEAD), fifos, sockets and devices, and symlinks that point outside the work tree. A sidecar paths list narrows
+// the import. The check then runs on the grade tree, never on the agent's.
+import { spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { dirname, isAbsolute, join, normalize, sep } from "node:path";
+
+type Kind = "f" | "d" | "l" | "o";
+interface Entry {
+  kind: Kind;
+  mode: number;
+  size: number;
+  target?: string;
+}
+
+export interface Delta {
+  added: string[];
+  changed: string[];
+  deleted: string[];
+  /** Agent output left out of the import, with why. */
+  dropped: { path: string; reason: string }[];
+}
+
+/** A byte-for-byte copy of a tree: modes, symlinks and .git included. */
+export function snapshot(src: string, dest: string): void {
+  mkdirSync(dirname(dest), { recursive: true });
+  const r = spawnSync("cp", ["-a", "--", src, dest], { encoding: "utf8" });
+  if (r.status !== 0) throw new Error("snapshot of " + src + " failed: " + r.stderr.trim());
+}
+
+function scan(root: string): Map<string, Entry> {
+  const out = new Map<string, Entry>();
+  const walk = (dir: string, rel: string) => {
+    for (const name of readdirSync(dir)) {
+      if (name === ".git") continue;
+      const path = join(dir, name);
+      const relPath = rel ? rel + "/" + name : name;
+      const st = lstatSync(path);
+      const kind: Kind = st.isSymbolicLink() ? "l" : st.isDirectory() ? "d" : st.isFile() ? "f" : "o";
+      out.set(relPath, { kind, mode: st.mode & 0o7777, size: st.size, ...(kind === "l" ? { target: readlinkSync(path) } : {}) });
+      if (kind === "d") walk(path, relPath);
+    }
+  };
+  walk(root, "");
+  return out;
+}
+
+const depth = (p: string) => p.split("/").length;
+
+/** Whether a symlink at rel with this target resolves inside the work tree. */
+const linkInside = (rel: string, target: string) => !isAbsolute(target) && !normalize(join(dirname(rel), target)).split(sep).includes("..");
+
+/** Imports the agent's changes (after) against the baseline into grade, a copy of the baseline. */
+export function importDelta(baseline: string, after: string, grade: string, paths?: readonly string[]): Delta {
+  spawnSync("chmod", ["-R", "u+rX", after], { stdio: "ignore" });
+  const before = scan(baseline);
+  const now = scan(after);
+  const scope = (paths ?? []).map((s) => s.replace(/\/+$/, ""));
+  const inScope = (p: string) => !scope.length || scope.some((s) => p === s || p.startsWith(s + "/"));
+  const delta: Delta = { added: [], changed: [], deleted: [], dropped: [] };
+  for (const p of [...before.keys()].filter((p) => !now.has(p) && inScope(p)).sort((a, b) => depth(b) - depth(a))) {
+    rmSync(join(grade, p), { recursive: true, force: true });
+    delta.deleted.push(p);
+  }
+  for (const p of [...now.keys()].sort((a, b) => depth(a) - depth(b) || a.localeCompare(b))) {
+    const e = now.get(p)!;
+    const old = before.get(p);
+    if (!inScope(p)) continue;
+    if (e.kind === "o") {
+      delta.dropped.push({ path: p, reason: "not a file, directory or symlink" });
+      continue;
+    }
+    if (e.kind === "l" && !linkInside(p, e.target!)) {
+      delta.dropped.push({ path: p, reason: "symlink to " + e.target + " points outside the work tree" });
+      if (old) {
+        rmSync(join(grade, p), { recursive: true, force: true });
+        delta.deleted.push(p);
+      }
+      continue;
+    }
+    const same = old && old.kind === e.kind && old.mode === e.mode && (e.kind === "d" || (e.kind === "l" ? old.target === e.target : old.size === e.size && readFileSync(join(baseline, p)).equals(readFileSync(join(after, p)))));
+    if (same) continue;
+    const dest = join(grade, p);
+    if (old && (old.kind !== e.kind || e.kind !== "d")) rmSync(dest, { recursive: true, force: true });
+    mkdirSync(dirname(dest), { recursive: true });
+    if (e.kind === "d") mkdirSync(dest, { recursive: true });
+    else if (e.kind === "l") symlinkSync(e.target!, dest);
+    else copyFileSync(join(after, p), dest);
+    if (e.kind !== "l") chmodSync(dest, e.mode);
+    (old ? delta.changed : delta.added).push(p);
+  }
+  return delta;
+}

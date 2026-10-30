@@ -12,6 +12,17 @@ Owner: U9 (src/trial), with U10 (the Claude Code and Codex adapters).
 
 **Arm images.** An arm image is the trial image plus the arm's installed tree, copied in as content-addressed layers and tagged by a hash of the base digest, the staged tree and the destinations. The build drops `.git`, any `skill-evals` path (gstack keeps its eval tasks under `test/fixtures/skill-evals/`) and any file with the same bytes as a file in the tasks directory. The built image is then scanned whole, and an arm image that still holds a fixture refuses with E_IMAGE_BUILD.
 
+**A trial.** Setup, the agent and the check each run in their own container as this machine's uid, with every capability dropped and no new privileges. The work dir is mounted at `/work/<task id>`, so the agent sees the task id as its project name and never the evaluator's layout.
+
+1. Setup runs with the work dir and a read-only copy of the tasks directory at `/fixtures` (`SKILL_EVAL_FIXTURES`), and no network.
+2. The state root is seeded: `.gstack-home` with gstack's onboarding markers and config, after setup so a setup that commits its tree never commits them. `GSTACK_STATE_ROOT` and `GSTACK_HOME` both name it.
+3. The work dir is snapshotted as the evaluator-owned baseline, with its .git.
+4. The agent runs in the arm image with the work dir only. The tasks directory, the sidecar, personas, mutants and hidden tasks never enter its container or its env.
+5. The agent's filesystem delta is imported against the baseline into a fresh copy: new, changed and deleted files anywhere in the work tree, untracked and git-excluded files included. Every .git entry stays the baseline's, so a commit cannot move the grader's HEAD. Fifos, sockets, devices and symlinks that point outside the work tree are dropped and named in `delta.json`. A sidecar `paths` list narrows the import.
+6. The check runs on that copy with a read-only copy of the tasks directory, a read-only root filesystem and no network. Its exit is judged by `judgeCheck`; a check that cannot judge leaves a missing cell (E_VERIFIER).
+
+Each child's env comes from its role's allowlist (`src/trial/env.ts`); the provider key lives only in the proxy. Evaluator records (`trial.json`, `delta.json`) sit beside the work dir, never inside it. Preflight's vacuity controls and `--lock` run in containers on the pinned trial image too. `--isolation process` runs setup and check as this user and the agent under bubblewrap with the system directories read-only, a fresh HOME and the work dir; without `bwrap` it refuses (E_ISOLATION_UNSAFE).
+
 **Retention.** A run keeps every image and arm tree it uses under `<state>/retained/`: `images/<image id>.tar` from `docker save`, `trees/<tree sha256>.tar` as byte-stable tars, and `MANIFEST.jsonl` listing each with its sha256 and size. The retention target: every retained file of a counted run stays fetchable by digest for as long as any report cites the run, so a replicator gets the exact bytes. The run's results pull request names where the files went. Until the program has its own bucket, that is a GitHub release on garrytan/gstack-evals named for the run id, one asset per digest. A retained file a published report cites is never pruned.
 
 **Docker tier.** Tests that need a Docker daemon skip unless `GSTACK_EVALS_DOCKER=1`, so the default CI job stays fast. U20's rig.yml runs them and counts a skipped expected case as a failure.

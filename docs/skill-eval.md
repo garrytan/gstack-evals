@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex need the host adapters (U10) and the trial module (U9), which are not built yet. Until then, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
+Real runs on Claude Code and Codex need the host adapters (U10), which are not built yet; the trial module (U9) is. Until then, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
 
 ## Quickstart
 
@@ -67,7 +67,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--no-noise-floor` | off | Drop before2. |
 | `--ledger` | `GSTACK_EVALS_LEDGER`, else the state dir | The machine-local SQLite ledger; refused on a network or FUSE mount. |
 | `--ledger-record` | `GSTACK_EVALS_LEDGER_RECORD`, else the state dir | The approval record. On Capy, point it at your Captain drive. |
-| `--isolation` | docker | process must be explicit. Until U9's container runner lands, preflight runs task controls only under `--isolation process` and stops with E_ISOLATION_UNSAFE under docker. |
+| `--isolation` | docker | process must be explicit. Under docker, preflight runs task controls in containers on the trial image `doctor` pinned; with no daemon it stops with E_ISOLATION_UNSAFE, and with no pin for this checkout's recipe with E_IMAGE_STALE. |
 | `--parallel` | min(4, available parallelism) | Sessions at once. |
 | `--timeout` | 600 | Seconds per session; a sidecar timeout_s overrides it per task. |
 | `--judge-model` | the policy's default for the subjects' provider | The cross-family judge for tasks with a judge rubric. |
@@ -92,9 +92,9 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 6. **Lock.** `tasks.lock.json` must be committed and clean at HEAD (LOCK_MISSING prints the exact `--lock` command and git steps). A changed tasks file, sidecar, policy, before copy or extractor, or a hand-edited row, is LOCK_DRIFT.
 7. **Ledger and cap.** The line item needs an approved cap on record, and `--spend-cap` must fit within it and what is left (E_LEDGER_MISSING, E_ITEM_BOUND). A cap below one arm-balanced round is E_CAP_TOO_LOW. With no `--spend-cap`, the stop prints the dry-run matrix and never a cap to copy.
 8. **PDF flag.** A task that sends a PDF gets the PDF_INPUT warning.
-9. **Host adapter.** The fake host is ready; a real host stops here until U9 and U10 land.
+9. **Host adapter.** The fake host is ready; a real host stops here until U10 lands.
 
-`skill-eval --lock` runs the contract and vacuity checks first and refuses to lock a set that fails them, so a rebuilt task set is checked and locked fresh. It runs the controls as you, with the trial's env allowlist.
+`skill-eval --lock` runs the contract and vacuity checks first and refuses to lock a set that fails them, so a rebuilt task set is checked and locked fresh. It runs the controls in containers on the pinned trial image when Docker answers, and otherwise as you with the trial's env allowlist; its vacuity line says which.
 
 ## Spend
 

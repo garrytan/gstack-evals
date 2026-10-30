@@ -8,8 +8,9 @@
 // until they land, a call on a real host stops after preflight's own checks.
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { FakeHostError, loadScript } from "../../adapters/_fake/host.ts";
+import { containerRunner } from "../../trial/sandbox.ts";
 import { REPO_ROOT, type Io } from "../../cli.ts";
 import type { ErrorContext } from "../../types.ts";
 import { codeLines, consoleIo, parseFlags as parseLockFlags } from "../contract/cli-io.ts";
@@ -73,22 +74,23 @@ export function errorContext(call: Call | null, env_names: string[], env: Env): 
 
 /**
  * --lock runs the contract and vacuity checks first and refuses to lock a set that fails them (GST-109 decision 1). The
- * controls run as this user with the env allowlist: the lock is the author's own step on their own committed tasks, and
- * U9's container runner takes the same runner seam when it lands. Preflight, which honors --isolation, refuses to run
- * them under docker until then.
+ * controls run in containers on the pinned trial image when Docker answers (U9's container runner); otherwise as this
+ * user with the env allowlist, since the lock is the author's own step on their own committed tasks, and the line says
+ * which. Preflight, which honors --isolation, never falls back.
  */
-async function lockWithChecks(argv: string[], io: Io): Promise<number> {
+async function lockWithChecks(argv: string[], io: Io, env: Env): Promise<number> {
   const parsed = parseLockFlags(argv, ["--tasks", "--ext", "--before", "--policy"], ["--help", "-h"]);
   if (typeof parsed !== "string" && parsed.values.has("--tasks") && !parsed.set.size) {
     const contract = loadContract(parsed.values.get("--tasks")!, parsed.values.get("--ext"));
     if (contract.ok) {
-      const vacuity = checkVacuity({ tasks: contract.tasks.tasks, dir: contract.tasks.dir, sidecar: contract.ext?.sidecar?.tasks ?? {} });
+      const isolated = containerRunner(contract.tasks.dir, env);
+      const vacuity = checkVacuity({ tasks: contract.tasks.tasks, dir: contract.tasks.dir, sidecar: contract.ext?.sidecar?.tasks ?? {} }, "runner" in isolated ? { runner: isolated.runner } : {});
       for (const w of vacuity.warnings) io.err(w.code + " " + w.message);
       if (vacuity.stops.length) {
         for (const s of vacuity.stops) io.err(codeLines(s.code, [s.message, "--lock refuses a task set that fails the vacuity check, so a fix never needs a post-hoc relock."]));
         return 2;
       }
-      io.out("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control (the controls ran as this user with the env allowlist)");
+      io.out("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control (" + ("runner" in isolated ? "the controls ran in containers on " + isolated.image : "the controls ran as this user with the env allowlist; " + isolated.stop.code + ": " + isolated.stop.message) + ")");
     }
   }
   return lockCommand(argv, io);
@@ -100,7 +102,7 @@ function printStops(io: Io, stops: readonly Stop[]): void {
 
 export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: Env = process.env, mode: "run" | "preflight" = "run"): Promise<number> {
   if (mode === "run" && argv[0] === "init") return initCommand(argv.slice(1), io);
-  if (mode === "run" && argv.includes("--lock")) return lockWithChecks(argv.filter((a) => a !== "--lock"), io);
+  if (mode === "run" && argv.includes("--lock")) return lockWithChecks(argv.filter((a) => a !== "--lock"), io, env);
   const parsed = parseFlags(argv, SKILL_EVAL_FLAGS, env);
   if (typeof parsed === "string") {
     io.err(codeLines("E_USAGE", ["skill-eval: " + parsed], HINT));
@@ -129,7 +131,8 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
   if (!json) io.out(effectiveLines(call).join("\n"));
   let report: PreflightReport | null = null;
   try {
-    report = preflight(call, { env, dryRun: call.dryRun, host: hostCheck(call, env) });
+    const isolated = call.isolation === "docker" && !call.dryRun ? containerRunner(dirname(resolve(call.tasks)), env) : null;
+    report = preflight(call, { env, dryRun: call.dryRun, host: hostCheck(call, env), ...(isolated ? ("runner" in isolated ? { runner: isolated.runner } : { isolationStop: isolated.stop }) : {}) });
     for (const w of report.warnings) io.err(w.code + " " + w.message);
     const refuse = (stops: readonly Stop[], names: string[]): number => {
       printStops(io, stops);

@@ -55,6 +55,8 @@ export interface PreflightOptions {
   /** The host adapter's own readiness, checked last; null when it is ready. */
   host: () => Stop | null;
   runner?: ShellRunner;
+  /** Why no container runner was given under --isolation docker (U9's containerRunner: no daemon, or no pinned trial image). */
+  isolationStop?: Stop;
   mounts?: Mount[];
 }
 
@@ -147,13 +149,14 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
   else report.passed.push("keys: " + keys.join(", ") + " set (checked by name)");
 
   if (call.isolation === "docker" && !opts.runner) {
-    stop("E_ISOLATION_UNSAFE", "the vacuity check runs each task's setup, mutant and check; under --isolation docker they need the container runner U9 builds, which is not built yet, so preflight did not run them", "Pass --isolation process to run the controls as this user with the trial's env allowlist; the verdict records it.");
+    const why = opts.isolationStop ?? { code: "E_ISOLATION_UNSAFE" as const, message: "under --isolation docker the vacuity check runs each task's setup, mutant and check in containers, and no container runner was given, so preflight did not run them", fix: "Start Docker and run gstack-evals doctor, or pass --isolation process on purpose; the verdict records it." };
+    stop(why.code, why.message, why.fix);
   } else {
     const vacuity = checkVacuity({ tasks, dir: contract.tasks.dir, sidecar: ext }, opts.runner ? { runner: opts.runner } : {});
     report.vacuity = vacuity;
     for (const s of vacuity.stops) stop(s.code, s.message);
     report.warnings.push(...vacuity.warnings);
-    if (!vacuity.stops.length) report.passed.push("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control, " + vacuity.results.filter((r) => r.status === "negative_unvalidated").length + " safety tasks without a mutant" + (opts.runner ? "" : " (controls ran as this user with the env allowlist, --isolation process)"));
+    if (!vacuity.stops.length) report.passed.push("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control, " + vacuity.results.filter((r) => r.status === "negative_unvalidated").length + " safety tasks without a mutant" + (opts.runner ? " (controls ran in containers)" : " (controls ran as this user with the env allowlist, --isolation process)"));
   }
 
   const lockPath = join(contract.tasks.dir, LOCK_FILE);
