@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CLAUDE_CLI, HAS_CLAUDE_CLI, REPO } from "./harness.ts";
+import { CLAUDE_CLI, CODEX_CLI, HAS_CLAUDE_CLI, HAS_CODEX_CLI, REPO } from "./harness.ts";
 
 const pins = JSON.parse(readFileSync(join(REPO, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;
 const dockerfile = readFileSync(join(REPO, "docker", "trial.Dockerfile"), "utf8");
@@ -17,4 +17,13 @@ test("host-cli.json, the Dockerfile and the Agent SDK name one Claude Code versi
   expect(bundled).toMatchObject({ version: sdk, claudeCodeVersion: version });
   expect(dockerfile).toMatch(new RegExp("ADD --checksum=sha256:[0-9a-f]{64} https://registry\\.npmjs\\.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-" + version.replaceAll(".", "\\.") + "\\.tgz "));
   if (HAS_CLAUDE_CLI) expect(spawnSync(CLAUDE_CLI, ["--version"], { encoding: "utf8" }).stdout.trim()).toBe(version + " (Claude Code)");
+});
+
+// Value: protects=the Codex in the trial image is the one the adapter tests run: host-cli.json, the Dockerfile's checked tarball and package.json's @openai/codex name one version; fails_when=one is bumped without the others; why_new=U10 bakes Codex into the trial image; seam=docker/host-cli.json, docker/trial.Dockerfile, package.json; no_claim=the image builds, which the Docker tier covers
+test("host-cli.json, the Dockerfile and package.json name one Codex version", () => {
+  const version = pins.codex!;
+  expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")).devDependencies["@openai/codex"]).toBe(version);
+  expect(dockerfile).toMatch(new RegExp("ADD --checksum=sha256:[0-9a-f]{64} https://registry\\.npmjs\\.org/@openai/codex/-/codex-" + version.replaceAll(".", "\\.") + "-linux-x64\\.tgz "));
+  if (HAS_CODEX_CLI) expect(spawnSync(CODEX_CLI, ["--version"], { encoding: "utf8" }).stdout.trim()).toBe("codex-cli " + version);
 });

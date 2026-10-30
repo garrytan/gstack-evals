@@ -1,12 +1,14 @@
 // Keyless harness for the host adapters: an in-process metering proxy (U3) on loopback whose upstream is a scripted fake
-// Anthropic Messages API, a ledger in memory, and a local agent session that runs the Claude Code CLI the Agent SDK
-// bundles (the same version docker/host-cli.json pins in the trial image) with the trial's agent env and its own HOME.
+// Anthropic Messages API and a scripted fake Responses API, a ledger in memory, and a local agent session that runs the
+// Claude Code CLI the Agent SDK bundles, or the Codex CLI from @openai/codex (each the version docker/host-cli.json pins
+// in the trial image), with the trial's agent env and its own HOME.
 // No key and no network: the proxy's fetch is the fake.
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
+import type { Provider } from "../../src/runner/pricing/prices.ts";
 import type { AgentSession, StepResult } from "../../src/trial/sandbox.ts";
 import { trialEnv } from "../../src/trial/env.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
@@ -14,6 +16,8 @@ import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLed
 export const REPO = join(import.meta.dir, "..", "..");
 export const CLAUDE_CLI = join(REPO, "node_modules", "@anthropic-ai", "claude-agent-sdk-" + process.platform + "-" + process.arch, "claude");
 export const HAS_CLAUDE_CLI = existsSync(CLAUDE_CLI);
+export const CODEX_CLI = join(REPO, "node_modules", "@openai", "codex-" + process.platform + "-" + process.arch, "vendor", (process.arch === "arm64" ? "aarch64" : "x86_64") + "-unknown-linux-musl", "bin", "codex");
+export const HAS_CODEX_CLI = existsSync(CODEX_CLI);
 export const KEYS = { ANTHROPIC_API_KEY: "sk-ant-fake-key-0123456789", OPENAI_API_KEY: "sk-openai-fake-key-0123456789", OPENROUTER_API_KEY: "sk-or-v1-fake-key-0123456789" };
 const MANAGEMENT = "management-token-0123456789abcdef";
 
@@ -72,6 +76,43 @@ function parse(messages: any[]): Pick<Turn, "results" | "users"> {
   return { results, users };
 }
 
+/** One item of a scripted Responses answer: an assistant message, or a shell call Codex runs as exec_command. */
+export type Item = { type: "message"; text: string } | { type: "shell"; id: string; cmd: string };
+
+export interface ResponsesTurn {
+  /** Tool outputs so far, by call id. */
+  outputs: Map<string, string>;
+  body: Record<string, any>;
+}
+
+/** A scripted Responses model: the items of the next answer, given what the conversation holds. */
+export type ResponsesScript = (turn: ResponsesTurn) => Item[];
+
+const RESPONSES_USAGE = { input_tokens: 2100, input_tokens_details: { cached_tokens: 2000 }, output_tokens: 50, output_tokens_details: { reasoning_tokens: 10 }, total_tokens: 2150 };
+
+/** One streamed Responses answer, with usage the proxy settles from. */
+export function responsesResponse(body: Record<string, any>, items: Item[]): Response {
+  const id = "resp_fake_" + Math.random().toString(36).slice(2);
+  const output = items.map((it, i) =>
+    it.type === "message"
+      ? { type: "message", id: "msg_" + i, role: "assistant", status: "completed", content: [{ type: "output_text", text: it.text, annotations: [] }] }
+      : { type: "function_call", id: "fc_" + i, call_id: it.id, name: "exec_command", arguments: JSON.stringify({ cmd: it.cmd }), status: "completed" },
+  );
+  const events: [string, unknown][] = [["response.created", { type: "response.created", response: { id, object: "response", model: body.model, status: "in_progress", output: [] } }]];
+  output.forEach((item, output_index) => {
+    events.push(["response.output_item.added", { type: "response.output_item.added", output_index, item }]);
+    events.push(["response.output_item.done", { type: "response.output_item.done", output_index, item }]);
+  });
+  events.push(["response.completed", { type: "response.completed", response: { id, object: "response", model: body.model, status: "completed", output, usage: RESPONSES_USAGE } }]);
+  return new Response(events.map(([n, e]) => "event: " + n + "\ndata: " + JSON.stringify(e) + "\n\n").join(""), { headers: { "content-type": "text/event-stream" } });
+}
+
+function parseResponses(body: Record<string, any>): ResponsesTurn {
+  const outputs = new Map<string, string>();
+  for (const it of body.input ?? []) if (it.type === "function_call_output") outputs.set(it.call_id, typeof it.output === "string" ? it.output : JSON.stringify(it.output));
+  return { outputs, body };
+}
+
 const USAGE = { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 2000, cache_creation_input_tokens: 500 };
 
 /** One Anthropic Messages answer, streamed or not, with usage the proxy settles from. */
@@ -101,7 +142,7 @@ export interface Harness {
   ledger: MemoryLedger;
   upstream: Upstream[];
   baseUrl: string;
-  bind(model: string, provider?: "anthropic" | "openrouter"): { slot: string; token: string; meter_id: string };
+  bind(model: string, provider?: Provider): { slot: string; token: string; meter_id: string };
   /** A local agent session: the CLI runs as this user, in work, with the trial's agent env and its own HOME. */
   session(work: string, home: string, driverEnv: Record<string, string>): AgentSession;
   /** SIGKILL every CLI process the sessions spawned: a host crash mid-run. */
@@ -113,7 +154,7 @@ export interface Harness {
  * The main agent's requests carry Claude Code's tools; side requests (titles, summaries) carry none and get a plain text
  * answer, so the script only sees the session's own turns.
  */
-export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string> } = {}): Harness {
+export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript } = {}): Harness {
   const dir = mkdtempSync(join(tmpdir(), "gse-adapter-"));
   const children: ChildProcess[] = [];
   const ledger = new MemoryLedger(opts.capMicros);
@@ -124,6 +165,7 @@ export function harness(script: Script, opts: { capMicros?: number; env?: Record
     fetch: async (url, init) => {
       const body = JSON.parse(String(init.body ?? "{}"));
       upstream.push({ url, headers: new Headers(init.headers), body });
+      if (new URL(url).pathname.endsWith("/v1/responses")) return responsesResponse(body, opts.responses ? opts.responses(parseResponses(body)) : [{ type: "message", text: "ok" }]);
       if (!new URL(url).pathname.endsWith("/v1/messages")) return Response.json({ data: [] });
       const tools = new Set((body.tools ?? []).map((t: { name: string }) => t.name));
       const blocks = tools.has("Bash") ? script({ ...parse(body.messages ?? []), body }) : [{ type: "text" as const, text: "ok" }];
@@ -142,7 +184,7 @@ export function harness(script: Script, opts: { capMicros?: number; env?: Record
       return {
         exec: (): StepResult => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
         spawn(argv, extra = {}) {
-          const child = spawn(argv[0] === "claude" ? CLAUDE_CLI : argv[0]!, argv.slice(1), { cwd: work, env: { ...env, ...extra }, stdio: ["pipe", "pipe", "pipe"] });
+          const child = spawn(argv[0] === "claude" ? CLAUDE_CLI : argv[0] === "codex" ? CODEX_CLI : argv[0]!, argv.slice(1), { cwd: work, env: { ...env, ...extra }, stdio: ["pipe", "pipe", "pipe"] });
           children.push(child);
           return child;
         },

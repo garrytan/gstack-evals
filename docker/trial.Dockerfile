@@ -17,5 +17,11 @@ RUN tar -xzf /tmp/claude-code.tgz -C /tmp package/claude \
  && install -m 0755 /tmp/package/claude /usr/local/bin/claude \
  && rm -rf /tmp/claude-code.tgz /tmp/package \
  && claude --version
+# Codex's is the binary @openai/codex's linux-x64 package carries, the one package.json pins for the adapter tests.
+ADD --checksum=sha256:cbc00a26d3d0e2ceefc4be8891f8a81ef1e349b3b175bc0ae308762bc001fd93 https://registry.npmjs.org/@openai/codex/-/codex-0.166.0-linux-x64.tgz /tmp/codex.tgz
+RUN tar -xzf /tmp/codex.tgz -C /tmp package/vendor/x86_64-unknown-linux-musl/bin/codex \
+ && install -m 0755 /tmp/package/vendor/x86_64-unknown-linux-musl/bin/codex /usr/local/bin/codex \
+ && rm -rf /tmp/codex.tgz /tmp/package \
+ && codex --version
 ENV HOME=/home/agent LANG=C.UTF-8
 WORKDIR /work

@@ -149,6 +149,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("Claude Code adapter on the Agent SDK, against 
     expect(r.outcome.turns).toEqual([]);
     expect(r.h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/messages"))).toEqual([]);
     expect(r.meter.micros).toBe(0);
+    // gstack-timing-ok: the bound only catches the CLI retrying the refusal, which backs off for minutes; one refused call takes seconds even on a slow machine
     expect(Date.now() - started).toBeLessThan(60_000);
   }, 180_000);
 
