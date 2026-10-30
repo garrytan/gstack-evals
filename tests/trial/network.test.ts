@@ -102,7 +102,8 @@ describe.skipIf(!DOCKER)("trial network (Docker tier, GSTACK_EVALS_DOCKER=1)", (
       const r = await recoverRun({ stopProxy: () => proxy.stop(), journal: proxy.journal, ledger, settle: () => "closed" });
       expect(r.settled).toBe("closed");
       expect(existsSync(proxy.socket)).toBe(true);
-      expect(() => startProxyContainer({ image: built.tag, net, dir: join(dir, "proxy"), ledger: join(dir, "ledger", "missing", "ledger.sqlite"), leaseId: "lease_test", managementToken: "m".repeat(32), retry: { attempts: 1, elapsed_ms: 1000 }, timeoutMs: 20_000 })).toThrow(/the proxy container did not come up/);
+      writeFileSync(join(dir, "ledger", "not-a-dir"), "a file where the ledger's directory should be\n");
+      expect(() => startProxyContainer({ image: built.tag, net, dir: join(dir, "proxy"), ledger: join(dir, "ledger", "not-a-dir", "ledger.sqlite"), leaseId: "lease_test", managementToken: "m".repeat(32), retry: { attempts: 1, elapsed_ms: 1000 }, timeoutMs: 20_000 })).toThrow(/the proxy container did not come up/);
     } finally {
       agent.stop();
       proxy.stop();
