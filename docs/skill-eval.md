@@ -130,7 +130,7 @@ The judge is chosen per preregistration, always from another family than the mod
 | 2 | INCOMPLETE | No verdict | NOT_MEASURABLE, MARGIN_NOT_ATTEMPTED, CAP_STOP, every LOCK_* and E_* code |
 | 3 | INCOMPLETE | Calibration failed | CALIBRATION_SKILL, CALIBRATION_NONE_LEAK, CALIBRATION_SHELL, CALIBRATION_CONFIG, CALIBRATION_USERSIM, CALIBRATION_EGRESS |
 
-An exit 1 reason outranks NOT_MEASURABLE. Warnings, such as CEILING, NONE_MATCHES, FLAKY and DEGRADED, never change the exit code. Every error line on stderr starts with its code, and the last lines give the fix and the docs anchor. docs/errors.md lists every code, and `gstack-evals explain <CODE>` prints one code's meaning, fix, side effects, retry safety and whether a run can resume.
+LOSS, the other exit 1 code, belongs to `gstack-evals noloss score`, not to skill-eval. An exit 1 reason outranks NOT_MEASURABLE. Warnings, such as CEILING, NONE_MATCHES, FLAKY and DEGRADED, never change the exit code. Every error line on stderr starts with its code, and the last lines give the fix and the docs anchor. docs/errors.md lists every code, and `gstack-evals explain <CODE>` prints one code's meaning, fix, side effects, retry safety and whether a run can resume.
 
 ## verdict.json
 

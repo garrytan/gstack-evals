@@ -1,0 +1,44 @@
+{
+  "contract_version": 1,
+  "id": "B",
+  "label": "B: round 2 batched packets (#3625 default)",
+  "suite": "gsta167-14pr",
+  "date": "2026-10-29",
+  "passes": 1,
+  "kind": "variant",
+  "provenance": "transcribed",
+  "transcribed_from": [
+    {
+      "name": "GSTA-167 noloss2-results.md",
+      "sha256": "4374c79fb65e82486884ce602cf28a7766a1f3df8856d1cc606e4322eb588df7"
+    }
+  ],
+  "status": "complete",
+  "coverage_gaps": [
+    "Codex structured review: no Codex CLI on the lane machine"
+  ],
+  "models": [
+    {
+      "role": "specialist",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "medium"
+    },
+    {
+      "role": "red-team",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "high"
+    },
+    {
+      "role": "adversarial-native",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "high"
+    },
+    {
+      "role": "outside-voice",
+      "model": "openai/gpt-6.1-sol",
+      "effort": "medium"
+    }
+  ],
+  "run_by": "GSTA-167 (GStack Minder), round 2; transcribed by GSTA-43",
+  "notes": "Transcribed from GSTA-167's round 2 per-blocker outcomes, in blocker order. The GSTA-167 lane judged them with arm labels in view, so they are labelled judging and are never pooled with blind judgments. The findings stay in the org drive, not in this repo."
+}

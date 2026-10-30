@@ -1,0 +1,14 @@
+pr	scope	total_tokens	wall_seconds	meter_source
+3593	all	27154565	353	root-counter-delta
+3596	all	11480525	228	root-counter-delta
+3516	all	18679099	145	root-counter-delta
+3524	all	21249906	184	root-counter-delta
+3526	all	18308415	309	root-counter-delta
+3527	all	35283577	269	root-counter-delta
+3534	all	7973009	232	root-counter-delta
+3540	all	5258926	188	root-counter-delta
+3545	all	1889508	128	root-counter-delta
+3564	all	11781954	208	root-counter-delta
+3567	all	37231848	445	root-counter-delta
+3573	all	5576580	122	root-counter-delta
+3578	all	3832263	186	root-counter-delta

@@ -1,0 +1,15 @@
+{
+  "contract_version": 1,
+  "suite": "gsta167-14pr",
+  "suite_sha256": "20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789",
+  "arm": "A",
+  "state": "judged",
+  "provenance": "transcribed",
+  "source_sha256": {
+    "arm.json": "030fd98eb215cf769e85287c9af498f04c8ccd795cf3635e479a0bc72287f4ff",
+    "judgments.tsv": "46d6c024de4347fafda0dd4e40d003edda1b426ec66d88d96e3051fe941ddb41"
+  },
+  "tree_sha256": "367bc4cf75de12883febe920db504fecf0ad7f01e5c2c2d6e0daadbb86344051",
+  "digest_only": [],
+  "replaced": null
+}
