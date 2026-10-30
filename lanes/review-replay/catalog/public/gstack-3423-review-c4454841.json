@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3423-review-c4454841",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3423,
+  "reviewed_head": "2c1f74195f443f60abc801b57c68a4c968b14009",
+  "merge_base": "c23d7d48fe273e54776192f23c4f272ce6ab4d2d",
+  "diff_range": {
+    "from": "c23d7d48fe273e54776192f23c4f272ce6ab4d2d",
+    "to": "2c1f74195f443f60abc801b57c68a4c968b14009",
+    "note": "#3423's full diff at the commit before its review fix c44548413d84."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/context-bill.ts",
+    "line": 860,
+    "summary": "exactSendSet treated any git repo with VERSION and setup as the gstack checkout, so other repos' files could be sent, and it refused the bin/dev-setup layout, so those skills fell back to the offline estimate."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the run-6 review section does not name this finding, and the fix message names no failing test or production break.",
+    "in_history": [
+      {
+        "by": "#3423's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "c44548413d849a684406e67f1a5076ef8ee9a5b9",
+    "pr": 3423
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3423,
+      "range": {
+        "from": "2c1f74195f443f60abc801b57c68a4c968b14009",
+        "to": "c44548413d849a684406e67f1a5076ef8ee9a5b9"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 13 later commits on the PR branch and 88 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 75 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 0e6c39978e23 lib/context-bill.ts:881; 214eb68d8195 lib/context-bill.ts:267,894,895,896,897,898,899,900. Hand check: 0e6c39978e23 is a feature (render folder) that rewrites the docblock; 214eb68d8195 moves isGstackCheckout unchanged above its docblock and rewords the walkMd comment."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3423, review-fix commit c44548413d84, which rewrote lines that #3423's own earlier commits added",
+    "evidence": [
+      "git diff -U0 2c1f74195f44..c44548413d84 -- lib/context-bill.ts rewrites 32 old lines; git blame 2c1f74195f44 gives 27 of them to #3423's commits (2c1f74195f44, 804d0a67754a, 9bf11e738eb9, c7ddca62dbfc, f4592483f049, f6bf669079c5)",
+      "lib/context-bill.ts lines 250,255,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,842,848,849,858,859,860 are added lines of c23d7d48fe27..2c1f74195f44",
+      "commit c44548413d84 subject: fix: pre-landing review fixes (context-bill run-4 cycle 2)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix recognises the gstack checkout by .git, VERSION, setup and a SKILL.md named gstack \"so the bin/dev-setup layout counts and other repos do not\". The reviewed line 860 dropped any checkout that enclosed the root and accepted any repo with VERSION and setup. Most other located lines are a docblock move. Needs human check: severity (No rating or failure class for this finding in the review section or fix message.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-25",
+    "source": "GitHub API: garrytan/gstack#3423 (the fix PR) created_at 2026-10-25T23:00:48Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3423's own review and fixed in c44548413d84 (author garrytan); #3423 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

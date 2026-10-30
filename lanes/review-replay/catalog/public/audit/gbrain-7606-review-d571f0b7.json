@@ -1,0 +1,114 @@
+{
+  "id": "gbrain-7606-review-d571f0b7",
+  "key": "garrytan/gbrain#7606@d571f0b72c04",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7606 merged into master at 2026-10-26T05:51:04Z; review fix d571f0b72c04 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "2568d32ac890 is an ancestor of 91cc63c05bb5"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/repair/failed-writes.ts lines 122,123,124,147,148,153 are added lines of 2568d32ac890..91cc63c05bb5"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 91cc63c05bb5..d571f0b72c04 -- src/core/repair/failed-writes.ts rewrote 6 old lines; git blame 91cc63c05bb5 gives 6 to #7606's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1023 and decoy 104 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/repair/failed-writes.ts",
+    "fix_file": "src/core/repair/failed-writes.ts",
+    "lines": [
+      122,
+      123,
+      124,
+      147,
+      148,
+      153
+    ],
+    "blamed": 6,
+    "owned": 6,
+    "insertion_only": false,
+    "introduced_by": [
+      "52dae8474bf527d6b2616f7bece52fe4e6b0388d",
+      "9d536f14647a0a578f841c43b5605631ee1e374e"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1023,
+    "decoy_lines": 104
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "Outside review: Codex unavailable (not installed); a Claude adversarial pass on d571f0b7 recommended ship as-is."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "91cc63c05bb5f089ee4afaf1883dc3ac5e5d0f5f",
+    "to": "d571f0b72c04b85fac6f8ce6d67c667f39c49e45",
+    "files": [
+      "src/core/repair/failed-writes.ts",
+      "test/facts-entity-moved-7602.test.ts"
+    ],
+    "added_lines": 96,
+    "searched": {
+      "branch": 3,
+      "default": 41,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review section says Red Team found, reproduced and fixed that 'recover:' was offered when the job's own page check would skip (permission_denied under a narrowed writer grant). At the head factsRecovery handled only superseded and page_missing skips, so any other skip fell through to the recover command.",
+    "summary": "gbrain repair failed-writes offered a 'recover:' retry-dead command for a refused facts batch even when the job's own page check would skip it (for example permission_denied), so the suggested retry could not recover the facts.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: Red Team rated it CRITICAL and reproduced it, but the evidence names a wrong recovery hint, not a failing test, production break or data loss"
+    },
+    "in_history": [
+      {
+        "by": "Red Team, invocation 3 pass 1, gstack /ship review on #7606",
+        "rated": "CRITICAL"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "reviewer CRITICAL label versus the floor; consequence is a wrong recovery command"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "reviewer CRITICAL label versus the floor; consequence is a wrong recovery command"
+    }
+  ]
+}

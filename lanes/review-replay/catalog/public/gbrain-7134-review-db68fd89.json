@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7134-review-db68fd89",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7134,
+  "reviewed_head": "f833ab957c0900fbeefaf6707a61ed11523e3914",
+  "merge_base": "6e1086492dbded0059fcfabc627b846ced7855f4",
+  "diff_range": {
+    "from": "6e1086492dbded0059fcfabc627b846ced7855f4",
+    "to": "f833ab957c0900fbeefaf6707a61ed11523e3914",
+    "note": "#7134's full diff at the commit before its review fix db68fd899c0e."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/think/sanitize.ts",
+    "line": 101,
+    "summary": "restoreNeutralized accepted words on one side of a marker as proof, so it could write a raw span into a stored fact when the other side did not match. It also built regexes from output text at a cost the fix calls non-linear."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the fix commit names no failing test, break or loss; there is no review section.",
+    "in_history": [
+      {
+        "by": "#7134's Pre-Landing Review",
+        "rated": "no Pre-Landing Review section; the fix commit's subject marks it a #7125 review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "db68fd899c0ef196ae0045bfb1e0e5c077130f5e",
+    "pr": 7134
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7134,
+      "range": {
+        "from": "f833ab957c0900fbeefaf6707a61ed11523e3914",
+        "to": "db68fd899c0ef196ae0045bfb1e0e5c077130f5e"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 13 later commits on the PR branch and 176 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 110 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7134, review-fix commit db68fd899c0e, which rewrote lines that #7134's own earlier commits added",
+    "evidence": [
+      "git diff -U0 f833ab957c09..db68fd899c0e -- src/core/think/sanitize.ts rewrites 22 old lines; git blame f833ab957c09 gives 22 of them to #7134's commits (f833ab957c09)",
+      "src/core/think/sanitize.ts lines 78,79,80,81,82,83,88,90,91,97,98,99,101,102,103,104,105,106,107,108,110,111 are added lines of 6e1086492dbd..f833ab957c09",
+      "commit db68fd899c0e subject: fix(sanitize): linear two-sided restoration proof; atomic preview-bound restore (#7125 review)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix asks for a 'two-sided restoration proof'. Its tests show the old one-sided fallbacks ([4,0,16], [0,4,16] at line 101) restored a marker from a paraphrased lead-in or an unrelated sentence sharing one side's words. Needs human check: severity (no rating or named failure in the evidence.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-20",
+    "source": "GitHub API: garrytan/gbrain#7117 (an issue it names) created_at 2026-10-20T13:34:29Z; garrytan/gbrain#7125 (an issue it names) created_at 2026-10-20T14:31:02Z; garrytan/gbrain#7134 (the fix PR) created_at 2026-10-20T17:07:41Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7134's own review and fixed in db68fd899c0e (author garrytan); #7134 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

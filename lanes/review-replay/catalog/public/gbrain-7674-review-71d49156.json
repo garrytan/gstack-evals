@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7674-review-71d49156",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7674,
+  "reviewed_head": "af88cba164b0eec8e5c22baeafa0ed64359fbe88",
+  "merge_base": "53b482504cfc37d5011f7e2259eb99357f650564",
+  "diff_range": {
+    "from": "53b482504cfc37d5011f7e2259eb99357f650564",
+    "to": "af88cba164b0eec8e5c22baeafa0ed64359fbe88",
+    "note": "#7674's full diff at the commit before its review fix 71d49156b517."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "data-migration"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/agent-install/setup.ts",
+    "line": 257,
+    "summary": "setupInAgent checked the bundle's Bun version against the 1.4.4 floor only after the first probe; when that probe failed and the in-install retry succeeded, line 257 filled identity with no floor check, so a below-floor runtime could be installed."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "the review says the defect was \"Fixed in 71d49156b with a revert-red test\", a test the old code fails, and the defect installs the below-floor Bun runtime the PR exists to refuse (TLS postgres.js leak, Brotli CVE).",
+    "in_history": [
+      {
+        "by": "red team, pass 2 of the third /ship invocation on #7674",
+        "rated": "fixed with a revert-red test; no rating named (that pass's four INFORMATIONAL items were the skipped ones)"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "71d49156b517cc69a6d940ab699143c2e61cfb54",
+    "pr": 7674
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7674,
+      "range": {
+        "from": "af88cba164b0eec8e5c22baeafa0ed64359fbe88",
+        "to": "71d49156b517cc69a6d940ab699143c2e61cfb54"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 3 later commits on the PR branch and 35 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 23 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7674, review-fix commit 71d49156b517, which rewrote lines that #7674's own earlier commits added",
+    "evidence": [
+      "git diff -U0 af88cba164b0..71d49156b517 -- src/core/agent-install/setup.ts rewrites 11 old lines; git blame af88cba164b0 gives 8 of them to #7674's commits (6e5b590c5d62, 70ce87afb50b)",
+      "src/core/agent-install/setup.ts lines 194,195,196,197,198,199,200,257 are added lines of 53b482504cfc..af88cba164b0",
+      "commit 71d49156b517 subject: fix: check every bundle probe against the Bun floor (third /ship invocation, pass 2)",
+      "#7674 Pre-Landing Review: Fixed in 71d49156b with a revert-red test."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says \"A first artifactFromBundle probe that failed left identity unset, and the retry inside the install filled it without the floor check, so a transient probe failure could install a below-floor runtime.\" At the reviewed head the floor check at lines 194-200 runs only when the first probe set identity, and line 257 (`identity ??= artifactFromBundle(...)`) refills it with no check before installArtifact. The review says the fix came with a revert-red test. No decoy hits."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gbrain#7674 (the fix PR) created_at 2026-10-26T14:15:07Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7674's own review and fixed in 71d49156b517 (author garrytan); #7674 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

@@ -1,0 +1,129 @@
+{
+  "id": "gstack-3587-review-174bc2fd",
+  "key": "garrytan/gstack#3587@174bc2fd7b57",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3587 merged into main at 2026-10-29T19:38:32Z; review fix 174bc2fd7b57 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "4729f4752ba6 is an ancestor of 9b3540bbeead"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": ".github/workflows/evals.yml lines 572,573 are added lines of 4729f4752ba6..9b3540bbeead"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 9b3540bbeead..174bc2fd7b57 -- .github/workflows/evals.yml rewrote 4 old lines; git blame 9b3540bbeead gives 2 to #3587's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 115 and decoy 45 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": ".github/workflows/evals.yml",
+    "fix_file": ".github/workflows/evals.yml",
+    "lines": [
+      572,
+      573
+    ],
+    "blamed": 4,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 115,
+    "decoy_lines": 45
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb",
+    "to": "174bc2fd7b57fa0e463d1d99ff0d9f335f790a8a",
+    "files": [
+      ".github/workflows/evals.yml",
+      "lib/ship-queue-train-ready.ts",
+      "scripts/test-pr-profile.ts",
+      "test/pr-dependencies.test.ts"
+    ],
+    "added_lines": 30,
+    "searched": {
+      "branch": 4,
+      "default": 7,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "9184ffd16cfe54f9944ea0a6d5adecd1c72eb60c",
+        "where": "default",
+        "pr": 3619,
+        "subject": "v1.91.328.0 ship-queue: screen only when the selector restores every case; unscreened PRs fill train seats (GSTA-165 1a) (#3619)",
+        "file": "lib/ship-queue-train-ready.ts",
+        "lines": [
+          52,
+          59
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix's subject says \"pull_request runs stay broad\" and its new comment calls a pull_request run \"the merge gate when no train block exists\". Reviewed line 573 defaulted every run without a screen_policy input to narrow, so that gate left hub-file dependents to a train gate that was not running.",
+    "line": 573,
+    "summary": "The evals workflow defaulted pull_request runs to the narrow screen policy, so when no train runs, the merge gate skipped the dependents of hub files and could pass without running them.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the review lists it among 7 fixed findings without a rating, and no failing test or production break is named."
+    },
+    "in_history": [
+      {
+        "by": "pass 1 (9 dispatches incl. red team, adversarial and outside voice), gstack /ship review on #3587",
+        "rated": "not rated in the review section; listed as fixed"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "The finding has no rating in the review section."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "9184ffd16cfe (#3619) is a feature that changes when ship-queue recommends a screen, rewriting the docblock and the selection call to read coverage mode."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "The finding has no rating in the review section."
+    }
+  ]
+}

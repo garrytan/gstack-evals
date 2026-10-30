@@ -1,0 +1,142 @@
+{
+  "id": "gbrain-7621-review-24c32c4a",
+  "key": "garrytan/gbrain#7621@24c32c4a32c2",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7621 merged into master at 2026-10-26T17:06:27Z; review fix 24c32c4a32c2 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "e7bdf107bbed is an ancestor of 9e3ba6d1e36c"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/cli/flag-equals.ts lines 15,16,17,18,48,49,252,253,254,255,285,287,288 are added lines of e7bdf107bbed..9e3ba6d1e36c"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 9e3ba6d1e36c..24c32c4a32c2 -- src/cli/flag-equals.ts rewrote 13 old lines; git blame 9e3ba6d1e36c gives 13 to #7621's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1143 and decoy 48 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/cli/flag-equals.ts",
+    "fix_file": "src/cli/flag-equals.ts",
+    "lines": [
+      15,
+      16,
+      17,
+      18,
+      48,
+      49,
+      252,
+      253,
+      254,
+      255,
+      285,
+      287,
+      288
+    ],
+    "blamed": 13,
+    "owned": 13,
+    "insertion_only": false,
+    "introduced_by": [
+      "98dd756690fcf5cd27d4df79e5c6449cb078105a",
+      "9e3ba6d1e36c954883245f02c323acfa5bfcb282",
+      "a1cf98397530798acad92e5354f9cc4a2bcf24dd",
+      "b67f35dd2a3c3bf86df49a10cf30965329590dfb"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1143,
+    "decoy_lines": 48
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "9e3ba6d1e36c954883245f02c323acfa5bfcb282",
+    "to": "24c32c4a32c254e6e17ac072d534657053ca79bc",
+    "files": [
+      "scripts/module-size-limits.tsv",
+      "scripts/structural-suites.tsv",
+      "src/cli/flag-equals.ts",
+      "test/cli-flag-equals.test.ts"
+    ],
+    "added_lines": 30,
+    "searched": {
+      "branch": 19,
+      "default": 36,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "90a2994b51d3565c4417f39bb9ca7ce4288fa266",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(upgrade): supervisor restart keeps global = flags (parseGlobalFlags) and pins the kept readers to EQUALS_READERS; narrow directEntryArgs docstring to auth; equalsExempt comment notes the jobs submit consent readers",
+        "file": "src/cli/flag-equals.ts",
+        "lines": [
+          305
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix (cycle-3 red team) makes the direct entry strip global flags 'like main' and hedges advice for true/false or 0/1 values. Its new tests show `auth list --quiet --timeout 5s` must pass and `--expect=on` must get the value reading; lines 252-255 and 287-288 held the old behaviour.",
+    "line": 288,
+    "summary": "directEntryArgs ran the = rule and unknown-flag check on raw argv without stripping global flags, so a direct entry refused global flags main accepts. Without a command table, a true/false value on a value flag got advice to write it as a bare switch.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the fix names no failing test or production break."
+    },
+    "in_history": [
+      {
+        "by": "#7621's Pre-Landing Review",
+        "rated": "not named in the review section (invocation 7); the fix commit's subject marks it a cycle-3 red team fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "no failure is rated in the evidence."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "90a2994b51d3 only narrows the directEntryArgs docstring at line 305; its code changes are in other files."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "no failure is rated in the evidence."
+    }
+  ]
+}

@@ -12,11 +12,24 @@
     "note": "The panel's replay range: pass 1's fixes on the candidate ee73419 (build.ts items c1-*). The defect came in with those fixes. History's pass 2 read the full diff from merge_base."
   },
   "roles": [
-    { "role": "specialist", "checklist": "state-machines" },
-    { "role": "specialist", "checklist": "testing" },
-    { "role": "specialist", "checklist": "maintainability" },
-    { "role": "red-team" },
-    { "role": "fix-check" }
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "red-team"
+    },
+    {
+      "role": "fix-check"
+    }
   ],
   "defect": {
     "file": "test/helpers/ship-hook-actor.ts",
@@ -26,16 +39,34 @@
   "severity": {
     "deserved": "CRITICAL",
     "basis": "The panel's finding says the regression would red the paid ship-local-hook-preservation case, which fails a test under gstack's floor; fix commit 27a1b1fd names it a recall regression against ee73419.",
-    "in_history": [{ "by": "State Machines specialist, pass 2 at 3712b79 (reviewer model not established)", "rated": "CRITICAL" }]
+    "in_history": [
+      {
+        "by": "State Machines specialist, pass 2 at 3712b79 (reviewer model not established)",
+        "rated": "CRITICAL"
+      }
+    ]
   },
-  "fix": { "commit": "27a1b1fdb5109f6d7812e55616cdf2bb3001e10b", "pr": 3516 },
+  "fix": {
+    "commit": "27a1b1fdb5109f6d7812e55616cdf2bb3001e10b",
+    "pr": 3516
+  },
   "decoys": [
     {
       "kind": "fix-commit",
       "repo": "garrytan/gstack",
       "pr": 3516,
-      "range": { "from": "3712b79711266aeac3b3b51ca6d5366171b55eb7", "to": "27a1b1fdb5109f6d7812e55616cdf2bb3001e10b" },
-      "audit": null
+      "range": {
+        "from": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+        "to": "27a1b1fdb5109f6d7812e55616cdf2bb3001e10b"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 5 later commits on the PR branch and 49 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 13 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
     }
   ],
   "receipt": {
@@ -48,7 +79,12 @@
       "captain-gstack-minder/reports/GSTA-128-decisions.tsv row 56 (SHIP_RECEIPT passes=3 blocking_found=2)"
     ]
   },
-  "answer_key_audit": null,
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Fix 27a1b1f's message says the pass-1 negation guard in ownersOwnHand() scanned the whole prefix before the reflexive and refused an honest request after a negated subordinate clause, a recall regression that would red the paid ship-local-hook-preservation case; line 146 at 3712b79 is that guard, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 1."
+  },
   "shelf_life": {
     "first_appeared": "2026-10-27",
     "source": "GitHub API repos/garrytan/gstack/pulls/3516 created_at 2026-10-27T14:47:20Z",

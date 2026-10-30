@@ -1,0 +1,175 @@
+{
+  "id": "gstack-3430-review-fb1a8f8d",
+  "key": "garrytan/gstack#3430@fb1a8f8d3776",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3430 merged into main at 2026-10-27T03:04:07Z; review fix fb1a8f8d3776 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "7bd3fb4a402c is an ancestor of c7ec40bc194c"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-motion-capture.ts lines 64,65,66,67,82,83,84,85,88,89 are added lines of 7bd3fb4a402c..c7ec40bc194c"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 c7ec40bc194c..fb1a8f8d3776 -- bin/gstack-motion-capture.ts rewrote 10 old lines; git blame c7ec40bc194c gives 10 to #3430's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1852 and decoy 109 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-motion-capture.ts",
+    "fix_file": "bin/gstack-motion-capture.ts",
+    "lines": [
+      64,
+      65,
+      66,
+      67,
+      82,
+      83,
+      84,
+      85,
+      88,
+      89
+    ],
+    "blamed": 10,
+    "owned": 10,
+    "insertion_only": false,
+    "introduced_by": [
+      "c7ec40bc194c6e7fc5ab332806bf56e0c3ed580b",
+      "c922ec74f5120b8c8eda28ee0ecb49e3b5d85940"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1852,
+    "decoy_lines": 109
+  },
+  "scope": "SCOPE_FRONTEND=true SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "c7ec40bc194c6e7fc5ab332806bf56e0c3ed580b",
+    "to": "fb1a8f8d37761a199bcff5e934e0822fc7a7ca74",
+    "files": [
+      "bin/gstack-motion-capture.ts",
+      "bin/gstack-motion-encode",
+      "lib/motion-encode.ts",
+      "test/motion-encode.test.ts",
+      "test/motion-pipeline.test.ts"
+    ],
+    "added_lines": 93,
+    "searched": {
+      "branch": 7,
+      "default": 66,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "078fb60583da33d6a7352a1dbb4513f9e56a095b",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(design-motion): mask coverage, manifest relations, Windows stop, Figma token off argv",
+        "file": "bin/gstack-motion-encode",
+        "lines": [
+          31
+        ]
+      },
+      {
+        "commit": "078fb60583da33d6a7352a1dbb4513f9e56a095b",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(design-motion): mask coverage, manifest relations, Windows stop, Figma token off argv",
+        "file": "test/motion-encode.test.ts",
+        "lines": [
+          7
+        ]
+      },
+      {
+        "commit": "078fb60583da33d6a7352a1dbb4513f9e56a095b",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(design-motion): mask coverage, manifest relations, Windows stop, Figma token off argv",
+        "file": "test/motion-pipeline.test.ts",
+        "lines": [
+          56,
+          59,
+          132,
+          133,
+          164,
+          173
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says the capture.json test is replaced 'so the rerun after MOTION_CONTRACT_MISSING or a crash works'. At the reviewed head lines 82-85 refused any --out holding frames/ without capture.json, and line 88 created frames/ before the contract check that exits with MOTION_CONTRACT_MISSING, so every rerun after that error was refused. The same commit bounds the font and image wait at lines 64-67, which hung on offscreen lazy images ('bounded at 30 s instead of hanging'), and adds a 'retry after a refused page' test.",
+    "line": 84,
+    "summary": "gstack-motion-capture created frames/ before checking the page's capture contract and refused any --out with frames/ but no capture.json, so after MOTION_CONTRACT_MISSING or a crash the rerun into the same --out was refused. Its font and image wait could also hang on offscreen lazy images.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the fix names a refused valid rerun and a hang, but no failing test, production break or data loss beyond the tests it adds."
+    },
+    "in_history": [
+      {
+        "by": "#3430's Pre-Landing Review",
+        "rated": "not named in the review section, which says earlier passes found and fixed the defects listed under What changed; the fix commit's subject marks it a third review cycle and adversarial fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "no rating or failing test is named for this defect."
+      },
+      {
+        "item": "decoy",
+        "reason": "078fb60583da extends the manifest validator this decoy added (fps/windowFrames >= 1, window fits the frames); whether that fixes a defect in the decoy's validator was not read before the token cap."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "unsettled",
+        "later_fix": null,
+        "reason": "078fb60583da's hits are an import line in bin/gstack-motion-encode and test-helper lines (splitting the --out ownership test, a mask parameter), which are not fixes; but the same commit adds missing checks to manifestError, which this decoy added, and its lib diff was not read before the token cap."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "no rating or failing test is named for this defect."
+    },
+    {
+      "item": "decoy",
+      "reason": "078fb60583da extends the manifest validator this decoy added (fps/windowFrames >= 1, window fits the frames); whether that fixes a defect in the decoy's validator was not read before the token cap."
+    },
+    {
+      "item": "decoy 0",
+      "reason": "hand read could not settle it, so its audit stays null: 078fb60583da's hits are an import line in bin/gstack-motion-encode and test-helper lines (splitting the --out ownership test, a mask parameter), which are not fixes; but the same commit adds missing checks to manifestError, which this decoy added, and its lib diff was not read before the token cap."
+    }
+  ]
+}

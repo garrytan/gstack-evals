@@ -1,0 +1,107 @@
+{
+  "id": "gstack-3304-review-da1a9687",
+  "key": "garrytan/gstack#3304@da1a9687f4d0",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3304 merged into main at 2026-10-19T20:50:37Z; review fix da1a9687f4d0 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "635535d3c1d0 is an ancestor of 84f0d12c32d4"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "lib/outside-review-result.ts lines 154,177 are added lines of 635535d3c1d0..84f0d12c32d4"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 84f0d12c32d4..da1a9687f4d0 -- lib/outside-review-result.ts rewrote 2 old lines; git blame 84f0d12c32d4 gives 2 to #3304's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 130 and decoy 5 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "lib/outside-review-result.ts",
+    "fix_file": "lib/outside-review-result.ts",
+    "lines": [
+      154,
+      177
+    ],
+    "blamed": 2,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "652646ea0a9e645a2f93340bb5e133ae4c064e85"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 130,
+    "decoy_lines": 5
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "84f0d12c32d4669995ef0bdb6464592315b3dd79",
+    "to": "da1a9687f4d0998ee2490e31be4b396e144d5aab",
+    "files": [
+      "lib/outside-review-result.ts",
+      "test/outside-review-result.test.ts"
+    ],
+    "added_lines": 3,
+    "searched": {
+      "branch": 3,
+      "default": 177,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix joins 'a wrapped line only when it continues in lowercase' and adds the test reply 'Summary of the retry helper\\nNo issues found.' to the no-findings set. At the head line 177 joined that new line onto the previous one, so the no-findings statement was not the conclusion and a clean reply did not count as no-findings.",
+    "summary": "concludesNoFindings joined every wrapped prose line, so a new sentence on its own line (such as 'No issues found.' after a heading-like line) merged into the line above and a clean outside review was not read as no-findings.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the fix adds a regression case but does not state that it fails on the old code or that production broke"
+    },
+    "in_history": [
+      {
+        "by": "#3304's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "whether the added test case fails at the reviewed head is not stated"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "whether the added test case fails at the reviewed head is not stated"
+    }
+  ]
+}

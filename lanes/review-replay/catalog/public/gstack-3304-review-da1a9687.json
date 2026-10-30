@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3304-review-da1a9687",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3304,
+  "reviewed_head": "84f0d12c32d4669995ef0bdb6464592315b3dd79",
+  "merge_base": "635535d3c1d08550992f89efdf32bf79bbac6610",
+  "diff_range": {
+    "from": "635535d3c1d08550992f89efdf32bf79bbac6610",
+    "to": "84f0d12c32d4669995ef0bdb6464592315b3dd79",
+    "note": "#3304's full diff at the commit before its review fix da1a9687f4d0."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/outside-review-result.ts",
+    "line": 154,
+    "summary": "concludesNoFindings joined every wrapped prose line, so a new sentence on its own line (such as 'No issues found.' after a heading-like line) merged into the line above and a clean outside review was not read as no-findings."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the fix adds a regression case but does not state that it fails on the old code or that production broke",
+    "in_history": [
+      {
+        "by": "#3304's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "da1a9687f4d0998ee2490e31be4b396e144d5aab",
+    "pr": 3304
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3304,
+      "range": {
+        "from": "84f0d12c32d4669995ef0bdb6464592315b3dd79",
+        "to": "da1a9687f4d0998ee2490e31be4b396e144d5aab"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 3 later commits on the PR branch and 177 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 3 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3304, review-fix commit da1a9687f4d0, which rewrote lines that #3304's own earlier commits added",
+    "evidence": [
+      "git diff -U0 84f0d12c32d4..da1a9687f4d0 -- lib/outside-review-result.ts rewrites 2 old lines; git blame 84f0d12c32d4 gives 2 of them to #3304's commits (652646ea0a9e)",
+      "lib/outside-review-result.ts lines 154,177 are added lines of 635535d3c1d0..84f0d12c32d4",
+      "commit da1a9687f4d0 subject: fix(outside-review): join a wrapped line only when it continues in lowercase"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix joins 'a wrapped line only when it continues in lowercase' and adds the test reply 'Summary of the retry helper\\nNo issues found.' to the no-findings set. At the head line 177 joined that new line onto the previous one, so the no-findings statement was not the conclusion and a clean reply did not count as no-findings. Needs human check: severity (whether the added test case fails at the reviewed head is not stated)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-19",
+    "source": "GitHub API: garrytan/gstack#3294 (an issue it names) created_at 2026-10-19T07:44:04Z; garrytan/gstack#3304 (the fix PR) created_at 2026-10-19T18:57:53Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3304's own review and fixed in da1a9687f4d0 (author garrytan); #3304 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

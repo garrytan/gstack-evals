@@ -1,0 +1,127 @@
+{
+  "id": "gbrain-7652-review-31a324f9",
+  "key": "garrytan/gbrain#7652@31a324f9403b",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7652 merged into master at 2026-10-30T04:10:22Z; review fix 31a324f9403b is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "9fc3daac1e41 is an ancestor of 1d571022e251"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/persistence/sync-pass-run.ts lines 26,1005 are added lines of 9fc3daac1e41..1d571022e251"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 1d571022e251..31a324f9403b -- src/core/persistence/sync-pass-run.ts rewrote 2 old lines; git blame 1d571022e251 gives 2 to #7652's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 611 and decoy 26 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/persistence/sync-pass-run.ts",
+    "fix_file": "src/core/persistence/sync-pass-run.ts",
+    "lines": [
+      26,
+      1005
+    ],
+    "blamed": 2,
+    "owned": 2,
+    "insertion_only": false,
+    "introduced_by": [
+      "618d0a25d02754fb6a451404dd7dced29163920c"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 611,
+    "decoy_lines": 26
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=true SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true",
+  "history": {
+    "receipt": false,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "1d571022e2512ae41483df0d61494981a9e324f3",
+    "to": "31a324f9403ba010cd1067125cf3338bd5de61d0",
+    "files": [
+      "src/core/persistence/sync-pass-run.ts",
+      "src/core/persistence/sync-stop-class.ts",
+      "test/sync-pass-readers-7614.test.ts"
+    ],
+    "added_lines": 24,
+    "searched": {
+      "branch": 4,
+      "default": 0,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "b3a4a172e26724d0ca566c87cf159edfdd33d719",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix(sync): a stop never rewrites a pass row its pass already ended; a failed open-row re-read decides nothing",
+        "file": "src/core/persistence/sync-pass-run.ts",
+        "lines": [
+          1005
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix switches line 1005 from unrecordedStop to resumableRowStop so \"a permission refusal keeps the pass row open\"; its new doc says otherwise a plain sync would retry the resumable pass forever. The reviewed catch path ended a permission refusal resumable.",
+    "line": 1005,
+    "summary": "A sync pass stopped by a permission refusal ended its row resumable, so a plain sync would retry it forever instead of the row reading interrupted, then abandoned, for an operator to act on.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the reviewed PR has no review section and the fix names no failing test or production break."
+    },
+    "in_history": [
+      {
+        "by": "#7652's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "No review receipt and no failure class in the fix text."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "b3a4a172e267 passes onlyOpen to the save on line 1005 so a stop never rewrites a row its pass already ended; that save predates the decoy, which only swapped the classifier."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "No review receipt and no failure class in the fix text."
+    }
+  ]
+}

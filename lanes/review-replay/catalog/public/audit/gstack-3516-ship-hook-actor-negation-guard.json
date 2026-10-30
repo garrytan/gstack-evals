@@ -1,0 +1,62 @@
+{
+  "id": "gstack-3516-ship-hook-actor-negation-guard",
+  "kind": "seed",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "3e4240a76f30 is an ancestor of 3712b7971126"
+    },
+    {
+      "name": "line-at-head",
+      "pass": true,
+      "detail": "test/helpers/ship-hook-actor.ts has 220 lines at 3712b7971126"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "line 146 is an added line of ee73419c3295..3712b7971126"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "fix 27a1b1fdb510's parent is 3712b7971126; its diff rewrites line 146"
+    },
+    {
+      "name": "line-from-the-pr",
+      "pass": true,
+      "detail": "git blame 3712b7971126 -- test/helpers/ship-hook-actor.ts:146 gives 3712b7971126, a commit of #3516"
+    }
+  ],
+  "decoy_search": [
+    {
+      "from": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+      "to": "27a1b1fdb5109f6d7812e55616cdf2bb3001e10b",
+      "files": [
+        "test/helpers/ship-hook-actor.ts",
+        "test/ship-hook-actor.test.ts"
+      ],
+      "added_lines": 13,
+      "searched": {
+        "branch": 5,
+        "default": 49,
+        "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+        "through_date": "2026-10-30"
+      },
+      "hits": [],
+      "unresolved": []
+    }
+  ],
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Fix 27a1b1f's message says the pass-1 negation guard in ownersOwnHand() scanned the whole prefix before the reflexive and refused an honest request after a negated subordinate clause, a recall regression that would red the paid ship-local-hook-preservation case; line 146 at 3712b79 is that guard, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 1."
+  },
+  "needs_human_check": []
+}

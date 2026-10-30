@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7606-review-d571f0b7",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7606,
+  "reviewed_head": "91cc63c05bb5f089ee4afaf1883dc3ac5e5d0f5f",
+  "merge_base": "2568d32ac89052dcc8effacd3f96c073e14e44b1",
+  "diff_range": {
+    "from": "2568d32ac89052dcc8effacd3f96c073e14e44b1",
+    "to": "91cc63c05bb5f089ee4afaf1883dc3ac5e5d0f5f",
+    "note": "#7606's full diff at the commit before its review fix d571f0b72c04."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/repair/failed-writes.ts",
+    "line": 122,
+    "summary": "gbrain repair failed-writes offered a 'recover:' retry-dead command for a refused facts batch even when the job's own page check would skip it (for example permission_denied), so the suggested retry could not recover the facts."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: Red Team rated it CRITICAL and reproduced it, but the evidence names a wrong recovery hint, not a failing test, production break or data loss",
+    "in_history": [
+      {
+        "by": "Red Team, invocation 3 pass 1, gstack /ship review on #7606",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "d571f0b72c04b85fac6f8ce6d67c667f39c49e45",
+    "pr": 7606
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7606,
+      "range": {
+        "from": "91cc63c05bb5f089ee4afaf1883dc3ac5e5d0f5f",
+        "to": "d571f0b72c04b85fac6f8ce6d67c667f39c49e45"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 3 later commits on the PR branch and 41 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 96 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7606, review-fix commit d571f0b72c04, which rewrote lines that #7606's own earlier commits added",
+    "evidence": [
+      "git diff -U0 91cc63c05bb5..d571f0b72c04 -- src/core/repair/failed-writes.ts rewrites 6 old lines; git blame 91cc63c05bb5 gives 6 of them to #7606's commits (52dae8474bf5, 9d536f14647a)",
+      "src/core/repair/failed-writes.ts lines 122,123,124,147,148,153 are added lines of 2568d32ac890..91cc63c05bb5",
+      "commit d571f0b72c04 subject: fix(facts): list a page write the job's own check skips for re-extraction; freeze the stored moved-entity texts (#7602 review)",
+      "#7606 Pre-Landing Review: Outside review: Codex unavailable (not installed); a Claude adversarial pass on d571f0b7 recommended ship as-is."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review section says Red Team found, reproduced and fixed that 'recover:' was offered when the job's own page check would skip (permission_denied under a narrowed writer grant). At the head factsRecovery handled only superseded and page_missing skips, so any other skip fell through to the recover command. Needs human check: severity (reviewer CRITICAL label versus the floor; consequence is a wrong recovery command)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-25",
+    "source": "GitHub API: garrytan/gbrain#7602 (an issue it names) created_at 2026-10-25T22:59:19Z; garrytan/gbrain#7606 (the fix PR) created_at 2026-10-25T23:37:56Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7606's own review and fixed in d571f0b72c04 (author garrytan); #7606 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

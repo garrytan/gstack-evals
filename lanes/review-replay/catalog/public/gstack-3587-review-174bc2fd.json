@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3587-review-174bc2fd",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3587,
+  "reviewed_head": "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb",
+  "merge_base": "4729f4752ba6aa6524f52fa49f51c28779a3ea24",
+  "diff_range": {
+    "from": "4729f4752ba6aa6524f52fa49f51c28779a3ea24",
+    "to": "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb",
+    "note": "#3587's full diff at the commit before its review fix 174bc2fd7b57."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": ".github/workflows/evals.yml",
+    "line": 573,
+    "summary": "The evals workflow defaulted pull_request runs to the narrow screen policy, so when no train runs, the merge gate skipped the dependents of hub files and could pass without running them."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the review lists it among 7 fixed findings without a rating, and no failing test or production break is named.",
+    "in_history": [
+      {
+        "by": "pass 1 (9 dispatches incl. red team, adversarial and outside voice), gstack /ship review on #3587",
+        "rated": "not rated in the review section; listed as fixed"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "174bc2fd7b57fa0e463d1d99ff0d9f335f790a8a",
+    "pr": 3587
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3587,
+      "range": {
+        "from": "9b3540bbeeadf3c9e8902d2050c8ee941d1260cb",
+        "to": "174bc2fd7b57fa0e463d1d99ff0d9f335f790a8a"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 4 later commits on the PR branch and 7 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 30 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 9184ffd16cfe (#3619) lib/ship-queue-train-ready.ts:52,59. Hand check: 9184ffd16cfe (#3619) is a feature that changes when ship-queue recommends a screen, rewriting the docblock and the selection call to read coverage mode."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3587, review-fix commit 174bc2fd7b57, which rewrote lines that #3587's own earlier commits added",
+    "evidence": [
+      "git diff -U0 9b3540bbeead..174bc2fd7b57 -- .github/workflows/evals.yml rewrites 4 old lines; git blame 9b3540bbeead gives 2 of them to #3587's commits (9b3540bbeead)",
+      ".github/workflows/evals.yml lines 572,573 are added lines of 4729f4752ba6..9b3540bbeead",
+      "commit 174bc2fd7b57 subject: fix: pre-landing review fixes (pull_request runs stay broad, deleted hubs, READY and summary previews)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix's subject says \"pull_request runs stay broad\" and its new comment calls a pull_request run \"the merge gate when no train block exists\". Reviewed line 573 defaulted every run without a screen_policy input to narrow, so that gate left hub-file dependents to a train gate that was not running. Needs human check: severity (The finding has no rating in the review section.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gstack#3587 (the fix PR) created_at 2026-10-29T04:48:34Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3587's own review and fixed in 174bc2fd7b57 (author garrytan); #3587 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

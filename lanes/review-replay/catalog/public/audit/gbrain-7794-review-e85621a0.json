@@ -1,0 +1,118 @@
+{
+  "id": "gbrain-7794-review-e85621a0",
+  "key": "garrytan/gbrain#7794@e85621a010bb",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7794 merged into master at 2026-10-28T03:03:25Z; review fix e85621a010bb is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "af87170126d5 is an ancestor of 2d801d54cee4"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/trust/owner-actions.ts lines 110,111,221,226,228,229,370 are added lines of af87170126d5..2d801d54cee4"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 2d801d54cee4..e85621a010bb -- src/core/trust/owner-actions.ts rewrote 7 old lines; git blame 2d801d54cee4 gives 7 to #7794's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 465 and decoy 79 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/trust/owner-actions.ts",
+    "fix_file": "src/core/trust/owner-actions.ts",
+    "lines": [
+      110,
+      111,
+      221,
+      226,
+      228,
+      229,
+      370
+    ],
+    "blamed": 7,
+    "owned": 7,
+    "insertion_only": false,
+    "introduced_by": [
+      "23c371ae2a42154d3e5d5fb1bcb77df41e37a12c",
+      "e26c25d0067c0e569d46111dab88be9579a157f0"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 465,
+    "decoy_lines": 79
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "The Opus 5.5 adversarial pass found a preview display-spoofing gap (bidi characters, a quote or comma faking a field), fixed in e85621a0 with a test that was red before."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "2d801d54cee4577ca2a34d89ca538e40a549d333",
+    "to": "e85621a010bbf6a367c52b77ba4c7210326abd9d",
+    "files": [
+      "src/core/trust/owner-actions.ts",
+      "test/doctor-trust-release-unpreviewed-fields.test.ts",
+      "test/trust-release-fence.test.ts",
+      "test/trust-release-preview-binding.test.ts"
+    ],
+    "added_lines": 70,
+    "searched": {
+      "branch": 5,
+      "default": 26,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says the release preview now strips bidi and format characters and escapes a quote or comma \"so a held row cannot show the owner a field it does not have\"; at the reviewed head printable at line 111 kept \\p{Cf} characters and releasedFields and the summary printed raw quotes and commas.",
+    "line": 111,
+    "summary": "The trust release preview kept bidi and format characters and left quotes and commas unescaped in the claim, source and context, so a held row could fake a field and show the owner something it does not have before they confirm.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: a preview spoofing gap is a security matter, but the review records REVIEW_LOOP blocking_found=0 and does not rate this finding."
+    },
+    "in_history": [
+      {
+        "by": "Opus 5.5 adversarial pass, gstack /ship review on #7794",
+        "rated": "not named in the review section; REVIEW_LOOP blocking_found=0"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "security exposure versus a review that counts no blocking finding"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "security exposure versus a review that counts no blocking finding"
+    }
+  ]
+}

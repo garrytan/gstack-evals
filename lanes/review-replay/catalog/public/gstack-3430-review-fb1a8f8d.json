@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3430-review-fb1a8f8d",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3430,
+  "reviewed_head": "c7ec40bc194c6e7fc5ab332806bf56e0c3ed580b",
+  "merge_base": "7bd3fb4a402c6e272338f2bd44c0ceab60438670",
+  "diff_range": {
+    "from": "7bd3fb4a402c6e272338f2bd44c0ceab60438670",
+    "to": "c7ec40bc194c6e7fc5ab332806bf56e0c3ed580b",
+    "note": "#3430's full diff at the commit before its review fix fb1a8f8d3776."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "design"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "bin/gstack-motion-capture.ts",
+    "line": 84,
+    "summary": "gstack-motion-capture created frames/ before checking the page's capture contract and refused any --out with frames/ but no capture.json, so after MOTION_CONTRACT_MISSING or a crash the rerun into the same --out was refused. Its font and image wait could also hang on offscreen lazy images."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the fix names a refused valid rerun and a hang, but no failing test, production break or data loss beyond the tests it adds.",
+    "in_history": [
+      {
+        "by": "#3430's Pre-Landing Review",
+        "rated": "not named in the review section, which says earlier passes found and fixed the defects listed under What changed; the fix commit's subject marks it a third review cycle and adversarial fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "fb1a8f8d37761a199bcff5e934e0822fc7a7ca74",
+    "pr": 3430
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3430,
+      "range": {
+        "from": "c7ec40bc194c6e7fc5ab332806bf56e0c3ed580b",
+        "to": "fb1a8f8d37761a199bcff5e934e0822fc7a7ca74"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3430, review-fix commit fb1a8f8d3776, which rewrote lines that #3430's own earlier commits added",
+    "evidence": [
+      "git diff -U0 c7ec40bc194c..fb1a8f8d3776 -- bin/gstack-motion-capture.ts rewrites 10 old lines; git blame c7ec40bc194c gives 10 of them to #3430's commits (c7ec40bc194c, c922ec74f512)",
+      "bin/gstack-motion-capture.ts lines 64,65,66,67,82,83,84,85,88,89 are added lines of 7bd3fb4a402c..c7ec40bc194c",
+      "commit fb1a8f8d3776 subject: fix(design-motion): third review cycle and adversarial findings"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says the capture.json test is replaced 'so the rerun after MOTION_CONTRACT_MISSING or a crash works'. At the reviewed head lines 82-85 refused any --out holding frames/ without capture.json, and line 88 created frames/ before the contract check that exits with MOTION_CONTRACT_MISSING, so every rerun after that error was refused. The same commit bounds the font and image wait at lines 64-67, which hung on offscreen lazy images ('bounded at 30 s instead of hanging'), and adds a 'retry after a refused page' test. Needs human check: severity (no rating or failing test is named for this defect.); decoy (078fb60583da extends the manifest validator this decoy added (fps/windowFrames >= 1, window fits the frames); whether that fixes a defect in the decoy's validator was not read before the token cap.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-25",
+    "source": "GitHub API: garrytan/gstack#3430 (the fix PR) created_at 2026-10-25T23:56:00Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3430's own review and fixed in fb1a8f8d3776 (author garrytan); #3430 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

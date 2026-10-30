@@ -26,13 +26,11 @@ describe("lanes/review-replay/catalog", () => {
     expect(problems).toEqual([]);
     const panel = JSON.parse(readFileSync(join(LANE, "panel/panel-cases.json"), "utf8"));
     for (const p of panel) {
-      const c = cases.find((x) => x.pr === p.pr)!;
+      const c = cases.find((x) => x.pr === p.pr && x.fix.commit === p.fix_commit)!;
       expect([c.reviewed_head, c.merge_base, c.fix.commit, c.defect.file, c.defect.line]).toEqual([p.reviewed_head, p.merge_base, p.fix_commit, p.finding.path, p.finding.line]);
       expect(c.visibility).toBe("public");
-      expect(c.decoys.map((d) => [d.kind, d.range.to, d.audit])).toEqual([["fix-commit", p.fix_commit, null]]);
-      expect(c.decoys.some(scorableAsClean)).toBe(false);
+      expect(c.decoys.map((d) => [d.kind, d.range.to])).toEqual([["fix-commit", p.fix_commit]]);
     }
-    expect(cases).toHaveLength(panel.length);
   });
 
   test("a decoy is scorable as clean only when its audit says clean", () => {

@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3433-review-51a117a8",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3433,
+  "reviewed_head": "0f59c01238d982e319331c1ee4504f6d3d48c163",
+  "merge_base": "021d817c366bbb17fc1e7303cb2f076def624a90",
+  "diff_range": {
+    "from": "021d817c366bbb17fc1e7303cb2f076def624a90",
+    "to": "0f59c01238d982e319331c1ee4504f6d3d48c163",
+    "note": "#3433's full diff at the commit before its review fix 51a117a83879."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "design-review/sections/craft-audit.md.tmpl",
+    "line": 13,
+    "summary": "The craft audit forbade cutting a claim only when the rules said so, but the checker's printed fix text for round-number and needs-proof says to drop or remove the claim, so Phase 8 could delete a real claim from the user's page."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the reviewer rated it Medium and closed it under a cycle-cap exception; the failure it names is a possible content deletion, not an observed one, and no test fails.",
+    "in_history": [
+      {
+        "by": "native adversarial, pass R3 of the post-merge /ship review on #3433",
+        "rated": "Medium (closed by the third cycle-cap exception, Captain 2026-10-26)"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "51a117a83879e19982bf19705913b606b4b916eb",
+    "pr": 3433
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3433,
+      "range": {
+        "from": "0f59c01238d982e319331c1ee4504f6d3d48c163",
+        "to": "51a117a83879e19982bf19705913b606b4b916eb"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 5 later commits on the PR branch and 70 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 2 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits d87eec950a64 (#3507) design-review/sections/craft-audit.md.tmpl:13. Hand check: d87eec950a64 (#3507) rewrites line 13 for a feature, swapping gstack-design-craft's CRAFT_CHECK protocol for gstack-design-lint's blocks/ask/waived lines; it keeps the decoy's sentence \"Never mark or cut a claim as a rule or fix says: defer it and ask for the proof\" verbatim, and its own saved-page fix concerns the new lint, not the decoy's text."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3433, review-fix commit 51a117a83879, which rewrote lines that #3433's own earlier commits added",
+    "evidence": [
+      "git diff -U0 0f59c01238d9..51a117a83879 -- design-review/sections/craft-audit.md.tmpl rewrites 1 old lines; git blame 0f59c01238d9 gives 1 of them to #3433's commits (0f59c01238d9)",
+      "design-review/sections/craft-audit.md.tmpl lines 13 are added lines of 021d817c366b..0f59c01238d9",
+      "commit 51a117a83879 subject: fix(design-review): never cut a claim a rule or printed fix says to drop",
+      "#3433 Pre-Landing Review: Post-merge on the integrated tree: R1 (f6e9893) and R2 (236869a) fixed what they found; R3 (0f59c01) reached the cycle cap with one Medium finding (the checker's printed fix text, \"drop the claim\" / \"remove the claim before publishing\", could lead Phase 8 to delete a real claim), closed by except...",
+      "#3433 Pre-Landing Review: The R4 verification-only pass at 51a117a ran all nine reviewers with no edits: outside voice `VERDICT: no_findings`, red team, security, performance, simplification and testing clean.",
+      "#3433 Pre-Landing Review: - `design-review/sections/craft-audit.md.tmpl:35`: Phase 8 has no pointer back to the craft audit's fix-order section, so after compaction the tie-break and Tailwind check rely on memory; a pointer does not fit the byte cap (native adversarial, confidence 6).",
+      "#3433 Pre-Landing Review: - `craft-audit.md.tmpl:7,13`: the repo-file path judges framework source by eye inside Phases 1-6, against \"Never read source code\" (native adversarial, confidence 5)."
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix names pass R3 (native adversarial, Medium): the CRAFT_CHECK fix text for round-number and needs-proof \"says to drop or remove the claim, which could lead Phase 8 to delete a real claim\". At the reviewed head (0f59c01238d9) line 13 of craft-audit.md.tmpl guards only \"as the rules below say\", while lib/design-catalog.ts:496 and :503 print \"drop the claim\" and \"remove the claim before publishing\" on each CRAFT_CHECK line the same sentence tells the agent to file. The fix widens the guard to \"a rule or fix\" and says defer and ask for proof. Needs human check: severity (a Medium rating on a possible content-deletion path does not settle CRITICAL against INFORMATIONAL on gstack's floor.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gstack#3433 (the fix PR) created_at 2026-10-26T00:06:09Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3433's own review and fixed in 51a117a83879 (author garrytan); #3433 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

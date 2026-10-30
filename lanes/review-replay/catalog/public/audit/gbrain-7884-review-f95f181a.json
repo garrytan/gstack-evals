@@ -1,0 +1,99 @@
+{
+  "id": "gbrain-7884-review-f95f181a",
+  "key": "garrytan/gbrain#7884@f95f181afb01",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7884 merged into master at 2026-10-29T03:47:04Z; review fix f95f181afb01 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "ece919a2e8a0 is an ancestor of d3b843389bd6"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/minions/handlers/ingest-capture.ts lines 335,336,337,338 are added lines of ece919a2e8a0..d3b843389bd6"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 d3b843389bd6..f95f181afb01 -- src/core/minions/handlers/ingest-capture.ts rewrote 7 old lines; git blame d3b843389bd6 gives 4 to #7884's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 381 and decoy 13 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/minions/handlers/ingest-capture.ts",
+    "fix_file": "src/core/minions/handlers/ingest-capture.ts",
+    "lines": [
+      335,
+      336,
+      337,
+      338
+    ],
+    "blamed": 7,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "06ce037866cd445c6ae34598a002f2aa69a61b0e"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 381,
+    "decoy_lines": 13
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "d3b843389bd617fb1a6e116ca542afbba1cf5784",
+    "to": "f95f181afb019e8073f49dec897155759723dc16",
+    "files": [
+      "src/core/minions/handlers/ingest-capture.ts"
+    ],
+    "added_lines": 6,
+    "searched": {
+      "branch": 3,
+      "default": 18,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix moves the visibility_noncanonical refusal after the source-fallback warning so ingest_capture \"logs a source fallback before refusing\". At the reviewed head the throw at lines 335-338 ran first, so the warning never printed on a refused request.",
+    "line": 336,
+    "summary": "When ingest_capture fell back to the default source and then refused a non-canonical private request, it threw before logging the source-fallback warning, so the operator never saw that the requested source was unavailable.",
+    "severity": {
+      "deserved": "INFORMATIONAL",
+      "basis": "The review counts one blocking finding, deferred as #7897, so the two fixed adversarial findings, this one included, were below the blocking floor, and no failure beyond a missing log line is named."
+    },
+    "in_history": [
+      {
+        "by": "Opus adversarial pass, gstack /ship review on #7884",
+        "rated": "not rated in the review section; fixed, and not the one blocking finding"
+      }
+    ],
+    "needs_human_check": []
+  },
+  "needs_human_check": []
+}

@@ -1,0 +1,101 @@
+{
+  "id": "gbrain-7901-review-8923ce6b",
+  "key": "garrytan/gbrain#7901@8923ce6bdd02",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7901 merged into master at 2026-10-29T14:30:59Z; review fix 8923ce6bdd02 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "7a929e2b21ea is an ancestor of 40461c875975"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "scripts/pregate-remote-gate.sh lines 21,22,23,87 are added lines of 7a929e2b21ea..40461c875975"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 40461c875975..8923ce6bdd02 -- scripts/pregate-remote-gate.sh rewrote 4 old lines; git blame 40461c875975 gives 4 to #7901's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 528 and decoy 15 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "scripts/pregate-remote-gate.sh",
+    "fix_file": "scripts/pregate-remote-gate.sh",
+    "lines": [
+      21,
+      22,
+      23,
+      87
+    ],
+    "blamed": 4,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "063646590053b314fb429cee844c6dd2fbe98dee",
+      "e9ab90cc3170015a44fa4d2ce683aa9db96796a7"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 528,
+    "decoy_lines": 15
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "- [FIXED, CRITICAL] `scripts/pregate-remote-gate.sh`: the self-attestation guard did not cover `scripts/lib/gh-issue.ts`, which `scripts/ci-reuse.ts` imports, so a tree changing that helper could have reused its own runs."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "40461c875975d8e6673632acfb6c2104c17519db",
+    "to": "8923ce6bdd027fd586a8374ce1087e45afe736bd",
+    "files": [
+      "scripts/pregate-remote-gate.sh",
+      "test/scripts/pregate-remote-gate.test.ts"
+    ],
+    "added_lines": 6,
+    "searched": {
+      "branch": 3,
+      "default": 11,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the review section's FIXED, CRITICAL item says the self-attestation guard 'did not cover scripts/lib/gh-issue.ts, which scripts/ci-reuse.ts imports', fixed red-first. At the head scripts/ci-reuse.ts line 42 imports ./lib/gh-issue.ts and the guard loop on line 87 omitted it.",
+    "summary": "The remote-gate reuse guard did not refuse a tree that changes scripts/lib/gh-issue.ts, a helper ci-reuse.ts imports, so such a tree could have reused its own CI runs as proof.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "reviewers rated it CRITICAL and fixed it red-first, so a test fails on the old guard; the guard failed open"
+    },
+    "in_history": [
+      {
+        "by": "pass 1 (6 specialists, red team), gstack /ship review on #7901",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "needs_human_check": []
+}

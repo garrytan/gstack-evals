@@ -124,6 +124,15 @@ function squashRepo(name = "r") {
 }
 
 describe("scripts/mine-review-cases.ts", () => {
+  test("the committed catalog regenerates byte for byte from mined.json and hand.json, and every case validates with an audit", () => {
+    const run = spawnSync("bun", ["scripts/mine-review-cases.ts", "build", "--check"], { cwd: ROOT, encoding: "utf8" });
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    const { cases, problems } = loadCatalog(join(ROOT, "lanes/review-replay/catalog/public"));
+    expect(problems).toEqual([]);
+    for (const c of cases) expect([c.id, c.visibility, c.answer_key_audit?.verdict]).toEqual([c.id, "public", "confirmed"]);
+  });
+
   test("parseDiff reads -U0 hunks, renames and new files, and never takes a removed '-- ' line for a header", () => {
     const d = parseDiff([
       "diff --git a/x.ts b/x.ts", "index 1..2 100644", "--- a/x.ts", "+++ b/x.ts", "@@ -3 +3 @@", "--- a comment", "+-- b comment", "@@ -7,0 +8,2 @@", "+n1", "+n2",

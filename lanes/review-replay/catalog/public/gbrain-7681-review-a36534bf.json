@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gbrain-7681-review-a36534bf",
+  "visibility": "public",
+  "repo": "garrytan/gbrain",
+  "pr": 7681,
+  "reviewed_head": "d1db331b34b23a28fdd7d00c9e4e4d47e5e576e6",
+  "merge_base": "a642d5d891d93d8a6a9b024df20d4223ecbc2f1f",
+  "diff_range": {
+    "from": "a642d5d891d93d8a6a9b024df20d4223ecbc2f1f",
+    "to": "d1db331b34b23a28fdd7d00c9e4e4d47e5e576e6",
+    "note": "#7681's full diff at the commit before its review fix a36534bf8f9c."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "src/core/persistence/worktree-refresh.ts",
+    "line": 232,
+    "summary": "A plain gbrain sources refresh of a worktree whose refresh needs a reset decision refused refresh_in_progress, with a fix saying the refresh finishes on its own or by the next plain refresh. Neither happens: the row waits for the user, and the right refusal is refresh_recovery_required with its stored fix."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: wrong refusal code and misleading fix advice; the fix adds a state-matrix test but does not say it was red before, and names no production break.",
+    "in_history": [
+      {
+        "by": "#7681's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a pre-landing review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "a36534bf8f9c1af1ab3dfacbc652d361675adf18",
+    "pr": 7681
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gbrain",
+      "pr": 7681,
+      "range": {
+        "from": "d1db331b34b23a28fdd7d00c9e4e4d47e5e576e6",
+        "to": "a36534bf8f9c1af1ab3dfacbc652d361675adf18"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 14 later commits on the PR branch and 31 later first-parent commits on master through 3654a7753313 (2026-10-30) for a change to any of the 144 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits 4755341734a7 src/core/persistence/worktree-refresh.ts:509,654; 84b96abc481c src/core/behavior-change-notice.ts:1318; 57bbfdc8277b test/persistence-worktree-refresh.test.ts:367,369,370,371,372,377,382,383,384,385,386,391,392,393,398,406,407,411,422; 26be70f71b2b test/persistence-worktree-refresh.test.ts:445,446,447. Hand check: 4755341734a7 drops inProgress's prose suggestion argument for one shared suggestion (lines 509, 654), a consolidation of wording; 84b96abc481c is a master merge that restamps the BEHAVIOR_CHANGES since version; 57bbfdc8277b and 26be70f71b2b extend the 7c state-matrix test with more kinds. None fixes a defect in the decoy's lines."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gbrain #7681, review-fix commit a36534bf8f9c, which rewrote lines that #7681's own earlier commits added",
+    "evidence": [
+      "git diff -U0 d1db331b34b2..a36534bf8f9c -- src/core/persistence/worktree-refresh.ts rewrites 7 old lines; git blame d1db331b34b2 gives 4 of them to #7681's commits (57571c3071ce, 8d421436af03)",
+      "src/core/persistence/worktree-refresh.ts lines 232,599,648,772 are added lines of a642d5d891d9..d1db331b34b2",
+      "commit a36534bf8f9c subject: fix: pre-landing review fixes (#7679, #7685)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'A plain refresh of a recovery_required row refuses refresh_recovery_required with its stored fix instead of refresh_in_progress'. At the reviewed head precheck line 232 threw inProgress for any active row, recovery_required included, and inProgress's structured fix says 'a live one finishes on its own; an orphaned one names ... --resume, which the next plain refresh also runs by itself', which is false for a row the plain refresh never adopts (adoptOrphanedRefresh returns null for recovery_required, and its own comment says 'the precheck refuses each case by name'). The other located lines are a scan tuning (599) and message wording (648, 772). Needs human check: severity (wrong refusal code with no stated failing test, production break or data loss.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-26",
+    "source": "GitHub API: garrytan/gbrain#7679 (an issue it names) created_at 2026-10-26T14:38:46Z; garrytan/gbrain#7681 (the fix PR) created_at 2026-10-26T15:30:03Z; garrytan/gbrain#7685 (an issue it names) created_at 2026-10-26T17:30:40Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gbrain#7681's own review and fixed in a36534bf8f9c (author garrytan); #7681 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

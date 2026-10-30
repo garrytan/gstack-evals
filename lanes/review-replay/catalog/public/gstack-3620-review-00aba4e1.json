@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3620-review-00aba4e1",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3620,
+  "reviewed_head": "f30c33f7d58ab347b99ca506dbed75f344e69851",
+  "merge_base": "ad8e12dff74286885fd0c56e4b5e45eb7e650083",
+  "diff_range": {
+    "from": "ad8e12dff74286885fd0c56e4b5e45eb7e650083",
+    "to": "f30c33f7d58ab347b99ca506dbed75f344e69851",
+    "note": "#3620's full diff at the commit before its review fix 00aba4e13cb6."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/ship-budget.ts",
+    "line": 180,
+    "summary": "measureSettled measured reservations whose charge the meter cannot see, so their zero or partial actuals shrank the run's dispatch factor and later projections."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "needs human check: the fix names wrong calibration but no failing test, break or loss.",
+    "in_history": [
+      {
+        "by": "#3620's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "00aba4e13cb6bb8f98c1475469fab356c9960a43",
+    "pr": 3620
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3620,
+      "range": {
+        "from": "f30c33f7d58ab347b99ca506dbed75f344e69851",
+        "to": "00aba4e13cb6bb8f98c1475469fab356c9960a43"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "GSTA-33 (Opus 5.5)",
+        "at": "2026-10-30",
+        "method": "Searched 10 later commits on the PR branch and 4 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 52 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); hits d33461825a14 lib/ship-budget.ts:54. Hand check: d33461825a14 adds a `remaining` field to the Reservation interface on line 54 for the handoff feature."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3620, review-fix commit 00aba4e13cb6, which rewrote lines that #3620's own earlier commits added",
+    "evidence": [
+      "git diff -U0 f30c33f7d58a..00aba4e13cb6 -- lib/ship-budget.ts rewrites 5 old lines; git blame f30c33f7d58a gives 3 of them to #3620's commits (f30c33f7d58a)",
+      "lib/ship-budget.ts lines 54,175,180 are added lines of ad8e12dff742..f30c33f7d58a",
+      "commit 00aba4e13cb6 subject: fix: pre-landing review fixes (GST-101)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says unseen charges (settle --unknown, a Claude-metered outside voice) 'are booked at their reservation and never measured, so they cannot shrink the dispatch factor'. Line 180 measured every settled reservation. Needs human check: severity (no rating or failure named in the evidence.)."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gstack#3620 (the fix PR) created_at 2026-10-29T19:04:48Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3620's own review and fixed in 00aba4e13cb6 (author garrytan); #3620 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

@@ -1,0 +1,125 @@
+{
+  "id": "gbrain-7878-review-748bf631",
+  "key": "garrytan/gbrain#7878@748bf63162fc",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gbrain visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#7878 merged into master at 2026-10-28T20:04:35Z; review fix 748bf63162fc is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "5af37ba44455 is an ancestor of d43d2497a65c"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "src/core/cycle/synthesize-source-routing.ts lines 29,68,69,122 are added lines of 5af37ba44455..d43d2497a65c"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 d43d2497a65c..748bf63162fc -- src/core/cycle/synthesize-source-routing.ts rewrote 4 old lines; git blame d43d2497a65c gives 4 to #7878's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1408 and decoy 132 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "src/core/cycle/synthesize-source-routing.ts",
+    "fix_file": "src/core/cycle/synthesize-source-routing.ts",
+    "lines": [
+      29,
+      68,
+      69,
+      122
+    ],
+    "blamed": 4,
+    "owned": 4,
+    "insertion_only": false,
+    "introduced_by": [
+      "13e447335f1485351c42d1a49418de98546ca6c5"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1408,
+    "decoy_lines": 132
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=true",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "d43d2497a65cb4b5fec162cd7460225c1769488a",
+    "to": "748bf63162fc29fdcde6048e770c724601d82da8",
+    "files": [
+      "src/cli/commands/append.ts",
+      "src/commands/doctor/checks/git-holds.ts",
+      "src/core/behavior-change-notice.ts",
+      "src/core/cycle/synthesize-source-routing.ts",
+      "src/core/page-body/streamed-import.ts",
+      "test/cli-page-writes.test.ts",
+      "test/synthesize-source-routing-realpath-7871.test.ts",
+      "test/visibility-noncanonical-surfaces-7848.test.ts"
+    ],
+    "added_lines": 124,
+    "searched": {
+      "branch": 1,
+      "default": 20,
+      "through": "3654a7753313cd4946e3db435760ace41e050046",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "331193f8d3e83d4d4c9f26898b3a3aa2ecfa85c5",
+        "where": "branch",
+        "pr": null,
+        "subject": "chore: bump version and changelog (v0.60.483.0)",
+        "file": "src/core/behavior-change-notice.ts",
+        "lines": [
+          1333,
+          1337
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'a path outside the corpus that no longer exists is located by its spelled path, not held as corpus_path_unresolvable'. Line 69 returned unresolvable for any missing real path.",
+    "line": 69,
+    "summary": "corpusLocation held any transcript whose real path was missing as corpus_path_unresolvable, even one outside the corpus, so a missing non-corpus file was held instead of routed by its spelled path.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the review says all five pass 1 issues were fixed with revert-red tests, so the defect fails a test."
+    },
+    "in_history": [
+      {
+        "by": "pass 1 of gstack /ship review on #7878 (six specialists, red team)",
+        "rated": "one of five fixed with revert-red tests; REVIEW_LOOP counts 3 blocking without saying which"
+      }
+    ],
+    "needs_human_check": [],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "331193f8d3e8 is the release restamp: it replaces since 'TBD' with '0.60.483.0' in BEHAVIOR_CHANGES rows."
+      }
+    }
+  },
+  "needs_human_check": []
+}

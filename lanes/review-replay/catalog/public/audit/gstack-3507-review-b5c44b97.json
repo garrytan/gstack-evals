@@ -1,0 +1,120 @@
+{
+  "id": "gstack-3507-review-b5c44b97",
+  "key": "garrytan/gstack#3507@b5c44b972aa2",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3507 merged into main at 2026-10-27T11:04:00Z; review fix b5c44b972aa2 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "c2e01e4ba7c4 is an ancestor of 8c021d124220"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "lib/design-lint/rules/copy.ts lines 91,132,133,134,135,137 are added lines of c2e01e4ba7c4..8c021d124220"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 8c021d124220..b5c44b972aa2 -- lib/design-lint/rules/copy.ts rewrote 6 old lines; git blame 8c021d124220 gives 6 to #3507's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1002 and decoy 47 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "lib/design-lint/rules/copy.ts",
+    "fix_file": "lib/design-lint/rules/copy.ts",
+    "lines": [
+      91,
+      132,
+      133,
+      134,
+      135,
+      137
+    ],
+    "blamed": 6,
+    "owned": 6,
+    "insertion_only": false,
+    "introduced_by": [
+      "018eedb137037f1c77e1000123df516dee707ecf"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1002,
+    "decoy_lines": 47
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "It and 7 others were fixed in b5c44b972.",
+      "Pass 2 (8c021d124..b5c44b972): testing and maintainability clean; one informational adversarial note (below)."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "8c021d1242204f36d248980e3af1a0998a882d12",
+    "to": "b5c44b972aa215a7b574ab8eafc6d2279f3f0fc4",
+    "files": [
+      "design-html/sections/craft.md.tmpl",
+      "design-review/sections/craft-audit.md.tmpl",
+      "lib/design-catalog.ts",
+      "lib/design-lint/rules/copy.ts",
+      "test/design-craft-resolvers.test.ts",
+      "test/design-lint-eighth-cycle.test.ts",
+      "test/design-lint.test.ts"
+    ],
+    "added_lines": 36,
+    "searched": {
+      "branch": 5,
+      "default": 56,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says \"inline-handler tells report at the value's line\"; at the reviewed head codeOf at line 91 gave an inline handler's code the position of the attribute match, not of the value, so tells in it reported at the wrong offset. The GPT outside pass rated it P3.",
+    "line": 91,
+    "summary": "The copy tier placed inline-handler code at the start of the on... attribute instead of its value, so a tell inside a handler reported at the wrong position and could name the wrong line.",
+    "severity": {
+      "deserved": "INFORMATIONAL",
+      "basis": "the outside review (openai/gpt-6.1-sol) rated the inline-handler line finding P3, and the review's one blocking finding is a different item (saved-page CSS)."
+    },
+    "in_history": [
+      {
+        "by": "outside review by openai/gpt-6.1-sol, gstack /ship review on #3507",
+        "rated": "P3"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "lines 132 to 137",
+        "reason": "the superlinear nav count fixed there is a performance change with no failure named; line 91 is the defect site"
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "lines 132 to 137",
+      "reason": "the superlinear nav count fixed there is a performance change with no failure named; line 91 is the defect site"
+    }
+  ]
+}

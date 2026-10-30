@@ -1,0 +1,107 @@
+{
+  "id": "gstack-3567-review-4ad8a6bf",
+  "key": "garrytan/gstack#3567@4ad8a6bfd925",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3567 merged into main at 2026-10-29T04:55:01Z; review fix 4ad8a6bfd925 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "4c745eec108a is an ancestor of 2b42ec597e03"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-ship-receipt lines 47,90,602 are added lines of 4c745eec108a..2b42ec597e03"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 2b42ec597e03..4ad8a6bfd925 -- bin/gstack-ship-receipt rewrote 3 old lines; git blame 2b42ec597e03 gives 3 to #3567's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1976 and decoy 210 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-ship-receipt",
+    "fix_file": "bin/gstack-ship-receipt",
+    "lines": [
+      47,
+      90,
+      602
+    ],
+    "blamed": 3,
+    "owned": 3,
+    "insertion_only": false,
+    "introduced_by": [
+      "d4c68de6351d4d0bb600983f0e4aa52438d19c25"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1976,
+    "decoy_lines": 210
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "Pass 1 (full, gate class: 6 specialists, Red Team, native adversarial, outside voice on openai/gpt-6.1-sol) found 14: 7 fixed in 4ad8a6b, including 2 blocking (the queue bound a gate scan by prefix and recomputed scope without the writer's range) and a reproduced CRITICAL (a carry `--head` other ..."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "2b42ec597e035880838df088475001c03ecb3c17",
+    "to": "4ad8a6bfd925a57ab9be2e134a7bfee50de0c310",
+    "files": [
+      "bin/gstack-diff-scope",
+      "bin/gstack-ship-receipt",
+      "lib/headless-artifacts.ts",
+      "lib/review-collect.ts",
+      "lib/ship-receipt-depth.ts",
+      "test/diff-scope.test.ts",
+      "test/review-collect.test.ts",
+      "test/ship-receipt-depth.test.ts"
+    ],
+    "added_lines": 156,
+    "searched": {
+      "branch": 6,
+      "default": 22,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix makes carry refuse \"a --head other than the checked-out HEAD\" and a receipt with gstack_version but no review_depth. At line 602 the reviewed code ran only when review_depth was set and scanned the working tree whatever --head named.",
+    "line": 602,
+    "summary": "gstack-ship-receipt carry recomputed review depth from the checked-out tree even when --head named another commit, so it recorded a gate scan of the wrong tree; a receipt with gstack_version but no review_depth carried through though the queue would refuse it.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "The review calls it a reproduced CRITICAL: the receipt recorded a working-tree gate scan for another head."
+    },
+    "in_history": [
+      {
+        "by": "pass 1 testing specialist and outside voice openai/gpt-6.1-sol, gstack /ship review on #3567",
+        "rated": "CRITICAL (reproduced)"
+      }
+    ],
+    "needs_human_check": []
+  },
+  "needs_human_check": []
+}

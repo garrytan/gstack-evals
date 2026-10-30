@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3431-review-9a79ceef",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3431,
+  "reviewed_head": "8f4cbb8db01c25a0deb0aeee9e5de0e02c283e70",
+  "merge_base": "1c28c09b763307fb4c125fef595dc297d7d10446",
+  "diff_range": {
+    "from": "1c28c09b763307fb4c125fef595dc297d7d10446",
+    "to": "8f4cbb8db01c25a0deb0aeee9e5de0e02c283e70",
+    "note": "#3431's full diff at the commit before its review fix 9a79ceefaa0b."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "data-migration"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "bin/gstack-timeline-log",
+    "line": 23,
+    "summary": "gstack-timeline-log used exit 3 to mean invalid input, so a Bun crash on Windows (also exit 3) silently dropped the event. A failed ts stamp replaced the event with empty output, losing it."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "the review lists 'a lost timeline event when the timestamp stamp fails' among its fixes, which is data loss.",
+    "in_history": [
+      {
+        "by": "Red Team (exit 3 collision) and the /review passes (lost event), gstack /ship review on #3431",
+        "rated": "listed under Fixed with no severity; the final pass converged with informational findings only"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "9a79ceefaa0b5613368e63f9cf15dab526887a70",
+    "pr": 3431
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3431,
+      "range": {
+        "from": "8f4cbb8db01c25a0deb0aeee9e5de0e02c283e70",
+        "to": "9a79ceefaa0b5613368e63f9cf15dab526887a70"
+      },
+      "audit": {
+        "later_fix_checked": true,
+        "later_fix": null,
+        "verdict": "clean",
+        "by": "scripts/mine-review-cases.ts (U14, GSTA-33)",
+        "at": "2026-10-30",
+        "method": "Searched 2 later commits on the PR branch and 103 later first-parent commits on main through de53aef03fbd (2026-10-30) for a change to any of the 58 lines this decoy added in source and test files (wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md, Rule 3); none changed them."
+      }
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3431, review-fix commit 9a79ceefaa0b, which rewrote lines that #3431's own earlier commits added",
+    "evidence": [
+      "git diff -U0 8f4cbb8db01c..9a79ceefaa0b -- bin/gstack-timeline-log rewrites 12 old lines; git blame 8f4cbb8db01c gives 11 of them to #3431's commits (27e5dce493d4)",
+      "bin/gstack-timeline-log lines 23,24,26,28,29,30,31,32,33,34,39 are added lines of 1c28c09b7633..8f4cbb8db01c",
+      "commit 9a79ceefaa0b subject: fix: pre-landing review fixes, cycle 2 (#3415)"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-33 (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'a Bun crash on Windows exits 3', which the validator's exit 3 read as invalid input and skipped silently, and that timeline-log now 'keeps the original event when ts stamping fails'. Lines 23-34 and 39 hold both."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-25",
+    "source": "GitHub API: garrytan/gstack#3415 (an issue it names) created_at 2026-10-25T16:20:37Z; garrytan/gstack#3431 (the fix PR) created_at 2026-10-25T23:57:01Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3431's own review and fixed in 9a79ceefaa0b (author garrytan); #3431 by @garrytan. Mined by scripts/mine-review-cases.ts (U14, GSTA-33)."
+}

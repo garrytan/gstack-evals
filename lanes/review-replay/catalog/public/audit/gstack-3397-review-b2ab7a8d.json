@@ -1,0 +1,113 @@
+{
+  "id": "gstack-3397-review-b2ab7a8d",
+  "key": "garrytan/gstack#3397@b2ab7a8d93c8",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3397 merged into main at 2026-10-26T07:08:53Z; review fix b2ab7a8d93c8 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "632bde77def8 is an ancestor of ffdedba75b02"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-developer-profile lines 418,419,420,448,449 are added lines of 632bde77def8..ffdedba75b02"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 ffdedba75b02..b2ab7a8d93c8 -- bin/gstack-developer-profile rewrote 5 old lines; git blame ffdedba75b02 gives 5 to #3397's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 313 and decoy 40 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-developer-profile",
+    "fix_file": "bin/gstack-developer-profile",
+    "lines": [
+      418,
+      419,
+      420,
+      448,
+      449
+    ],
+    "blamed": 5,
+    "owned": 5,
+    "insertion_only": false,
+    "introduced_by": [
+      "ffdedba75b026e8a39113c58c4d6a510153955f1"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 313,
+    "decoy_lines": 40
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [
+      "Both reviews were bound at b2ab7a8; the only later commit (d91337d) changes TODOS.md and CHANGELOG.md text."
+    ],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "ffdedba75b026e8a39113c58c4d6a510153955f1",
+    "to": "b2ab7a8d93c8fe37204280e045480463c715c3dc",
+    "files": [
+      "bin/gstack-developer-profile",
+      "test/gstack-developer-profile.test.ts"
+    ],
+    "added_lines": 28,
+    "searched": {
+      "branch": 2,
+      "default": 97,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says \"Date alone parses strings such as \\\"junk 1\\\" as real days, which let junk rows escape the bound and inflate days_span\", and that a zoneless space-separated time should read as UTC. At the reviewed head (ffdedba75b02) line 448 appends Z only to a T-separated zoneless ts and line 449 passes any other string to new Date. Node here gives new Date(\"junk 1\") = 2001-06-01, so the comment's promise that junk cannot escape the bound does not hold. No decoy hits.",
+    "line": 449,
+    "summary": "accumulateSignals handed any string ts to new Date, which reads junk such as \"junk 1\" as a real day, so junk rows escaped the shared undated bucket and the per-day bound and inflated diversity.days_span. A zoneless space-separated time was read as local time instead of UTC.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the fix names wrong output (an escaped bound, an inflated days_span) but no failing test, production break or data loss, and the review's 0 critical / 5 informational count was taken at this fix's tree, not of it."
+    },
+    "in_history": [
+      {
+        "by": "#3397's Pre-Landing Review",
+        "rated": "not named in the review section, which says both reviews were bound at b2ab7a8; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "no failing test, production break or data loss is named, and no reviewer rating for this item is given."
+      }
+    ]
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "no failing test, production break or data loss is named, and no reviewer rating for this item is given."
+    }
+  ]
+}

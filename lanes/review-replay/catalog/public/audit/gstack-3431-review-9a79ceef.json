@@ -1,0 +1,108 @@
+{
+  "id": "gstack-3431-review-9a79ceef",
+  "key": "garrytan/gstack#3431@9a79ceefaa0b",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3431 merged into main at 2026-10-26T04:32:28Z; review fix 9a79ceefaa0b is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "1c28c09b7633 is an ancestor of 8f4cbb8db01c"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "bin/gstack-timeline-log lines 23,24,26,28,29,30,31,32,33,34,39 are added lines of 1c28c09b7633..8f4cbb8db01c"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 8f4cbb8db01c..9a79ceefaa0b -- bin/gstack-timeline-log rewrote 12 old lines; git blame 8f4cbb8db01c gives 11 to #3431's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 539 and decoy 84 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "bin/gstack-timeline-log",
+    "fix_file": "bin/gstack-timeline-log",
+    "lines": [
+      23,
+      24,
+      26,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      39
+    ],
+    "blamed": 12,
+    "owned": 11,
+    "insertion_only": false,
+    "introduced_by": [
+      "27e5dce493d436891aaaac8cab70d0e321f8f270"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 539,
+    "decoy_lines": 84
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=true SCOPE_API=false SCOPE_AUTH=true",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "8f4cbb8db01c25a0deb0aeee9e5de0e02c283e70",
+    "to": "9a79ceefaa0b5613368e63f9cf15dab526887a70",
+    "files": [
+      "bin/gstack-developer-profile",
+      "bin/gstack-timeline-log",
+      "test/bun-config-shell-bins.test.ts",
+      "test/bun-entry-isolation.test.ts"
+    ],
+    "added_lines": 58,
+    "searched": {
+      "branch": 2,
+      "default": 103,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix says 'a Bun crash on Windows exits 3', which the validator's exit 3 read as invalid input and skipped silently, and that timeline-log now 'keeps the original event when ts stamping fails'. Lines 23-34 and 39 hold both.",
+    "summary": "gstack-timeline-log used exit 3 to mean invalid input, so a Bun crash on Windows (also exit 3) silently dropped the event. A failed ts stamp replaced the event with empty output, losing it.",
+    "severity": {
+      "deserved": "CRITICAL",
+      "basis": "the review lists 'a lost timeline event when the timestamp stamp fails' among its fixes, which is data loss."
+    },
+    "in_history": [
+      {
+        "by": "Red Team (exit 3 collision) and the /review passes (lost event), gstack /ship review on #3431",
+        "rated": "listed under Fixed with no severity; the final pass converged with informational findings only"
+      }
+    ],
+    "needs_human_check": []
+  },
+  "needs_human_check": []
+}

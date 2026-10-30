@@ -1,0 +1,172 @@
+{
+  "id": "gstack-3423-review-c4454841",
+  "key": "garrytan/gstack#3423@c44548413d84",
+  "kind": "review-caught",
+  "rules": "wiki/plans/2026-10-30-gsta-33-u14-review-case-mining-rules.md",
+  "checks": [
+    {
+      "name": "repo-public",
+      "pass": true,
+      "detail": "GET /repos/garrytan/gstack visibility public"
+    },
+    {
+      "name": "fix-merged-in-window",
+      "pass": true,
+      "detail": "#3423 merged into main at 2026-10-26T10:57:53Z; review fix c44548413d84 is on its branch"
+    },
+    {
+      "name": "head-and-base-resolve",
+      "pass": true,
+      "detail": "c23d7d48fe27 is an ancestor of 2c1f74195f44"
+    },
+    {
+      "name": "line-in-diff-range",
+      "pass": true,
+      "detail": "lib/context-bill.ts lines 250,255,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,842,848,849,858,859,860 are added lines of c23d7d48fe27..2c1f74195f44"
+    },
+    {
+      "name": "fix-rewrote-line",
+      "pass": true,
+      "detail": "git diff -U0 2c1f74195f44..c44548413d84 -- lib/context-bill.ts rewrote 32 old lines; git blame 2c1f74195f44 gives 27 to #3423's commits"
+    },
+    {
+      "name": "sizes",
+      "pass": true,
+      "detail": "reviewed 1165 and decoy 108 filtered changed lines"
+    }
+  ],
+  "located": {
+    "file": "lib/context-bill.ts",
+    "fix_file": "lib/context-bill.ts",
+    "lines": [
+      250,
+      255,
+      274,
+      275,
+      276,
+      277,
+      278,
+      279,
+      280,
+      281,
+      282,
+      283,
+      284,
+      285,
+      286,
+      287,
+      288,
+      289,
+      290,
+      291,
+      842,
+      848,
+      849,
+      858,
+      859,
+      860
+    ],
+    "blamed": 32,
+    "owned": 27,
+    "insertion_only": false,
+    "introduced_by": [
+      "2c1f74195f443f60abc801b57c68a4c968b14009",
+      "804d0a67754a2ec4bc9a22d936ae0dab156b0ba5",
+      "9bf11e738eb94875692f97dcc324c77e37c19f0a",
+      "c7ddca62dbfcec615cd3974e08bc4c3262ce44da",
+      "f4592483f0499dd126a956c3d51e6bc2b7678e64",
+      "f6bf669079c5e6178f6435ba60f0a6f71f169e49"
+    ]
+  },
+  "sizes": {
+    "reviewed_lines": 1165,
+    "decoy_lines": 108
+  },
+  "scope": "SCOPE_FRONTEND=false SCOPE_BACKEND=true SCOPE_PROMPTS=false SCOPE_TESTS=true SCOPE_DOCS=true SCOPE_CONFIG=false SCOPE_MIGRATIONS=false SCOPE_API=false SCOPE_AUTH=false",
+  "history": {
+    "receipt": true,
+    "excerpt": [],
+    "default": null
+  },
+  "decoy_search": {
+    "from": "2c1f74195f443f60abc801b57c68a4c968b14009",
+    "to": "c44548413d849a684406e67f1a5076ef8ee9a5b9",
+    "files": [
+      "lib/context-bill.ts",
+      "test/context-bill.test.ts"
+    ],
+    "added_lines": 75,
+    "searched": {
+      "branch": 13,
+      "default": 88,
+      "through": "de53aef03fbd0811d51cb111c86f8c7ecaf7e57e",
+      "through_date": "2026-10-30"
+    },
+    "hits": [
+      {
+        "commit": "0e6c39978e23623b80aceccc603f163df3cf186e",
+        "where": "branch",
+        "pr": null,
+        "subject": "feat(context-bill): --exact also sends files inside gstack's render folder ($GSTACK_STATE_ROOT/render), judged by realpath",
+        "file": "lib/context-bill.ts",
+        "lines": [
+          881
+        ]
+      },
+      {
+        "commit": "214eb68d81952dbf4a9be7ce44e65f5124c4aa81",
+        "where": "branch",
+        "pr": null,
+        "subject": "fix: pre-landing review fixes (context-bill run-5 cycle 1)",
+        "file": "lib/context-bill.ts",
+        "lines": [
+          267,
+          894,
+          895,
+          896,
+          897,
+          898,
+          899,
+          900
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "hand": {
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Confirmed: the fix recognises the gstack checkout by .git, VERSION, setup and a SKILL.md named gstack \"so the bin/dev-setup layout counts and other repos do not\". The reviewed line 860 dropped any checkout that enclosed the root and accepted any repo with VERSION and setup. Most other located lines are a docblock move.",
+    "line": 860,
+    "summary": "exactSendSet treated any git repo with VERSION and setup as the gstack checkout, so other repos' files could be sent, and it refused the bin/dev-setup layout, so those skills fell back to the offline estimate.",
+    "severity": {
+      "deserved": null,
+      "basis": "needs human check: the run-6 review section does not name this finding, and the fix message names no failing test or production break."
+    },
+    "in_history": [
+      {
+        "by": "#3423's Pre-Landing Review",
+        "rated": "not named in the review section; the fix commit's subject marks it a review fix"
+      }
+    ],
+    "needs_human_check": [
+      {
+        "item": "severity",
+        "reason": "No rating or failure class for this finding in the review section or fix message."
+      }
+    ],
+    "decoys": {
+      "0": {
+        "verdict": "clean",
+        "later_fix": null,
+        "reason": "0e6c39978e23 is a feature (render folder) that rewrites the docblock; 214eb68d8195 moves isGstackCheckout unchanged above its docblock and rewords the walkMd comment."
+      }
+    }
+  },
+  "needs_human_check": [
+    {
+      "item": "severity",
+      "reason": "No rating or failure class for this finding in the review section or fix message."
+    }
+  ]
+}
