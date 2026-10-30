@@ -16,7 +16,7 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { REPO_ROOT, type Io } from "../../src/cli.ts";
 import { CODES, type ReasonCode } from "../../src/errors/codes.ts";
 import { openLease, settleLease } from "../../src/runner/ledger/ledger.ts";
@@ -27,7 +27,7 @@ import { LedgerError, readItem } from "../../src/runner/ledger/record.ts";
 import { chatPrice, openRouterRouting, priceRequest, reservationMicros } from "../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal, UPSTREAM_DEADLINE_MS } from "../../src/runner/proxy/metering-proxy.ts";
 import { DEFAULT_POLICY, type PolicyProvider } from "../../src/skill-eval/cli/policy.ts";
-import { errorLines, errorRecord, writeAtomic, writeErrorRecord } from "../../src/skill-eval/verdict/error-record.ts";
+import { errorLines, errorRecord, writeErrorRecord } from "../../src/skill-eval/verdict/error-record.ts";
 import type { CallOutcome, ErrorContext, Termination, TokenUsage } from "../../src/types.ts";
 import { readReply, requestFor, type Reading } from "./outcome.ts";
 import { checkModels, KEY_ENV, loadPlan, ReplayError, type PlanItem } from "./replay-plan.ts";
@@ -60,7 +60,8 @@ interface RunFile {
   plan_name: string;
   plan_sha256: string;
   line_item: string;
-  lease_id: string;
+  /** null until the run's first lease is open. */
+  lease_id: string | null;
   created_at: string;
 }
 
@@ -137,7 +138,16 @@ function spendOf(calls: Call[]): Pick<ItemRecord, "priced_usage" | "spent_micros
   };
 }
 
-/** Writes and fsyncs a JSON file aside, then moves it into place: linked once (an outcome), or renamed over (an intent). */
+function syncDir(dir: string): void {
+  const fd = openSync(dir, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Writes and fsyncs a JSON file aside, moves it into place (linked once for an outcome, renamed over otherwise), then fsyncs its directory. */
 function writeDurable(path: string, value: unknown, once: boolean): void {
   const tmp = path + ".tmp-" + process.pid;
   const fd = openSync(tmp, "w", 0o600);
@@ -147,12 +157,15 @@ function writeDurable(path: string, value: unknown, once: boolean): void {
   } finally {
     closeSync(fd);
   }
-  if (!once) return renameSync(tmp, path);
-  try {
-    linkSync(tmp, path);
-  } finally {
-    unlinkSync(tmp);
+  if (!once) renameSync(tmp, path);
+  else {
+    try {
+      linkSync(tmp, path);
+    } finally {
+      unlinkSync(tmp);
+    }
   }
+  syncDir(dirname(path));
 }
 
 const codeOf = (e: unknown): ReasonCode => {
@@ -289,8 +302,8 @@ export async function runReplay(o: ReplayOptions): Promise<number> {
     const queue = sends.filter((s) => !records.has(s.item.id));
     if (!queue.length) {
       try {
-        const held = prior ? local.getLease(prior.lease_id) : null;
-        if (held && (held.state === "open" || held.state === "closing")) settleLease(record, local, prior!.lease_id, warn);
+        const held = prior?.lease_id ? local.getLease(prior.lease_id) : null;
+        if (held && (held.state === "open" || held.state === "closing")) settleLease(record, local, prior!.lease_id!, warn);
       } catch (e) {
         return failWith(e);
       }
@@ -300,15 +313,25 @@ export async function runReplay(o: ReplayOptions): Promise<number> {
     let lease: { lease_id: string; reserved_micros: number };
     let reused = false;
     try {
-      const held = prior ? local.getLease(prior.lease_id) : null;
+      const held = prior?.lease_id ? local.getLease(prior.lease_id) : null;
       if (held?.state === "open" && new Date() < new Date(held.file.expires_at)) {
         lease = held.file;
         reused = true;
       } else {
-        if (held && (held.state === "open" || held.state === "closing")) settleLease(record, local, prior!.lease_id, warn);
+        if (held && (held.state === "open" || held.state === "closing")) settleLease(record, local, prior!.lease_id!, warn);
+        const base = { schema_version: 1 as const, run_id: runId, plan_name: plan.name, plan_sha256: loaded.sha256, line_item: o.item, created_at: prior?.created_at ?? new Date().toISOString() };
+        if (!prior) {
+          mkdirSync(itemsDir, { recursive: true });
+          for (const dir of [out, dirname(out)]) syncDir(dir);
+          writeDurable(runPath, { ...base, lease_id: null } satisfies RunFile, false);
+        }
         lease = openLease(record, local, { item: o.item, run_id: runId, warn });
-        mkdirSync(itemsDir, { recursive: true });
-        writeAtomic(runPath, { schema_version: 1, run_id: runId, plan_name: plan.name, plan_sha256: loaded.sha256, line_item: o.item, lease_id: lease.lease_id, created_at: prior?.created_at ?? new Date().toISOString() } satisfies RunFile);
+        try {
+          writeDurable(runPath, { ...base, lease_id: lease.lease_id } satisfies RunFile, false);
+        } catch (e) {
+          settleLease(record, local, lease.lease_id, warn);
+          throw e;
+        }
       }
     } catch (e) {
       if (codeOf(e) === "CAP_STOP" && !o.json) io.out(stopLine(record, o.item));
@@ -335,7 +358,7 @@ export async function runReplay(o: ReplayOptions): Promise<number> {
       let body: string;
       let unknown: number;
       try {
-        res = await fetch("http://127.0.0.1:" + proxy.port + "/" + binding.slot + "/" + provider + s.route, { method: "POST", headers: { authorization: "Bearer " + binding.token, "content-type": "application/json" }, body: JSON.stringify(s.body) });
+        res = await fetch("http://127.0.0.1:" + proxy.port + "/" + binding.slot + "/" + provider + s.route, { method: "POST", headers: { authorization: "Bearer " + binding.token, "content-type": "application/json" }, body: JSON.stringify(s.body), timeout: false } as RequestInit);
         body = await res.text();
       } finally {
         unknown = (await proxy.finalize(binding.meter_id)).unknown;
@@ -356,7 +379,7 @@ export async function runReplay(o: ReplayOptions): Promise<number> {
       if (reading.stop) stop ??= { code: reading.stop, message: "item " + item.id + " (" + provider + ":" + item.model + "): " + reading.reason, model: item.model };
       if (!reading.termination) {
         rmSync(intentPath, { force: true });
-        io.err(item.id + ": no outcome recorded; the run stops with " + reading.stop);
+        io.err(reading.stop + ": review replay: item " + item.id + ": no outcome recorded; the run stops");
         return;
       }
       save(s, lease.lease_id, binding.meter_id, reading.termination, reading, calls, ms, status);

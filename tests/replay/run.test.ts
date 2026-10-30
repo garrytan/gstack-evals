@@ -269,6 +269,16 @@ describe("review replay runner: GSTA-11 rerun preconditions", () => {
 });
 
 describe("review replay runner: records and secrets", () => {
+  test("a new run writes run.json before it leases, so a lease refusal leaves a run that --resume continues", async () => {
+    const t = setup();
+    expect(await t.run({ item: "unapproved" })).toBe(2);
+    expect(t.err_lines[0]).toMatch(/^E_LEDGER_MISSING /);
+    expect(JSON.parse(readFileSync(join(t.out, "run.json"), "utf8"))).toMatchObject({ line_item: "unapproved", lease_id: null });
+    recordApproval(t.record, { action: "init", item: "unapproved", cap_micros: 1_000_000, quotes: [QUOTE], admission: "warn" });
+    expect(await t.run({ item: "unapproved", resume: true })).toBe(0);
+    expect(t.sent).toEqual(["a", "b", "c"]);
+  });
+
   test("--json writes error.json with the record's fields, prints one summary object, and no key value appears in the out dir or the output", async () => {
     const t = setup();
     t.h.reply = (id) => (id === "b" ? new Response("bad key", { status: 401 }) : anthropic());
