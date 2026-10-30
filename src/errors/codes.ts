@@ -176,8 +176,8 @@ export const CODES = {
   },
   LOCK_DRIFT: {
     exit: 2,
-    meaning: "The tasks file, the sidecar or the policy no longer matches the committed lock.",
-    fix: "Restore the locked files, or commit a relock (--lock), which reruns the changed tasks in every arm and marks the verdict post_hoc. Do not --resume.",
+    meaning: "The tasks file, the sidecar, the policy, the before copy, the contract-line rules or the question classifier no longer match the committed lock, or a lock row differs from the row re-derived from the before copy (a hand-edited or deleted row). Each line of the message names one difference, re-derived rows by index and id.",
+    fix: "Restore the locked files (git checkout the lock to undo a hand edit to a row), or commit a relock (--lock), which reruns the changed tasks in every arm and marks the verdict post_hoc. Do not --resume.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
@@ -345,6 +345,15 @@ export const CODES = {
     resumable: false,
     owner: "U7",
   },
+  E_HOST_CLI: {
+    exit: 2,
+    meaning: "The host CLI (claude for Claude Code, codex for Codex) is not on PATH, or its --version failed.",
+    fix: "Install the host's CLI on this machine and check that <host> --version runs, or pick the other --host. Then run gstack-evals doctor again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U7",
+  },
   VACUOUS_CHECK: {
     exit: 2,
     meaning: "Preflight found a task whose whole pass predicate holds on the no-op control (a non-safety task), or still holds on its mutant (a safety task).",
@@ -356,8 +365,8 @@ export const CODES = {
   },
   E_TASKS_INVALID: {
     exit: 2,
-    meaning: "A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules: an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks.",
-    fix: "Fix each problem the lines above name, then run gstack-evals validate --tasks <tasks.json> until it exits 0. If the tasks file is locked, commit a relock (--lock).",
+    meaning: "A tasks file breaks the contract's task rules (the same rules as gstack's checkEvalTasks), or its tasks.ext.json sidecar breaks the sidecar rules (an unknown key, a bad value, an unknown reply category or an entry for an id the tasks file lacks), or preflight could not run a task's control: its setup or mutant setup failed, its check ended in an error (no exit code, exit 2, or a command missing outside the work dir), or a pattern stopped compiling.",
+    fix: "Fix each problem the lines above name. gstack-evals validate --tasks <tasks.json> checks the file rules, and gstack-evals preflight runs the controls. If the tasks file is locked, commit a relock (--lock).",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
@@ -586,6 +595,12 @@ export const CODES = {
     meaning: "A scripted reply matched a question ambiguously and got a non-approving answer, or after's question sequence differed from before's.",
     fix: "Read the event log's reply sources and give the question's category its own reply in tasks.ext.json.",
     owner: "U10",
+  },
+  PDF_INPUT: {
+    exit: null,
+    meaning: "A task's prompt, setup, check or mutant names a PDF, or the task has a setup and its fixtures hold one. The metering proxy reserves a PDF sent inline as base64 loosely, so one call's reservation bound may not hold; settlement still bills the provider's reported usage (U3, accepted as won't-fix).",
+    fix: "Prefer text fixtures. If the task needs the PDF, keep headroom in the cap and check the ledger's settled spend after the run.",
+    owner: "U7",
   },
   NEGATIVE_UNVALIDATED: {
     exit: null,

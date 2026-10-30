@@ -11,9 +11,9 @@
 // Every model must also have a row in the metering proxy's price table, or its spend could not be held against a cap;
 // OpenRouter models wait for the proxy's OpenRouter route (M2a), so a policy may list one before it can run.
 //
-// The default allows Sonnet 5.5 as a subject only: Garry's "don't use sonnet" covers every agent doing our work (judges,
-// adjudicators, the user simulator), and he allowed Sonnet as a model under test on 2026-10-29 (GST-225). A caller's own
-// policy sets its own roles.
+// The default gives Sonnet 5.5 the roles of the other current models, judge included (Garry, 2026-10-29). The judge is
+// chosen per preregistration; the Opus 5.5 preference is stated in docs/skill-eval.md, not enforced here. A caller's
+// own policy sets its own roles.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

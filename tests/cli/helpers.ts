@@ -1,9 +1,10 @@
 // Builders for CLI tests: temp trees, git repos and an Io that collects output.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Io } from "../../src/cli.ts";
+import { REPO_ROOT, type Io } from "../../src/cli.ts";
+import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 
 export const TMP = mkdtempSync(join(tmpdir(), "u7-cli-"));
 process.on("exit", () => rmSync(TMP, { recursive: true, force: true }));
@@ -42,4 +43,23 @@ export function collect(): Io & { text: () => { out: string; err: string } } {
 export const SKILL_MD = (name: string) => "---\nname: " + name + "\ndescription: d\n---\n\n# " + name + "\n\nRun ~/.claude/skills/gstack/bin/gstack-skill-start first.\nNEVER edit files the user did not name.\n";
 export function gstackRoot(skill = "learn", extra: Record<string, string> = {}): string {
   return tree({ [skill + "/SKILL.md"]: SKILL_MD(skill), "bin/gstack-skill-start": "#!/bin/sh\n", ...extra });
+}
+
+/** A stand-in for gstack's rendered learn skill, with gstack's committed learn tasks and seed script (tests/contract/fixtures/gstack/learn). */
+export const LEARN_MD = "---\nname: learn\ndescription: Review, search, prune and export what gstack learned across sessions.\n---\n\n# learn\n\nRun ~/.claude/skills/gstack/bin/gstack-learnings-search before answering.\n\n## Rules\n\nNEVER edit code files while managing learnings.\nAlways show the learning's key and type.\nAsk the user before you delete a learning they did not name.\n";
+
+export function learnRepo(extra: Record<string, string> = {}): { root: string; tasks: string; skill: string } {
+  const root = gstackRoot("learn", { "learn/SKILL.md": LEARN_MD, ...extra });
+  const dir = join(root, "test", "fixtures", "skill-evals", "learn");
+  mkdirSync(dir, { recursive: true });
+  for (const f of ["tasks.json", "seed.sh"]) cpSync(join(REPO_ROOT, "tests", "contract", "fixtures", "gstack", "learn", f), join(dir, f));
+  commitAll(root);
+  return { root, tasks: join(dir, "tasks.json"), skill: join(root, "learn") };
+}
+
+/** An approval record holding one line item, recorded keylessly (no gstack-approvals mirror). */
+export function approvalRecord(item: string, capUsd: number): string {
+  const record = mkdtempSync(join(TMP, "record-"));
+  recordApproval(record, { action: "init", item, cap_micros: capUsd * 1_000_000, quotes: [{ words: "keyless test, no spend", by: "tests/cli", source: "tests/cli/helpers.ts" }], admission: "warn" });
+  return record;
 }

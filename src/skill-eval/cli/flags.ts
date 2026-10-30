@@ -50,7 +50,7 @@ export const SKILL_EVAL_FLAGS: readonly FlagSpec[] = [
   { name: "--isolation", kind: "enum", values: ["docker", "process"], default: "docker", summary: "Trial isolation; process must be explicit and is recorded in the verdict.", owner: "U9", built: true },
   { name: "--parallel", kind: "int", default: null, default_rule: "min(4, the machine's available parallelism)", summary: "Sessions run at once.", owner: "U9", built: true },
   { name: "--timeout", kind: "int", default: 600, summary: "Seconds per session; a sidecar timeout_s overrides it per task.", owner: "U9", built: true },
-  { name: "--judge-model", kind: "string", default: null, default_rule: "the policy's judge default for the subjects' provider (gpt-6.1-sol for Anthropic subjects, claude-opus-5-5 for OpenAI subjects)", summary: "The cross-family judge for tasks with a judge rubric; never Sonnet.", owner: "U10", built: true },
+  { name: "--judge-model", kind: "string", default: null, default_rule: "the policy's judge default for the subjects' provider (gpt-6.1-sol for Anthropic subjects, claude-opus-5-5 for OpenAI subjects)", summary: "The cross-family judge for tasks with a judge rubric, allowed as a judge by the policy.", owner: "U10", built: true },
   { name: "--margin", kind: "number", default: null, summary: "Non-inferiority margin in percentage points; needed for noninferior: true.", owner: "U6", built: true },
   { name: "--resume", kind: "path", default: null, summary: "Continue a stopped run from its out directory.", owner: "U10", built: false },
   { name: "--repair", kind: "string", default: null, summary: "Rerun the cells a named repair affects, under a new verdict id.", owner: "U10", built: false },
