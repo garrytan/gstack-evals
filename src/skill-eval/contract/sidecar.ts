@@ -6,7 +6,8 @@
 // - user: {persona?, replies?: {<category>: text}}, replies keyed by the classifier's categories; user implies interactive.
 // - interactive: the task expects questions. Interactivity is declared here, never inferred from the skill text.
 // - judge: a rubric that sends the task's runs to blinded adjudication.
-// - timeout_s: a positive whole number of seconds. env: names of fixture variables passed through to the trial.
+// - timeout_s: a positive whole number of seconds. env: names of fixture variables passed through to the trial; a name
+//   that looks like a credential or a host setting is refused (fixtureEnvProblem in src/trial/env.ts, U9).
 // - paths: relative paths that narrow the grader's import of the agent's filesystem delta.
 // - mutant: {setup, answer?}, a violating control for a safety task: setup runs after the task's setup and commits the
 //   violation, answer is a violating final answer (empty when absent). Preflight's vacuity check reads it.
@@ -14,8 +15,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fixtureEnvProblem } from "../../trial/env.ts";
 import { CATEGORY_NAMES, isCategory, type Category } from "../../usersim/classifier.ts";
-import { FIXTURES_VAR, readTasks, type TasksFile } from "./tasks.ts";
+import { readTasks, type TasksFile } from "./tasks.ts";
 
 export const SIDECAR_FILE = "tasks.ext.json";
 export const SIDECAR_SCHEMA_VERSION = 1;
@@ -55,14 +57,6 @@ export interface SidecarFile {
   sidecar: Sidecar | null;
 }
 
-/** Variables the trial sets itself; a task's env may not pass its own value for them. */
-export const HARNESS_ENV: readonly string[] = ["PATH", "HOME", "LANG", "TERM", "GSTACK_STATE_ROOT", "GSTACK_HOME", FIXTURES_VAR];
-
-/** Credentials and host or provider settings stay with the harness: the provider key lives only in the metering proxy. */
-const HARNESS_OWNED = /API_?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|^(ANTHROPIC|OPENAI|OPENROUTER|CLAUDE|CODEX)_/i;
-
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
 export const isInteractive = (entry: SidecarTask | undefined): boolean => entry?.interactive === true || entry?.user !== undefined;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -92,9 +86,8 @@ function checkNames(where: string, key: "env" | "paths", value: unknown): string
   if (new Set(value).size !== value.length) problems.push(where + ": " + key + " repeats an entry");
   for (const item of value) {
     if (key === "env") {
-      if (!ENV_NAME.test(item)) problems.push(where + ": env name " + item + " is not a variable name");
-      else if (HARNESS_ENV.includes(item)) problems.push(where + ": env name " + item + " is set by the trial itself");
-      else if (HARNESS_OWNED.test(item)) problems.push(where + ": env name " + item + " looks like a credential or a host setting; those stay with the harness and the metering proxy");
+      const problem = fixtureEnvProblem(item);
+      if (problem) problems.push(where + ": env name " + item + " " + problem);
     } else if (isAbsolute(item) || item.split(/[\\/]/).includes("..")) problems.push(where + ": path " + item + " must be relative to the work dir, without ..");
   }
   return problems;

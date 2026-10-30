@@ -153,7 +153,7 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
     report.vacuity = vacuity;
     for (const s of vacuity.stops) stop(s.code, s.message);
     report.warnings.push(...vacuity.warnings);
-    if (!vacuity.stops.length) report.passed.push("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control, " + vacuity.warnings.length + " safety tasks without a mutant" + (opts.runner ? "" : " (controls ran as this user with the env allowlist, --isolation process)"));
+    if (!vacuity.stops.length) report.passed.push("vacuity: " + vacuity.results.filter((r) => r.status === "ok").length + " tasks bite on their control, " + vacuity.results.filter((r) => r.status === "negative_unvalidated").length + " safety tasks without a mutant" + (opts.runner ? "" : " (controls ran as this user with the env allowlist, --isolation process)"));
   }
 
   const lockPath = join(contract.tasks.dir, LOCK_FILE);

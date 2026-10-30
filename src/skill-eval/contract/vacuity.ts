@@ -17,10 +17,12 @@
 // and the task's declared env variables. The shell runner is a parameter, so the trial module can run the controls
 // in its own containers.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
+import { removeTree, type CleanupOptions } from "../../trial/cleanup.ts";
+import { trialEnv, TrialEnvError } from "../../trial/env.ts";
 import { judgeCheck } from "./check.ts";
 import { heldAssertions, predicateHolds, scoreAnswer } from "./predicate.ts";
 import type { SidecarTask } from "./sidecar.ts";
@@ -55,6 +57,8 @@ export interface VacuityResult {
   held: string[];
   /** Why a broken task could not be judged. */
   reason?: string;
+  /** Why the control's work dir is still on disk (CLEANUP_INCOMPLETE), when removing it failed. */
+  leftover?: string;
 }
 
 export interface VacuityReport {
@@ -78,6 +82,8 @@ export interface VacuityOptions {
   timeoutMs?: number;
   /** Where the work dirs go. Defaults to the OS temp dir; each is removed after its control. */
   workRoot?: string;
+  /** How each control's work dir is removed (src/trial/cleanup.ts): an image removes files a container runner left owned by root. */
+  cleanup?: CleanupOptions;
 }
 
 const tail = (text: string) => text.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
@@ -89,50 +95,55 @@ function noResult(r: ShellResult): string | null {
   return null;
 }
 
-function runControl(task: ContractTask, entry: SidecarTask | undefined, control: "no-op" | "mutant", input: VacuityInput, runner: ShellRunner, timeoutMs: number, workRoot: string): VacuityResult {
-  const safety = task.safety === true;
+function runControl(task: ContractTask, entry: SidecarTask | undefined, control: "no-op" | "mutant", input: VacuityInput, runner: ShellRunner, timeoutMs: number, workRoot: string, options: VacuityOptions): VacuityResult {
   const root = mkdtempSync(join(workRoot, "gstack-evals-vacuity-"));
+  let result: VacuityResult;
   try {
-    const work = join(root, "work");
-    const home = join(root, "home");
-    mkdirSync(work);
-    mkdirSync(home);
-    const env: Record<string, string> = {
-      PATH: process.env.PATH ?? "/usr/bin:/bin",
-      HOME: home,
-      LANG: process.env.LANG ?? "C.UTF-8",
-      TERM: "dumb",
-      [FIXTURES_VAR]: input.dir,
-      GSTACK_STATE_ROOT: join(work, ".gstack-home"),
-      GSTACK_HOME: join(work, ".gstack-home"),
-    };
-    for (const name of entry?.env ?? []) if (process.env[name] !== undefined) env[name] = process.env[name]!;
-    const broken = (reason: string): VacuityResult => ({ id: task.id, safety, status: "broken", control, held: [], reason });
-    const steps: [string, string | undefined][] = [["setup", task.setup], ["mutant setup", control === "mutant" ? entry?.mutant?.setup : undefined]];
-    for (const [name, command] of steps) {
-      if (command === undefined) continue;
-      const r = runner(command, { cwd: work, env, timeoutMs });
-      const why = noResult(r) ?? (r.exitCode !== 0 ? "exited " + r.exitCode : null);
-      if (why) return broken(name + " " + why + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
-    }
-    let check: boolean | null = null;
-    if (task.check !== undefined) {
-      const verdict = judgeCheck(runner(task.check, { cwd: work, env, timeoutMs }), work);
-      if (verdict.kind === "error") return broken(verdict.reason);
-      check = verdict.kind === "pass";
-    }
-    let score;
-    try {
-      score = scoreAnswer(task, control === "mutant" ? (entry?.mutant?.answer ?? "") : "");
-    } catch (error) {
-      return broken("a pattern does not compile once its quotes are removed: " + (error as Error).message);
-    }
-    const holds = predicateHolds(score, check);
-    return { id: task.id, safety, status: holds ? "vacuous" : "ok", control, held: heldAssertions(score, check) };
-  } finally {
-    spawnSync("chmod", ["-R", "u+rwX", root]);
-    rmSync(root, { recursive: true, force: true });
+    result = judgeControl(root, task, entry, control, input, runner, timeoutMs);
+  } catch (error) {
+    const leftover = removeTree(root, options.cleanup);
+    if (leftover && error instanceof Error) error.message += "; and CLEANUP_INCOMPLETE: " + leftover;
+    throw error;
   }
+  const leftover = removeTree(root, options.cleanup);
+  return leftover ? { ...result, leftover } : result;
+}
+
+function judgeControl(root: string, task: ContractTask, entry: SidecarTask | undefined, control: "no-op" | "mutant", input: VacuityInput, runner: ShellRunner, timeoutMs: number): VacuityResult {
+  const safety = task.safety === true;
+  const work = join(root, "work");
+  const home = join(root, "home");
+  mkdirSync(work);
+  mkdirSync(home);
+  const broken = (reason: string): VacuityResult => ({ id: task.id, safety, status: "broken", control, held: [], reason });
+  let env: Record<string, string>;
+  try {
+    env = trialEnv("setup", { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home, LANG: process.env.LANG ?? "C.UTF-8", TERM: "dumb", [FIXTURES_VAR]: input.dir, GSTACK_STATE_ROOT: join(work, ".gstack-home"), GSTACK_HOME: join(work, ".gstack-home") }, entry?.env ?? []);
+  } catch (error) {
+    if (!(error instanceof TrialEnvError)) throw error;
+    return broken("its env: " + error.message);
+  }
+  const steps: [string, string | undefined][] = [["setup", task.setup], ["mutant setup", control === "mutant" ? entry?.mutant?.setup : undefined]];
+  for (const [name, command] of steps) {
+    if (command === undefined) continue;
+    const r = runner(command, { cwd: work, env, timeoutMs });
+    const why = noResult(r) ?? (r.exitCode !== 0 ? "exited " + r.exitCode : null);
+    if (why) return broken(name + " " + why + (r.stderr.trim() ? ": " + tail(r.stderr) : ""));
+  }
+  let check: boolean | null = null;
+  if (task.check !== undefined) {
+    const verdict = judgeCheck(runner(task.check, { cwd: work, env, timeoutMs }), work);
+    if (verdict.kind === "error") return broken(verdict.reason);
+    check = verdict.kind === "pass";
+  }
+  let score;
+  try {
+    score = scoreAnswer(task, control === "mutant" ? (entry?.mutant?.answer ?? "") : "");
+  } catch (error) {
+    return broken("a pattern does not compile once its quotes are removed: " + (error as Error).message);
+  }
+  const holds = predicateHolds(score, check);
+  return { id: task.id, safety, status: holds ? "vacuous" : "ok", control, held: heldAssertions(score, check) };
 }
 
 export function checkVacuity(input: VacuityInput, options: VacuityOptions = {}): VacuityReport {
@@ -149,8 +160,9 @@ export function checkVacuity(input: VacuityInput, options: VacuityOptions = {}):
       warnings.push({ code: "NEGATIVE_UNVALIDATED", message: task.id + ": a safety task with no mutant in tasks.ext.json, so nothing showed it fails on a violation" });
       continue;
     }
-    const result = runControl(task, entry, task.safety === true ? "mutant" : "no-op", input, runner, timeoutMs, workRoot);
+    const result = runControl(task, entry, task.safety === true ? "mutant" : "no-op", input, runner, timeoutMs, workRoot, options);
     results.push(result);
+    if (result.leftover) warnings.push({ code: "CLEANUP_INCOMPLETE", message: task.id + ": " + result.leftover });
     if (result.status === "broken") stops.push({ code: "E_TASKS_INVALID", message: task.id + ": cannot run its " + result.control + " control: " + result.reason });
     if (result.status !== "vacuous") continue;
     const did = result.control === "mutant" ? "still passes on its mutant" : "passes on the no-op control (an empty answer on the untouched fixture)";
