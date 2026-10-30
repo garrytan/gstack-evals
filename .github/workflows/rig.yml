@@ -1,0 +1,87 @@
+# The Docker tier (CI plan v5, U20; stage m1b of gate/manifest.json): the Docker-backed tests of U3, U9 and U10, the R5
+# egress and R6 sealed-store probes (tests/rig/probes.test.ts) and the test refusing unpinned installs under docker/, run
+# with GSTACK_EVALS_DOCKER=1 and no credential in the env. gstack-evals rig tier counts a skipped or failing case, or an
+# expected test file missing from the report, as RED and exits 2 (E_RIG_RED).
+# It runs on pull requests and pushes to main that touch the rig, and on workflow_dispatch. Train records cover stage m0
+# only, so every main push on these paths runs it. A pull request's run checks out the PR head, not the merge commit, so
+# the tree it proves is the head's.
+# It posts no check of its own (GST-254): the token is read-only and no step writes to GitHub. The tier job annotates its
+# summary (title gstack-evals-rig-tier), which gstack-evals rig admit reads back with the run's path, event, head and
+# conclusion (src/rig/admission.ts), and uploads rig-tier.json with the JUnit report as an artifact for people.
+name: rig
+
+on:
+  pull_request:
+    paths:
+      - src/trial/**
+      - src/adapters/**
+      - src/runner/**
+      - src/rig/**
+      - lanes/**
+      - schema/**
+      - docker/**
+      - bun.lock
+      - package.json
+      - gate/manifest.json
+      - tests/trial/**
+      - tests/adapters/**
+      - tests/proxy/**
+      - tests/rig/**
+      - .github/workflows/**
+  push:
+    branches: [main]
+    paths:
+      - src/trial/**
+      - src/adapters/**
+      - src/runner/**
+      - src/rig/**
+      - lanes/**
+      - schema/**
+      - docker/**
+      - bun.lock
+      - package.json
+      - gate/manifest.json
+      - tests/trial/**
+      - tests/adapters/**
+      - tests/proxy/**
+      - tests/rig/**
+      - .github/workflows/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rig-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Bun, checked against the release's SHA-256
+        env:
+          BUN_VERSION: 1.4.4
+          BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - name: Install (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Docker tier (stage m1b), keyless
+        run: bin/gstack-evals rig tier --out "$RUNNER_TEMP/rig-tier"
+      - name: Keep the tier record and JUnit report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gstack-evals-rig-tier
+          path: ${{ runner.temp }}/rig-tier
+          if-no-files-found: warn
+          retention-days: 30

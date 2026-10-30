@@ -8,6 +8,7 @@ import { ledgerCli } from "../../src/runner/ledger/cli.ts";
 import { machineId } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
+import { admitThisCheckout } from "../rig/helpers.ts";
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -187,6 +188,9 @@ describe("admission (GSTA-8, decision 3)", () => {
     expect((await w.cli("lease", "--item", "u11-lanea", "--run", "run-1")).err).toStartWith("E_RIG_UNPROVEN ");
     expect(readItem(w.env.GSTACK_EVALS_LEDGER_RECORD, "u11-lanea")).toMatchObject({ leases: [], run_id: null });
     writeFileSync(join(dir, "admission-0001.json"), JSON.stringify({ item: "u11-lanea", seq: 1, run_id: "run-1", machine_id: machineId(), proof: "U20 fills this" }));
+    expect((await w.cli("lease", "--item", "u11-lanea", "--run", "run-1")).err).toStartWith("E_RIG_UNPROVEN ");
+    rmSync(join(dir, "admission-0001.json"));
+    admitThisCheckout(w.env.GSTACK_EVALS_LEDGER_RECORD, { item: "u11-lanea", proof: "direct", run_id: "run-1" });
     expect(await w.cli("lease", "--item", "u11-lanea", "--run", "run-1")).toMatchObject({ code: 0, err: "" });
   });
 
