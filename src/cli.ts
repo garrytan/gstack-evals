@@ -27,6 +27,7 @@ export const COMMANDS: Command[] = [
   { name: "preflight", summary: "Run the free checks every paid command runs first: keys, host, policy, lock, ledger, vacuity.", module: "src/skill-eval/cli/preflight.ts", owner: "U7, M1a" },
   { name: "explain", summary: "Print a reason code's meaning, fix, side effects, retry safety and resumability.", module: "src/skill-eval/cli/explain.ts", owner: "U7, M1a" },
   { name: "ledger", summary: "Record approved caps and line items with the owner's words; settle and reconcile leases.", module: "src/runner/ledger/cli.ts", owner: "U4, M0" },
+  { name: "rig", summary: "Run the Docker tier, run the keyless rig probes, and admit a line item's next lease (docs/rig.md).", module: "src/rig/cli.ts", owner: "U20, M1b" },
   { name: "tokens", summary: "Export the review token table for gstack's review-dispatch-compare.", module: "lanes/review-replay/tokens-cli.ts", owner: "U13, M1c" },
   { name: "noloss", summary: "Review no-loss category: suites, arm ingest, paired scoring, export, power and blinded judge packets.", module: "lanes/review-noloss/cli.ts", owner: "U13, GSTA-43, GSTA-45" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },

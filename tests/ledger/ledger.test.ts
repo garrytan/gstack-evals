@@ -6,6 +6,7 @@ import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLeas
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem, slotPath, writeOnce } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
+import { admitThisCheckout } from "../rig/helpers.ts";
 
 const LEDGER = join(import.meta.dir, "../../src/runner/ledger");
 const dirs: string[] = [];
@@ -221,8 +222,8 @@ describe("admission", () => {
   test("a warn item leases quietly with a matching admission record, and warns naming a mismatched one", () => {
     const record = join(scratch(), "record");
     for (const item of ["lanea", "laneb"]) recordApproval(record, { action: "init", item, cap_micros: DOLLAR, quotes: [quote], admission: "warn" });
-    writeFileSync(slotPath(record, { kind: "admission", item: "lanea", seq: 1 }), JSON.stringify({ item: "lanea", seq: 1, run_id: "run-a", machine_id: "m-1" }));
-    writeFileSync(slotPath(record, { kind: "admission", item: "laneb", seq: 1 }), JSON.stringify({ item: "laneb", seq: 1, run_id: "run-other", machine_id: "m-1" }));
+    admitThisCheckout(record, { item: "lanea", proof: "direct", run_id: "run-a", machine_id: "m-1" });
+    admitThisCheckout(record, { item: "laneb", proof: "direct", run_id: "run-other", machine_id: "m-1" });
     const warnings: string[] = [];
     const warn = (code: string, message: string) => warnings.push(code + " " + message);
     expect(openLease(record, null, { item: "lanea", run_id: "run-a", machine_id: "m-1", warn }).state).toBe("open");
@@ -230,7 +231,7 @@ describe("admission", () => {
     expect(openLease(record, null, { item: "laneb", run_id: "run-a", machine_id: "m-1", warn }).state).toBe("open");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toStartWith("RIG_UNPROVEN line item laneb leased without admission: the admission record at ");
-    expect(warnings[0]).toContain("does not name line item laneb, slot 1, run run-a and machine m-1");
+    expect(warnings[0]).toContain("admits run run-other, not run-a");
   });
 });
 

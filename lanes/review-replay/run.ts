@@ -20,6 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { REPO_ROOT, type Io } from "../../src/cli.ts";
 import { CODES, type ReasonCode } from "../../src/errors/codes.ts";
 import { openLease, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { rigAdmission } from "../../src/rig/admission.ts";
 import { openLocalLedger, type LocalLedger } from "../../src/runner/ledger/local.ts";
 import { usd } from "../../src/runner/ledger/money.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
@@ -327,7 +328,7 @@ export async function runReplay(o: ReplayOptions): Promise<number> {
           for (const dir of [...created, dirname(created.at(-1) ?? itemsDir)]) syncDir(dir);
           writeDurable(runPath, { ...base, lease_id: null } satisfies RunFile, false);
         }
-        lease = openLease(record, local, { item: o.item, run_id: runId, warn });
+        lease = openLease(record, local, { item: o.item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: "direct" }) });
         try {
           writeDurable(runPath, { ...base, lease_id: lease.lease_id } satisfies RunFile, false);
         } catch (e) {

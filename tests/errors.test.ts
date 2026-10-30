@@ -29,7 +29,7 @@ describe("reason-code registry", () => {
   test("every entry is complete and plainly written", () => {
     for (const [code, info] of entries) {
       expect(code).toMatch(/^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/);
-      expect(info.owner).toMatch(/^U([1-9]|1[0-8])$/);
+      expect(info.owner).toMatch(/^U([1-9]|1[0-8]|20)$/);
       const texts = [info.meaning, info.fix, ...(info.exit === null ? [] : [info.side_effects])];
       for (const text of texts) {
         expect(text.length).toBeGreaterThan(10);

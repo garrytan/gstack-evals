@@ -39,6 +39,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_APPROVAL_RECORD](#e_approval_record) | 2 | U4 |
 | [E_LEDGER_RECORD](#e_ledger_record) | 2 | U4 |
 | [E_RIG_UNPROVEN](#e_rig_unproven) | 2 | U4 |
+| [E_RIG_PROOF](#e_rig_proof) | 2 | U20 |
+| [E_RIG_PROBE](#e_rig_probe) | 2 | U20 |
+| [E_RIG_RED](#e_rig_red) | 2 | U20 |
 | [E_ITEM_BOUND](#e_item_bound) | 2 | U4 |
 | [E_LEASE_CLOSED](#e_lease_closed) | 2 | U4 |
 | [E_RESERVE_CONFLICT](#e_reserve_conflict) | 2 | U4 |
@@ -314,6 +317,30 @@ A line item recorded with --admission required was asked for a lease, and no mat
 Fix: Write the admission record the message names on the machine that will spend (U20's rig admission), then lease again. A new lease after a reconcile needs its own record.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_RIG_PROOF
+
+gstack-evals rig admit could not gather the proof set: the checkout has uncommitted changes, the workflow run it needs at this commit is missing or still running, or GitHub could not be read. Nothing was written.
+
+Fix: Do what the message says: commit the change, start the named workflow at this commit (docs/rig.md) and wait for it to finish, or fix gh's access, then run gstack-evals rig admit again.
+
+Exit 2. Side effects: None: no admission record was written and nothing was leased. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RIG_PROBE
+
+gstack-evals rig admit or rig probes could not run the keyless probes on this machine, so nothing was proven: Docker, the trial image or the probe's network could not be set up.
+
+Fix: Run gstack-evals doctor on this machine, fix what it names (Docker, the trial image), then run the command again. Probes make no model call and need no key.
+
+Exit 2. Side effects: None: no admission record was written. The probe's containers and network are removed. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RIG_RED
+
+The rig's proof is red: the Docker tier failed, skipped or missed an expected case, or an admission attempt found a failing workflow run, tier record or probe. A red admission record is written, so a lease on it refuses with E_RIG_UNPROVEN.
+
+Fix: Read the problems the command printed. Fix the rig or the run it names, get a green run at the commit, then run gstack-evals rig admit again; the next attempt is written beside the red one and decides.
+
+Exit 2. Side effects: rig tier writes its red rig-tier.json; rig admit writes a red admission record. Nothing is leased or spent. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_ITEM_BOUND
 

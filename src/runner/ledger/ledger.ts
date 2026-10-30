@@ -3,13 +3,14 @@
 // and a new lease waits until the previous one is settled or reconciled. The local ledger holds a lease's calls against
 // its amount, and the lease closes into the approval record. Nothing here releases an allowance whose spend is unknown.
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import type { ReasonCode } from "../../errors/codes.ts";
+import { rigAdmission } from "../../rig/admission.ts";
 import type { Lease } from "../../types.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { isRecordFile, isTime, ITEM_NAME, LedgerError, listItems, readItem, slotPath, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { isRecordFile, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -95,7 +96,7 @@ export interface LeaseRequest {
   amount_micros?: number;
   ttl_ms?: number;
   now?: Date;
-  /** Checks the lease's admission record on an item initialized with an admission mode; defaults to admissionRecordExists. */
+  /** Checks the lease's admission record on an item initialized with an admission mode; defaults to U20's rigAdmission(). */
   requireAdmission?: RequireAdmission;
   /** Receives a warning, such as RIG_UNPROVEN on a warn item, without stopping the lease. */
   warn?: (code: ReasonCode, message: string) => void;
@@ -107,18 +108,6 @@ export interface LeaseRequest {
  * be written before the lease whose id it shares up to the id's random suffix.
  */
 export type RequireAdmission = (record: string, lease: LeaseFile) => string | null;
-
-/** U4's check: an admission record exists for the lease's slot and names its item, run and machine. What proves the rig is U20's to check. */
-export function admissionRecordExists(record: string, lease: LeaseFile): string | null {
-  const path = slotPath(record, { kind: "admission", item: lease.item, seq: lease.seq });
-  if (!existsSync(path)) return "no admission record at " + path;
-  let r: Partial<LeaseFile> | null = null;
-  try {
-    r = JSON.parse(readFileSync(path, "utf8"));
-  } catch {}
-  if (r?.item === lease.item && r.seq === lease.seq && r.run_id === lease.run_id && r.machine_id === lease.machine_id) return null;
-  return "the admission record at " + path + " does not name line item " + lease.item + ", slot " + lease.seq + ", run " + lease.run_id + " and machine " + lease.machine_id;
-}
 
 /** Leases a line item for a run, in the record and, when given, in this machine's local ledger. */
 export function openLease(record: string, local: LocalLedger | null, req: LeaseRequest): Lease {
@@ -146,7 +135,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     expires_at: new Date(now.getTime() + ttl).toISOString(),
     created_at: now.toISOString(),
   };
-  const unproven = state.admission && (req.requireAdmission ?? admissionRecordExists)(record, file);
+  const unproven = state.admission && (req.requireAdmission ?? rigAdmission())(record, file);
   if (unproven && state.admission === "required") throw new LedgerError("E_RIG_UNPROVEN", "line item " + req.item + " requires admission: " + unproven);
   if (unproven) req.warn?.("RIG_UNPROVEN", "line item " + req.item + " leased without admission: " + unproven);
   if (typeof write(record, file) === "object") {

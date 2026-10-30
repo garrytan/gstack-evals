@@ -88,6 +88,31 @@
       "tests/trial/grader.test.ts"
     ]
   },
+  "guards": [
+    {
+      "id": "rig-docker-tier",
+      "when": [
+        "src/trial/**",
+        "src/adapters/**",
+        "src/runner/**",
+        "src/rig/**",
+        "lanes/**",
+        "schema/**",
+        "docker/**",
+        "bun.lock",
+        "package.json",
+        "gate/manifest.json",
+        "tests/trial/**",
+        "tests/adapters/**",
+        "tests/proxy/**",
+        "tests/rig/**",
+        ".github/workflows/rig.yml"
+      ],
+      "command": "GSTACK_EVALS_DOCKER=1 bun test tests/rig",
+      "fix": "run GSTACK_EVALS_DOCKER=1 bun test tests/rig on a machine with Docker and fix what fails (docs/rig.md)",
+      "timeout_s": 1800
+    }
+  ],
   "strays": {
     "allow": [
       "lanes",

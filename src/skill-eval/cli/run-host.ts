@@ -34,6 +34,7 @@ import { dockerInstaller, installArms, sentinelLayer, stackSources, type ArmInst
 import { hostDriver, skillRoot } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
+import { rigAdmission } from "../../rig/admission.ts";
 import { openLocalLedger } from "../../runner/ledger/local.ts";
 import { ProxyControl, type BindRequest, type Binding, type Meter } from "../../runner/proxy/metering-proxy.ts";
 import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../../trial/cache.ts";
@@ -444,7 +445,7 @@ export function dockerRig(call: Call, o: { env: Env; skill: string | null; nonce
   if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
   const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain });
   const local = openLocalLedger(call.ledger);
-  const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap });
+  const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
   let net: ReturnType<typeof createTrialNetwork> | null = null;
   try {
     net = createTrialNetwork(bin);

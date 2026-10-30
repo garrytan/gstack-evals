@@ -6,7 +6,7 @@
 // - Edit only the codes your unit owns (the owner field): their meaning, fix, side_effects, retry_safe and resumable text.
 // - exit is part of the contract: 1 fails the edit, 2 is no verdict, 3 is a failed calibration, null is a warning.
 
-export type Unit = "U1" | "U2" | "U3" | "U4" | "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U13" | "U14" | "U15" | "U16" | "U17" | "U18";
+export type Unit = "U1" | "U2" | "U3" | "U4" | "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U13" | "U14" | "U15" | "U16" | "U17" | "U18" | "U20";
 
 export interface StopCode {
   /** 1: the edit lost something (FAIL). 2: no verdict (INCOMPLETE). 3: calibration failed (INCOMPLETE). */
@@ -263,6 +263,33 @@ export const CODES = {
     retry_safe: true,
     resumable: false,
     owner: "U4",
+  },
+  E_RIG_PROOF: {
+    exit: 2,
+    meaning: "gstack-evals rig admit could not gather the proof set: the checkout has uncommitted changes, the workflow run it needs at this commit is missing or still running, or GitHub could not be read. Nothing was written.",
+    fix: "Do what the message says: commit the change, start the named workflow at this commit (docs/rig.md) and wait for it to finish, or fix gh's access, then run gstack-evals rig admit again.",
+    side_effects: "None: no admission record was written and nothing was leased.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_RIG_PROBE: {
+    exit: 2,
+    meaning: "gstack-evals rig admit or rig probes could not run the keyless probes on this machine, so nothing was proven: Docker, the trial image or the probe's network could not be set up.",
+    fix: "Run gstack-evals doctor on this machine, fix what it names (Docker, the trial image), then run the command again. Probes make no model call and need no key.",
+    side_effects: "None: no admission record was written. The probe's containers and network are removed.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_RIG_RED: {
+    exit: 2,
+    meaning: "The rig's proof is red: the Docker tier failed, skipped or missed an expected case, or an admission attempt found a failing workflow run, tier record or probe. A red admission record is written, so a lease on it refuses with E_RIG_UNPROVEN.",
+    fix: "Read the problems the command printed. Fix the rig or the run it names, get a green run at the commit, then run gstack-evals rig admit again; the next attempt is written beside the red one and decides.",
+    side_effects: "rig tier writes its red rig-tier.json; rig admit writes a red admission record. Nothing is leased or spent.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
   },
   E_ITEM_BOUND: {
     exit: 2,

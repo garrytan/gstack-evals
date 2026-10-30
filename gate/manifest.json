@@ -40,6 +40,34 @@
           "runs the gate's command cases in ci.yml"
         ]
       }
+    ],
+    "m1b": [
+      {
+        "id": "docker-tier",
+        "kind": "junit",
+        "run": "GSTACK_EVALS_DOCKER=1 bun test ./tests/trial ./tests/adapters ./tests/proxy ./tests/rig ./tests/cli/preflight.test.ts ./tests/cli/doctor.test.ts --reporter=junit --reporter-outfile=\"$GATE_JUNIT\"",
+        "tests": [
+          "tests/trial/network.test.ts",
+          "tests/trial/grader.test.ts",
+          "tests/trial/image.test.ts",
+          "tests/trial/foundations.test.ts",
+          "tests/trial/env.test.ts",
+          "tests/trial/recipe.test.ts",
+          "tests/trial/lock-commit.test.ts",
+          "tests/adapters/claude-code.test.ts",
+          "tests/adapters/codex.test.ts",
+          "tests/adapters/run-host.test.ts",
+          "tests/adapters/pins.test.ts",
+          "tests/proxy/metering-proxy.test.ts",
+          "tests/cli/preflight.test.ts",
+          "tests/cli/doctor.test.ts",
+          "tests/rig/admission.test.ts",
+          "tests/rig/entry.test.ts",
+          "tests/rig/pins.test.ts",
+          "tests/rig/rig-probes.test.ts",
+          "tests/rig/tier.test.ts"
+        ]
+      }
     ]
   },
   "gate_surface": [

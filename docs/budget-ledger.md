@@ -56,9 +56,9 @@ gstack-evals ledger status [--item lanea-quick]
 Admission is the rig check before money (GSTA-8's CI plan, decision 3). The ledger checks it at the lease, the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross.
 
 - An item's admission mode is recorded with the owner's words in its first approval file, `items/<item>/approval-0001.json`, as `{ item, admission }` with `admission` set to `required` or `warn`. U2's preregistration check reads those two fields.
-- Before a lease is written, the ledger looks for the admission record for that lease's slot, `items/<item>/admission-<slot>.json`. It must name the same item, slot, run and machine as the lease.
+- Before a lease is written, the ledger reads the admission record for that lease's slot, `items/<item>/admission-<slot>.json` (or its latest attempt, `admission-<slot>.<n>.json`). `gstack-evals rig admit` writes it, and [docs/rig.md](rig.md) says what it must prove.
 - On a `required` item, a missing or mismatched record refuses the lease with E_RIG_UNPROVEN, and nothing is leased. On a `warn` item the lease goes ahead, and the RIG_UNPROVEN warning is printed and returned with the lease.
-- The ledger checks only that the record exists and matches. What the record must prove, and the command that writes it, are U20's. `openLease` takes a `requireAdmission` function for that, which defaults to the existence check.
+- `openLease` takes a `requireAdmission` function, which defaults to U20's `rigAdmission()` (src/rig/admission.ts): the record must be green, name the lease's item, slot, run and machine, and still match the checkout's tree, the recipe hash and the host. Lane A asks for the trial proof set and the replay lane for the direct one.
 - A new lease after a settle or reconcile is a new slot, so it needs its own record.
 
 ## Settling, and when a machine is lost
