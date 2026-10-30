@@ -8,6 +8,7 @@ model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-30
 status: open
+supersedes: [2026-10-30-gsta-42-lanea-shakedown-prereg]
 links:
   - 2026-10-30-gsta-42-lanea-shakedown-prereg
   - 2026-10-30-gsta-49-u20-rig-admit-handoff
