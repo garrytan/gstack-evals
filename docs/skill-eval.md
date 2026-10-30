@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex need the host adapters (U10), which are not built yet; the trial module (U9) is. Until then, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
+Real runs on Claude Code and Codex need the host adapters and the run loop (U10). The trial module (U9) and the Claude Code adapter (src/adapters/claude-code/) are built; until the rest lands, a call on a real host passes or fails preflight's own checks and then stops with E_USAGE. Nothing spends money.
 
 ## Quickstart
 
@@ -117,7 +117,7 @@ On a VM that is deleted after the run, set `GSTACK_EVALS_EPHEMERAL=1` and `GSTAC
 
 ## Model policy
 
-The default policy, `policy/models.json`, lists the newest generation of each family. Opus 5.5, Sonnet 5.5, Haiku 5.5, gpt-6-astra, gpt-6.1-sol and gpt-6-luna may be subjects. Opus 5.5, Sonnet 5.5, gpt-6-astra and gpt-6.1-sol may also judge and adjudicate, and gpt-6-luna simulates the user. Fable 5.1 is allowed only with `--smoke`, and gpt-5.4-mini is refused. particle-1 and DeepSeek V4.1 Flash run through OpenRouter as subjects on `--host codex`, with `OPENROUTER_API_KEY`. Any model the metering proxy cannot route and price is refused (E_MODEL_POLICY). Pass your own file with `--policy`; policy/examples/gbrain.json shows a narrower ladder.
+The default policy, `policy/models.json`, lists the newest generation of each family. Opus 5.5, Sonnet 5.5, Haiku 5.5, gpt-6-astra, gpt-6.1-sol and gpt-6-luna may be subjects. Opus 5.5, Sonnet 5.5, gpt-6-astra and gpt-6.1-sol may also judge and adjudicate, and gpt-6-luna simulates the user. Fable 5.1 is allowed only with `--smoke`, and gpt-5.4-mini is refused. particle-1 and DeepSeek V4.1 Flash run through OpenRouter as subjects, with `OPENROUTER_API_KEY`: on `--host claude` through OpenRouter's Anthropic-compatible Messages route, and on `--host codex`. Any model the metering proxy cannot route and price is refused (E_MODEL_POLICY). Pass your own file with `--policy`; policy/examples/gbrain.json shows a narrower ladder.
 
 The judge is chosen per preregistration, always from another family than the models under test. gstack's own runs prefer Opus 5.5 wherever that rule allows it, because Garry prefers Opus. This preference is stated here and not enforced in code: the default judge is Opus 5.5 for OpenAI and OpenRouter subjects and gpt-6.1-sol for Anthropic subjects, and `--judge-model` picks any judge the policy allows.
 

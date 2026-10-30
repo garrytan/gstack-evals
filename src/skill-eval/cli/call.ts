@@ -18,7 +18,7 @@ import { unbuiltFlags, type ParsedFlags } from "./flags.ts";
 import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy, type PolicyProvider } from "./policy.ts";
 
 /** The providers whose models each host runs: Claude Code runs Anthropic models; Codex runs OpenAI and OpenAI-compatible (OpenRouter) ones. */
-export const HOST_PROVIDERS: Record<Host, readonly PolicyProvider[]> = { claude: ["anthropic"], codex: ["openai", "openrouter"] };
+export const HOST_PROVIDERS: Record<Host, readonly PolicyProvider[]> = { claude: ["anthropic", "openrouter"], codex: ["openai", "openrouter"] };
 
 export interface Setting {
   name: string;

@@ -18,7 +18,7 @@ describe("gstack-evals doctor", () => {
   test("a healthy machine passes every check, and key values are never printed", async () => {
     const record = approvalRecord("doctor-item", 10);
     const io = collect();
-    expect(await doctorCommand(["--host", "claude", "--ledger", join(TMP, "doctor.sqlite"), "--ledger-record", record], io, env(), healthy)).toBe(0);
+    expect(await doctorCommand(["--host", "claude", "--ledger", join(TMP, "doctor.sqlite"), "--ledger-record", record], io, env({ OPENROUTER_API_KEY: "fake-openrouter-should-never-print" }), healthy)).toBe(0);
     const { out, err } = io.text();
     expect(err).toBe("");
     expect(out.split("\n")).toEqual([
@@ -27,6 +27,7 @@ describe("gstack-evals doctor", () => {
       "ok trial image: gstack-evals-trial:" + recipe.slice(0, 16) + " " + IMAGE_ID + " (recipe " + recipe.slice(0, 12) + ", pinned)",
       "ok claude CLI: claude 2.1.0",
       "ok claude key: ANTHROPIC_API_KEY set (checked by name)",
+      "ok claude key: OPENROUTER_API_KEY set (openrouter models under test)",
       "ok claude key: OPENAI_API_KEY set (the default judge gpt-6.1-sol)",
       "ok ledger: " + join(TMP, "doctor.sqlite") + " (--ledger)",
       "ok ledger record: " + record + " (--ledger-record), 1 line item",

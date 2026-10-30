@@ -13,7 +13,7 @@
 // --isolation process (explicit only): setup and check run as this user with the env allowlist, and the agent runs under
 // bubblewrap with the system directories read-only, the trial's own HOME and the work dir, and no tasks directory. Without bwrap
 // on PATH it refuses (E_ISOLATION_UNSAFE). The verdict records the mode.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -40,6 +40,11 @@ export interface StepOptions {
 export interface AgentSession {
   /** Runs one shell step in the agent's environment, in the work dir. */
   exec(command: string, timeoutMs: number): StepResult;
+  /**
+   * Starts one long-lived process in the agent's environment, in the work dir, with stdin, stdout and stderr piped: the
+   * host CLI a driver streams to. env adds non-credential names on top of the session's env. The caller kills it.
+   */
+  spawn(argv: string[], env?: Record<string, string>): ChildProcess;
   /** Ends the session and removes its container; safe to call twice. */
   stop(): void;
 }
@@ -103,6 +108,11 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
       if (start.exitCode !== 0) throw new IsolationError("could not start the agent container: " + start.stderr.trim().split("\n").slice(-1)[0]);
       let stopped = false;
       return {
+        spawn: (argv, env = {}) => {
+          const { args: envArgs, clientEnv } = dockerEnvArgs(env);
+          const client = Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : [])));
+          return spawn(docker, ["exec", "-i", "-w", path, ...envArgs, name, ...argv], { env: { ...client, ...clientEnv }, stdio: ["pipe", "pipe", "pipe"] });
+        },
         exec: (command, timeoutMs) => {
           const r = result(spawnSync(docker, ["exec", "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER }));
           if (r.timedOut) spawnSync(docker, ["exec", name, "sh", "-c", "kill -9 -1"], { stdio: "ignore" });
@@ -119,10 +129,15 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
 
 /** The bubblewrap command that runs one agent step: system directories read-only, the trial's own HOME, the work dir and nothing else. */
 export function bwrapArgs(work: string, home: string, command: string): string[] {
+  return bwrapArgv(work, home, ["sh", "-c", command]);
+}
+
+/** The bubblewrap command for one agent process given as an argv. */
+export function bwrapArgv(work: string, home: string, argv: readonly string[]): string[] {
   return [
     "--die-with-parent", "--unshare-all", "--share-net", "--new-session",
     "--ro-bind", "/usr", "/usr", "--ro-bind", "/etc", "/etc", "--symlink", "usr/bin", "/bin", "--symlink", "usr/sbin", "/sbin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
-    "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", home, home, "--bind", work, work, "--chdir", work, "sh", "-c", command,
+    "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", home, home, "--bind", work, work, "--chdir", work, ...argv,
   ];
 }
 
@@ -153,6 +168,7 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
       if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");
       return {
         exec: (command, timeoutMs) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER })),
+        spawn: (argv, env = {}) => spawn(bwrap, bwrapArgv(o.work, home, argv), { env: { ...o.env, ...env }, stdio: ["pipe", "pipe", "pipe"] }),
         stop: () => {},
       };
     },

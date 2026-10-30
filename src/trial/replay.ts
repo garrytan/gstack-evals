@@ -21,7 +21,7 @@ export const NOP: Transcript = { steps: [], turns: [] };
 export function replayAgent(transcript: Transcript): ReplayDriver {
   const driver: ReplayDriver = {
     outputs: [],
-    run(session, _task: ContractTask, timeoutMs): AgentOutcome {
+    async run(session, _task: ContractTask, timeoutMs): Promise<AgentOutcome> {
       driver.outputs = [];
       const deadline = Date.now() + timeoutMs;
       for (const command of transcript.steps) {

@@ -33,7 +33,7 @@ export interface AgentOutcome {
 export interface AgentDriver {
   /** Names and values the driver adds to the agent's env: the session bearer, the proxy base URL, host settings. */
   env?: Record<string, string>;
-  run(session: AgentSession, task: ContractTask, timeoutMs: number): AgentOutcome;
+  run(session: AgentSession, task: ContractTask, timeoutMs: number): Promise<AgentOutcome>;
 }
 
 export interface TrialSpec {
@@ -70,7 +70,7 @@ export interface TrialRun {
 const PATH = "/usr/local/bin:/usr/bin:/bin";
 const tail = (r: StepResult) => r.stderr.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
-export function runTrial(spec: TrialSpec): TrialRun {
+export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const started = Date.now();
   const { task, sandbox } = spec;
   const work = join(spec.dir, "work", task.id);
@@ -114,7 +114,7 @@ export function runTrial(spec: TrialSpec): TrialRun {
     const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
     let outcome: AgentOutcome;
     try {
-      outcome = spec.agent.run(session, task, timeoutMs);
+      outcome = await spec.agent.run(session, task, timeoutMs);
     } finally {
       session.stop();
     }

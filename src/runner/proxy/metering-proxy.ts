@@ -22,9 +22,11 @@
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
 // - Free routes (model listings, Anthropic token counts) are forwarded unreserved, and every request, free, paid or
 //   refused, is journaled with its source address.
-// - OpenRouter chat and Responses calls are routed with OPENROUTER_API_KEY. The proxy replaces the request's provider routing
-//   with the price row's (its prices as max_price, and its pinned providers), and settles from the token usage OpenRouter
-//   reports, priced at the row, as for the other providers.
+// - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
+//   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
+//   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
+//   (/v1/messages, which Claude Code arms use for OpenRouter models) usage comes in Anthropic's shape, with cache reads and
+//   writes beside input_tokens, and is read that way.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -49,6 +51,7 @@ const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true
     { method: "GET", path: /^\/v1\/models(\/[^/]+)?$/, free: true },
   ],
   openrouter: [
+    { method: "POST", path: /^\/v1\/messages$/ },
     { method: "POST", path: /^\/v1\/chat\/completions$/ },
     { method: "POST", path: /^\/v1\/responses$/ },
     { method: "GET", path: /^\/v1\/models$/, free: true },
@@ -247,7 +250,7 @@ function presentedCredential(req: Request): string | null {
 
 /** The output-cap fields the provider reads on this route; the first is where the proxy writes the cell's cap. */
 function outputFields(provider: Provider, route: string): string[] {
-  if (provider === "anthropic") return ["max_tokens"];
+  if (provider === "anthropic" || route === "/v1/messages") return ["max_tokens"];
   if (route === "/v1/responses") return ["max_output_tokens"];
   return provider === "openrouter" ? ["max_tokens", "max_completion_tokens"] : ["max_completion_tokens", "max_tokens"];
 }
@@ -505,7 +508,7 @@ export class MeteringProxy {
     const outBody = JSON.stringify(body);
     let price: ReturnType<typeof priceRequest>;
     try {
-      price = priceRequest(provider, body, stated.length ? Math.max(...stated) : cap);
+      price = priceRequest(provider, body, stated.length ? Math.max(...stated) : cap, route);
     } catch (e) {
       if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
       throw e;
