@@ -57,7 +57,8 @@ describe("the persona's free-form source in the Claude Code adapter", () => {
     const grant = await drive([async () => [said("Shall I push the branch now?"), done], async () => [said("FINAL: ok."), done]], { freeform: answer("Yes, push it.") });
     expect(grant.sent[1]).toBe(NON_APPROVING);
 
-    const slow = await drive([async () => [said(QUESTION), done], async () => [said("FINAL: noted."), done]], { timeoutMs: 300, freeform: async () => (await Bun.sleep(600), { text: "Three dentists paid a deposit." }) });
+    // gstack-timing-ok: the answer takes twice the session's limit, so a running clock would end the cell as a timeout; the stand-in session's own work takes milliseconds
+    const slow = await drive([async () => [said(QUESTION), done], async () => [said("FINAL: noted."), done]], { timeoutMs: 1_000, freeform: async () => (await Bun.sleep(2_000), { text: "Three dentists paid a deposit." }) });
     expect(slow.outcome.termination).toEqual({ kind: "completed" });
 
     const capped = await drive([async () => [said(QUESTION), done], async () => [said("FINAL: never sent."), done]], { freeform: async () => ({ stop: { kind: "cap_stop" } }) });
