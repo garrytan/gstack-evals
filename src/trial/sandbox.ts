@@ -15,10 +15,12 @@
 // on PATH it refuses (E_ISOLATION_UNSAFE). The verdict records the mode.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 import type { ShellResult, ShellRunner } from "../skill-eval/contract/vacuity.ts";
+import { removeTree } from "./cleanup.ts";
 import { dockerEnvArgs } from "./env.ts";
 import { checkImagePin, dockerRun, stateRoot, type Runner } from "./image.ts";
 
@@ -138,7 +140,14 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
       mkdirSync(join(dir, "home"), { recursive: true });
       return join(dir, "home");
     },
-    step: (_role, command, _task, o) => local(command, o.work, o.env, o.timeoutMs),
+    step: (_role, command, _task, o) => {
+      const home = mkdtempSync(join(tmpdir(), "gse-step-home-"));
+      try {
+        return local(command, o.work, { ...o.env, HOME: home }, o.timeoutMs);
+      } finally {
+        removeTree(home);
+      }
+    },
     agent(_task, o) {
       const home = o.env.HOME;
       if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");

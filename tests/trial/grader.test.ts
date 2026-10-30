@@ -214,13 +214,33 @@ describe("delta import", () => {
     expect(readFileSync(join(grade, "d", "f"), "utf8")).toBe("f");
     expect([statSync(join(grade, "locked")).mode & 0o777, statSync(join(grade, "d")).mode & 0o777]).toEqual([0o555, 0o555]);
   });
+
+  // Value: protects=a restored directory mode lands only on a directory that is still there; fails_when=a directory replaced by a file keeps the old mode, or one replaced by a symlink stamps its mode on the link's target; why_new=#59 review; seam=importDelta; no_claim=none beyond protects
+  test("a directory replaced by a file or a symlink does not pass its mode on", () => {
+    const root = scratch("replaced");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    for (const d of ["bin", "lib"]) mkdirSync(join(baseline, d), { recursive: true });
+    writeFileSync(join(baseline, "target"), "t");
+    chmodSync(join(baseline, "target"), 0o644);
+    chmodSync(join(baseline, "bin"), 0o700);
+    chmodSync(join(baseline, "lib"), 0o700);
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    removeTree(join(after, "bin"));
+    writeFileSync(join(after, "bin"), "#!/bin/sh\n");
+    chmodSync(join(after, "bin"), 0o755);
+    removeTree(join(after, "lib"));
+    symlinkSync("target", join(after, "lib"));
+    importDelta(baseline, after, grade);
+    expect([statSync(join(grade, "bin")).mode & 0o777, statSync(join(grade, "target")).mode & 0o777]).toEqual([0o755, 0o644]);
+  });
 });
 
 test("--isolation process refuses without bubblewrap", () => {
   expect(() => processSandbox({ bwrap: "/nonexistent/bwrap" })).toThrow(IsolationError);
 });
 
-// Value: protects=an agent's HOME under --isolation process holds what earlier steps wrote; fails_when=each bubblewrap step gets an empty HOME; why_new=#59 review; seam=bwrapArgs, processSandbox; no_claim=bubblewrap's own isolation
+// Value: protects=an agent's HOME under --isolation process holds what earlier steps wrote, and setup and check each get a fresh HOME the agent never wrote, as under Docker; fails_when=each bubblewrap step gets an empty HOME, or a check runs with agent-written config in its HOME; why_new=#59 review; seam=bwrapArgs, processSandbox; no_claim=bubblewrap's own isolation
 test("--isolation process binds the trial's HOME into every agent step", () => {
   const args = bwrapArgs("/w/add", "/t/home", "true");
   expect(args.join(" ")).toContain("--bind /t/home /t/home --bind /w/add /w/add");
@@ -233,6 +253,8 @@ test("--isolation process binds the trial's HOME into every agent step", () => {
   const session = processSandbox().agent("add", { work, env: { PATH: "/usr/bin:/bin", HOME: home }, network: null });
   expect(session.exec('echo kept > "$HOME/config"', 10_000).exitCode).toBe(0);
   expect(session.exec('cat "$HOME/config"', 10_000).stdout.trim()).toBe("kept");
+  const check = processSandbox().step("check", 'test ! -e "$HOME/config" && test "$HOME" != ' + JSON.stringify(home), "add", { work, fixtures: work, env: { PATH: "/usr/bin:/bin", HOME: home }, timeoutMs: 10_000 });
+  expect(check.exitCode).toBe(0);
 });
 
 describe.skipIf(!DOCKER)("Docker tier (GSTACK_EVALS_DOCKER=1)", () => {

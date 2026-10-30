@@ -5,7 +5,7 @@
 // grader's HEAD), fifos, sockets and devices, and symlinks that point outside the work tree. A sidecar paths list narrows
 // the import. The check then runs on the grade tree, never on the agent's.
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 
 type Kind = "f" | "d" | "l" | "o";
@@ -133,6 +133,6 @@ export function importDelta(baseline: string, after: string, grade: string, path
     }
     (old ? delta.changed : delta.added).push(p);
   }
-  for (const [path, mode] of [...modes].sort(([a], [b]) => depth(b) - depth(a))) if (existsSync(path)) chmodSync(path, mode);
+  for (const [path, mode] of [...modes].sort(([a], [b]) => depth(b) - depth(a))) if (lstatSync(path, { throwIfNoEntry: false })?.isDirectory()) chmodSync(path, mode);
   return delta;
 }
