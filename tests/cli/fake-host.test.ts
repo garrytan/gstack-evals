@@ -73,7 +73,7 @@ describe("a run on the fake host", () => {
     expect([lock.status, lock.stdout.includes("LOCKED ")]).toEqual([0, true]);
     expect(spawnSync("bash", ["-c", 'git add test/fixtures/skill-evals/learn/ && git commit -m "test: lock learn eval tasks"'], { cwd: repo.root, encoding: "utf8" }).status).toBe(0);
     const record = approvalRecord("learn-diet", 500);
-    const call = (out: string, extra: string[] = []) => ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", join(repo.root, tasks), "--host", "claude", "--model", "claude-opus-5-5", "--trials", "3", "--spend-cap", "100", "--out", out, "--item", "learn-diet", "--ledger", join(TMP, "run-ledger.sqlite"), "--ledger-record", record, "--isolation", "process", ...extra];
+    const call = (out: string, extra: string[] = []) => ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", join(repo.root, tasks), "--host", "claude", "--model", "claude-opus-5-5", "--trials", "3", "--spend-cap", "300", "--out", out, "--item", "learn-diet", "--ledger", join(TMP, "run-ledger.sqlite"), "--ledger-record", record, "--isolation", "process", ...extra];
     return { repo, bin, call };
   }
 
@@ -85,7 +85,7 @@ describe("a run on the fake host", () => {
     expect([r.status, r.stderr]).toEqual([0, "NEGATIVE_UNVALIDATED no-code-change: a safety task with no mutant in tasks.ext.json, so nothing showed it fails on a violation\n"]);
     expect(r.stdout).toContain("VERDICT: PASS (exit 0) for claude-opus-5-5, 3 trials");
     const verdict = JSON.parse(readFileSync(join(out, "verdict.json"), "utf8"));
-    expect(verdict).toMatchObject({ verdict: "PASS", exit_code: 0, harness: { host: "claude", host_version: "fake" }, effective: { isolation: "process", skill: "learn" }, spend: { line_item: "learn-diet", committed: 0, cap: 100_000_000 } });
+    expect(verdict).toMatchObject({ verdict: "PASS", exit_code: 0, harness: { host: "claude", host_version: "fake" }, effective: { isolation: "process", skill: "learn" }, spend: { line_item: "learn-diet", committed: 0, cap: 300_000_000 } });
     expect(verdict.lock.commit).toBe(git(repo.root, "rev-parse", "HEAD").trim());
     expect(verdict.lock_drift).toEqual([]);
     expect(Object.keys(verdict.arm_trees)).toEqual(["before", "before2", "after"]);
@@ -105,10 +105,10 @@ describe("a run on the fake host", () => {
     expect(verdict.reasons).toContain("MISS search");
     expect(verdict.models[0].rerun).toMatchObject({ red: ["search"], state: "done" });
     const costly = join(TMP, "costly.json");
-    writeFileSync(costly, JSON.stringify({ arms: { before: "1", after: "1", none: "0" }, session_usd: 2 }));
+    writeFileSync(costly, JSON.stringify({ arms: { before: "1", after: "1", none: "0" }, session_usd: 6 }));
     const cap = collect();
     expect(await skillEvalCommand(call(join(TMP, "cap-run")), cap, { GSTACK_EVALS_FAKE_HOST: costly, ...KEYS })).toBe(2);
-    expect(cap.text().out).toContain("STOP: reason=budget_exhausted spent=$80.00 reserved=$0.00 unknown=0 cap=$100.00");
+    expect(cap.text().out).toContain("STOP: reason=budget_exhausted spent=$240.00 reserved=$0.00 unknown=0 cap=$300.00");
     const bad = collect();
     expect(await skillEvalCommand(call(join(TMP, "bad-run")), bad, { GSTACK_EVALS_FAKE_HOST: join(TMP, "no-such-script.json"), ...KEYS }, "preflight")).toBe(2);
     expect(bad.text().err).toContain("E_USAGE GSTACK_EVALS_FAKE_HOST is neither 1 nor a readable script file");
@@ -121,7 +121,7 @@ describe("a run on the fake host", () => {
     expect(await skillEvalCommand(call(out, ["--calibrate"]), io, { GSTACK_EVALS_FAKE_HOST: "1", ...KEYS })).toBe(0);
     expect(io.text().out).toMatch(/CALIBRATION: pass for claude-opus-5-5  skill pass  none pass  shell pass  config n\/a  usersim (pass|n\/a)  egress pass/);
     const record = JSON.parse(readFileSync(join(out, "calibration.json"), "utf8"));
-    expect(record).toMatchObject({ exit_code: 0, failures: [], spend: { committed: 0, unknown: 0, lease_id: null, cap: 100_000_000 } });
+    expect(record).toMatchObject({ exit_code: 0, failures: [], spend: { committed: 0, unknown: 0, lease_id: null, cap: 300_000_000 } });
     expect(Object.keys(record.calibration)).toEqual(["claude-opus-5-5"]);
     expect(existsSync(join(out, "verdict.json"))).toBe(false);
     const dry = collect();

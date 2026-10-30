@@ -6,9 +6,10 @@
 // refuses the next call. An allowance is a token budget priced at the model's list price, uncached input included:
 // 1.6M input and 32k output tokens per agent session. The proxy refuses a call whose bound (one token per body byte
 // plus the output cap) would take the session past its allowance, so the allowance must hold a session's spend and its
-// next request's bound: replaying GSTA-13's metered office-hours sessions on Opus 5.5, 400k refused about 97% of
-// skill-arm sessions before they finished and 1.6M refused none ($7.04 on Opus, near GSTA-13's $7.25 reservation). Judges get 60k and 4k per judged run, and the user simulator 80k and 5k per interactive
-// session. The rerun stage can rerun every task in every arm once, so it doubles the agent, judge and user simulator parts.
+// next request's bound. Replaying GSTA-13's metered office-hours sessions on Opus 5.5, 400k refused 89% to 100% of the
+// skill-arm sessions before they finished, and 1.6M ($7.04 a session) refused none. Judges get 200k and 40k per judged
+// run, and the user simulator 80k and 5k per interactive session. The rerun stage can rerun every task in every arm
+// once, so it doubles the agent, judge and user simulator parts.
 import { chatPrice } from "../../runner/pricing/prices.ts";
 import { usd } from "../../runner/ledger/money.ts";
 import type { Call } from "./call.ts";

@@ -357,7 +357,7 @@ describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex 
     writeFileSync(tasks, JSON.stringify([{ id: "hello", prompt: "Say hello.", must: ["hello"] }]));
     const out = join(root, "out");
     const env = { OPENAI_API_KEY: "fake-openai-value" };
-    const argv = (extra: string[]) => ["--arms", "before=" + armDir(root, "before") + ",after=" + after + ",none", "--tasks", tasks, "--host", "codex", "--model", MODELS.codex, "--trials", "1", "--spend-cap", "5", "--item", "resume-test", "--isolation", "docker", "--no-noise-floor", "--out", out, ...extra];
+    const argv = (extra: string[]) => ["--arms", "before=" + armDir(root, "before") + ",after=" + after + ",none", "--tasks", tasks, "--host", "codex", "--model", MODELS.codex, "--trials", "1", "--spend-cap", "15", "--item", "resume-test", "--isolation", "docker", "--no-noise-floor", "--out", out, ...extra];
     const call = (extra: string[]) => {
       const parsed = parseFlags(argv(extra), SKILL_EVAL_FLAGS, env);
       if (typeof parsed === "string") throw new Error(parsed);

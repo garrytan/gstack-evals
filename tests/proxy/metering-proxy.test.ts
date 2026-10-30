@@ -532,7 +532,7 @@ describe("OpenRouter route", () => {
   test("a call goes out with OPENROUTER_API_KEY and the price row's routing, and settles from reported tokens at the row", async () => {
     const t = setup(() =>
       t.calls.length === 1
-        ? ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.0004 })
+        ? ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.0002 })
         : ok({ prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 800 }, cost: 0.0001 }),
     );
     const a = t.bind({ models });
@@ -541,16 +541,16 @@ describe("OpenRouter route", () => {
     expect(t.calls[0]!.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(t.calls[0]!.headers.get("authorization")).toBe(`Bearer ${OPENROUTER_KEY}`);
     expect(t.calls[0]!.headers.get("x-api-key")).toBeNull();
-    expect(t.calls[0]!.body.provider).toEqual({ max_price: { prompt: 0.25, completion: 1, request: 0, image: 0 } });
+    expect(t.calls[0]!.body.provider).toEqual({ max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     expect(t.calls[0]!.body.max_tokens).toBe(32_768);
     expect(t.calls[0]!.body.max_completion_tokens).toBeUndefined();
     expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, max_price: { prompt: 0.3, completion: 1.2, request: 0, image: 0 } });
     expect(t.ledger.settles).toEqual([
-      ["res_1", { kind: "spent", spent_micros: 1000 * 0.25 + 200 * 1, usage: { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 } }],
+      ["res_1", { kind: "spent", spent_micros: 1000 * 0.1 + 200 * 1, usage: { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 } }],
       ["res_2", { kind: "spent", spent_micros: Math.ceil(200 * 0.3 + 800 * 0.006 + 100 * 1.2), usage: { input: 200, output: 100, reasoning: 0, cache_read: 800, cache_write: 0 } }],
     ]);
     const meter = await t.proxy.finalize(a.meter_id);
-    expect(meter.by_model[`openrouter:${PARTICLE}`]).toEqual({ micros: 450, requests: 1 });
+    expect(meter.by_model[`openrouter:${PARTICLE}`]).toEqual({ micros: 300, requests: 1 });
     expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(OPENROUTER_KEY);
   });
 
@@ -566,25 +566,25 @@ describe("OpenRouter route", () => {
   });
 
   test("a stream settles from the usage in its last chunk, past OpenRouter's keep-alive comments", async () => {
-    const chunks = [": OPENROUTER PROCESSING", `data: ${JSON.stringify({ choices: [{ delta: { content: "hi" } }], usage: null })}`, `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 400, completion_tokens: 100, completion_tokens_details: { reasoning_tokens: 40 }, cost: 0.0002 } })}`, "data: [DONE]"];
+    const chunks = [": OPENROUTER PROCESSING", `data: ${JSON.stringify({ choices: [{ delta: { content: "hi" } }], usage: null })}`, `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 400, completion_tokens: 100, completion_tokens_details: { reasoning_tokens: 40 }, cost: 0.0001 } })}`, "data: [DONE]"];
     const t = setup(() => new Response(chunks.join("\n\n") + "\n\n", { headers: { "content-type": "text/event-stream" } }));
     const a = t.bind({ models });
     expect(await (await t.call(a.slot, a.token, PATH, chat(PARTICLE, { stream: true }))).text()).toContain('"content":"hi"');
     expect(t.calls[0]!.body.stream_options).toEqual({ include_usage: true });
     const meter = await t.proxy.finalize(a.meter_id);
-    expect(meter).toMatchObject({ micros: 400 * 0.25 + 100 * 1, unknown: 0, requests: 1 });
-    expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 200, usage: { input: 400, output: 60, reasoning: 40, cache_read: 0, cache_write: 0 } }]]);
+    expect(meter).toMatchObject({ micros: 400 * 0.1 + 100 * 1, unknown: 0, requests: 1 });
+    expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 140, usage: { input: 400, output: 60, reasoning: 40, cache_read: 0, cache_write: 0 } }]]);
   });
 
   test("a Responses stream, as Codex sends one, gets the row's routing and settles from response.completed", async () => {
-    const usage = { input_tokens: 2000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, output_tokens_details: { reasoning_tokens: 100 }, cost: 0.0005 };
+    const usage = { input_tokens: 2000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, output_tokens_details: { reasoning_tokens: 100 }, cost: 0.0004 };
     const t = setup(() => sse([{ type: "response.created", response: { usage: null } }, { type: "response.output_text.delta", delta: "hi" }, { type: "response.completed", response: { usage } }]));
     const a = t.bind({ models });
     const input = [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }];
     await (await t.call(a.slot, a.token, "/openrouter/v1/responses", { model: PARTICLE, stream: true, store: false, input, reasoning: { effort: "high" } })).text();
     expect(t.calls[0]!.url).toBe("https://openrouter.ai/api/v1/responses");
-    expect(t.calls[0]!.body).toMatchObject({ provider: { max_price: { prompt: 0.25, completion: 1, request: 0, image: 0 } }, max_output_tokens: 32_768 });
-    expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 2000 * 0.25 + 300 * 1, usage: { input: 2000, output: 200, reasoning: 100, cache_read: 0, cache_write: 0 } }]]);
+    expect(t.calls[0]!.body).toMatchObject({ provider: { max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } }, max_output_tokens: 32_768 });
+    expect(t.ledger.settles).toEqual([["res_1", { kind: "spent", spent_micros: 2000 * 0.1 + 300 * 1, usage: { input: 2000, output: 200, reasoning: 100, cache_read: 0, cache_write: 0 } }]]);
   });
 
   test("a call OpenRouter bills above its tokens at the row settles at what OpenRouter billed", async () => {
@@ -599,10 +599,10 @@ describe("OpenRouter route", () => {
     const a = t.bind({ models });
     expect((await t.call(a.slot, a.token, PATH, chat())).status).toBe(200);
     const held = t.ledger.reservations.get("res_1")!.max_micros;
-    expect(held).toBeGreaterThan(40_000 - 10_250);
+    expect(held).toBeGreaterThan(40_000 - 10_100);
     await expectProblem(await t.call(a.slot, a.token, PATH, chat()), 402, "CAP_STOP");
     expect(t.calls).toHaveLength(1);
-    expect(t.ledger.committed()).toBe(10_250);
+    expect(t.ledger.committed()).toBe(10_100);
   });
 
   test("with no OPENROUTER_API_KEY the call is refused by that name before the ledger and the provider", async () => {
