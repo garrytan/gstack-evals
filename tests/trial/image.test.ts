@@ -62,6 +62,33 @@ describe("trial image pin", () => {
   });
 });
 
+describe("arm images without a daemon", () => {
+  /** A docker stand-in: the base exists, the arm tag does not until built, and the scan answers as given. */
+  const fakeDocker = (scan: { status: number | null; stdout: string; stderr: string }) => {
+    let built = false;
+    const run: Runner = (_command, args) => {
+      if (args[0] === "image") return args.at(-1) === "base:test" || built ? { status: 0, stdout: "sha256:" + "b".repeat(64) + " x\n", stderr: "" } : { status: 1, stdout: "", stderr: "No such image" };
+      if (args[0] === "build") built = true;
+      if (args[0] === "run") return scan;
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    return run;
+  };
+
+  // Value: protects=an arm image is accepted only after a scan that finished; fails_when=a scan that timed out or failed partway, with some checksums printed, passes as clean; why_new=#58 review; seam=imageFixtures, buildArmImage; no_claim=the scan's coverage, which the Docker tier checks
+  test("a scan that fails partway is E_IMAGE_BUILD even with partial output", () => {
+    const partial = { status: 123, stdout: "e".repeat(64) + "  /usr/bin/ls\n", stderr: "sha256sum: /x: Input/output error\n" };
+    expect(imageFixtures("arm:test", LEARN, fakeDocker(partial))).toMatchObject({ ok: false, code: "E_IMAGE_BUILD", message: expect.stringContaining("not known to be clean: sha256sum: /x: Input/output error") });
+    expect(imageFixtures("arm:test", LEARN, fakeDocker({ status: null, stdout: "", stderr: "" }))).toMatchObject({ ok: false, code: "E_IMAGE_BUILD", message: expect.stringContaining("not known to be clean: exit null") });
+  });
+
+  // Value: protects=a base-only arm builds like any other; fails_when=an empty layer list throws ENOENT instead of building; why_new=#58 review; seam=buildArmImage; no_claim=none beyond protects
+  test("an arm with no layers builds on its base", () => {
+    const r = buildArmImage({ base: "base:test", layers: [], tasksDir: LEARN, state: scratch("empty-arm"), run: fakeDocker({ status: 0, stdout: "", stderr: "" }) });
+    expect(r).toMatchObject({ ok: true, dropped: [] });
+  });
+});
+
 /** A gstack-like arm tree that carries learn's eval fixtures where gstack keeps them, and one stray copy. */
 function gstackTree(): string {
   const root = scratch("arm");

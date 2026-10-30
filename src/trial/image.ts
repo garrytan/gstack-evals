@@ -135,7 +135,7 @@ export function imageFixtures(image: string, tasksDir: string, run: Runner = doc
   const digests = fixtureDigests(tasksDir);
   const scan = "find / -xdev \\( -path /proc -o -path /sys -o -path /dev \\) -prune -o -type f -print0 | xargs -0 -r sha256sum";
   const r = run("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", image, "-c", scan], { timeoutMs: 600_000 });
-  if (r.status !== 0 && !r.stdout) return { ok: false, code: "E_IMAGE_BUILD", message: "could not scan " + image + " for eval fixtures: " + lastLine(r.stderr) };
+  if (r.status !== 0) return { ok: false, code: "E_IMAGE_BUILD", message: "could not scan " + image + " for eval fixtures, so it is not known to be clean: " + (lastLine(r.stderr) || "exit " + r.status) };
   const hits: string[] = [];
   for (const line of r.stdout.split("\n")) {
     const m = /^([0-9a-f]{64}) {2}(.+)$/.exec(line);
@@ -187,6 +187,7 @@ export function buildArmImage(opts: { base: string; layers: ArmLayer[]; tasksDir
   const context = join(state, "images", "arm-context-" + randomBytes(6).toString("hex"));
   const dropped: string[] = [];
   try {
+    mkdirSync(context, { recursive: true });
     opts.layers.forEach((layer, i) => stage(layer.src, join(context, "layer-" + i), digests, dropped));
     const tree = dirTreeSha256(context);
     const id = createHash("sha256").update([base.id, tree, ...opts.layers.map((l) => l.dest)].join("\n")).digest("hex");

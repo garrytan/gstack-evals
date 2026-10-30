@@ -59,12 +59,14 @@ describe("gstack-evals doctor", () => {
     expect([ledger.status, ledger.code, ledger.detail]).toEqual(["fail", "E_LEDGER_PATH", join(dir, "ledger.sqlite") + " (--ledger) exists but is not readable and writable by this user"]);
   });
 
-  // Value: protects=bin/gstack-evals runs doctor, without --host it checks both host CLIs, and --json prints one object; fails_when=the doctor row stops resolving or --json mixes in text; why_new=the doctor row printed not built yet; seam=src/cli.ts; no_claim=none beyond protects
+  // Value: protects=bin/gstack-evals runs doctor, without --host it checks both host CLIs, and --json prints one object; fails_when=the doctor row stops resolving or --json mixes in text; why_new=the doctor row printed not built yet; seam=src/cli.ts, and GSTACK_EVALS_DOCKER_BIN=false outside the Docker tier so the keyless job never builds the image; no_claim=none beyond protects
   test("bin/gstack-evals doctor --json checks both hosts and prints one object", () => {
-    const r = spawnSync(join(REPO_ROOT, "bin", "gstack-evals"), ["doctor", "--json", "--ledger", join(TMP, "bin.sqlite")], { encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: TMP } });
+    const noDaemon = process.env.GSTACK_EVALS_DOCKER === "1" ? {} : { GSTACK_EVALS_DOCKER_BIN: "false" };
+    const r = spawnSync(join(REPO_ROOT, "bin", "gstack-evals"), ["doctor", "--json", "--ledger", join(TMP, "bin.sqlite")], { encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: TMP, ...noDaemon } });
     const report = JSON.parse(r.stdout);
     expect(r.status).toBe(report.ok ? 0 : 2);
     expect(report.checks.map((c: { name: string }) => c.name).filter((n: string) => n.endsWith(" CLI"))).toEqual(["claude CLI", "codex CLI"]);
     expect(report.checks.find((c: { name: string }) => c.name === "claude key")).toMatchObject({ status: "fail", code: "E_KEY_MISSING" });
-  });
+    if (process.env.GSTACK_EVALS_DOCKER !== "1") expect(report.checks.filter((c: { name: string }) => ["docker", "trial image"].includes(c.name)).map((c: { status: string }) => c.status)).toEqual(["fail", "skip"]);
+  }, 900_000);
 });

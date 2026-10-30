@@ -69,8 +69,10 @@ function ledgerFileProblem(path: string): string | null {
 }
 
 export function doctorChecks(opts: DoctorOptions): Check[] {
-  const run = opts.run ?? localRun;
   const env = opts.env;
+  const base = opts.run ?? localRun;
+  const dockerBin = env.GSTACK_EVALS_DOCKER_BIN || "docker";
+  const run: Runner = (command, args, o) => base(command === "docker" ? dockerBin : command, args, o);
   const checks: Check[] = [];
   const add = (c: Check) => checks.push(c);
 
