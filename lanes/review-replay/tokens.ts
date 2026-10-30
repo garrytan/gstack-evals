@@ -77,7 +77,7 @@ export function p90(values: number[]): number {
 
 const isCount = (v: unknown, min = 0): v is number => Number.isInteger(v) && (v as number) >= min;
 const isText = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
-const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(v + "T00:00:00Z").toISOString().startsWith(v);
+const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v + "T00:00:00Z")) && new Date(v + "T00:00:00Z").toISOString().startsWith(v);
 
 export const rowName = (r: { model: string; role: string; effort: string }) => r.model + " " + r.role + " " + r.effort;
 

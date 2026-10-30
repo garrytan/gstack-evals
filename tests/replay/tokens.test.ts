@@ -87,12 +87,15 @@ describe("the review token table", () => {
     table.rows[0].output_tokens.median = 6928;
     table.rows[1].n = 7;
     table.rows[1].source_run_ids = ["unknown-run"];
-    table.rows.push({ ...table.rows[0] });
+    table.rows.push({ ...table.rows[0], as_of: "2026-13-01" });
+    table.rows.push({ ...table.rows[1], effort: "light", as_of: "2026-02-30" });
     const problems = tableProblems(table).join("\n");
     expect(problems).toContain('rows[0].output_tokens must be {"median":6929,"p90":13566}');
     expect(problems).toContain("rows[1].n is 7 but it lists 6 trials");
     expect(problems).toContain("rows[1].source_run_ids must name runs listed in sources");
     expect(problems).toContain("rows[2] repeats claude-opus-5-5 specialist full");
+    expect(problems).toContain("rows[2].as_of must be a YYYY-MM-DD date");
+    expect(problems).toContain("rows[3].as_of must be a YYYY-MM-DD date");
     expect(tableProblems({ schema_version: 1, flag_rules: { min_n: 10, max_age_days: 30 }, sources: {}, rows: [] })).toContain("rows must be a non-empty array");
   });
 
@@ -164,6 +167,8 @@ describe("gstack-evals tokens export", () => {
   test("bad usage and an unreadable or invalid table exit 2 with E_USAGE", async () => {
     const invalid = committed();
     invalid.rows[0].n = 9;
+    const badDate = committed();
+    badDate.rows[1].as_of = "2026-13-01";
     const cases: Array<[string[], string]> = [
       [["export", "--model", "claude-opus-5-5", "--stat", "median"], "needs --for"],
       [[...OPUS], "needs --stat"],
@@ -175,6 +180,7 @@ describe("gstack-evals tokens export", () => {
       [[...OPUS, "--stat"], "--stat needs a value"],
       [[...OPUS, "--stat", "median", "--table", join(tmpdir(), "no-such-tokens.json")], "cannot read the token table"],
       [[...OPUS, "--stat", "median", "--table", tableFile(invalid)], "rows[0].n is 9 but it lists 6 trials"],
+      [[...OPUS, "--stat", "median", "--table", tableFile(badDate)], "rows[1].as_of must be a YYYY-MM-DD date"],
       [["import"], 'unknown tokens command "import"'],
     ];
     for (const [argv, message] of cases) {
