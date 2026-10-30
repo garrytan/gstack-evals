@@ -1,0 +1,3 @@
+{"id":"ex-3593-b1","severity":"CRITICAL","confidence":7,"path":"lib/ship-budget.ts","line":306,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3593@89156431975e B1.","fix":"None: synthetic.","reader":"testing"}
+{"id":"ex-3593-b2","severity":"CRITICAL","confidence":7,"path":"lib/ship-budget.ts","line":242,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3593@89156431975e B2.","fix":"None: synthetic.","reader":"adversarial-native","label":"FIXABLE"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"lib/ship-budget.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

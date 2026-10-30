@@ -1,0 +1,41 @@
+{
+  "contract_version": 1,
+  "id": "example",
+  "label": "Example arm (synthetic)",
+  "suite": "gsta167-14pr",
+  "date": "2026-10-30",
+  "passes": 1,
+  "kind": "variant",
+  "provenance": "live",
+  "status": "complete",
+  "source": {
+    "repo": "garrytan/gstack",
+    "ref": "example-branch",
+    "sha": "0000000000000000000000000000000000000000"
+  },
+  "models": [
+    {
+      "role": "specialist",
+      "model": "anthropic/claude-opus-5-5",
+      "effort": "medium"
+    },
+    {
+      "role": "outside-voice",
+      "model": "openai/gpt-6.1-sol",
+      "effort": "medium"
+    }
+  ],
+  "run_by": "GSTA-43 (synthetic example for the contract test)",
+  "coverage_gaps": [
+    "Codex structured review: no Codex CLI on the runner"
+  ],
+  "severity_map": {
+    "default": {
+      "FIXABLE": "CRITICAL",
+      "INVESTIGATE": "INFORMATIONAL",
+      "High": "CRITICAL",
+      "Medium": "INFORMATIONAL"
+    }
+  },
+  "notes": "Synthetic. It shows every contract field; its findings are invented and its scores mean nothing."
+}

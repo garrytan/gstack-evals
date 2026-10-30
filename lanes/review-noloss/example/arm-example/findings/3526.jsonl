@@ -1,0 +1,4 @@
+{"id":"ex-3526-b2","severity":"CRITICAL","confidence":7,"path":"bin/gstack-harness-ledger.sh","line":40,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3526@808dead70e32 B2.","fix":"None: synthetic.","reader":"testing"}
+{"id":"ex-3526-b3","severity":"CRITICAL","confidence":7,"path":"bin/gstack-harness-ledger.sh","line":27,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3526@808dead70e32 B3.","fix":"None: synthetic.","reader":"adversarial-native","label":"FIXABLE"}
+{"id":"ex-3526-b4","severity":"INFORMATIONAL","confidence":7,"path":"lib/harness-register.ts","line":429,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3526@808dead70e32 B4.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"bin/gstack-harness-ledger.sh","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

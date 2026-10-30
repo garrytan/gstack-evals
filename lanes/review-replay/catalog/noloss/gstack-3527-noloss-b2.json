@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3527-noloss-b2",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3527,
+  "reviewed_head": "2684974602c14ec9fadc26ee62ff2890f50beb18",
+  "merge_base": "10b77de4f2e8a2377f21adea6ac2bbd91b8a30df",
+  "diff_range": {
+    "from": "10b77de4f2e8a2377f21adea6ac2bbd91b8a30df",
+    "to": "2684974602c14ec9fadc26ee62ff2890f50beb18",
+    "note": "#3527's pass-1 range: the head its first review read."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "bin/gstack-ship-receipt",
+    "line": 493,
+    "summary": "carry --pregate read the pregate file and bound it to the --head being carried without checking that the checkout was at that head, so a pregate run on one commit could certify a different one."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "The fix adds a regression test ('a --pregate from a checkout at another commit never rebinds the receipt to --head') that the old code fails, and the defect lets a gate certify an untested head.",
+    "in_history": [
+      {
+        "by": "pass 1, gstack /ship review on #3527 (the PR body does not name which of the 9 reviewers)",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "9c34fda1f3021e578fe3d5571075907671bce4f6",
+    "pr": 3527
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3527,
+      "range": {
+        "from": "2684974602c14ec9fadc26ee62ff2890f50beb18",
+        "to": "9c34fda1f3021e578fe3d5571075907671bce4f6"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3527, blocker B2 of GSTA-167's no-loss cohort, fixed by 9c34fda1f302",
+    "evidence": [
+      "commit 9c34fda1f302 subject: fix(GSTA-131): ship review pass-1 repairs: fix-check binds under its own skill, Step 11.5 accepts a fix-check or a planned adversarial skip, delta carry with a pregate, carry --pregate pinned to the checkout, quiet-after-cap revise regates, skill-dir markdown and rule docs classed code, gate signals from tests class up, plan fails closed on git errors, per-class compare ratios",
+      "bin/gstack-ship-receipt:493 at 2684974602c1 is an added line of 10b77de4f2e8..2684974602c1",
+      "git diff -U0 2684974602c1..9c34fda1f302 -- bin/gstack-ship-receipt inserts right after line 493",
+      "roles from gstack-diff-scope at b61744517cc3 on 1743 filtered changed lines (BACKEND, TESTS, DOCS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Insertion-only fix: the fix inserts a HEAD check right after line 493 ('if (pregateFile) {') in cmdCarry, the prereg's '~493' line. The prereg's first window, ~359-377, holds only a doc comment the fix moved unchanged to sit above cmdCarry, so the window rule would pick a line that is not the defect. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix inserts right after it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-28",
+    "source": "GitHub API: garrytan/gstack#3527 created_at 2026-10-28T01:27:47Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3527's own review and fixed in 9c34fda1f302; #3527 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

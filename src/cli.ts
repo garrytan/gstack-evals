@@ -28,6 +28,7 @@ export const COMMANDS: Command[] = [
   { name: "explain", summary: "Print a reason code's meaning, fix, side effects, retry safety and resumability.", module: "src/skill-eval/cli/explain.ts", owner: "U7, M1a" },
   { name: "ledger", summary: "Record approved caps and line items with the owner's words; settle and reconcile leases.", module: "src/runner/ledger/cli.ts", owner: "U4, M0" },
   { name: "tokens", summary: "Export the review token table for gstack's review-dispatch-compare.", module: "lanes/review-replay/tokens-cli.ts", owner: "U13, M1c" },
+  { name: "noloss", summary: "Review no-loss category: check suites and ingest review arms (arm contract v1).", module: "lanes/review-noloss/cli.ts", owner: "U13, GSTA-43" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },

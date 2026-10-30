@@ -1,0 +1,2 @@
+{"id":"ex-3545-b1","severity":"CRITICAL","confidence":7,"path":"browse/test/process-liveness-windows.test.ts","line":154,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3545@d4f0ea3c314f B1.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"browse/test/process-liveness-windows.test.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

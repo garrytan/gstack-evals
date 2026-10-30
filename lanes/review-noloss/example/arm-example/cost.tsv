@@ -1,0 +1,16 @@
+pr	scope	input_tokens	output_tokens	cache_read_tokens	cache_write_tokens	reasoning_tokens	total_tokens	usd	wall_seconds	meter_source	covers
+3593	all						3000		60	lane-counter-delta	
+3596	all						3000		60	lane-counter-delta	
+3516	all						3000		60	lane-counter-delta	
+3524	all						2000		60	lane-counter-delta	
+3526	all						5000		60	lane-counter-delta	
+3527	all						5000		60	lane-counter-delta	
+3534	all						5000		60	lane-counter-delta	
+3540	all						2000		60	lane-counter-delta	
+3545	all						2000		60	lane-counter-delta	
+3564	all						2000		60	lane-counter-delta	
+3567	all						4000		60	lane-counter-delta	
+3573	all						2000		60	lane-counter-delta	
+3578	all						2000		60	lane-counter-delta	
+3583	all						3000		60	lane-counter-delta	
+3593	red-team						400		20	reader-counter	

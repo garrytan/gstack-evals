@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3578-noloss-b1",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3578,
+  "reviewed_head": "0ff98dba1fddc532e0f61803a07a45d3b81475e0",
+  "merge_base": "4729f4752ba6aa6524f52fa49f51c28779a3ea24",
+  "diff_range": {
+    "from": "4729f4752ba6aa6524f52fa49f51c28779a3ea24",
+    "to": "0ff98dba1fddc532e0f61803a07a45d3b81475e0",
+    "note": "#3578's pass-1 range: the head its first review read."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/redact-patterns.ts",
+    "line": 494,
+    "summary": "The rule that lets package@version style file names through also let real email addresses saved as file names through, such as an address followed by .json, so the redaction scan stopped reporting them."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "The fix narrows the rule and adds regression cases (test/redact-constant-and-at-filename.test.ts).",
+    "in_history": [
+      {
+        "by": "gstack /ship review on #3578, pass 1 (Pre-Landing Review)",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "566641d44f0907c20c6dceedab16a6d574134fc3",
+    "pr": 3578
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3578,
+      "range": {
+        "from": "0ff98dba1fddc532e0f61803a07a45d3b81475e0",
+        "to": "566641d44f0907c20c6dceedab16a6d574134fc3"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3578, blocker B1 of GSTA-167's no-loss cohort, fixed by 566641d44f09",
+    "evidence": [
+      "commit 566641d44f09 subject: fix(redact): pii.email reports a file named after an address",
+      "lib/redact-patterns.ts:494 at 0ff98dba1fdd is an added line of 4729f4752ba6..0ff98dba1fdd",
+      "git diff -U0 0ff98dba1fdd..566641d44f09 -- lib/redact-patterns.ts rewrites line 494",
+      "roles from gstack-diff-scope at b61744517cc3 on 147 filtered changed lines (BACKEND, TESTS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "The first rewritten lines in the window are the comment on the extension list; line 494 is the return that exempted any domain ending in such an extension, which the fix replaces. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix rewrites it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gstack#3578 created_at 2026-10-29T03:12:06Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3578's own review and fixed in 566641d44f09; #3578 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

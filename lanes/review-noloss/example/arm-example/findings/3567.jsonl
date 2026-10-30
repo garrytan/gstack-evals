@@ -1,0 +1,3 @@
+{"id":"ex-3567-b1","severity":"INFORMATIONAL","confidence":7,"path":"lib/ship-receipt-depth.ts","line":124,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3567@2b42ec597e03 B1.","fix":"None: synthetic.","reader":"testing"}
+{"id":"ex-3567-b3","severity":"CRITICAL","confidence":7,"path":"bin/gstack-ship-receipt","line":602,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3567@2b42ec597e03 B3.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"lib/ship-receipt-depth.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

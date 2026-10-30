@@ -1,0 +1,2 @@
+{"id":"ex-3596-b1","severity":"INFORMATIONAL","confidence":7,"path":"bin/gstack-review-plan","line":118,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3596@0be7c3d44339 B1.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"bin/gstack-review-plan","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/garrytan/gstack-evals/blob/main/lanes/review-noloss/arm.schema.json",
+  "$comment": "Arm contract version 1: arm.json, and one line of findings/<unit>.jsonl ($defs/finding). judgments.tsv and cost.tsv are TSV; their columns are in lanes/review-noloss/README.md. contract.ts also checks what a schema cannot. Unknown fields are kept and ignored.",
+  "title": "Review no-loss arm",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "id",
+    "label",
+    "suite",
+    "date",
+    "passes"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1. A reader refuses a major version it does not know."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$",
+      "description": "Also the arm's directory name once ingested. A' is written A2 with label A'."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "suite": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "suite_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Optional: the suite file's sha256 the arm ran against. When present, ingest and score refuse a different suite."
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "passes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "description": "Every pass needs one judgments row per suite blocker."
+    },
+    "kind": {
+      "enum": [
+        "reference",
+        "variant"
+      ]
+    },
+    "provenance": {
+      "enum": [
+        "live",
+        "transcribed"
+      ],
+      "description": "transcribed: judgments copied from a results table with no findings; matched_finding is - and saw_label is yes. Default live."
+    },
+    "transcribed_from": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "stopped"
+      ],
+      "description": "stopped: a cap or failure stopped the run. It is scored and reported, and never gets a NO_LOSS or LOSS verdict. Default complete."
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Reviewers the arm meant to run and could not, such as a Codex structured review with no CLI."
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "sha": {
+          "type": "string"
+        }
+      }
+    },
+    "prereg": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "model"
+        ],
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "run_by": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "severity_map": {
+      "type": "object",
+      "description": "From a raw label (the text before its first comma, matched exactly) to CRITICAL or INFORMATIONAL. CRITICAL and INFORMATIONAL always map to themselves; any other raw label needs an entry. by_reader entries override default for that reader.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/map"
+        },
+        "by_reader": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/map"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "map": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "CRITICAL",
+          "INFORMATIONAL"
+        ]
+      }
+    },
+    "finding": {
+      "type": "object",
+      "description": "One line of findings/<unit>.jsonl, in gstack's specialist line shape. Its id is id, else fingerprint, else #<0-based line index>; #<index> always names the line too.",
+      "required": [
+        "severity",
+        "path",
+        "line",
+        "summary"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The label the arm's merge recorded."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The reader's own label when it differs from severity, as in a prose voice's FIXABLE. The raw label is label, else severity."
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Repo-relative; an absolute or home path is refused."
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fix": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "category": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "specialist": {
+          "type": "string"
+        },
+        "pass": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}
