@@ -74,6 +74,9 @@
       "tests/trial/recipe.test.ts",
       "tests/trial/image.test.ts",
       "tests/cli/doctor.test.ts"
+    ],
+    "tests/trial/fixtures/**": [
+      "tests/trial/grader.test.ts"
     ]
   },
   "strays": {
