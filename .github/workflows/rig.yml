@@ -65,6 +65,31 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Pin Docker to the rig's engine and use the containerd image store
+        # The runner ships Docker 28.0.4 on the classic store, whose image exporter ignores rewrite-timestamp, so a no-cache
+        # rebuild stamps each COPY layer with the clock. Docker 28.0.4 on the containerd store refuses rewrite-timestamp
+        # ("conflicts with unpack"). These are the versions the Capy rig runs; the tier then rebuilds arm images byte-identically.
+        env:
+          DOCKER_VERSION: 5:29.9.2-1~ubuntu.24.04~noble
+          CONTAINERD_VERSION: 2.4.2-3~ubuntu.24.04~noble
+          BUILDX_VERSION: 0.38.1-1~ubuntu.24.04~noble
+          DOCKER_KEY_SHA256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570 # download.docker.com/linux/ubuntu/gpg, key 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/docker.asc" https://download.docker.com/linux/ubuntu/gpg
+          printf '%s  %s\n' "$DOCKER_KEY_SHA256" "$RUNNER_TEMP/docker.asc" | sha256sum -c --strict -
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo install -m 0644 "$RUNNER_TEMP/docker.asc" /etc/apt/keyrings/docker.asc
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" | sudo tee /etc/apt/sources.list.d/docker.list
+          sudo apt-get update -o Dir::Etc::sourcelist=sources.list.d/docker.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+          sudo apt-get install -y --no-install-recommends --allow-downgrades "docker-ce=$DOCKER_VERSION" "docker-ce-cli=$DOCKER_VERSION" "containerd.io=$CONTAINERD_VERSION" "docker-buildx-plugin=$BUILDX_VERSION"
+          { if [ -s /etc/docker/daemon.json ]; then sudo cat /etc/docker/daemon.json; else echo '{}'; fi; } | jq '.features["containerd-snapshotter"] = true' > "$RUNNER_TEMP/daemon.json"
+          sudo install -m 0644 "$RUNNER_TEMP/daemon.json" /etc/docker/daemon.json
+          sudo systemctl restart docker
+          docker version --format 'docker server {{.Server.Version}}, client {{.Client.Version}}'
+          docker buildx version
+          docker info --format '{{.Driver}} {{json .DriverStatus}}'
+          test "$(docker version --format '{{.Server.Version}}')" = 29.9.2
+          docker info --format '{{json .DriverStatus}}' | grep -qF io.containerd.snapshotter.v1
       - name: Install Bun, checked against the release's SHA-256
         env:
           BUN_VERSION: 1.4.4
