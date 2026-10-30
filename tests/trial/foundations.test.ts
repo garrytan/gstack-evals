@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, SESSION_KEY_PARTS, sessionKey, staleParts, writeProgress, type SessionKeyInput } from "../../src/trial/cache.ts";
@@ -56,6 +56,17 @@ describe("session cache key", () => {
     symlinkSync("a.sh", join(dir, "link"));
     expect(dirTreeSha256(dir)).not.toBe(withDir);
   });
+
+  test("a space in a symlink's name or target cannot make two trees hash alike", () => {
+    const trees = [["a", "b c"], ["a b", "c"]].map(([link, target]) => {
+      const dir = scratch("space");
+      writeFileSync(join(dir, "b c"), "1");
+      writeFileSync(join(dir, "c"), "2");
+      symlinkSync(target!, join(dir, link!));
+      return dirTreeSha256(dir);
+    });
+    expect(trees[0]).not.toBe(trees[1]);
+  });
 });
 
 describe("progress.json", () => {
@@ -79,6 +90,8 @@ describe("receipts and journals outlive the machine", () => {
     expect(volatilePathProblem("/dev/shm/x")).toContain("does not outlive the machine");
     expect(volatilePathProblem("/srv/state/run/journal", [{ point: "/srv/state", type: "tmpfs" }], "/nonexistent-tmp")).toBe("/srv/state/run/journal is on a tmpfs mount at /srv/state, which does not outlive the machine");
     expect(volatilePathProblem("/srv/state/run/journal", [{ point: "/", type: "ext4" }, { point: "/srv", type: "xfs" }], "/nonexistent-tmp")).toBeNull();
+    expect(volatilePathProblem(join(tmpdir(), "..receipts", "journal"))).toContain("does not outlive the machine");
+    expect(volatilePathProblem("/srv/state/..run/journal", [{ point: "/", type: "ext4" }, { point: "/srv/state", type: "tmpfs" }], "/nonexistent-tmp")).toContain("is on a tmpfs mount at /srv/state");
   });
 
   test("an ephemeral VM must name a receipts sink, and the copy keeps paths under out", () => {
@@ -92,6 +105,11 @@ describe("receipts and journals outlive the machine", () => {
     expect(receiptsSink({ GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink })).toEqual({ sink });
     expect(copyToSink(out, [join(out, "receipts"), join(out, "journal.ndjson"), join(out, "missing")], sink)).toEqual([join(sink, "receipts"), join(sink, "journal.ndjson")]);
     expect(readFileSync(join(sink, "receipts", "r.json"), "utf8")).toBe("{}");
+    const elsewhere = scratch("proxy");
+    writeFileSync(join(elsewhere, "journal.ndjson"), "{}\n");
+    const empty = scratch("sink2");
+    expect(() => copyToSink(out, [join(out, "journal.ndjson"), join(elsewhere, "journal.ndjson")], empty)).toThrow("these files are outside the run's out dir " + out + ", so they have no place under the receipts sink: " + join(elsewhere, "journal.ndjson"));
+    expect(readdirSync(empty)).toEqual([]);
   });
 });
 

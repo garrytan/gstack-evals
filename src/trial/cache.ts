@@ -64,7 +64,8 @@ export function cacheStale(cell: string, changed: readonly SessionKeyPart[]): Ca
 
 /**
  * A directory's tree hash: every entry's relative path, type, executable bit and content (a symlink's target), sorted.
- * Directories with no files still count. Used for the fixture tree and an arm's installed tree.
+ * Directories with no files still count. Each entry is one JSON array, so a space or newline in a name or target cannot
+ * make two trees serialize alike. Used for the fixture tree and an arm's installed tree.
  */
 export function dirTreeSha256(root: string): string {
   const lines: string[] = [];
@@ -73,12 +74,12 @@ export function dirTreeSha256(root: string): string {
       const path = join(dir, name);
       const relPath = rel ? rel + "/" + name : name;
       const st = lstatSync(path);
-      if (st.isSymbolicLink()) lines.push("l " + relPath + " " + readlinkSync(path));
+      if (st.isSymbolicLink()) lines.push(JSON.stringify(["l", relPath, readlinkSync(path)]));
       else if (st.isDirectory()) {
-        lines.push("d " + relPath);
+        lines.push(JSON.stringify(["d", relPath]));
         walk(path, relPath);
-      } else if (st.isFile()) lines.push("f " + relPath + " " + (st.mode & 0o111 ? "x" : "-") + " " + sha(readFileSync(path)));
-      else lines.push("o " + relPath);
+      } else if (st.isFile()) lines.push(JSON.stringify(["f", relPath, st.mode & 0o111 ? "x" : "-", sha(readFileSync(path))]));
+      else lines.push(JSON.stringify(["o", relPath]));
     }
   };
   walk(root, "");

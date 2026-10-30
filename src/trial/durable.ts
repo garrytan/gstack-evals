@@ -24,7 +24,7 @@ const real = (path: string): string => {
 
 const under = (path: string, root: string) => {
   const rel = relative(root, path);
-  return rel === "" || (!rel.startsWith("..") && !rel.startsWith(sep));
+  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !rel.startsWith(sep));
 };
 
 /** Why receipts or a journal at path would not survive the machine, or null when they would. */
@@ -45,8 +45,13 @@ export function receiptsSink(env: Env = process.env): { sink: string | null } | 
   return { sink: resolve(env.GSTACK_EVALS_RECEIPTS) };
 }
 
-/** Copies the run's receipts and journal to the sink, keeping their paths under the run's out dir. */
+/**
+ * Copies the run's receipts and journal to the sink, keeping their paths under the run's out dir. A file outside out has
+ * no place under the sink, so the copy refuses before it writes anything; the run keeps its journal under out.
+ */
 export function copyToSink(out: string, files: readonly string[], sink: string): string[] {
+  const outside = files.filter((file) => !under(resolve(file), resolve(out)));
+  if (outside.length) throw new Error("these files are outside the run's out dir " + resolve(out) + ", so they have no place under the receipts sink: " + outside.join(", "));
   const copied: string[] = [];
   for (const file of files) {
     if (!existsSync(file)) continue;

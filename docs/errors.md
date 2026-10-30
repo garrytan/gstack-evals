@@ -82,6 +82,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
 | [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 | [LEASE_OVERSPENT](#lease_overspent) | warning | U4 |
+| [CLEANUP_INCOMPLETE](#cleanup_incomplete) | warning | U9 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -634,3 +635,11 @@ A lease closed holding more than it reserved, because a provider billed a call a
 Fix: Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.
 
 Warning. Owner: U4.
+
+### CLEANUP_INCOMPLETE
+
+A work dir that a preflight control or a trial used is still on disk, because removing it failed (often files a root step left). The message names the path and why. The result is unchanged.
+
+Fix: Remove the named path as its owner or as root. Give cleanup an image (the trial image) so it can remove root-owned files from a container with no network.
+
+Warning. Owner: U9.

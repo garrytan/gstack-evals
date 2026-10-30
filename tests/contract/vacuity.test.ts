@@ -105,6 +105,16 @@ describe("vacuity check on the whole task", () => {
     expect(readdirSync(tmp).filter((name) => name.startsWith("gstack-evals-vacuity-"))).toEqual([]);
   });
 
+  test("a work dir that cleanup cannot remove keeps the result and warns CLEANUP_INCOMPLETE, naming the path", () => {
+    const r = checkVacuity({ tasks: [task("stuck", { must: ["x"] })], dir: tmp }, { workRoot: tmp, cleanup: { remove: () => {} } });
+    const leftover = r.results[0]!.leftover!;
+    expect(leftover).toMatch(/^could not remove .*gstack-evals-vacuity-.*: still present after removal$/);
+    expect(r.results[0]!.status).toBe("ok");
+    expect(r.stops).toEqual([]);
+    expect(r.warnings).toEqual([{ code: "CLEANUP_INCOMPLETE", message: "stuck: " + leftover }]);
+    for (const name of readdirSync(tmp).filter((n) => n.startsWith("gstack-evals-vacuity-"))) rmSync(join(tmp, name), { recursive: true, force: true });
+  });
+
   test("controls run in a fresh work dir with the env allowlist and the task's declared variables only", () => {
     process.env.EVAL_FIXTURE_GREETING = "fixture-value";
     process.env.GSTACK_EVALS_TEST_UNLISTED = "must-not-leak";

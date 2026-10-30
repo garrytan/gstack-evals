@@ -620,6 +620,12 @@ export const CODES = {
     fix: "Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.",
     owner: "U4",
   },
+  CLEANUP_INCOMPLETE: {
+    exit: null,
+    meaning: "A work dir that a preflight control or a trial used is still on disk, because removing it failed (often files a root step left). The message names the path and why. The result is unchanged.",
+    fix: "Remove the named path as its owner or as root. Give cleanup an image (the trial image) so it can remove root-owned files from a container with no network.",
+    owner: "U9",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
