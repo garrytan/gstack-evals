@@ -102,6 +102,19 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 - One arm-balanced round is one trial of every task in every arm, for every model. A round that would pass the cap is not started, so a cap stop keeps complete paired cells, exits 2 with CAP_STOP and prints `STOP: reason=budget_exhausted spent=<usd> reserved=<usd> unknown=<n> cap=<usd>`.
 - Approvals are recorded by a person with `gstack-evals ledger init|raise` and their exact words (docs/budget-ledger.md). The CLI never implies or suggests a cap.
 
+## Run it from a Capy thread
+
+A real run outlasts one tool call, so run it the way Capy runs long work:
+
+1. Start the eval as a background operation. Capy's limit is six hours per operation; `--dry-run` prints the parallelism and an ETA first, and a Capy machine has few cores.
+2. Register a wait on that operation and end the turn. The wait keeps the machine awake through the operation's own timeout and wakes the thread when it ends.
+3. Keep `--out` at its default under `~/.capy/work`, which survives a wake, and the local ledger at its default on the machine. Point `--ledger-record` at your Captain drive.
+4. While you wait, read `<out>/progress.json`: sessions done, passed, failed, timed out and missing, the cells still running and an ETA. It is rewritten whole after every session.
+5. If the operation ended before the run did (the six-hour limit, or a machine that slept with no wait on it), run the same call with `--resume <out>` (not built until U10). Resume stops the proxy, reconciles its journal, then settles the lease (docs/adapters.md, Lane A), and a session whose cache key changed stops with E_CACHE_STALE before any spend.
+6. If the machine is replaced, its lease stays reserved until `gstack-evals ledger reconcile` records the settlement from the provider's usage export.
+
+On a VM that is deleted after the run, set `GSTACK_EVALS_EPHEMERAL=1` and `GSTACK_EVALS_RECEIPTS` to a directory that outlives it; the run copies its receipts and journal there before it exits.
+
 ## Model policy
 
 The default policy, `policy/models.json`, lists the newest generation of each family. Opus 5.5, Sonnet 5.5, Haiku 5.5, gpt-6-astra, gpt-6.1-sol and gpt-6-luna may be subjects. Opus 5.5, Sonnet 5.5, gpt-6-astra and gpt-6.1-sol may also judge and adjudicate, and gpt-6-luna simulates the user. Fable 5.1 is allowed only with `--smoke`, and gpt-5.4-mini is refused. particle-1 and DeepSeek V4.1 Flash run through OpenRouter as subjects on `--host codex`, with `OPENROUTER_API_KEY`. Any model the metering proxy cannot route and price is refused (E_MODEL_POLICY). Pass your own file with `--policy`; policy/examples/gbrain.json shows a narrower ladder.
