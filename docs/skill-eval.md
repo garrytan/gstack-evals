@@ -74,7 +74,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--margin` | none | A non-inferiority margin in percentage points; needed for `noninferior: true`. |
 | `--resume` | none | Continue a stopped run on Claude Code or Codex from its out directory: finished sessions whose key still matches are reused. The fake host refuses it (E_USAGE). |
 | `--repair` | none | With `--resume <out>`: rerun the cells whose key changed under a new verdict id; the value names the repair. |
-| `--mirror` | none | Copy verdict.json, calibration.json, run.json, progress.json and the cells, adjudication and usersim journals to this directory, with transcript turns, machine paths and meter, lease and container ids scrubbed (src/skill-eval/cli/mirror.ts). Nothing under runs/, judge/ or proxy/ is copied. It may not be the out directory. |
+| `--mirror` | none | Copy verdict.json, calibration.json, run.json, progress.json and the cells, adjudication and usersim journals to this directory, with transcript turns, machine paths and meter, lease and container ids scrubbed (src/skill-eval/cli/mirror.ts). Nothing under runs/, judge/ or proxy/ is copied. It may not be the out directory under any name, and a reused mirror directory loses the records this run did not write. |
 | `--arms-file` | none | The full arm manifest. Not built (U9). |
 | `--json` | off | Stdout carries JSON only: the verdict, the plan or the preflight result. Every failure writes `<out>/error.json`. |
 | `--example` | off | A keyless fake-host example; takes only `--out` and `--json`. |

@@ -12,8 +12,10 @@
 //   naming the question. WebSearch and WebFetch are disallowed: they reach outside the trial network's lock.
 // - An SDK-side PreToolUse hook answers "ask" for every tool call, so each one reaches canUseTool even when an allow
 //   rule (a fixture's or the agent's own .claude/settings.json), a settings hook or a permission mode would approve it
-//   first. After the session, an AskUserQuestion that got an answer canUseTool never gave ends the cell as a missing
-//   cell, E_APPROVAL_BYPASS: no route answers a question without the simulator.
+//   first. After the session, an AskUserQuestion whose result canUseTool never gave (an answer, or another hook's deny
+//   reason) ends the cell as a missing cell, E_APPROVAL_BYPASS, unless it was a cap stop: no route answers a question
+//   without the simulator.
+// - The session's clock stops while the persona's free-form source answers, so usersim latency never times the arm out.
 // - A question the sidecar does not answer goes to the persona's free-form source when the run passes one
 //   (src/usersim/persona.ts); a source that cannot answer ends the cell with its termination.
 // - After each turn whose last text ends in a question, the simulator's reply goes in as the next user message; the
@@ -124,17 +126,21 @@ class Inbox {
 
 const userMessage = (text: string): SdkMessage => ({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, session_id: "" });
 
-/** AskUserQuestion calls whose result is an answer that did not come through canUseTool, by tool_use id. */
-export function unapprovedAsks(messages: readonly SdkMessage[], approved: ReadonlySet<string>): string[] {
+/**
+ * AskUserQuestion calls whose result did not come through canUseTool, by tool_use id: a result that answers, or any
+ * result for a call the adapter's PreToolUse hook saw, since another hook's deny reason reaches the model as the
+ * result. An error result for a call no hook saw (input the CLI refused before the hooks) is not one.
+ */
+export function unapprovedAsks(messages: readonly SdkMessage[], approved: ReadonlySet<string>, hooked: ReadonlySet<string> = new Set()): string[] {
   const asks = new Set<string>();
-  const answered: string[] = [];
+  const results: { id: string; error: boolean }[] = [];
   for (const m of messages) {
     for (const b of Array.isArray(m.message?.content) ? (m.message.content as SdkMessage[]) : []) {
       if (m.type === "assistant" && b.type === "tool_use" && b.name === "AskUserQuestion") asks.add(b.id);
-      if (m.type === "user" && b.type === "tool_result" && b.is_error !== true) answered.push(b.tool_use_id);
+      if (m.type === "user" && b.type === "tool_result") results.push({ id: b.tool_use_id, error: b.is_error === true });
     }
   }
-  return answered.filter((id) => asks.has(id) && !approved.has(id));
+  return results.filter((r) => asks.has(r.id) && !approved.has(r.id) && (!r.error || hooked.has(r.id))).map((r) => r.id);
 }
 
 const ROUTE_TO_CAN_USE_TOOL = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: "every tool call goes through the adapter's canUseTool" } };
@@ -181,16 +187,22 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         inbox.close();
         abort.abort();
       };
-      const timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs);
+      let deadline = Date.now() + timeoutMs;
+      let timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs);
       const persona = o.freeform;
       const freeform = persona && (async (text: string, question: string) => {
+        clearTimeout(timer);
+        const paused = Date.now();
         const a = await persona(text, question);
+        deadline += Date.now() - paused;
+        timer = setTimeout(() => end({ kind: "timeout" }), Math.max(0, deadline - Date.now()));
         if ("text" in a) return a.text;
         end(a.stop);
         return null;
       });
       const sim = (driver.sim = new UserSim({ task: task.id, script: o.entry?.user, log: join(o.out, "usersim.ndjson"), ...(freeform ? { freeform } : {}) }));
       const approved = new Set<string>();
+      const hooked = new Set<string>();
       const canUseTool = async (name: string, input: Record<string, unknown>, options?: { toolUseID?: string }) => {
         if (options?.toolUseID) approved.add(options.toolUseID);
         if (name !== "AskUserQuestion") return { behavior: "allow", updatedInput: input };
@@ -212,7 +224,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
           disallowedTools: DISALLOWED_TOOLS,
           abortController: abort,
           canUseTool,
-          hooks: { PreToolUse: [{ hooks: [async () => ROUTE_TO_CAN_USE_TOOL] }] },
+          hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
           stderr: (d: string) => appendFileSync(join(o.out, "cli-stderr.log"), d),
           spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) =>
             session.spawn([CLAUDE_BIN, ...s.args], Object.fromEntries(SDK_ENV.flatMap((k) => (s.env[k] ? [[k, s.env[k]!]] : [])))),
@@ -263,7 +275,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         inbox.close();
         if (!abort.signal.aborted) abort.abort();
       }
-      if (unapprovedAsks(messages, approved).length) stop ??= { kind: "missing", code: "E_APPROVAL_BYPASS" };
+      if (unapprovedAsks(messages, approved, hooked).length && (stop as Termination | null)?.kind !== "cap_stop") stop = { kind: "missing", code: "E_APPROVAL_BYPASS" };
       const { turns, calls } = parseClaudeCode(messages);
       const use = skillUse(calls, o.skill);
       writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files, missing_question: missingQuestion }, null, 2) + "\n");

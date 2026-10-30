@@ -20,10 +20,12 @@ describe("--mirror's scrub", () => {
     writeFileSync(join(out, "run.json"), JSON.stringify({ run_id: "r", recovery: { lease_id: "item.0001.abc123", proxy_container: "gse-proxy-1", journal: join(out, "proxy", "journal.ndjson") } }));
     writeFileSync(join(out, "cells.ndjson"), JSON.stringify({ cell: { model: "m", arm: "after", task: "t" }, record: { turns: ["SECRET TRANSCRIPT LINE", "FINAL ANSWER TEXT"], files_read: ["SKILL.md"], cost_micros: 77, termination: { kind: "completed" }, meter_id: meter } }) + "\nnot json " + join(out, "x") + "\n");
     writeFileSync(join(out, "adjudication.ndjson"), JSON.stringify({ dir: join(out, "judge", "abc"), judge_route: "openai /v1/responses", judgment: "done", cost_micros: 5 }) + "\n");
+    writeFileSync(join(out, "progress.json"), JSON.stringify({ last: { cell: "m after t round 1 trial 0" }, notes: ["file:///" + "etc/x", "PATH=/usr/bin:/srv/b", "key:/opt/k", "near " + arms + "2/x", "rate 3/4 and/or"] }));
     const dest = join(root, "mirror");
     const written = mirrorRun(out, dest, [arms, join(root, "ledger")]);
-    expect(written.map((w) => w.slice(dest.length + 1)).sort()).toEqual(["adjudication.ndjson", "cells.ndjson", "run.json", "verdict.json"]);
-    expect(readdirSync(dest).sort()).toEqual(["adjudication.ndjson", "cells.ndjson", "run.json", "verdict.json"]);
+    expect(written.map((w) => w.slice(dest.length + 1)).sort()).toEqual(["adjudication.ndjson", "cells.ndjson", "progress.json", "run.json", "verdict.json"]);
+    expect(readdirSync(dest).sort()).toEqual(["adjudication.ndjson", "cells.ndjson", "progress.json", "run.json", "verdict.json"]);
+    expect(JSON.parse(readFileSync(join(dest, "progress.json"), "utf8")).notes).toEqual(["file://<path>", "PATH=<path>", "key:<path>", "near <path>", "rate 3/4 and/or"]);
     const text = readdirSync(dest).map((f) => readFileSync(join(dest, f), "utf8")).join("\n");
     for (const leak of [out, root, meter, "SECRET TRANSCRIPT LINE", "FINAL ANSWER TEXT", "item.0001.abc123", "gse-proxy-1", agentPath, "not json"]) expect(text).not.toContain(leak);
     const verdict = JSON.parse(readFileSync(join(dest, "verdict.json"), "utf8"));

@@ -5,7 +5,7 @@
 // - A key on SCRUB_KEYS loses its value (an array becomes [], anything else null): transcript text, machine paths, and
 //   meter, lease and container ids.
 // - In every other string, the out dir and each root the caller names become <out> or <path>, any other absolute path
-//   under a machine root becomes <path>, and a meter id becomes <meter>.
+//   becomes <path> (an API route under /v1/ stays), and a meter id becomes <meter>.
 // - A journal line that does not parse is dropped, not copied.
 // A mirror directory that resolves to the out directory, through a symlink or not, is refused, and a record the run did
 // not write is removed from a reused mirror directory, so a mirror never overwrites its source or mixes two runs.
@@ -29,7 +29,8 @@ export const SCRUB_KEYS: Readonly<Record<string, string>> = {
 };
 
 const METER_ID = /\bm_[0-9a-f]{24}\b/g;
-const MACHINE_PATH = /(?<![\w.~:/-])(?:~\/[^\s"'`,;)<>]*|\/(?:home|Users|root|tmp|var|private|workspace|mnt|opt|srv|data|media|Volumes|run|nix)(?![\w.-])(?:\/[^\s"'`,;)<>]*)?)/g;
+const MACHINE_PATH = /(?<![\w.~>-])(?:~\/[^\s"'`,;)<>]*|\/(?!v1\/)[\w.@+-][^\s"'`,;)<>]*)/g;
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The path with every symlink in its longest existing prefix resolved, so two names for one directory compare equal. */
 export function canonical(path: string): string {
@@ -41,7 +42,7 @@ export function canonical(path: string): string {
 /** Replaces the out dir, the named roots, other machine paths and meter ids in one string. */
 function scrubText(text: string, roots: readonly [string, string][]): string {
   let t = text;
-  for (const [root, mark] of roots) t = t.split(root).join(mark);
+  for (const [root, mark] of roots) t = t.replace(new RegExp(escaped(root) + "(?![\\w.@+-])", "g"), mark);
   return t.replace(METER_ID, "<meter>").replace(MACHINE_PATH, "<path>");
 }
 

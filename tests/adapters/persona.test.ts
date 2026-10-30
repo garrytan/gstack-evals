@@ -31,18 +31,18 @@ function stub(turns: ((options: Msg) => Promise<Msg[]>)[], sent: string[]) {
 }
 
 const QUESTION = "Before I start: what's the strongest evidence you have that someone actually wants this?";
-const drive = async (turns: ((options: Msg) => Promise<Msg[]>)[], o: { freeform?: (persona: string, question: string) => Promise<PersonaAnswer>; replies?: Record<string, string> } = {}) => {
+const drive = async (turns: ((options: Msg) => Promise<Msg[]>)[], o: { freeform?: (persona: string, question: string) => Promise<PersonaAnswer>; replies?: Record<string, string>; timeoutMs?: number } = {}) => {
   const out = mkdtempSync(join(tmpdir(), "gse-persona-"));
   const sent: string[] = [];
   const driver = claudeCodeDriver({ model: "claude-haiku-5-5", provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, entry: { user: { persona: "A dentist-software founder in a hurry.", ...(o.replies ? { replies: o.replies } : {}) } }, skill: null, out, query: stub(turns, sent) as never, ...(o.freeform ? { freeform: o.freeform } : {}) });
-  const outcome = await driver.run({} as AgentSession, { id: "t", prompt: "Say hello." }, 30_000);
+  const outcome = await driver.run({} as AgentSession, { id: "t", prompt: "Say hello." }, o.timeoutMs ?? 30_000);
   const events = readFileSync(join(out, "usersim.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   return { outcome, sent, events };
 };
 
 describe("the persona's free-form source in the Claude Code adapter", () => {
   // Value: protects=a question the sidecar does not answer goes to the persona's source with the persona and the question, and its answer is the next user message; an answer that approves a gated effect still goes out as the fixed non-approving reply (#64's binding); a source that cannot answer ends the cell with its termination instead of a fallback; fails_when=the persona answer is dropped, a free-form approval reaches the agent, or a usersim cap stop is counted as an outcome; why_new=GST-273 (U10b wires the free-form model); seam=claudeCodeDriver's freeform option over a stand-in SDK; no_claim=the real CLI and the usersim slot (tests/adapters/run-host.test.ts)
-  test("a free-form answer goes in as the next user message, under the binding rules, and a failed source ends the cell", async () => {
+  test("a free-form answer goes in as the next user message, under the binding rules, the clock stops while it is pending, and a failed source ends the cell", async () => {
     const asked: string[][] = [];
     const answer = (text: string) => async (persona: string, question: string): Promise<PersonaAnswer> => {
       asked.push([persona, question]);
@@ -56,6 +56,9 @@ describe("the persona's free-form source in the Claude Code adapter", () => {
 
     const grant = await drive([async () => [said("Shall I push the branch now?"), done], async () => [said("FINAL: ok."), done]], { freeform: answer("Yes, push it.") });
     expect(grant.sent[1]).toBe(NON_APPROVING);
+
+    const slow = await drive([async () => [said(QUESTION), done], async () => [said("FINAL: noted."), done]], { timeoutMs: 300, freeform: async () => (await Bun.sleep(600), { text: "Three dentists paid a deposit." }) });
+    expect(slow.outcome.termination).toEqual({ kind: "completed" });
 
     const capped = await drive([async () => [said(QUESTION), done], async () => [said("FINAL: never sent."), done]], { freeform: async () => ({ stop: { kind: "cap_stop" } }) });
     expect(capped.outcome.termination).toEqual({ kind: "cap_stop" });
@@ -94,6 +97,7 @@ describe("the approval path's backstop", () => {
     expect(unapprovedAsks([askUse, answered("bad input", true)], new Set())).toEqual([]);
     expect(unapprovedAsks([askUse, answered("x")], new Set(["toolu_q"]))).toEqual([]);
     expect(unapprovedAsks([askUse, answered("x")], new Set())).toEqual(["toolu_q"]);
+    expect(unapprovedAsks([askUse, answered("PreToolUse:AskUserQuestion hook error: the user chose A", true)], new Set(), new Set(["toolu_q"]))).toEqual(["toolu_q"]);
   });
 });
 
