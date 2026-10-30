@@ -81,7 +81,8 @@ export function codexArgs(o: Pick<CodexOptions, "model" | "provider" | "proxy">)
 
 type CodexEvent = { type?: string; message?: string; error?: { message?: string }; usage?: Record<string, number> };
 
-const tokens = (u: Record<string, number>): TokenUsage => ({ input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, reasoning: u.reasoning_output_tokens ?? 0, cache_read: u.cached_input_tokens ?? 0, cache_write: u.cache_write_input_tokens ?? 0 });
+/** Codex's input_tokens include its cached input and its output_tokens include reasoning; TokenUsage keeps each class apart. */
+const tokens = (u: Record<string, number>): TokenUsage => ({ input: Math.max(0, (u.input_tokens ?? 0) - (u.cached_input_tokens ?? 0) - (u.cache_write_input_tokens ?? 0)), output: Math.max(0, (u.output_tokens ?? 0) - (u.reasoning_output_tokens ?? 0)), reasoning: u.reasoning_output_tokens ?? 0, cache_read: u.cached_input_tokens ?? 0, cache_write: u.cache_write_input_tokens ?? 0 });
 
 export interface CodexDriver extends AgentDriver {
   env: Record<string, string>;

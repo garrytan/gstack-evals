@@ -50,7 +50,7 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(r.outcome.turns).toEqual(["Reading the skill.", "FINAL: it says demo."]);
     expect(r.calls().calls.map((c: { tool: string; ok: boolean }) => [c.tool, c.ok])).toEqual([["shell", true]]);
     expect([r.outcome.opened, r.outcome.files_read, r.outcome.loaded_bytes]).toEqual([true, ["SKILL.md"], statSync(join(root, "SKILL.md")).size]);
-    expect(r.outcome.usage).toMatchObject({ output: 100, reasoning: 20 });
+    expect(r.outcome.usage).toEqual({ input: 200, output: 80, reasoning: 20, cache_read: 4000, cache_write: 0 });
     const sent = r.responses();
     expect(sent.length).toBe(2);
     for (const u of sent) {
@@ -82,6 +82,7 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     const key = await run(final, { env: rest });
     expect(key.outcome.termination).toEqual({ kind: "missing", code: "E_KEY_MISSING" });
     expect(key.responses()).toEqual([]);
+    // gstack-timing-ok: the bound only catches the CLI retrying the refusal, which backs off for minutes; one refused call takes seconds even on a slow machine
     expect(Date.now() - started).toBeLessThan(60_000);
   }, 180_000);
 
