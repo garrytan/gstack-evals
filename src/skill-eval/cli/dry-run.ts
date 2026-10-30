@@ -4,9 +4,14 @@
 //
 // The worst case prices every session at its allowance, the most the metering proxy lets one session spend before it
 // refuses the next call. An allowance is a token budget priced at the model's list price, uncached input included:
-// 400k input and 32k output tokens per agent session, five times the high end of interface v0.4's typical Opus 5.5 cost
-// ($120 over 144 sessions). Judges get 60k and 4k per judged run, and the user simulator 80k and 5k per interactive
-// session. The rerun stage can rerun every task in every arm once, so it doubles the agent, judge and user simulator parts.
+// 1.6M input and 32k output tokens per agent session. The proxy refuses a call whose bound (one token per body byte
+// plus the output cap) would take the session past its allowance, so the allowance must hold a session's spend and its
+// next request's bound. Replaying GSTA-13's metered office-hours sessions on Opus 5.5, 400k refused 89% to 100% of the
+// skill-arm sessions before they finished, and 1.6M ($7.04 a session) refused none. A model with a long-prompt row
+// (Haiku 5.5 past 100k input tokens, gpt-6.1-sol past 272k) is priced at that row, because the proxy reserves any
+// request past the threshold at it; at base rates Haiku 5.5's allowance could not hold one 190 KB request. Judges get
+// 200k and 40k per judged run, and the user simulator 80k and 5k per interactive session. The rerun stage can rerun
+// every task in every arm once, so it doubles the agent, judge and user simulator parts.
 import { chatPrice } from "../../runner/pricing/prices.ts";
 import { usd } from "../../runner/ledger/money.ts";
 import type { Call } from "./call.ts";
@@ -17,7 +22,7 @@ export interface Allowance {
   output: number;
 }
 
-export const SESSION_ALLOWANCE: Allowance = { input: 400_000, output: 32_000 };
+export const SESSION_ALLOWANCE: Allowance = { input: 1_600_000, output: 32_000 };
 /**
  * A judge is one request with no tools. The proxy writes its 32,768-token output cap into a request that names none and
  * reserves for it, so the output allowance must cover that cap (a reasoning judge thinks before its one line). The input
@@ -59,11 +64,17 @@ export interface Plan {
   calibrate: boolean;
 }
 
-/** A session's allowance at the model's list price, in micro-dollars: $/M tokens is micro-dollars per token. */
+/**
+ * A session's allowance at the model's list price, in micro-dollars: $/M tokens is micro-dollars per token. A model whose
+ * long-prompt row starts below the allowance's input is priced at that row, since the proxy reserves any request past
+ * the threshold at it.
+ */
 export function allowanceMicros(call: Pick<Call, "policy">, model: string, a: Allowance): number | null {
   const provider = providerOf(call.policy, model);
   const price = provider ? chatPrice(provider + ":" + model) : undefined;
-  return price ? Math.ceil(a.input * price.input + a.output * price.output) : null;
+  if (!price) return null;
+  const rates = price.long && a.input > price.long.above_input_tokens ? price.long : price;
+  return Math.ceil(a.input * rates.input + a.output * rates.output);
 }
 
 const describe = (model: string, a: Allowance) => model + ": " + a.input / 1000 + "k input + " + a.output / 1000 + "k output tokens at list price";

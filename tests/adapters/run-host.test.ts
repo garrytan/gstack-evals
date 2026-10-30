@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NO_SKILL, withSentinel } from "../../src/adapters/calibration.ts";
-import { judgeDriver } from "../../src/adapters/judge.ts";
+import { JUDGE_REASONING_EFFORT, judgeDriver } from "../../src/adapters/judge.ts";
 import { SKILL_DIRS } from "../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { armImages, dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
@@ -11,7 +11,7 @@ import { resolveCall, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS } from "../../src/skill-eval/cli/flags.ts";
 import { preflight } from "../../src/skill-eval/cli/preflight.ts";
 import { mirrorReceipts, runOnRealHost } from "../../src/skill-eval/cli/skill-eval.ts";
-import { PERSONA_MAX_OUTPUT_TOKENS } from "../../src/usersim/persona.ts";
+import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_REASONING_EFFORT } from "../../src/usersim/persona.ts";
 import { collect } from "../cli/helpers.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { buildTrialImage, checkImagePin, stateRoot } from "../../src/trial/image.ts";
@@ -191,7 +191,7 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect(lines.map((l) => [l.cell.arm, l.judge_route, l.judge_model, l.judgment])).toEqual(expect.arrayContaining([["before", "openai /v1/responses", "gpt-6.1-sol", "done"], ["after", "openai /v1/responses", "gpt-6.1-sol", "done"], ["none", "openai /v1/responses", "gpt-6.1-sol", "done"]]));
     const judged = h.upstream.filter((u) => JSON.stringify(u.body).includes("You are grading one answer"));
     expect(judged).toHaveLength(3);
-    for (const u of judged) expect([Object.keys(u.body).sort(), u.body.input.length, u.body.stream ?? false]).toEqual([["input", "max_output_tokens", "model", "service_tier", "store"], 1, false]);
+    for (const u of judged) expect([Object.keys(u.body).sort(), u.body.input.length, u.body.stream ?? false, u.body.reasoning]).toEqual([["input", "max_output_tokens", "model", "reasoning", "service_tier", "store"], 1, false, { effort: JUDGE_REASONING_EFFORT }]);
     for (const l of lines) expect(existsSync(join(l.dir, "host"))).toBe(false);
     expect(run.input.stops).toEqual([]);
 
@@ -215,7 +215,7 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     const asks = h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/responses"));
     expect(asks).toHaveLength(3);
     for (const u of asks) {
-      expect([u.body.model, u.body.tools, u.body.max_output_tokens]).toEqual([usersim, undefined, PERSONA_MAX_OUTPUT_TOKENS]);
+      expect([u.body.model, u.body.tools, u.body.max_output_tokens, u.body.reasoning]).toEqual([usersim, undefined, PERSONA_MAX_OUTPUT_TOKENS, { effort: PERSONA_REASONING_EFFORT }]);
       expect(JSON.stringify(u.body.input)).toContain(PERSONA);
       expect(JSON.stringify(u.body.input)).toContain("strongest evidence");
     }
@@ -357,7 +357,7 @@ describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex 
     writeFileSync(tasks, JSON.stringify([{ id: "hello", prompt: "Say hello.", must: ["hello"] }]));
     const out = join(root, "out");
     const env = { OPENAI_API_KEY: "fake-openai-value" };
-    const argv = (extra: string[]) => ["--arms", "before=" + armDir(root, "before") + ",after=" + after + ",none", "--tasks", tasks, "--host", "codex", "--model", MODELS.codex, "--trials", "1", "--spend-cap", "5", "--item", "resume-test", "--isolation", "docker", "--no-noise-floor", "--out", out, ...extra];
+    const argv = (extra: string[]) => ["--arms", "before=" + armDir(root, "before") + ",after=" + after + ",none", "--tasks", tasks, "--host", "codex", "--model", MODELS.codex, "--trials", "1", "--spend-cap", "25", "--item", "resume-test", "--isolation", "docker", "--no-noise-floor", "--out", out, ...extra];
     const call = (extra: string[]) => {
       const parsed = parseFlags(argv(extra), SKILL_EVAL_FLAGS, env);
       if (typeof parsed === "string") throw new Error(parsed);
@@ -423,7 +423,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("--mirror through the CLI's run layer, on Claud
     const out = join(root, "out");
     const mirror = join(root, "mirror");
     const env = { ANTHROPIC_API_KEY: "fake-anthropic-value", OPENAI_API_KEY: "fake-openai-value" };
-    const parsed = parseFlags(["--arms", "before=" + armDir(root, "before") + ",after=" + armDir(root, "after") + ",none", "--tasks", tasks, "--host", "claude", "--model", MODELS.claude, "--trials", "1", "--spend-cap", "5", "--item", "mirror-test", "--isolation", "docker", "--no-noise-floor", "--out", out, "--mirror", mirror], SKILL_EVAL_FLAGS, env);
+    const parsed = parseFlags(["--arms", "before=" + armDir(root, "before") + ",after=" + armDir(root, "after") + ",none", "--tasks", tasks, "--host", "claude", "--model", MODELS.claude, "--trials", "1", "--spend-cap", "10", "--item", "mirror-test", "--isolation", "docker", "--no-noise-floor", "--out", out, "--mirror", mirror], SKILL_EVAL_FLAGS, env);
     if (typeof parsed === "string") throw new Error(parsed);
     const call = resolveCall(parsed, env);
     if ("code" in call) throw new Error(call.code + " " + call.message);

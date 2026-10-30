@@ -134,7 +134,7 @@ describe("cleanup", () => {
 });
 
 describe("state root", () => {
-  // Value: protects=each work dir gets an onboarded .gstack-home that both variables name, without changing the fixture's git tree; fails_when=a marker is missing, telemetry stays on, a learning is clobbered, or the markers show up in git status; why_new=new; seam=seedStateRoot; no_claim=which markers newer gstack versions add
+  // Value: protects=each work dir gets an onboarded .gstack-home that both variables name, without changing the fixture's git tree; fails_when=a marker is missing, telemetry stays on, the routing offer is not declined, a learning is clobbered, or the markers show up in git status; why_new=new; seam=seedStateRoot; no_claim=which markers newer gstack versions add
   test("seeds markers and config after /learn's setup, keeps the fixture's files and stays git-excluded", () => {
     const work = scratch("learn");
     const seed = join(import.meta.dir, "../contract/fixtures/gstack/learn/seed.sh");
@@ -145,6 +145,7 @@ describe("state root", () => {
     const config = readFileSync(join(work, ".gstack-home", "config.yaml"), "utf8");
     expect(config).toContain("telemetry: off\nupdate_check: false\n");
     expect(config).toContain("proactive: core\n");
+    expect(config).toContain("routing_declined: true\n");
     expect(spawnSync("git", ["status", "--porcelain"], { cwd: work, encoding: "utf8" }).stdout).toBe("");
     const slug = spawnSync("ls", [join(work, ".gstack-home", "projects")], { encoding: "utf8" }).stdout.trim().split("\n")[0]!;
     expect(readFileSync(join(work, ".gstack-home", "projects", slug, "learnings.jsonl"), "utf8").split("\n").filter(Boolean)).toHaveLength(7);

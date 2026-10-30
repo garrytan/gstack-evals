@@ -13,6 +13,9 @@ import type { Termination } from "../types.ts";
 /** The output cap one free-form answer asks the proxy for; the session's usersim allowance covers several. */
 export const PERSONA_MAX_OUTPUT_TOKENS = 1024;
 
+/** The reasoning effort one free-form answer asks for on the OpenAI route: low, so reasoning leaves room for the answer inside the output cap. */
+export const PERSONA_REASONING_EFFORT = "low";
+
 /** Seconds one free-form answer may take. */
 export const PERSONA_TIMEOUT_S = 120;
 

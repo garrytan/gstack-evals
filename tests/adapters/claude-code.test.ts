@@ -164,10 +164,10 @@ describe.skipIf(!HAS_CLAUDE_CLI)("Claude Code adapter on the Agent SDK, against 
       expect(u.headers.get("authorization")).toBe("Bearer " + KEYS.OPENROUTER_API_KEY);
       expect(u.headers.get("x-api-key")).toBeNull();
       expect(u.body.model).toBe("particle-ai/particle-1");
-      expect(u.body.provider).toEqual({ max_price: { prompt: 0.25, completion: 1, request: 0, image: 0 } });
+      expect(u.body.provider).toEqual({ max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     }
-    // 100 fresh input, 2000 cache read and 500 cache write tokens, 50 output, per call, at particle-1's row (no cache rates: input price).
-    expect(r.meter.micros).toBe(r.meter.requests * Math.ceil(2600 * 0.25 + 50 * 1));
+    // 100 fresh input, 2000 cache read and 500 cache write tokens, 50 output, per call, at particle-1's row (cache reads at its cache-read rate; it has no write rate, so writes pay input).
+    expect(r.meter.micros).toBe(r.meter.requests * Math.ceil(100 * 0.1 + 2000 * 0.003 + 500 * 0.1 + 50 * 1));
   }, 180_000);
 });
 
@@ -188,8 +188,8 @@ describe("Claude Code adapter pieces", () => {
   test("OpenRouter's Messages route reads usage in Anthropic's shape; its chat route keeps OpenAI's", () => {
     const body = { model: "particle-ai/particle-1", messages: [{ role: "user", content: "hi" }] };
     const usage = { input_tokens: 100, cache_read_input_tokens: 2000, cache_creation_input_tokens: 0, output_tokens: 50 };
-    expect(usageCost(priceRequest("openrouter", body, 100, "/v1/messages"), usage)).toEqual({ micros: Math.ceil(2100 * 0.25 + 50), usage: { input: 100, output: 50, reasoning: 0, cache_read: 2000, cache_write: 0 } });
-    expect(usageCost(priceRequest("openrouter", body, 100, "/v1/chat/completions"), { prompt_tokens: 2100, completion_tokens: 50, prompt_tokens_details: { cached_tokens: 2000 } })!.micros).toBe(Math.ceil(2100 * 0.25 + 50));
+    expect(usageCost(priceRequest("openrouter", body, 100, "/v1/messages"), usage)).toEqual({ micros: Math.ceil(100 * 0.1 + 2000 * 0.003 + 50), usage: { input: 100, output: 50, reasoning: 0, cache_read: 2000, cache_write: 0 } });
+    expect(usageCost(priceRequest("openrouter", body, 100, "/v1/chat/completions"), { prompt_tokens: 2100, completion_tokens: 50, prompt_tokens_details: { cached_tokens: 2000 } })!.micros).toBe(Math.ceil(100 * 0.1 + 2000 * 0.003 + 50));
   });
 
   // Value: protects=the proxy's refusal codes read out of an API error's text; fails_when=a code is missed or a substring of another word matches; why_new=U10 (cap stop, rejected keys, missing cells from the proxy); seam=refusalIn; no_claim=none beyond protects

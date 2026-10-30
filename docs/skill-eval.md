@@ -98,7 +98,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 
 ## Spend
 
-- The dry run prices every session at its allowance: 400k input and 32k output tokens per agent session, 200k and 40k per judged run (one request with no tools: the input holds the whole answer and the evidence, and the output covers the proxy's 32,768-token cap, which a request that names none reserves), 80k and 5k per user-simulator session, at list price. The rerun stage doubles each part.
+- The dry run prices every session at its allowance: 1.6M input and 32k output tokens per agent session (room for its spend plus the proxy's bound on its next request, one token per body byte plus the output cap), 200k and 40k per judged run (one request with no tools: the input holds the whole answer and the evidence, and the output covers the proxy's 32,768-token cap, which a request that names none reserves), 80k and 5k per user-simulator session, at list price. A model whose long-prompt row starts below the allowance's input (Haiku 5.5 at 100k tokens, gpt-6.1-sol at 272k) is priced at that row, because the proxy reserves any request past the threshold at it. The rerun stage doubles each part.
 - One arm-balanced round is one trial of every task in every arm, for every model. A round that would pass the cap is not started, so a cap stop keeps complete paired cells, exits 2 with CAP_STOP and prints `STOP: reason=budget_exhausted spent=<usd> reserved=<usd> unknown=<n> cap=<usd>`.
 - Approvals are recorded by a person with `gstack-evals ledger init|raise` and their exact words (docs/budget-ledger.md). The CLI never implies or suggests a cap.
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeCodeDriver, unapprovedAsks } from "../../src/adapters/claude-code/driver.ts";
 import { judgeRequest } from "../../src/adapters/judge.ts";
-import { personaAnswer, personaPrompt, type PersonaAnswer } from "../../src/usersim/persona.ts";
+import { PERSONA_REASONING_EFFORT, personaAnswer, personaPrompt, type PersonaAnswer } from "../../src/usersim/persona.ts";
 import { NON_APPROVING } from "../../src/usersim/sim.ts";
 import type { AgentSession } from "../../src/trial/sandbox.ts";
 
@@ -123,6 +123,8 @@ describe("persona pieces", () => {
     expect(judgeRequest("anthropic", "claude-haiku-5-5", "q", 1024)).toMatchObject({ max_tokens: 1024 });
     expect(judgeRequest("openrouter", "x/y", "q", 1024)).toMatchObject({ max_tokens: 1024 });
     expect(judgeRequest("anthropic", "claude-haiku-5-5", "q")).toEqual({ model: "claude-haiku-5-5", messages: [{ role: "user", content: "q" }] });
+    expect(judgeRequest("openai", "gpt-6-luna", "q", 1024, PERSONA_REASONING_EFFORT)).toEqual({ model: "gpt-6-luna", input: [{ role: "user", content: "q" }], store: false, max_output_tokens: 1024, reasoning: { effort: "low" } });
+    expect(judgeRequest("anthropic", "claude-haiku-5-5", "q", 1024, "low")).toEqual({ model: "claude-haiku-5-5", messages: [{ role: "user", content: "q" }], max_tokens: 1024 });
     const p = personaPrompt(" A founder. ", "Which plan?");
     expect(p).toContain("<persona>\nA founder.\n</persona>");
     expect(p).toContain("<question>\nWhich plan?\n</question>");

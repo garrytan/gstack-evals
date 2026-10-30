@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { REPO_ROOT } from "../../src/cli.ts";
 import { lockCommand } from "../../src/skill-eval/lock/cli.ts";
 import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
-import { DEFAULT_POLICY } from "../../src/skill-eval/cli/policy.ts";
+import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
+import { allowanceMicros, JUDGE_ALLOWANCE, SESSION_ALLOWANCE } from "../../src/skill-eval/cli/dry-run.ts";
+import { priceRequest, reservationMicros } from "../../src/runner/pricing/prices.ts";
 import { buildTrialImage } from "../../src/trial/image.ts";
 import { approvalRecord, collect, commitAll, git, learnRepo, TMP, tree } from "./helpers.ts";
 
@@ -30,7 +32,7 @@ async function lockedLearn(policy = DEFAULT_POLICY) {
   git(repo.root, "add", "-A");
   git(repo.root, "commit", "-q", "-m", "lock");
   const record = approvalRecord("learn-fake", 500);
-  const args = (host: string, model: string, extra: string[] = []) => ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", host, "--model", model, "--spend-cap", "100", "--item", "learn-fake", "--ledger", join(TMP, "ledger.sqlite"), "--ledger-record", record, "--out", join(TMP, "out"), "--isolation", "process", ...policyArgs, ...extra];
+  const args = (host: string, model: string, extra: string[] = []) => ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", host, "--model", model, "--spend-cap", "300", "--item", "learn-fake", "--ledger", join(TMP, "ledger.sqlite"), "--ledger-record", record, "--out", join(TMP, "out"), "--isolation", "process", ...policyArgs, ...extra];
   return { repo, record, args };
 }
 
@@ -76,7 +78,7 @@ describe("preflight on gstack's learn tasks", () => {
     expect((await run(n.args("claude", "claude-opus-5-5"))).code).toBe(0);
     const wide = write("wide", { ...def.models, "gpt-5.5": { provider: "openai", roles: ["subject"] } });
     const w = await lockedLearn(wide);
-    const gpt55 = w.args("codex", "gpt-5.5").map((a, i, all) => (all[i - 1] === "--spend-cap" ? "200" : a));
+    const gpt55 = w.args("codex", "gpt-5.5").map((a, i, all) => (all[i - 1] === "--spend-cap" ? "400" : a));
     expect((await run(gpt55)).code).toBe(0);
     expect((await run(gpt55.filter((a, i, all) => a !== "--policy" && all[i - 1] !== "--policy"))).err).toContain("LOCK_DRIFT policy changed");
   });
@@ -87,7 +89,7 @@ describe("preflight's lock step", () => {
   test("LOCK_MISSING prints the --lock command and the git steps, and running them clears it", async () => {
     const repo = learnRepo();
     const record = approvalRecord("learn-fake", 500);
-    const args = ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", "claude", "--model", "claude-opus-5-5", "--spend-cap", "100", "--item", "learn-fake", "--ledger", join(TMP, "l.sqlite"), "--ledger-record", record, "--out", join(TMP, "o"), "--isolation", "process"];
+    const args = ["--arms", "before=" + repo.skill + ",after=" + repo.skill + ",none", "--tasks", repo.tasks, "--host", "claude", "--model", "claude-opus-5-5", "--spend-cap", "300", "--item", "learn-fake", "--ledger", join(TMP, "l.sqlite"), "--ledger-record", record, "--out", join(TMP, "o"), "--isolation", "process"];
     const missing = await run(args);
     expect(missing.code).toBe(2);
     const lines = missing.err.split("\n").filter((l) => l.startsWith("LOCK_MISSING "));
@@ -191,11 +193,11 @@ describe("preflight's ledger, key and host steps", () => {
     const low = approvalRecord("learn-fake", 50);
     const swap = (list: string[], flag: string, value: string) => list.map((a, i) => (list[i - 1] === flag ? value : a));
     const above = await run(swap(args("claude", "claude-opus-5-5"), "--ledger-record", low));
-    expect(above.err).toContain("E_LEDGER_MISSING --spend-cap $100.00 is above the approved cap of $50.00 for line item learn-fake");
+    expect(above.err).toContain("E_LEDGER_MISSING --spend-cap $300.00 is above the approved cap of $50.00 for line item learn-fake");
     expect((await run(swap(args("claude", "claude-opus-5-5"), "--item", "other-item"))).err).toContain("E_LEDGER_MISSING no approved cap is on record for line item other-item");
     expect((await run(args("claude", "claude-opus-5-5").filter((a, i, all) => a !== "--item" && all[i - 1] !== "--item"))).err).toContain("E_USAGE --item (or GSTACK_EVALS_ITEM) must name the ledger line item");
     const tiny = await run(swap(args("claude", "claude-opus-5-5"), "--spend-cap", "10"));
-    expect(tiny.err).toContain("E_CAP_TOO_LOW --spend-cap $10.00 is below one arm-balanced round, $89.60");
+    expect(tiny.err).toContain("E_CAP_TOO_LOW --spend-cap $10.00 is below one arm-balanced round, $281.60");
   });
 
   // Value: protects=no --spend-cap is E_USAGE with the dry-run matrix and never a cap to copy; fails_when=the matrix is missing or a suggested cap is printed; why_new=interface v0.4's spend rule; seam=none; no_claim=none beyond protects
@@ -242,9 +244,9 @@ describe("preflight's ledger, key and host steps", () => {
     const io = collect();
     expect(await skillEvalCommand(dry, io, {})).toBe(0);
     const { out } = io.text();
-    expect(out).toContain("sessions claude-opus-5-5     120 x $2.24 = $268.80");
-    expect(out).toContain("rerun stage claude-opus-5-5  120 x $2.24 = $268.80");
-    expect(out).toContain("one arm-balanced round: $89.60");
+    expect(out).toContain("sessions claude-opus-5-5     120 x $7.04 = $844.80");
+    expect(out).toContain("rerun stage claude-opus-5-5  120 x $7.04 = $844.80");
+    expect(out).toContain("one arm-balanced round: $281.60");
     expect(out).toContain("parallel 2; worst-case wall time 20.8 h (every agent session at its timeout, task timeouts, rerun stage and calibration included; judge calls not counted)");
     writeFileSync(join(repo.root, "test/fixtures/skill-evals/learn/tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { show: { timeout_s: 7200 } } }));
     const slow = collect();
@@ -259,5 +261,22 @@ describe("preflight's ledger, key and host steps", () => {
     const r = await run(["--arms", "before=" + join(root, "demo") + ",after=" + join(root, "demo"), "--tasks", join(root, "missing.json"), "--host", "claude", "--model", "claude-opus-5-5", "--dry-run", "--json", "--out", out]);
     expect(r.code).toBe(2);
     expect(JSON.parse(readFileSync(join(out, "error.json"), "utf8"))).toMatchObject({ code: "E_TASKS_INVALID", operation: "preflight" });
+  });
+});
+
+describe("the session allowance", () => {
+  // Value: protects=a model with a long-prompt row gets its session allowance at that row, so a request past the threshold fits in a fresh session; fails_when=the allowance is priced at base rates and the proxy's long-rate reservation of a 190 KB Haiku 5.5 request is larger than it (E_ALLOWANCE with nothing spent); why_new=PR #71 review; seam=allowanceMicros, reservationMicros; no_claim=the body sizes of real sessions
+  test("a long-row model's allowance is priced at its long row, so a request past the threshold fits", () => {
+    const policy = loadPolicy(DEFAULT_POLICY);
+    if ("problem" in policy) throw new Error(policy.problem);
+    const haiku = allowanceMicros({ policy }, "claude-haiku-5-5", SESSION_ALLOWANCE)!;
+    expect(haiku).toBe(1_600_000 * 0.5 + 32_000 * 2.5);
+    expect(allowanceMicros({ policy }, "gpt-6.1-sol", SESSION_ALLOWANCE)).toBe(1_600_000 * 4 + 32_000 * 15);
+    expect(allowanceMicros({ policy }, "claude-opus-5-5", SESSION_ALLOWANCE)).toBe(1_600_000 * 4 + 32_000 * 20);
+    expect(allowanceMicros({ policy }, "gpt-6.1-sol", JUDGE_ALLOWANCE)).toBe(200_000 * 2 + 40_000 * 10);
+    const body = { model: "claude-haiku-5-5", system: [{ type: "text", text: "x".repeat(190_000), cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: "hi" }] };
+    const reserved = reservationMicros(priceRequest("anthropic", body, 32_768, "/v1/messages"));
+    expect(reserved).toBeGreaterThan(1_600_000 * 0.1 + 32_000 * 0.5);
+    expect(reserved).toBeLessThan(haiku);
   });
 });

@@ -39,7 +39,8 @@ export interface ChatPrice extends TokenPrices {
  * provider that bills above the row.
  */
 export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
-  "particle-ai/particle-1": { input: 0.25, output: 1 },
+  // OpenRouter's models API (https://openrouter.ai/api/v1/models), read 2026-10-30: $0.10 input, $1 output, $0.003 cache read.
+  "particle-ai/particle-1": { input: 0.1, output: 1, cache_read: 0.003 },
   // DeepSeek's own endpoint at its weekday peak price, an upper bound (off-peak is half).
   "deepseek/deepseek-v4.1-flash-1017": { input: 0.3, output: 1.2, cache_read: 0.006, providers: ["deepseek"] },
 };
