@@ -134,7 +134,7 @@ async function runHost(host: Host, o: { interactive?: boolean; egressOpen?: bool
 }
 
 describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host's adapter, against a fake upstream behind the metering proxy", () => {
-  // Value: protects=a task with a judge rubric sends each run to a fresh judge session of the other family, blinded to the arm, the skill, the model and the host, as one request with no tools and no host CLI (so the judge cannot read the arm), and every judgment lands in adjudication.ndjson; a judge that cannot answer leaves the run unjudged and stops the verdict with JUDGE_UNAVAILABLE; fails_when=the judge prompt names the arm, skill, model or host, a judged run keeps judge null, or a broken judge passes silently; why_new=U10 done criterion (adjudication blinding and JUDGE_UNAVAILABLE); seam=runOnHost's adjudication, judgePrompt, parseJudgment; no_claim=a real judge model's accuracy
+  // Value: protects=a task with a judge rubric sends each run to a fresh judge session of the other family, blinded to the arm, the skill, the model and the host, as one request with no tools and no host CLI (so the judge cannot read the arm), and every judgment lands in adjudication.ndjson; a judge that cannot answer leaves the run unjudged, unjournaled (so --resume judges it again) and stops the verdict with JUDGE_UNAVAILABLE; fails_when=the judge prompt names the arm, skill, model or host, a judged run keeps judge null, or a broken judge passes silently; why_new=U10 done criterion (adjudication blinding and JUDGE_UNAVAILABLE); seam=runOnHost's adjudication, judgePrompt, parseJudgment; no_claim=a real judge model's accuracy
   test("adjudication is blinded and cross-family, and a judge that cannot answer stops with JUDGE_UNAVAILABLE", async () => {
     const prompts: string[] = [];
     const judge = (answer: Item[] | null): ResponsesScript => (turn) => {
@@ -170,6 +170,8 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect(prompts.length).toBeGreaterThan(0);
     expect(down.run.input.records.every((r) => r.judge === null)).toBe(true);
     expect(down.run.input.stops).toEqual([{ code: "JUDGE_UNAVAILABLE", model: MODELS.claude, subject: "hello" }]);
+    const journal = join(down.root, "out", "cells.ndjson");
+    expect(existsSync(journal) ? readFileSync(journal, "utf8").trim() : "").toBe("");
     expect(decide(down.run.input, DEFAULT_OPTIONS).reasons).toContain("JUDGE_UNAVAILABLE hello");
   }, 300_000);
 
@@ -275,7 +277,7 @@ describe("real-host readiness", () => {
 });
 
 describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex against a fake upstream", () => {
-  // Value: protects=the CLI's --resume layer (run.json, the journal and the verdict): E_NOT_RESUMABLE for a directory with no run.json and for a run that ended on a terminal reason; a resumed run reuses every journaled cell, sends no task session upstream and names the run it resumed; a changed arm stops with E_CACHE_STALE before any trial, and --repair reruns only that arm's cell under a new verdict id; --repair without --resume is E_USAGE; fails_when=resume reruns a finished cell, runs over a changed arm, loses the verdict's resumed_from, or accepts a terminal run; why_new=the Captain's brief for GST-271 (the --resume CLI path was tested only at runOnHost); seam=resolveCall's resume, runOnRealHost with the keyless rig in the Docker rig's place; no_claim=preflight on a real host and the Docker rig (the Docker tier), and proxy recovery after a crash (recoverRun's own tests)
+  // Value: protects=the CLI's --resume layer (run.json, the journal and the verdict), after an operation that died before writing the run's end: E_NOT_RESUMABLE for a directory with no run.json and for a run that ended on a terminal reason; a resumed run reuses every journaled cell, sends no task session upstream and names the run it resumed; a changed arm stops with E_CACHE_STALE before any trial, and --repair reruns only that arm's cell under a new verdict id while the run the line item funds keeps its id; a terminal reason in the verdict's own format (code, then detail) is E_NOT_RESUMABLE; --repair without --resume is E_USAGE; fails_when=resume reruns a finished cell, runs over a changed arm, loses the verdict's resumed_from, or accepts a terminal run; why_new=the Captain's brief for GST-271 (the --resume CLI path was tested only at runOnHost); seam=resolveCall's resume, runOnRealHost with the keyless rig in the Docker rig's place; no_claim=preflight on a real host and the Docker rig (the Docker tier), and proxy recovery after a crash (recoverRun's own tests)
   test("--resume reuses the journal, refuses stale and terminal runs, and --repair reruns the changed arm", async () => {
     const h = harness(() => [], { responses: codexModel });
     open.push(h);
@@ -301,6 +303,11 @@ describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex 
       return { code, ...io.text() };
     };
     const asked = () => h.upstream.filter((u) => JSON.stringify(u.body).includes("Say hello.")).length;
+    const runFile = join(out, "run.json");
+    const died = () => {
+      const { ended: _, ...live } = JSON.parse(readFileSync(runFile, "utf8"));
+      writeFileSync(runFile, JSON.stringify(live));
+    };
     const verdict = () => JSON.parse(readFileSync(join(out, "verdict.json"), "utf8"));
 
     const empty = await go(["--resume", join(root, "nothing")]);
@@ -311,21 +318,23 @@ describe.skipIf(!HAS_CODEX_CLI)("--resume through the CLI's run layer, on Codex 
     const v1 = verdict();
     expect([asked(), readFileSync(join(out, "cells.ndjson"), "utf8").trim().split("\n").length, v1.resumed_from]).toEqual([3, 3, null]);
 
+    died();
     const again = await go(["--resume", out]);
     const v2 = verdict();
     expect([again.code, asked(), v2.resumed_from, v2.verdict_id]).toEqual([first.code, 3, v1.verdict_id, v1.verdict_id]);
 
     writeFileSync(join(after, "SKILL.md"), readFileSync(join(after, "SKILL.md"), "utf8") + "One more line.\n");
+    died();
     const stale = await go(["--resume", out]);
     expect([stale.code, stale.err, asked()]).toEqual([2, expect.stringContaining("E_CACHE_STALE"), 3]);
+    died();
     const repaired = await go(["--resume", out, "--repair", "after gained a line"]);
     const v3 = verdict();
-    expect([repaired.code, asked(), v3.resumed_from, v3.verdict_id === v1.verdict_id]).toEqual([first.code, 4, v1.verdict_id, false]);
+    expect([repaired.code, asked(), v3.resumed_from, v3.verdict_id === v1.verdict_id, JSON.parse(readFileSync(runFile, "utf8")).run_id]).toEqual([first.code, 4, v1.verdict_id, false, v1.verdict_id]);
 
-    const runFile = join(out, "run.json");
-    writeFileSync(runFile, JSON.stringify({ ...JSON.parse(readFileSync(runFile, "utf8")), ended: { exit_code: 2, reasons: ["LOCK_DRIFT"], committed: 0 } }));
+    writeFileSync(runFile, JSON.stringify({ ...JSON.parse(readFileSync(runFile, "utf8")), ended: { exit_code: 2, reasons: ["NOT_MEASURABLE 0 informative tasks"], committed: 0 } }));
     const terminal = await go(["--resume", out]);
-    expect([terminal.code, terminal.err]).toEqual([2, expect.stringContaining("E_NOT_RESUMABLE the run ended on LOCK_DRIFT")]);
+    expect([terminal.code, terminal.err]).toEqual([2, expect.stringContaining("E_NOT_RESUMABLE the run ended on NOT_MEASURABLE")]);
     const loneFlags = parseFlags(argv(["--repair", "x"]), SKILL_EVAL_FLAGS, env);
     const lone = typeof loneFlags === "string" ? loneFlags : resolveCall(loneFlags, env);
     expect(lone).toMatchObject({ code: "E_USAGE", message: expect.stringContaining("give that run's out directory with --resume <out>") });

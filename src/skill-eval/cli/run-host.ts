@@ -13,7 +13,8 @@
 //   resume's order: stop the proxy, reconcile its journal, settle the lease.
 // - A task with a judge rubric sends each completed run to blinded cross-family adjudication (src/grade/adjudicate.ts);
 //   a judge that cannot run leaves the run unjudged and stops the verdict with JUDGE_UNAVAILABLE.
-// - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts). --resume reuses
+// - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts); a judged
+//   session is journaled only with its judgment, so --resume reruns one whose judge failed or hit the cap. --resume reuses
 //   a journaled cell whose key still matches; a changed key refuses before any spend (E_CACHE_STALE) unless --repair
 //   names the repair, which reruns those cells.
 // - Arms on a real host are loose skill folders, none and bare. A gstack base at a sha, a stack and a placebo arm, and
@@ -311,7 +312,8 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
         wall += run.record.wall_ms ?? 0;
         progress = recordSession(progress, cellName(c.cell), run.record.termination.kind === "completed" ? (g.outcome === "pass" ? "pass" : "fail") : run.record.termination.kind === "timeout" ? "timeout" : "missing", wall / 1000 / (records.length + 1), o.parallel);
         writeProgress(o.out, progress);
-        if (run.record.termination.kind !== "cap_stop") appendFileSync(journal, JSON.stringify({ cell: c.cell, key: keyOf(c.cell.model, c.arm, byId.get(c.task.id)!), record: run.record } satisfies JournalEntry) + "\n");
+        const unjudged = judges(c.task) && run.record.termination.kind === "completed" && run.record.judge === null;
+        if (run.record.termination.kind !== "cap_stop" && !unjudged) appendFileSync(journal, JSON.stringify({ cell: c.cell, key: keyOf(c.cell.model, c.arm, byId.get(c.task.id)!), record: run.record } satisfies JournalEntry) + "\n");
         return run.record;
       });
       records.push(...runs);

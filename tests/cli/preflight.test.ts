@@ -1,6 +1,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { openLease } from "../../src/runner/ledger/ledger.ts";
 import { join } from "node:path";
 import { REPO_ROOT } from "../../src/cli.ts";
 import { lockCommand } from "../../src/skill-eval/lock/cli.ts";
@@ -130,6 +131,21 @@ describe("preflight's lock step", () => {
     expect(r.out).toContain("ok vacuity: 9 tasks bite on their control, 1 safety tasks without a mutant (controls ran in containers)");
     expect(r.code).toBe(0);
   }, 900_000);
+
+  // Value: protects=--resume passes preflight's ledger step for the run its line item is bound to, and only that run: a fresh call or a resume of another run is still E_ITEM_BOUND; fails_when=the documented --resume call is refused by its own binding, or a bound item funds a second run; why_new=Capy's review of #68; seam=preflight's ledger step with call.resume; no_claim=lease recovery and settlement, which runOnRealHost and recoverRun cover
+  test("--resume of the run a line item is bound to passes the ledger step", async () => {
+    const { record, args } = await lockedLearn();
+    openLease(record, null, { item: "learn-fake", run_id: "run-a", amount_micros: 1_000_000 });
+    const runDir = (id: string) => {
+      const d = mkdtempSync(join(TMP, "resume-"));
+      writeFileSync(join(d, "run.json"), JSON.stringify({ run_id: id }));
+      return d;
+    };
+    expect((await run(args("claude", "claude-opus-5-5"))).err).toContain("E_ITEM_BOUND line item learn-fake is bound to run run-a");
+    const own = await run(args("claude", "claude-opus-5-5", ["--resume", runDir("run-a")]));
+    expect([own.code, own.err.includes("E_ITEM_BOUND")]).toEqual([0, false]);
+    expect((await run(args("claude", "claude-opus-5-5", ["--resume", runDir("run-b")]))).err).toContain("E_ITEM_BOUND line item learn-fake is bound to run run-a");
+  });
 
   // Value: protects=a lock row edit is caught when only before is a folder and after is a repo@sha arm; fails_when=mixed arm types skip the re-derivation; why_new=PR #45 review; seam=U6's rederiveLock, which needs only the before copy; no_claim=a before arm given as repo@sha, whose files are not read yet
   test("a hand-edited lock row is LOCK_DRIFT when after is a repo@sha arm", async () => {

@@ -240,7 +240,7 @@ export async function runOnRealHost(call: Call, report: PreflightReport, io: Io,
       return 2;
     }
     prior = JSON.parse(readFileSync(runFile, "utf8")) as RunFile;
-    const terminal = (prior.ended?.reasons ?? []).filter((r) => TERMINAL.includes(r));
+    const terminal = (prior.ended?.reasons ?? []).map((r) => r.split(" ")[0]!).filter((c) => TERMINAL.includes(c));
     if (terminal.length) {
       printStops(io, [{ code: "E_NOT_RESUMABLE", message: "the run ended on " + terminal.join(", ") + ", which continuing cannot change" }]);
       return 2;
@@ -254,7 +254,8 @@ export async function runOnRealHost(call: Call, report: PreflightReport, io: Io,
     }
   }
   const committedBefore = prior ? prior.committed_before + (prior.ended?.committed ?? 0) : 0;
-  const runId = prior && !resume?.repair ? prior.run_id : call.runId;
+  const runId = prior?.run_id ?? call.runId;
+  const verdictId = prior && !resume?.repair ? prior.verdict_id : call.runId;
   const cap = Math.max(0, call.spendCap! - committedBefore);
   const holder = call.arms.arms.find((a) => a.kind === "overlay" && a.dir !== null);
   const skill = call.arms.skill?.name ?? (holder && holder.kind === "overlay" && holder.dir ? skillName(holder.dir) : null);
@@ -269,7 +270,7 @@ export async function runOnRealHost(call: Call, report: PreflightReport, io: Io,
     printStops(io, [{ code, message: message.slice(code.length + 1).trim() }]);
     return 2;
   }
-  const record: RunFile = { schema_version: 1, run_id: prior?.run_id ?? runId, verdict_id: runId, started_at: new Date(started).toISOString(), committed_before: committedBefore, repair: resume?.repair ?? null, recovery: rig.recovery };
+  const record: RunFile = { schema_version: 1, run_id: runId, verdict_id: verdictId, started_at: new Date(started).toISOString(), committed_before: committedBefore, repair: resume?.repair ?? null, recovery: rig.recovery };
   mkdirSync(out, { recursive: true });
   writeFileSync(runFile, JSON.stringify(record, null, 2) + "\n");
   const pins = JSON.parse(readFileSync(join(REPO_ROOT, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;
@@ -294,7 +295,7 @@ export async function runOnRealHost(call: Call, report: PreflightReport, io: Io,
   const judged = tasks.some((t) => t.judge);
   const base = call.arms.base ? call.arms.base.ref.repo + "@" + call.arms.base.ref.sha : null;
   const context: VerdictContext = {
-    verdict_id: runId,
+    verdict_id: verdictId,
     harness_version: version(),
     trials: call.trials,
     effective: { noise_floor: call.noiseFloor, parallel: call.parallel, timeout_s: call.timeoutS, judge_model: judged ? call.judgeModel : null, isolation: call.isolation, policy_sha256: call.policy.sha256, base, skill },

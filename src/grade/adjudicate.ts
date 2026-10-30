@@ -17,12 +17,12 @@
 
 export type Judgment = "done" | "not_done" | "unknown";
 
-/** Replaces each name in `names` (case-insensitive) with [redacted], counting the hits. */
+/** Replaces each name in `names` (case-insensitive, whole words, so /ship and gstack-ship go but relationship stays) with [redacted], counting the hits. */
 export function redact(text: string, names: readonly string[]): { text: string; hits: number } {
   let hits = 0;
   const words = names.filter((n) => n.trim()).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   if (!words.length) return { text, hits };
-  return { text: text.replace(new RegExp(words.join("|"), "gi"), () => (hits++, "[redacted]")), hits };
+  return { text: text.replace(new RegExp("(?<!\\w)(?:" + words.join("|") + ")(?!\\w)", "gi"), () => (hits++, "[redacted]")), hits };
 }
 
 /** The judge's prompt: no arm, skill, model or host in it; the answer and evidence sit between nonce tags. */
