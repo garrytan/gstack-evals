@@ -193,8 +193,14 @@ export const sha256 = (s: string): string => createHash("sha256").update(s).dige
 // ---------------------------------------------------------------------------------------------------------------------
 // Git and the GitHub API.
 
+const sq = (x: string): string => "'" + x.replace(/'/g, "'\\''") + "'";
+/** The only diff lines parseDiff reads. Keeping just these bounds a diff's size by its file and hunk count, not its content. */
+const DIFF_HEADERS = "^(diff --git |--- |\\+\\+\\+ |@@ |rename from |rename to |new file mode|deleted file mode|Binary files )";
+
+export interface Changed { old: string | null; new: string | null }
+
 export class Git {
-  private memo = new Map<string, string | null>();
+  private memo = new Map<string, string | number | boolean>();
   constructor(readonly dir: string) {}
   run(args: string[], ok: number[] = [0]): string {
     const r = spawnSync("git", ["-c", "core.quotePath=false", ...args], { cwd: this.dir, encoding: "utf8", maxBuffer: 1 << 30 });
@@ -204,35 +210,63 @@ export class Git {
   try(args: string[]): string | null {
     try { return this.run(args); } catch { return null; }
   }
+  private sh(script: string): string {
+    const r = spawnSync("bash", ["-c", "set -o pipefail; " + script], { cwd: this.dir, encoding: "utf8", maxBuffer: 1 << 28 });
+    if (r.status !== 0) throw new Error(script.slice(0, 200) + " in " + this.dir + " exited " + r.status + ": " + (r.stderr ?? "").slice(0, 300));
+    return r.stdout;
+  }
+  private memoize<T extends string | number | boolean>(k: string, f: () => T): T {
+    if (!this.memo.has(k)) this.memo.set(k, f());
+    return this.memo.get(k) as T;
+  }
   has(sha: string): boolean {
     return this.try(["cat-file", "-e", sha + "^{commit}"]) !== null;
   }
   parents(sha: string): string[] {
-    const k = "parents " + sha;
-    if (!this.memo.has(k)) this.memo.set(k, this.run(["rev-list", "--parents", "-n", "1", sha]).trim());
-    return this.memo.get(k)!.split(" ").slice(1);
+    return this.memoize("parents " + sha, () => this.run(["rev-list", "--parents", "-n", "1", sha]).trim()).split(" ").slice(1);
   }
   isAncestor(a: string, b: string): boolean {
     return spawnSync("git", ["merge-base", "--is-ancestor", a, b], { cwd: this.dir }).status === 0;
   }
+  /** The hunks of a -U0 diff, with only its header lines read. */
   diff(from: string, to: string, paths: string[] = []): FileDiff[] {
-    return parseDiff(this.run(["diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", from, to, "--", ...paths]));
+    const git = "git -c core.quotePath=false diff -U0 -M --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ " + sq(from) + " " + sq(to) + " -- " + paths.map(sq).join(" ");
+    return parseDiff(this.sh(git + " | { grep -E " + sq(DIFF_HEADERS) + " || test $? = 1; }"));
   }
   fileDiff(from: string, to: string, path: string): Hunk[] {
     return this.diff(from, to, [path]).find((f) => f.oldPath === path || f.newPath === path)?.hunks ?? [];
   }
-  show(rev: string, path: string): string | null {
-    const k = rev + ":" + path;
-    if (!this.memo.has(k)) this.memo.set(k, this.try(["show", k]));
-    return this.memo.get(k)!;
+  /** The files a diff touches, with renames paired, read without any file content. */
+  changed(from: string, to: string): Changed[] {
+    const t = this.run(["diff", "--name-status", "-M", "-z", from, to]).split("\0");
+    const out: Changed[] = [];
+    for (let i = 0; i + 1 < t.length; ) {
+      const st = t[i]!;
+      if (/^[RC]/.test(st)) { out.push({ old: t[i + 1]!, new: t[i + 2]! }); i += 3; continue; }
+      out.push({ old: st === "A" ? null : t[i + 1]!, new: st === "D" ? null : t[i + 1]! });
+      i += 2;
+    }
+    return out;
   }
+  exists(rev: string, path: string): boolean {
+    return this.memoize("exists " + rev + ":" + path, () => this.try(["cat-file", "-e", rev + ":" + path]) !== null);
+  }
+  /** The file's first 400 bytes at a revision, or "" when it does not exist there. */
   head(rev: string, path: string): string {
-    return (this.show(rev, path) ?? "").slice(0, 400);
+    return this.memoize("head " + rev + ":" + path, () => (this.exists(rev, path) ? this.sh("git cat-file -p " + sq(rev + ":" + path) + " | head -c 400 || true") : ""));
   }
   lineCount(rev: string, path: string): number {
-    const t = this.show(rev, path);
-    if (!t) return 0;
-    return t.split("\n").length - (t.endsWith("\n") ? 1 : 0);
+    return this.memoize("lines " + rev + ":" + path, () => (this.exists(rev, path) ? Number(this.sh("git cat-file -p " + sq(rev + ":" + path) + " | awk 'END{print NR}'").trim()) : 0));
+  }
+  /** Changed lines (added plus removed) of the named files, from git's numstat; a binary file counts 0. */
+  numstat(from: string, to: string, paths: string[]): number {
+    if (!paths.length) return 0;
+    let n = 0;
+    for (const line of this.run(["diff", "--numstat", "-M", from, to, "--", ...paths]).split("\n")) {
+      const m = /^(\d+)\t(\d+)\t/.exec(line);
+      if (m) n += +m[1]! + +m[2]!;
+    }
+    return n;
   }
   blame(rev: string, path: string, ranges: Array<[number, number]>): BlameLine[] {
     if (!ranges.length) return [];
@@ -357,7 +391,7 @@ export class RepoMiner {
   fpIndex = new Map<string, number>();
   private intro = new Map<string, string | null>();
   private prOfCommit = new Map<string, number | null>();
-  private changed = new Map<string, FileDiff[]>();
+  private changed = new Map<string, Changed[]>();
   candidates: Candidate[] = [];
   drops: Drop[] = [];
   gstackSha: string | null = null;
@@ -405,19 +439,14 @@ export class RepoMiner {
     return this.o.api.get("repos/" + this.repo + "/pulls/" + n);
   }
 
-  private changedBy(c: string): FileDiff[] {
-    if (!this.changed.has(c)) this.changed.set(c, this.git.diff(this.git.parents(c)[0]!, c));
+  private changedBy(c: string): Changed[] {
+    if (!this.changed.has(c)) this.changed.set(c, this.git.changed(this.git.parents(c)[0]!, c));
     return this.changed.get(c)!;
   }
 
   private filteredLines(from: string, to: string): number {
-    let n = 0;
-    for (const f of this.git.diff(from, to)) {
-      const path = f.newPath ?? f.oldPath;
-      if (!path || f.binary || !countsForSize(path, f.newPath ? this.git.head(to, f.newPath) : this.git.head(from, f.oldPath!))) continue;
-      for (const h of f.hunks) n += h.oldCount + h.newCount;
-    }
-    return n;
+    const kept = this.git.changed(from, to).filter((f) => countsForSize(f.new ?? f.old!, f.new ? this.git.head(to, f.new) : this.git.head(from, f.old!)));
+    return this.git.numstat(from, to, [...new Set(kept.flatMap((f) => [f.old, f.new].filter((p): p is string => p !== null)))]);
   }
 
   /** Rule 3: every later commit that rewrites or removes a line the decoy added in its source and test files. */
@@ -426,8 +455,9 @@ export class RepoMiner {
     const targets = new Set<string>();
     const paths = new Set<string>();
     let added = 0;
-    for (const f of this.git.diff(from, to)) {
-      if (!f.newPath || f.binary || !decoyFile(f.newPath, this.git.head(to, f.newPath))) continue;
+    const named = this.git.changed(from, to).filter((f) => f.new && decoyFile(f.new, "") && decoyFile(f.new, this.git.head(to, f.new)));
+    for (const f of named.length ? this.git.diff(from, to, named.map((x) => x.new!)) : []) {
+      if (!f.newPath || f.binary) continue;
       const lines = [...addedLines(f.hunks)];
       if (!lines.length) continue;
       added += lines.length;
@@ -438,10 +468,10 @@ export class RepoMiner {
     const scan = async (commits: string[], where: "branch" | "default") => {
       for (const c of commits) {
         if (!paths.size) return;
-        const files = where === "default" ? this.changedBy(c) : this.git.diff(this.git.parents(c)[0]!, c);
-        if (!files.some((f) => f.oldPath && paths.has(f.oldPath))) continue;
         const parent = this.git.parents(c)[0]!;
-        for (const f of files) {
+        const touched = (where === "default" ? this.changedBy(c) : this.git.changed(parent, c)).filter((f) => f.old && paths.has(f.old));
+        if (!touched.length) continue;
+        for (const f of this.git.diff(parent, c, [...new Set(touched.flatMap((x) => [x.old!, x.new ?? x.old!]))])) {
           if (!f.oldPath || !paths.has(f.oldPath)) continue;
           if (f.newPath && f.newPath !== f.oldPath) paths.add(f.newPath);
           const hit = this.git.blame(parent, f.oldPath, rewrittenRanges(f.hunks)).filter((x) => targets.has(id(x)));
@@ -506,7 +536,8 @@ export class RepoMiner {
 
   /** Rule 1.1 to 1.3 on one fix: the source files it rewrote, each with its blamed lines. */
   private fixFiles(parent: string, fix: string): { files: Array<{ path: string; newPath: string; blame: BlameLine[]; insertion: boolean }>; code: string | null; detail: string } {
-    const src = this.git.diff(parent, fix).filter((f) => f.oldPath && f.newPath && !f.binary && f.hunks.length && canHoldDefect(f.oldPath, this.git.head(parent, f.oldPath)));
+    const named = this.git.changed(parent, fix).filter((f) => f.old && f.new && canHoldDefect(f.old, "") && canHoldDefect(f.old, this.git.head(parent, f.old)));
+    const src = named.length ? this.git.diff(parent, fix, [...new Set(named.flatMap((f) => [f.old!, f.new!]))]).filter((f) => f.oldPath && f.newPath && !f.binary && f.hunks.length && named.some((x) => x.old === f.oldPath)) : [];
     if (!src.length) return { files: [], code: "no-source-file", detail: "the fix rewrote no source file (Rule 1.1)" };
     if (src.length > RULES.maxFixFiles) return { files: [], code: "fix-too-broad", detail: "the fix rewrote " + src.length + " source files, more than " + RULES.maxFixFiles + " (Rule 1.2)" };
     const files = [];
@@ -561,7 +592,7 @@ export class RepoMiner {
       let l: number | null = null;
       if (b.sha === MX) l = mapLine(this.git.fileDiff(head, MX, b.path), b.orig, "new");
       else if (this.git.isAncestor(b.sha, head)) l = mapLine(this.git.fileDiff(b.sha, head, b.path), b.orig, "old");
-      if (l !== null && this.git.show(head, b.path) !== null) byPath.set(b.path, [...(byPath.get(b.path) ?? []), l]);
+      if (l !== null && this.git.exists(head, b.path)) byPath.set(b.path, [...(byPath.get(b.path) ?? []), l]);
     }
     const [path, mapped] = [...byPath.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))[0] ?? ["", []];
     const inDiff = addedLines(path ? this.git.fileDiff(base, head, path) : []);
@@ -707,7 +738,7 @@ export async function mine(o: MineOptions): Promise<Mined> {
     const fixes = merged.filter((p) => isFixTitle(p.title));
     let reviewFixes = 0;
     for (const p of merged) {
-      o.log?.(repo + "#" + p.number);
+      o.log?.(repo + "#" + p.number + " rss " + Math.round(process.memoryUsage().rss / 1e6) + " MB");
       if (fixes.includes(p)) await m.escaped(p);
       reviewFixes += await m.reviewCaught(p);
     }
@@ -729,7 +760,8 @@ export async function mine(o: MineOptions): Promise<Mined> {
 // ---------------------------------------------------------------------------------------------------------------------
 // The hand audit and build.
 
-export interface HandDecoy { verdict: "clean" | "holds-defect"; later_fix: { ref: string; fixed: string } | null; reason: string }
+/** unsettled: the read could not call it clean or a defect, so the audit stays null (never scored as clean) and the reason goes to needs_human_check. */
+export interface HandDecoy { verdict: "clean" | "holds-defect" | "unsettled"; later_fix: { ref: string; fixed: string } | null; reason: string }
 export interface HandAudit {
   at: string;
   verdict: "confirmed" | "rejected";
@@ -755,10 +787,10 @@ const searchMethod = (s: DecoySearch, def: string): string =>
 
 export function decoyAudit(s: DecoySearch, def: string, hand: HandDecoy | undefined, auditor: string, at: string, runDate: string): DecoyAudit | null {
   if (!s.hits.length && !s.unresolved.length) return { later_fix_checked: true, later_fix: null, verdict: "clean", by: MINER, at: runDate, method: searchMethod(s, def) + "; none changed them." };
-  if (!hand) return null;
+  if (!hand || hand.verdict === "unsettled") return null;
   const hits = s.hits.map((h) => short(h.commit) + (h.pr ? " (#" + h.pr + ")" : "") + " " + h.file + ":" + h.lines.join(",")).join("; ");
   const open = s.unresolved.length ? "; lines not followed into the squash commit " + s.unresolved.join(", ") : "";
-  return { later_fix_checked: true, later_fix: hand.later_fix, verdict: hand.verdict, by: auditor, at, method: searchMethod(s, def) + (hits ? "; hits " + hits : "") + open + ". Hand check: " + hand.reason };
+  return { later_fix_checked: true, later_fix: hand.later_fix, verdict: hand.verdict as "clean" | "holds-defect", by: auditor, at, method: searchMethod(s, def) + (hits ? "; hits " + hits : "") + open + ". Hand check: " + hand.reason };
 }
 
 function handProblems(c: Candidate, h: HandAudit): string[] {
@@ -855,6 +887,8 @@ export function build(catalog: string, mined: Mined, hand: Hand, target = RULES.
 function needs(h: HandAudit | undefined, searches: DecoySearch[]): Array<{ item: string; reason: string }> {
   const out = [...(h?.needs_human_check ?? [])];
   searches.forEach((s, i) => {
+    const hd = h?.decoys?.[String(i)];
+    if (hd?.verdict === "unsettled") out.push({ item: "decoy " + i, reason: "hand read could not settle it, so its audit stays null: " + hd.reason });
     if (s.hits.length && !h?.decoys?.[String(i)]) out.push({ item: "decoy " + i, reason: s.hits.length + " later commits changed lines it added; nobody has read them, so its audit stays null" });
     if (s.unresolved.length && !h?.decoys?.[String(i)]) out.push({ item: "decoy " + i, reason: s.unresolved.length + " of its lines could not be followed into the squash commit, so the search cannot vouch for them and its audit stays null" });
   });
@@ -890,13 +924,13 @@ export async function dossier(c: Candidate, git: Git, api: Api): Promise<string>
     "SHELF " + c.shelf.first_appeared,
     "",
     "=== " + (F ? "fix PR body" : "commit message"),
-    clip(F ? F.body ?? "" : git.run(["log", "-1", "--format=%B", c.fix.commit]), 3500),
+    clip(F ? F.body ?? "" : git.run(["log", "-1", "--format=%B", c.fix.commit]), 2500),
     "",
     "=== reviewed PR's Pre-Landing Review",
-    clip(reviewSection(X.body) || "(none)", 2500),
+    clip(reviewSection(X.body) || "(none)", 2000),
     "",
     "=== fix diff, " + c.fix_file,
-    lines(git.run(["diff", "-U3", "--no-color", c.fix.parent, c.fix.commit, "--", c.fix_file]), 160),
+    lines(git.run(["diff", "-U3", "--no-color", c.fix.parent, c.fix.commit, "--", c.fix_file]), 120),
     "",
     "=== reviewed diff around the located lines, " + c.file,
     lines(git.run(["diff", "-U6", "--no-color", c.merge_base, c.reviewed_head, "--", c.file]).split(/^(?=@@ )/m).filter((h) => {
@@ -904,12 +938,17 @@ export async function dossier(c: Candidate, git: Git, api: Api): Promise<string>
       if (!m) return false;
       const a = +m[1]!, b = a + (m[2] === undefined ? 1 : +m[2]);
       return c.lines.some((l) => l >= a && l < b);
-    }).join(""), 160),
+    }).join(""), 120),
   ];
   for (const h of c.decoy.hits) {
     out.push("", "=== decoy hit " + short(h.commit) + (h.pr ? " (#" + h.pr + ")" : "") + " \"" + h.subject + "\" changed " + h.file + " lines " + h.lines.join(","));
-    out.push(lines(git.run(["log", "-1", "--format=%B", h.commit]), 30));
-    out.push(lines(git.run(["diff", "-U2", "--no-color", git.parents(h.commit)[0]!, h.commit, "--", h.file]), 80));
+    out.push(lines(git.run(["log", "-1", "--format=%B", h.commit]), 12));
+    out.push(lines(git.run(["diff", "-U1", "--no-color", git.parents(h.commit)[0]!, h.commit, "--", h.file]).split(/^(?=@@ )/m).filter((x) => {
+      const m = /^@@ -(\d+)(?:,(\d+))?/.exec(x);
+      if (!m) return false;
+      const a = +m[1]!, b = a + (m[2] === undefined ? 1 : +m[2]);
+      return h.lines.some((l) => l >= a - 1 && l <= b);
+    }).join(""), 40));
   }
   return out.join("\n");
 }

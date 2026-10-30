@@ -1,0 +1,28 @@
+{
+  "auditor": "GSTA-33 (anthropic/claude-opus-5-5), hand read",
+  "audits": {
+    "gstack-3516-ship-hook-actor-negation-guard": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Fix 27a1b1f's message says the pass-1 negation guard in ownersOwnHand() scanned the whole prefix before the reflexive and refused an honest request after a negated subordinate clause, a recall regression that would red the paid ship-local-hook-preservation case; line 146 at 3712b79 is that guard, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 1."
+    },
+    "gstack-3518-train-verify-unreadable-state": {
+      "at": "2026-10-30",
+      "verdict": "confirmed",
+      "notes": "Fix ada2acc's message says stopped() read prState's 'unreadable' as not merged, so a slot-1 squash already on main while gh pr view failed answered that nothing merged and the queue is not frozen; line 150 at a2077ff is that read, an added line of the panel's range, and the fix rewrites it. Matches GSTA-131's panel case 2.",
+      "needs_human_check": [
+        {
+          "item": "severity",
+          "reason": "every reviewer rated it INFORMATIONAL and the panel names no failing test or production break, so deserved severity stays null"
+        }
+      ],
+      "decoys": {
+        "0": {
+          "verdict": "unsettled",
+          "later_fix": null,
+          "reason": "5905c76 (later on #3518's branch) rewrote the decoy's states/landed/unreadable lines in stopped() to fix a two-read race: freezeQueue re-read prState and could file a slot that read MERGED as unmerged. Both reads came in with pass 1's fix, before this decoy, so the decoy did not introduce the race but carries it in the lines it rewrote; a reviewer who flags it would be right, so it is not clean, and it is not this decoy's own defect either."
+        }
+      }
+    }
+  }
+}
