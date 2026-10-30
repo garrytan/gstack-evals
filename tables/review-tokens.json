@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "about": "Measured tokens per review dispatch, by reviewer role, effort and model. gstack-evals tokens export turns these rows into the --tokens file gstack's scripts/review-dispatch-compare.ts reads. Plan v3.2, review replay lane, requirement 3. Refresh rows from metered pilots and counted replays; never fill a row by hand.",
+  "output_tokens": "Output tokens count output plus reasoning tokens per call. Anthropic's usage.output_tokens already includes thinking tokens, so an Anthropic row records output_tokens as reported. Input tokens are usage.input_tokens.",
+  "rounding": "Every statistic is whole tokens. The median of an even count is the mean of the two middle values, rounded half up. p90 is by nearest rank: the ceil(0.9 * n)-th smallest value.",
+  "efforts": {
+    "full": "gstack's full review effort. provider_effort records what the measuring run sent; GSTA-131 ran full as Anthropic output_config.effort high.",
+    "light": "gstack's light review effort. GSTA-131 ran light as Anthropic output_config.effort medium."
+  },
+  "flag_rules": {
+    "min_n": 10,
+    "max_age_days": 30,
+    "rule": "A row is flagged when n is under min_n or as_of is more than max_age_days before today. Flagged rows still export; the export lists them on stderr."
+  },
+  "sources": {
+    "gsta131-eval1": "GSTA-131's eval 1 (org drive handoffs/gsta131-review-replay/eval1): direct Messages API replays on claude-opus-5-5. The specialist rows use only t-testing-code and t-maint-code, 3 trials per effort, the items its bar B3 preregistered for token measurement. The panel's other items ran at one effort only, so they are not pooled into these rows. as_of is the date of its priced pilot calls (2026-10-27), which ran just before the eval."
+  },
+  "rows": [
+    {
+      "model": "claude-opus-5-5",
+      "role": "specialist",
+      "effort": "full",
+      "provider_effort": "high",
+      "input_tokens": { "median": 88869, "p90": 90057 },
+      "output_tokens": { "median": 6929, "p90": 13566 },
+      "n": 6,
+      "source_run_ids": ["gsta131-eval1"],
+      "as_of": "2026-10-27",
+      "trials": [
+        { "id": "t-testing-code.high.1", "input_tokens": 90057, "output_tokens": 13566 },
+        { "id": "t-testing-code.high.2", "input_tokens": 90057, "output_tokens": 11933 },
+        { "id": "t-testing-code.high.3", "input_tokens": 90057, "output_tokens": 6976 },
+        { "id": "t-maint-code.high.1", "input_tokens": 87680, "output_tokens": 5388 },
+        { "id": "t-maint-code.high.2", "input_tokens": 87680, "output_tokens": 3420 },
+        { "id": "t-maint-code.high.3", "input_tokens": 87680, "output_tokens": 6881 }
+      ]
+    },
+    {
+      "model": "claude-opus-5-5",
+      "role": "specialist",
+      "effort": "light",
+      "provider_effort": "medium",
+      "input_tokens": { "median": 88869, "p90": 90057 },
+      "output_tokens": { "median": 5446, "p90": 9009 },
+      "n": 6,
+      "source_run_ids": ["gsta131-eval1"],
+      "as_of": "2026-10-27",
+      "trials": [
+        { "id": "t-testing-code.medium.1", "input_tokens": 90057, "output_tokens": 7613 },
+        { "id": "t-testing-code.medium.2", "input_tokens": 90057, "output_tokens": 6064 },
+        { "id": "t-testing-code.medium.3", "input_tokens": 90057, "output_tokens": 9009 },
+        { "id": "t-maint-code.medium.1", "input_tokens": 87680, "output_tokens": 4828 },
+        { "id": "t-maint-code.medium.2", "input_tokens": 87680, "output_tokens": 4651 },
+        { "id": "t-maint-code.medium.3", "input_tokens": 87680, "output_tokens": 3451 }
+      ]
+    }
+  ]
+}
