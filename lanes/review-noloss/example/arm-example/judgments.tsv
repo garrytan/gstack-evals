@@ -1,0 +1,30 @@
+pr	blocker_id	outcome	matched_finding	raw_severity	mapped_severity	judge	saw_label	note	pass	coverage
+3593	B1	F	ex-3593-b1	CRITICAL	CRITICAL	synthetic	no		1	complete
+3593	B2	F	ex-3593-b2	FIXABLE	CRITICAL	synthetic	no		1	complete
+3596	B1	D	ex-3596-b1	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3596	B2	M				synthetic	no	no finding names this defect	1	complete
+3516	B1	F	ex-3516-b1	CRITICAL	CRITICAL	synthetic	no		1	complete
+3516	B2	F	ex-3516-b2	FIXABLE	CRITICAL	synthetic	no		1	complete
+3524	B1	D	ex-3524-b1	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3526	B1	M				synthetic	no	no finding names this defect	1	complete
+3526	B2	F	ex-3526-b2	CRITICAL	CRITICAL	synthetic	no		1	complete
+3526	B3	F	ex-3526-b3	FIXABLE	CRITICAL	synthetic	no		1	complete
+3526	B4	D	ex-3526-b4	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3527	B1	M				synthetic	no	no finding names this defect	1	complete
+3527	B2	F	ex-3527-b2	CRITICAL	CRITICAL	synthetic	no		1	complete
+3527	B3	F	ex-3527-b3	FIXABLE	CRITICAL	synthetic	no		1	complete
+3527	B4	D	ex-3527-b4	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3534	B1	M				synthetic	no	no finding names this defect	1	complete
+3534	B2	F	ex-3534-b2	CRITICAL	CRITICAL	synthetic	no		1	complete
+3534	B3	F	ex-3534-b3	FIXABLE	CRITICAL	synthetic	no		1	complete
+3534	B4	D	ex-3534-b4	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3540	B1	M				synthetic	no	no finding names this defect	1	complete
+3545	B1	F	ex-3545-b1	CRITICAL	CRITICAL	synthetic	no		1	complete
+3564	B1	F	ex-3564-b1	FIXABLE	CRITICAL	synthetic	no		1	complete
+3567	B1	D	ex-3567-b1	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3567	B2	M				synthetic	no	no finding names this defect	1	complete
+3567	B3	F	ex-3567-b3	CRITICAL	CRITICAL	synthetic	no		1	complete
+3573	B1	F	ex-3573-b1	FIXABLE	CRITICAL	synthetic	no		1	complete
+3578	B1	D	ex-3578-b1	INFORMATIONAL	INFORMATIONAL	synthetic	no		1	complete
+3583	B1	M				synthetic	no	no finding names this defect	1	complete
+3583	B2	F	ex-3583-b2	CRITICAL	CRITICAL	synthetic	no		1	complete

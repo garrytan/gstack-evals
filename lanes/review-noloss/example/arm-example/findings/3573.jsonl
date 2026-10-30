@@ -1,0 +1,2 @@
+{"id":"ex-3573-b1","severity":"CRITICAL","confidence":7,"path":"bin/gstack-capy-session","line":115,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3573@f3a130c760f8 B1.","fix":"None: synthetic.","reader":"adversarial-native","label":"FIXABLE"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"bin/gstack-capy-session","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

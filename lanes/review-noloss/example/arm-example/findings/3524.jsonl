@@ -1,0 +1,2 @@
+{"id":"ex-3524-b1","severity":"INFORMATIONAL","confidence":7,"path":"scripts/skill-bin-drift.ts","line":124,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3524@205ea0e2e82f B1.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"scripts/skill-bin-drift.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

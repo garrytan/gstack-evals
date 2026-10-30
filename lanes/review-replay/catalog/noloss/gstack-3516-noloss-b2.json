@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3516-noloss-b2",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3516,
+  "reviewed_head": "ee73419c3295e4d47ab09864fd99be7efbd428e1",
+  "merge_base": "3e4240a76f301e5bb5afbd2476233345c2d20dc4",
+  "diff_range": {
+    "from": "3e4240a76f301e5bb5afbd2476233345c2d20dc4",
+    "to": "ee73419c3295e4d47ab09864fd99be7efbd428e1",
+    "note": "#3516's pass-1 range: the head its first review read."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "scripts/resolvers/plan-gates.ts",
+    "line": 566,
+    "summary": "The generated review instructions for the no-plan path told the agent to emit Step 1.5's Scope Check, a step that itself waits on the completion audit, so the no-plan path and the STOP trigger asked for a prerequisite that could not come first."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "The fix is a change to prompt wording plus a test that pins the new wording; no failing behaviour, broken run or loss is shown, so the evidence does not settle the floor.",
+    "in_history": [
+      {
+        "by": "Red Team, pass 1, gstack /ship review on #3516",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+    "pr": 3516
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3516,
+      "range": {
+        "from": "ee73419c3295e4d47ab09864fd99be7efbd428e1",
+        "to": "3712b79711266aeac3b3b51ca6d5366171b55eb7"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3516, blocker B2 of GSTA-167's no-loss cohort, fixed by 3712b7971126",
+    "evidence": [
+      "commit 3712b7971126 subject: fix(review): pre-landing review fixes for the paid flaky-case repairs",
+      "scripts/resolvers/plan-gates.ts:566 at ee73419c3295 is a context line of 3e4240a76f30..ee73419c3295",
+      "git diff -U0 ee73419c3295..3712b7971126 -- scripts/resolvers/plan-gates.ts rewrites line 566",
+      "roles from gstack-diff-scope at b61744517cc3 on 1176 filtered changed lines (BACKEND, TESTS, DOCS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "The only old-side line 3712b79 rewrote in this file, inside [551,581]. The same fix also edits review/SKILL.md.tmpl and its generated SKILL.md. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix rewrites it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-27",
+    "source": "GitHub API: garrytan/gstack#3516 created_at 2026-10-27T14:47:20Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3516's own review and fixed in 3712b7971126; #3516 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

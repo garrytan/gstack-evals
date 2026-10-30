@@ -69,6 +69,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_REPLAY_TRANSPORT](#e_replay_transport) | 2 | U13 |
 | [E_PARITY_SOURCE](#e_parity_source) | 2 | U15 |
 | [E_PARITY_STALE](#e_parity_stale) | 2 | U15 |
+| [E_NOLOSS_SUITE](#e_noloss_suite) | 2 | U13 |
+| [E_NOLOSS_SOURCE](#e_noloss_source) | 2 | U13 |
+| [E_NOLOSS_ARM](#e_noloss_arm) | 2 | U13 |
+| [E_NOLOSS_JUDGMENT](#e_noloss_judgment) | 2 | U13 |
+| [E_NOLOSS_COST](#e_noloss_cost) | 2 | U13 |
 | [E_MINE_SOURCE](#e_mine_source) | 2 | U14 |
 | [E_MINE_HAND](#e_mine_hand) | 2 | U14 |
 | [E_MINE_STALE](#e_mine_stale) | 2 | U14 |
@@ -536,6 +541,46 @@ A file the parity SD estimate reads or generates (source.json, counts.json, resu
 Fix: Restore a missing or unreadable file from git. Otherwise run the same command without --check, review the diff, and commit it only if the change is intended.
 
 Exit 2. Side effects: None: nothing is written. Retry safe: yes. Resumable: no. Owner: U15.
+
+### E_NOLOSS_SUITE
+
+A review no-loss suite cannot be used: the file is unreadable or malformed, a blocker's catalog case is missing, lacks a confirmed answer-key audit or disagrees with its unit's range, file or line, a prereg freeze digest fails on its byte prefix, or scripts/import-noloss-cases.ts found a blocker it cannot place (a line absent at the pass-1 head, a fix that does not touch it, lineage that rewrote it, or a summary that copies the source).
+
+Fix: Read the named unit and blocker. Fix the case or the hand audit (lanes/review-replay/catalog/noloss/mining/hand.json) and rerun the import, or regenerate the suite; never edit a digest to make it match.
+
+Exit 2. Side effects: None: suite --check and import --check write nothing, and import writes cases only when every blocker resolves. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_SOURCE
+
+scripts/import-noloss-cases.ts could not read a source: the gstack clone or a commit is missing, gstack-diff-scope is missing, the GitHub API failed, or the repo's visibility is unverified or not public. An API failure means unverified, not private.
+
+Fix: Read the message. Fetch the named PR ref into the clone, point --gstack at a gstack checkout, or wait for the API and rerun; cached API responses under --cache are reused. A repo that is not public is never imported.
+
+Exit 2. Side effects: None in the repo. API responses fetched so far stay in the --cache dir. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_ARM
+
+A review arm directory does not fit arm contract v1: arm.json is missing, malformed or names an unsupported contract_version or another suite; the directory holds a symlink or a file outside the contract; a findings file or line is malformed, names no unit, repeats an id or carries an absolute path; a raw label has no severity_map entry; a text breaks the publication scan; or the destination already holds a different arm.
+
+Fix: Each line names the file, row and field and how to fix that row. Fix the source arm (ingest never edits it) and run ingest --check again. For a scan hit in a finding, --digest-only &lt;id> publishes only its digest; to replace a published arm, pass --replace with the reason.
+
+Exit 2. Side effects: None: refused before anything is published. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_JUDGMENT
+
+An arm's judgments.tsv breaks the contract: a column is missing, a row names an unknown unit or blocker or repeats one, a blocker has no row for a pass, an outcome disagrees with the mapped severity of the findings it matched, matched_finding names no finding, or a transcribed row claims a finding or a blind judge.
+
+Fix: Fix the named row. For a missing row, re-judge the blocker, or record it with coverage incomplete and the reason in note; never add an M row just to pass the check. Outcome follows the matched finding's mapped severity: CRITICAL is F, INFORMATIONAL is D.
+
+Exit 2. Side effects: None: refused before anything is published. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_COST
+
+An arm's cost.tsv breaks the contract: a required column is missing, a meter_source is not one of the five meters, a number is not a non-negative number, a pr * row has no covers, a row names an unknown unit, or two all-scope rows cover the same units and pass.
+
+Fix: Fix the named row. Leave a number blank when it is unknown, use proxy-journal, reader-counter, lane-counter-delta, root-counter-delta or estimate for meter_source, and list the units a pr * row covers.
+
+Exit 2. Side effects: None: refused before anything is published. Retry safe: yes. Resumable: no. Owner: U13.
 
 ### E_MINE_SOURCE
 

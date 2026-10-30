@@ -1,0 +1,825 @@
+{
+  "auditor": "GSTA-43 hand audit (Opus 5.5)",
+  "at": "2026-10-30",
+  "blockers": [
+    {
+      "pr": 3593,
+      "blocker": "B1",
+      "case_id": "gstack-3593-noloss-b1",
+      "paths": [
+        "lib/ship-budget.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/ship-budget.ts",
+      "window": [
+        306,
+        317
+      ],
+      "line": 306,
+      "fix": "ba42df715ae9877d8ed519a4e3fb0e8ea4c064fe",
+      "intermediate": [],
+      "line_text": "  const l = pointer.ledger ? readLedger(pointer.ledger) : undefined;",
+      "check": "rewritten",
+      "summary": "Under a token cap, gstack-review-log --start treated any marker pointing at a stopped run, or at a ledger file that no longer exists, as an active capped run. After such a run, every later uncapped review start on the branch refused with exit 1 instead of simply capturing.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('a stopped run or a lost ledger does not block a later uncapped review on the branch') that the old activeLedger/admitReviewStart code fails, and the PR body describes every later uncapped start exiting 1, which breaks the review workflow.",
+      "in_history": [
+        {
+          "by": "Red Team, pass 1, gstack /ship review on #3593",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "First old-side line ba42df7 rewrote inside [306,317] (it also rewrote 313, a doc comment, and 317, the early return in admitReviewStart). The fix's parent is the pass-1 head."
+    },
+    {
+      "pr": 3593,
+      "blocker": "B2",
+      "case_id": "gstack-3593-noloss-b2",
+      "paths": [
+        "lib/ship-budget.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/ship-budget.ts",
+      "window": [
+        227,
+        257
+      ],
+      "line": 242,
+      "fix": "e393a03bdb7ed912b29e6ca29b9aad27a22a1136",
+      "intermediate": [
+        "ba42df715ae9877d8ed519a4e3fb0e8ea4c064fe"
+      ],
+      "line_text": "  const metered = l.meter.contract.meter === 'estimate' ? 0 : Math.max(0, (l.meter.last ?? l.meter.baseline) - l.meter.baseline);",
+      "check": "rewritten",
+      "summary": "When a capped run switched from the estimate meter to a real meter, newEpoch closed the estimate epoch with zero usage, so tokens already settled against the estimate were dropped from the carried total and the run under-counted its spend.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('estimate spend survives a change of meter (estimate -> capy -> estimate)') that the old line fails, and the lost spend is ledger data loss that weakens the cap.",
+      "in_history": [
+        {
+          "by": "Step 11 outside voice, pass 2, gstack /ship review on #3593",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "e393a03 rewrote line 242 of its parent. Its parent is not the pass-1 head: the one intermediate commit ba42df7 edits lib/ship-budget.ts only at lines 306-317, so line 242 maps to 242 at the pass-1 head with identical text. The fix also inserts a reset after line 244."
+    },
+    {
+      "pr": 3596,
+      "blocker": "B1",
+      "case_id": "gstack-3596-noloss-b1",
+      "paths": [
+        "bin/gstack-review-plan"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-review-plan",
+      "window": [
+        118,
+        125
+      ],
+      "line": 118,
+      "fix": "2e8ed2a918366157ab05e6331844453a0385cb9e",
+      "intermediate": [],
+      "line_text": "      const range = classifyDiff({ ...collectCommit(root, resolved, 'HEAD'), registry, gateTagged: 0 });",
+      "check": "rewritten",
+      "summary": "The review planner classified the fix range but threw away its class, so a fix commit that touched or reverted a gate-path edit still planned a scoped second pass unless the caller passed --touched-gate by hand. An empty fix range was also accepted as if it had been read.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a CLI regression test ('a fix range that touches a gate path keeps the full pass 2 without --touched-gate, and an empty range is unread') that the old code fails.",
+      "in_history": [
+        {
+          "by": "Red Team, pass 1, gstack /ship review on #3596",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "First old-side line 2e8ed2a rewrote inside [118,125]; it also rewrote 119 and 125 (the history touchedGate flag) and line 110 outside the window. The fix's parent is the pass-1 head."
+    },
+    {
+      "pr": 3596,
+      "blocker": "B2",
+      "case_id": "gstack-3596-noloss-b2",
+      "paths": [
+        "bin/gstack-review-plan"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-review-plan",
+      "window": [
+        118,
+        125
+      ],
+      "line": 118,
+      "fix": "fc5ef06e13c9c09334720086831a4983e32f63e2",
+      "intermediate": [
+        "2e8ed2a918366157ab05e6331844453a0385cb9e"
+      ],
+      "line_text": "      const range = classifyDiff({ ...collectCommit(root, resolved, 'HEAD'), registry, gateTagged: 0 });",
+      "check": "rewritten",
+      "summary": "The planner classified the fix range with a hard-coded gate count of zero and no scope signals of its own, so a fix that reverted an auth or migration edit could still be planned as a scoped pass rather than a full one.",
+      "deserved": null,
+      "basis": "fc5ef06 adds no new test and the PR body names the blocker without a shown test failure, broken run or loss; the evidence does not settle the floor.",
+      "in_history": [
+        {
+          "by": "Red Team, pass 2, gstack /ship review on #3596",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Text mapping does not hold exactly. fc5ef06 rewrote parent line 119 ('const range = classifyDiff({ ...commit, registry, gateTagged: 0 });'), which the intermediate commit 2e8ed2a created by splitting pass-1 line 118 into two lines; the defective arguments (registry, gateTagged: 0, no scope) are unchanged from line 118, but the line text differs. fc5ef06's other rewrites inside the parent map to pass-1 lines 94-104 (the scope and gate scan bound to the PR base), outside the window. Picked 118 as the pass-1 line that carries the defect.",
+      "carried": "2e8ed2a split pass-1 line 118 in two, and the second half keeps the same call that classifies the fix range without its scope or gate-scan inputs"
+    },
+    {
+      "pr": 3516,
+      "blocker": "B1",
+      "case_id": "gstack-3516-noloss-b1",
+      "paths": [
+        "test/skill-e2e-ship-docsync.test.ts",
+        "test/helpers/docsync-contract.ts"
+      ],
+      "fix_paths": [],
+      "file": "test/skill-e2e-ship-docsync.test.ts",
+      "window": [
+        84,
+        99
+      ],
+      "line": 84,
+      "fix": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+      "intermediate": [],
+      "line_text": "        // partial content), so the accepted contract owns only the paths no earlier attempt reported.",
+      "check": "rewritten",
+      "summary": "In the two-attempt doc-sync E2E check, any path an earlier rejected attempt had reported was removed from the accepted attempt's changed paths, even when the accepted attempt claimed it again. An honest re-audit that re-edited the same document then read as a mutation the contract did not report, and the test went red.",
+      "deserved": "CRITICAL",
+      "basis": "The PR body says the filter turns an honest re-audit red, which is a failing test caused by the defect, and the fix replaces the filter with acceptedChangedPaths.",
+      "in_history": [
+        {
+          "by": "Testing specialist, pass 1, gstack /ship review on #3516",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Rule pick: line 84 is the first old-side line 3712b79 rewrote inside [84,99], a comment stating the wrong ownership rule. The behavioural lines are 93 (the retained list) and 99 (the changedPaths filter), both rewritten by the same fix. The helper file only gains a new function after line 57 (insertion)."
+    },
+    {
+      "pr": 3516,
+      "blocker": "B2",
+      "case_id": "gstack-3516-noloss-b2",
+      "paths": [
+        "scripts/resolvers/plan-gates.ts"
+      ],
+      "fix_paths": [],
+      "file": "scripts/resolvers/plan-gates.ts",
+      "window": [
+        551,
+        581
+      ],
+      "line": 566,
+      "fix": "3712b79711266aeac3b3b51ca6d5366171b55eb7",
+      "intermediate": [],
+      "line_text": "Emit Step 1.5's Scope Check once without plan fields. If no intent sources exist, state",
+      "check": "rewritten",
+      "summary": "The generated review instructions for the no-plan path told the agent to emit Step 1.5's Scope Check, a step that itself waits on the completion audit, so the no-plan path and the STOP trigger asked for a prerequisite that could not come first.",
+      "deserved": null,
+      "basis": "The fix is a change to prompt wording plus a test that pins the new wording; no failing behaviour, broken run or loss is shown, so the evidence does not settle the floor.",
+      "in_history": [
+        {
+          "by": "Red Team, pass 1, gstack /ship review on #3516",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The only old-side line 3712b79 rewrote in this file, inside [551,581]. The same fix also edits review/SKILL.md.tmpl and its generated SKILL.md."
+    },
+    {
+      "pr": 3524,
+      "blocker": "B1",
+      "case_id": "gstack-3524-noloss-b1",
+      "paths": [
+        "scripts/skill-bin-drift.ts"
+      ],
+      "fix_paths": [],
+      "file": "scripts/skill-bin-drift.ts",
+      "window": [
+        109,
+        139
+      ],
+      "line": 124,
+      "fix": "a57463ad1db3f2eb7462700e74fd3232513a1023",
+      "intermediate": [],
+      "line_text": "    if ('|;&>`)'.includes(c) || (c === '$' && rest[i + 1] === '(')) break;",
+      "check": "rewritten",
+      "summary": "The skill bin drift scanner stopped reading a command's arguments at the first redirect, so a flag written after one, as in bin/x 2>/dev/null --bogus, was never checked against the bin's real flags.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('a redirect does not end the command: flags after it are still checked') that the old line fails.",
+      "in_history": [
+        {
+          "by": "Step 11 outside voice, pass 1, gstack /ship review on #3524",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The only old-side line a57463a rewrote in this file; it sits in [109,139]."
+    },
+    {
+      "pr": 3526,
+      "blocker": "B1",
+      "case_id": "gstack-3526-noloss-b1",
+      "paths": [
+        "bin/gstack-harness-ledger.sh",
+        "lib/harness-register.ts"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-harness-ledger.sh",
+      "window": null,
+      "line": 35,
+      "fix": "dd2f3c13ecd0ac92182c243b6a72444cd07fdbad",
+      "intermediate": [],
+      "line_text": "  backup=\"$root/backups/harness/$stamp\"",
+      "check": "rewritten",
+      "summary": "When a harness was unregistered, a file the user had edited was moved into a backups folder under the gstack state root, and uninstall removes that root, so the user's edits were deleted along with it.",
+      "deserved": "CRITICAL",
+      "basis": "The fix commit message says uninstall deleted the edit backups, which is loss of user data, and the fix moves kept edits beside the original file.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3526 (the PR body does not name the reviewer)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 35 sets the backup folder under the state root; the fix rewrote it (and line 42, the move into it). The register path has the same defect at lib/harness-register.ts:365 (backupFile), also rewritten."
+    },
+    {
+      "pr": 3526,
+      "blocker": "B2",
+      "case_id": "gstack-3526-noloss-b2",
+      "paths": [
+        "bin/gstack-harness-ledger.sh",
+        "lib/harness-register.ts"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-harness-ledger.sh",
+      "window": null,
+      "line": 40,
+      "fix": "dd2f3c13ecd0ac92182c243b6a72444cd07fdbad",
+      "intermediate": [],
+      "line_text": "        { [ -f \"$b\" ] && [ ! -L \"$b\" ]; } || continue",
+      "check": "rewritten",
+      "summary": "Unregister checked only whether the recorded file itself was a symlink, so if a folder between the destination and the file had been swapped for a symlink, it followed that link and removed or moved files outside the destination.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('a folder swapped for a symlink below the destination is never followed') that the old check fails, and following the link deletes files gstack does not own.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3526 (the PR body does not name the reviewer)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 40 is the per-file guard in gstack_harness_unregister_ledger; the fix replaced it with a walk that refuses any symlink below the destination."
+    },
+    {
+      "pr": 3526,
+      "blocker": "B3",
+      "case_id": "gstack-3526-noloss-b3",
+      "paths": [
+        "bin/gstack-harness-ledger.sh",
+        "lib/harness-register.ts"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-harness-ledger.sh",
+      "window": null,
+      "line": 27,
+      "fix": "dd2f3c13ecd0ac92182c243b6a72444cd07fdbad",
+      "intermediate": [],
+      "line_text": "  awk 'index($0, \"<!-- gstack:begin harness-routing -->\") { skip = 1 } !skip { print } index($0, \"<!-- gstack:end harness-routing -->\") { skip = 0 }' \"$file\" > \"$tmp\" || { rm -f \"$tmp\"; return 1; }",
+      "check": "rewritten",
+      "summary": "The context-block cutter dropped every line from any begin marker to the next end marker, so a lone begin marker, a repeated one, or a block the user had edited made it delete the user's own lines in that file.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('a lone, repeated or edited marker block is never cut or rewritten') and the lost lines are user data.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3526 (the PR body does not name the reviewer)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 27 is the awk cut in _gstack_harness_cut_block, rewritten to cut only one exact, hash-checked marker pair. The insert side (lib/harness-register.ts insertBlock) was rewritten too."
+    },
+    {
+      "pr": 3526,
+      "blocker": "B4",
+      "case_id": "gstack-3526-noloss-b4",
+      "paths": [
+        "bin/gstack-harness-ledger.sh",
+        "lib/harness-register.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/harness-register.ts",
+      "window": null,
+      "line": 429,
+      "fix": "dd2f3c13ecd0ac92182c243b6a72444cd07fdbad",
+      "intermediate": [],
+      "line_text": "    const same = prev && prev.meta.mode === mode && prev.meta.names === visible.join(',') && prev.files.length === want.length",
+      "check": "rewritten",
+      "summary": "Re-registering a harness with a new --context but the same files counted as unchanged, so the ledger was not rewritten while the context block was still inserted, leaving a block that uninstall did not know to remove.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('adding or moving --context is recorded, and the old block is cut') that the old unchanged check fails.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3526 (the PR body does not name the reviewer)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 429 is the 'same' check in register(), which ignored the context path; the fix adds the context and block hashes to it. The ledger write and the unconditional insertBlock call that it skipped were rewritten in the same hunk group."
+    },
+    {
+      "pr": 3527,
+      "blocker": "B1",
+      "case_id": "gstack-3527-noloss-b1",
+      "paths": [
+        "lib/autoplan-revise.ts",
+        "lib/autoplan-budget.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/autoplan-revise.ts",
+      "window": null,
+      "line": 200,
+      "fix": "9c34fda1f3021e578fe3d5571075907671bce4f6",
+      "intermediate": [],
+      "line_text": "  const regate = capped.length > 0 && state.status === 'gate_pending';",
+      "check": "rewritten",
+      "summary": "After a capped autoplan revise left an unreviewed delta for the owner, a later quiet revise (below High) that ended at gate_pending did not open a new owner gate, so the capped delta could pass without the owner seeing it.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('a quiet revise after a capped one regates so the capped delta reaches the owner') that the old condition fails.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3527 (the PR body does not name which of the 9 reviewers)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The prereg's line, lib/autoplan-budget.ts:~43, does not fit: the fix's only change there wraps the consensus file read in a try/catch, which does not touch the quiet-revise gate. Picked by hand the regate condition in lib/autoplan-revise.ts, which the fix rewrote to include quiet revises (it also rewrote line 176 so a quiet revise computes its delta)."
+    },
+    {
+      "pr": 3527,
+      "blocker": "B2",
+      "case_id": "gstack-3527-noloss-b2",
+      "paths": [
+        "bin/gstack-ship-receipt"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-ship-receipt",
+      "window": [
+        478,
+        508
+      ],
+      "line": 493,
+      "fix": "9c34fda1f3021e578fe3d5571075907671bce4f6",
+      "intermediate": [],
+      "line_text": "  if (pregateFile) {",
+      "check": "insertion-adjacent",
+      "summary": "carry --pregate read the pregate file and bound it to the --head being carried without checking that the checkout was at that head, so a pregate run on one commit could certify a different one.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('a --pregate from a checkout at another commit never rebinds the receipt to --head') that the old code fails, and the defect lets a gate certify an untested head.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3527 (the PR body does not name which of the 9 reviewers)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Insertion-only fix: the fix inserts a HEAD check right after line 493 ('if (pregateFile) {') in cmdCarry, the prereg's '~493' line. The prereg's first window, ~359-377, holds only a doc comment the fix moved unchanged to sit above cmdCarry, so the window rule would pick a line that is not the defect."
+    },
+    {
+      "pr": 3527,
+      "blocker": "B3",
+      "case_id": "gstack-3527-noloss-b3",
+      "paths": [
+        "ship/SKILL.md.tmpl"
+      ],
+      "fix_paths": [],
+      "file": "ship/SKILL.md.tmpl",
+      "window": null,
+      "line": 232,
+      "fix": "9c34fda1f3021e578fe3d5571075907671bce4f6",
+      "intermediate": [],
+      "line_text": "   Select this invocation's final Step 9.4 record (`skill:\"review\"`, `via:\"ship\"`)",
+      "check": "rewritten",
+      "summary": "Step 11.5 of the ship skill only accepted the Step 9.4 review record and a Step 11 native adversarial record, so a run whose loop ended with a fix-check, or whose plan skipped the adversarial pass, had no record it was allowed to bind.",
+      "deserved": null,
+      "basis": "The fix rewrites skill instructions and adds a test that pins the new wording; no failing run, broken production path or loss is shown, so the evidence does not settle the floor.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3527 (the PR body does not name which of the 9 reviewers)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 232 is the first line of Step 11.5's record selection that the fix rewrote (it also rewrote 233 and the snapshot rule at 237). The generated ship/SKILL.md carries the same change."
+    },
+    {
+      "pr": 3527,
+      "blocker": "B4",
+      "case_id": "gstack-3527-noloss-b4",
+      "paths": [
+        "ship/SKILL.md.tmpl",
+        "ship/sections/review-army.md.tmpl"
+      ],
+      "fix_paths": [
+        "lib/review-depth.ts"
+      ],
+      "file": "lib/review-depth.ts",
+      "window": null,
+      "line": 128,
+      "fix": "9c34fda1f3021e578fe3d5571075907671bce4f6",
+      "intermediate": [],
+      "line_text": "  if (!fixed) return h.blockingOpen ? { step: 'stop', reason: 'a blocking finding is open with no fix applied' } : { step: 'done', reason: 'the step applied no edits' };",
+      "check": "rewritten",
+      "summary": "The review planner's nextStep stopped on an open blocker only when no fix had landed, so once any other fix was applied it routed to a fix-check or another pass while a blocking finding was still open.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a regression test ('an open blocker never routes to a fix-check, even when other fixes landed') that the old nextStep fails.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3527 (the PR body does not name which of the 9 reviewers)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg, and neither prereg-named file holds this defect: the fix's edits to review-army.md.tmpl add planner flags and rename the fix-check token, and its ship/SKILL.md.tmpl edits cover the carry check and Step 11.5. The routing lives in lib/review-depth.ts nextStep; line 128 is the line the fix split into an unconditional blocker stop and the no-fix case."
+    },
+    {
+      "pr": 3534,
+      "blocker": "B1",
+      "case_id": "gstack-3534-noloss-b1",
+      "paths": [
+        "lib/pregate/lane-selection.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/pregate/lane-selection.ts",
+      "window": [
+        107,
+        126
+      ],
+      "line": 109,
+      "fix": "6e69dc36819dd124c37bbdf508d5b787ef086be5",
+      "intermediate": [],
+      "line_text": " * Why a removed path no remaining test selects owes no lane, and the owning-suite tests it selects: a rename's old name defers",
+      "check": "rewritten",
+      "summary": "Pregate treated any removed non-test file as owing no lane, so deleting a manifest, lockfile, config, fixture, golden or workflow, or a file a config still named, passed without PREGATE_NO_LANE.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a failing-first test ('a deleted source file a remaining config still names fails closed') and the PR body calls every blocker a fail-open of the gate.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3534 (the PR body does not name the reviewer or itemize which pass-1 findings were floor-rated)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Rule pick: line 109 is the first old-side line the fix rewrote in [107,126], the doc comment stating the old rule. The behavioural line is 116, the early return for any removed non-test file, also rewritten."
+    },
+    {
+      "pr": 3534,
+      "blocker": "B2",
+      "case_id": "gstack-3534-noloss-b2",
+      "paths": [
+        "lib/pregate/import-graph.ts",
+        "lib/pregate/lane-selection.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/pregate/import-graph.ts",
+      "window": null,
+      "line": 481,
+      "fix": "6e69dc36819dd124c37bbdf508d5b787ef086be5",
+      "intermediate": [],
+      "line_text": "  for (const f of all) { let d = path.posix.dirname(f); while (d && d !== '.') { dirs.add(d); d = path.posix.dirname(d); } }",
+      "check": "rewritten",
+      "summary": "The import graph built its set of known folders from every path, deleted ones included, so a remaining test that read a folder whose files were all deleted was not selected to run.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a failing-first test ('deleting every file of a fixture directory a remaining test reads selects that test') and the PR body calls the blocker a fail-open of the gate.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3534 (the PR body does not name the reviewer or itemize which pass-1 findings were floor-rated)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 481 in buildGraph is the folder set the fix rebuilt from remaining files only."
+    },
+    {
+      "pr": 3534,
+      "blocker": "B3",
+      "case_id": "gstack-3534-noloss-b3",
+      "paths": [
+        "lib/pregate/import-graph.ts",
+        "lib/pregate/lane-selection.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/pregate/import-graph.ts",
+      "window": null,
+      "line": 496,
+      "fix": "6e69dc36819dd124c37bbdf508d5b787ef086be5",
+      "intermediate": [],
+      "line_text": "  const rust = rustEdges(all, rel => readRepoFile(repoRoot, rel, maxBytes));",
+      "check": "rewritten",
+      "summary": "Rust edges were computed over every path including deleted ones, so a deleted Rust module did not pull in its crate's remaining tests and the removal went untested.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a failing-first test ('a deleted Rust module selects its crate's tests') and the PR body calls the blocker a fail-open of the gate.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3534 (the PR body does not name the reviewer or itemize which pass-1 findings were floor-rated)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 496 in buildGraph is the rustEdges call the fix switched to remaining files; it also rewrote 497 to skip deleted tests."
+    },
+    {
+      "pr": 3534,
+      "blocker": "B4",
+      "case_id": "gstack-3534-noloss-b4",
+      "paths": [
+        "lib/pregate/import-graph.ts",
+        "lib/pregate/lane-selection.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/pregate/lane-selection.ts",
+      "window": null,
+      "line": 115,
+      "fix": "6e69dc36819dd124c37bbdf508d5b787ef086be5",
+      "intermediate": [],
+      "line_text": "  if (renamedTo) return { removed: { file, note: `old name of ${renamedTo}`, lostCoverage: [] }, suite: [] };",
+      "check": "rewritten",
+      "summary": "A removed path that had been renamed was always treated as the old name of its new path, so a test renamed to a non-test path never counted as a deleted test and its lost coverage was not checked.",
+      "deserved": "CRITICAL",
+      "basis": "The fix adds a failing-first test for a test moved to a path outside the test tree, and the PR body calls the blocker a fail-open of the gate.",
+      "in_history": [
+        {
+          "by": "pass 1, gstack /ship review on #3534 (the PR body does not name the reviewer or itemize which pass-1 findings were floor-rated)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "No line in the prereg. Line 115 in removedPath is the rename shortcut the fix narrowed; selectLanes (old lines 139-141) was also changed to read the renamed test's merge-base text."
+    },
+    {
+      "pr": 3540,
+      "blocker": "B1",
+      "case_id": "gstack-3540-review-0e2e1121",
+      "paths": [
+        "bin/gstack-doctor"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-doctor",
+      "window": [
+        88,
+        118
+      ],
+      "line": 103,
+      "fix": "0e2e112182f79c424d789bdc988de8408643058b",
+      "intermediate": [],
+      "line_text": "cfg() { gstack_config_select \"$1\" 2>/dev/null; _cfg=\"${_gstack_cfg_value:-$2}\"; }",
+      "check": "rewritten",
+      "summary": "The doctor's in-process config read reselected the state root after the doctor set GSTACK_STATE_ROOT, so the --check and --json state-root row always said it was selected by GSTACK_STATE_ROOT.",
+      "deserved": "CRITICAL",
+      "basis": "Existing mined case gstack-3540-review-0e2e1121; its audit applies.",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3540, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Reuses the mined case gstack-3540-review-0e2e1121 (same head, base, file, line and fix)."
+    },
+    {
+      "pr": 3545,
+      "blocker": "B1",
+      "case_id": "gstack-3545-noloss-b1",
+      "paths": [
+        "browse/test/process-liveness-windows.test.ts"
+      ],
+      "fix_paths": [],
+      "file": "browse/test/process-liveness-windows.test.ts",
+      "window": null,
+      "line": 154,
+      "fix": "c397b4c78879ae0c7024493dcab28a290e415b0d",
+      "intermediate": [],
+      "line_text": "        expect(powershellCalls).toEqual([]);",
+      "check": "rewritten",
+      "summary": "The Windows test that checks the owner is never looked up through PowerShell expected an empty call list, yet the stub process the test starts triggers its own lookup, so the check failed on Windows although the owner was never queried.",
+      "deserved": "CRITICAL",
+      "basis": "Windows CI failed on this assertion, and the fix rewrites it to count only queries for the owner.",
+      "in_history": [
+        {
+          "by": "testing specialist and outside voice, gstack /ship review on #3545, confirmed on Windows CI",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The fix rewrites the assertion at line 154 (its parent is the pass-1 head); the line the source names, near 255, is a different edit in the same commit, so the window is left out."
+    },
+    {
+      "pr": 3564,
+      "blocker": "B1",
+      "case_id": "gstack-3564-noloss-b1",
+      "paths": [
+        "bin/gstack-ship-receipt"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-ship-receipt",
+      "window": [
+        381,
+        411
+      ],
+      "line": 396,
+      "fix": "f47aba6fe73a2be2d1303525d2fffaf9f6144de2",
+      "intermediate": [],
+      "line_text": "  if (!regen || regen.status !== 'pass' || !/\\bfresh\\b/.test(regen.detail ?? '')) return [];",
+      "check": "rewritten",
+      "summary": "When the regeneration check reported its outputs fresh, the receipt carry treated every output glob in the base registry as exempt metadata, so product files under those globs could change after review without voiding the receipt.",
+      "deserved": "CRITICAL",
+      "basis": "The PR body lists it as a CRITICAL gate bypass, and the fix adds a regression test (test/ship-receipt-carry-rewrite.test.ts).",
+      "in_history": [
+        {
+          "by": "Red Team, native adversarial pass and outside voice, pass 1, gstack /ship review on #3564",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The first rewritten lines in the window are the doc comment above verifiedOutputs; line 396 is the condition that trusted the word fresh, which the fix replaces."
+    },
+    {
+      "pr": 3567,
+      "blocker": "B1",
+      "case_id": "gstack-3567-noloss-b1",
+      "paths": [
+        "lib/ship-receipt-depth.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/ship-receipt-depth.ts",
+      "window": null,
+      "line": 124,
+      "fix": "4ad8a6bfd925a57ab9be2e134a7bfee50de0c310",
+      "intermediate": [],
+      "line_text": "  const scanBound = !!rd && rd.gate_scan.tagged !== null && head.startsWith(rd.gate_scan.head);",
+      "check": "rewritten",
+      "summary": "The merge queue accepted a recorded gate scan whenever the head merely started with the scan's recorded commit text, so a short or partial id in the receipt could vouch for a different head.",
+      "deserved": "CRITICAL",
+      "basis": "The fix requires the full bound commit and adds regression tests (test/ship-receipt-depth.test.ts).",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3567, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The prefix check is the startsWith call at line 124, which the fix rewrites; the source's window near 45-63 holds the writer's code, not the queue's check."
+    },
+    {
+      "pr": 3567,
+      "blocker": "B2",
+      "case_id": "gstack-3567-noloss-b2",
+      "paths": [
+        "lib/ship-receipt-depth.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/ship-receipt-depth.ts",
+      "window": [
+        45,
+        63
+      ],
+      "line": 46,
+      "fix": "4ad8a6bfd925a57ab9be2e134a7bfee50de0c310",
+      "intermediate": [],
+      "line_text": "  const run = (bin: string, timeout: number) => runScriptSync(path.join(binDir, bin), [branch], { cwd: repoRoot, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 });",
+      "check": "rewritten",
+      "summary": "The depth record ran gstack-diff-scope against the branch name and the working tree instead of the committed base and head range the writer used, so the queue and the writer could compute different scopes for one head.",
+      "deserved": "CRITICAL",
+      "basis": "The fix computes scope on the committed range and adds regression tests (test/ship-receipt-depth.test.ts, test/diff-scope.test.ts).",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3567, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Line 46 builds the runner that passes only the branch to gstack-diff-scope; the fix replaces it with a range-based scope call. Line 45, the first rewritten line, is the commit collection beside it."
+    },
+    {
+      "pr": 3567,
+      "blocker": "B3",
+      "case_id": "gstack-3572-review-4ad8a6bf",
+      "paths": [
+        "bin/gstack-ship-receipt"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-ship-receipt",
+      "window": [
+        587,
+        617
+      ],
+      "line": 602,
+      "fix": "4ad8a6bfd925a57ab9be2e134a7bfee50de0c310",
+      "intermediate": [],
+      "line_text": "  if (receipt.review_depth) {",
+      "check": "rewritten",
+      "summary": "Existing mined case gstack-3572-review-4ad8a6bf: carry with a --head other than the checkout recorded a working-tree gate scan.",
+      "deserved": null,
+      "basis": "Existing mined case gstack-3572-review-4ad8a6bf; its audit applies.",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3567, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Reuses the mined case gstack-3572-review-4ad8a6bf: same head 2b42ec5, base 4c745ee, file, line and fix 4ad8a6b, filed under #3572."
+    },
+    {
+      "pr": 3573,
+      "blocker": "B1",
+      "case_id": "gstack-3573-noloss-b1",
+      "paths": [
+        "bin/gstack-capy-session"
+      ],
+      "fix_paths": [],
+      "file": "bin/gstack-capy-session",
+      "window": [
+        115,
+        121
+      ],
+      "line": 115,
+      "fix": "86dc45156b40c236e807f0be5671a76a95ac4f4c",
+      "intermediate": [],
+      "line_text": "    && OWN=$(\"$ROOT/bin/gstack-lease\" live --root \"$ROOT\" 2>/dev/null) \\",
+      "check": "rewritten",
+      "summary": "The session wrapper skipped its self-upgrade whenever its own process chain held any live workflow lease; on Capy that lease belongs to the machine's long-running server, so the upgrade was put off indefinitely.",
+      "deserved": "CRITICAL",
+      "basis": "The fix bounds the deferral by lease age and adds a regression test (test/capy-skill-wrapper.test.ts).",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3573, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "Line 115 reads the live lease with no age bound; the fix rewrites it to keep only leases under 120 minutes old."
+    },
+    {
+      "pr": 3578,
+      "blocker": "B1",
+      "case_id": "gstack-3578-noloss-b1",
+      "paths": [
+        "lib/redact-patterns.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/redact-patterns.ts",
+      "window": [
+        478,
+        494
+      ],
+      "line": 494,
+      "fix": "566641d44f0907c20c6dceedab16a6d574134fc3",
+      "intermediate": [],
+      "line_text": "  return NON_TLD_EXTENSION.test(domain) || /^\\d+(?:\\.\\d+)+\\.[A-Za-z]{2,}$/.test(domain);",
+      "check": "rewritten",
+      "summary": "The rule that lets package@version style file names through also let real email addresses saved as file names through, such as an address followed by .json, so the redaction scan stopped reporting them.",
+      "deserved": "CRITICAL",
+      "basis": "The fix narrows the rule and adds regression cases (test/redact-constant-and-at-filename.test.ts).",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3578, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The first rewritten lines in the window are the comment on the extension list; line 494 is the return that exempted any domain ending in such an extension, which the fix replaces."
+    },
+    {
+      "pr": 3583,
+      "blocker": "B1",
+      "case_id": "gstack-3583-noloss-b1",
+      "paths": [
+        "lib/autoplan-carry.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/autoplan-carry.ts",
+      "window": null,
+      "line": 114,
+      "fix": "a56d6752690f61bdd0b4b72765babc1b872bad23",
+      "intermediate": [],
+      "line_text": "export function evaluateCarry(state: RunState, prev: GateList | undefined, list: GateList): CarryRecord | undefined {",
+      "check": "insertion-adjacent",
+      "summary": "A delta check still waiting on its reviewer was not cancelled when the owner answered the same gate, so a later carry could reuse that answer for a plan revision the owner never saw.",
+      "deserved": "CRITICAL",
+      "basis": "The fix voids pending checks when a gate is written or answered and adds regression tests (test/autoplan-carry.test.ts).",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3583, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The fix inserts the voiding call at the top of evaluateCarry, right after line 114; inside the source window it only adds the new helper after a blank line."
+    },
+    {
+      "pr": 3583,
+      "blocker": "B2",
+      "case_id": "gstack-3583-noloss-b2",
+      "paths": [
+        "lib/autoplan-carry.ts"
+      ],
+      "fix_paths": [],
+      "file": "lib/autoplan-carry.ts",
+      "window": [
+        76,
+        107
+      ],
+      "line": 85,
+      "fix": "a56d6752690f61bdd0b4b72765babc1b872bad23",
+      "intermediate": [],
+      "line_text": "  if (!p1 || p1.status === 'pending' || !p1.answered_at) return { reason: `gate_rev ${from} was not answered`, from };",
+      "check": "insertion-adjacent",
+      "summary": "A gate whose first approval item had an answer while another approval item was still pending could be carried forward as if the owner had approved the whole gate.",
+      "deserved": "CRITICAL",
+      "basis": "The fix refuses a carry while any item of the gate is unanswered and adds regression tests (test/autoplan-carry.test.ts).",
+      "in_history": [
+        {
+          "by": "gstack /ship review on #3583, pass 1 (Pre-Landing Review)",
+          "rated": "CRITICAL"
+        }
+      ],
+      "pick_note": "The fix inserts the unanswered-item check right after line 85, the test that p1 was answered."
+    }
+  ]
+}

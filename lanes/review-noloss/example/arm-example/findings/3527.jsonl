@@ -1,0 +1,4 @@
+{"id":"ex-3527-b2","severity":"CRITICAL","confidence":7,"path":"bin/gstack-ship-receipt","line":493,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3527@2684974602c1 B2.","fix":"None: synthetic.","reader":"testing"}
+{"id":"ex-3527-b3","severity":"CRITICAL","confidence":7,"path":"ship/SKILL.md.tmpl","line":232,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3527@2684974602c1 B3.","fix":"None: synthetic.","reader":"adversarial-native","label":"FIXABLE"}
+{"id":"ex-3527-b4","severity":"INFORMATIONAL","confidence":7,"path":"lib/review-depth.ts","line":128,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3527@2684974602c1 B4.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"lib/autoplan-revise.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3596-noloss-b2",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3596,
+  "reviewed_head": "0be7c3d44339b509f52382dd93851646002c1e8f",
+  "merge_base": "6c67e0236fec9db99af6681945f36295d6d33073",
+  "diff_range": {
+    "from": "6c67e0236fec9db99af6681945f36295d6d33073",
+    "to": "0be7c3d44339b509f52382dd93851646002c1e8f",
+    "note": "#3596's pass-1 range: the head its first review read. The base is #3596's PR base when it was reviewed (6c67e02, the head of the PR it was stacked on), not a merge base with main."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "bin/gstack-review-plan",
+    "line": 118,
+    "summary": "The planner classified the fix range with a hard-coded gate count of zero and no scope signals of its own, so a fix that reverted an auth or migration edit could still be planned as a scoped pass rather than a full one."
+  },
+  "severity": {
+    "deserved": null,
+    "basis": "fc5ef06 adds no new test and the PR body names the blocker without a shown test failure, broken run or loss; the evidence does not settle the floor.",
+    "in_history": [
+      {
+        "by": "Red Team, pass 2, gstack /ship review on #3596",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "fc5ef06e13c9c09334720086831a4983e32f63e2",
+    "pr": 3596
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3596,
+      "range": {
+        "from": "2e8ed2a918366157ab05e6331844453a0385cb9e",
+        "to": "fc5ef06e13c9c09334720086831a4983e32f63e2"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3596, blocker B2 of GSTA-167's no-loss cohort, fixed by fc5ef06e13c9",
+    "evidence": [
+      "commit fc5ef06e13c9 subject: fix: classify the fix range and the diff at the range base with their own scope and gate scan (GSTA-152 PR B pass 2)",
+      "bin/gstack-review-plan:118 at 0be7c3d44339 is an added line of 6c67e0236fec..0be7c3d44339",
+      "git diff -U0 2e8ed2a91836..fc5ef06e13c9 -- bin/gstack-review-plan rewrites line 119, which 2e8ed2a91836 made from line 118 of the pass-1 head: 2e8ed2a split pass-1 line 118 in two, and the second half keeps the same call that classifies the fix range without its scope or gate-scan inputs",
+      "roles from gstack-diff-scope at b61744517cc3 on 318 filtered changed lines (BACKEND, TESTS, DOCS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "Text mapping does not hold exactly. fc5ef06 rewrote parent line 119 ('const range = classifyDiff({ ...commit, registry, gateTagged: 0 });'), which the intermediate commit 2e8ed2a created by splitting pass-1 line 118 into two lines; the defective arguments (registry, gateTagged: 0, no scope) are unchanged from line 118, but the line text differs. fc5ef06's other rewrites inside the parent map to pass-1 lines 94-104 (the scope and gate scan bound to the PR base), outside the window. Picked 118 as the pass-1 line that carries the defect. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix rewrites it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gstack#3596 created_at 2026-10-29T05:44:20Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3596's own review and fixed in fc5ef06e13c9; #3596 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

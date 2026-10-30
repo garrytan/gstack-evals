@@ -1,0 +1,208 @@
+{
+  "suite": "gsta167-14pr",
+  "title": "GSTA-167 no-loss cohort: 29 review blockers on 14 gstack PRs",
+  "purpose": "Development suite for review variants: does a variant keep the blockers gstack's old /ship review caught on 14 public gstack PRs, replayed at each PR's pass-1 head? Every arm GSTA-167 ran was judged on it in the open, so it ranks variants and catches large losses, but a release claim needs a cohort frozen before the variant is built and a reference run in the same window.",
+  "repo": "garrytan/gstack",
+  "credit": "Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5).",
+  "groups": {
+    "a": "GSTA-152: the two PRs whose review misses started the packet work",
+    "b": "GSTA-165 replay set: merged gstack PRs in a 40-PR window whose review logged a blocking finding"
+  },
+  "units": [
+    {
+      "pr": 3593,
+      "head": "89156431975e5569f57130b37c8fcef3be676c89",
+      "base": "edf4c2e581e6e05b04545b15df00e2e4cedab23f",
+      "group": "a"
+    },
+    {
+      "pr": 3596,
+      "head": "0be7c3d44339b509f52382dd93851646002c1e8f",
+      "base": "6c67e0236fec9db99af6681945f36295d6d33073",
+      "group": "a",
+      "note": "The base is #3596's PR base when it was reviewed (6c67e02, the head of the PR it was stacked on), not a merge base with main."
+    },
+    {
+      "pr": 3516,
+      "head": "ee73419c3295e4d47ab09864fd99be7efbd428e1",
+      "base": "3e4240a76f301e5bb5afbd2476233345c2d20dc4",
+      "group": "b"
+    },
+    {
+      "pr": 3524,
+      "head": "205ea0e2e82f8239a97fd07b77fec49eddc2e2b0",
+      "base": "10b77de4f2e8a2377f21adea6ac2bbd91b8a30df",
+      "group": "b"
+    },
+    {
+      "pr": 3526,
+      "head": "808dead70e32c78b7ba5c6035b41cf6892c3c81f",
+      "base": "398618259d56df55e66793f168d0bd8c25cb9085",
+      "group": "b"
+    },
+    {
+      "pr": 3527,
+      "head": "2684974602c14ec9fadc26ee62ff2890f50beb18",
+      "base": "10b77de4f2e8a2377f21adea6ac2bbd91b8a30df",
+      "group": "b"
+    },
+    {
+      "pr": 3534,
+      "head": "a76620148c194ce9f8123d34213b8220d2c8cf45",
+      "base": "6f27f0c269cb33ad60b300ec10df63c2b9f296ba",
+      "group": "b"
+    },
+    {
+      "pr": 3540,
+      "head": "115355a38bd60322d9452d9f9ac9c58d2709470a",
+      "base": "9e3308f65adf547b7e4776e5ed22467a2649d2ee",
+      "group": "b"
+    },
+    {
+      "pr": 3545,
+      "head": "d4f0ea3c314f4506097f3968ff65cdf1a1fdaa47",
+      "base": "4b8c03bea9d1c7b51257f6267a4831ee0da8aa20",
+      "group": "b"
+    },
+    {
+      "pr": 3564,
+      "head": "e97b8573502b785a5df3e9e8e05efe55a00656d3",
+      "base": "4c745eec108abf7072f1ff755dce09bc8ba400a9",
+      "group": "b"
+    },
+    {
+      "pr": 3567,
+      "head": "2b42ec597e035880838df088475001c03ecb3c17",
+      "base": "4c745eec108abf7072f1ff755dce09bc8ba400a9",
+      "group": "b"
+    },
+    {
+      "pr": 3573,
+      "head": "f3a130c760f8b4539f131c35aabb6ce80eaf394b",
+      "base": "29f8ca053e7417d4702a094ce867f00cb7081a46",
+      "group": "b"
+    },
+    {
+      "pr": 3578,
+      "head": "0ff98dba1fddc532e0f61803a07a45d3b81475e0",
+      "base": "4729f4752ba6aa6524f52fa49f51c28779a3ea24",
+      "group": "b"
+    },
+    {
+      "pr": 3583,
+      "head": "f5bcdf71a765db9ddf56f76d7995b7650a6a7e2e",
+      "base": "4729f4752ba6aa6524f52fa49f51c28779a3ea24",
+      "group": "b"
+    }
+  ],
+  "sources": [
+    {
+      "name": "noloss-prereg.md",
+      "sha256": "790d2038efb2b6d015b39f1349694a285696723da4fe89eaaa59bde8c34c63ac",
+      "bytes": 27175,
+      "what": "GSTA-167's preregistration as read on 2026-10-30, through its round 4b scoring addendum: cohort, eligibility, blockers, judging rule and each round's bar. Kept in the org drive (handoffs/GSTA-167/), not committed."
+    },
+    {
+      "name": "noloss-cohort.tsv",
+      "sha256": "6f16f6a5782cca741b019eba840781c37e651db18670a43af1742e0f2ed24921",
+      "what": "Full pass-1 heads and bases of the 14 PRs, copied into units."
+    },
+    {
+      "name": "noloss2-results.md",
+      "sha256": "4374c79fb65e82486884ce602cf28a7766a1f3df8856d1cc606e4322eb588df7",
+      "what": "Round 2 results: arms A and B per blocker."
+    },
+    {
+      "name": "noloss3-results.md",
+      "sha256": "268ffa929092686ff2ffcf9961b0c6054d7195b3f91fe56fb5347e95824b80dc",
+      "what": "Round 3 results: arms C and A' per blocker, and the counter cost table."
+    },
+    {
+      "name": "noloss4-results.md",
+      "sha256": "131b60a285dcfe28abd63eddde12d0f8857164c15eaffc0064f464f1648629ec",
+      "what": "Round 4 results: arm D against C, the 29 recount and the corrected C cost per PR."
+    }
+  ],
+  "prereg_freezes": [
+    {
+      "round": "2",
+      "bytes": 12819,
+      "sha256": "b54b94ada5d82873933852d6924cd3896b2a5c59cbe4a2d0ae6acb7e0ed57080"
+    },
+    {
+      "round": "3",
+      "bytes": 18397,
+      "sha256": "123faa479864e5853b508399ee645e6fb1ad35f762ad1d7c1695bcb42b035d8a"
+    },
+    {
+      "round": "4",
+      "bytes": 22480,
+      "sha256": "201955183200af6ced2065fc41b153a153a50b637e07e3ace7b07f0a3c4c6c30"
+    }
+  ],
+  "judging_rule": "A blocker is FOUND when one finding in the arm's merged output names the same defect: it sits on a path the blocker lists, gives the same cause, and maps to CRITICAL; its line may differ. A finding for the same defect that maps only to INFORMATIONAL makes the blocker DOWNGRADED, which counts as missed. With no such finding the blocker is MISSED. A reviewer that did not run leaves its blockers missed, recorded with coverage incomplete. CRITICAL findings that match no blocker are counted and reported, never scored.",
+  "ineligible": [
+    {
+      "ref": "garrytan/gstack#3525",
+      "reason": "Its only blocking item came from a CI suite failure, not from a reviewer."
+    },
+    {
+      "ref": "garrytan/gstack#3532",
+      "reason": "A stray commit sits between the first commit and the review fix, so the pass-1 head cannot be placed."
+    },
+    {
+      "ref": "garrytan/gstack#3555",
+      "reason": "The review fix was folded into the PR's commits, so no pre-fix head survives."
+    }
+  ],
+  "excluded": [
+    {
+      "ref": "garrytan/gstack#3516",
+      "reason": "A pass-2 state-machine blocker: a regression inside the pass-1 guard, so absent at the pass-1 head."
+    },
+    {
+      "ref": "garrytan/gstack#3524",
+      "reason": "A pass-3 Windows path-separator blocker, fixed in b4bfa78 and 3e5feed, introduced after the pass-1 head."
+    },
+    {
+      "ref": "garrytan/gstack#3527",
+      "reason": "Pass-2 items on text the pass-1 fix itself added, plus truncated bullets, stale goldens and a later fix-check pin."
+    },
+    {
+      "ref": "garrytan/gstack#3564",
+      "reason": "Two later CRITICALs (lib/regen.ts and the receipt's proven names) inside code the pass-1 fix wrote."
+    },
+    {
+      "ref": "garrytan/gstack#3596",
+      "reason": "A pass-3 at-base scan defect added by the pass-2 fix fc5ef06."
+    },
+    {
+      "ref": "garrytan/gstack#3593",
+      "reason": "Failures found by pregate and Windows CI, not by a reviewer."
+    }
+  ],
+  "frozen_bars": [
+    {
+      "round": "2",
+      "kind": "group-all-and-hits",
+      "all_found_group": "a",
+      "hits_group": "b",
+      "min_hits": 11,
+      "text": "Round 2 (arms A and B): every blocker on the two group (a) PRs found, and at least 11 of the 12 group (b) PRs hit, where a PR is hit when every blocker on it is found."
+    },
+    {
+      "round": "3",
+      "kind": "reference-misses",
+      "reference": "C",
+      "max_misses": 1,
+      "text": "Round 3 (A' against C): of the blockers C found, A' may miss at most one."
+    },
+    {
+      "round": "4",
+      "kind": "reference-misses",
+      "reference": "C",
+      "max_misses": 1,
+      "text": "Round 4 (D against C): of the blockers C found in round 3, D may miss at most one."
+    }
+  ]
+}

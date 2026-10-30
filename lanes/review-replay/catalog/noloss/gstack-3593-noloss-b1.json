@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3593-noloss-b1",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3593,
+  "reviewed_head": "89156431975e5569f57130b37c8fcef3be676c89",
+  "merge_base": "edf4c2e581e6e05b04545b15df00e2e4cedab23f",
+  "diff_range": {
+    "from": "edf4c2e581e6e05b04545b15df00e2e4cedab23f",
+    "to": "89156431975e5569f57130b37c8fcef3be676c89",
+    "note": "#3593's pass-1 range: the head its first review read."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/ship-budget.ts",
+    "line": 306,
+    "summary": "Under a token cap, gstack-review-log --start treated any marker pointing at a stopped run, or at a ledger file that no longer exists, as an active capped run. After such a run, every later uncapped review start on the branch refused with exit 1 instead of simply capturing."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "The fix adds a regression test ('a stopped run or a lost ledger does not block a later uncapped review on the branch') that the old activeLedger/admitReviewStart code fails, and the PR body describes every later uncapped start exiting 1, which breaks the review workflow.",
+    "in_history": [
+      {
+        "by": "Red Team, pass 1, gstack /ship review on #3593",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "ba42df715ae9877d8ed519a4e3fb0e8ea4c064fe",
+    "pr": 3593
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3593,
+      "range": {
+        "from": "89156431975e5569f57130b37c8fcef3be676c89",
+        "to": "ba42df715ae9877d8ed519a4e3fb0e8ea4c064fe"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3593, blocker B1 of GSTA-167's no-loss cohort, fixed by ba42df715ae9",
+    "evidence": [
+      "commit ba42df715ae9 subject: fix: pre-landing review fixes (stopped or lost capped run no longer blocks uncapped review starts; short child return reconciles incomplete)",
+      "lib/ship-budget.ts:306 at 89156431975e is an added line of edf4c2e581e6..89156431975e",
+      "git diff -U0 89156431975e..ba42df715ae9 -- lib/ship-budget.ts rewrites line 306",
+      "roles from gstack-diff-scope at b61744517cc3 on 2511 filtered changed lines (BACKEND, TESTS, DOCS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "First old-side line ba42df7 rewrote inside [306,317] (it also rewrote 313, a doc comment, and 317, the early return in admitReviewStart). The fix's parent is the pass-1 head. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix rewrites it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gstack#3593 created_at 2026-10-29T05:40:33Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3593's own review and fixed in ba42df715ae9; #3593 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

@@ -1,0 +1,4 @@
+{"id":"ex-3534-b2","severity":"CRITICAL","confidence":7,"path":"lib/pregate/import-graph.ts","line":481,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3534@a76620148c19 B2.","fix":"None: synthetic.","reader":"testing"}
+{"id":"ex-3534-b3","severity":"CRITICAL","confidence":7,"path":"lib/pregate/import-graph.ts","line":496,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3534@a76620148c19 B3.","fix":"None: synthetic.","reader":"adversarial-native","label":"FIXABLE"}
+{"id":"ex-3534-b4","severity":"INFORMATIONAL","confidence":7,"path":"lib/pregate/lane-selection.ts","line":115,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3534@a76620148c19 B4.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"lib/pregate/lane-selection.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

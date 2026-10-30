@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3593-noloss-b2",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3593,
+  "reviewed_head": "89156431975e5569f57130b37c8fcef3be676c89",
+  "merge_base": "edf4c2e581e6e05b04545b15df00e2e4cedab23f",
+  "diff_range": {
+    "from": "edf4c2e581e6e05b04545b15df00e2e4cedab23f",
+    "to": "89156431975e5569f57130b37c8fcef3be676c89",
+    "note": "#3593's pass-1 range: the head its first review read."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/ship-budget.ts",
+    "line": 242,
+    "summary": "When a capped run switched from the estimate meter to a real meter, newEpoch closed the estimate epoch with zero usage, so tokens already settled against the estimate were dropped from the carried total and the run under-counted its spend."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "The fix adds a regression test ('estimate spend survives a change of meter (estimate -> capy -> estimate)') that the old line fails, and the lost spend is ledger data loss that weakens the cap.",
+    "in_history": [
+      {
+        "by": "Step 11 outside voice, pass 2, gstack /ship review on #3593",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "e393a03bdb7ed912b29e6ca29b9aad27a22a1136",
+    "pr": 3593
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3593,
+      "range": {
+        "from": "ba42df715ae9877d8ed519a4e3fb0e8ea4c064fe",
+        "to": "e393a03bdb7ed912b29e6ca29b9aad27a22a1136"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3593, blocker B2 of GSTA-167's no-loss cohort, fixed by e393a03bdb7e",
+    "evidence": [
+      "commit e393a03bdb7e subject: fix: carry estimate spend across a meter epoch change; calibration docs match their evidence",
+      "lib/ship-budget.ts:242 at 89156431975e is an added line of edf4c2e581e6..89156431975e",
+      "git diff -U0 ba42df715ae9..e393a03bdb7e -- lib/ship-budget.ts rewrites line 242, which is line 242 at the pass-1 head through ba42df715ae9",
+      "roles from gstack-diff-scope at b61744517cc3 on 2511 filtered changed lines (BACKEND, TESTS, DOCS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "e393a03 rewrote line 242 of its parent. Its parent is not the pass-1 head: the one intermediate commit ba42df7 edits lib/ship-budget.ts only at lines 306-317, so line 242 maps to 242 at the pass-1 head with identical text. The fix also inserts a reset after line 244. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix rewrites it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-29",
+    "source": "GitHub API: garrytan/gstack#3593 created_at 2026-10-29T05:40:33Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3593's own review and fixed in e393a03bdb7e; #3593 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

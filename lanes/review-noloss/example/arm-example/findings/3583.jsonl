@@ -1,0 +1,2 @@
+{"id":"ex-3583-b2","severity":"CRITICAL","confidence":7,"path":"lib/autoplan-carry.ts","line":85,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3583@f5bcdf71a765 B2.","fix":"None: synthetic.","reader":"testing"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"lib/autoplan-carry.ts","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}

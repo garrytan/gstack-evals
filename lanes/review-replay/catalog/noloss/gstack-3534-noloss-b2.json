@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "gstack-3534-noloss-b2",
+  "visibility": "public",
+  "repo": "garrytan/gstack",
+  "pr": 3534,
+  "reviewed_head": "a76620148c194ce9f8123d34213b8220d2c8cf45",
+  "merge_base": "6f27f0c269cb33ad60b300ec10df63c2b9f296ba",
+  "diff_range": {
+    "from": "6f27f0c269cb33ad60b300ec10df63c2b9f296ba",
+    "to": "a76620148c194ce9f8123d34213b8220d2c8cf45",
+    "note": "#3534's pass-1 range: the head its first review read."
+  },
+  "roles": [
+    {
+      "role": "specialist",
+      "checklist": "testing"
+    },
+    {
+      "role": "specialist",
+      "checklist": "maintainability"
+    },
+    {
+      "role": "specialist",
+      "checklist": "security"
+    },
+    {
+      "role": "specialist",
+      "checklist": "performance"
+    },
+    {
+      "role": "specialist",
+      "checklist": "simplification"
+    },
+    {
+      "role": "specialist",
+      "checklist": "state-machines"
+    },
+    {
+      "role": "red-team"
+    }
+  ],
+  "defect": {
+    "file": "lib/pregate/import-graph.ts",
+    "line": 481,
+    "summary": "The import graph built its set of known folders from every path, deleted ones included, so a remaining test that read a folder whose files were all deleted was not selected to run."
+  },
+  "severity": {
+    "deserved": "CRITICAL",
+    "basis": "The fix adds a failing-first test ('deleting every file of a fixture directory a remaining test reads selects that test') and the PR body calls the blocker a fail-open of the gate.",
+    "in_history": [
+      {
+        "by": "pass 1, gstack /ship review on #3534 (the PR body does not name the reviewer or itemize which pass-1 findings were floor-rated)",
+        "rated": "CRITICAL"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "6e69dc36819dd124c37bbdf508d5b787ef086be5",
+    "pr": 3534
+  },
+  "decoys": [
+    {
+      "kind": "fix-commit",
+      "repo": "garrytan/gstack",
+      "pr": 3534,
+      "range": {
+        "from": "a76620148c194ce9f8123d34213b8220d2c8cf45",
+        "to": "6e69dc36819dd124c37bbdf508d5b787ef086be5"
+      },
+      "audit": null
+    }
+  ],
+  "receipt": {
+    "source": "garrytan/gstack #3534, blocker B2 of GSTA-167's no-loss cohort, fixed by 6e69dc36819d",
+    "evidence": [
+      "commit 6e69dc36819d subject: fix(pregate): pre-landing review fixes for removed paths",
+      "lib/pregate/import-graph.ts:481 at a76620148c19 is a context line of 6f27f0c269cb..a76620148c19",
+      "git diff -U0 a76620148c19..6e69dc36819d -- lib/pregate/import-graph.ts rewrites line 481",
+      "roles from gstack-diff-scope at b61744517cc3 on 308 filtered changed lines (BACKEND, TESTS, DOCS), selected as scripts/mine-review-cases.ts does"
+    ]
+  },
+  "answer_key_audit": {
+    "by": "GSTA-43 hand audit (Opus 5.5)",
+    "at": "2026-10-30",
+    "verdict": "confirmed",
+    "notes": "No line in the prereg. Line 481 in buildGraph is the folder set the fix rebuilt from remaining files only. Checked by scripts/import-noloss-cases.ts (GSTA-43): the line exists at the pass-1 head and the fix rewrites it. The fix-commit decoy is unaudited (null), so it is never scored as clean."
+  },
+  "shelf_life": {
+    "first_appeared": "2026-10-28",
+    "source": "GitHub API: garrytan/gstack#3534 created_at 2026-10-28T08:22:16Z",
+    "short": true
+  },
+  "credit": "Caught in garrytan/gstack#3534's own review and fixed in 6e69dc36819d; #3534 by @garrytan. Cohort, blocker list and judging rule from GSTA-167 (GStack Minder); restated and hand-audited by GSTA-43 (Opus 5.5)."
+}

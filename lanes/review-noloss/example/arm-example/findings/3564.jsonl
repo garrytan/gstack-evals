@@ -1,0 +1,2 @@
+{"id":"ex-3564-b1","severity":"CRITICAL","confidence":7,"path":"bin/gstack-ship-receipt","line":396,"category":"example","summary":"Synthetic example finding for garrytan/gstack#3564@e97b8573502b B1.","fix":"None: synthetic.","reader":"adversarial-native","label":"FIXABLE"}
+{"severity":"INFORMATIONAL","label":"Medium","path":"bin/gstack-ship-receipt","line":null,"summary":"Synthetic finding that matches no blocker.","reader":"outside-voice"}
