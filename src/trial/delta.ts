@@ -5,8 +5,8 @@
 // grader's HEAD), fifos, sockets and devices, and symlinks that point outside the work tree. A sidecar paths list narrows
 // the import. The check then runs on the grade tree, never on the agent's.
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
-import { dirname, isAbsolute, join, normalize, sep } from "node:path";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { dirname, isAbsolute, join } from "node:path";
 
 type Kind = "f" | "d" | "l" | "o";
 interface Entry {
@@ -50,8 +50,42 @@ function scan(root: string): Map<string, Entry> {
 
 const depth = (p: string) => p.split("/").length;
 
-/** Whether a symlink at rel with this target resolves inside the work tree. */
-const linkInside = (rel: string, target: string) => !isAbsolute(target) && !normalize(join(dirname(rel), target)).split(sep).includes("..");
+/**
+ * Where a symlink at rel with this target lands, as path parts under the work tree, or null when it escapes. Each
+ * intermediate symlink in the tree is followed as the kernel would, so a chain through a link like a -> . cannot hide
+ * an escape. An absolute target, or a chain longer than 40 links, counts as escaping.
+ */
+function resolveLink(rel: string, target: string, tree: Map<string, Entry>, hops = 0): string[] | null {
+  if (isAbsolute(target) || hops > 40) return null;
+  const parts = rel.split("/").slice(0, -1);
+  for (const part of target.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      if (!parts.length) return null;
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+    const entry = tree.get(parts.join("/"));
+    if (entry?.kind !== "l") continue;
+    const landed = resolveLink(parts.join("/"), entry.target!, tree, hops + 1);
+    if (!landed) return null;
+    parts.splice(0, parts.length, ...landed);
+  }
+  return parts;
+}
+
+/** Every directory under root, with its mode. */
+function dirModes(root: string, out = new Map<string, number>()): Map<string, number> {
+  for (const name of readdirSync(root)) {
+    const path = join(root, name);
+    const st = lstatSync(path);
+    if (!st.isDirectory()) continue;
+    out.set(path, st.mode & 0o7777);
+    dirModes(path, out);
+  }
+  return out;
+}
 
 /** Imports the agent's changes (after) against the baseline into grade, a copy of the baseline. */
 export function importDelta(baseline: string, after: string, grade: string, paths?: readonly string[]): Delta {
@@ -61,6 +95,9 @@ export function importDelta(baseline: string, after: string, grade: string, path
   const scope = (paths ?? []).map((s) => s.replace(/\/+$/, ""));
   const inScope = (p: string) => !scope.length || scope.some((s) => p === s || p.startsWith(s + "/"));
   const delta: Delta = { added: [], changed: [], deleted: [], dropped: [] };
+  const graded = new Map([...before].filter(([p]) => !inScope(p)).concat([...now].filter(([p]) => inScope(p))));
+  const modes = dirModes(grade);
+  for (const path of modes.keys()) chmodSync(path, 0o700);
   for (const p of [...before.keys()].filter((p) => !now.has(p) && inScope(p)).sort((a, b) => depth(b) - depth(a))) {
     rmSync(join(grade, p), { recursive: true, force: true });
     delta.deleted.push(p);
@@ -73,7 +110,7 @@ export function importDelta(baseline: string, after: string, grade: string, path
       delta.dropped.push({ path: p, reason: "not a file, directory or symlink" });
       continue;
     }
-    if (e.kind === "l" && !linkInside(p, e.target!)) {
+    if (e.kind === "l" && !resolveLink(p, e.target!, graded)) {
       delta.dropped.push({ path: p, reason: "symlink to " + e.target + " points outside the work tree" });
       if (old) {
         rmSync(join(grade, p), { recursive: true, force: true });
@@ -86,11 +123,16 @@ export function importDelta(baseline: string, after: string, grade: string, path
     const dest = join(grade, p);
     if (old && (old.kind !== e.kind || e.kind !== "d")) rmSync(dest, { recursive: true, force: true });
     mkdirSync(dirname(dest), { recursive: true });
-    if (e.kind === "d") mkdirSync(dest, { recursive: true });
-    else if (e.kind === "l") symlinkSync(e.target!, dest);
-    else copyFileSync(join(after, p), dest);
-    if (e.kind !== "l") chmodSync(dest, e.mode);
+    if (e.kind === "d") {
+      mkdirSync(dest, { recursive: true, mode: 0o700 });
+      modes.set(dest, e.mode);
+    } else if (e.kind === "l") symlinkSync(e.target!, dest);
+    else {
+      copyFileSync(join(after, p), dest);
+      chmodSync(dest, e.mode);
+    }
     (old ? delta.changed : delta.added).push(p);
   }
+  for (const [path, mode] of [...modes].sort(([a], [b]) => depth(b) - depth(a))) if (existsSync(path)) chmodSync(path, mode);
   return delta;
 }

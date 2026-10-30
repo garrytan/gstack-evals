@@ -44,7 +44,7 @@ export interface TrialSpec {
   tasksDir: string;
   sandbox: Sandbox;
   agent: AgentDriver;
-  /** The trial's evaluator-side directory; the work dir is <dir>/<task id>. */
+  /** The trial's evaluator-side directory. The work dir is <dir>/work/<task id>, so no task id can name an evaluator tree. */
   dir: string;
   timeoutS: number;
   proactive?: Proactive;
@@ -73,7 +73,7 @@ const tail = (r: StepResult) => r.stderr.trim().split("\n").slice(-3).join(" | "
 export function runTrial(spec: TrialSpec): TrialRun {
   const started = Date.now();
   const { task, sandbox } = spec;
-  const work = join(spec.dir, task.id);
+  const work = join(spec.dir, "work", task.id);
   const baseline = join(spec.dir, "baseline");
   const grade = join(spec.dir, "grade");
   const fixtures = join(spec.dir, "fixtures");
@@ -101,16 +101,15 @@ export function runTrial(spec: TrialSpec): TrialRun {
     logs.missing = why;
     return finish(null);
   };
-  let stateEnv: { GSTACK_STATE_ROOT: string; GSTACK_HOME: string };
   try {
     const childEnv = (role: "setup" | "check", state: Record<string, string>) => trialEnv(role, { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", [FIXTURES_VAR]: sandbox.fixturesPath(fixtures), ...state }, declared, source);
-    const stateVars = { GSTACK_STATE_ROOT: workPath + "/.gstack-home", GSTACK_HOME: workPath + "/.gstack-home" };
+    const stateVars = (path: string) => ({ GSTACK_STATE_ROOT: path + "/.gstack-home", GSTACK_HOME: path + "/.gstack-home" });
     if (task.setup !== undefined) {
-      const r = sandbox.step("setup", task.setup, task.id, { work, fixtures, env: childEnv("setup", stateVars), timeoutMs });
+      const r = sandbox.step("setup", task.setup, task.id, { work, fixtures, env: childEnv("setup", stateVars(workPath)), timeoutMs });
       logs.setup = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       if (r.exitCode !== 0) return missing("E_TASKS_INVALID", "setup " + (r.timedOut ? "timed out" : "exited " + r.exitCode) + ": " + tail(r));
     }
-    stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core");
+    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core");
     snapshot(work, baseline);
     const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
     let outcome: AgentOutcome;
@@ -125,9 +124,10 @@ export function runTrial(spec: TrialSpec): TrialRun {
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);
     writeFileSync(join(spec.dir, "delta.json"), JSON.stringify(delta, null, 2) + "\n");
     if (task.check !== undefined) {
-      const r = sandbox.step("check", task.check, task.id, { work: grade, fixtures, env: childEnv("check", stateEnv), timeoutMs });
+      const gradePath = sandbox.workPath(grade, task.id);
+      const r = sandbox.step("check", task.check, task.id, { work: grade, fixtures, env: childEnv("check", stateVars(gradePath)), timeoutMs });
       logs.check = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
-      const verdict = judgeCheck(r, workPath);
+      const verdict = judgeCheck(r, gradePath);
       if (verdict.kind === "error") {
         record.termination = { kind: "missing", code: "E_VERIFIER" };
         logs.missing = verdict.reason;

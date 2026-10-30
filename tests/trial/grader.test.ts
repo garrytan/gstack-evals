@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadContract } from "../../src/skill-eval/contract/sidecar.ts";
@@ -11,7 +11,7 @@ import { removeTree } from "../../src/trial/cleanup.ts";
 import { importDelta, snapshot } from "../../src/trial/delta.ts";
 import { buildTrialImage } from "../../src/trial/image.ts";
 import { NOP, replayAgent, type Transcript } from "../../src/trial/replay.ts";
-import { dockerSandbox, IsolationError, processSandbox, type Sandbox, type StepResult } from "../../src/trial/sandbox.ts";
+import { bwrapArgs, dockerSandbox, IsolationError, processSandbox, type Sandbox, type StepResult } from "../../src/trial/sandbox.ts";
 import { runTrial, type TrialSpec } from "../../src/trial/trial.ts";
 
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";
@@ -59,7 +59,7 @@ const task = (skill: string, id: string) => skills[skill]!.tasks.find((t) => t.i
 
 /** The check on the agent's own tree, for comparison with the grade tree. */
 const checkAgentTree = (sandbox: Sandbox, skill: string, t: ContractTask, dir: string) =>
-  sandbox.step("check", t.check!, t.id, { work: join(dir, t.id), fixtures: join(dir, "fixtures"), env: { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: sandbox.homePath(dir), LANG: "C.UTF-8", TERM: "dumb", SKILL_EVAL_FIXTURES: sandbox.fixturesPath(join(dir, "fixtures")), GSTACK_HOME: sandbox.workPath(join(dir, t.id), t.id) + "/.gstack-home", GSTACK_STATE_ROOT: sandbox.workPath(join(dir, t.id), t.id) + "/.gstack-home" }, timeoutMs: 60_000 }).exitCode === 0;
+  sandbox.step("check", t.check!, t.id, { work: join(dir, "work", t.id), fixtures: join(dir, "fixtures"), env: { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: sandbox.homePath(dir), LANG: "C.UTF-8", TERM: "dumb", SKILL_EVAL_FIXTURES: sandbox.fixturesPath(join(dir, "fixtures")), GSTACK_HOME: sandbox.workPath(join(dir, "work", t.id), t.id) + "/.gstack-home", GSTACK_STATE_ROOT: sandbox.workPath(join(dir, "work", t.id), t.id) + "/.gstack-home" }, timeoutMs: 60_000 }).exitCode === 0;
 
 function graderSuite(name: string, sandbox: () => Sandbox) {
   describe(name, () => {
@@ -111,6 +111,19 @@ function graderSuite(name: string, sandbox: () => Sandbox) {
       expect(trial(sandbox(), "learn", t, ORACLE.learn!.add!).record.check).toBe(true);
       const narrowed = trial(sandbox(), "learn", t, ORACLE.learn!.add!, { entry: { paths: ["app"] } });
       expect(narrowed.record.check).toBe(false);
+      const viaVar = { ...t, check: 'grep -rq flaky-port-3000 "$GSTACK_HOME/projects"' };
+      expect(trial(sandbox(), "learn", viaVar, ORACLE.learn!.add!).record.check).toBe(true);
+      expect(trial(sandbox(), "learn", viaVar, ORACLE.learn!.add!, { entry: { paths: ["app"] } }).record.check).toBe(false);
+    }, 300_000);
+
+    // Value: protects=every kebab task id stays disjoint from the evaluator's trees; fails_when=an id such as fixtures, baseline, grade or home puts the tasks directory in the agent's work dir or makes a snapshot copy onto itself; why_new=#59 review; seam=runTrial; no_claim=none beyond protects
+    test("a task id that names an evaluator tree keeps the tasks directory out of the work dir and still grades", () => {
+      const t = task("learn", "add");
+      for (const id of ["fixtures", "baseline", "grade", "home", "work"]) {
+        const r = runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: { ...t, id }, tasksDir: join(FIXTURES, "learn"), sandbox: sandbox(), agent: replayAgent(ORACLE.learn!.add!), dir: scratch("id-" + id), timeoutS: 120, keep: true });
+        expect([id, r.record.termination.kind, r.record.check]).toEqual([id, "completed", true]);
+        expect(existsSync(join(r.dir, "work", id, "tasks.json"))).toBe(false);
+      }
     }, 300_000);
 
     test("a timeout is its own outcome, a failing setup and a check that cannot judge are missing cells", () => {
@@ -126,7 +139,7 @@ function graderSuite(name: string, sandbox: () => Sandbox) {
       const t = task("learn", "add");
       const r = trial(sandbox(), "learn", t, ORACLE.learn!.add!, { cleanup: { remove: () => {} } });
       expect(r.outcome).toBe("pass");
-      expect(r.leftovers.map((l) => l.replace(r.dir, "<dir>"))).toEqual(["add", "baseline", "grade", "fixtures"].map((tree) => "could not remove <dir>/" + tree + ": still present after removal"));
+      expect(r.leftovers.map((l) => l.replace(r.dir, "<dir>"))).toEqual(["work/add", "baseline", "grade", "fixtures"].map((tree) => "could not remove <dir>/" + tree + ": still present after removal"));
       expect(JSON.parse(readFileSync(join(r.dir, "trial.json"), "utf8")).logs.leftovers).toEqual(r.leftovers);
     }, 300_000);
   });
@@ -163,10 +176,63 @@ describe("delta import", () => {
     expect(delta.dropped.map((d) => d.path).toSorted()).toEqual(["escape", "pipe"]);
     expect(delta.deleted).toEqual(["d/x"]);
   });
+
+  // Value: protects=a symlink is imported only when its whole chain resolves inside the work tree; fails_when=a chain through a link like a -> . reaches the check's /fixtures or another path outside; why_new=#59 review; seam=importDelta; no_claim=absolute links into the work dir's container path, which are dropped too
+  test("a symlink chain that escapes through an intermediate link is dropped; one that stays inside is kept", () => {
+    const root = scratch("chain");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    mkdirSync(baseline, { recursive: true });
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    writeFileSync(join(after, "file"), "inside");
+    symlinkSync(".", join(after, "a"));
+    symlinkSync("a/../demo/a/../../fixtures/expected.txt", join(after, "answer"));
+    symlinkSync("a/a/file", join(after, "ok"));
+    symlinkSync("loop", join(after, "loop"));
+    const delta = importDelta(baseline, after, grade);
+    expect(delta.dropped.map((d) => d.path).toSorted()).toEqual(["answer", "loop"]);
+    expect(readFileSync(join(grade, "ok"), "utf8")).toBe("inside");
+  });
+
+  // Value: protects=an agent's read-only directories import with their contents and keep their modes, under a baseline directory that is read-only too; fails_when=a parent's final mode is set before its children are copied and the import throws EACCES; why_new=#59 review; seam=importDelta; no_claim=root, who writes anywhere
+  test.skipIf(process.getuid?.() === 0)("read-only directories import with their children and keep their modes", () => {
+    const root = scratch("modes");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    mkdirSync(join(baseline, "locked"), { recursive: true });
+    chmodSync(join(baseline, "locked"), 0o555);
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    chmodSync(join(after, "locked"), 0o755);
+    writeFileSync(join(after, "locked", "new"), "added");
+    chmodSync(join(after, "locked"), 0o555);
+    mkdirSync(join(after, "d"));
+    writeFileSync(join(after, "d", "f"), "f");
+    chmodSync(join(after, "d"), 0o555);
+    const delta = importDelta(baseline, after, grade);
+    expect(delta.added.toSorted()).toEqual(["d", "d/f", "locked/new"]);
+    expect(readFileSync(join(grade, "locked", "new"), "utf8")).toBe("added");
+    expect(readFileSync(join(grade, "d", "f"), "utf8")).toBe("f");
+    expect([statSync(join(grade, "locked")).mode & 0o777, statSync(join(grade, "d")).mode & 0o777]).toEqual([0o555, 0o555]);
+  });
 });
 
 test("--isolation process refuses without bubblewrap", () => {
   expect(() => processSandbox({ bwrap: "/nonexistent/bwrap" })).toThrow(IsolationError);
+});
+
+// Value: protects=an agent's HOME under --isolation process holds what earlier steps wrote; fails_when=each bubblewrap step gets an empty HOME; why_new=#59 review; seam=bwrapArgs, processSandbox; no_claim=bubblewrap's own isolation
+test("--isolation process binds the trial's HOME into every agent step", () => {
+  const args = bwrapArgs("/w/add", "/t/home", "true");
+  expect(args.join(" ")).toContain("--bind /t/home /t/home --bind /w/add /w/add");
+  const hasBwrap = spawnSync("bwrap", ["--ro-bind", "/", "/", "true"], { stdio: "ignore" }).status === 0;
+  if (!hasBwrap) return;
+  const dir = scratch("bwrap");
+  const work = join(dir, "work");
+  mkdirSync(work);
+  const home = processSandbox().homePath(dir);
+  const session = processSandbox().agent("add", { work, env: { PATH: "/usr/bin:/bin", HOME: home }, network: null });
+  expect(session.exec('echo kept > "$HOME/config"', 10_000).exitCode).toBe(0);
+  expect(session.exec('cat "$HOME/config"', 10_000).stdout.trim()).toBe("kept");
 });
 
 describe.skipIf(!DOCKER)("Docker tier (GSTACK_EVALS_DOCKER=1)", () => {

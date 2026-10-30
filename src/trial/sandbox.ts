@@ -11,7 +11,7 @@
 // evaluator's layout (arm names, run paths).
 //
 // --isolation process (explicit only): setup and check run as this user with the env allowlist, and the agent runs under
-// bubblewrap with the system directories read-only, a fresh HOME and the work dir, and no tasks directory. Without bwrap
+// bubblewrap with the system directories read-only, the trial's own HOME and the work dir, and no tasks directory. Without bwrap
 // on PATH it refuses (E_ISOLATION_UNSAFE). The verdict records the mode.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -115,12 +115,12 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
   };
 }
 
-/** The bubblewrap command that runs one agent step: system directories read-only, a fresh HOME, the work dir and nothing else. */
+/** The bubblewrap command that runs one agent step: system directories read-only, the trial's own HOME, the work dir and nothing else. */
 export function bwrapArgs(work: string, home: string, command: string): string[] {
   return [
     "--die-with-parent", "--unshare-all", "--share-net", "--new-session",
     "--ro-bind", "/usr", "/usr", "--ro-bind", "/etc", "/etc", "--symlink", "usr/bin", "/bin", "--symlink", "usr/sbin", "/sbin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
-    "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", home, "--bind", work, work, "--chdir", work, "sh", "-c", command,
+    "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", home, home, "--bind", work, work, "--chdir", work, "sh", "-c", command,
   ];
 }
 
@@ -140,7 +140,8 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
     },
     step: (_role, command, _task, o) => local(command, o.work, o.env, o.timeoutMs),
     agent(_task, o) {
-      const home = o.env.HOME ?? "/home/agent";
+      const home = o.env.HOME;
+      if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");
       return {
         exec: (command, timeoutMs) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER })),
         stop: () => {},
