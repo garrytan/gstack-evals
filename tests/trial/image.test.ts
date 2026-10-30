@@ -87,6 +87,29 @@ describe("arm images without a daemon", () => {
     const r = buildArmImage({ base: "base:test", layers: [], tasksDir: LEARN, state: scratch("empty-arm"), run: fakeDocker({ status: 0, stdout: "", stderr: "" }) });
     expect(r).toMatchObject({ ok: true, dropped: [] });
   });
+
+  // Value: protects=an arm build, its fixture scan and retention run the docker binary GSTACK_EVALS_DOCKER_BIN names, never a bare docker, and the build asks for a reproducible image (no provenance attestation, SOURCE_DATE_EPOCH=0, layer timestamps rewritten); fails_when=any step calls docker directly when another binary was given, or a flag that makes the image digest stable is dropped; why_new=GST-272 (carried from U9: arm builds and retention called docker directly; the image for a base sha and overlay is byte-identical across builds); seam=buildArmImage, imageFixtures, retainImage; no_claim=the digests themselves, which the Docker tier compares
+  test("arm builds, scans and retention run the docker binary they are given, with a reproducible build", () => {
+    const commands = new Set<string>();
+    const builds: string[][] = [];
+    const images: Record<string, string> = { "base:test": "sha256:" + "1".repeat(64) + " r" };
+    const ok = { status: 0, stdout: "", stderr: "" };
+    const run: Runner = (command, args) => {
+      commands.add(command);
+      if (args[0] === "image") return images[args.at(-1)!] ? { status: 0, stdout: images[args.at(-1)!]! + "\n", stderr: "" } : { status: 1, stdout: "", stderr: "No such image" };
+      if (args[0] === "build") {
+        builds.push(args);
+        images[/name=([^,]+)/.exec(args[args.indexOf("--output") + 1]!)![1]!] = "sha256:" + "2".repeat(64) + " " + args[args.indexOf("--label") + 1]!.split("=")[1];
+      }
+      if (args[0] === "save") writeFileSync(args[args.indexOf("-o") + 1]!, "image tar\n");
+      return ok;
+    };
+    const built = buildArmImage({ base: "base:test", layers: [{ src: gstackTree(), dest: AGENT_SKILLS }], tasksDir: LEARN, state: scratch("bin"), run, docker: "/opt/bin/docker-x" });
+    if (!built.ok) throw new Error(built.message);
+    expect(retainImage(built.tag, scratch("keep"), run, "/opt/bin/docker-x")).toMatchObject({ kind: "image", ref: "sha256:" + "2".repeat(64) });
+    expect([...commands]).toEqual(["/opt/bin/docker-x"]);
+    expect(builds[0]).toEqual(expect.arrayContaining(["--provenance=false", "SOURCE_DATE_EPOCH=0", "type=image,name=" + built.tag + ",rewrite-timestamp=true"]));
+  });
 });
 
 /** A gstack-like arm tree that carries learn's eval fixtures where gstack keeps them, and one stray copy. */
