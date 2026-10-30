@@ -67,6 +67,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_REPLAY_TRANSPORT](#e_replay_transport) | 2 | U13 |
 | [E_PARITY_SOURCE](#e_parity_source) | 2 | U15 |
 | [E_PARITY_STALE](#e_parity_stale) | 2 | U15 |
+| [E_MINE_SOURCE](#e_mine_source) | 2 | U14 |
+| [E_MINE_HAND](#e_mine_hand) | 2 | U14 |
+| [E_MINE_STALE](#e_mine_stale) | 2 | U14 |
 | [CALIBRATION_SKILL](#calibration_skill) | 3 | U10 |
 | [CALIBRATION_NONE_LEAK](#calibration_none_leak) | 3 | U10 |
 | [CALIBRATION_SHELL](#calibration_shell) | 3 | U10 |
@@ -513,6 +516,30 @@ A file the parity SD estimate reads or generates (source.json, counts.json, resu
 Fix: Restore a missing or unreadable file from git. Otherwise run the same command without --check, review the diff, and commit it only if the change is intended.
 
 Exit 2. Side effects: None: nothing is written. Retry safe: yes. Resumable: no. Owner: U15.
+
+### E_MINE_SOURCE
+
+scripts/mine-review-cases.ts could not read a source it mines: a repo clone is missing, a git command failed, a commit stayed missing after fetching its PR's ref, gstack's bin/gstack-diff-scope failed, or the GitHub API answered something other than 200 or 404 after its retries.
+
+Fix: Read the message. Clone a missing repo with git clone --filter=blob:limit=200k, fetch the named ref, or wait for the API's rate limit to reset, then run mine again. Cached API responses under --cache are reused, so a rerun reads only what is missing.
+
+Exit 2. Side effects: None in the repo: mined.json is written only when mining finishes. API responses fetched so far stay in the --cache dir. Retry safe: yes. Resumable: no. Owner: U14.
+
+### E_MINE_HAND
+
+The hand audits in the catalog's mining/hand.json cannot be used: the file is unreadable, it audits a candidate mined.json does not hold, or an audit is incomplete (no summary or severity on a confirmed case, a line outside the located lines, no history where the script could not settle it, or no verdict on a decoy whose lines a later commit changed).
+
+Fix: Fix the named audits in hand.json and run build again. Mark what the evidence cannot settle as needs_human_check with its reason rather than guessing.
+
+Exit 2. Side effects: None: build writes nothing. Retry safe: yes. Resumable: no. Owner: U14.
+
+### E_MINE_STALE
+
+A generated catalog file differs from what scripts/mine-review-cases.ts build computes from mining/mined.json and mining/hand.json, a file in the catalog is not one build writes, or mined.json is missing or unreadable.
+
+Fix: Run build without --check, review the diff, and commit it only if the change is intended. Restore a missing mined.json from git, or run mine again.
+
+Exit 2. Side effects: None: --check writes nothing. Retry safe: yes. Resumable: no. Owner: U14.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
