@@ -101,7 +101,8 @@ function runControl(task: ContractTask, entry: SidecarTask | undefined, control:
   try {
     result = judgeControl(root, task, entry, control, input, runner, timeoutMs);
   } catch (error) {
-    removeTree(root, options.cleanup);
+    const leftover = removeTree(root, options.cleanup);
+    if (leftover && error instanceof Error) error.message += "; and CLEANUP_INCOMPLETE: " + leftover;
     throw error;
   }
   const leftover = removeTree(root, options.cleanup);

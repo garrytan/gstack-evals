@@ -112,6 +112,10 @@ describe("vacuity check on the whole task", () => {
     expect(r.results[0]!.status).toBe("ok");
     expect(r.stops).toEqual([]);
     expect(r.warnings).toEqual([{ code: "CLEANUP_INCOMPLETE", message: "stuck: " + leftover }]);
+    const thrower: ShellRunner = () => {
+      throw new Error("runner broke");
+    };
+    expect(() => checkVacuity({ tasks: [task("stuck", { setup: "true", must: ["x"] })], dir: tmp }, { runner: thrower, workRoot: tmp, cleanup: { remove: () => {} } })).toThrow(/^runner broke; and CLEANUP_INCOMPLETE: could not remove .*gstack-evals-vacuity-.*: still present after removal$/);
     for (const name of readdirSync(tmp).filter((n) => n.startsWith("gstack-evals-vacuity-"))) rmSync(join(tmp, name), { recursive: true, force: true });
   });
 
