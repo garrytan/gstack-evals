@@ -7,7 +7,8 @@
 // model. An answer judge-join would refuse is asked again once in a fresh request; a second refusal leaves the packet
 // unjudged for that role (unjudged.json). impact and verifiable go to TSV files, never into a reply. Adjudication packets
 // go out with an evidence sheet: each finding's evidence, masked and leak-checked as packets are, and the unit head's code
-// around the finding's line, read from a --source clone.
+// around the finding's line, read from a --source clone. The metering proxy retries a 429 or 5xx within JUDGE_RETRY, the
+// retry budget the GST-456 post freezes; a transport error, or a 429 or 5xx past that budget, stops the run.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,17 +22,19 @@ import { usd } from "../../src/runner/ledger/money.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import { LedgerError, readItem } from "../../src/runner/ledger/record.ts";
 import { chatPrice, openRouterRouting, priceRequest, reservationMicros, type Provider } from "../../src/runner/pricing/prices.ts";
-import { MeteringProxy, reconcileJournal, UPSTREAM_DEADLINE_MS } from "../../src/runner/proxy/metering-proxy.ts";
+import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../src/rig/admission.ts";
 import { DEFAULT_POLICY, loadPolicy, modelProblem, providerOf } from "../../src/skill-eval/cli/policy.ts";
 import type { NolossIo } from "./cli.ts";
 import type { Ruling } from "./contract.ts";
 import { readArmDir } from "./ingest.ts";
-import { judgeSets, leakRules, loadKey, masker, packetAnswers, packetRulings, type JudgeRole, type Unjudged } from "./judge.ts";
+import { findingSha256, judgeSets, leakRules, loadKey, masker, packetAnswers, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
 import { ScoreError } from "./score.ts";
 import { insideRepo, loadSuite, sha256, unitRef } from "./suite.ts";
 
 const MAX_OUTPUT_TOKENS = 16000;
+/** Per request: at most 3 sends, the first included, and no new send once 900 s have passed since the first began. */
+export const JUDGE_RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 const ROLES: JudgeRole[] = ["primary", "second", "third"];
 const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" };
 const FLAGS: Record<string, "value" | "repeat" | "bool"> = { "--suite": "value", "--packets": "value", "--key": "value", "--arm": "repeat", "--brief": "value", "--primary": "value", "--second": "value", "--third": "value", "--item": "value", "--out": "value", "--source": "repeat", "--concurrency": "value", "--ledger": "value", "--record": "value", "--policy": "value", "--dry-run": "bool" };
@@ -107,7 +110,7 @@ interface Answer {
   rated: Map<string, string>;
 }
 
-export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Record<string, string | undefined>; fetch?: (input: string, init: RequestInit) => Promise<Response> } = {}): Promise<number> {
+export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Record<string, string | undefined>; fetch?: (input: string, init: RequestInit) => Promise<Response>; sleep?: (ms: number) => Promise<void> } = {}): Promise<number> {
   const env = o.env ?? process.env;
   const flags = new Map<string, string[]>();
   for (let i = 0; i < argv.length; i++) {
@@ -135,6 +138,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   const arms = armDirs.map((d) => readArmDir(d, suite, loadedSuite.sha256));
   const key = loadKey({ suite, suiteSha256: loadedSuite.sha256, key: keyPath, arms });
   const adjudicate = key.kind === "adjudicate";
+  const findingOf = (e: KeyEntry, unit: string) => arms.find((a) => a.arm.arm.id === e.arm)!.arm.findings!.get(unit)!.find((x) => x.id === e.finding && x.pass === e.pass)!;
   const batchText = read(join(packetsDir, "batch.json"), "the batch instructions");
   if ((JSON.parse(batchText) as { batch?: unknown }).batch !== key.batch) blind(join(packetsDir, "batch.json") + " is not the instructions of batch " + key.batch + "; --packets and --key must come from one judge-packet run");
   const packets = key.packets.map((p) => {
@@ -175,7 +179,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
       const findings = key.entries
         .filter((e) => e.packet === p.file)
         .map((e) => {
-          const f = arms.find((a) => a.arm.arm.id === e.arm)!.arm.findings!.get(unit.id)!.find((x) => x.id === e.finding && x.pass === e.pass)!;
+          const f = findingOf(e, unit.id);
           const raw = f.fields.evidence;
           const evidence = mask(raw === undefined || raw === null ? "" : typeof raw === "string" ? raw : JSON.stringify(raw));
           for (const { rule, re } of leaks) if (re.test(evidence)) problems.push(unitRef(suite, unit) + ", arm " + e.arm + ", finding " + JSON.stringify(f.id) + ": its evidence names " + rule);
@@ -190,19 +194,26 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   const request = (role: JudgeRole, p: (typeof packets)[number]) => judgeRequest(models[role].provider, models[role].model, prompt(p), MAX_OUTPUT_TOKENS, models[role].provider === "openai" ? JUDGE_REASONING_EFFORT : undefined);
   const item = one("--item");
   const record = recordPath(flags.get("--record")?.[0], env).path;
-  ledgerStep(() => readItem(record, item));
+  const itemState = ledgerStep(() => readItem(record, item));
 
   if (flags.has("--dry-run")) {
     const totals = new Map<JudgeRole, number>();
     for (const role of ROLES)
       for (const p of packets) {
         const m = models[role];
-        const worst = reservationMicros(priceRequest(m.provider, asProxied(m.provider, request(role, p)), MAX_OUTPUT_TOKENS));
+        const send = reservationMicros(priceRequest(m.provider, asProxied(m.provider, request(role, p)), MAX_OUTPUT_TOKENS));
+        const worst = send * JUDGE_RETRY.attempts;
         totals.set(role, (totals.get(role) ?? 0) + worst);
-        io.out(role + "  " + m.id + "  " + p.file + "  worst case " + usd(worst));
+        io.out(role + "  " + m.id + "  " + p.file + "  worst case " + usd(worst) + " (" + JUDGE_RETRY.attempts + " sends at " + usd(send) + ")");
       }
     const all = ROLES.reduce((n, r) => n + totals.get(r)!, 0);
-    io.out("worst case: primary " + usd(totals.get("primary")!) + " on " + packets.length + " packets; second up to " + usd(totals.get("second")!) + " and third up to " + usd(totals.get("third")!) + " if they read every packet; " + usd(all) + " in all, " + usd(2 * all) + " if every answer is asked again. Nothing was sent or written.");
+    io.out("worst case: primary " + usd(totals.get("primary")!) + " on " + packets.length + " packets; second up to " + usd(totals.get("second")!) + " and third up to " + usd(totals.get("third")!) + " if they read every packet; " + usd(all) + " in all, " + usd(2 * all) + " if every answer is asked again. Each request counts " + JUDGE_RETRY.attempts + " sends, since the retry budget allows " + JUDGE_RETRY.attempts + " sends within " + JUDGE_RETRY.elapsed_ms / 1000 + " s and a 5xx without usage is charged its full reservation. Nothing was sent or written.");
+    if (itemState.cap_micros === null) io.out("item " + item + ": no approval yet, so there is no cap to compare.");
+    else {
+      const left = itemState.cap_micros - itemState.committed_micros;
+      const fits = (n: number) => usd(n) + (n <= left ? " fits" : " does not fit");
+      io.out("item " + item + ": cap " + usd(itemState.cap_micros) + ", " + usd(itemState.committed_micros) + " committed, " + usd(Math.max(left, 0)) + " left; the worst case " + fits(all) + ", and asked again " + fits(2 * all) + ". The cap stops the run wherever it falls.");
+    }
     return 0;
   }
 
@@ -316,7 +327,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
     packets.filter((p) => judged.some((c) => c.packet === p.file && set.has(c.k))).map((p) => () => ask(role, p, judged.filter((c) => c.packet === p.file && set.has(c.k)).map((c) => c.k)));
 
   try {
-    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "gse-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: { attempts: 1, elapsed_ms: UPSTREAM_DEADLINE_MS }, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS });
+    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "gse-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: JUDGE_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: MAX_OUTPUT_TOKENS });
     proxy.start();
     await pool(packets.map((p) => () => ask("primary", p, adjudicate ? key.entries.filter((e) => e.packet === p.file).map((e) => p.file + " " + e.opaque) : p.unitOf.blockers.map((b) => p.unit + " " + b.id))));
     if (!stop) {
@@ -363,7 +374,8 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   if (final.third!.size) put("third.json", reply("third", final.third));
   if (unjudged.length) put("unjudged.json", JSON.stringify({ batch: key.batch, entries: unjudged }, null, 2) + "\n");
   const column = adjudicate ? "verifiable" : "impact";
-  put(column + ".tsv", [["packet", "opaque", "judge", column, "batch"].join("\t"), ...ROLES.flatMap((r) => packets.flatMap((p) => [...(replies.get(r)!.get(p.file)?.rated ?? [])].map(([opaque, v]) => [p.file, opaque, models[r].id, v, key.batch].join("\t"))))].join("\n") + "\n");
+  const entry = new Map(key.entries.map((e) => [e.packet + " " + e.opaque, e]));
+  put(column + ".tsv", [["packet", "opaque", "judge", column, "batch", "finding_sha256"].join("\t"), ...ROLES.flatMap((r) => packets.flatMap((p) => [...(replies.get(r)!.get(p.file)?.rated ?? [])].map(([opaque, v]) => [p.file, opaque, models[r].id, v, key.batch, findingSha256(findingOf(entry.get(p.file + " " + opaque)!, p.unit).fields)].join("\t"))))].join("\n") + "\n");
   for (const [file, text] of sheets) put(join("sheets", basename(file)), text);
 
   if (adjudicate) {
@@ -379,7 +391,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
         .map((r) => models[r].id);
       if (!judges.length) continue;
       const unit = packets.find((p) => p.file === e.packet)!.unitOf;
-      const f = armMap.get(e.arm)!.findings!.get(unit.id)!.find((x) => x.id === e.finding && x.pass === e.pass)!;
+      const f = findingOf(e, unit.id);
       rows.push([e.arm, unitRef(suite, unit), String(e.pass), /[;\s]/.test(f.id) ? "#" + f.index : f.id, judges.join(",")].join("\t"));
       counts.set(e.arm, counts.get(e.arm)! + 1);
     }
