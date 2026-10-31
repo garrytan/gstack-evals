@@ -22,7 +22,7 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { copyLayers, installArms, localInstaller, stackSources, type ArmInstall } from "../../../src/arms/install.ts";
 import { STACKS } from "../../../src/arms/stacks.ts";
 import { stateRoot } from "../../../src/trial/image.ts";
@@ -95,7 +95,7 @@ export function placeboReport(pstack: string, placebo: string, seed: string): Sk
 
 if (import.meta.main) {
   const here = import.meta.dir;
-  const out = process.argv[2] ?? join(homedir(), ".capy", "work", "laneb-arms");
+  const out = resolve(process.argv[2] ?? join(homedir(), ".capy", "work", "laneb-arms"));
   mkdirSync(out, { recursive: true });
   const builder = /^ARG BUILDER_IMAGE=(.+)$/m.exec(readFileSync(join(here, "Dockerfile"), "utf8"))![1]!;
   const inBuilder = (args: string[]): void => {
