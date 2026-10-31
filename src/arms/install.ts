@@ -324,19 +324,22 @@ export function releaseInstalls(hold: CacheHold): string[] {
     const mine = join(holds, hold.run);
     const doomed = locked(dirname(dir), () => {
       const built = existsSync(mine) && readFileSync(mine, "utf8").trim() === "built";
-      rmSync(mine, { force: true });
-      const others = existsSync(holds) ? readdirSync(holds).sort() : [];
+      const others = existsSync(holds) ? readdirSync(holds).filter((n) => n !== hold.run).sort() : [];
       if (others.length) {
         if (built) writeFileSync(join(holds, others[0]!), "built\n");
+        rmSync(mine, { force: true });
         return null;
       }
+      let to: string | null = null;
+      if (built && existsSync(dir)) {
+        to = dir + ".rm-" + randomBytes(4).toString("hex");
+        renameSync(dir, to);
+        rmSync(dir + ".log", { force: true });
+      }
+      rmSync(mine, { force: true });
       try {
         rmdirSync(holds);
       } catch {}
-      if (!built || !existsSync(dir)) return null;
-      const to = dir + ".rm-" + randomBytes(4).toString("hex");
-      renameSync(dir, to);
-      rmSync(dir + ".log", { force: true });
       return to;
     });
     if (!doomed) continue;

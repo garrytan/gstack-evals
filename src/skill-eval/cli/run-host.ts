@@ -13,7 +13,7 @@
 //   network (createTrialNetwork) and binds slots over its management socket. close() keeps resume's order: stop the
 //   proxy, reconcile its journal, settle the lease, then delete the arm installs the run built that no other run holds.
 //   A start that fails undoes its steps and deletes them too. --resume takes over every hold of the run it continues and
-//   reinstalls what was deleted, byte-identically.
+//   reinstalls what was deleted; an arm tree that changes on reinstall changes its cells' keys (E_CACHE_STALE below).
 // - A task with a judge rubric sends each completed run to blinded cross-family adjudication (src/grade/adjudicate.ts);
 //   a judge that cannot run leaves the run unjudged and stops the verdict with JUDGE_UNAVAILABLE.
 // - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts); a judged
