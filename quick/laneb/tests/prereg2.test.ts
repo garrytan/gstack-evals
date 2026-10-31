@@ -17,7 +17,7 @@ const spec = {
     { name: "gstack", tar: "/run/arms/gstack.tar", sha256: "b" },
     { name: "placebo", tar: "/run/arms/placebo.tar", sha256: "c" },
   ],
-  skill_map: { a: "investigate" },
+  skill_maps: { gstack: { a: "investigate" }, placebo: { a: "investigate" } },
 };
 
 describe("prereg 2 explicit invocation", () => {
@@ -25,7 +25,7 @@ describe("prereg 2 explicit invocation", () => {
     const agents = jobConfig(spec).agents;
     const invoke = Object.fromEntries(agents.map((ag) => [ag.kwargs.arm, ag.kwargs.invoke]));
     expect(invoke).toEqual({ none: false, gstack: true, placebo: true });
-    for (const ag of agents) expect(ag.kwargs.skill_map).toEqual({ a: "investigate" });
+    for (const ag of agents) expect(ag.kwargs.skill_map).toEqual(ag.kwargs.arm === "none" ? {} : { a: "investigate" });
     // wrapper stays the base wrapper for every arm; there is no nudge wrapper.
     for (const ag of agents) expect(ag.kwargs.wrapper_path).toBe("/r/prompt-wrapper.md");
   });

@@ -64,6 +64,10 @@ ALIAS_ENV = (
 )
 
 
+# Where each arm's skills live: gstack and its placebo under ~/.claude/skills, pstack and its placebo under ~/.local/share/pstack/skills.
+SKILL_DIRS = ("/root/.claude/skills", "/root/.local/share/pstack/skills")
+
+
 class LedgerCapStop(Exception):
     """The ledger refused this session's reserve: the line item's cap is reached. Never retried."""
 
@@ -95,7 +99,7 @@ def post_json(url: str, body: dict, timeout: float = 30) -> dict:
 
 class LanebOptions(ClaudeCodeOptions):
     persona_path: str = Field(description="Host path of the simulator persona; never uploaded.")
-    arm: str = Field(description="Arm name: none, gstack or placebo.")
+    arm: str = Field(description="Arm name: none, gstack, placebo, pstack or pstack-placebo.")
     arm_tar: str = Field(description="Host path of the arm tarball, extracted into /root.")
     arm_sha256: str = Field(default="", description="Preregistered sha256 of the arm tarball; a mismatch fails the trial before any model call.")
     control_url: str = Field(default="http://127.0.0.1:8788", description="Proxy control plane.")
@@ -106,8 +110,8 @@ class LanebOptions(ClaudeCodeOptions):
     workdir: str = Field(default="", description="Claude Code working directory in the container; empty means the image's WORKDIR.")
     max_output_tokens: int = Field(default=32000, description="CLAUDE_CODE_MAX_OUTPUT_TOKENS; Claude Code otherwise asks for 128k, whose worst case exceeds the cheap cells' caps.")
     sdk_max_turns: int = Field(default=200, description="Hard turn ceiling; the session cap and agent timeout bind first.")
-    invoke: bool = Field(default=False, description="When true the prompt opens with a slash command '/<skill> ' so the CLI expands it and injects that skill's SKILL.md body. The gstack and placebo arms set it; none does not.")
-    skill_map: dict[str, str] = Field(default_factory=dict, description="Task id to the preregistered gstack skill name invoked for it; read only when invoke is true.")
+    invoke: bool = Field(default=False, description="When true the prompt opens with a slash command '/<skill> ' so the CLI expands it and injects that skill's SKILL.md body. Every arm but none sets it.")
+    skill_map: dict[str, str] = Field(default_factory=dict, description="Task id to the preregistered skill this arm invokes for it, from the arm's entry in skill-map.stacks.json; read only when invoke is true.")
     invocation_sep: str = Field(default=" ", description="Separator between the slash command and the wrapper text; the CLI needs one space to parse the slash command.")
 
 
@@ -149,7 +153,7 @@ class LanebAgent(ClaudeCode):
             res = subprocess.run(["docker", "exec", "-i", container, "sh", "-c", "mkdir -p /root && tar -x -C /root"], stdin=f, capture_output=True, timeout=600)
         if res.returncode != 0:
             raise RuntimeError(f"arm extract failed: {res.stderr[-500:]!r}")
-        listing = self._exec(container, "ls -1 /root/.claude/skills 2>/dev/null | sort").stdout.decode().split()
+        listing = [entry for d in SKILL_DIRS for entry in self._exec(container, f"ls -1 {d} 2>/dev/null | sort").stdout.decode().split()]
         return {"event": "arm", "arm": self.options.arm, "tar_sha256": digest, "skills_dirs": len(listing)}
 
     def _export_patch(self, container: str) -> dict:

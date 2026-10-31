@@ -20,7 +20,8 @@ export type Trial = {
   wallS: number | null;
 };
 
-const SKILL_PATH = /\/\.claude\/skills\/([^/\s"']+)\/SKILL\.md/;
+// gstack and its placebo install skills under ~/.claude/skills; pstack and its placebo under ~/.local/share/pstack/skills.
+const SKILL_PATH = /\/(?:\.claude|\.local\/share\/pstack)\/skills\/([^/\s"']+)\/SKILL\.md/;
 
 export function skillOpensFromMessages(lines: string[]): string[] {
   const out: string[] = [];
