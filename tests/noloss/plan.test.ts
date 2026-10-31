@@ -250,6 +250,17 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     expect([rec.false_alarm_gate.result, rec.false_alarm_gate.reasons, rec.warnings]).toEqual([null, ["arm noisy has 36 must-fix findings on decoys with no adjudication row"], ["FALSE_ALARM_GATE_FAIL"]]);
   });
 
+  test("labelled and blind adjudication are never pooled, so the gate stays unread and the claim may not be made", async () => {
+    const src = writePlanArm(join(dir, "src", "mixed"), panel.suite, { ...arms("honest"), id: "mixed", noise: 1 });
+    const adj = join(src, "adjudication.tsv");
+    writeFileSync(adj, readFileSync(adj, "utf8").replace(/^(\d+\tp1-n1\t1\tnot-defect\tsynthetic\t)no\t/gm, "$1yes\t"));
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", root, ...S])).code).toBe(0);
+    const file = join(dir, "mixed.json");
+    writeFileSync(file, JSON.stringify({ ...json(prereg), comparisons: [cmp("none", "mixed")], loss_family: { order: ["none-vs-mixed"], null: "zero", reason: "test" } }));
+    const rec = JSON.parse((await score("none", "mixed", ["--json"], panel.stubPath, root, file)).out);
+    expect([rec.result.verdict, rec.false_alarm_gate.per_decoy, rec.false_alarm_gate.result, rec.false_alarm_gate.reasons, rec.loss_claim.eligible]).toEqual(["LOSS", { variant: 0, reference: 1 }, null, ["labelled and blind adjudication are never pooled"], false]);
+  });
+
   test("a comparisons file's gate must be a non-negative margin per decoy", async () => {
     const bad = join(dir, "bad.json");
     writeFileSync(bad, JSON.stringify({ ...json(prereg), comparisons: [{ ...cmp("none", "flagall"), false_alarm_gate: { margin: 1 } }], loss_family: { order: ["none-vs-flagall"], null: "zero", reason: "test" } }));
