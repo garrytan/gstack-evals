@@ -14,7 +14,7 @@
 // - recursive: a Grep call, or a Bash grep -r, rgrep, rg, ag, ack, git grep or diff -r, whose path is a directory
 //   holding such a file at any depth, an ancestor of an install root included.
 // - list: a listing that shows such a file's name. ls and LS list a directory's entries, so they flag a file directly in
-//   it; ls -R, find and tree list every file below their path, an ancestor of an install root included; a Glob, or a
+//   it, except ls -d, which lists only the directory itself; ls -R, find and tree list every file below their path, an ancestor of an install root included; a Glob, or a
 //   listing that names the file itself, flags each file it matches.
 // - search: a call with any path in the roots, or a recursive call from an ancestor of a root, whose Grep pattern or
 //   Bash words hold the unit's PR number as a whole number, or 7 or more leading hex characters of a fix commit of one
@@ -163,7 +163,8 @@ export function touches(tool: string, input: Record<string, unknown>, cwd: strin
     const flags = argv.filter((w) => w.startsWith("-"));
     const list = LISTINGS.has(name);
     const recursive = RECURSIVE.has(name) || (GREPS.has(name) && flags.some((f) => /^-[A-Za-z]*[rR]/.test(f) || f === "--recursive" || f === "--dereference-recursive")) || (name === "git" && argv.includes("grep")) || (name === "diff" && flags.some((f) => /^-[A-Za-z]*r/.test(f) || f === "--recursive")) || name === "find" || name === "tree" || (name === "ls" && flags.some((f) => /^-[A-Za-z]*R/.test(f) || f === "--recursive"));
-    const reach = recursive ? "tree" : list ? "entries" : "path";
+    const directoryOnly = name === "ls" && flags.some((f) => /^-[A-Za-z]*d/.test(f) || f === "--directory");
+    const reach = directoryOnly ? "path" : recursive ? "tree" : list ? "entries" : "path";
     for (const w of argv.slice(1)) {
       words.push(w);
       const v = w.startsWith("--") && w.includes("=") ? w.slice(w.indexOf("=") + 1) : w;

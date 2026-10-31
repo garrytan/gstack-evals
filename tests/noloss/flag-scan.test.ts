@@ -27,6 +27,8 @@ describe("noloss flag-scan: the frozen contamination rules", () => {
     expect(touches("Bash", { command: "grep -rn foo $HOME/.claude/skills/" }, "/work/t").paths).toEqual([{ path: H + "/.claude/skills", reach: "tree", list: false }]);
     expect(touches("Bash", { command: "ls ${HOME}/.claude/skills/review" }, "/work/t").paths).toEqual([{ path: H + "/.claude/skills/review", reach: "entries", list: true }]);
     expect(touches("Bash", { command: "ls -laR ~/x && find ~/y -name z && tree ~/w" }, "/work/t").paths.map((p) => p.reach + " " + p.list)).toEqual(["tree true", "tree true", "tree true"]);
+    expect(touches("Bash", { command: "ls -d ~/x && ls -dR ~/y && ls --directory ~/z" }, "/work/t").paths.map((p) => p.reach + " " + p.list)).toEqual(["path true", "path true", "path true"]);
+    expect(touches("Bash", { command: "cd ~/.local/share/gstack && ls -d" }, "/work/t").paths).toEqual([{ path: H + "/.local/share/gstack", reach: "path", list: true }]);
     expect(touches("Glob", { pattern: "**/*.md", path: H + "/.claude/skills" }, "/work/t").paths).toEqual([{ path: H + "/.claude/skills/**/*.md", reach: "path", list: true }]);
     expect(touches("LS", { path: H + "/.claude/skills/review" }, "/work/t").paths).toEqual([{ path: H + "/.claude/skills/review", reach: "entries", list: true }]);
     expect(touches("Skill", { skill: "pstack:interrogate" }, "/work/t").paths[0]!.path).toBe(H + "/.local/share/pstack/skills/interrogate/SKILL.md");
@@ -47,6 +49,8 @@ describe("noloss flag-scan: the frozen contamination rules", () => {
     expect([glob(H + "/.claude/skills/gstack/lib/a.ts"), glob(H + "/.claude/skills/gstack/lib/sub/a.ts")]).toEqual(["read", null]);
     const ls = touchRule(touches("Bash", { command: "ls ~/.local/share/gstack/lib" }, "/work/t").paths[0]!);
     expect([ls(H + "/.local/share/gstack/lib/a.ts"), ls(H + "/.local/share/gstack/lib/sub/a.ts"), ls(H + "/.local/share/gstack/lib")]).toEqual(["list", null, "list"]);
+    const lsDir = touchRule(touches("Bash", { command: "ls -ld ~/.local/share/gstack/lib" }, "/work/t").paths[0]!);
+    expect([lsDir(H + "/.local/share/gstack/lib/a.ts"), lsDir(H + "/.local/share/gstack/lib")]).toEqual([null, "list"]);
     expect(touchRule(touches("Glob", { pattern: "**/a.ts", path: H + "/.local/share/gstack" }, "/work/t").paths[0]!)(H + "/.local/share/gstack/lib/sub/a.ts")).toBe("list");
   });
 
