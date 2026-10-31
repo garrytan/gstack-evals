@@ -545,7 +545,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
               writeFileSync(join(home, f.dest), readFileSync(f.src));
             }
             canonicalize(home, null);
-          });
+          }, o.hold);
           layers.push({ src: added.dir, dest: "" });
           digests.push(digestOf(layers[1]!, added.tree_sha256));
         }
