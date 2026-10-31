@@ -28,7 +28,11 @@ gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin
 gstack-evals noloss export [--check]
 gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>]
 gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
-gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] --arm <dir>... --out <dir>
+gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] [--unjudged <file>] --arm <dir>... --out <dir>
+gstack-evals noloss judge-run --suite <id> --packets <dir> --key <file> --arm <dir>... --brief <file> --primary <provider/model> --second <provider/model> --third <provider/model> --item <ledger item> --out <dir> [--source <owner/repo>=<clone>]... [--dry-run]
+gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge>]
+gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>]
+gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--permutations <n>] [--json]
 ```
 
 `gstack-evals noloss --help` has the details. Every refusal starts with its reason code (E_NOLOSS_SUITE, E_NOLOSS_ARM,
@@ -153,3 +157,16 @@ packet per unit that has any, each with the unit's known informational cases. A 
 `{batch, judge, packets: [{file, sha256, findings: [{id, ruling}]}]}`. `judge-join` on that key asks a second judge for
 every finding the primary ruled not-defect or known-informational plus a seeded 20% sample of the rest, and a third read
 wherever the two differ, then writes adjudication.tsv for every arm at once; ingest each with `--replace`.
+
+## Judge runner
+
+`judge-run` is the paid step between the two. It sends each judge the frozen brief, the batch's batch.json and one
+packet per request through an in-process metering proxy on a lease of one ledger item, with no tools, no system prompt
+and at most 16,000 output tokens. The primary reads every packet; the second and third read the packets that hold the
+blockers or findings judge-join will ask them for (the same `judgeSets` code), and their reply files keep only those.
+The runner writes each reply's batch, judge, file and digest itself. An answer judge-join would refuse is asked again
+once, and a second refusal goes to unjudged.json, which `judge-join --unjudged` turns into coverage incomplete rows (or
+no adjudication row). `impact` and `verifiable` go to impact.tsv and verifiable.tsv, never into a reply. Adjudication
+packets go out with an evidence sheet built from each finding's masked evidence and the unit head's code in a `--source`
+clone, and the run writes unverifiable.tsv for the frozen sensitivity count. `--dry-run` prints each request's worst
+case and spends nothing. A ledger item binds to one run, so the matching and adjudication batches need an item each.
