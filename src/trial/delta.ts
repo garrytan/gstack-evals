@@ -8,7 +8,8 @@
 // - git's in-tree config (.gitignore, .gitattributes, .gitmodules) stays the baseline's, so an agent cannot hide new
 //   files from git ls-files or change how git diffs.
 // - a symlink that points outside the work tree becomes an empty directory holding PLACEHOLDER, so test -e, test -d,
-//   find and git's untracked list all still see that something was written at that path.
+//   find and git's untracked list all still see that something was written at that path. runTrial also runs the check
+//   without these placeholders and passes only when both runs pass, so a placeholder cannot satisfy a check that needs the path.
 // - a baseline directory the agent replaced with a symlink (such as .gstack-home) stays a directory: graded as the
 //   directory the link points to when that is in the tree, else as the baseline's.
 import { spawnSync } from "node:child_process";

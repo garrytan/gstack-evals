@@ -4,8 +4,9 @@
 // environment: the tasks directory, the sidecar, mutants and hidden tasks reach setup and check only. Evaluator records
 // (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it. The check reads a copy of delta.json
 // in its tasks directory copy through SKILL_EVAL_DELTA, and a trial whose import dropped anything names those paths in
-// its record (dropped), which the verdict reports as DELTA_DROPPED.
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+// its record (dropped), which the verdict reports as DELTA_DROPPED. When the import stood in for an escaping symlink, the
+// check runs again on a copy without those placeholders, and the trial passes only when both runs pass.
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 import { judgeCheck } from "../skill-eval/contract/check.ts";
@@ -14,7 +15,7 @@ import { FIXTURES_VAR, type ContractTask } from "../skill-eval/contract/tasks.ts
 import type { Category } from "../usersim/classifier.ts";
 import type { Termination, TokenUsage, TrialRecord } from "../types.ts";
 import { removeTree, type CleanupOptions } from "./cleanup.ts";
-import { importDelta, snapshot, type Delta } from "./delta.ts";
+import { importDelta, PLACEHOLDER, snapshot, type Delta } from "./delta.ts";
 import { DELTA_VAR, trialEnv, TrialEnvError } from "./env.ts";
 import type { AgentSession, Sandbox, StepResult } from "./sandbox.ts";
 import { seedStateRoot, type Proactive } from "./state-root.ts";
@@ -80,6 +81,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const work = join(spec.dir, "work", task.id);
   const baseline = join(spec.dir, "baseline");
   const grade = join(spec.dir, "grade");
+  const bare = join(spec.dir, "grade-bare");
   const fixtures = join(spec.dir, "fixtures");
   const timeoutMs = (spec.entry?.timeout_s ?? spec.timeoutS) * 1000;
   mkdirSync(work, { recursive: true });
@@ -95,7 +97,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   };
   const finish = (delta: Delta | null): TrialRun => {
     record.wall_ms = Date.now() - started;
-    const leftovers = spec.keep ? [] : [work, baseline, grade, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
+    const leftovers = spec.keep ? [] : [work, baseline, grade, bare, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
     if (leftovers.length) logs.leftovers = leftovers;
     writeFileSync(join(spec.dir, "trial.json"), JSON.stringify({ record, delta, logs }, null, 2) + "\n");
     return { record, delta, dir: spec.dir, leftovers };
@@ -130,17 +132,27 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     writeFileSync(join(spec.dir, "delta.json"), deltaJson);
     if (delta.dropped.length) record.dropped = delta.dropped.map((d) => d.path);
     if (task.check !== undefined) {
-      const gradePath = sandbox.workPath(grade, task.id);
       writeFileSync(join(fixtures, DELTA_FILE), deltaJson);
-      const r = sandbox.step("check", task.check, task.id, { work: grade, fixtures, env: childEnv("check", { ...stateVars(gradePath), [DELTA_VAR]: sandbox.fixturesPath(fixtures) + "/" + DELTA_FILE }), timeoutMs });
-      logs.check = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
-      const verdict = judgeCheck(r, gradePath);
-      if (verdict.kind === "error") {
+      const placeholders = delta.dropped.map((d) => d.path).filter((p) => existsSync(join(grade, p, PLACEHOLDER)));
+      if (placeholders.length) {
+        snapshot(grade, bare);
+        for (const p of placeholders) rmSync(join(bare, p), { recursive: true, force: true });
+      }
+      const check = (tree: string) => {
+        const path = sandbox.workPath(tree, task.id);
+        const r = sandbox.step("check", task.check!, task.id, { work: tree, fixtures, env: childEnv("check", { ...stateVars(path), [DELTA_VAR]: sandbox.fixturesPath(fixtures) + "/" + DELTA_FILE }), timeoutMs });
+        return { log: { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) }, verdict: judgeCheck(r, path) };
+      };
+      const runs = [check(grade), ...(placeholders.length ? [check(bare)] : [])];
+      logs.check = runs[0]!.log;
+      if (runs[1]) logs.check_bare = runs[1].log;
+      for (const { verdict } of runs) {
+        if (verdict.kind !== "error") continue;
         record.termination = { kind: "missing", code: "E_VERIFIER" };
         logs.missing = verdict.reason;
         return finish(delta);
       }
-      record.check = verdict.kind === "pass";
+      record.check = runs.every((run) => run.verdict.kind === "pass");
     }
     return finish(delta);
   } catch (error) {

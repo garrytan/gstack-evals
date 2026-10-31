@@ -403,6 +403,19 @@ describe("U11 grader routes (keyless, on this machine)", () => {
     expect((await u11Check("office-hours", t, ["printf 'print(1)\\n' > merge.py && printf '*\\n' > .gitignore"])).check).toBe(true);
     expect((await u11Check("office-hours", t, [])).check).toBe(false);
   }, 300_000);
+
+  // Value: protects=rule A closes both directions: a dangling escaping symlink satisfies no check that needs its path, while an absolute link at a path the check does not read leaves the result alone; fails_when=the placeholder directory alone passes find -name, test -e or test -s, or the second run fails a check that never reads the dropped path; why_new=#90 review (red team); seam=runTrial; no_claim=what the link pointed at, which the grader cannot see
+  test("a check passes only when it passes both with and without the placeholders", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const found = { ...base, check: 'test -n "$(find . -name sketch.html)"' };
+    expect((await u11Check("office-hours", found, ["printf 'h\\n' > sketch.html"])).check).toBe(true);
+    expect((await u11Check("office-hours", found, ["ln -s /nonexistent/sketch.html sketch.html"])).check).toBe(false);
+    const sized = { ...base, check: "test -s report.txt && test -e report.txt" };
+    expect((await u11Check("office-hours", sized, ["printf 'r\\n' > report.txt"])).check).toBe(true);
+    expect((await u11Check("office-hours", sized, ["ln -s /nonexistent/report.txt report.txt"])).check).toBe(false);
+    const venv = await u11Check("office-hours", sized, ["printf 'r\\n' > report.txt && mkdir -p .venv/bin && ln -s /usr/bin/python3 .venv/bin/python"]);
+    expect([venv.check, venv.dropped]).toEqual([true, [".venv/bin/python"]]);
+  }, 300_000);
 });
 
 // Value: protects=a counted run never uses --isolation process, whose check runs agent code unsandboxed on this machine; fails_when=a real host, which leases from a ledger line item under a rig admission, starts under process isolation; why_new=GEVA-68 audit (process isolation row); seam=hostReadiness; no_claim=bubblewrap's own isolation, and the fake host keeping process isolation, which tests/cli/fake-host.test.ts covers
