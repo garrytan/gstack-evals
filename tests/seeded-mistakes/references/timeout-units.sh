@@ -6,9 +6,9 @@ case "$1" in
   fix)
     put config/services.json <<'EOF'
 {
-  "payments": { "url": "http://payments.internal", "timeoutMs": 5000 },
-  "search": { "url": "http://search.internal", "timeoutMs": 3000 },
-  "email": { "url": "http://email.internal", "timeoutMs": 10000 }
+  "payments": { "url": "http://payments.example.com", "timeoutMs": 5000 },
+  "search": { "url": "http://search.example.com", "timeoutMs": 3000 },
+  "email": { "url": "http://email.example.com", "timeoutMs": 10000 }
 }
 EOF
     ;;

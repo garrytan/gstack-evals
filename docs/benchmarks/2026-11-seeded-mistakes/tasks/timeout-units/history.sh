@@ -9,8 +9,8 @@ CI runs `bun run check`.
 EOF
 put config/services.json <<'EOF'
 {
-  "payments": { "url": "http://payments.internal", "timeoutMs": 5000 },
-  "search": { "url": "http://search.internal", "timeoutMs": 3 }
+  "payments": { "url": "http://payments.example.com", "timeoutMs": 5000 },
+  "search": { "url": "http://search.example.com", "timeoutMs": 3 }
 }
 EOF
 put src/client.ts <<'EOF'
@@ -54,8 +54,8 @@ EOF
 commit "Add the service client"
 put config/services.json <<'EOF'
 {
-  "payments": { "url": "http://payments.internal", "timeoutMs": 5000 },
-  "search": { "url": "http://search.internal", "timeoutMs": 3000 }
+  "payments": { "url": "http://payments.example.com", "timeoutMs": 5000 },
+  "search": { "url": "http://search.example.com", "timeoutMs": 3000 }
 }
 EOF
 put tests/client.test.ts <<'EOF'
@@ -77,9 +77,9 @@ EOF
 commit "Fix search timing out at once: timeoutMs is in milliseconds"
 put config/services.json <<'EOF'
 {
-  "payments": { "url": "http://payments.internal", "timeoutMs": 5000 },
-  "search": { "url": "http://search.internal", "timeoutMs": 3000 },
-  "email": { "url": "http://email.internal", "timeoutMs": 10 }
+  "payments": { "url": "http://payments.example.com", "timeoutMs": 5000 },
+  "search": { "url": "http://search.example.com", "timeoutMs": 3000 },
+  "email": { "url": "http://email.example.com", "timeoutMs": 10 }
 }
 EOF
 commit "Add the email service with a 10 second timeout"

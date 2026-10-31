@@ -63,12 +63,6 @@
     "docs/benchmarks/2026-11-seeded-mistakes/**": [
       "tests/seeded-mistakes/tasks.test.ts"
     ],
-    "tests/seeded-mistakes/references/**": [
-      "tests/seeded-mistakes/tasks.test.ts"
-    ],
-    "tests/seeded-mistakes/guards/**": [
-      "tests/seeded-mistakes/tasks.test.ts"
-    ],
     "quick/laneb/**": [
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",

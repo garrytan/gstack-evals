@@ -15,8 +15,8 @@ import { readLock, treeSha256 } from "../../src/skill-eval/lock/lock.ts";
 
 const SUITE = join(REPO_ROOT, "docs/benchmarks/2026-11-seeded-mistakes");
 const TASKS = join(SUITE, "tasks");
-const REFS = join(import.meta.dir, "references");
-const GUARDS = join(import.meta.dir, "guards");
+const REFS = join(REPO_ROOT, "tests/seeded-mistakes/references");
+const GUARDS = join(REPO_ROOT, "tests/seeded-mistakes/guards");
 const ENV = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? tmpdir(), LANG: "C.UTF-8" };
 const KINDS: Record<string, string> = {
   "admin-route-flag": "test gap",
