@@ -17,7 +17,9 @@
 //   uid can add files there but cannot change the root-owned install. Every layer is laid out from HOME. Each install
 //   and derived layer is cached under <state>/installs/ by a hash of its inputs, and checked against its recorded
 //   digest when reused (E_STACK_DIGEST). A run holds each entry it uses (a file named for the run in <entry>.holds/),
-//   and releaseInstalls deletes the entries the run built once no other run holds them.
+//   and releaseInstalls deletes the entries the run built once no other run holds them. Taking a hold, committing a
+//   build and deciding a deletion each run under one flock on <state>/installs.lock, so runs that share a state root
+//   never delete an entry another run holds.
 // - A base arm is two layers: the base tree minus the target skill, installed (the none arm), then every file that
 //   installing the arm's skill folder in its place adds or changes. Each base arm runs the base's installer on its own
 //   tree, so the host's render of the skill (Codex renders gstack-<skill> from its template) is the installer's own.
@@ -29,7 +31,8 @@
 //   names it in its front matter. Its roots are every path that reaches that folder.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { dlopen, FFIType } from "bun:ffi";
+import { chmodSync, closeSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_SEED, placeboSkill } from "../../quick/laneb/arms/placebo/placebo.ts";
@@ -237,16 +240,40 @@ function outsideLink(dir: string, rel = ""): string | null {
   return null;
 }
 
-/** A content-addressed directory under <state>/installs: built once into home/, reused only while it still hashes to its recorded digest. */
 /** A run's claim on the install cache: each entry it uses gets a hold file named for the run, saying whether the run built it. */
 export interface CacheHold {
   run: string;
-  /** Every entry directory the run used. */
+  /** Every entry directory the run holds. */
   entries: string[];
 }
 
+/** The hold of a run that may already hold entries: a resumed run takes over every entry of the run it continues, those its arms no longer use included. */
+export function runHold(state: string, run: string): CacheHold {
+  const installs = join(state, "installs");
+  const names = existsSync(installs) ? readdirSync(installs).sort() : [];
+  return { run, entries: names.filter((n) => n.endsWith(".holds") && existsSync(join(installs, n, run))).map((n) => join(installs, n.slice(0, -".holds".length))) };
+}
+
+let libc: { symbols: { flock: (fd: number, operation: number) => number } } | null = null;
+const LOCK_EX = 2;
+
+/** Runs fn holding an exclusive flock on <installs>.lock, waiting for it. The kernel drops the lock when its descriptor closes or its process dies. */
+function locked<T>(installs: string, fn: () => T): T {
+  libc ??= dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
+  mkdirSync(installs, { recursive: true });
+  const fd = openSync(installs + ".lock", "a", 0o600);
+  try {
+    if (libc.symbols.flock(fd, LOCK_EX) !== 0) throw new InstallError("E_IMAGE_BUILD", "could not lock " + installs + ".lock to change the install cache's holds");
+    return fn();
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** A content-addressed directory under <state>/installs: built once into home/, reused only while it still hashes to its recorded digest. */
 function cached(state: string, key: string, meta: Record<string, unknown>, build: (home: string) => void, hold?: CacheHold): { dir: string; tree_sha256: string } {
-  const dir = join(state, "installs", key.slice(0, 32));
+  const installs = join(state, "installs");
+  const dir = join(installs, key.slice(0, 32));
   const record = join(dir, "install.json");
   const mark = (word: "used" | "built") => {
     if (!hold) return;
@@ -254,25 +281,32 @@ function cached(state: string, key: string, meta: Record<string, unknown>, build
     writeFileSync(join(dir + ".holds", hold.run), word + "\n");
   };
   if (hold) {
-    if (!existsSync(join(dir + ".holds", hold.run))) mark("used");
+    locked(installs, () => {
+      if (!existsSync(join(dir + ".holds", hold.run))) mark("used");
+    });
     hold.entries.push(dir);
   }
-  if (existsSync(record)) {
+  const reuse = () => {
     const recorded = (JSON.parse(readFileSync(record, "utf8")) as { tree_sha256: string }).tree_sha256;
     const now = dirTreeSha256(join(dir, "home"));
     if (now !== recorded) throw new InstallError("E_STACK_DIGEST", "the cached install " + dir + " hashes to " + now + ", not its recorded " + recorded, "Remove " + dir + " and run again; it is rebuilt from the verified tree.");
     return { dir: join(dir, "home"), tree_sha256: now };
-  }
+  };
+  if (existsSync(record)) return reuse();
   const tmp = dir + ".tmp-" + randomBytes(4).toString("hex");
   try {
     mkdirSync(join(tmp, "home"), { recursive: true });
     build(join(tmp, "home"));
     const tree = dirTreeSha256(join(tmp, "home"));
     writeFileSync(join(tmp, "install.json"), JSON.stringify({ schema_version: 1, ...meta, tree_sha256: tree }, null, 2) + "\n");
-    rmSync(dir, { recursive: true, force: true });
-    renameSync(tmp, dir);
-    mark("built");
-    return { dir: join(dir, "home"), tree_sha256: tree };
+    const committed = locked(installs, () => {
+      if (existsSync(record)) return false;
+      rmSync(dir, { recursive: true, force: true });
+      renameSync(tmp, dir);
+      mark("built");
+      return true;
+    });
+    return committed ? { dir: join(dir, "home"), tree_sha256: tree } : reuse();
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -288,23 +322,26 @@ export function releaseInstalls(hold: CacheHold): string[] {
   for (const dir of new Set(hold.entries)) {
     const holds = dir + ".holds";
     const mine = join(holds, hold.run);
-    const built = existsSync(mine) && readFileSync(mine, "utf8").trim() === "built";
-    rmSync(mine, { force: true });
-    const others = existsSync(holds) ? readdirSync(holds).sort() : [];
-    if (others.length) {
-      if (built) writeFileSync(join(holds, others[0]!), "built\n");
-      continue;
-    }
-    if (built && existsSync(dir)) {
-      const doomed = dir + ".rm-" + randomBytes(4).toString("hex");
-      renameSync(dir, doomed);
-      rmSync(doomed, { recursive: true, force: true });
+    const doomed = locked(dirname(dir), () => {
+      const built = existsSync(mine) && readFileSync(mine, "utf8").trim() === "built";
+      rmSync(mine, { force: true });
+      const others = existsSync(holds) ? readdirSync(holds).sort() : [];
+      if (others.length) {
+        if (built) writeFileSync(join(holds, others[0]!), "built\n");
+        return null;
+      }
+      try {
+        rmdirSync(holds);
+      } catch {}
+      if (!built || !existsSync(dir)) return null;
+      const to = dir + ".rm-" + randomBytes(4).toString("hex");
+      renameSync(dir, to);
       rmSync(dir + ".log", { force: true });
-      deleted.push(dir);
-    }
-    try {
-      rmdirSync(holds);
-    } catch {}
+      return to;
+    });
+    if (!doomed) continue;
+    rmSync(doomed, { recursive: true, force: true });
+    deleted.push(dir);
   }
   return deleted;
 }

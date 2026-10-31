@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installArms, InstallError, localInstaller, releaseInstalls, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
+import { installArms, InstallError, localInstaller, releaseInstalls, runHold, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
 import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
 import { FIXTURE_PATH } from "../../src/trial/image.ts";
 import type { Host } from "../../src/types.ts";
@@ -190,5 +190,69 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     const d = hold("d");
     installed(d);
     expect([releaseInstalls(d), left()]).toEqual([[], warm]);
+  });
+
+  // Value: protects=runs that share a state root take holds and decide deletions one at a time under <state>/installs.lock, so a run releasing its entries while another run takes holds on them never deletes one the other holds, and the last holder still deletes them all; fails_when=the last-holder check and the delete, or a new hold, run outside the lock, so a release deletes entries a new run is hashing or using, or a handover strands one; why_new=PR #85 review (install cleanup races); seam=cached, releaseInstalls; no_claim=a caller that passes no hold
+  test("a release and new holds on the same entries wait for the lock and never delete a held entry", async () => {
+    const state = scratch("state");
+    const options = { host: "codex" as const, arms: resolved.arms, skill: "demo", base: resolved.base, sources: [stack.root], state };
+    const a = runHold(state, "a");
+    installArms({ ...options, runner: localInstaller(scratch("runner")), hold: a });
+    const built = [...new Set(a.entries)].sort();
+    expect(built.length).toBeGreaterThan(3);
+    const scripts = scratch("scripts");
+    const lib = join(import.meta.dir, "..", "..", "src", "arms", "install.ts");
+    writeFileSync(join(scripts, "lock.ts"), [
+      `import { dlopen, FFIType } from "bun:ffi";`,
+      `import { existsSync, openSync, writeFileSync } from "node:fs";`,
+      `const [lock, ready, go] = process.argv.slice(2);`,
+      `const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });`,
+      `if (libc.symbols.flock(openSync(lock!, "a"), 2) !== 0) process.exit(2);`,
+      `writeFileSync(ready!, "");`,
+      `while (!existsSync(go!)) Bun.sleepSync(20);`,
+    ].join("\n"));
+    writeFileSync(join(scripts, "release.ts"), `import { releaseInstalls } from ${JSON.stringify(lib)};\nreleaseInstalls(JSON.parse(process.argv[2]!));\n`);
+    writeFileSync(join(scripts, "take.ts"), [
+      `import { existsSync } from "node:fs";`,
+      `import { installArms, localInstaller, runHold } from ${JSON.stringify(lib)};`,
+      `const options = JSON.parse(process.argv[2]!);`,
+      `const arms = installArms({ ...options, runner: localInstaller(process.argv[3]!), hold: runHold(options.state, "b") });`,
+      `console.log(JSON.stringify(arms.flatMap((arm) => arm.layers.map((layer) => layer.src)).filter((src) => !existsSync(src))));`,
+    ].join("\n"));
+    const [ready, go] = [join(scripts, "ready"), join(scripts, "go")];
+    const lock = Bun.spawn([process.execPath, join(scripts, "lock.ts"), join(state, "installs.lock"), ready, go]);
+    while (!existsSync(ready)) await Bun.sleep(20);
+    const release = Bun.spawn([process.execPath, join(scripts, "release.ts"), JSON.stringify(a)]);
+    const take = Bun.spawn([process.execPath, join(scripts, "take.ts"), JSON.stringify(options), scratch("runner")], { stdout: "pipe" });
+    await Bun.sleep(1500);
+    expect([release.exitCode, take.exitCode]).toEqual([null, null]);
+    expect(built.filter((dir) => !existsSync(join(dir, "install.json")) || existsSync(join(dir + ".holds", "b")))).toEqual([]);
+    writeFileSync(go, "");
+    expect([await lock.exited, await release.exited, await take.exited]).toEqual([0, 0, 0]);
+    expect(JSON.parse(await new Response(take.stdout).text())).toEqual([]);
+    const b = runHold(state, "b");
+    expect(b.entries).toEqual(built);
+    expect(releaseInstalls(b).sort()).toEqual(built);
+    expect(readdirSync(join(state, "installs"))).toEqual([]);
+  }, 60_000);
+
+  // Value: protects=a resumed run takes over every hold of the run it continues, so it deletes the entries that run built even when an arm changed before the resume and its old entry is no longer used; fails_when=the resumed run's hold starts empty, so the dead run's holds and installs outlive the resume and block every later run from deleting them; why_new=PR #85 review (resumed holds stranded); seam=runHold, cached, releaseInstalls; no_claim=a run that dies and is never resumed, whose holds keep its entries until --resume
+  test("a resumed run takes over the holds of the run it continues, entries its changed arms no longer use included", () => {
+    const state = scratch("state");
+    const dir = join(scratch("loose"), "loose");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: loose\n---\nfirst\n");
+    const installed = (hold: CacheHold) => installArms({ host: "claude", arms: [{ name: "before", kind: "overlay", base: null, skill: "loose", dir }], skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state, hold });
+    const crashed = runHold(state, "r");
+    expect(crashed.entries).toEqual([]);
+    installed(crashed);
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: loose\n---\nedited before the resume\n");
+    const resumed = runHold(state, "r");
+    expect(resumed.entries).toEqual(crashed.entries);
+    installed(resumed);
+    const entries = [...new Set(resumed.entries)].sort();
+    expect(entries).toHaveLength(2);
+    expect(releaseInstalls(resumed).sort()).toEqual(entries);
+    expect(readdirSync(join(state, "installs"))).toEqual([]);
   });
 });

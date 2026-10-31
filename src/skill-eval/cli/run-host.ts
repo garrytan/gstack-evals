@@ -12,7 +12,8 @@
 //   keeps each layer tree and the trial image by digest, opens the lease, starts the proxy container on the trial
 //   network (createTrialNetwork) and binds slots over its management socket. close() keeps resume's order: stop the
 //   proxy, reconcile its journal, settle the lease, then delete the arm installs the run built that no other run holds.
-//   A start that fails undoes its steps and deletes them too; --resume reinstalls them, byte-identically.
+//   A start that fails undoes its steps and deletes them too. --resume takes over every hold of the run it continues and
+//   reinstalls what was deleted, byte-identically.
 // - A task with a judge rubric sends each completed run to blinded cross-family adjudication (src/grade/adjudicate.ts);
 //   a judge that cannot run leaves the run unjudged and stops the verdict with JUDGE_UNAVAILABLE.
 // - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts); a judged
@@ -31,7 +32,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { homedir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
-import { dockerInstaller, installArms, releaseInstalls, sentinelLayer, stackSources, type ArmInstall, type CacheHold, type Layer } from "../../arms/install.ts";
+import { dockerInstaller, installArms, releaseInstalls, runHold, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
 import { hostDriver, skillRoot } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
@@ -442,7 +443,7 @@ export function dockerRig(call: Call, o: { env: Env; skill: string | null; nonce
   const pin = checkImagePin({ state, docker: bin });
   if (!pin.ok) throw new Error(pin.code + ": " + pin.message);
   const home = dockerSandbox({ trialImage: pin.pin.tag, docker: bin }).homePath("");
-  const hold: CacheHold = { run: call.runId, entries: [] };
+  const hold = runHold(state, call.runId);
   const undo: (() => void)[] = [() => releaseInstalls(hold)];
   try {
     const installs = installArms({ host: call.host, arms: call.arms.arms, skill: o.skill, base: call.arms.base, sources: stackSources({ root: call.arms.base?.root ?? null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state, hold });
