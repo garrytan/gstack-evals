@@ -65,6 +65,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_ALLOWANCE](#e_allowance) | 2 | U3 |
 | [E_TRIPWIRE](#e_tripwire) | 2 | U3 |
 | [E_LEDGER_UNAVAILABLE](#e_ledger_unavailable) | 2 | U3 |
+| [E_DISK_LOW](#e_disk_low) | 2 | U10 |
 | [E_IMAGE_BUILD](#e_image_build) | 2 | U9 |
 | [E_IMAGE_STALE](#e_image_stale) | 2 | U9 |
 | [E_USERSIM](#e_usersim) | 2 | U10 |
@@ -532,6 +533,14 @@ The metering proxy could not reserve a call because the ledger did not answer, s
 Fix: Check that the run's ledger is reachable and its lease is open (the message carries the ledger's error and the reservation's idempotency key), then --resume &lt;out>. Resume must run reconcileJournal on the stopped proxy's journal before it settles the lease, which releases at $0 a hold the lost answer left. U9 wires that into the runner; until it does, call reconcileJournal from code.
 
 Exit 2. Side effects: Nothing was sent or spent. If the ledger recorded the reservation before its answer was lost, it holds the call's worst case until reconcileJournal finds the journaled idempotency key and settles it at $0. A lease settled first counts that hold as unknown, which overstates spend and loses none. Retry safe: yes. Resumable: yes. Owner: U3.
+
+### E_DISK_LOW
+
+A filesystem a real-host call fills has less free space than the call can need at its peak: the state root (arm installs, retained trees, the trial image tar) or Docker's root dir (arm images and build cache), or both when they share one. Preflight checks it before any lease.
+
+Fix: Free space on the filesystem the message names: delete &lt;state>/installs while no run is going, prune Docker's build cache and arm images no run needs, or point XDG_STATE_HOME at a larger disk. Then run the same call again, with --resume &lt;out> if it was a resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U10.
 
 ### E_IMAGE_BUILD
 

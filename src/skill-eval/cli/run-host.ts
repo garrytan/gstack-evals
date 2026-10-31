@@ -11,7 +11,9 @@
 // - The Docker rig installs every arm (src/arms/install.ts), builds one arm image per arm and one per calibration copy,
 //   keeps each layer tree and the trial image by digest, opens the lease, starts the proxy container on the trial
 //   network (createTrialNetwork) and binds slots over its management socket. close() keeps resume's order: stop the
-//   proxy, reconcile its journal, settle the lease.
+//   proxy, reconcile its journal, settle the lease, then delete the arm installs the run built that no other run holds.
+//   A start that fails undoes its steps and deletes them too. --resume takes over every hold of the run it continues and
+//   reinstalls what was deleted; an arm tree that changes on reinstall changes its cells' keys (E_CACHE_STALE below).
 // - A task with a judge rubric sends each completed run to blinded cross-family adjudication (src/grade/adjudicate.ts);
 //   a judge that cannot run leaves the run unjudged and stops the verdict with JUDGE_UNAVAILABLE.
 // - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts); a judged
@@ -33,7 +35,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { homedir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
-import { dockerInstaller, installArms, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
+import { dockerInstaller, installArms, releaseInstalls, runHold, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
 import { cellFor, cellSettings, type CellSettings } from "../../arms/cells.ts";
 import type { CodexProvider } from "../../adapters/codex/driver.ts";
 import { hostDriver, skillRoot, type HostDriverOptions } from "../../adapters/host.ts";
@@ -83,7 +85,7 @@ export interface HostRig {
   judgeSandbox(): Sandbox;
   /** The evaluator's egress probe to a non-model host, from an agent session on the agents' network. */
   egress(): { open: boolean; detail: string };
-  /** Stops the proxy, reconciles its journal and settles the lease, in that order. */
+  /** Stops the proxy, reconciles its journal and settles the lease, in that order, then deletes the installs the run built. */
   close(): Promise<{ committed: number; unknown: number; lease_id: string | null }>;
   /** What --resume needs to recover this run if the process dies: the lease and the proxy container. */
   recovery: { lease_id: string; proxy_container: string; journal: string } | null;
@@ -510,29 +512,31 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
   return images;
 }
 
-/** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it. */
+/** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
 export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
   if (!pin.ok) throw new Error(pin.code + ": " + pin.message);
   const home = dockerSandbox({ trialImage: pin.pin.tag, docker: bin }).homePath("");
-  const installs = installArms({ host: call.host, arms: call.arms.arms, skill: o.skill, ...(o.skills ? { skills: o.skills } : {}), base: call.arms.base, sources: stackSources({ root: call.arms.base?.root ?? null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state });
-  const retain = join(state, "retained");
-  const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
-  if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
-  const cells = armCells(installs, call.models, call.policy, join(state, "cells"));
-  const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
-  const local = openLocalLedger(call.ledger);
-  const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
-  let net: ReturnType<typeof createTrialNetwork> | null = null;
+  const hold = runHold(state, call.runId);
+  const undo: (() => void)[] = [() => releaseInstalls(hold)];
   try {
-    net = createTrialNetwork(bin);
+    const installs = installArms({ host: call.host, arms: call.arms.arms, skill: o.skill, ...(o.skills ? { skills: o.skills } : {}), base: call.arms.base, sources: stackSources({ root: call.arms.base?.root ?? null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state, hold });
+    const retain = join(state, "retained");
+    const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
+    if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
+    const cells = armCells(installs, call.models, call.policy, join(state, "cells"));
+    const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
+    const local = openLocalLedger(call.ledger);
+    const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
+    undo.unshift(() => settleLease(call.record.path, local, lease.lease_id));
+    const network = createTrialNetwork(bin);
+    undo.unshift(() => removeTrialNetwork(network, bin));
     const token = randomBytes(32).toString("hex");
     const providerKeys = Object.fromEntries(PROVIDER_KEYS.flatMap((k) => (o.env[k] ? [[k, o.env[k]!]] : [])));
-    const proxy = startProxyContainer({ image: pin.pin.tag, net, dir: join(call.out.path, "proxy"), ledger: call.ledger.path, leaseId: lease.lease_id, managementToken: token, retry: { attempts: 3, elapsed_ms: 300_000 }, providerKeys, docker: bin });
+    const proxy = startProxyContainer({ image: pin.pin.tag, net: network, dir: join(call.out.path, "proxy"), ledger: call.ledger.path, leaseId: lease.lease_id, managementToken: token, retry: { attempts: 3, elapsed_ms: 300_000 }, providerKeys, docker: bin });
     const control = new ProxyControl(proxy.socket, token);
-    const network = net;
     return {
       baseUrl: proxy.baseUrl,
       network: network.name,
@@ -558,12 +562,12 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
       async close() {
         const { settled } = await recoverRun({ stopProxy: () => proxy.stop(), journal: proxy.journal, ledger: local, settle: () => settleLease(call.record.path, local, lease.lease_id) });
         removeTrialNetwork(network, bin);
+        releaseInstalls(hold);
         return { committed: settled.spent_micros, unknown: settled.unknown_calls, lease_id: lease.lease_id };
       },
     };
   } catch (error) {
-    if (net) removeTrialNetwork(net, bin);
-    settleLease(call.record.path, local, lease.lease_id);
+    for (const step of undo) step();
     throw error;
   }
 }

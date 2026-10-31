@@ -69,7 +69,8 @@
       "quick/laneb/tests/proxy-accounting.test.ts",
       "quick/laneb/tests/proxy-paths.test.ts",
       "quick/laneb/tests/proxy-states.test.ts",
-      "quick/laneb/tests/runner.test.ts"
+      "quick/laneb/tests/runner.test.ts",
+      "quick/laneb/tests/stacks.test.ts"
     ],
     "quick/lanea-quick/**": [
       "quick/lanea-quick/test/grade.test.ts",

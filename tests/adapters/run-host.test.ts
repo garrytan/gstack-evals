@@ -647,5 +647,34 @@ describe.skipIf(!DOCKER)("the Docker rig (Docker tier, GSTACK_EVALS_DOCKER=1)", 
       expect(readFileSync(join(root, "retained", "MANIFEST.jsonl"), "utf8").trim().split("\n").length).toBeGreaterThanOrEqual(4);
     }
   }, 1_800_000);
+
+  // Value: protects=the Docker rig deletes the install entries its run built when the run closes and when its start fails after the installs (here the lease refuses a cap above the item's), so a call leaves no installs behind; fails_when=an install entry, its log or its hold outlives close or a failed start; why_new=GST-361 (each Lane A call left about 3.6 GB under <state>/installs and U11's machine hit ENOSPC); seam=dockerRig's undo steps and close, releaseInstalls; no_claim=gstack's real setup (tests/arms/gstack-reinstall.test.ts) and other runs' holds (tests/arms/install.test.ts)
+  test("the rig deletes the installs its run built on close and after a failed start", async () => {
+    const env = process.env;
+    const state = stateRoot(env);
+    expect(buildTrialImage({ state }).ok).toBe(true);
+    const root = temp("docker-clean");
+    const after = armDir(root, "after");
+    writeFileSync(join(after, "SKILL.md"), readFileSync(join(after, "SKILL.md"), "utf8") + "Built for " + root + "\n");
+    mkdirSync(join(root, "tasks"), { recursive: true });
+    writeFileSync(join(root, "tasks", "tasks.json"), "[]\n");
+    const record = temp("docker-clean-record");
+    recordApproval(record, { action: "init", item: "clean-test", cap_micros: 5_000_000, quotes: [{ words: "keyless Docker-tier test, no model call", by: "tests/adapters", source: "tests/adapters/run-host.test.ts" }], admission: "warn" });
+    const call = (runId: string) => ({ host: "claude", tasks: join(root, "tasks", "tasks.json"), arms: { arms: [{ name: "after", kind: "overlay", base: null, skill: SKILL, dir: after }, { name: "none", kind: "overlay", base: null, skill: SKILL, dir: null }], base: null, skill: null, notes: [] }, out: { path: join(root, runId), rule: "test" }, ledger: { path: join(root, "ledger.sqlite"), rule: "test" }, record: { path: record, rule: "test" }, item: "clean-test", runId, spendCap: 1_000_000 }) as unknown as Call;
+    const installs = () => (existsSync(join(state, "installs")) ? readdirSync(join(state, "installs")).sort() : []);
+    const before = installs();
+    let failed: unknown = null;
+    try {
+      dockerRig(call("failed-run"), { env, skill: SKILL, nonce: NONCE, cap: 10_000_000 });
+    } catch (error) {
+      failed = error;
+    }
+    expect((failed as { code?: string } | null)?.code).toBe("CAP_STOP");
+    expect(installs()).toEqual(before);
+    const r = dockerRig(call("closed-run"), { env, skill: SKILL, nonce: NONCE, cap: 1_000_000 });
+    expect(installs().filter((n) => !before.includes(n)).length).toBeGreaterThan(1);
+    await r.close();
+    expect(installs()).toEqual(before);
+  }, 600_000);
 });
 

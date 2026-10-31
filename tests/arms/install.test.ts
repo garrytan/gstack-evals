@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { installArms, InstallError, localInstaller, stackInstall, stackTree, WRITABLE, type ArmInstall } from "../../src/arms/install.ts";
+import { dirname, join } from "node:path";
+import { installArms, InstallError, localInstaller, releaseInstalls, runHold, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
 import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
+import { newRunId } from "../../src/skill-eval/cli/call.ts";
 import { FIXTURE_PATH } from "../../src/trial/image.ts";
 import type { Host } from "../../src/types.ts";
 import { commitAll, git } from "../cli/helpers.ts";
@@ -161,5 +162,184 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     const none = byName(install("codex", state)).none!.layers[0]!.src;
     writeFileSync(join(none, ".local", "share", "gstack", "other", "SKILL.md"), "tampered\n");
     expect(stop(() => install("codex", state))).toBe("E_STACK_DIGEST");
+  });
+
+  // Value: protects=a run deletes only the install entries it built, once no other run holds them (the last holder deletes a shared one), keeps entries it only reused, a resumed run keeps the claim of the run it continues, and a reinstall after the cleanup gives the same arm trees, so --resume keeps its session keys; fails_when=cleanup deletes an entry another run holds or one the run only reused, leaks an entry the run built or its log, or a reinstall changes a tree; why_new=GST-361 (each Lane A call left about 3.6 GB of installs and U11's 65 GB disk filled); seam=installArms' hold, cached, releaseInstalls; no_claim=gstack's real setup (tests/arms/gstack-reinstall.test.ts) and the Docker rig's close and failed start (the Docker tier)
+  test("a run deletes the installs it built once no run holds them, and a reinstall gives the same trees", () => {
+    const state = scratch("state");
+    const hold = (run: string): CacheHold => ({ run, entries: [] });
+    const installed = (h?: CacheHold) => installArms({ host: "codex", arms: resolved.arms, skill: "demo", base: resolved.base, sources: [stack.root], runner: localInstaller(scratch("runner")), state, ...(h ? { hold: h } : {}) }).map((a) => a.tree_sha256);
+    const left = () => readdirSync(join(state, "installs")).sort();
+    const [a, b] = [hold("a"), hold("b")];
+    const trees = installed(a);
+    const built = left().filter((n) => !n.includes(".")).map((n) => join(state, "installs", n));
+    expect(built.length).toBeGreaterThan(3);
+    installed(b);
+    expect(releaseInstalls(a)).toEqual([]);
+    expect(left().filter((n) => !n.includes("."))).toHaveLength(built.length);
+    expect(releaseInstalls(b).sort()).toEqual(built);
+    expect(left()).toEqual([]);
+
+    expect(installed(hold("c"))).toEqual(trees);
+    const resumed = hold("c");
+    installed(resumed);
+    expect(releaseInstalls(resumed).sort()).toEqual(built);
+    expect(left()).toEqual([]);
+
+    installed();
+    const warm = left();
+    const d = hold("d");
+    installed(d);
+    expect([releaseInstalls(d), left()]).toEqual([[], warm]);
+  });
+
+  // Value: protects=runs that share a state root take holds and decide deletions one at a time under <state>/installs.lock, so a run releasing its entries while another run takes holds on them never deletes one the other holds, and the last holder still deletes them all; fails_when=the last-holder check and the delete, or a new hold, run outside the lock, so a release deletes entries a new run is hashing or using, or a handover strands one; why_new=PR #85 review (install cleanup races); seam=cached, releaseInstalls; no_claim=a caller that passes no hold
+  test("a release and new holds on the same entries wait for the lock and never delete a held entry", async () => {
+    const state = scratch("state");
+    const options = { host: "codex" as const, arms: resolved.arms, skill: "demo", base: resolved.base, sources: [stack.root], state };
+    const a = runHold(state, "a");
+    installArms({ ...options, runner: localInstaller(scratch("runner")), hold: a });
+    const built = [...new Set(a.entries)].sort();
+    expect(built.length).toBeGreaterThan(3);
+    const scripts = scratch("scripts");
+    const lib = join(import.meta.dir, "..", "..", "src", "arms", "install.ts");
+    writeFileSync(join(scripts, "lock.ts"), [
+      `import { dlopen, FFIType } from "bun:ffi";`,
+      `import { existsSync, openSync, writeFileSync } from "node:fs";`,
+      `const [lock, ready, go] = process.argv.slice(2);`,
+      `const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });`,
+      `if (libc.symbols.flock(openSync(lock!, "a"), 2) !== 0) process.exit(2);`,
+      `writeFileSync(ready!, "");`,
+      `while (!existsSync(go!)) Bun.sleepSync(20);`,
+    ].join("\n"));
+    writeFileSync(join(scripts, "release.ts"), `import { writeFileSync } from "node:fs";\nimport { releaseInstalls } from ${JSON.stringify(lib)};\nwriteFileSync(process.argv[3]!, "");\nreleaseInstalls(JSON.parse(process.argv[2]!));\n`);
+    writeFileSync(join(scripts, "take.ts"), [
+      `import { existsSync, writeFileSync } from "node:fs";`,
+      `import { installArms, localInstaller, runHold } from ${JSON.stringify(lib)};`,
+      `const options = JSON.parse(process.argv[2]!);`,
+      `writeFileSync(process.argv[4]!, "");`,
+      `const arms = installArms({ ...options, runner: localInstaller(process.argv[3]!), hold: runHold(options.state, "b") });`,
+      `console.log(JSON.stringify(arms.flatMap((arm) => arm.layers.map((layer) => layer.src)).filter((src) => !existsSync(src))));`,
+    ].join("\n"));
+    const [ready, go, releasing, taking] = ["ready", "go", "releasing", "taking"].map((name) => join(scripts, name));
+    const lock = Bun.spawn([process.execPath, join(scripts, "lock.ts"), join(state, "installs.lock"), ready, go!]);
+    while (!existsSync(ready!)) await Bun.sleep(20);
+    const release = Bun.spawn([process.execPath, join(scripts, "release.ts"), JSON.stringify(a), releasing!]);
+    const take = Bun.spawn([process.execPath, join(scripts, "take.ts"), JSON.stringify(options), scratch("runner"), taking!], { stdout: "pipe" });
+    while (!existsSync(releasing!) || !existsSync(taking!)) await Bun.sleep(20);
+    // gstack-timing-ok: both children have started, and without the lock the release finishes in milliseconds; with it they wait until go, however long this takes
+    await Bun.sleep(1000);
+    expect([release.exitCode, take.exitCode]).toEqual([null, null]);
+    expect(built.filter((dir) => !existsSync(join(dir, "install.json")) || existsSync(join(dir + ".holds", "b")))).toEqual([]);
+    writeFileSync(go!, "");
+    expect([await lock.exited, await release.exited, await take.exited]).toEqual([0, 0, 0]);
+    expect(JSON.parse(await new Response(take.stdout).text())).toEqual([]);
+    const b = runHold(state, "b");
+    expect(b.entries).toEqual(built);
+    expect(releaseInstalls(b).sort()).toEqual(built);
+    expect(readdirSync(join(state, "installs"))).toEqual([]);
+  }, 60_000);
+
+  // Value: protects=a run that builds an entry another run commits first drops its own build, reuses the winner's entry and keeps a used hold, so its release deletes nothing and the winner's release deletes the entry; fails_when=the losing run returns its deleted build, marks its hold built, or its release deletes an entry the winner still holds; why_new=PR #85 /ship review (cached()'s lost commit race was untested); seam=cached, releaseInstalls; no_claim=two processes racing, which the lock test covers
+  test("a run that loses the commit race reuses the winner's entry and keeps a used hold", () => {
+    const state = scratch("state");
+    const options = { host: "codex" as const, arms: resolved.arms.filter((a) => a.name === "after"), skill: "demo", base: null, sources: [stack.root], state };
+    const runner = localInstaller(scratch("runner"));
+    const [winner, loser] = [runHold(state, "winner"), runHold(state, "loser")];
+    let raced = false;
+    const racing = {
+      ...runner,
+      run(src: string, o: Parameters<typeof runner.run>[1]) {
+        const failed = runner.run(src, o);
+        if (!raced) {
+          raced = true;
+          installArms({ ...options, runner: localInstaller(scratch("runner")), hold: winner });
+        }
+        return failed;
+      },
+    };
+    const [arm] = installArms({ ...options, runner: racing, hold: loser }) as [ArmInstall];
+    const entry = dirname(arm.layers[0]!.src);
+    expect([raced, readFileSync(join(entry + ".holds", "loser"), "utf8"), readFileSync(join(entry + ".holds", "winner"), "utf8")]).toEqual([true, "used\n", "built\n"]);
+    expect(arm.layers.filter((l) => !existsSync(l.src))).toEqual([]);
+    expect(releaseInstalls(loser)).toEqual([]);
+    expect(releaseInstalls(winner)).toEqual([entry]);
+  });
+
+  // Value: protects=a resumed run takes over every hold of the run it continues, so it deletes the entries that run built even when an arm changed before the resume and its old entry is no longer used; fails_when=the resumed run's hold starts empty, so the dead run's holds and installs outlive the resume and block every later run from deleting them; why_new=PR #85 review (resumed holds stranded); seam=runHold, cached, releaseInstalls; no_claim=a run that dies and is never resumed, whose holds keep its entries until --resume
+  test("a resumed run takes over the holds of the run it continues, entries its changed arms no longer use included", () => {
+    const state = scratch("state");
+    const dir = join(scratch("loose"), "loose");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: loose\n---\nfirst\n");
+    const installed = (hold: CacheHold) => installArms({ host: "claude", arms: [{ name: "before", kind: "overlay", base: null, skill: "loose", dir }], skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state, hold });
+    const crashed = runHold(state, "r");
+    expect(crashed.entries).toEqual([]);
+    installed(crashed);
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: loose\n---\nedited before the resume\n");
+    const resumed = runHold(state, "r");
+    expect(resumed.entries).toEqual(crashed.entries);
+    installed(resumed);
+    const entries = [...new Set(resumed.entries)].sort();
+    expect(entries).toHaveLength(2);
+    expect(releaseInstalls(resumed).sort()).toEqual(entries);
+    expect(readdirSync(join(state, "installs"))).toEqual([]);
+  });
+
+  const looseArms = (name: string) => {
+    const dir = join(scratch("loose"), "loose");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: loose\n---\n" + name + "\n");
+    return [{ name: "before", kind: "overlay" as const, base: null, skill: "loose", dir }];
+  };
+
+  // Value: protects=a run that only reused an entry keeps it on release and leaves the builder's built claim, and a resumed run that took over such a hold deletes nothing; fails_when=a release by a run that only reused an entry deletes it or moves the builder's claim, or a resumed run's used hold turns into a delete; why_new=PR #85 /ship state-machine review (used x release-shared and used x resume-release untested); seam=runHold, cached, releaseInstalls; no_claim=concurrent runs (the lock test)
+  test("a run that only reused an entry keeps it and the builder's claim, on release and after a resume", () => {
+    const state = scratch("state");
+    const arms = looseArms("reused");
+    const installed = (hold?: CacheHold) => installArms({ host: "claude", arms, skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state, ...(hold ? { hold } : {}) });
+    const x = runHold(state, "x");
+    installed(x);
+    const entry = x.entries[0]!;
+    const y = runHold(state, "y");
+    installed(y);
+    expect(releaseInstalls(y)).toEqual([]);
+    expect([existsSync(join(entry, "install.json")), readFileSync(join(entry + ".holds", "x"), "utf8")]).toEqual([true, "built\n"]);
+    expect(releaseInstalls(x)).toEqual([entry]);
+    installed();
+    const warm = readdirSync(join(state, "installs")).sort();
+    installed(runHold(state, "r"));
+    const resumed = runHold(state, "r");
+    expect(resumed.entries).toEqual([entry]);
+    installed(resumed);
+    expect([releaseInstalls(resumed), readdirSync(join(state, "installs")).sort()]).toEqual([[], warm]);
+  });
+
+  // Value: protects=a release that fails before its entry is gone keeps the run's hold, so --resume can still release the entry; fails_when=the hold is dropped before the rename, so a failed or killed release leaves an entry nobody deletes; why_new=PR #85 review (crash window in releaseInstalls); seam=releaseInstalls, runHold; no_claim=root, whom chmod does not stop
+  test.skipIf(process.getuid?.() === 0)("a release that fails keeps its hold, so --resume can still release the entry", () => {
+    const state = scratch("state");
+    const arms = looseArms("failed release");
+    const hold = runHold(state, "r");
+    installArms({ host: "claude", arms, skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state, hold });
+    chmodSync(join(state, "installs"), 0o555);
+    try {
+      expect(() => releaseInstalls(hold)).toThrow();
+    } finally {
+      chmodSync(join(state, "installs"), 0o755);
+    }
+    const resumed = runHold(state, "r");
+    expect(resumed.entries).toEqual(hold.entries);
+    expect(releaseInstalls(resumed)).toEqual(hold.entries);
+  });
+
+  // Value: protects=a run id that is not a plain name (a tampered run.json on --resume) is refused before a hold path is built from it, and every id newRunId makes for a fresh run is accepted; fails_when=runHold joins ../ segments or a non-string into a hold path and releaseInstalls deletes or writes outside the state root, or a fresh run whose label has no ASCII letter is refused; why_new=PR #85 /ship security and red-team review; seam=runHold, newRunId; no_claim=none
+  test("a run id that is not a plain name is refused before a hold path is built from it", () => {
+    const root = scratch("hold");
+    const state = join(root, "state");
+    mkdirSync(join(state, "installs", "entry.holds"), { recursive: true });
+    writeFileSync(join(root, "canary"), "keep\n");
+    for (const run of ["../../../canary", "..", ".", "a/b", "", null, 123, ["ok"]]) expect(stop(() => runHold(state, run as string))).toBe("E_USAGE");
+    expect(readFileSync(join(root, "canary"), "utf8")).toBe("keep\n");
+    for (const label of ["demo", "", "_", "評価"]) expect(runHold(state, newRunId(label)).entries).toEqual([]);
   });
 });
