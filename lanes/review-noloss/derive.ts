@@ -96,6 +96,8 @@ export function derive(o: DeriveOptions): DeriveResult {
   const names = existsSync(dir) ? readdirSync(dir).filter((n) => !n.startsWith(".") && lstatSync(join(dir, n)).isDirectory()).sort() : [];
   if (!names.length) usage("no arm is ingested for suite " + suite.id + " under " + o.root);
   const arms = names.map((n) => readIngested(join(dir, n), suite, base.sha256));
+  const transcribed = arms.filter((a) => a.arm.provenance === "transcribed").map((a) => a.arm.arm.id);
+  if (o.firstK && transcribed.length) usage("--first-k cuts each arm's findings, and " + (transcribed.length > 1 ? "arms " : "arm ") + transcribed.join(", ") + (transcribed.length > 1 ? " are" : " is") + " transcribed, with no findings to cut; derive the volume-matched reading from a --root that holds live arms only");
   const unitOf = (ref: string, where: string): Unit => {
     const r = resolveUnit(suite, ref);
     return r.unit ?? usage(where + ": " + r.problem);

@@ -65,7 +65,8 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       sign-flip, PR-clustered interval, per-PR table); --false-blocker-drop is the smallest per-PR drop that counts.
       --false-alarm-gate (or a comparison's false_alarm_gate) reads must-fix false alarms on decoy units only (units
       whose every blocker is a bait) and gates the reference: a LOSS whose reference's excess false alarms per decoy has
-      a 95% interval reaching past the margin warns FALSE_ALARM_GATE_FAIL, and its claim may not be made.
+      a 95% interval reaching past the margin warns FALSE_ALARM_GATE_FAIL, and its claim may not be made. With --prereg,
+      a --false-alarm-gate that is not the comparison's preregistered gate scores the comparison post hoc.
       The text output ends with "verdict: <LOSS|NOT_DISTINGUISHED|NO_LOSS|none> [NOLOSS_UNDERPOWERED]". --expect reads
       the run from that line (or the JSON record) and the first reason code, and exits 0 only when the outcome is one
       it lists: LOSS, NOT_DISTINGUISHED, NO_LOSS (a claim), NOLOSS_UNDERPOWERED, NO_VERDICT or a reason code such as
@@ -99,7 +100,8 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       drop units for every arm alike (named, listed in a TSV's unit column, or every unit with a coverage gap or a judgment
       with coverage incomplete), count blockers as detection-only, or re-map severity (a map per arm id or arm name, or one
       judge's impact ratings from judge-run's impact.tsv with the matching batch's key), or keep each unit-pass's first k
-      must-fix findings as must-fix (--first-k, the volume-matched reading). Findings, matches and rulings never
+      must-fix findings as must-fix (--first-k, the volume-matched reading, which refuses a transcribed arm: it has no
+      findings to cut). Findings, matches and rulings never
       change: a re-map recomputes outcomes from the judges' matches. A stopped arm whose every coverage gap is dropped, and
       that left no session unrun, is complete in the derived suite. Writes <out>/<id>.json, <out>/arms/<id>/<arm>/ (ingested),
       <out>/comparisons.<id>.json (the comparisons file with its suite set to <id>) and <out>/derive.json.
@@ -290,7 +292,10 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   if (flags.has("--power")) c = { ...c, size_rule: { power: num(flags, "--power", null, (n) => n >= 0 && n <= 1, "a share from 0 to 1"), source: need("--power-source") } };
   if (flags.has("--power-sims")) c = { ...c, size_rule: { power_sims: num(flags, "--power-sims", null, (n) => int(n) && n > 0, "a positive integer"), spread: flags.get("--spread")?.[0] ?? "wide" } };
   if (flags.has("--false-blocker-drop")) c = { ...c, false_blocker_drop: num(flags, "--false-blocker-drop", null, (n) => Number.isFinite(n) && n >= 0, "a non-negative number of false blockers per PR") };
-  if (flags.has("--false-alarm-gate")) c = { ...c, false_alarm_gate: { margin_per_decoy: num(flags, "--false-alarm-gate", null, (n) => Number.isFinite(n) && n >= 0, "a non-negative number of must-fix false alarms per decoy") } };
+  if (flags.has("--false-alarm-gate")) {
+    const margin = num(flags, "--false-alarm-gate", null, (n) => Number.isFinite(n) && n >= 0, "a non-negative number of must-fix false alarms per decoy");
+    c = { ...c, false_alarm_gate: { margin_per_decoy: margin }, post_hoc: c.post_hoc || c.false_alarm_gate?.margin_per_decoy !== margin };
+  }
   seed = num(flags, "--seed", seed, int, "a non-negative integer");
   draws = num(flags, "--draws", draws, (n) => int(n) && n >= 1000, "an integer of at least 1000");
   const out = flags.get("--out")?.[0];

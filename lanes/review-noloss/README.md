@@ -142,8 +142,10 @@ A decoy's one case is its bait, deserved INFORMATIONAL, so it counts only toward
 
 A sealed suite never sits in this repo whole. Its suite file and catalogs live under a sealed root: any absolute
 directory outside this checkout, given to every command with `--sealed-root <dir>`; one inside the checkout, or a
-symlink into it, is refused. The repo holds the stub `suite --stub` prints: id, kind, counts by blocker kind and group,
-the suite's sha256 and the sha256 over its catalogs' case files, and a custody line that starts "procedural custody".
+symlink into it, is refused, and every sealed output path is checked with its symlinks resolved. The repo holds the stub
+`suite --stub` prints: id, kind, counts by blocker kind and group, the suite's sha256 and the sha256 over its catalogs'
+case files, and a custody line that starts "procedural custody". The stub is refused when its id, title, purpose,
+custody or group names name a sealed unit, cluster, repo, commit or case.
 A stub loads only with a sealed root whose suite and catalogs match its digests and counts. Decrypting a panel into a
 sealed root happens outside the scorer. `export --publish-sealed-table` writes a sealed suite's table into the repo
 only when it names no sealed unit, cluster, commit or case.
@@ -152,8 +154,10 @@ Plan judge packets show each finding's section, claim, evidence and fix, mask se
 PLAN_HEADING_WORDS of gstack's plan reviews, and carry the unit's tree at its head from `--source`, whose plan.md must
 hash to every case's plan digest. `score --false-alarm-gate <n>` (or a comparison's `false_alarm_gate`) reads
 must-fix false alarms on decoys only: a LOSS whose reference raises more than n extra per decoy, interval included,
-warns FALSE_ALARM_GATE_FAIL and its claim may not be made. `derive --first-k <k>` is the volume-matched reading, and
-`power --alpha` and `--dependence` give power at a Holm step with the flaws of one plan moving together.
+warns FALSE_ALARM_GATE_FAIL and its claim may not be made. With `--prereg`, a `--false-alarm-gate` that is not the
+comparison's preregistered gate scores it post hoc. `derive --first-k <k>` is the volume-matched reading; it refuses a
+transcribed arm, which has no findings to cut. `power --alpha` and `--dependence` give power at a Holm step with the
+flaws of one plan moving together.
 
 ## Legacy arms
 

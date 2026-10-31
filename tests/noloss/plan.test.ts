@@ -5,7 +5,7 @@ import { loadCatalog } from "../../lanes/review-replay/catalog/catalog.ts";
 import { PLAN_HEADING_WORDS, PLAN_HEADING_WORDS_SHA256, PLAN_MATERIAL_CAP, planMaterial } from "../../lanes/review-noloss/judge.ts";
 import { spawnSync } from "node:child_process";
 import { simulate } from "../../lanes/review-noloss/power.ts";
-import { checkSealedRoot, checkSuite, loadSuite, PLAN_JUDGING_RULE, REPO_ROOT, sealedLeaks, stubProblems, suiteFromCatalog, suiteStub, SUITES_DIR, type SuiteStub } from "../../lanes/review-noloss/suite.ts";
+import { checkSealedRoot, checkSuite, insideRepo, loadSuite, PLAN_JUDGING_RULE, REPO_ROOT, sealedLeaks, stubProblems, suiteFromCatalog, suiteStub, SUITES_DIR, type SuiteStub } from "../../lanes/review-noloss/suite.ts";
 import { cleanup, run, tmp } from "./helpers.ts";
 import { CUSTODY, planPanel, planText, writePlanArm, type PlanArm } from "./plan-panel.ts";
 
@@ -127,6 +127,33 @@ describe("the sealed root and the stub (open item 1)", () => {
     const out = await run(["suite", "--from-catalog", "catalog/plans", "--id", "x", "--out", join(dir, "x.json"), ...S]);
     expect([out.code, out.err]).toEqual([2, expect.stringContaining("is sealed, and --out " + join(dir, "x.json") + " is inside the repo")]);
   });
+
+  test("a sealed --out through a symlink into the repo is refused, and nothing reaches the checkout", async () => {
+    const dir = join(REPO_ROOT, ".noloss-plan-link-" + process.pid);
+    inRepo.push(dir);
+    mkdirSync(dir);
+    const outside = tmp("noloss-plan-alias-");
+    const alias = join(outside, "alias");
+    symlinkSync(dir, alias);
+    const dangling = join(outside, "dangling.json");
+    symlinkSync(join(dir, "later.json"), dangling);
+    for (const p of [alias, join(alias, "whole.json"), join(alias, "new", "whole.json"), dangling]) expect(insideRepo(p)).toBe(true);
+    expect(insideRepo(join(outside, "whole.json"))).toBe(false);
+    for (const out of [join(alias, "whole.json"), dangling]) {
+      const r = await run(["suite", "--from-catalog", "catalog/plans", "--id", "whole", "--out", out, ...S]);
+      expect([r.code, r.err]).toEqual([2, expect.stringContaining("is sealed, and --out " + out + " is inside the repo")]);
+    }
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  test("a stub is refused when the suite's id or a group name names a sealed case", () => {
+    const text = readFileSync(panel.suitePath, "utf8");
+    const caseId = panel.suite.units[1]!.blockers[0]!.case;
+    const refused = "the stub would publish what the seal hides in the suite's id, title, purpose, custody or group names: " + caseId + ";";
+    expect(() => suiteStub({ ...panel.suite, id: caseId }, text, panel.sealedRoot, CUSTODY)).toThrow(refused);
+    const grouped = { ...panel.suite, groups: { ...panel.suite.groups, [caseId]: "a group" }, units: panel.suite.units.map((u, i) => (i === 0 ? { ...u, group: caseId } : u)) };
+    expect(() => suiteStub(grouped, text, panel.sealedRoot, CUSTODY)).toThrow(refused);
+  });
 });
 
 describe("power at a Holm step and with flaws that move together (B1, open item 12)", () => {
@@ -230,7 +257,7 @@ describe("plan judge packets (B6, open item 11)", () => {
   test("sealedLeaks names 7-character commits and the unit repo, and a stub refuses a title that names one", () => {
     const u = panel.suite.units[0]!;
     expect(sealedLeaks(panel.suite, "see " + u.head.slice(0, 7) + " in " + u.repo)).toEqual([u.head.slice(0, 7), u.repo].sort());
-    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's title, purpose or custody: " + u.base.slice(0, 7));
+    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's id, title, purpose, custody or group names: " + u.base.slice(0, 7));
   });
 });
 
@@ -342,6 +369,20 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     expect([rec.result.verdict === "LOSS", rec.false_alarm_gate.per_decoy, rec.false_alarm_gate.result]).toEqual([false, { variant: 0, reference: 1 }, "PASS"]);
     const both = await run(["derive", "--suite", panel.stubPath, "--comparisons", prereg, "--root", root, "--id", "planpanel-k2", "--out", join(dir, "k2"), "--first-k", "1", "--severity-map", prereg, ...S]);
     expect([both.code, both.err]).toEqual([2, expect.stringContaining("give one of --severity-map, --impact and --first-k")]);
+  });
+
+  test("derive --first-k refuses transcribed arms, which have no findings to cut, so no reading mixes cut and uncut arms", async () => {
+    const out = join(dir, "k-legacy");
+    const r = await run(["derive", "--suite", "gsta167-14pr", "--comparisons", join(REPO_ROOT, "lanes/review-noloss/comparisons/gsta167-14pr.json"), "--root", join(REPO_ROOT, "lanes/review-noloss/arms"), "--id", "k-legacy", "--out", out, "--first-k", "1"]);
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("--first-k cuts each arm's findings, and arms A, A2, B, C are transcribed, with no findings to cut")]);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("with --prereg, a --false-alarm-gate other than the preregistered gate scores the comparison post hoc, so its claim may not be made", async () => {
+    const wide = JSON.parse((await score("none", "flagall", ["--json", "--false-alarm-gate", "10"])).out);
+    expect([wide.result.verdict, wide.false_alarm_gate.result, wide.post_hoc, wide.loss_claim.eligible, wide.loss_claim.reasons]).toEqual(["LOSS", "PASS", true, false, ["post hoc: the comparison was not preregistered before the arms ran"]]);
+    const same = JSON.parse((await score("none", "flagall", ["--json", "--false-alarm-gate", "1"])).out);
+    expect([same.false_alarm_gate.result, same.post_hoc, same.loss_claim.eligible]).toEqual(["FAIL", false, false]);
   });
 });
 
