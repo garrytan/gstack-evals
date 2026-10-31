@@ -524,4 +524,21 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       }
     });
   }, 240_000);
+
+  // Value: protects=grading starts no git process that outlives its step: since git 2.47 every commit in seed.sh detaches `git maintenance run --auto`, which unlinks its lock in the seed's .git a few milliseconds later, and when that lands while remove() deletes the seed, Bun's rmSync stops early without an error, so the next scenario's mkdir of the seed exits 2 with EEXIST; fails_when=grade.ts runs git with auto maintenance on again; why_new=the native adversarial reader at ec8f835 on GEVA-75's /ship (GST-348): 2 of 9 full-file runs exited 2; seam=grade.ts's NO_GIT_CONFIG; no_claim=that tree code cannot leave its own processes running
+  test("grading starts no background git maintenance", async () => {
+    await inRoot(async (root) => {
+      const dir = seed(root, ID, "traced", ["fix", "guard"]);
+      const bin = join(root, "bin");
+      const trace = join(root, "trace2.json");
+      mkdirSync(bin);
+      write(bin, { git: "#!/bin/sh\nGIT_TRACE2_EVENT='" + trace + "' exec '" + join(run(["git", "--exec-path"], root).trim(), "git") + "' \"$@\"\n" });
+      chmodSync(join(bin, "git"), 0o755);
+      const r = await check(dir, ID, { PATH: bin + ":" + ENV.PATH });
+      expect(r.code, r.err).toBe(0);
+      const events = readFileSync(trace, "utf8").split("\n");
+      expect(events.some((e) => /"argv":\[[^\]]*"commit"/.test(e))).toBe(true);
+      expect(events.filter((e) => /"argv":\[[^\]]*"maintenance"|"label":"detach"/.test(e))).toEqual([]);
+    });
+  }, 240_000);
 });

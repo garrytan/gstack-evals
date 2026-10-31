@@ -32,7 +32,8 @@
 // unreadable file) fails, and so does a scenario whose oracle or check does not finish (a timeout, a signal or an exit
 // code above 128), so a hung or killed check never counts as a caught mistake. Exit 2 means the grader itself failed
 // and nothing was judged: an unknown task, a seed that failed, a mutant that failed on the seed too, a step that could
-// not start, or a full disk.
+// not start, a copy that could not be removed, or a full disk. Git runs with auto maintenance off, so no commit in a
+// seed leaves a process behind that could change the seed while it is removed.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,7 +45,7 @@ const UNBROKEN = "with no mistake in place";
 const ORACLE = "__grade__/oracle.test.ts";
 const STEP_MS = 300_000;
 const COPY = { recursive: true, verbatimSymlinks: true };
-const NO_GIT_CONFIG = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+const NO_GIT_CONFIG = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "maintenance.auto", GIT_CONFIG_VALUE_0: "false" };
 const DISK_FAULTS = ["ENOSPC", "EDQUOT", "EIO", "ENOMEM", "EMFILE", "ENFILE"];
 
 const task = process.argv[2] ?? "";
@@ -61,7 +62,10 @@ const run = (cmd: string[], cwd: string, extra: Record<string, string> = {}): St
 
 const remove = (path: string) => {
   spawnSync("chmod", ["-R", "u+rwx", path], { stdio: "ignore" });
-  rmSync(path, { recursive: true, force: true });
+  for (let tries = 0; existsSync(path); tries++) {
+    if (tries === 3) throw new Error("could not remove " + path);
+    rmSync(path, { recursive: true, force: true });
+  }
 };
 
 function strayLink(top: string, dir = top): string | undefined {
