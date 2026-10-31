@@ -49,15 +49,19 @@ const remove = (path: string) => {
   rmSync(path, { recursive: true, force: true });
 };
 
-function strayLink(top: string): string | undefined {
-  for (const entry of readdirSync(top, { recursive: true, withFileTypes: true })) {
-    if (!entry.isSymbolicLink()) continue;
-    const path = join(entry.parentPath, entry.name);
-    let target = "";
-    try {
-      target = realpathSync(path);
-    } catch {}
-    if (target !== top && !target.startsWith(top + sep)) return relative(top, path);
+function strayLink(top: string, dir = top): string | undefined {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const found = strayLink(top, path);
+      if (found) return found;
+    } else if (entry.isSymbolicLink()) {
+      let target = "";
+      try {
+        target = realpathSync(path);
+      } catch {}
+      if (target !== top && !target.startsWith(top + sep)) return relative(top, path);
+    }
   }
 }
 

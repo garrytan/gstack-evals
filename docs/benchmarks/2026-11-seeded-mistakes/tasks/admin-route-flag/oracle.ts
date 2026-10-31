@@ -8,13 +8,14 @@ import { ADMIN_TOKEN, handle } from "../src/router.ts";
 
 const full = ["final", "touch"].includes(process.env.GRADE_SCENARIO ?? "final");
 const admin = [["GET", "/admin/export"], ["POST", "/admin/refunds"]];
-if (existsSync(join(import.meta.dir, "../src/routes/audit.ts"))) admin.push(["GET", "/admin/audit"]);
+const audit = existsSync(join(import.meta.dir, "../src/routes/audit.ts"));
+if (audit) admin.push(["GET", "/admin/audit"]);
 
 test("admin routes refuse callers without the admin token", async () => {
   for (const [method, path] of admin) {
     for (const headers of [{}, { "x-admin-token": "wrong" }]) expect([401, 403, 404]).toContain((await handle({ method: method!, path: path!, headers })).status);
   }
-  if (admin.length > 2) expect((await handle({ method: "GET", path: "/admin/audit", headers: { "x-admin-token": ADMIN_TOKEN } })).status, "/admin/audit is served").toBe(200);
+  if (audit) expect((await handle({ method: "GET", path: "/admin/audit", headers: { "x-admin-token": ADMIN_TOKEN } })).status, "/admin/audit is served").toBe(200);
 });
 
 test.if(full)("routes still answer callers who may use them", async () => {

@@ -242,7 +242,7 @@ describe("grade.ts grades the tree, not the tree's config", () => {
   }, 240_000);
 
   // Value: protects=a symlink that leaves the tree, or points nowhere, fails the grade before any mutant can write through it; fails_when=grade.ts stops refusing such links; why_new=GEVA-64's /ship blocking finding 2 (GST-348); seam=grade.ts's link check; no_claim=that the trial's delta import lets such links through
-  test("a symlink that leaves the tree, or points nowhere, fails the grade and nothing outside is written", async () => {
+  test("a symlink that leaves the tree, or points nowhere, fails the grade and nothing outside is written; a loop inside the tree is still judged", async () => {
     await inRoot(async (root) => {
       const outside = seed(root, ID, "outside", ["fix", "guard"]);
       mkdirSync(join(root, "elsewhere"));
@@ -250,11 +250,23 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       symlinkSync(join(root, "elsewhere/latency.ts"), join(outside, "src/reports/latency.ts"));
       const dangling = seed(root, ID, "dangling", ["fix", "guard"]);
       symlinkSync("missing.ts", join(dangling, "src/reports/gone.ts"));
+      const shut = join(root, "shut");
+      mkdirSync(shut, { mode: 0o000 });
+      const folder = seed(root, ID, "folder", ["fix", "guard"]);
+      symlinkSync(shut, join(folder, "src/out"));
+      const loop = seed(root, ID, "loop", ["fix", "guard"]);
+      symlinkSync(".", join(loop, "src/self"));
       const before = readFileSync(join(root, "elsewhere/latency.ts"), "utf8");
-      const [out, gone] = await Promise.all([grade(outside, ID), grade(dangling, ID)]);
-      expect(readFileSync(join(root, "elsewhere/latency.ts"), "utf8")).toBe(before);
-      expect(out).toMatchObject({ code: 1, pass: false, refused: "src/reports/latency.ts" });
-      expect(gone).toMatchObject({ code: 1, pass: false, refused: "src/reports/gone.ts" });
+      try {
+        const [out, gone, dir, self] = await Promise.all([grade(outside, ID), grade(dangling, ID), grade(folder, ID), check(loop, ID)]);
+        expect(readFileSync(join(root, "elsewhere/latency.ts"), "utf8")).toBe(before);
+        expect(out).toMatchObject({ code: 1, pass: false, refused: "src/reports/latency.ts" });
+        expect(gone).toMatchObject({ code: 1, pass: false, refused: "src/reports/gone.ts" });
+        expect(dir).toMatchObject({ code: 1, pass: false, refused: "src/out" });
+        expect(self.code, self.err).not.toBe(2);
+      } finally {
+        chmodSync(shut, 0o755);
+      }
     });
   }, 240_000);
 
@@ -287,16 +299,21 @@ describe("grade.ts grades the tree, not the tree's config", () => {
   }, 240_000);
 
   // Value: protects=the check cannot tell which scenario it is in from the folder it runs in; fails_when=scenarios run at paths that name them again; why_new=the /ship Red Team on GEVA-67 (GST-348): a check that failed only in the mistake scenarios' folders passed with no guard; seam=grade.ts's scenario loop; no_claim=that a check keeping state between its runs cannot guess, which the random order only makes unreliable
-  test("the check cannot tell its scenario from the folder it runs in", async () => {
+  test("the check cannot tell its scenario from the folder it runs in or the mutants' seed", async () => {
     await inRoot(async (root) => {
-      const dir = seed(root, ID, "where", ["fix"]);
-      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-      pkg.scripts.check = 'case "$PWD" in */[234]/repo) exit 1 ;; esac; bun test';
-      write(dir, { "package.json": JSON.stringify(pkg, null, 2) + "\n" });
-      const g = await grade(dir, ID);
-      expect(g).toMatchObject({ code: 1, pass: false });
-      expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
-      expect([...g.order].sort()).toEqual(["final", "fresh", "revert-a", "revert-c", "touch"]);
+      const probes = { where: 'case "$PWD" in */[234]/repo) exit 1 ;; esac; bun test', seed: "[ -d ../pristine ] && exit 1; bun test" };
+      const dirs = Object.entries(probes).map(([name, script]) => {
+        const dir = seed(root, ID, name, ["fix"]);
+        const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+        pkg.scripts.check = script;
+        write(dir, { "package.json": JSON.stringify(pkg, null, 2) + "\n" });
+        return dir;
+      });
+      for (const g of await Promise.all(dirs.map((dir) => grade(dir, ID)))) {
+        expect(g).toMatchObject({ code: 1, pass: false });
+        expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
+        expect([...g.order].sort()).toEqual(["final", "fresh", "revert-a", "revert-c", "touch"]);
+      }
     });
   }, 240_000);
 
@@ -310,7 +327,10 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       });
       const migrations = seed(root, "migration-rollback", "static-migrations", ["fix"]);
       const names = readdirSync(join(migrations, "migrations")).filter((f) => f.endsWith(".ts")).sort();
-      writeFileSync(join(migrations, "src/migrate.ts"), readFileSync(join(migrations, "src/migrate.ts"), "utf8").replace(/const files = readdirSync\(dir\)[^\n]*/, "const files = " + JSON.stringify(names) + ";"));
+      const scan = readFileSync(join(migrations, "src/migrate.ts"), "utf8");
+      const listed = scan.replace(/const files = readdirSync\(dir\)[^\n]*/, "const files = " + JSON.stringify(names) + ";");
+      expect(listed).not.toBe(scan);
+      writeFileSync(join(migrations, "src/migrate.ts"), listed);
       for (const g of await Promise.all([grade(routes, "admin-route-flag"), grade(migrations, "migration-rollback")])) {
         expect(g).toMatchObject({ code: 1, pass: false });
         expect(g.scenarios.fresh).toEqual({ check: true, oracle: false, ok: false });
