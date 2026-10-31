@@ -66,27 +66,29 @@ tests/seeded-mistakes/tasks.test.ts runs without keys in about 40 seconds:
 - Preflight's vacuity check (checkVacuity, which `--lock` also runs) accepts every task: the untouched fixture fails each check.
 - The lock pins this tasks file against the stub.
 - On every task, the reference guards pass. Three controls are scored to fail, and each fails on the scenario built for it: the fix alone fails revert-c; a snapshot of every source file fails touch; a guard that remembers only the old mistakes' exact bytes fails fresh.
-- Nothing in a graded tree changes how it is graded. Each case below failed on the grader as GEVA-64 left it and passes now: a bunfig.toml preload that exits 0 (it skipped grading, passed the oracle, or skipped a mutant's bun step), a .env that set TMPDIR inside the tree (a failing tree came out unjudged), a coverage threshold the repo's tests meet (it failed a correct fix), a relative symlink (mutants wrote into the graded tree), a symlink out of the tree or to nothing, a tsconfig.json paths entry (it swapped grade.ts for another file), tree code that exits 0 on import, a test that rewrites the mutated file back, a missing translation rendered as a blank line, a check killed by a signal, and a read-only folder at cleanup.
+- Nothing in a graded tree changes how it is graded. Each case below failed on the grader as GEVA-64 left it and passes now: a bunfig.toml preload that exits 0 (it skipped grading, passed the oracle, or skipped a mutant's bun step), a .env that set TMPDIR inside the tree (a failing tree came out unjudged), a coverage threshold the repo's tests meet (it failed a correct fix), a relative symlink (mutants wrote into the graded tree), a symlink out of the tree or to nothing, a tsconfig.json paths entry (it swapped grade.ts for another file), tree code that exits 0 on import, a test that rewrites the mutated file back, a check that fails only in the mistake scenarios' folders, a fixed route or migration list that never loads fresh's file, a missing translation rendered as a blank line, a check killed by a signal, and a read-only folder at cleanup.
 
 ## What the grader keeps out
 
 The repo's own `bun run check` reads the tree's config, as its CI would. The grader's own steps do not:
 
 - grade.ts, each oracle and the mutants' bun steps run with `--no-env-file` and the suite's bunfig.toml (which also sets `env = false`). grade.ts also runs with the suite's tsconfig.json. The oracle keeps the tree's tsconfig.json, because the tree's code it imports may rely on its paths.
+- Each scenario runs at the same path, in random order, on a fresh copy of the tree, and mutants read a seed made for that scenario and removed before any tree code runs. A check that failed only in the mistake scenarios' folders passed with no guard before this.
 - The oracle runs first, in its own copy of each scenario's tree, so the check cannot rewrite what the oracle grades. It passes only when it exits 0 and its JUnit report shows its own test file ran with none failing.
 - The copies keep symlinks as links. A link that leaves the tree or points nowhere fails the grade before any mutant runs.
 - A step that exits above 128 counts as killed, so a guard ended by a signal is unjudged, not a caught mistake. Cleanup makes the copies writable first and never changes the exit code.
 
-The oracle imports the tree's code by design, so code written to tamper with the oracle from inside its process stays out of reach. These rules close the routes a tree can hit by accident and the cheap deliberate ones.
+The oracle imports the tree's code by design. Code written to tamper with grading from inside a step (by patching the oracle's process, writing outside its own copy, keeping state between its runs or leaving a process running) stays out of reach. A check that keeps state can still guess its scenario; the random order makes that guess wrong most of the time. These rules close the routes a tree can hit by accident and the cheap deliberate ones.
 
 ## Limits
 
 - The tasks are public, not held out. The agent never sees the tasks directory in a trial, but a future model may have read it. Round 2 may add sealed variants.
 - revert-a is often caught by the test the history already added for A. revert-c and fresh are the scenarios that tell arms apart.
 - fresh is written in the repo's old style. If an arm changes an API so that this code no longer loads, the check fails and fresh counts as caught. That is generous to design changes, which is acceptable: code written the old, mistaken way no longer runs.
+- In admin-route-flag and migration-rollback, fresh's file reaches the app only through a folder scan, so those oracles also require it to be served or listed. A tree that switches to a fixed list must catch the unlisted file in its check, or fresh fails.
 - An agent that renames or moves the files a mutant edits breaks the scenario. The prompt asks agents to keep files and exported names, and the oracles import those names.
 - How much headroom the tasks leave on Opus 5.5 is unknown until a pilot. A ceiling there would send the suite to the cheaper rungs, as the CREW model-ladder rule says.
 - Each grade runs `bun run check` five times, so a slow suite of agent tests makes grading slow. Each step has a 300-second limit. A step that times out or is killed leaves its scenario unjudged, so the grader exits 2 and the trial records a check error, never a pass.
 - No scenario adds a harmless new file, so a guard that fails on any new file, paired with one that remembers the old mistakes' bytes, would pass every scenario. Closing it needs a sixth scenario per task (a correct new file written the repo's way); it is left for round 2's pilot to show whether any arm writes such a guard.
 - The timeout-units oracle accepts a design that drops timeouts entirely, because checking that a hung call is cut off at 10 seconds would make each grade far slower.
-- Round 2's preregistration must decide two things these tasks leave open: whether an unjudged trial drops its task (on_missing: drop_task) or counts as a failure, and a timeout_s for each task, since a grade runs up to ten 300-second steps.
+- Round 2's preregistration must decide two things these tasks leave open: whether an unjudged trial drops its task (on_missing: drop_task) or counts as a failure, and a timeout_s for each task, since a grade runs up to 23 timed steps of up to 300 seconds each (four seeds, four mutant edits, and five each of oracle, git add and check), though only the oracle and the check run tree code.

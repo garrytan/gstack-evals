@@ -1,4 +1,5 @@
-// Behavior oracle for admin-route-flag. Every scenario: no admin route answers without the admin token.
+// Behavior oracle for admin-route-flag. Every scenario: no admin route answers without the admin token, and a new route
+// file (fresh's src/routes/audit.ts) is served, so a tree that stops loading route files cannot get fresh for free.
 // final and touch also: the routes still answer callers who may use them.
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -13,6 +14,7 @@ test("admin routes refuse callers without the admin token", async () => {
   for (const [method, path] of admin) {
     for (const headers of [{}, { "x-admin-token": "wrong" }]) expect([401, 403, 404]).toContain((await handle({ method: method!, path: path!, headers })).status);
   }
+  if (admin.length > 2) expect((await handle({ method: "GET", path: "/admin/audit", headers: { "x-admin-token": ADMIN_TOKEN } })).status, "/admin/audit is served").toBe(200);
 });
 
 test.if(full)("routes still answer callers who may use them", async () => {

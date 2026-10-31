@@ -5,7 +5,7 @@
 // code that exits early, a check that rewrites files) changes how grade.ts grades it.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { REPO_ROOT } from "../../src/cli.ts";
@@ -76,7 +76,7 @@ function addLiteralGuard(root: string, id: string, dir: string) {
 }
 
 type Scenario = { check: boolean; oracle: boolean; ok: boolean };
-type Grade = { code: number; pass: boolean; scenarios: Record<string, Scenario> };
+type Grade = { code: number; pass: boolean; order: string[]; scenarios: Record<string, Scenario> };
 
 async function check(dir: string, id: string): Promise<{ code: number; out: string; err: string }> {
   const p = Bun.spawn(["sh", "-c", CHECK + id], { cwd: dir, env: { ...ENV, SKILL_EVAL_FIXTURES: TASKS }, stdout: "pipe", stderr: "pipe" });
@@ -151,6 +151,7 @@ describe.each(ids)("%s", (id) => {
       expect(fix!.pass).toBe(false);
       expect([fix!.scenarios.final!.ok, fix!.scenarios.touch!.ok]).toEqual([true, true]);
       expect(fix!.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
+      expect(fix!.scenarios["revert-a"]).toEqual({ check: false, oracle: false, ok: true });
       expect(snap!.pass).toBe(false);
       expect(snap!.scenarios.final!.ok).toBe(true);
       expect(["touch", "revert-a", "revert-c", "fresh"].map((s) => snap!.scenarios[s]!.check)).toEqual([false, false, false, false]);
@@ -282,6 +283,38 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       const g = await grade(dir, ID);
       expect(g).toMatchObject({ code: 1, pass: false });
       expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
+    });
+  }, 240_000);
+
+  // Value: protects=the check cannot tell which scenario it is in from the folder it runs in; fails_when=scenarios run at paths that name them again; why_new=the /ship Red Team on GEVA-67 (GST-348): a check that failed only in the mistake scenarios' folders passed with no guard; seam=grade.ts's scenario loop; no_claim=that a check keeping state between its runs cannot guess, which the random order only makes unreliable
+  test("the check cannot tell its scenario from the folder it runs in", async () => {
+    await inRoot(async (root) => {
+      const dir = seed(root, ID, "where", ["fix"]);
+      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+      pkg.scripts.check = 'case "$PWD" in */[234]/repo) exit 1 ;; esac; bun test';
+      write(dir, { "package.json": JSON.stringify(pkg, null, 2) + "\n" });
+      const g = await grade(dir, ID);
+      expect(g).toMatchObject({ code: 1, pass: false });
+      expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
+      expect([...g.order].sort()).toEqual(["final", "fresh", "revert-a", "revert-c", "touch"]);
+    });
+  }, 240_000);
+
+  // Value: protects=fresh is not free for a tree that stops loading files from a folder: the new route or migration must be served or listed; fails_when=the admin-route-flag or migration-rollback oracle stops checking that fresh's file is wired in; why_new=the /ship Red Team on GEVA-67 (GST-348): a fixed route list plus a test for one route passed every scenario; seam=admin-route-flag/oracle.ts and migration-rollback/oracle.ts; no_claim=that other tasks' fresh files cannot be left unloaded, which they cannot be today because they are imported by name or by every caller
+  test("admin-route-flag and migration-rollback: a fresh file the tree never loads does not pass fresh", async () => {
+    await inRoot(async (root) => {
+      const routes = seed(root, "admin-route-flag", "static-routes", ["fix"]);
+      write(routes, {
+        "src/routes/index.ts": 'import exportRoute from "./export.ts";\nimport health from "./health.ts";\nimport refunds from "./refunds.ts";\nimport type { Route } from "./types.ts";\n\nexport const routes: Route[] = [exportRoute, health, refunds];\n',
+        "tests/refunds.test.ts": 'import { expect, test } from "bun:test";\nimport { handle } from "../src/router.ts";\n\ntest("/admin/refunds needs the admin token", () => {\n  expect(handle({ method: "POST", path: "/admin/refunds", headers: {} }).status).toBe(401);\n});\n',
+      });
+      const migrations = seed(root, "migration-rollback", "static-migrations", ["fix"]);
+      const names = readdirSync(join(migrations, "migrations")).filter((f) => f.endsWith(".ts")).sort();
+      writeFileSync(join(migrations, "src/migrate.ts"), readFileSync(join(migrations, "src/migrate.ts"), "utf8").replace(/const files = readdirSync\(dir\)[^\n]*/, "const files = " + JSON.stringify(names) + ";"));
+      for (const g of await Promise.all([grade(routes, "admin-route-flag"), grade(migrations, "migration-rollback")])) {
+        expect(g).toMatchObject({ code: 1, pass: false });
+        expect(g.scenarios.fresh).toEqual({ check: true, oracle: false, ok: false });
+      }
     });
   }, 240_000);
 

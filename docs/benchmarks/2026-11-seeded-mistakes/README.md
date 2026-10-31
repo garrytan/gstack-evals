@@ -45,10 +45,11 @@ A task passes when all five do. The grader prints one JSON line with every scena
 The repo's own `bun run check` reads the tree's config, as its CI would. Nothing in the tree reaches the grader itself:
 
 - grade.ts, each oracle and the mutants' bun steps run with `--no-env-file` and the suite's bunfig.toml, so the tree's .env, bunfig.toml preloads and [test] options (a coverage threshold, say) do not apply to them. grade.ts also runs with the suite's tsconfig.json, so a paths entry in the tree cannot swap it for another file.
+- Each scenario runs at the same path, in random order (the JSON lists it as `order`), on a fresh copy of the tree. Mutants read a seed made for that scenario and removed before any tree code runs. So the check cannot tell which scenario it is in from where or when it runs.
 - The oracle runs first, in its own copy of the scenario's tree, so nothing the check does to the files reaches it. It passes only when it exits 0 and its JUnit report shows its own tests ran with none failing, so tree code that ends the process early does not pass it.
 - The copies keep symlinks as links. A link that leaves the tree or points nowhere fails the grade (exit 1, with the link named in `refused`) before any mutant runs.
 
-The oracle still imports the tree's code, which is the point of it, so code written to tamper with the oracle from inside its process is out of reach of these rules.
+The oracle still imports the tree's code, which is the point of it. Code written to tamper with grading from inside a step (by patching the oracle's process, writing outside its own copy, keeping state between its runs or leaving a process running) is out of reach of these rules.
 
 To grade a work tree by hand, run the check from the tree's root with `SKILL_EVAL_FIXTURES` set to the tasks folder.
 
