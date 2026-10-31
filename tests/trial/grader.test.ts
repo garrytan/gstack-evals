@@ -356,14 +356,14 @@ describe("U11 grader routes (keyless, on this machine)", () => {
   }, 300_000);
 
   // Value: protects=a read-only tasks directory grades and its check still reads SKILL_EVAL_DELTA, while a tasks directory that holds the delta copy's name is refused before setup instead of overwritten; fails_when=writing the check's copy of delta.json into a 0555 tasks directory copy throws EACCES out of runTrial, or a task's own .skill-eval-delta.json is replaced; why_new=#90 Step 11 native adversarial (trial.ts:137); seam=runTrial; no_claim=root, which ignores the modes
-  test.skipIf(process.getuid?.() === 0)("a read-only tasks directory grades with SKILL_EVAL_DELTA, and one that holds its name is refused", async () => {
+  test.skipIf(process.getuid?.() === 0)("a read-only tasks directory grades with SKILL_EVAL_DELTA, and one that holds its name, or whose setup writes it, is refused", async () => {
     const t = { ...u11("office-hours", "no-code-session"), check: 'grep -q \'"merge.py"\' "$SKILL_EVAL_DELTA"' };
     const tasks = (name: string) => {
       const dir = join(scratch(name), "office-hours");
       cpSync(join(U11, "office-hours"), dir, { recursive: true });
       return dir;
     };
-    const run = (tasksDir: string) => runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: t, tasksDir, sandbox: local, agent: replayAgent({ steps: ["printf 'print(1)\\n' > merge.py"], turns: ["done"] }), dir: scratch("u11-tasks"), timeoutS: 120 });
+    const run = (tasksDir: string, task = t) => runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task, tasksDir, sandbox: local, agent: replayAgent({ steps: ["printf 'print(1)\\n' > merge.py"], turns: ["done"] }), dir: scratch("u11-tasks"), timeoutS: 120 });
     const readOnly = tasks("ro-tasks");
     chmodSync(readOnly, 0o555);
     const ro = await run(readOnly);
@@ -373,6 +373,8 @@ describe("U11 grader routes (keyless, on this machine)", () => {
     const held = await run(holds);
     const logs = JSON.parse(readFileSync(join(held.dir, "trial.json"), "utf8")).logs;
     expect([held.record.termination, held.record.check, logs.check, logs.missing]).toEqual([{ kind: "missing", code: "E_TASKS_INVALID" }, null, undefined, expect.stringContaining(".skill-eval-delta.json")]);
+    const late = await run(tasks("setup-tasks"), { ...t, setup: [t.setup, 'printf x > "$SKILL_EVAL_FIXTURES/.skill-eval-delta.json"'].filter(Boolean).join(" && ") });
+    expect([late.record.termination, late.record.check]).toEqual([{ kind: "missing", code: "E_TASKS_INVALID" }, null]);
   }, 300_000);
 
   // Value: protects=rule A closes both directions: a dangling escaping symlink satisfies no check that needs its path, while an absolute link at a path the check does not read leaves the result alone; fails_when=the placeholder directory alone passes find -name, test -e or test -s, or the second run fails a check that never reads the dropped path; why_new=#90 review (red team); seam=runTrial; no_claim=what the link pointed at, which the grader cannot see
