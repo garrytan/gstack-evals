@@ -34,7 +34,8 @@ import { insideRepo, loadSuite, sha256, unitRef } from "./suite.ts";
 
 const MAX_OUTPUT_TOKENS = 16000;
 /** Per request: at most 3 sends, the first included, and no new send once 900 s have passed since the first began. */
-export const JUDGE_RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
+export const JUDGE_ATTEMPTS = 3;
+export const JUDGE_RETRY: RetryBudget = { attempts: JUDGE_ATTEMPTS, elapsed_ms: 900_000 };
 const ROLES: JudgeRole[] = ["primary", "second", "third"];
 const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" };
 const FLAGS: Record<string, "value" | "repeat" | "bool"> = { "--suite": "value", "--packets": "value", "--key": "value", "--arm": "repeat", "--brief": "value", "--primary": "value", "--second": "value", "--third": "value", "--item": "value", "--out": "value", "--source": "repeat", "--concurrency": "value", "--ledger": "value", "--record": "value", "--policy": "value", "--dry-run": "bool" };
