@@ -310,6 +310,30 @@ describe("delta import", () => {
     expect(readFileSync(join(narrow, "app", "models", "user.rb"), "utf8")).toBe("edited\n");
     expect([scoped.changed, scoped.dropped.map((d) => d.path)]).toEqual([["app/models/user.rb"], ["app"]]);
   });
+
+  // Value: protects=rule D follows a replaced directory only where the kernel lands it, inside the work tree; fails_when=a link inside a followed directory is checked at its graded path but read through the real links on disk, so the import copies files from outside the work tree or throws on a target that is missing on disk; why_new=#90 review; seam=importDelta; no_claim=links changed while the import runs
+  test("a link inside a followed directory is checked where the kernel reads it, so nothing outside the work tree comes in", () => {
+    for (const target of ["../../outside", "../../gone"]) {
+      const root = scratch("nested-link");
+      const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+      mkdirSync(join(baseline, "a", "b", "c", "d"), { recursive: true });
+      writeFileSync(join(baseline, "a", "b", "c", "d", "keep.txt"), "k");
+      snapshot(baseline, after);
+      snapshot(baseline, grade);
+      mkdirSync(join(root, "outside"));
+      writeFileSync(join(root, "outside", "secret.txt"), "s");
+      removeTree(join(after, "a", "b", "c"));
+      mkdirSync(join(after, "x"));
+      symlinkSync("../../x", join(after, "a", "b", "c"));
+      symlinkSync(target, join(after, "x", "d"));
+      mkdirSync(join(after, "a", "outside"));
+      mkdirSync(join(after, "a", "gone"));
+      const delta = importDelta(baseline, after, grade);
+      expect(readdirSync(join(grade, "a", "b", "c", "d"))).toEqual(["keep.txt"]);
+      expect(readdirSync(grade, { recursive: true }).filter((p) => String(p).endsWith("secret.txt"))).toEqual([]);
+      expect(delta.dropped.map((d) => d.path)).toEqual(expect.arrayContaining(["a/b/c", "a/b/c/d"]));
+    }
+  });
 });
 
 /** The committed U11 tasks (docs/benchmarks/2026-11-lanea-shakedown/tasks), vendored from gstack: their setup and check commands as locked. */

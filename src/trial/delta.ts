@@ -12,7 +12,7 @@
 // - a baseline directory the agent replaced with a symlink (such as .gstack-home) stays a directory: graded as the
 //   directory the link points to when that is in the tree, else as the baseline's.
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 type Kind = "f" | "d" | "l" | "o";
@@ -102,6 +102,7 @@ function dirModes(root: string, out = new Map<string, number>()): Map<string, nu
 /** Imports the agent's changes (after) against the baseline into grade, a copy of the baseline. */
 export function importDelta(baseline: string, after: string, grade: string, paths?: readonly string[]): Delta {
   spawnSync("chmod", ["-R", "u+rX", after], { stdio: "ignore" });
+  const root = realpathSync(after);
   const before = scan(baseline);
   const now = scan(after);
   const scope = (paths ?? []).map((s) => s.replace(/\/+$/, ""));
@@ -112,13 +113,17 @@ export function importDelta(baseline: string, after: string, grade: string, path
   const relinked = () => [...now].find(([p, e]) => e.kind === "l" && before.get(p)?.kind === "d" && !delta.dropped.some((d) => d.path === p) && (inScope(p) || scope.some((s) => s.startsWith(p + "/"))))?.[0];
   for (let p = relinked(); p !== undefined; p = relinked()) {
     const target = now.get(p)!.target!;
-    const landed = resolveLink(p, target, now);
-    const dir = landed?.length ? now.get(landed.join("/")) : undefined;
-    if (dir?.kind === "d") {
-      now.set(p, dir);
+    let real = "";
+    try {
+      real = realpathSync(join(after, p));
+    } catch {}
+    const dir = real.startsWith(root + "/") ? statSync(real) : undefined;
+    const follow = dir?.isDirectory() === true;
+    if (follow) {
+      now.set(p, { kind: "d", mode: dir!.mode & 0o7777, size: dir!.size });
       walk(join(after, p), p, now);
     } else kept.push(p);
-    delta.dropped.push({ path: p, reason: "directory replaced by a symlink to " + target + "; graded as " + (dir?.kind === "d" ? "the directory it points to" : "the baseline's directory") });
+    delta.dropped.push({ path: p, reason: "directory replaced by a symlink to " + target + "; graded as " + (follow ? "the directory it points to" : "the baseline's directory") });
   }
   const graded = new Map([...before].filter(([p]) => !inScope(p)).concat([...now].filter(([p]) => inScope(p))));
   const gitConfig = (p: string) => p.split("/").some((s) => GIT_CONFIG.has(s));
