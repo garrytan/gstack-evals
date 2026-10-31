@@ -45,6 +45,8 @@ export interface Comparison {
   size_rule?: SizeRuleSpec;
   /** The smallest drop in false blockers per PR that counts (the preregistration freezes it). */
   false_blocker_drop?: number;
+  /** The decoy-only false-alarm gate (planning lane, open item 7): a LOSS is a claim only when the arm it calls better raises at most this many more must-fix false alarms per decoy, interval included. */
+  false_alarm_gate?: { margin_per_decoy: number };
   note?: string;
 }
 
@@ -337,6 +339,44 @@ function falseBlockers(suite: Suite, v: Arm, r: Arm, drop: number | null, noVerd
   return { complete: true, reasons, ...base, difference: round(d.delta), ci95: d.ci95 ? [round(d.ci95[0]), round(d.ci95[1])] : null, p_two_sided: test.p === null ? null : round(test.p, 6), min_p: test.min_p, clears_drop: drop === null ? null : d.delta <= -drop + 1e-9, interval_below_zero: d.ci95 ? d.ci95[1] < 0 : null };
 }
 
+/** The decoy-only false-alarm gate on the arm a LOSS calls better, the reference. */
+export interface FalseAlarmGate {
+  margin_per_decoy: number;
+  /** Decoy units: every blocker is a bait (over-blocking). The denominator. */
+  decoys: number;
+  /** Must-fix false alarms per pass per decoy. */
+  per_decoy: { variant: number; reference: number };
+  /** Reference minus variant, per pass per decoy: the excess of the arm a LOSS calls better. */
+  excess: number | null;
+  ci95: [number, number] | null;
+  reasons: string[];
+  /** PASS when the interval's upper end is within the margin; null when the reading is incomplete. */
+  result: "PASS" | "FAIL" | null;
+}
+
+/** Must-fix false alarms on decoys only, paired by decoy, with the decoy-clustered interval of the reference's excess. */
+function falseAlarmGate(suite: Suite, v: Arm, r: Arm, margin: number, noVerdict: string | null, opts: { seed: number; draws: number }): FalseAlarmGate {
+  const decoys = suite.units.filter((u) => u.blockers.every((b) => b.counts === "over-blocking"));
+  const reasons: string[] = noVerdict ? [noVerdict] : [];
+  if (!decoys.length) reasons.push("suite " + suite.id + " has no decoy units (units whose every blocker is a bait), so the gate has no denominator");
+  const tv = tallyFalseBlockers(suite, v);
+  const tr = tallyFalseBlockers(suite, r);
+  for (const t of [tv, tr]) if ("reason" in t) reasons.push(t.reason);
+  const empty = { margin_per_decoy: margin, decoys: decoys.length, per_decoy: { variant: 0, reference: 0 }, excess: null, ci95: null, result: null };
+  if ("reason" in tv || "reason" in tr) return { ...empty, reasons };
+  for (const [a, t] of [[v, tv], [r, tr]] as const) {
+    const n = decoys.reduce((s, u) => s + t.units.get(u.id)!.unadjudicated, 0);
+    if (n) reasons.push("arm " + a.arm.id + " has " + n + " must-fix finding" + (n > 1 ? "s" : "") + " on decoys with no adjudication row");
+  }
+  const vals = decoys.map((u) => ({ id: u.id, cluster: u.cluster, a: tv.units.get(u.id)!.false / v.arm.passes, b: tr.units.get(u.id)!.false / r.arm.passes }));
+  const mean = (k: "a" | "b") => (vals.length ? round(vals.reduce((s, x) => s + x[k], 0) / vals.length) : 0);
+  const per_decoy = { variant: mean("a"), reference: mean("b") };
+  if (reasons.length) return { ...empty, per_decoy, reasons };
+  const d = clusteredPairedDelta(vals, opts);
+  const ci95: [number, number] | null = d.ci95 ? [round(d.ci95[0]), round(d.ci95[1])] : null;
+  return { margin_per_decoy: margin, decoys: decoys.length, per_decoy, excess: round(d.delta), ci95, reasons, result: ci95 === null ? null : ci95[1] <= margin + 1e-9 ? "PASS" : "FAIL" };
+}
+
 export interface ArmMetrics {
   id: string;
   label: string;
@@ -480,6 +520,10 @@ export interface ScoreRecord {
     loss_family: { size: number; position: number; step: number; null: LossFamily["null"]; null_points: number } | null;
   };
   false_blockers: FalseBlockerReading | { reason: string };
+  /** Present only when the comparison declares a false-alarm gate. */
+  false_alarm_gate?: FalseAlarmGate;
+  /** Present only with a false-alarm gate: whether "the reference catches more than the variant" may be said. */
+  loss_claim?: { claim: string; eligible: boolean; reasons: string[] };
   size_rule: { source: "declared" | "simulated" | "unchecked"; power: number | null; goal: number; met: boolean | null; detail: string };
   agreement: { shared: number; table: { FF: number; FD: number; DF: number; DD: number } | null; agreement: number | null; kappa: number | null; reason: string | null };
   noise_floor: { repeat: string; delta: number; losses: number; gains: number; discordant_clusters: number } | { repeat: null; reason: string };
@@ -579,7 +623,9 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
     }
     const barResult = bar ? frozenBar(suite, bar, v, arms) : null;
     const size = sizeRule(suite, c.size_rule, v, r, stats.mean_a, c.margin_points, opts.seed, comparisons.length);
-    const warnings = verdict === "NO_LOSS" && size.met !== true ? ["NOLOSS_UNDERPOWERED"] : [];
+    const gate = c.false_alarm_gate ? falseAlarmGate(suite, v, r, c.false_alarm_gate.margin_per_decoy, d.noVerdict, opts) : null;
+    const warnings = verdict === "NO_LOSS" && size.met !== true ? ["NOLOSS_UNDERPOWERED"] : verdict === "LOSS" && gate && gate.result !== "PASS" ? ["FALSE_ALARM_GATE_FAIL"] : [];
+    const lossReasons = gate ? [...(verdict !== "LOSS" ? [verdict === null ? d.noVerdict! : "the verdict is " + verdict] : []), ...(gate.result !== "PASS" ? ["false-alarm gate " + (gate.result ?? "not read") + (gate.reasons.length ? " (" + gate.reasons.join("; ") + ")" : "")] : []), ...(c.post_hoc ? ["post hoc: the comparison was not preregistered before the arms ran"] : []), ...(labelled ? ["labelled judging: the judge saw arm labels"] : [])] : [];
     const claim = "non-inferior within " + c.margin_points + " points of blocking recall";
     const reasons: string[] = [];
     if (barResult && barResult.result !== "PASS") reasons.push("frozen bar, round " + barResult.round + ": " + (barResult.result ?? "not scored") + " (" + barResult.detail + ")");
@@ -638,6 +684,7 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
         loss_family: at >= 0 ? { size: family!.order.length, position: at + 1, step: lossHolm!.step[at]!, null: family!.null, null_points: family!.null === "margin" ? c.margin_points : 0 } : null,
       },
       false_blockers: falseBlockers(suite, v, r, c.false_blocker_drop ?? null, d.noVerdict, opts),
+      ...(gate ? { false_alarm_gate: gate, loss_claim: { claim: r.arm.id + " catches more of these blockers than " + v.arm.id, eligible: lossReasons.length === 0, reasons: lossReasons } } : {}),
       size_rule: size,
       agreement: agreement(suite, v, r),
       noise_floor: noise,
@@ -727,10 +774,17 @@ export function renderRecord(rec: ScoreRecord): string[] {
         (fb.drop === null ? "no smallest drop that counts was given" : "smallest drop that counts " + fb.drop + " per PR: the estimate " + (fb.clears_drop ? "clears it" : "does not clear it")) +
         "; the interval " + (fb.interval_below_zero ? "is below zero" : "does not exclude zero or lies above it") + ".",
     );
+  const g = rec.false_alarm_gate;
+  if (g)
+    out.push(
+      "false-alarm gate (decoys only, margin " + g.margin_per_decoy + " per decoy): must-fix false alarms per decoy per pass " + rec.reference.id + " " + g.per_decoy.reference.toFixed(2) + ", " + rec.variant.id + " " + g.per_decoy.variant.toFixed(2) + " on " + g.decoys + " decoys; " +
+        (g.result === null ? "not read (" + g.reasons.join("; ") + ")" : rec.reference.id + "'s excess " + two(g.excess!) + " [95% CI " + two(g.ci95![0]) + ", " + two(g.ci95![1]) + "]: " + g.result) + ".",
+    );
   const c = rec.cost;
   if ("reason" in c) out.push("cost: " + c.reason + ".");
   else out.push("cost on the " + c.variant.units + " units metered in both (" + c.grade + "): " + rec.variant.id + " " + mtok(c.variant.per_unit_mean) + " per unit, " + mtok(c.variant.per_blocker_found) + " per blocker found; " + rec.reference.id + " " + mtok(c.reference.per_unit_mean) + " per unit, " + mtok(c.reference.per_blocker_found) + " per blocker found.");
   out.push("claim \"" + rec.eligibility.claim + "\": " + (rec.eligibility.eligible ? "may be made" : "may not be made: " + rec.eligibility.reasons.join("; ")) + ".");
+  if (rec.loss_claim) out.push("claim \"" + rec.loss_claim.claim + "\": " + (rec.loss_claim.eligible ? "may be made" : "may not be made: " + rec.loss_claim.reasons.join("; ")) + ".");
   return out;
 }
 

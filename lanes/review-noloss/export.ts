@@ -66,6 +66,8 @@ export function loadComparisons(path: string): { file: ComparisonsFile; sha256: 
     if (c.frozen_bar !== null && typeof c.frozen_bar !== "string") bad(path, at + ": frozen_bar is a round or null");
     const s = c.size_rule as Record<string, unknown> | undefined;
     if (c.false_blocker_drop !== undefined && !(typeof c.false_blocker_drop === "number" && c.false_blocker_drop >= 0)) bad(path, at + ": false_blocker_drop is a non-negative number of false blockers per PR");
+    const g = c.false_alarm_gate as { margin_per_decoy?: unknown } | undefined;
+    if (g !== undefined && !(g && typeof g === "object" && Object.keys(g).length === 1 && typeof g.margin_per_decoy === "number" && g.margin_per_decoy >= 0)) bad(path, at + ": false_alarm_gate is { margin_per_decoy: <a non-negative number of must-fix false alarms per decoy> }");
     if (s !== undefined && !(typeof s.power === "number" && typeof s.source === "string") && !(Number.isSafeInteger(s.power_sims) && (s.power_sims as number) > 0)) bad(path, at + ": size_rule is {power, source} or {power_sims, spread}");
   }
   const fam = file.loss_family as LossFamily | undefined;

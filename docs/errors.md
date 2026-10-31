@@ -115,6 +115,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CELL_RULE](#e_cell_rule) | 2 | U10 |
 | [E_CODEX_CONFIG](#e_codex_config) | 2 | U10 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
+| [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -929,5 +930,13 @@ Warning. Owner: U9.
 A review no-loss comparison reached NO_LOSS, but the size rule is unchecked or below 80%: an arm exactly as good as the reference would pass less than 80% of the time. The verdict prints with this warning, exits 2, and is not a no-loss claim.
 
 Fix: Check the size rule with --power-sims (or the prereg's --power), and buy more PRs or passes until it reaches 80% before stating the claim.
+
+Warning. Owner: U13.
+
+### FALSE_ALARM_GATE_FAIL
+
+A review no-loss comparison reached LOSS, so its reference caught more blockers, but the comparison's decoy-only false-alarm gate did not pass: the reference's excess must-fix false alarms per decoy has a 95% interval reaching past the preregistered margin, or the reading is incomplete. The verdict prints with this warning and exits 1, and the claim that the reference catches more may not be made.
+
+Fix: Report the LOSS with its false-alarm reading and no claim. Adjudicate any unadjudicated must-fix finding on the decoys; never widen the margin after the run.
 
 Warning. Owner: U13.

@@ -23,6 +23,7 @@ import { shellCommands } from "../../src/grade/transcript.ts";
 import { toldSkill, type ToldArm } from "../../src/trial/review/told.ts";
 import { parseTsv } from "./contract.ts";
 import { ScoreError } from "./score.ts";
+import { isPlanCase } from "../review-replay/catalog/catalog.ts";
 import { resolveUnit, suiteCases, type Suite, type Unit } from "./suite.ts";
 
 export const SESSION_HOME = "/home/agent";
@@ -152,7 +153,7 @@ export function flagScan(o: { suite: Suite; run: string; audit: string; home?: s
       for (const u of listed) {
         const unit = unitOf(u.id, "units.json");
         const files = audit.get(unit.id + " " + arm) ?? new Set<string>();
-        const fixes = unit.blockers.map((b) => cases.get(b.case)?.fix?.commit).filter((s): s is string => typeof s === "string").map((s) => s.toLowerCase());
+        const fixes = unit.blockers.map((b) => cases.get(b.case)).map((c) => (c && !isPlanCase(c) ? c.fix.commit : undefined)).filter((s): s is string => typeof s === "string").map((s) => s.toLowerCase());
         const prWord = new RegExp("(?<![0-9])" + unit.pr + "(?![0-9])");
         const dir = join(runs, model, arm, u.task);
         for (const p of existsSync(dir) ? readdirSync(dir).filter((x) => /^p\d+$/.test(x)).sort() : []) {

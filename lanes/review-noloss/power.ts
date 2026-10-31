@@ -3,6 +3,13 @@
 // simulated blocker gets a reference detection rate from a beta distribution with the stated mean recall and spread;
 // the variant's rates are the reference's scaled so its mean recall moves by exactly delta. Each arm's passes are
 // independent draws, and every simulated comparison runs the exact tests in stats.ts. No model is called.
+//
+// Two options serve the planning lane (plan 2026-10-31-geva-79-planning-lane-plan, B1 and open item 12). alpha sets
+// both tests' alpha, so a Holm family's strictest step (0.05 over its size) can be simulated. dependence makes the
+// blockers of one PR cluster (the flaws of one plan) move together within a pass: in each pass, each blocker's draw is,
+// with probability dependence, the one draw its cluster shares in that pass, and otherwise its own. Every blocker keeps
+// its detection rate, while the flaws of one plan tend to be caught or missed together (0 independent, 1 one draw per
+// plan per pass).
 import { seededRandom } from "../../src/runner/stats/paired.ts";
 import { ALPHA, decide, pairedTests } from "./stats.ts";
 import type { Suite } from "./suite.ts";
@@ -24,6 +31,10 @@ export interface PowerInput {
   seed: number;
   /** The no-loss test's alpha; an export's Holm family faces 0.05 / its size at the strictest step. */
   alpha_no_loss?: number;
+  /** Both tests' alpha (alpha_no_loss, when set, still wins for the no-loss test). Default 0.05. */
+  alpha?: number;
+  /** The share of each blocker's beta concentration drawn once per PR cluster, from 0 to 1. Default 0. */
+  dependence?: number;
 }
 
 export interface PowerResult {
@@ -76,6 +87,10 @@ export function simulate(input: PowerInput): PowerResult {
   if (input.delta_points > 0) throw new Error("delta is zero or a loss; a gain is not simulated");
   if (!Number.isSafeInteger(sims) || sims < 1) throw new Error("--sims is a positive integer");
   if (clusters.length < 2) throw new Error("the size rule needs at least 2 PR clusters");
+  const alpha = input.alpha ?? ALPHA;
+  if (!(alpha > 0 && alpha < 1)) throw new Error("--alpha is a share strictly between 0 and 1");
+  const dependence = input.dependence ?? 0;
+  if (!(dependence >= 0 && dependence <= 1)) throw new Error("--dependence is a share from 0 to 1");
   const rng = seededRandom(input.seed);
   const cluster = clusters.flatMap((n, c) => Array.from({ length: n }, () => "c" + String(c).padStart(3, "0")));
   const passes = [input.passes_reference, input.passes_variant];
@@ -83,6 +98,18 @@ export function simulate(input: PowerInput): PowerResult {
     let hits = 0;
     for (let i = 0; i < p; i++) if (rng() < rate) hits++;
     return hits / p;
+  };
+  const plan = (rates: number[], p: number): number[] => {
+    const hits = rates.map(() => 0);
+    for (let pass = 0; pass < p; pass++) {
+      const draws = new Map<string, number>();
+      rates.forEach((rate, i) => {
+        if (!draws.has(cluster[i]!)) draws.set(cluster[i]!, rng());
+        const own = rng();
+        if ((rng() < dependence ? draws.get(cluster[i]!)! : own) < rate) hits[i]!++;
+      });
+    }
+    return hits.map((h) => h / p);
   };
   let noLoss = 0;
   let loss = 0;
@@ -93,9 +120,15 @@ export function simulate(input: PowerInput): PowerResult {
     });
     const mean = rates.reduce((a, r) => a + r, 0) / rates.length;
     const scale = mean > 0 ? Math.max(0, mean + input.delta_points / 100) / mean : 1;
-    const pairs = rates.map((r, i) => ({ id: String(i), cluster: cluster[i]!, a: share(r, input.passes_reference), b: share(Math.min(1, r * scale), input.passes_variant) }));
+    const pairs = dependence === 0
+      ? rates.map((r, i) => ({ id: String(i), cluster: cluster[i]!, a: share(r, input.passes_reference), b: share(Math.min(1, r * scale), input.passes_variant) }))
+      : (() => {
+          const a = plan(rates, input.passes_reference);
+          const b = plan(rates.map((r) => Math.min(1, r * scale)), input.passes_variant);
+          return rates.map((_, i) => ({ id: String(i), cluster: cluster[i]!, a: a[i]!, b: b[i]! }));
+        })();
     const t = pairedTests(pairs, input.margin_points, passes);
-    const v = decide(t.no_loss.p, t.loss.p, input.alpha_no_loss ?? ALPHA);
+    const v = decide(t.no_loss.p, t.loss.p, input.alpha_no_loss ?? alpha, alpha);
     if (v === "NO_LOSS") noLoss++;
     else if (v === "LOSS") loss++;
   }
@@ -124,10 +157,11 @@ export interface PowerRow {
 }
 
 /** The plan's power table for each design: equal arms at every margin, false NO_LOSS at minus the first margin, and a stated loss. */
-export function powerTable(designs: PowerDesign[], o: { recall: number; spread: number; margins: number[]; loss_points: number | null; sims: number; seed: number }): PowerRow[] {
+export function powerTable(designs: PowerDesign[], o: { recall: number; spread: number; margins: number[]; loss_points: number | null; sims: number; seed: number; alpha?: number; dependence?: number }): PowerRow[] {
   if (!o.margins.length) throw new Error("the size rule needs at least one margin");
+  const extra = { ...(o.alpha !== undefined ? { alpha: o.alpha } : {}), ...(o.dependence !== undefined ? { dependence: o.dependence } : {}) };
   return designs.map((d) => {
-    const run = (margin: number, delta: number) => simulate({ clusters: d.clusters, passes_variant: d.passes, passes_reference: d.passes, recall: o.recall, spread: o.spread, margin_points: margin, delta_points: delta, sims: o.sims, seed: o.seed });
+    const run = (margin: number, delta: number) => simulate({ clusters: d.clusters, passes_variant: d.passes, passes_reference: d.passes, recall: o.recall, spread: o.spread, margin_points: margin, delta_points: delta, sims: o.sims, seed: o.seed, ...extra });
     const off = run(o.margins[0]!, -o.margins[0]!);
     return {
       label: d.label,
