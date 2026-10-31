@@ -142,7 +142,7 @@ Haiku's gstack minus placebo is -8 [-22, +5] on the original 20 and -5 [-12, +2]
 
 ## particle-1 beside DeepSeek V4.1 Flash
 
-Same day, same jobs, paired by task. particle-1 minus DeepSeek is -10 [-20, -2] with no skills, -5 [-13, +2] with gstack and -3 [-9, +4] with placebo. particle-1 uses fewer tokens per trial (median 352k vs 489k with no skills) but its cache reads cost five times DeepSeek's, so its cost per success is higher ($0.10 to $0.11 vs $0.08). By the prereg's rule, particle-1's token savings come at a cost in passes, and DeepSeek stays the cheaper rung to carry forward.
+Same day, same jobs, paired by task. particle-1 minus DeepSeek is -10 [-20, -2] with no skills, -5 [-13, +2] with gstack and -3 [-9, +4] with placebo. particle-1 uses fewer tokens per trial (median 352k vs 492k with no skills) but its cache reads cost five times DeepSeek's, so its cost per success is higher ($0.10 to $0.11 vs $0.08). By the prereg's rule, particle-1's token savings come at a cost in passes, and DeepSeek stays the cheaper rung to carry forward.
 
 ## Model comparison (secondary, exploratory)
 
@@ -289,7 +289,7 @@ laneb3-pilot: Sonnet 5.5 and particle-1, arms gstack and placebo, 5 tasks, 1 tri
 
 ## What this means
 
-On these 39 tasks gstack's `/investigate` body does not help any of the four cheaper models, with a body-load rate of 100%. Quick look 2's loss on Opus and Haiku extends to Sonnet 5.5, particle-1 and DeepSeek V4.1 Flash, though the losses are small and none is clearly below zero on its own. The skill stays on the two tracks: harder tasks with headroom, or cutting the lines that do not help.
+On these 39 tasks gstack's `/investigate` body does not help any of the four cheaper models, with a body-load rate of 100%. Quick look 2's loss to placebo on Opus, Haiku and DeepSeek V4.1 Flash shows again on Haiku and DeepSeek and extends to Sonnet 5.5 and particle-1, though the losses are small and none is clearly below zero on its own. The skill stays on the two tracks: harder tasks with headroom, or cutting the lines that do not help.
 
 The ladder question needs harder tasks. Opus 5.5 with no skills passes 79% and DeepSeek with no skills matches it, so there is no gap here for gstack to close. particle-1 is not a cheaper substitute for DeepSeek on this harness.
 
