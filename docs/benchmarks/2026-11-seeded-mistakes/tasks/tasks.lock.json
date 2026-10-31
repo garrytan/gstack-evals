@@ -2,7 +2,7 @@
   "schema_version": 1,
   "tasks": {
     "file": "tasks.json",
-    "sha256": "39c1954fea9ca3cc7bceee5fdf624f6cf33d1138c505e0f15502d993707aebea"
+    "sha256": "d239ef0af5c04e41e5076c71e3d6e379c4de606a1dea1362f711cfb2d7127963"
   },
   "ext": null,
   "policy": {

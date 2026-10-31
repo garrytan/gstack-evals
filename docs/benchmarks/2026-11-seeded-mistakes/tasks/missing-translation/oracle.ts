@@ -1,4 +1,5 @@
-// Behavior oracle for missing-translation. Every scenario: no page shows a raw message key in English or French.
+// Behavior oracle for missing-translation. Every scenario: no page shows a raw message key or a blank line in English or
+// French.
 // final and touch also: the French pages are in French.
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
@@ -16,6 +17,7 @@ test("no page shows a raw message key", async () => {
     for (const locale of ["en", "fr"]) {
       const out = await render(locale);
       for (const key of keys) expect(out, name + " in " + locale).not.toContain(key);
+      for (const line of out.split("\n")) expect(line.trim(), name + " in " + locale + " shows a blank line").not.toBe("");
     }
   }
 });

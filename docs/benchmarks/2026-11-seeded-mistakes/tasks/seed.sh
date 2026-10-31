@@ -4,6 +4,7 @@
 # <task id>/history.sh writes the repo one commit at a time: package_json names the app, put writes a file from stdin,
 # and commit records everything written since the last commit.
 set -eu
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 task="${1:-}"
 here=$(cd "$(dirname "$0")" && pwd)
 case "$task" in '' | *[!a-z0-9-]*) echo "E_TASKS_INVALID: seed.sh: no task named '$task'" >&2; exit 2 ;; esac
