@@ -94,7 +94,7 @@ async function run(tier: Tier, arm: ArmInstall, cell: CellSettings, prompt: stri
 }
 
 const BOOT = 'BUN_CONFIG_REGISTRY=http://127.0.0.1:9 bun "$HOME/.local/share/pstack/skills/poteto-mode/scripts/watch-pr/watch-pr" --help >/dev/null 2>&1; echo "exit=$?"';
-const SOL = 'S=$(mktemp -d) && printf "Review only. CANARY brief.\\n" > "$S/brief.md" && codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --ephemeral -m gpt-6.1-sol --output-last-message "$S/reply.md" - < "$S/brief.md" > "$S/codex.log" 2>&1; echo "exit=$?"; cat "$S/reply.md"; tail -3 "$S/codex.log"';
+const SOL = 'S=$(mktemp -d) && printf "Review only. CANARY brief.\\n" > "$S/brief.md" && codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --ephemeral --output-last-message "$S/reply.md" - < "$S/brief.md" > "$S/codex.log" 2>&1; echo "exit=$?"; cat "$S/reply.md"; tail -3 "$S/codex.log"';
 
 async function pstackCanary(tier: Tier, arm: ArmInstall, cell: CellSettings): Promise<void> {
   const root = join(arm.layers[0]!.src, arm.plugins[0]!);

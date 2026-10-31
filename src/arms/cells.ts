@@ -13,7 +13,7 @@
 // - Codex: in a voice cell, an arm whose stack keeps a voice (gstack's outside voice, tstack's Sol reviewer) gets the
 //   Claude Code driver's codex option, which writes the session's ~/.codex/config.toml with no credential in it.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dirTreeSha256 } from "../trial/cache.ts";
 import { canonicalize, InstallError, type ArmInstall, type Layer } from "./install.ts";
@@ -65,22 +65,25 @@ export function pstackModelsRule(setupSkill: string, cell: Cell): string | null 
   return roles ? out.join("\n").trim() + "\n" : null;
 }
 
-/** The settings of one arm in one cell; a layer is written under dir when the cell adds files. */
+/** The settings of one arm in one cell. A cell that adds files writes its layer under dir, in a folder named by its content, so cells may share dir. */
 export function cellSettings(install: ArmInstall, cell: Cell, dir: string): CellSettings {
   const kind = install.provenance.kind === "stack" ? stackKind(install.provenance.stack as StackRef) : null;
   let layer: Layer | null = null;
   if (kind?.plugin && install.plugins.length) {
-    const file = join(install.layers[0]!.src, install.plugins[0]!, "skills", "setup-pstack", "SKILL.md");
-    const rule = existsSync(file) ? pstackModelsRule(readFileSync(file, "utf8"), cell) : null;
-    if (rule === null) throw new InstallError("E_CELL_RULE", "arm " + install.name + ": " + install.plugins[0] + "/skills/setup-pstack/SKILL.md holds no rule shape with role lines in its step 5, so the cell's " + PSTACK_RULE + " cannot be derived");
-    rmSync(dir, { recursive: true, force: true });
-    mkdirSync(join(dir, ".claude", "rules"), { recursive: true });
-    writeFileSync(join(dir, PSTACK_RULE), rule);
-    canonicalize(dir, null);
-    layer = { src: dir, dest: "" };
+    const root = join(install.layers[0]!.src, install.plugins[0]!);
+    const file = join(root, "skills", "setup-pstack", "SKILL.md");
+    const inside = existsSync(file) && realpathSync(file).startsWith(realpathSync(root) + "/") && statSync(file).isFile();
+    const rule = inside ? pstackModelsRule(readFileSync(file, "utf8"), cell) : null;
+    if (rule === null) throw new InstallError("E_CELL_RULE", "arm " + install.name + ": " + install.plugins[0] + "/skills/setup-pstack/SKILL.md is missing, leaves the plugin, or holds no rule shape with role lines in its step 5, so the cell's " + PSTACK_RULE + " cannot be derived");
+    const at = join(dir, createHash("sha256").update(rule).digest("hex").slice(0, 16));
+    rmSync(at, { recursive: true, force: true });
+    mkdirSync(join(at, ".claude", "rules"), { recursive: true });
+    writeFileSync(join(at, PSTACK_RULE), rule);
+    canonicalize(at, null);
+    layer = { src: at, dest: "" };
   }
   const gstack_config: Record<string, string> = install.gstack ? { agent_model: "host", codex_reviews: cell.voice ? "enabled" : "disabled" } : {};
   const codex = cell.voice && (install.gstack || kind?.voice) ? { model: cell.voice } : null;
-  const parts = [install.tree_sha256, layer ? PSTACK_RULE + " " + dirTreeSha256(dir) : "", JSON.stringify(gstack_config), JSON.stringify(codex)];
+  const parts = [install.tree_sha256, layer ? PSTACK_RULE + " " + dirTreeSha256(layer.src) : "", JSON.stringify(gstack_config), JSON.stringify(codex)];
   return { cell, layer, gstack_config, codex, tree_sha256: createHash("sha256").update(parts.join("\n")).digest("hex") };
 }

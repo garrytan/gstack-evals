@@ -485,8 +485,10 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
             writeFileSync(join(home, folder, "SKILL.md"), text);
           }
           for (const p of plugins) {
+            const manifest = resolveIn(tree, p + "/.claude-plugin/plugin.json");
+            if (!isFile(tree, manifest)) throw new InstallError("E_IMAGE_BUILD", "placebo arm " + arm.name + ": " + p + "/.claude-plugin/plugin.json is missing or leaves the installed tree");
             mkdirSync(join(home, p, ".claude-plugin"), { recursive: true });
-            writeFileSync(join(home, p, ".claude-plugin", "plugin.json"), readFileSync(join(tree, p, ".claude-plugin", "plugin.json")));
+            writeFileSync(join(home, p, ".claude-plugin", "plugin.json"), readFileSync(join(tree, manifest)));
           }
           canonicalize(home, null);
         });

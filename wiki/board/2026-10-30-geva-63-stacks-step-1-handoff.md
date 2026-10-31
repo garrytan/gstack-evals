@@ -34,16 +34,17 @@ This is step 1 of section 10 of the [stacks round 1 plan](../plans/2026-10-30-ge
 
 ## Canary results
 
-tests/arms/stack-canary.test.ts passed both tiers on 2026-10-30 (GEVA-63's machine, Claude Code 2.1.314, Codex 0.166.0). Each told command resolved with its skill body in the first model request. pstack:poteto-agent started as a subagent. tstack's Sol subagent ran `codex exec`, which reached the fake upstream as gpt-6.1-sol on the session's slot with the proxy's key, never the session's. poteto-mode's watch-pr ran with the registry pointed at a closed port. The Docker tier did the same from trial image gstack-evals-trial:20aba56c362bcd81 and wrote this arms.json:
+tests/arms/stack-canary.test.ts passed both tiers on 2026-10-30 (GEVA-63's machine, Claude Code 2.1.314, Codex 0.166.0). Each told command resolved with its skill body in the first model request. pstack:poteto-agent started as a subagent. tstack's Sol subagent ran `codex exec`, which reached the fake upstream as gpt-6.1-sol on the session's slot with the proxy's key, never the session's. poteto-mode's watch-pr ran with the registry pointed at a closed port. The Docker tier did the same from trial image gstack-evals-trial:e742c72a07d63feb, at the PR's final rig code, and wrote this arms.json:
 
 | Arm | Repo at sha | Subtree | Git tree | Tree sha256 | Image digest |
 |---|---|---|---|---|---|
-| pstack | cursor/plugins@c742dd61706f | harness/pstack/claude-code | cdbbd4ca5dd2 | eb7aeda94b0e | sha256:1ba6679788f2 |
-| pstack, Opus cell | | | | 82d976158c28 (cell tree) | sha256:eb97f00f89ee |
-| pstack, Haiku cell | | | | 19a92365e55c (cell tree) | sha256:27102fb9c71c |
-| tstack | t3dotgg/tstack@1085050f3bae | | a939d866f545 | 0abdb52c9996 | sha256:91a57f55fc26 |
+| pstack | cursor/plugins@c742dd61706f | harness/pstack/claude-code | cdbbd4ca5dd2 | eb7aeda94b0e | sha256:184593c04fd9 |
+| pstack, Opus cell | | | | 82d976158c28 (cell tree) | sha256:c6d9e9234bb0 |
+| pstack, Haiku cell | | | | 19a92365e55c (cell tree) | sha256:c494c2070ab5 |
+| tstack | t3dotgg/tstack@1085050f3bae | | a939d866f545 | 0abdb52c9996 | sha256:fc1dfedf0055 |
+| tstack, Opus cell | | | | b0b7c40c78ba (cell tree) | sha256:fc1dfedf0055 (no cell layer) |
 
-tstack's Sol file has sha256 af8c6c4f271d56a47b6ebbe6b776d2c8889e19ec1411da090f4d8396f2d07244. The digests depend on the builder image and are re-made at preregistration.
+tstack's Sol file has sha256 6bdfc26fd62a95dbe1657f279ba378f760712645ada05c0117e507bddf7798e9. It takes its model from the session's Codex config, so the cell's voice is the one source of the model. The digests depend on the builder image and are re-made at preregistration.
 
 ## For step 2 (review units as trials)
 
@@ -51,6 +52,9 @@ tstack's Sol file has sha256 af8c6c4f271d56a47b6ebbe6b776d2c8889e19ec1411da090f4
 - For each cell, call `cellSettings(install, cell, dir)`. Use its `tree_sha256` as the session key's arm tree, pass `gstack_config` to `seedStateRoot`'s new `extra` argument (runTrial does not pass it yet), and pass `codex` and the arm's plugin roots (joined to the agent's HOME) to `hostDriver`. `armImages` with `cells` returns each cell's image as `<arm>@<model>`.
 - The proxy binding in an Opus cell must admit `openai:gpt-6.1-sol` beside the cell's model, or the voice is refused. That allowlist is yours.
 - T5 (origin refs for head-only units) is still open; gstack /review and sol-loop both look for a base.
+- When the Sol relay fails (the proxy refuses the voice, or Codex errors), the subagent replies `SOL UNAVAILABLE:` as plain text, and sol-loop then stops without a review. Score that as a missing cell with its own reason code, not as a tstack miss, and count voice failures for gstack's outside voice the same way (/ship's red team on #88).
+- `armImages` keys cell images by arm and model and refuses two cells on one model for an arm. A no-voice ablation on Opus needs its own arm name.
+- `skillUse` now counts a Skill call through any plugin namespace (`pstack:interrogate`) as opening the skill.
 
 ## For step 3 (TB2 arms)
 

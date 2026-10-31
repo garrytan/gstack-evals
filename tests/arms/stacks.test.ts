@@ -11,7 +11,7 @@ import { getEncoding } from "js-tiktoken";
 import { cellSettings, PSTACK_RULE, pstackModelsRule } from "../../src/arms/cells.ts";
 import { installArms, InstallError, localInstaller, stackTree, type ArmInstall } from "../../src/arms/install.ts";
 import { SOL_AGENT, stackKind, STACKS } from "../../src/arms/stacks.ts";
-import { claudeCodeEnv, codexConfigCommand } from "../../src/adapters/claude-code/driver.ts";
+import { claudeCodeDriver, claudeCodeEnv, codexConfigCommand } from "../../src/adapters/claude-code/driver.ts";
 import { parseStackRef } from "../../src/skill-eval/cli/arms.ts";
 import { trialEnv } from "../../src/trial/env.ts";
 import { seedStateRoot } from "../../src/trial/state-root.ts";
@@ -60,6 +60,7 @@ function pstackRepo(): { root: string; sha: string; ref: StackRef } {
   write(join(p, "skills", "interrogate", "SKILL.md"), skill("interrogate", PROCEDURE.repeat(4)));
   write(join(p, "skills", "poteto-mode", "SKILL.md"), skill("poteto-mode", "POTETO-PROCEDURE pick a playbook and copy its steps."));
   write(join(p, "skills", "poteto-mode", "playbooks", "bug-fix.md"), "PLAYBOOK-TEXT\n");
+  write(join(p, "skills", "poteto-mode", "scripts", "bootstrap.ts"), "export function ensureDependenciesInstalled(): void {}\n");
   write(join(p, "skills", "setup-pstack", "SKILL.md"), skill("setup-pstack", SETUP));
   write(join(p, "agents", "poteto-agent.md"), "---\nname: poteto-agent\ndescription: d\n---\nAGENT-TEXT\n");
   const commit = commitAll(root, "pstack");
@@ -162,6 +163,16 @@ describe("pstack and tstack installs", () => {
     expect(t.plugins).toEqual([]);
   });
 
+  // Value: protects=pstack's installer runs its own bootstrap and fails when the tree has none, so an arm never ships without poteto-mode's script dependencies; fails_when=the installer skips a missing bootstrap and the arm installs anyway; why_new=ship #88 red team (a re-pinned tree whose bootstrap moved would score as pstack losses); seam=PSTACK_INSTALL through installArms; no_claim=the real bootstrap's dependency install, which the canary runs
+  test("pstack without poteto-mode's bootstrap fails to install", () => {
+    const root = scratch("plugins-nb");
+    const p = join(root, "harness", "pstack", "claude-code");
+    write(join(p, ".claude-plugin", "plugin.json"), "{}\n");
+    write(join(p, "skills", "interrogate", "SKILL.md"), skill("interrogate", "x"));
+    const commit = commitAll(root, "no bootstrap");
+    expect(stop(() => install("claude", [stackArm("pstack", { repo: "cursor/plugins", sha: commit, path: "harness/pstack/claude-code" })], "interrogate", [root]))).toBe("E_IMAGE_BUILD");
+  });
+
   // Value: protects=a listed stack with no installer for the host is refused, rather than falling back to gstack's setup; fails_when=pstack on Codex runs ./setup or installs nothing silently; why_new=GST-370 step 1 (installers in the per-host install map); seam=installArms; no_claim=none
   test("a host the stack has no installer for is refused", () => {
     expect(stop(() => install("codex", [stackArm("pstack", ps.ref)], "interrogate", [ps.root]))).toBe("E_USAGE");
@@ -184,6 +195,11 @@ describe("pstack and tstack installs", () => {
       expect(a.tree_sha256).not.toBe(b.tree_sha256);
       expect([a.codex, a.gstack_config]).toEqual([null, {}]);
       expect(stop(() => cellSettings(placebo, opus, join(scratch("cell"), "c")))).toBe("no error");
+      const shared = scratch("cell");
+      const x = cellSettings(pstack, opus, shared);
+      const y = cellSettings(pstack, cheap, shared);
+      expect(readFileSync(join(x.layer!.src, PSTACK_RULE), "utf8")).toContain("opus xhigh");
+      expect(readFileSync(join(y.layer!.src, PSTACK_RULE), "utf8")).not.toContain("opus");
     });
 
     // Value: protects=gstack's cell keys pin readers to the parent and turn the outside voice on only in a voice cell, and a voice stack (tstack) gets the codex option only there; fails_when=a cheap cell enables codex_reviews or the voice, or an Opus cell drops it; why_new=GST-370 step 1 (per-cell gstack preferences, Codex for gstack's outside voice and tstack's reviewer); seam=cellSettings; no_claim=gstack honouring the keys, which gstack's own tests cover
@@ -222,5 +238,28 @@ describe("Codex in a Claude Code session", () => {
     expect(env.OPENAI_API_KEY).toBe(proxy.token);
     expect(trialEnv("agent", { PATH: "/usr/bin", HOME: "/home/agent", ...env }, [], {}).OPENAI_API_KEY).toBe(proxy.token);
     expect(claudeCodeEnv({ model: "m", provider: "anthropic", proxy }).OPENAI_API_KEY).toBeUndefined();
+  });
+
+  // Value: protects=a failed Codex config step ends the cell as missing E_CODEX_CONFIG before Claude Code starts, with no bearer in the log, and plugin roots reach the SDK as local plugins while an arm without them sends none; fails_when=the exit check is dropped and the CLI starts without the config, or the roots are lost between the driver option and the SDK; why_new=ship #88 testing review and coverage audit; seam=claudeCodeDriver; no_claim=hostDriver and runOnHost passing the roots, which the canary's sessions exercise
+  test("a failed Codex config step is a missing cell, and plugin roots reach the SDK", async () => {
+    const proxy = { baseUrl: "http://proxy:8080", slot: "s1", token: "gse_" + "B".repeat(43) };
+    const seen: Record<string, unknown>[] = [];
+    const query = ((a: { options: Record<string, unknown> }) => {
+      seen.push(a.options);
+      return (async function* () {})();
+    }) as never;
+    const session = (exitCode: number) => ({ exec: () => ({ exitCode, timedOut: false, stdout: "", stderr: "read-only file system" }), spawn: () => { throw new Error("unused"); }, stop() {} }) as never;
+    const task = { id: "t", prompt: "p" } as never;
+    const out = scratch("out");
+    const failed = await claudeCodeDriver({ model: "claude-opus-5-5", provider: "anthropic", proxy, skill: null, out, codex: { provider: "openai", model: "gpt-6.1-sol" }, query }).run(session(1), task, 10_000);
+    expect(failed.termination).toEqual({ kind: "missing", code: "E_CODEX_CONFIG" });
+    expect(seen).toHaveLength(0);
+    const log = readFileSync(join(out, "cli-stderr.log"), "utf8");
+    expect(log).toContain("exited 1");
+    expect(log).not.toContain(proxy.token);
+    await claudeCodeDriver({ model: "claude-opus-5-5", provider: "anthropic", proxy, skill: null, out: scratch("out"), plugins: ["/sandbox/pstack"], query }).run(session(0), task, 10_000);
+    await claudeCodeDriver({ model: "claude-opus-5-5", provider: "anthropic", proxy, skill: null, out: scratch("out"), query }).run(session(0), task, 10_000);
+    expect(seen[0]!.plugins).toEqual([{ type: "local", path: "/sandbox/pstack" }]);
+    expect("plugins" in seen[1]!).toBe(false);
   });
 });

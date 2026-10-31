@@ -12,7 +12,8 @@
 // - tstack: the whole tree, installed by the copy of skills/ into the host's skills directory that its README gives.
 //   sol-loop runs Sol only through a subagent set up for it and refuses to substitute a model, so the arm adds one
 //   rig-authored, disclosed file: agents/sol.md beside this module, at ~/.claude/agents/sol.md. It relays the brief to
-//   gpt-6.1-sol through the Codex CLI on the session's proxy slot, and its sha256 is in the arm's provenance.
+//   the cell's voice (gpt-6.1-sol) through the Codex CLI on the session's proxy slot, taking the model from the
+//   session's Codex config, and its sha256 is in the arm's provenance.
 // - gstack is not listed: a stack arm whose repository is not listed here runs gstack's own ./setup (stackInstall).
 import { fileURLToPath } from "node:url";
 import type { Host, StackRef } from "../types.ts";
@@ -41,8 +42,8 @@ export interface StackKind {
 
 export const SOL_AGENT = fileURLToPath(new URL("./agents/sol.md", import.meta.url));
 
-/** pstack's installer: its own bootstrap installs poteto-mode's script dependencies from their lockfile. */
-const PSTACK_INSTALL = "if [ -f skills/poteto-mode/scripts/bootstrap.ts ]; then (cd skills/poteto-mode/scripts && bun -e 'import(\"./bootstrap.ts\").then((m) => m.ensureDependenciesInstalled())'); fi";
+/** pstack's installer: its own bootstrap installs poteto-mode's script dependencies from their lockfile. A tree without it fails to install. */
+const PSTACK_INSTALL = "(cd skills/poteto-mode/scripts && bun -e 'import(\"./bootstrap.ts\").then((m) => m.ensureDependenciesInstalled())')";
 
 export const STACKS: readonly StackKind[] = [
   {

@@ -433,6 +433,8 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
     images.set(arm.name + "#calibration", calibration.tag);
     const kept = (l: Layer) => ({ dest: l.dest, ...(o.retain ? { retained: retainTree(l.src, o.retain) } : { tree_sha256: dirTreeSha256(l.src) }) });
     const layers = arm.layers.map(kept);
+    const models = (o.cells?.[arm.name] ?? []).map((c) => c.cell.model);
+    if (new Set(models).size !== models.length) throw new Error("E_USAGE: arm " + arm.name + " has two cells on one model; cell images are keyed by arm and model");
     const cells = (o.cells?.[arm.name] ?? []).map((c) => {
       const built = c.layer ? build(image.tag, [c.layer]) : image;
       images.set(arm.name + "@" + c.cell.model, built.tag);
