@@ -1,11 +1,24 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { snapshot } from "../../lanes/review-noloss/ingest.ts";
-import { REPO_ROOT } from "../../lanes/review-noloss/suite.ts";
+import { readArmDir, snapshot } from "../../lanes/review-noloss/ingest.ts";
+import { findingSha256 } from "../../lanes/review-noloss/judge.ts";
+import { loadSuite, REPO_ROOT } from "../../lanes/review-noloss/suite.ts";
 import { cleanup, editArm, editJudgments, run, tmp, writeArm } from "./helpers.ts";
 
 afterAll(cleanup);
+type Entry = { packet: string; opaque: string; arm: string; pass: number; finding: string };
+type Key = { batch: string; packets: Array<{ file: string; unit: string }>; entries: Entry[] };
+const IMPACT = "packet\topaque\tjudge\timpact\tbatch\tfinding_sha256";
+/** judge-run's finding_sha256 for a key entry, read from the arms under armsRoot. */
+const shaIn = (armsRoot: string, key: Key) => {
+  const base = loadSuite("gsta167-14pr");
+  const arms = new Map<string, ReturnType<typeof readArmDir>>();
+  return (e: Entry) => {
+    if (!arms.has(e.arm)) arms.set(e.arm, readArmDir(join(armsRoot, "gsta167-14pr", e.arm), base.suite, base.sha256));
+    return findingSha256(arms.get(e.arm)!.arm.findings!.get(key.packets.find((p) => p.file === e.packet)!.unit)!.find((f) => f.id === e.finding && f.pass === e.pass)!.fields);
+  };
+};
 const example = snapshot(join(REPO_ROOT, "lanes/review-noloss/example/arm-example"));
 const U3593 = "garrytan/gstack#3593@89156431975e";
 const U3596 = "garrytan/gstack#3596@0be7c3d44339";
@@ -115,9 +128,10 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
     const packets = join(dir, "packets");
     const keyPath = join(dir, "key.json");
     expect((await run(["judge-packet", "--suite", "gsta167-14pr", "--arm", join(root, "gsta167-14pr", "alpha"), "--arm", join(root, "gsta167-14pr", "beta"), "--seed", "7", "--out", packets, "--key", keyPath])).code).toBe(0);
-    const key = JSON.parse(readFileSync(keyPath, "utf8")) as { batch: string; entries: Array<{ packet: string; opaque: string; arm: string; finding: string }> };
-    const rows = key.entries.filter((e) => e.finding !== "ex-3524-b1").map((e) => [e.packet, e.opaque, "judge-a", e.finding.startsWith("ex-") && e.finding.endsWith("b1") ? "blocking" : "non-blocking", key.batch].join("\t"));
-    const impact = json("impact.tsv", ["packet\topaque\tjudge\timpact\tbatch", ...rows, key.entries[0]!.packet + "\t" + key.entries[0]!.opaque + "\tjudge-b\tblocking\t" + key.batch].join("\n") + "\n");
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as Key;
+    const sha = shaIn(root, key);
+    const rows = key.entries.filter((e) => e.finding !== "ex-3524-b1").map((e) => [e.packet, e.opaque, "judge-a", e.finding.startsWith("ex-") && e.finding.endsWith("b1") ? "blocking" : "non-blocking", key.batch, sha(e)].join("\t"));
+    const impact = json("impact.tsv", [IMPACT, ...rows, [key.entries[0]!.packet, key.entries[0]!.opaque, "judge-b", "blocking", key.batch, sha(key.entries[0]!)].join("\t")].join("\n") + "\n");
     const d = await deriveTo("gsta167-imp", ["--drop-gaps", "--impact", impact, "--key", keyPath, "--impact-judge", "judge-a"]);
     expect(d.code).toBe(0);
     const [suite, armsRoot, prereg] = derived("gsta167-imp");
@@ -133,8 +147,9 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
 
   test("--impact reads judge-run's missing rating as unrated and refuses any other value", async () => {
     const keyPath = join(dir, "key.json");
-    const key = JSON.parse(readFileSync(keyPath, "utf8")) as { batch: string; entries: Array<{ packet: string; opaque: string; finding: string }> };
-    const tsv = (name: string, rating: string) => json(name, ["packet\topaque\tjudge\timpact\tbatch", ...key.entries.map((e) => [e.packet, e.opaque, "judge-a", e.finding === "ex-3596-b1" ? rating : "non-blocking", key.batch].join("\t"))].join("\n") + "\n");
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as Key;
+    const sha = shaIn(root, key);
+    const tsv = (name: string, rating: string) => json(name, [IMPACT, ...key.entries.map((e) => [e.packet, e.opaque, "judge-a", e.finding === "ex-3596-b1" ? rating : "non-blocking", key.batch, sha(e)].join("\t"))].join("\n") + "\n");
     const d = await deriveTo("gsta167-imp-missing", ["--drop-gaps", "--impact", tsv("impact-missing.tsv", "missing"), "--key", keyPath, "--impact-judge", "judge-a"]);
     expect([d.code, d.err]).toEqual([0, expect.not.stringContaining("E_USAGE")]);
     const first = JSON.parse(readFileSync(join(dir, "gsta167-imp-missing", "arms", "gsta167-imp-missing", "alpha", "findings", "3596.jsonl"), "utf8").split("\n")[0]!);
@@ -155,10 +170,11 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
     for (const id of ["alpha", "beta"]) expect((await run(["ingest", writeArm(join(dir, "src-shared", id), shared(arm(id))), "--suite", "gsta167-14pr", "--root", sharedRoot])).code).toBe(0);
     const keyPath = join(dir, "key-shared.json");
     expect((await run(["judge-packet", "--suite", "gsta167-14pr", "--arm", join(sharedRoot, "gsta167-14pr", "alpha"), "--arm", join(sharedRoot, "gsta167-14pr", "beta"), "--seed", "7", "--out", join(dir, "packets-shared"), "--key", keyPath])).code).toBe(0);
-    const key = JSON.parse(readFileSync(keyPath, "utf8")) as { batch: string; packets: Array<{ file: string; unit: string }>; entries: Array<{ packet: string; opaque: string; finding: string }> };
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as Key;
     const unitOf = new Map(key.packets.map((p) => [p.file, p.unit]));
-    const rows = key.entries.map((e) => [e.packet, e.opaque, "judge-a", e.finding === "p1-1" && unitOf.get(e.packet) === U3596 ? "blocking" : "non-blocking", key.batch].join("\t"));
-    const impact = json("impact-shared.tsv", ["packet\topaque\tjudge\timpact\tbatch", ...rows].join("\n") + "\n");
+    const sha = shaIn(sharedRoot, key);
+    const rows = key.entries.map((e) => [e.packet, e.opaque, "judge-a", e.finding === "p1-1" && unitOf.get(e.packet) === U3596 ? "blocking" : "non-blocking", key.batch, sha(e)].join("\t"));
+    const impact = json("impact-shared.tsv", [IMPACT, ...rows].join("\n") + "\n");
     const d = await run(["derive", "--suite", "gsta167-14pr", "--comparisons", comparisons, "--root", sharedRoot, "--id", "gsta167-shared", "--out", join(dir, "gsta167-shared"), "--impact", impact, "--key", keyPath, "--impact-judge", "judge-a"]);
     expect([d.code, d.err]).toEqual([0, expect.not.stringContaining("E_USAGE")]);
     const label = (pr: string) => readFileSync(join(dir, "gsta167-shared", "arms", "gsta167-shared", "alpha", "findings", pr + ".jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((f) => f.id === "p1-1").label;
@@ -169,13 +185,60 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
     const keyPath = join(dir, "key.json");
     const otherKey = join(dir, "key-other.json");
     expect((await run(["judge-packet", "--suite", "gsta167-14pr", "--arm", join(root, "gsta167-14pr", "alpha"), "--arm", join(root, "gsta167-14pr", "beta"), "--seed", "8", "--out", join(dir, "packets-other"), "--key", otherKey])).code).toBe(0);
-    const key = JSON.parse(readFileSync(keyPath, "utf8")) as { batch: string; entries: Array<{ packet: string; opaque: string }> };
-    const impact = json("impact-other.tsv", ["packet\topaque\tjudge\timpact\tbatch", ...key.entries.map((e) => [e.packet, e.opaque, "judge-a", "blocking", key.batch].join("\t"))].join("\n") + "\n");
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as Key;
+    const sha = shaIn(root, key);
+    const impact = json("impact-other.tsv", [IMPACT, ...key.entries.map((e) => [e.packet, e.opaque, "judge-a", "blocking", key.batch, sha(e)].join("\t"))].join("\n") + "\n");
     const other = await deriveTo("gsta167-imp-other", ["--drop-gaps", "--impact", impact, "--key", otherKey, "--impact-judge", "judge-a"]);
     expect([other.code, other.err]).toEqual([2, expect.stringMatching(/^E_USAGE .*not --key's batch/)]);
     const edited = json("key-edited.json", { ...JSON.parse(readFileSync(keyPath, "utf8")), seed: 99 });
     const swapped = await deriveTo("gsta167-imp-edited", ["--drop-gaps", "--impact", impact, "--key", edited, "--impact-judge", "judge-a"]);
     expect([swapped.code, swapped.err]).toEqual([2, expect.stringMatching(/^E_USAGE .*does not hash to its own batch digest/)]);
+  });
+
+  test("--impact refuses a rating whose finding changed or is gone since judge-run read it, and a file with no finding_sha256", async () => {
+    const keyPath = join(dir, "key.json");
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as Key;
+    const impact = join(dir, "impact.tsv");
+    const changedRoot = join(dir, "arms-changed");
+    const edit = (files: Map<string, Buffer>, from: string, to: string) => {
+      const m = new Map(files);
+      m.set("findings/3596.jsonl", Buffer.from(m.get("findings/3596.jsonl")!.toString("utf8").replace(from, to)));
+      return m;
+    };
+    const first = JSON.parse(arm("alpha").get("findings/3596.jsonl")!.toString("utf8").split("\n")[0]!);
+    expect(first.id).toBe("ex-3596-b1");
+    const changed = edit(arm("alpha"), JSON.stringify(first.summary), JSON.stringify(first.summary + " Reworded after judging."));
+    for (const [id, files] of [["alpha", changed], ["beta", arm("beta")]] as const) expect((await run(["ingest", writeArm(join(dir, "src-changed", id), files), "--suite", "gsta167-14pr", "--root", changedRoot])).code).toBe(0);
+    const derive = (rootDir: string, name: string, tsv: string) => run(["derive", "--suite", "gsta167-14pr", "--comparisons", comparisons, "--root", rootDir, "--id", name, "--out", join(dir, name), "--impact", tsv, "--key", keyPath, "--impact-judge", "judge-a"]);
+    const d = await derive(changedRoot, "gsta167-imp-changed", impact);
+    expect([d.code, d.err, existsSync(join(dir, "gsta167-imp-changed"))]).toEqual([2, expect.stringMatching(/^E_NOLOSS_ARM .*rates finding "ex-3596-b1" of arm alpha, pass 1, in garrytan\/gstack#3596@\w+ as judged \(sha256 [0-9a-f]{64}\), but the arm now holds sha256 [0-9a-f]{64}; the finding changed since judge-run read it/), false]);
+    const goneRoot = join(dir, "arms-gone");
+    const gone = edit(arm("alpha"), '"id":"ex-3596-b1"', '"id":"ex-3596-b1-renamed"');
+    const renamed = editJudgments(gone, (c) => {
+      if (c[3] === "ex-3596-b1") c[3] = "ex-3596-b1-renamed";
+    });
+    for (const [id, files] of [["alpha", renamed], ["beta", arm("beta")]] as const) expect((await run(["ingest", writeArm(join(dir, "src-gone", id), files), "--suite", "gsta167-14pr", "--root", goneRoot])).code).toBe(0);
+    expect((await derive(goneRoot, "gsta167-imp-gone", impact)).err).toMatch(/^E_NOLOSS_ARM .*but the arm now holds no such finding/);
+    const old = json("impact-five.tsv", readFileSync(impact, "utf8").split("\n").map((l) => l.split("\t").slice(0, 5).join("\t")).join("\n"));
+    expect((await derive(root, "gsta167-imp-five", old)).err).toMatch(/^E_USAGE .*needs a finding_sha256 column/);
+    const sha = shaIn(root, key);
+    expect(readFileSync(impact, "utf8").split("\n")[1]!.split("\t")[5]).toBe(sha(key.entries.find((e) => e.finding !== "ex-3524-b1")!));
+  });
+
+  test("--impact refuses a rating for a judged arm that is not ingested under --root, and names the --root to pass", async () => {
+    const alphaRoot = join(dir, "arms-alpha-only");
+    expect((await run(["ingest", writeArm(join(dir, "src-alpha-only", "alpha"), arm("alpha")), "--suite", "gsta167-14pr", "--root", alphaRoot])).code).toBe(0);
+    const d = await run(["derive", "--suite", "gsta167-14pr", "--comparisons", comparisons, "--root", alphaRoot, "--id", "gsta167-imp-alpha", "--out", join(dir, "gsta167-imp-alpha"), "--impact", join(dir, "impact.tsv"), "--key", join(dir, "key.json"), "--impact-judge", "judge-a"]);
+    expect([d.code, d.err, existsSync(join(dir, "gsta167-imp-alpha"))]).toEqual([2, expect.stringMatching(/^E_NOLOSS_ARM .* of arm beta, which is not ingested under --root .*arms-alpha-only; pass the --root that holds it/), false]);
+  });
+
+  test("a sealed suite's --out inside the repo is refused before anything is written", async () => {
+    const base = loadSuite("gsta167-14pr").suite;
+    const sealed = json("sealed-suite.json", { ...base, id: "gsta167-sealed", sealed: true });
+    const comp = json("comparisons-sealed.json", { ...JSON.parse(readFileSync(comparisons, "utf8")), suite: "gsta167-sealed" });
+    const out = join(REPO_ROOT, ".derive-sealed-test");
+    const d = await run(["derive", "--suite", sealed, "--comparisons", comp, "--root", root, "--id", "gsta167-sealed-cc", "--out", out, "--drop-gaps"]);
+    expect([d.code, d.err, existsSync(out)]).toEqual([2, expect.stringMatching(/^E_USAGE .*suite gsta167-sealed is sealed, and --out .* is inside the repo/), false]);
   });
 
   test("refusals: the base id, a used out dir, a drop file with no unit column", async () => {
