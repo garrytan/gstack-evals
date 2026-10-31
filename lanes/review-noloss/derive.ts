@@ -165,6 +165,7 @@ export function derive(o: DeriveOptions): DeriveResult {
       if (cells.batch !== key.batch) usage("--impact line " + line + " is from batch " + cells.batch + ", not --key's batch " + key.batch);
       const e = entries.get(cells.packet + " " + cells.opaque) ?? usage("--impact line " + line + " rates " + cells.packet + " " + cells.opaque + ", which --key does not hold");
       const k = (packetUnit.get(e.packet) ?? usage("--key names no unit for packet " + e.packet)) + "\0" + e.arm + "\0" + e.pass + "\0" + e.finding;
+      if (!arms.some(({ arm }) => arm.arm.id === e.arm)) bad("--impact line " + line + " rates finding " + JSON.stringify(e.finding) + " of arm " + e.arm + ", which is not ingested under --root " + o.root + "; pass the --root that holds it");
       if (held.get(k) !== cells.finding_sha256) bad("--impact line " + line + " rates finding " + JSON.stringify(e.finding) + " of arm " + e.arm + ", pass " + e.pass + ", in " + packetUnit.get(e.packet) + " as judged (sha256 " + cells.finding_sha256 + "), but the arm now holds " + (held.has(k) ? "sha256 " + held.get(k) : "no such finding") + "; the finding changed since judge-run read it, so judge it again");
       if (cells.impact === "missing") continue;
       if (cells.impact !== "blocking" && cells.impact !== "non-blocking") usage("--impact line " + line + ": impact is blocking, non-blocking or missing, not " + JSON.stringify(cells.impact));

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContractError, mapSeverity, parseArm, type ArmJson } from "../../lanes/review-noloss/contract.ts";
 import { prepare, publish, snapshot } from "../../lanes/review-noloss/ingest.ts";
-import { loadSuite, REPO_ROOT, type Suite } from "../../lanes/review-noloss/suite.ts";
+import { insideRepo, loadSuite, REPO_ROOT, type Suite } from "../../lanes/review-noloss/suite.ts";
 import { nolossCli } from "../../lanes/review-noloss/cli.ts";
 
 const EXAMPLE = join(REPO_ROOT, "lanes/review-noloss/example/arm-example");
@@ -188,6 +188,15 @@ describe("noloss ingest", () => {
     const p = prepare(base(), sealed, sha256, []);
     expect(() => publish(p, sealed, join(REPO_ROOT, "lanes/review-noloss/arms"), null)).toThrow(/sealed/);
     expect(publish(p, sealed, tmp(), null).status).toBe("published");
+  });
+
+  test("insideRepo resolves symlinks: a link from outside into the repo is inside, also for a path that does not exist yet", () => {
+    const repo = tmp();
+    const outside = tmp();
+    symlinkSync(repo, join(outside, "alias"));
+    expect([join(outside, "alias"), join(outside, "alias", "sealed.tsv"), join(outside, "alias", "new", "deeper", "flags.jsonl")].map((d) => insideRepo(d, repo))).toEqual([true, true, true]);
+    expect(insideRepo(join(repo, "not-yet", "x.tsv"), join(outside, "alias"))).toBe(true);
+    expect([join(outside, "x.tsv"), join(outside, "none", "x.tsv")].map((d) => insideRepo(d, repo))).toEqual([false, false]);
   });
 
   test("the CLI: ingest --check on the example, suite --check, and refusals start with their code", async () => {

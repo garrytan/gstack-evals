@@ -225,6 +225,13 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
     expect(readFileSync(impact, "utf8").split("\n")[1]!.split("\t")[5]).toBe(sha(key.entries.find((e) => e.finding !== "ex-3524-b1")!));
   });
 
+  test("--impact refuses a rating for a judged arm that is not ingested under --root, and names the --root to pass", async () => {
+    const alphaRoot = join(dir, "arms-alpha-only");
+    expect((await run(["ingest", writeArm(join(dir, "src-alpha-only", "alpha"), arm("alpha")), "--suite", "gsta167-14pr", "--root", alphaRoot])).code).toBe(0);
+    const d = await run(["derive", "--suite", "gsta167-14pr", "--comparisons", comparisons, "--root", alphaRoot, "--id", "gsta167-imp-alpha", "--out", join(dir, "gsta167-imp-alpha"), "--impact", join(dir, "impact.tsv"), "--key", join(dir, "key.json"), "--impact-judge", "judge-a"]);
+    expect([d.code, d.err, existsSync(join(dir, "gsta167-imp-alpha"))]).toEqual([2, expect.stringMatching(/^E_NOLOSS_ARM .* of arm beta, which is not ingested under --root .*arms-alpha-only; pass the --root that holds it/), false]);
+  });
+
   test("a sealed suite's --out inside the repo is refused before anything is written", async () => {
     const base = loadSuite("gsta167-14pr").suite;
     const sealed = json("sealed-suite.json", { ...base, id: "gsta167-sealed", sealed: true });

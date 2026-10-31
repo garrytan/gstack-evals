@@ -67,6 +67,26 @@ describe("noloss flag-scan: the frozen contamination rules", () => {
     expect(touchRule(touches("Glob", { pattern: "**/a.ts", path: H + "/.local/share/gstack" }, "/work/t").paths[0]!)(H + "/.local/share/gstack/lib/sub/a.ts")).toBe("list");
   });
 
+  test("redirections and option values are not operands, so a listing after cd still lists the cwd", () => {
+    const cwdTouch = (command: string) => touches("Bash", { command: "cd ~/.local/share/gstack && " + command }, "/work/t").paths.find((p) => p.path === H + "/.local/share/gstack");
+    const bare = cwdTouch("ls");
+    expect(bare).toEqual({ path: H + "/.local/share/gstack", reach: "entries", list: true });
+    expect(["ls 2>/dev/null", "ls 2>&1", "ls >x", "ls -I x", "ls -w 80"].map(cwdTouch)).toEqual(Array(5).fill(bare));
+    expect(touchRule(cwdTouch("ls 2>/dev/null")!)(H + "/.local/share/gstack/ETHOS.md")).toBe("list");
+    const tree = cwdTouch("tree -L 2")!;
+    expect(tree).toEqual({ path: H + "/.local/share/gstack", reach: "tree", list: true, depth: 2 });
+    expect([H + "/.local/share/gstack/lib/a.ts", H + "/.local/share/gstack/lib/x/a.ts"].map(touchRule(tree))).toEqual(["list", null]);
+  });
+
+  test("a crafted glob cannot stall the scan: each glob step walks the path once", () => {
+    const f = H + "/.local/share/gstack/lib/ship-budget.ts";
+    const rule = (word: string) => touchRule(touches("Bash", { command: "cat " + word }, "/work/t").paths[0]!);
+    const started = performance.now();
+    expect(["/" + "**?".repeat(22) + "Z", "/" + "**[!x]".repeat(30) + "Z", "/" + "**/".repeat(40) + "Z", H + "/.local/share/gstack/lib/" + "*?".repeat(40) + "Z"].map((w) => rule(w)(f))).toEqual([null, null, null, null]);
+    expect(["/" + "**?".repeat(22) + "/ship-budget.ts", "/" + "**/".repeat(40) + "ship-budget.ts", H + "/.local/share/gstack/lib/" + "*?".repeat(5) + "*.ts"].map((w) => rule(w)(f))).toEqual(["read", "read", "read"]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   test("a review-units out dir: read, cd, recursive, list, search, told and missing-transcript flags, and none for a listing that does not show the file", async () => {
     const dir = tmp("noloss-flags-");
     const run_ = join(dir, "run");

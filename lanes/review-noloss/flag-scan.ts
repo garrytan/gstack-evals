@@ -40,6 +40,8 @@ export const ROOTS: Record<string, string[]> = { gstack: [".local/share/gstack",
 const RECURSIVE = new Set(["rg", "ag", "ack", "rgrep"]);
 const GREPS = new Set(["grep", "egrep", "fgrep", "zgrep"]);
 const LISTINGS = new Set(["ls", "find", "tree"]);
+/** The options of a listing whose value is the next word, not an operand. */
+const VALUED: Record<string, string[]> = { ls: ["-I", "-w", "-T", "--ignore", "--hide", "--width", "--tabsize"], tree: ["-L", "-I", "-P", "-o", "-H", "-T", "--filelimit", "--charset"] };
 export const FLAG_COLUMNS = ["unit", "arm", "model", "pass", "rule", "tool", "call", "path", "audit_path"];
 
 export interface Flag {
@@ -71,39 +73,88 @@ const fail = (message: string): never => {
   throw new ScoreError("E_USAGE", "noloss flag-scan: " + message);
 };
 
-const compiles = (source: string) => {
+/** One step of a shell glob: a literal character, ? (one character within a path segment), a [...] class, * (any run
+ * within a segment), ** (any run across segments), ** then a slash (whole segments) or a {a,b} choice. */
+type Step = { lit: string } | { one: true } | { cls: RegExp } | { star: "*" | "**" | "**/" } | { alt: Step[][] };
+
+const charClass = (source: string): RegExp | null => {
   try {
-    new RegExp(source);
-    return true;
+    return new RegExp("^(?:" + source + ")$");
   } catch {
-    return false;
+    return null;
   }
 };
 
-/** A shell glob as a regex source: * and ? stay within a path segment, ** crosses segments, [...] is a class (a literal [
- * when the regex engine rejects it), {a,b} is a choice. */
-export function globSource(path: string): string {
-  let re = "";
-  for (let i = 0; i < path.length; i++) {
-    const c = path[i]!;
-    const close = c === "[" ? path.indexOf("]", i + 2) : c === "{" ? path.indexOf("}", i + 1) : -1;
-    const cls = c === "[" && close > 0 ? "[" + path.slice(i + 1, close).replace(/^!/, "^").replace(/\\/g, "\\\\") + "]" : null;
-    if (c === "*" && path[i + 1] === "*") {
-      const slash = path[i + 2] === "/";
-      re += slash ? "(?:[^/]+/)*" : ".*";
+/** A shell glob as steps: [...] is a class (a literal [ when the regex engine rejects it), {a,b} is a choice, and a run of
+ * stars is one step. */
+export function globSteps(glob: string): Step[] {
+  const steps: Step[] = [];
+  const star = (kind: "*" | "**" | "**/") => {
+    const last = steps.at(-1);
+    if (!last || !("star" in last)) steps.push({ star: kind });
+    else if (last.star === "**" || kind === "**") last.star = "**";
+    else if (last.star !== kind) steps.push({ star: kind });
+  };
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i]!;
+    const close = c === "[" ? glob.indexOf("]", i + 2) : c === "{" ? glob.indexOf("}", i + 1) : -1;
+    const cls = c === "[" && close > 0 ? charClass("[" + glob.slice(i + 1, close).replace(/^!/, "^").replace(/\\/g, "\\\\") + "]") : null;
+    if (c === "*" && glob[i + 1] === "*") {
+      const slash = glob[i + 2] === "/";
+      star(slash ? "**/" : "**");
       i += slash ? 2 : 1;
-    } else if (c === "*") re += "[^/]*";
-    else if (c === "?") re += "[^/]";
-    else if (cls && compiles(cls)) {
-      re += cls;
+    } else if (c === "*") star("*");
+    else if (c === "?") steps.push({ one: true });
+    else if (cls) {
+      steps.push({ cls });
       i = close;
-    } else if (c === "{" && close > 0 && path.slice(i + 1, close).includes(",")) {
-      re += "(?:" + path.slice(i + 1, close).split(",").map(globSource).join("|") + ")";
+    } else if (c === "{" && close > 0 && glob.slice(i + 1, close).includes(",")) {
+      steps.push({ alt: glob.slice(i + 1, close).split(",").map(globSteps) });
       i = close;
-    } else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    } else steps.push({ lit: c });
   }
-  return re;
+  return steps;
 }
+
+/** The positions in s where a match of steps can end, given where it can start. Each step costs one walk over s, so no
+ * glob can make a match backtrack. */
+function ends(steps: Step[], s: string, from: Uint8Array): Uint8Array {
+  let at = from;
+  for (const step of steps) {
+    const next = new Uint8Array(s.length + 1);
+    if ("alt" in step) for (const alt of step.alt) ends(alt, s, at).forEach((v, q) => (next[q] |= v));
+    else if ("star" in step && step.star === "**/") {
+      let seen = 0;
+      for (let q = 0; q <= s.length; q++) {
+        if (q > 0 && s[q - 1] === "/") {
+          next[q] = at[q]! | seen;
+          seen = 0;
+        } else {
+          next[q] = at[q]!;
+          if (q > 0) seen |= next[q - 1]!;
+        }
+      }
+    } else if ("star" in step) {
+      let open = 0;
+      for (let q = 0; q <= s.length; q++) {
+        if (step.star === "*" && q > 0 && s[q - 1] === "/") open = 0;
+        open |= at[q]!;
+        next[q] = open;
+      }
+    } else for (let q = 0; q < s.length; q++) if (at[q] && ("lit" in step ? s[q] === step.lit : "cls" in step ? step.cls.test(s[q]!) : s[q] !== "/")) next[q + 1] = 1;
+    if (!next.includes(1)) return next;
+    at = next;
+  }
+  return at;
+}
+
+const start = (s: string) => {
+  const at = new Uint8Array(s.length + 1);
+  at[0] = 1;
+  return at;
+};
+
+const globMatch = (steps: Step[], s: string) => ends(steps, s, start(s))[s.length] === 1;
 
 const expand = (word: string, home: string) => word.replace(/^~(?=\/|$)/, home).replace(/^\$\{HOME\}|^\$HOME(?![A-Za-z0-9_])/, home);
 
@@ -136,7 +187,7 @@ export function inRoots(arm: string, t: Touch, home = SESSION_HOME): boolean {
     for (let i = 0; i < root.length; i++) {
       if (i >= segs.length) return t.reach === "tree";
       if (segs[i]!.includes("**")) return true;
-      if (!new RegExp("^" + globSource(segs[i]!) + "$").test(root[i]!)) return false;
+      if (!globMatch(globSteps(segs[i]!), root[i]!)) return false;
     }
     return true;
   });
@@ -144,18 +195,19 @@ export function inRoots(arm: string, t: Touch, home = SESSION_HOME): boolean {
 
 /** The rule a touch fires on a session path, or null: read or list on the path itself, list on an entry, recursive or list below. */
 export function touchRule(t: Touch): (path: string) => Flag["rule"] | null {
-  const re = globSource(t.path);
-  const under = t.path === "/" ? "" : re;
-  const same = new RegExp("^" + re + "$");
-  const entry = new RegExp("^" + under + "/[^/]+$");
-  const below = new RegExp("^" + under + "/(.+)$");
-  const name = t.name === undefined ? null : new RegExp("^" + globSource(t.name) + "$");
+  const steps = globSteps(t.path);
+  const name = t.name === undefined ? null : globSteps(t.name);
   return (path) => {
-    if (same.test(path)) return t.list ? "list" : "read";
-    if (t.reach === "entries" && entry.test(path)) return "list";
-    const rest = t.reach === "tree" ? below.exec(path)?.[1] : undefined;
-    if (rest === undefined || (t.depth !== undefined && rest.split("/").length > t.depth) || (name && !name.test(posix.basename(path)))) return null;
-    return t.list ? "list" : "recursive";
+    const at = ends(steps, path, start(path));
+    if (at[path.length]) return t.list ? "list" : "read";
+    const under = t.path === "/" ? start(path) : at;
+    for (let p = 0; p < path.length - 1; p++) {
+      if (!under[p] || path[p] !== "/") continue;
+      const rest = path.slice(p + 1);
+      if (t.reach === "entries" && !rest.includes("/")) return "list";
+      if (t.reach === "tree" && (t.depth === undefined || rest.split("/").length <= t.depth) && (!name || globMatch(name, posix.basename(path)))) return t.list ? "list" : "recursive";
+    }
+    return null;
   };
 }
 
@@ -199,7 +251,13 @@ export function touches(tool: string, input: Record<string, unknown>, cwd: strin
       if (!v || v.startsWith("-") || /^[a-z]+:\/\//i.test(v)) continue;
       if (v.includes("/") || v.startsWith("~") || v.startsWith("$HOME") || v.startsWith("${HOME}") || here !== cwd) paths.push(touch(abs(v, here), reach));
     }
-    const named = name === "find" ? !!argv[1] && !argv[1].startsWith("-") : argv.slice(1).some((w) => !w.startsWith("-"));
+    const operand = (i: number) => {
+      const w = argv[i]!;
+      if (w.startsWith("-") || w === "<" || w === ">" || argv[i - 1] === "<" || argv[i - 1] === ">") return false;
+      if (/^\d+$/.test(w) && (argv[i + 1] === "<" || argv[i + 1] === ">")) return false;
+      return !(VALUED[name] ?? []).includes(argv[i - 1]!);
+    };
+    const named = name === "find" ? !!argv[1] && operand(1) : argv.some((_, i) => i > 0 && operand(i));
     if (here !== cwd) paths.push(touch(here, list && named ? "path" : reach));
   }
   return { paths, words };

@@ -4,8 +4,8 @@
 // that range should flag, and every blocker points at a catalog case in U13's schema. Units are keyed by repo, PR and
 // head, and clustered by repo and PR, so two heads of one PR are two units in one cluster.
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { loadCatalog, type ReplayCase } from "../review-replay/catalog/catalog.ts";
 
 export const LANE_DIR = import.meta.dir;
@@ -222,10 +222,23 @@ export function checkSuite(suite: Suite, options: { repoRoot?: string; prereg?: 
 
 export const countsFor = (c: ReplayCase): Counts => (c.severity.deserved === "CRITICAL" ? "blocking" : c.severity.deserved === "INFORMATIONAL" ? "over-blocking" : "detection");
 
-/** True when dir resolves inside the repo tree. */
+/** A path with its symlinks resolved: the realpath of its nearest existing ancestor, then the rest of the path. */
+const realPath = (p: string): string => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return dirname(p) === p ? p : join(realPath(dirname(p)), basename(p));
+  }
+};
+
+/** True when dir is inside the repo tree, as written or with symlinks resolved on both sides. */
 export function insideRepo(dir: string, repoRoot = REPO_ROOT): boolean {
-  const rel = relative(resolve(repoRoot), resolve(dir));
-  return rel === "" || (!isAbsolute(rel) && rel.split(sep)[0] !== "..");
+  const within = (d: string, root: string) => {
+    const rel = relative(root, d);
+    return rel === "" || (!isAbsolute(rel) && rel.split(sep)[0] !== "..");
+  };
+  const abs = (p: string) => (isAbsolute(p) ? p : process.cwd() + sep + p);
+  return within(resolve(dir), resolve(repoRoot)) || within(realPath(abs(dir)), realPath(abs(repoRoot)));
 }
 
 /**
