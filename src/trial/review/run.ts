@@ -16,6 +16,7 @@
 //   judgments.tsv, so it is raw and judge-packet can read it. <out>/units.json, parses.tsv and refusals.tsv sit beside.
 // - Receipts never sit on a volatile path (E_RECEIPTS_VOLATILE); with GSTACK_EVALS_EPHEMERAL=1 they are copied to
 //   GSTACK_EVALS_RECEIPTS before the run returns.
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { hostDriver } from "../../adapters/host.ts";
@@ -119,9 +120,13 @@ export interface ReviewRun {
 export const reviewCellId = (c: ReviewCell): string => JSON.stringify([c.model, c.arm, c.unit, c.pass]);
 const cellName = (c: ReviewCell): string => c.model + " " + c.arm + " " + c.unit + " pass " + c.pass;
 
-const ARM_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
-/** The model's short name in an arm id: a Claude model's family (opus, haiku), else the id with other characters as -. */
-export const modelTag = (model: string): string => (/^claude-([a-z]+)-/.exec(model)?.[1] ?? model).replace(/[^A-Za-z0-9_-]+/g, "-");
+export const ARM_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+/** The model's short name in an arm id: a Claude model's family (opus, haiku), else the id's last path segment with other
+ * characters as -. A tag past 24 characters keeps 17 and adds a hash of the id, so a 7-character arm name still fits ARM_ID. */
+export const modelTag = (model: string): string => {
+  const tag = (/^claude-([a-z]+)-/.exec(model)?.[1] ?? model.slice(model.lastIndexOf("/") + 1)).replace(/[^A-Za-z0-9_-]+/g, "-");
+  return tag.length <= 24 ? tag : tag.slice(0, 17) + "-" + createHash("sha256").update(model).digest("hex").slice(0, 6);
+};
 /** <arm>-<model tag>, such as pstack-opus: the arm's id in contract v1 and its directory under <out>/arms. */
 export const armId = (arm: string, model: string): string => arm + "-" + modelTag(model);
 /** A unit id as a findings file name: / written __. */

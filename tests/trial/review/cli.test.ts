@@ -25,6 +25,7 @@ describe("review-units arguments (keyless)", () => {
     expect((await run([...base(out), "--arms", "none", "--bogus"])).err).toMatch(/^E_USAGE .*unknown argument/);
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", "claude-opus-5-5", "--out", out, "--arms", "none"])).err).toMatch(/^E_USAGE .*no --source for garrytan\/gstack/);
     expect((await run([...base(out), "--arms", "none", "placebo"])).err).toMatch(/^E_USAGE .*--arms takes none/);
+    expect((await run([...base(out), "--arms", GSTACK.replace(/^gstack/, "g".repeat(30)), "--dry-run"])).err).toMatch(/^E_USAGE .*arm id "g{30}-opus"/);
     const mixed = await run([...base(out), "--arms", GSTACK, PSTACK, "--dry-run"]);
     expect(mixed.code).toBe(0);
     expect(mixed.out).toContain("/review");

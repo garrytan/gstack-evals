@@ -10,7 +10,7 @@ import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
-import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
+import { ARM_ID, armId, modelTag, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, unitTaskId } from "../../../src/trial/review/unit.ts";
 import { harness, localSandbox } from "../../adapters/harness.ts";
 import { sourceRepo } from "./helpers.ts";
@@ -34,6 +34,19 @@ const files = (dir: string) => {
   walk(dir);
   return map;
 };
+
+describe("arm ids", () => {
+  // Value: protects=every model in the default policy, the DeepSeek and particle rungs included, gets an arm id that fits contract v1 with each told arm; fails_when=a model tag keeps a provider prefix or grows past 24 characters.
+  test("every policy model fits ARM_ID with each told arm", () => {
+    for (const m of Object.keys(policy.policy.models)) for (const arm of ["none", "gstack", "pstack", "tstack"]) expect(armId(arm, m)).toMatch(ARM_ID);
+    expect(modelTag("deepseek/deepseek-v4.1-flash-1017")).toBe("deepseek-v4-1-flash-1017");
+    expect(modelTag("particle-ai/particle-1")).toBe("particle-1");
+    expect(modelTag(OPUS)).toBe("opus");
+    const long = modelTag("vendor/" + "x".repeat(40));
+    expect(long).toHaveLength(24);
+    expect(long).not.toBe(modelTag("vendor/" + "x".repeat(41)));
+  });
+});
 
 describe("review units in the run loop (keyless)", () => {
   // Value: protects=each review is a trial on its own proxy slot: findings files and cost.tsv with usd from the real journal, the voice admitted only in its cell, missing and malformed outputs counted apart (a malformed or incomplete pass stops its arm with a coverage gap, so it is never scored as an empty review; a missing block stays a flagged zero), resume reusing every cell with no spend, a changed key refused with E_CACHE_STALE, receipts copied to the sink, and arms that parse under contract v1; fails_when=any of those regress; why_new=GEVA-70 build step 2; seam=runReviewUnits on a test rig with the harness proxy; no_claim=Claude Code and the Docker rig, which the canary and the Docker tier cover

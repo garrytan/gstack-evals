@@ -19,7 +19,7 @@ import { dirTreeSha256 } from "../cache.ts";
 import { volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
-import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewArm } from "./run.ts";
+import { ARM_ID, armId, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewArm } from "./run.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -134,6 +134,10 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!told) throw new Usage("arm " + a.name + " (" + a.kind + "): review units run none, gstack, pstack and tstack arms only");
     return { name: a.name, told };
   });
+  for (const a of arms) for (const m of models) {
+    const id = armId(a.name, m);
+    if (!ARM_ID.test(id)) throw new Usage("arm id " + JSON.stringify(id) + " (arm " + a.name + ", model " + m + ") does not match " + ARM_ID + "; use a shorter arm name");
+  }
   const skills = Object.fromEntries(arms.flatMap((a) => {
     const skill = toldSkill(a.told);
     return skill ? [[a.name, skill]] : [];
