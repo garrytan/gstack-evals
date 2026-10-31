@@ -67,9 +67,9 @@ describe("GST-109: user-visible turns from a Claude Code transcript", () => {
     ]);
   });
 
-  // Value: protects=the opened signal: a successful Skill call (bare or gstack-prefixed), a Read or a shell read under one of the skill's roots open it, and a failed call or a read elsewhere does not; fails_when=the none arm's failed Skill call counts or a gstack base's second path is missed; why_new=interface v0.5 Hosts (a Skill call or a read under the arm's skill tree); seam=skillUse; no_claim=none beyond protects
+  // Value: protects=the opened signal: a successful Skill call (bare, or gstack-prefixed in an arm that installs gstack), a Read or a shell read under one of the skill's roots open it, and a failed call or a read elsewhere does not; fails_when=the none arm's failed Skill call counts or a gstack base's second path is missed; why_new=interface v0.5 Hosts (a Skill call or a read under the arm's skill tree); seam=skillUse; no_claim=none beyond protects
   test("opened needs a successful call that names or reads the skill", () => {
-    const skill = { name: "learn", roots: ["/h/.claude/skills/learn", "/h/.claude/skills/gstack/learn"] };
+    const skill = { name: "learn", roots: ["/h/.claude/skills/learn", "/h/.claude/skills/gstack/learn"], namespaces: ["gstack"] };
     const c = (tool: string, input: Record<string, string>, ok: boolean | null = true): Call => ({ id: tool, tool, input, ok, subagent: false });
     expect(skillUse([c("Skill", { skill: "learn" }, false)], skill)).toEqual({ opened: false, files: [] });
     expect(skillUse([c("Skill", { skill: "gstack:learn" })], skill)).toEqual({ opened: true, files: ["SKILL.md"] });
@@ -189,14 +189,17 @@ describe("calibration's sentinel proof of a skill read", () => {
 });
 
 describe("Skill calls through a plugin namespace", () => {
-  // Value: protects=a Skill call that names the skill through a plugin namespace (pstack:interrogate, gstack:review) opens it, and another skill of the namespace or a longer name does not; fails_when=only gstack: counts, so a pstack arm loaded as a plugin under-reports opened; why_new=ship #88 red team (pstack loads as a plugin, so its skills answer as pstack:<name>); seam=skillUse; no_claim=how a told slash command shows in the transcript
-  test("pstack:<name> opens the skill; other names do not", () => {
+  // Value: protects=a Skill call that names the skill through one of the arm's own namespaces (pstack:interrogate for the pstack plugin, gstack:review for a gstack arm) opens it, and a namespace the arm does not have, another skill of the namespace or a longer name does not; fails_when=any plugin's namespace counts, so a pstack arm reads as opening gstack's skill or the reverse; why_new=ship #88 red team (pstack loads as a plugin, so its skills answer as pstack:<name>), then #88 /ship Step 11 (both voices: any namespace was accepted); seam=skillUse; no_claim=how a told slash command shows in the transcript
+  test("<namespace>:<name> opens the skill only through the arm's own namespaces", () => {
     const call = (skill: string) => ({ id: "c1", tool: "Skill", input: { skill }, ok: true }) as unknown as Call;
-    const ref = { name: "interrogate", roots: ["/sandbox/pstack/skills/interrogate"] };
+    const ref = { name: "interrogate", roots: ["/sandbox/pstack/skills/interrogate"], namespaces: ["pstack"] };
     expect(skillUse([call("pstack:interrogate")], ref).opened).toBe(true);
-    expect(skillUse([call("gstack:interrogate")], ref).opened).toBe(true);
+    expect(skillUse([call("gstack:interrogate")], ref).opened).toBe(false);
+    expect(skillUse([call("evil:interrogate")], ref).opened).toBe(false);
     expect(skillUse([call("interrogate")], ref).opened).toBe(true);
     expect(skillUse([call("pstack:poteto-mode")], ref).opened).toBe(false);
     expect(skillUse([call("pre-interrogate")], ref).opened).toBe(false);
+    expect(skillUse([call("pstack:interrogate")], { name: "interrogate", roots: [] }).opened).toBe(false);
+    expect(skillUse([call("gstack:review")], { name: "review", roots: [], namespaces: ["gstack"] }).opened).toBe(true);
   });
 });

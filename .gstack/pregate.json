@@ -85,6 +85,10 @@
       "tests/trial/image.test.ts",
       "tests/cli/doctor.test.ts"
     ],
+    "tests/trial/review/fixtures/**": [
+      "tests/trial/review/findings.test.ts",
+      "tests/trial/review/run.test.ts"
+    ],
     "tests/trial/fixtures/**": [
       "tests/trial/grader.test.ts"
     ]

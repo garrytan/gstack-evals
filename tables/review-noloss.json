@@ -87,6 +87,8 @@
       "f_share": 0.6875,
       "new_blocking": null,
       "new_blocking_reason": "a transcribed arm has no findings",
+      "false_blockers": null,
+      "false_blockers_reason": "arm A is transcribed: it has no findings to adjudicate",
       "incomplete": 0,
       "cost": null
     },
@@ -159,6 +161,8 @@
       "f_share": 0.5714,
       "new_blocking": null,
       "new_blocking_reason": "a transcribed arm has no findings",
+      "false_blockers": null,
+      "false_blockers_reason": "arm A2 is transcribed: it has no findings to adjudicate",
       "incomplete": 0,
       "cost": {
         "units": 13,
@@ -242,6 +246,8 @@
       "f_share": 0.4211,
       "new_blocking": null,
       "new_blocking_reason": "a transcribed arm has no findings",
+      "false_blockers": null,
+      "false_blockers_reason": "arm B is transcribed: it has no findings to adjudicate",
       "incomplete": 0,
       "cost": null
     },
@@ -314,6 +320,8 @@
       "f_share": 0.95,
       "new_blocking": null,
       "new_blocking_reason": "a transcribed arm has no findings",
+      "false_blockers": null,
+      "false_blockers_reason": "arm C is transcribed: it has no findings to adjudicate",
       "incomplete": 0,
       "cost": {
         "units": 12,
@@ -400,6 +408,15 @@
         "per_pr": 7
       },
       "new_blocking_reason": null,
+      "false_blockers": {
+        "per_pr": 0,
+        "not_defect": 0,
+        "known_informational": 0,
+        "new_blockers": 0,
+        "unadjudicated": 196,
+        "labelled": false
+      },
+      "false_blockers_reason": null,
       "incomplete": 0,
       "cost": {
         "units": 12,
@@ -488,6 +505,15 @@
         "per_pr": 7.0714
       },
       "new_blocking_reason": null,
+      "false_blockers": {
+        "per_pr": 0,
+        "not_defect": 0,
+        "known_informational": 0,
+        "new_blockers": 0,
+        "unadjudicated": 99,
+        "labelled": false
+      },
+      "false_blockers_reason": null,
       "incomplete": 0,
       "cost": {
         "units": 14,
@@ -574,6 +600,15 @@
         "per_pr": 7.4286
       },
       "new_blocking_reason": null,
+      "false_blockers": {
+        "per_pr": 0,
+        "not_defect": 0,
+        "known_informational": 0,
+        "new_blockers": 0,
+        "unadjudicated": 104,
+        "labelled": false
+      },
+      "false_blockers_reason": null,
       "incomplete": 0,
       "cost": {
         "units": 14,
@@ -660,9 +695,14 @@
         "p_no_loss": 0.931091,
         "p_no_loss_holm": 1,
         "p_loss": 0.03125,
+        "p_loss_holm": null,
         "min_p_loss": 0.00390625,
         "note": null,
-        "holm_family": 5
+        "holm_family": 5,
+        "loss_family": null
+      },
+      "false_blockers": {
+        "reason": "arm A2 is transcribed: it has no findings to adjudicate"
       },
       "size_rule": {
         "source": "simulated",
@@ -801,9 +841,14 @@
         "p_no_loss": 0.914246,
         "p_no_loss_holm": 1,
         "p_loss": 0.03125,
+        "p_loss_holm": null,
         "min_p_loss": 0.03125,
         "note": null,
-        "holm_family": 5
+        "holm_family": 5,
+        "loss_family": null
+      },
+      "false_blockers": {
+        "reason": "arm A is transcribed: it has no findings to adjudicate"
       },
       "size_rule": {
         "source": "simulated",
@@ -918,9 +963,14 @@
         "p_no_loss": 0.990479,
         "p_no_loss_holm": 1,
         "p_loss": 0.003906,
+        "p_loss_holm": null,
         "min_p_loss": 0.00390625,
         "note": null,
-        "holm_family": 5
+        "holm_family": 5,
+        "loss_family": null
+      },
+      "false_blockers": {
+        "reason": "arm B is transcribed: it has no findings to adjudicate"
       },
       "size_rule": {
         "source": "simulated",
@@ -1035,9 +1085,14 @@
         "p_no_loss": 0.548401,
         "p_no_loss_holm": 1,
         "p_loss": 0.125,
+        "p_loss_holm": null,
         "min_p_loss": 0.125,
         "note": null,
-        "holm_family": 5
+        "holm_family": 5,
+        "loss_family": null
+      },
+      "false_blockers": {
+        "reason": "arm B is transcribed: it has no findings to adjudicate"
       },
       "size_rule": {
         "source": "simulated",
@@ -1170,9 +1225,145 @@
         "p_no_loss": 0.858337,
         "p_no_loss_holm": 1,
         "p_loss": 0.046875,
+        "p_loss_holm": null,
         "min_p_loss": 0.0078125,
         "note": null,
-        "holm_family": 5
+        "holm_family": 5,
+        "loss_family": null
+      },
+      "false_blockers": {
+        "complete": false,
+        "reasons": [
+          "arm D has 104 blocking findings with no adjudication row",
+          "arm C12 has 196 blocking findings with no adjudication row"
+        ],
+        "labelled": false,
+        "prs": 14,
+        "per_pr": {
+          "variant": 0,
+          "reference": 0
+        },
+        "drop": null,
+        "table": [
+          {
+            "pr": "garrytan/gstack#3516",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 2,
+            "reference_unadjudicated": 5
+          },
+          {
+            "pr": "garrytan/gstack#3524",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 14,
+            "reference_unadjudicated": 20
+          },
+          {
+            "pr": "garrytan/gstack#3526",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 6,
+            "reference_unadjudicated": 15
+          },
+          {
+            "pr": "garrytan/gstack#3527",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 19,
+            "reference_unadjudicated": 37
+          },
+          {
+            "pr": "garrytan/gstack#3534",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 5,
+            "reference_unadjudicated": 12
+          },
+          {
+            "pr": "garrytan/gstack#3540",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 1,
+            "reference_unadjudicated": 4
+          },
+          {
+            "pr": "garrytan/gstack#3545",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 2,
+            "reference_unadjudicated": 4
+          },
+          {
+            "pr": "garrytan/gstack#3564",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 6,
+            "reference_unadjudicated": 9
+          },
+          {
+            "pr": "garrytan/gstack#3567",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 6,
+            "reference_unadjudicated": 10
+          },
+          {
+            "pr": "garrytan/gstack#3573",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 3,
+            "reference_unadjudicated": 6
+          },
+          {
+            "pr": "garrytan/gstack#3578",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 1,
+            "reference_unadjudicated": 0
+          },
+          {
+            "pr": "garrytan/gstack#3583",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 14,
+            "reference_unadjudicated": 21
+          },
+          {
+            "pr": "garrytan/gstack#3593",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 20,
+            "reference_unadjudicated": 45
+          },
+          {
+            "pr": "garrytan/gstack#3596",
+            "variant": 0,
+            "reference": 0,
+            "difference": 0,
+            "variant_unadjudicated": 5,
+            "reference_unadjudicated": 8
+          }
+        ],
+        "difference": null,
+        "ci95": null,
+        "p_two_sided": null,
+        "min_p": null,
+        "clears_drop": null,
+        "interval_below_zero": null
       },
       "size_rule": {
         "source": "simulated",

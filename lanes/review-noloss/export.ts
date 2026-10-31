@@ -7,7 +7,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { readIngested } from "./ingest.ts";
 import { powerTable, renderPowerTable, spreadValue, suiteClusters, type PowerDesign, type PowerRow } from "./power.ts";
-import { armMetrics, mtok, renderRecord, scoreComparisons, ScoreError, type ArmMetrics, type Comparison, type ScoredArm, type ScoreRecord } from "./score.ts";
+import { armMetrics, mtok, renderRecord, scoreComparisons, ScoreError, type ArmMetrics, type Comparison, type LossFamily, type ScoredArm, type ScoreRecord } from "./score.ts";
 import { insideRepo, LANE_DIR, loadSuite, REPO_ROOT, sha256, suiteFromCatalog, type Suite } from "./suite.ts";
 
 export const TABLE_PATH = join(REPO_ROOT, "tables", "review-noloss.json");
@@ -32,6 +32,8 @@ export interface ComparisonsFile {
   seed: number;
   draws: number;
   comparisons: Comparison[];
+  /** The declared LOSS family: Holm across these comparisons' LOSS p, in this order, under this null. */
+  loss_family?: LossFamily;
   power?: PowerSpec;
 }
 
@@ -63,7 +65,14 @@ export function loadComparisons(path: string): { file: ComparisonsFile; sha256: 
     if (typeof c.post_hoc !== "boolean") bad(path, at + ": post_hoc must be true or false");
     if (c.frozen_bar !== null && typeof c.frozen_bar !== "string") bad(path, at + ": frozen_bar is a round or null");
     const s = c.size_rule as Record<string, unknown> | undefined;
+    if (c.false_blocker_drop !== undefined && !(typeof c.false_blocker_drop === "number" && c.false_blocker_drop >= 0)) bad(path, at + ": false_blocker_drop is a non-negative number of false blockers per PR");
     if (s !== undefined && !(typeof s.power === "number" && typeof s.source === "string") && !(Number.isSafeInteger(s.power_sims) && (s.power_sims as number) > 0)) bad(path, at + ": size_rule is {power, source} or {power_sims, spread}");
+  }
+  const fam = file.loss_family as LossFamily | undefined;
+  if (fam !== undefined) {
+    if (!Array.isArray(fam?.order) || !fam.order.length || new Set(fam.order).size !== fam.order.length || !fam.order.every((id) => ids.has(id))) bad(path, "loss_family.order lists comparison ids of this file, each once, in the declared order");
+    if (fam.null !== "zero" && fam.null !== "margin") bad(path, "loss_family.null is zero (V no worse than R) or margin (V no worse than R by more than the comparison's margin)");
+    if (typeof fam.reason !== "string" || !fam.reason.trim()) bad(path, "loss_family needs its reason");
   }
   return { file, sha256: sha256(bytes!) };
 }
@@ -122,9 +131,9 @@ export function buildExport(o: { comparisons: string; root: string }): ExportTab
     decision_rule: file.decision_rule,
     seed: file.seed,
     draws: file.draws,
-    holm: "p_no_loss is Holm-adjusted across the " + file.comparisons.length + " comparisons below; the LOSS test is not adjusted",
+    holm: "p_no_loss is Holm-adjusted across the " + file.comparisons.length + " comparisons below; " + (file.loss_family ? "p_loss is Holm-adjusted across the declared LOSS family (" + file.loss_family.order.join(", ") + ", in that order, null " + file.loss_family.null + ") and LOSS is decided on the adjusted p" : "the LOSS test is not adjusted"),
     arms: [...arms.values()].map((a) => armMetrics(suite, a, opts)),
-    comparisons: scoreComparisons(suite, suiteSha, arms, file.comparisons, opts),
+    comparisons: scoreComparisons(suite, suiteSha, arms, file.comparisons, { ...opts, lossFamily: file.loss_family }),
     power: power && file.power ? { ...power, rows: powerTable(designs(file.power), { recall: file.power.recall, spread: spreadValue(file.power.spread), margins: file.power.margins, loss_points: file.power.loss_points, sims: file.power.sims, seed: file.power.seed }) } : null,
   };
 }
@@ -138,7 +147,7 @@ export function renderExport(t: ExportTable): string {
   out.push("# Review no-loss: " + t.suite.id, "");
   out.push("Suite " + t.suite.id + " (sha256 " + t.suite.sha256.slice(0, 12) + ")" + (t.suite.development_only ? ", development-only: it ranks variants but cannot confirm a release on its own" : "") + ". Comparisons from " + t.comparisons_file.path + "; seed " + t.seed + ", " + t.draws + " bootstrap draws. " + t.holm + ".", "");
   out.push("## Arms", "");
-  out.push("| Arm | Judging | Blocking recall [95% CI] | Detection | PR hit / any | F/(F+D) | New blocking per PR | Tokens per unit (grade, units) | Tokens per blocker found |", "|---|---|---|---|---|---|---|---|---|");
+  out.push("| Arm | Judging | Blocking recall [95% CI] | Detection | PR hit / any | F/(F+D) | New blocking per PR | False blockers per PR | Tokens per unit (grade, units) | Tokens per blocker found |", "|---|---|---|---|---|---|---|---|---|---|");
   for (const a of t.arms) {
     const judging = [a.judging.labelled ? "labelled judging" : "blind", a.provenance === "transcribed" ? "transcribed" : "live", a.status === "stopped" ? "stopped" : ""].filter(Boolean).join(", ") + " (" + pct(a.judging.blind_share) + " blind)";
     const b = a.blocking;
@@ -146,7 +155,7 @@ export function renderExport(t: ExportTable): string {
     const det = a.detection ? num(a.detection.found) + "/" + a.detection.n : "n/a";
     const hit = a.pr_hit_any.all ? pct(a.pr_hit_any.all.hit) + " / " + pct(a.pr_hit_any.all.any) : "n/a";
     const cost = a.cost ? mtok(a.cost.per_unit_mean) + " (" + a.cost.grade + ", " + a.cost.units + ")" : "not metered";
-    out.push("| " + [a.label.startsWith(a.id + ":") ? a.label : a.id + ": " + a.label, judging, recall, det, hit, pct(a.f_share), a.new_blocking ? num(a.new_blocking.per_pr) : "n/a (" + a.new_blocking_reason + ")", cost, a.cost ? mtok(a.cost.per_blocker_found) : "n/a"].join(" | ") + " |");
+    out.push("| " + [a.label.startsWith(a.id + ":") ? a.label : a.id + ": " + a.label, judging, recall, det, hit, pct(a.f_share), a.new_blocking ? num(a.new_blocking.per_pr) : "n/a (" + a.new_blocking_reason + ")", a.false_blockers ? num(a.false_blockers.per_pr) + (a.false_blockers.unadjudicated ? " (" + a.false_blockers.unadjudicated + " unadjudicated)" : "") : "n/a", cost, a.cost ? mtok(a.cost.per_blocker_found) : "n/a"].join(" | ") + " |");
   }
   out.push("", "## Comparisons", "");
   for (const r of t.comparisons) {

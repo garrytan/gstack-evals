@@ -58,6 +58,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_ISOLATION_UNSAFE](#e_isolation_unsafe) | 2 | U9 |
 | [E_ISOLATION_COUNTED](#e_isolation_counted) | 2 | U9 |
 | [E_CACHE_STALE](#e_cache_stale) | 2 | U9 |
+| [E_UNIT_REPO](#e_unit_repo) | 2 | U9 |
+| [E_UNIT_IMAGE](#e_unit_image) | 2 | U9 |
+| [E_RECEIPTS_VOLATILE](#e_receipts_volatile) | 2 | U9 |
 | [E_NOT_RESUMABLE](#e_not_resumable) | 2 | U10 |
 | [E_SLOT_DENIED](#e_slot_denied) | 2 | U3 |
 | [E_ALLOWANCE](#e_allowance) | 2 | U3 |
@@ -83,6 +86,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [NOT_DISTINGUISHED](#not_distinguished) | 2 | U13 |
 | [E_NOLOSS_BLIND](#e_noloss_blind) | 2 | U13 |
 | [E_NOLOSS_STALE](#e_noloss_stale) | 2 | U13 |
+| [E_NOLOSS_ADJUDICATION](#e_noloss_adjudication) | 2 | U13 |
+| [E_NOLOSS_EXPECT](#e_noloss_expect) | 2 | U13 |
 | [E_MINE_SOURCE](#e_mine_source) | 2 | U14 |
 | [E_MINE_HAND](#e_mine_hand) | 2 | U14 |
 | [E_MINE_STALE](#e_mine_stale) | 2 | U14 |
@@ -475,6 +480,30 @@ Fix: Read which key parts changed, then rerun the affected cells with --repair "
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
 
+### E_UNIT_REPO
+
+A review unit's repository could not be built from its source clone, or it failed the history check: its commits are not exactly the head's ancestry, it carries tags, remotes, a reflog, FETCH_HEAD or unreachable objects, its refs are not the ones written, or origin/&lt;base>, &lt;base> and origin/HEAD do not give the unit's merge-base and diff.
+
+Fix: Read the problems the message lists. Point --source at a full (not shallow) clone that holds the unit's head and base commits, and name the base branch with --base-branch when the repository is not in the default table. Then run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_UNIT_IMAGE
+
+A review unit's tree failed the unit-image check: its install command failed in the builder container, the install changed tracked files, or the unit's own test command failed offline (--network none).
+
+Fix: Read the install or test output in the message. A unit whose own tests fail offline is dropped for every arm alike before the preregistration freezes (plan section 6): run again without it, or fix the install or test command for its repository.
+
+Exit 2. Side effects: None: refused before any spend. Trees already built stay under &lt;out>/units. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_RECEIPTS_VOLATILE
+
+A run's out directory, which holds its receipts and journal, is on a path that does not outlive the machine (the OS temp dir, /tmp, /var/tmp, /dev/shm, or a tmpfs or ramfs mount), or GSTACK_EVALS_EPHEMERAL=1 is set without GSTACK_EVALS_RECEIPTS.
+
+Fix: Put --out on a disk that outlives the machine, or on a VM the runner deletes afterwards set GSTACK_EVALS_RECEIPTS to a directory the receipts are copied to (src/trial/durable.ts).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
+
 ### E_NOT_RESUMABLE
 
 --resume was given for a run that ended on a terminal stop: NOT_MEASURABLE, MARGIN_NOT_ATTEMPTED, VACUOUS_CHECK, LOCK_MISSING, LOCK_DRIFT, E_USER_TURNS_MISSING, E_INTERACTIVE_HOST or E_LOOSE_GSTACK.
@@ -667,6 +696,22 @@ Fix: Run gstack-evals noloss export without --check, review the diff, and commit
 
 Exit 2. Side effects: None: export --check writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
 
+### E_NOLOSS_ADJUDICATION
+
+An arm's adjudication.tsv breaks arm contract v1: a missing column, a row naming no blocking finding of its unit and pass, a finding judgments.tsv already matches, a second row for one finding, a version other than 1, or a ruling other than defect, not-defect or known-informational (the last only on a unit with an over-blocking blocker).
+
+Fix: Fix the named row, or rebuild the file with noloss judge-packet --adjudicate and judge-join. A blocking finding with no row is not an error: the false-blocker reading reports it as incomplete.
+
+Exit 2. Side effects: None: the arm is not ingested or scored. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_EXPECT
+
+noloss score --expect: the run's outcome, read from its verdict line or JSON record and its first reason code, is not one --expect lists, or the output cannot be read as an outcome (no verdict line, no reason code, or an exit code that disagrees with the verdict).
+
+Fix: Read the score output above this line. If the outcome is right, fix the --expect list; never accept a bare exit 2, which also covers refusals.
+
+Exit 2. Side effects: None beyond what score itself writes (--out). Retry safe: yes. Resumable: no. Owner: U13.
+
 ### E_MINE_SOURCE
 
 scripts/mine-review-cases.ts could not read a source it mines: a repo clone is missing, a git command failed, a commit stayed missing after fetching its PR's ref, gstack's bin/gstack-diff-scope failed, or the GitHub API answered something other than 200 or 404 after its retries.
@@ -709,9 +754,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_CELL_RULE
 
-A pstack arm's per-cell model rule could not be derived: the pinned tree's setup-pstack SKILL.md has no rule shape with role lines in its step 5. No image was built for the cell.
+A pstack arm's per-cell model rule could not be derived: the pinned tree's setup-pstack SKILL.md has no rule shape with role lines in its step 5, or a role's value is not a Claude slug, a Grok slug, auto or inherit-parent, so the cell cannot say which model that role runs on. No image was built for the cell.
 
-Fix: Check that the arm pins pstack's Claude Code tree (cursor/plugins at harness/pstack/claude-code) at a commit whose setup-pstack still shows the rule shape, and re-pin it in the preregistration if the shape moved. Do not --resume.
+Fix: Check that the arm pins pstack's Claude Code tree (cursor/plugins at harness/pstack/claude-code) at a commit whose setup-pstack still shows the rule shape, and re-pin it in the preregistration if the shape moved. A new kind of value needs its own mapping in src/arms/cells.ts, with a test, before any cell uses it. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
 

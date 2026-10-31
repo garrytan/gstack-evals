@@ -62,6 +62,10 @@ export interface TrialSpec {
   keep?: boolean;
   /** How the trees are removed (src/trial/cleanup.ts): an image removes root-owned leftovers. */
   cleanup?: CleanupOptions;
+  /** Keys appended to the gstack state root's config.yaml after the seed: a stack cell's gstack config (src/arms/cells.ts). */
+  stateConfig?: Record<string, string>;
+  /** A directory copied into the work dir before setup, such as a review unit's repository; it never holds an answer key. */
+  seed?: string;
 }
 
 export interface TrialRun {
@@ -88,6 +92,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const fixtures = join(spec.dir, "fixtures");
   const timeoutMs = (spec.entry?.timeout_s ?? spec.timeoutS) * 1000;
   mkdirSync(work, { recursive: true });
+  if (spec.seed) cpSync(spec.seed, work, { recursive: true, verbatimSymlinks: true });
   cpSync(spec.tasksDir, fixtures, { recursive: true });
   const workPath = sandbox.workPath(work, task.id);
   const home = sandbox.homePath(spec.dir);
@@ -119,7 +124,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       logs.setup = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       if (r.exitCode !== 0) return missing("E_TASKS_INVALID", "setup " + (r.timedOut ? "timed out" : "exited " + r.exitCode) + ": " + tail(r));
     }
-    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core");
+    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig);
     snapshot(work, baseline);
     const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
     let outcome: AgentOutcome;

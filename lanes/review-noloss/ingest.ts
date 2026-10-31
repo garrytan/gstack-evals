@@ -10,7 +10,7 @@ import { scanText } from "./scan.ts";
 import { insideRepo, LANE_DIR, sha256, type Suite } from "./suite.ts";
 
 export const ARMS_ROOT = join(LANE_DIR, "arms");
-const TOP = new Set(["arm.json", "judgments.tsv", "cost.tsv", "findings"]);
+const TOP = new Set(["arm.json", "judgments.tsv", "cost.tsv", "adjudication.tsv", "findings"]);
 const KEEP_IN_DIGEST_ONLY = ["severity", "label", "path", "line", "category", "reader", "specialist", "voice", "pass", "id", "fingerprint", "confidence"];
 export const INGEST_RECORD = "ingest.json";
 
@@ -19,7 +19,7 @@ const fail = (where: string, message: string, fix: string): never => {
 };
 
 /**
- * The arm's files as bytes, read once. Only arm.json, judgments.tsv, cost.tsv and findings/*.jsonl are allowed; a
+ * The arm's files as bytes, read once. Only arm.json, judgments.tsv, cost.tsv, adjudication.tsv and findings/*.jsonl are allowed; a
  * symlink, a non-regular file or any other file is refused.
  */
 export function snapshot(dir: string): Map<string, Buffer> {
@@ -51,7 +51,7 @@ export function snapshot(dir: string): Map<string, Buffer> {
     } else if (!st.isFile()) fail(name, "is not a regular file", "replace it with a regular file");
     else files.set(name, readFileSync(join(dir, name)));
   }
-  if (extra.length) fail(extra.join(", "), "not part of arm contract v1", "move it out of the arm directory; the contract holds arm.json, findings/<unit>.jsonl, judgments.tsv and cost.tsv");
+  if (extra.length) fail(extra.join(", "), "not part of arm contract v1", "move it out of the arm directory; the contract holds arm.json, findings/<unit>.jsonl, judgments.tsv, cost.tsv and adjudication.tsv");
   return files;
 }
 

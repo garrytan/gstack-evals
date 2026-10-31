@@ -5,11 +5,14 @@
 // no-loss p-values Holm-adjusted across the comparisons one call makes (as the verdict engine does for margins; the
 // LOSS test is not adjusted, like its WORSE). The record keeps the statistical result apart from whether the claim
 // "non-inferior within the margin" may be made, and why not. Labelled and blind judgments are never pooled.
+// A run may declare a LOSS family (GEVA-59 T8): its comparisons' LOSS p-values are Holm-adjusted in the declared order
+// under a frozen null, and LOSS is decided on the adjusted p. Beside the verdict, the false-blocker reading (T6, T9)
+// pairs each PR's false blockers per pass across the two arms with an exact two-sided sign-flip test over PRs.
 import { clusteredPairedDelta, holmAdjusted, type PairedItem } from "../../src/runner/stats/paired.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
-import { mapSeverity, type Arm, type CostRow, type Grade, type Judgment } from "./contract.ts";
+import { mapSeverity, matchedBlockers, type Arm, type CostRow, type Grade, type Judgment } from "./contract.ts";
 import { POWER_GOAL, simulate, spreadValue, suiteClusters } from "./power.ts";
-import { ALPHA, decide, pairedTests, type SignFlip, type Verdict } from "./stats.ts";
+import { ALPHA, decide, holmSteps, lcm, pairedTests, twoSidedSignFlip, type SignFlip, type Verdict } from "./stats.ts";
 import type { Blocker, FrozenBar, Suite, Unit } from "./suite.ts";
 
 export const SCORE_VERSION = 1;
@@ -40,7 +43,18 @@ export interface Comparison {
   /** A same-window repeat of the reference: their discordance is the noise floor printed beside the comparison. */
   reference_repeat?: string;
   size_rule?: SizeRuleSpec;
+  /** The smallest drop in false blockers per PR that counts (the preregistration freezes it). */
+  false_blocker_drop?: number;
   note?: string;
+}
+
+/** A declared LOSS family: its comparisons' LOSS p-values are Holm-adjusted together, in this order. */
+export interface LossFamily {
+  /** Comparison ids, in the declared order. */
+  order: string[];
+  /** zero: the LOSS null is "V is no worse than R"; margin: "V is no worse than R by more than the comparison's margin". */
+  null: "zero" | "margin";
+  reason: string;
 }
 
 /** An arm as scored: parsed, judged, with the tree digest it was ingested under. */
@@ -233,6 +247,93 @@ function newBlockingFindings(suite: Suite, arm: Arm): { per_pass: number; per_pr
   return { per_pass: round(n / arm.arm.passes), per_pr: round(n / arm.arm.passes / suite.units.length) };
 }
 
+interface FalseBlockerTally {
+  /** Per unit id, summed over passes. */
+  units: Map<string, { false: number; unadjudicated: number }>;
+  not_defect: number;
+  known_informational: number;
+  new_blockers: number;
+  unadjudicated: number;
+  labelled: boolean;
+  blind: boolean;
+}
+
+/**
+ * Every blocking finding once. judgments.tsv settles a matched one: a blocking or detection-only blocker makes it a real
+ * defect, an over-blocking blocker alone makes it over-block the known informational case. adjudication.tsv rules on
+ * the rest; a finding with no row is unadjudicated and is never counted as not a defect.
+ */
+function tallyFalseBlockers(suite: Suite, arm: Arm): FalseBlockerTally | { reason: string } {
+  if (!arm.findings) return { reason: "arm " + arm.arm.id + " is transcribed: it has no findings to adjudicate" };
+  const matched = matchedBlockers(arm.judgments ?? []);
+  const rows = arm.adjudications ?? [];
+  const ruled = new Map(rows.map((a) => [a.finding, a.ruling]));
+  const t: FalseBlockerTally = { units: new Map(), not_defect: 0, known_informational: 0, new_blockers: 0, unadjudicated: 0, labelled: rows.some((a) => a.saw_label), blind: rows.some((a) => !a.saw_label) };
+  for (const u of suite.units) {
+    const cell = { false: 0, unadjudicated: 0 };
+    for (const f of arm.findings.get(u.id) ?? []) {
+      if (mapSeverity(arm.arm, f.raw, f.reader) !== "CRITICAL") continue;
+      const blockers = matched.get(f) ?? [];
+      if (blockers.some((b) => b.counts !== "over-blocking")) continue;
+      const ruling = blockers.length ? "known-informational" : ruled.get(f);
+      if (ruling === undefined) {
+        cell.unadjudicated++;
+        t.unadjudicated++;
+      } else if (ruling === "defect") t.new_blockers++;
+      else {
+        cell.false++;
+        if (ruling === "not-defect") t.not_defect++;
+        else t.known_informational++;
+      }
+    }
+    t.units.set(u.id, cell);
+  }
+  return t;
+}
+
+export interface FalseBlockerReading {
+  /** False when a blocking finding has no adjudication row, an arm stopped, or labelled and blind adjudication would pool. */
+  complete: boolean;
+  reasons: string[];
+  labelled: boolean;
+  prs: number;
+  per_pr: { variant: number; reference: number };
+  /** Variant minus reference, false blockers per pass per PR; negative means the variant raises fewer. */
+  difference: number | null;
+  ci95: [number, number] | null;
+  p_two_sided: number | null;
+  min_p: number | null;
+  drop: number | null;
+  /** Whether the estimate is a drop of at least drop per PR. */
+  clears_drop: boolean | null;
+  interval_below_zero: boolean | null;
+  table: Array<{ pr: string; variant: number; reference: number; difference: number; variant_unadjudicated: number; reference_unadjudicated: number }>;
+}
+
+/** False blockers per pass, paired by PR: the mean difference, its PR-clustered interval and the exact two-sided sign-flip test. */
+function falseBlockers(suite: Suite, v: Arm, r: Arm, drop: number | null, noVerdict: string | null, opts: { seed: number; draws: number }): FalseBlockerReading | { reason: string } {
+  const tv = tallyFalseBlockers(suite, v);
+  if ("reason" in tv) return tv;
+  const tr = tallyFalseBlockers(suite, r);
+  if ("reason" in tr) return tr;
+  const clusters = [...new Set(suite.units.map((u) => u.cluster))].sort();
+  const sum = (t: FalseBlockerTally, c: string, k: "false" | "unadjudicated") => suite.units.filter((u) => u.cluster === c).reduce((s, u) => s + t.units.get(u.id)![k], 0);
+  const pv = v.arm.passes;
+  const pr = r.arm.passes;
+  const vals = clusters.map((c) => ({ c, v: sum(tv, c, "false") / pv, r: sum(tr, c, "false") / pr }));
+  const table = vals.map((x, i) => ({ pr: suite.sealed ? "PR " + (i + 1) : x.c, variant: round(x.v), reference: round(x.r), difference: round(x.v - x.r), variant_unadjudicated: sum(tv, x.c, "unadjudicated"), reference_unadjudicated: sum(tr, x.c, "unadjudicated") }));
+  const reasons: string[] = noVerdict ? [noVerdict] : [];
+  for (const [a, t] of [[v, tv], [r, tr]] as const) if (t.unadjudicated) reasons.push("arm " + a.arm.id + " has " + t.unadjudicated + " blocking finding" + (t.unadjudicated > 1 ? "s" : "") + " with no adjudication row");
+  if ((tv.labelled || tr.labelled) && (tv.blind || tr.blind)) reasons.push("labelled and blind adjudication are never pooled");
+  const mean = (k: "v" | "r") => round(vals.reduce((s, x) => s + x[k], 0) / vals.length);
+  const base = { labelled: tv.labelled || tr.labelled, prs: clusters.length, per_pr: { variant: mean("v"), reference: mean("r") }, drop, table };
+  if (reasons.length) return { complete: false, reasons, ...base, difference: null, ci95: null, p_two_sided: null, min_p: null, clears_drop: null, interval_below_zero: null };
+  const d = clusteredPairedDelta(vals.map((x) => ({ id: x.c, cluster: x.c, a: x.r, b: x.v })), opts);
+  const l = lcm(pv, pr);
+  const test = twoSidedSignFlip(clusters.map((c) => sum(tv, c, "false") * (l / pv) - sum(tr, c, "false") * (l / pr)));
+  return { complete: true, reasons, ...base, difference: round(d.delta), ci95: d.ci95 ? [round(d.ci95[0]), round(d.ci95[1])] : null, p_two_sided: test.p === null ? null : round(test.p, 6), min_p: test.min_p, clears_drop: drop === null ? null : d.delta <= -drop + 1e-9, interval_below_zero: d.ci95 ? d.ci95[1] < 0 : null };
+}
+
 export interface ArmMetrics {
   id: string;
   label: string;
@@ -251,6 +352,9 @@ export interface ArmMetrics {
   f_share: number | null;
   new_blocking: { per_pass: number; per_pr: number } | null;
   new_blocking_reason: string | null;
+  /** Per pass: false blockers per PR, by kind, and the blocking findings that still lack a ruling. */
+  false_blockers: { per_pr: number; not_defect: number; known_informational: number; new_blockers: number; unadjudicated: number; labelled: boolean } | null;
+  false_blockers_reason: string | null;
   incomplete: number;
   cost: CostSummary | null;
 }
@@ -281,6 +385,8 @@ export function armMetrics(suite: Suite, s: ScoredArm, opts: { seed: number; dra
   const groups = [...new Set(suite.units.map((u) => u.group).filter((g): g is string => g !== null))].sort();
   const judgments = arm.judgments;
   const own = meter(arm);
+  const fb = tallyFalseBlockers(suite, arm);
+  const perPass = (n: number) => round(n / arm.arm.passes);
   return {
     id: arm.arm.id,
     label: arm.arm.label,
@@ -299,6 +405,8 @@ export function armMetrics(suite: Suite, s: ScoredArm, opts: { seed: number; dra
     f_share: f + d ? round(f / (f + d)) : null,
     new_blocking: newBlocking,
     new_blocking_reason: arm.findings ? null : "a transcribed arm has no findings",
+    false_blockers: "reason" in fb ? null : { per_pr: round((fb.not_defect + fb.known_informational) / arm.arm.passes / new Set(suite.units.map((u) => u.cluster)).size), not_defect: perPass(fb.not_defect), known_informational: perPass(fb.known_informational), new_blockers: perPass(fb.new_blockers), unadjudicated: fb.unadjudicated, labelled: fb.labelled },
+    false_blockers_reason: "reason" in fb ? fb.reason : null,
     incomplete: judgments.filter((j) => j.coverage === "incomplete").length,
     cost: costOn(suite, arm, own, meteredUnits(own)),
   };
@@ -361,10 +469,14 @@ export interface ScoreRecord {
     p_no_loss: number | null;
     p_no_loss_holm: number | null;
     p_loss: number | null;
+    /** Holm-adjusted across the declared LOSS family; null outside one. */
+    p_loss_holm: number | null;
     min_p_loss: number | null;
     note: string | null;
     holm_family: number;
+    loss_family: { size: number; position: number; step: number; null: LossFamily["null"]; null_points: number } | null;
   };
+  false_blockers: FalseBlockerReading | { reason: string };
   size_rule: { source: "declared" | "simulated" | "unchecked"; power: number | null; goal: number; met: boolean | null; detail: string };
   agreement: { shared: number; table: { FF: number; FD: number; DF: number; DD: number } | null; agreement: number | null; kappa: number | null; reason: string | null };
   noise_floor: { repeat: string; delta: number; losses: number; gains: number; discordant_clusters: number } | { repeat: null; reason: string };
@@ -409,8 +521,13 @@ function sizeRule(suite: Suite, spec: SizeRuleSpec | undefined, v: Arm, r: Arm, 
   return { source: "simulated", power: round(res.no_loss), goal: POWER_GOAL, met: res.no_loss >= POWER_GOAL, detail: "an arm as good as the reference gets NO_LOSS in " + round(res.no_loss * 100, 1) + "% of " + spec.power_sims + " simulations (spread " + spread + ", recall " + round(refRecall, 3) + ", seed " + seed + (family > 1 ? ", no-loss alpha 0.05/" + family + ", Holm's strictest step" : "") + ")" };
 }
 
-/** Scores comparisons as one family: their no-loss p-values are Holm-adjusted together. */
-export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<string, ScoredArm>, comparisons: Comparison[], opts: { seed: number; draws: number }): ScoreRecord[] {
+/**
+ * Scores comparisons as one family: their no-loss p-values are Holm-adjusted together. With a declared LOSS family, the
+ * LOSS p-values of its comparisons are Holm-adjusted in its order under its null, and LOSS is decided on the adjusted p.
+ */
+export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<string, ScoredArm>, comparisons: Comparison[], opts: { seed: number; draws: number; lossFamily?: LossFamily }): ScoreRecord[] {
+  const family = opts.lossFamily ?? null;
+  for (const id of family?.order ?? []) if (!comparisons.some((c) => c.id === id)) throw new ScoreError("E_USAGE", "the LOSS family names comparison " + id + ", which this run does not score");
   const get = (id: string) => {
     const a = arms.get(id);
     if (!a) throw new ScoreError("E_NOLOSS_ARM", "arm " + id + " is not ingested for suite " + suite.id);
@@ -432,7 +549,7 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
     const pairs = pairsOf(suite, v, r);
     if (!pairs.length) throw new ScoreError("E_NOLOSS_SUITE", "suite " + suite.id + " has no blocking blockers to compare on");
     const stats = clusteredPairedDelta(pairs, opts);
-    const tests = pairedTests(pairs, c.margin_points, [v.arm.passes, r.arm.passes]);
+    const tests = pairedTests(pairs, c.margin_points, [v.arm.passes, r.arm.passes], family?.null === "margin" && family.order.includes(c.id) ? c.margin_points : 0);
     const stopped = [v, r].filter((a) => a.arm.status === "stopped").map((a) => a.arm.id);
     const incomplete = [v, r].filter((a) => a.judgments!.some((j) => j.coverage === "incomplete")).map((a) => a.arm.id);
     const noVerdict = stopped.length ? "arm " + stopped.join(" and ") + " stopped, so there is no verdict" : incomplete.length ? "arm " + incomplete.join(" and ") + " has blockers recorded with coverage incomplete, so there is no verdict" : null;
@@ -441,12 +558,15 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
     return { c, V, R, pairs, stats, tests, noVerdict, discordant: [...byCluster.values()].filter((x) => Math.abs(x) > 1e-12).length };
   });
   const holm = holmAdjusted(drafts.map((d) => (d.noVerdict === null && d.tests.no_loss.p !== null ? d.tests.no_loss.p : 1)));
+  const lossHolm = family ? holmSteps(family.order.map((id) => drafts.find((d) => d.c.id === id)!).map((d) => (d.noVerdict === null && d.tests.loss.p !== null ? d.tests.loss.p : 1))) : null;
   return drafts.map((d, i) => {
     const { c, V, R, pairs, stats, tests } = d;
     const v = V.arm;
     const r = R.arm;
     const attempted = d.noVerdict === null && tests.no_loss.p !== null;
-    const verdict = d.noVerdict === null ? decide(attempted ? holm[i]! : null, tests.loss.p) : null;
+    const at = family ? family.order.indexOf(c.id) : -1;
+    const pLossHolm = at >= 0 && d.noVerdict === null && tests.loss.p !== null ? lossHolm!.adjusted[at]! : null;
+    const verdict = d.noVerdict === null ? decide(attempted ? holm[i]! : null, at >= 0 ? pLossHolm : tests.loss.p) : null;
     const pHolm = attempted ? round(holm[i]!, 6) : null;
     const labelled = v.judgments![0]!.saw_label;
     const bar = c.frozen_bar === null ? null : suite.frozen_bars.find((b) => b.round === c.frozen_bar);
@@ -466,7 +586,7 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
     if (labelled) reasons.push("labelled judging: the judge saw arm labels");
     if (suite.development_only) reasons.push("suite " + suite.id + " is development-only: it ranks variants but cannot confirm a release on its own");
     if (!v.findings) reasons.push("the variant is transcribed, so its unmatched blocking findings cannot be adjudicated");
-    else if (newBlockingFindings(suite, v)!.per_pass > 0) reasons.push("the variant's unmatched blocking findings are not adjudicated, so there is no false-blocking bound");
+    else if ((tallyFalseBlockers(suite, v) as FalseBlockerTally).unadjudicated > 0) reasons.push("the variant's unmatched blocking findings are not adjudicated, so there is no false-blocking bound");
     const repeat = c.reference_repeat ? get(c.reference_repeat) : null;
     let noise: ScoreRecord["noise_floor"] = { repeat: null, reason: "no same-window repeat of reference " + r.arm.id + " is named" };
     if (repeat?.arm.arm.status === "stopped") noise = { repeat: null, reason: "repeat arm " + repeat.arm.arm.id + " stopped" };
@@ -508,10 +628,13 @@ export function scoreComparisons(suite: Suite, suiteSha256: string, arms: Map<st
         p_no_loss: tests.no_loss.p === null ? null : round(tests.no_loss.p, 6),
         p_no_loss_holm: pHolm,
         p_loss: tests.loss.p === null ? null : round(tests.loss.p, 6),
+        p_loss_holm: pLossHolm === null ? null : round(pLossHolm, 6),
         min_p_loss: tests.loss.min_p,
         note: note(tests.no_loss) ?? note(tests.loss),
         holm_family: comparisons.length,
+        loss_family: at >= 0 ? { size: family!.order.length, position: at + 1, step: lossHolm!.step[at]!, null: family!.null, null_points: family!.null === "margin" ? c.margin_points : 0 } : null,
       },
+      false_blockers: falseBlockers(suite, v, r, c.false_blocker_drop ?? null, d.noVerdict, opts),
       size_rule: size,
       agreement: agreement(suite, v, r),
       noise_floor: noise,
@@ -578,7 +701,9 @@ export function renderRecord(rec: ScoreRecord): string[] {
       fmtP(r.p_no_loss) +
       (r.holm_family > 1 ? " (Holm " + fmtP(r.p_no_loss_holm) + " over " + r.holm_family + ")" : "") +
       ", p loss " +
+      (r.loss_family?.null === "margin" ? "beyond the margin " : "") +
       fmtP(r.p_loss) +
+      (r.loss_family ? " (Holm " + fmtP(r.p_loss_holm) + ", step " + r.loss_family.step + " of " + r.loss_family.size + " in the declared LOSS family)" : "") +
       " (minimum reachable " +
       fmtP(r.min_p_loss) +
       ")" +
@@ -586,11 +711,31 @@ export function renderRecord(rec: ScoreRecord): string[] {
       ".",
   );
   out.push(flags + "size rule: " + (rec.size_rule.met === null ? "unchecked" : rec.size_rule.met ? "met" : "below") + ", " + rec.size_rule.detail + ".");
+  const fb = rec.false_blockers;
+  const two = (x: number) => (x > 0 ? "+" : "") + x.toFixed(2);
+  if ("reason" in fb) out.push("false blockers per PR: n/a (" + fb.reason + ").");
+  else if (!fb.complete) out.push((fb.labelled ? "labelled adjudication: " : "") + "false blockers per PR: incomplete, so not tested (" + fb.reasons.join("; ") + ").");
+  else
+    out.push(
+      (fb.labelled ? "labelled adjudication: " : "") +
+        "false blockers per PR: " + rec.variant.id + " " + fb.per_pr.variant.toFixed(2) + ", " + rec.reference.id + " " + fb.per_pr.reference.toFixed(2) +
+        ", difference " + two(fb.difference!) + (fb.ci95 ? " [95% CI " + two(fb.ci95[0]) + ", " + two(fb.ci95[1]) + "]" : "") +
+        " on " + fb.prs + " PRs; two-sided p " + fmtP(fb.p_two_sided) + " (minimum reachable " + fmtP(fb.min_p) + "); " +
+        (fb.drop === null ? "no smallest drop that counts was given" : "smallest drop that counts " + fb.drop + " per PR: the estimate " + (fb.clears_drop ? "clears it" : "does not clear it")) +
+        "; the interval " + (fb.interval_below_zero ? "is below zero" : "does not exclude zero or lies above it") + ".",
+    );
   const c = rec.cost;
   if ("reason" in c) out.push("cost: " + c.reason + ".");
   else out.push("cost on the " + c.variant.units + " units metered in both (" + c.grade + "): " + rec.variant.id + " " + mtok(c.variant.per_unit_mean) + " per unit, " + mtok(c.variant.per_blocker_found) + " per blocker found; " + rec.reference.id + " " + mtok(c.reference.per_unit_mean) + " per unit, " + mtok(c.reference.per_blocker_found) + " per blocker found.");
   out.push("claim \"" + rec.eligibility.claim + "\": " + (rec.eligibility.eligible ? "may be made" : "may not be made: " + rec.eligibility.reasons.join("; ")) + ".");
   return out;
+}
+
+/** The per-PR false-blocker table: PR, variant count, reference count, difference, and findings still unadjudicated. */
+export function falseBlockerTable(rec: ScoreRecord): string[] {
+  const fb = rec.false_blockers;
+  if ("reason" in fb) return [];
+  return ["| PR | " + rec.variant.id + " | " + rec.reference.id + " | difference | unadjudicated (" + rec.variant.id + " / " + rec.reference.id + ") |", "|---|---|---|---|---|", ...fb.table.map((t) => "| " + [t.pr, t.variant, t.reference, t.difference, t.variant_unadjudicated + " / " + t.reference_unadjudicated].join(" | ") + " |")];
 }
 
 export const mtok = (t: number | null) => (t === null ? "n/a" : (t / 1e6).toFixed(1) + "M tokens");

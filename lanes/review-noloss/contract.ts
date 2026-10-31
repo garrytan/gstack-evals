@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Arm contract version 1 for the review no-loss category (plan section 3): arm.json, findings/<unit>.jsonl,
-// judgments.tsv and cost.tsv. An arm with no judgments yet is raw: it can be ingested and turned into blinded judge
-// packets, and is scored only once judge-join writes its judgments. Unknown fields and columns are kept and ignored.
+// judgments.tsv, cost.tsv and the optional adjudication.tsv. An arm with no judgments yet is raw: it can be ingested and
+// turned into blinded judge packets, and is scored only once judge-join writes its judgments. adjudication.tsv rules on
+// each blocking finding judgments.tsv leaves unmatched; a finding with no row is unadjudicated, never "not a defect".
+// Unknown fields and columns are kept and ignored.
 // Every refusal names the file, the row and the field, and says how to fix that row.
 import Ajv2020 from "ajv/dist/2020";
 import { readFileSync } from "node:fs";
@@ -17,6 +19,11 @@ export type Outcome = "F" | "D" | "M";
 export type Grade = "exact" | "lane" | "upper-bound" | "estimate";
 export const METER_GRADES: Record<string, Grade> = { "proxy-journal": "exact", "reader-counter": "exact", "lane-counter-delta": "lane", "root-counter-delta": "upper-bound", estimate: "estimate" };
 export const JUDGMENT_COLUMNS = ["pr", "blocker_id", "outcome", "matched_finding", "raw_severity", "mapped_severity", "judge", "saw_label", "note"];
+export const ADJUDICATION_COLUMNS = ["pr", "finding", "pass", "ruling", "judge", "saw_label", "version", "batch", "note"];
+export const ADJUDICATION_VERSION = 1;
+/** defect: a real defect no suite blocker names (a new blocker); not-defect; known-informational: it over-blocks the unit's known informational case. */
+export const RULINGS = ["defect", "not-defect", "known-informational"] as const;
+export type Ruling = (typeof RULINGS)[number];
 const COST_ALIASES: Record<string, string[]> = {
   pr: ["pr"],
   scope: ["scope", "voice"],
@@ -81,6 +88,17 @@ export interface Judgment {
   note: string;
 }
 
+export interface Adjudication {
+  unit: Unit;
+  finding: Finding;
+  pass: number;
+  ruling: Ruling;
+  judge: string;
+  saw_label: boolean;
+  batch: string;
+  note: string;
+}
+
 export interface CostRow {
   row: number;
   units: Unit[];
@@ -100,10 +118,19 @@ export interface Arm {
   /** By unit id; null for a transcribed arm, which has no findings. */
   findings: Map<string, Finding[]> | null;
   judgments: Judgment[] | null;
+  /** adjudication.tsv rows; null when the arm has none. */
+  adjudications: Adjudication[] | null;
   cost: CostRow[];
 }
 
-export type ContractCode = "E_NOLOSS_ARM" | "E_NOLOSS_JUDGMENT" | "E_NOLOSS_COST";
+export type ContractCode = "E_NOLOSS_ARM" | "E_NOLOSS_JUDGMENT" | "E_NOLOSS_COST" | "E_NOLOSS_ADJUDICATION";
+
+/** The blockers each finding is matched to in judgments.tsv. A blocking finding absent here is unmatched. */
+export function matchedBlockers(judgments: readonly Judgment[]): Map<Finding, Blocker[]> {
+  const m = new Map<Finding, Blocker[]>();
+  for (const j of judgments) for (const f of j.matched) m.set(f, [...(m.get(f) ?? []), j.blocker]);
+  return m;
+}
 
 export interface Problem {
   code: ContractCode;
@@ -331,6 +358,65 @@ export function parseArm(files: Map<string, Buffer>, suite: Suite, suiteSha256: 
     }
   }
 
+  let adjudications: Adjudication[] | null = null;
+  const aText = files.get("adjudication.tsv");
+  if (aText && (!findings || !judgments))
+    add("E_NOLOSS_ADJUDICATION", "adjudication.tsv", findings ? "adjudication rules on the blocking findings judgments.tsv leaves unmatched, and the arm has no judgments.tsv" : "the arm has no findings to adjudicate", findings ? "join judgments first (noloss judge-join), then adjudicate (noloss judge-packet --adjudicate)" : "drop adjudication.tsv");
+  else if (aText && !problems.length) {
+    adjudications = [];
+    const t = parseTsv(aText.toString("utf8"));
+    const missingCols = ADJUDICATION_COLUMNS.filter((c) => !t.header.includes(c));
+    if (missingCols.length) add("E_NOLOSS_ADJUDICATION", "adjudication.tsv header", "missing column(s) " + missingCols.join(", "), "the header is " + ADJUDICATION_COLUMNS.join(", "));
+    for (const l of t.ragged) add("E_NOLOSS_ADJUDICATION", "adjudication.tsv line " + l, "more cells than header columns", "remove the extra tab-separated cells");
+    const matched = matchedBlockers(judgments!);
+    const seen = new Set<Finding>();
+    if (!missingCols.length) {
+      for (const { line, cells } of t.rows) {
+        const at = "adjudication.tsv line " + line;
+        const { unit, problem } = resolveUnit(suite, cells.pr!);
+        if (!unit) {
+          add("E_NOLOSS_ADJUDICATION", at + " pr", problem!, "name a unit of suite " + suite.id);
+          continue;
+        }
+        const pass = cells.pass ? Number(cells.pass) : 1;
+        if (!Number.isSafeInteger(pass) || pass < 1 || pass > arm.passes) {
+          add("E_NOLOSS_ADJUDICATION", at + " pass", "pass " + JSON.stringify(cells.pass) + " is not 1 to " + arm.passes, "fix the pass");
+          continue;
+        }
+        const ref = cells.finding!;
+        const list = findings!.get(unit.id)!.filter((f) => f.pass === pass);
+        const f = list.find((x) => x.id === ref) ?? (/^#\d+$/.test(ref) ? list.find((x) => x.index === Number(ref.slice(1))) : undefined);
+        if (!f) {
+          add("E_NOLOSS_ADJUDICATION", at + " finding", JSON.stringify(ref) + " is not a pass-" + pass + " finding in findings/ for " + unit.id, "name a finding's id, fingerprint or #<0-based line> in that unit's findings file");
+          continue;
+        }
+        if (seen.has(f)) {
+          add("E_NOLOSS_ADJUDICATION", at, "a second row for " + unit.id + " finding " + JSON.stringify(ref) + " pass " + pass, "keep one row per finding per pass");
+          continue;
+        }
+        seen.add(f);
+        if (mapSeverity(arm, f.raw, f.reader) !== "CRITICAL") {
+          add("E_NOLOSS_ADJUDICATION", at + " finding", JSON.stringify(ref) + " maps to INFORMATIONAL; only blocking findings are adjudicated", "drop the row");
+          continue;
+        }
+        if (matched.has(f)) {
+          add("E_NOLOSS_ADJUDICATION", at + " finding", "judgments.tsv already rules " + JSON.stringify(ref) + ": it names blocker " + matched.get(f)!.map((b) => b.id).join(", "), "drop the row; adjudication covers only the blocking findings judgments.tsv leaves unmatched");
+          continue;
+        }
+        const ruling = cells.ruling as Ruling;
+        if (!RULINGS.includes(ruling)) {
+          add("E_NOLOSS_ADJUDICATION", at + " ruling", JSON.stringify(cells.ruling) + " is not " + RULINGS.join(", "), "defect: a real defect no suite blocker names; not-defect; known-informational: it over-blocks the unit's known informational case");
+          continue;
+        }
+        if (ruling === "known-informational" && !unit.blockers.some((b) => b.counts === "over-blocking")) add("E_NOLOSS_ADJUDICATION", at + " ruling", unit.id + " has no over-blocking blocker, so it has no known informational case", "rule defect or not-defect");
+        if (cells.saw_label !== "yes" && cells.saw_label !== "no") add("E_NOLOSS_ADJUDICATION", at + " saw_label", JSON.stringify(cells.saw_label) + " is not yes or no", "yes when the judge saw arm labels, no for a blinded join");
+        if (cells.version !== String(ADJUDICATION_VERSION)) add("E_NOLOSS_ADJUDICATION", at + " version", JSON.stringify(cells.version) + " is not adjudication version " + ADJUDICATION_VERSION, "write " + ADJUDICATION_VERSION + ", or upgrade gstack-evals to read a newer file");
+        if (!cells.judge) add("E_NOLOSS_ADJUDICATION", at + " judge", "missing", "name the judge");
+        adjudications.push({ unit, finding: f, pass, ruling, judge: cells.judge ?? "", saw_label: cells.saw_label === "yes", batch: cells.batch ?? "", note: cells.note ?? "" });
+      }
+    }
+  }
+
   const cost: CostRow[] = [];
   const cText = files.get("cost.tsv");
   if (cText) {
@@ -392,5 +478,5 @@ export function parseArm(files: Map<string, Buffer>, suite: Suite, suiteSha256: 
     }
   }
   if (problems.length) throw new ContractError(problems);
-  return { arm, provenance, state: judgments ? "judged" : "raw", findings, judgments, cost };
+  return { arm, provenance, state: judgments ? "judged" : "raw", findings, judgments, adjudications, cost };
 }

@@ -6,7 +6,7 @@ import { NO_SKILL, sentinelFor, withSentinel } from "../../src/adapters/calibrat
 import { JUDGE_REASONING_EFFORT, judgeDriver } from "../../src/adapters/judge.ts";
 import { SKILL_DIRS } from "../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
-import { armImages, dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
+import { armCells, armImages, armNamespaces, armTree, dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
 import { resolveCall, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS } from "../../src/skill-eval/cli/flags.ts";
 import { preflight } from "../../src/skill-eval/cli/preflight.ts";
@@ -490,6 +490,73 @@ describe.skipIf(!HAS_CLAUDE_CLI)("--mirror through the CLI's run layer, on Claud
     expect(verdict.tasks.hello).toEqual(JSON.parse(readFileSync(join(out, "verdict.json"), "utf8")).tasks.hello);
     expect(verdict.spend).toMatchObject({ ledger: null, ledger_record: null, lease_id: null });
   }, 300_000);
+});
+
+describe("stack cells in the run loop (keyless)", () => {
+  const OPUS = "claude-opus-5-5";
+  const CHEAP = "claude-haiku-5-5";
+  // Value: protects=a stack arm's session runs in its cell: in the Opus cell its slot admits the session's model and gpt-6.1-sol only, the driver gets the Codex config for that voice and the arm's namespaces, and the gstack keys land in the state root; in a cheap cell the slot admits the model alone and no voice or codex_reviews is on; arms without cells keep a slot for their model; the cell tree is the session key's arm tree; fails_when=a tstack or gstack arm runs without its voice (SOL UNAVAILABLE, scored as a loss), a cheap cell admits the voice, the state root keeps codex reviews off in a voice cell, or the key ignores the cell; why_new=#88 /ship Step 11 (both voices, rated high: cells and the Codex config never reached runOnHost); seam=runOnHost's session, HostRig.cells and driver, armCells, armTree; no_claim=Claude Code honouring the options, which the stack canary covers, and the Docker rig's cell images, which its tier covers
+  test("cells reach the slot, the driver and the state root", async () => {
+    const stack = stackArms("claude");
+    const cells = armCells(stack.installs, [OPUS, CHEAP], policy, temp("cells"));
+    expect(Object.keys(cells)).toEqual(["after"]);
+    const slots = new Map<string, { arm: string; model: string; models: string[] }>();
+    const seen: { arm: string; model: string; models: string[]; codex: unknown; namespaces: unknown; config: string }[] = [];
+    await runHost("claude", {
+      stack, models: [OPUS, CHEAP], calibrateOnly: true,
+      rigOf: (h, arms) => ({
+        ...rig(h, "claude", arms, { installs: stack.installs }),
+        cells,
+        bind: async (request) => {
+          const binding = await h.proxy.bind(request);
+          slots.set(binding.slot, { arm: request.cell.arm, model: request.cell.model, models: [...request.models] });
+          return binding;
+        },
+        driver: (o) => ({
+          async run(session) {
+            const config = session.exec('cat "$GSTACK_STATE_ROOT/config.yaml"', 10_000).stdout;
+            seen.push({ ...slots.get(o.proxy.slot)!, codex: o.codex ?? null, namespaces: o.skill?.namespaces ?? null, config });
+            return { turns: ["done"], termination: { kind: "completed" }, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
+          },
+        }),
+      }),
+    });
+    const of = (arm: string, model: string) => seen.filter((s) => s.arm === arm && s.model === model);
+    expect(of("after", OPUS).length).toBeGreaterThan(0);
+    for (const s of of("after", OPUS)) {
+      expect(s.models).toEqual(["anthropic:" + OPUS, "openai:gpt-6.1-sol"]);
+      expect(s.codex).toEqual({ provider: "openai", model: "gpt-6.1-sol" });
+      expect(s.namespaces).toEqual(["gstack"]);
+      expect(s.config).toContain("agent_model: host");
+      expect(s.config).toContain("codex_reviews: enabled");
+      expect(s.config).not.toContain("codex_reviews: disabled");
+    }
+    for (const s of of("after", CHEAP)) {
+      expect(s.models).toEqual(["anthropic:" + CHEAP]);
+      expect(s.codex).toBeNull();
+      expect(s.config).toContain("agent_model: host");
+      expect(s.config).toContain("codex_reviews: disabled");
+      expect(s.config).not.toContain("codex_reviews: enabled");
+    }
+    for (const s of seen.filter((x) => x.arm !== "after")) {
+      expect(s.models).toEqual(["anthropic:" + s.model]);
+      expect(s.codex).toBeNull();
+    }
+    const installs = Object.fromEntries(stack.installs.map((i) => [i.name, i]));
+    expect(armTree({ arms: installs, cells }, "after", OPUS)).toBe(cells.after![OPUS]!.tree_sha256);
+    expect(armTree({ arms: installs, cells }, "after", OPUS)).not.toBe(installs.after!.tree_sha256);
+    expect(armTree({ arms: installs, cells }, "before", OPUS)).toBe(installs.before!.tree_sha256);
+    expect(armNamespaces(installs.after!)).toEqual(["gstack"]);
+  });
+
+  // Value: protects=a cell whose voice the policy cannot route for the Codex CLI refuses before any image or spend; fails_when=an Opus cell runs without its voice because the policy lacks gpt-6.1-sol; why_new=#88 /ship Step 11 (wiring cells through runOnHost); seam=armCells, codexOption; no_claim=none
+  test("a cell voice the policy cannot route refuses", () => {
+    const stack = stackArms("claude");
+    const { ["gpt-6.1-sol"]: _sol, ...models } = policy.policy.models;
+    const without = { ...policy, policy: { ...policy.policy, models } } as LoadedPolicy;
+    expect(() => armCells(stack.installs, [OPUS], without, temp("cells"))).toThrow(/^E_MODEL_POLICY: /);
+    expect(() => armCells(stack.installs, [CHEAP], without, temp("cells"))).not.toThrow();
+  });
 });
 
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";

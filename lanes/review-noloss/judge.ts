@@ -7,10 +7,14 @@
 // wins), requires the second judge on every blocker where the arms disagree plus a seeded 20% sample, and a third read
 // wherever the two judges match different findings, before it writes judgments.tsv (saw_label no) for every arm at once. No model is
 // called here; the judges are paid work under their own preregistration.
+// judge-packet --adjudicate builds the same blinded packets from the blocking findings judgments.tsv leaves unmatched,
+// with each unit's known informational case, and judge-join on its key writes adjudication.tsv: one ruling per finding
+// per pass (defect, not-defect or known-informational), with a second judge on every finding that counts as a false
+// blocker plus a seeded 20% sample of the rest, and a third read wherever the two judges differ.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
-import { JUDGMENT_COLUMNS, mapSeverity, parseArm, type Arm, type Finding, type Mapped, type Outcome } from "./contract.ts";
+import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, RULINGS, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
 import { ScoreError } from "./score.ts";
 import { insideRepo, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
 
@@ -38,6 +42,8 @@ export interface KeyEntry {
 
 export interface JudgeKey {
   version: number;
+  /** Present on an adjudication batch. */
+  kind?: "adjudicate";
   batch: string;
   suite: { id: string; sha256: string };
   arms: Array<{ id: string; tree_sha256: string }>;
@@ -50,7 +56,7 @@ export interface JudgeKey {
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const wholeWord = (s: string, flags = "i") => new RegExp("(?<![A-Za-z0-9_])" + escape(s) + "(?![A-Za-z0-9_])", flags);
 const fileName = (suite: Suite, u: Unit) => "packets/" + unitRef(suite, u).replace(/\//g, "__") + ".json";
-const batchDigest = (k: Pick<JudgeKey, "suite" | "arms" | "seed" | "mapping_sha256" | "packets">) => sha256(JSON.stringify({ version: JUDGE_VERSION, suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
+const batchDigest = (k: Pick<JudgeKey, "kind" | "suite" | "arms" | "seed" | "mapping_sha256" | "packets">) => sha256(JSON.stringify({ version: JUDGE_VERSION, ...(k.kind ? { kind: k.kind } : {}), suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
 const inside = (child: string, dir: string) => resolve(child) === resolve(dir) || resolve(child).startsWith(resolve(dir) + sep);
 
 /** Texts a packet must never carry: arm ids and labels (3 or more characters), "arm <id>", model ids, and reader names with a hyphen or digit. */
@@ -87,9 +93,13 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
   return a;
 }
 
-/** Writes one packet per unit and batch.json under out, and the key file at key, which must sit outside out. */
-export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: LoadedArm[]; seed: number; out: string; key: string }): { batch: string; packets: number; findings: number } {
+/**
+ * Writes one packet per unit and batch.json under out, and the key file at key, which must sit outside out. With
+ * adjudicate, a packet holds only the blocking findings judgments.tsv leaves unmatched, and units with none get no packet.
+ */
+export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: LoadedArm[]; seed: number; out: string; key: string; adjudicate?: boolean }): { batch: string; packets: number; findings: number } {
   const { suite, arms } = o;
+  const adjudicate = o.adjudicate === true;
   if (suite.sealed && (insideRepo(o.out) || insideRepo(o.key))) blind("suite " + suite.id + " is sealed, so its packets and key must be written outside the repo");
   if (inside(o.key, o.out)) blind("--key " + o.key + " is inside --out " + o.out + "; the key maps opaque ids back to arms and must never travel with the packets");
   if (existsSync(o.key)) blind("--key " + o.key + " already exists; give each batch a new key path");
@@ -98,6 +108,9 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   const ids = arms.map((a) => a.arm.arm.id);
   if (new Set(ids).size !== ids.length) blind("an arm is given twice: " + ids.join(", "));
   for (const a of arms) if (!a.arm.findings) blind("arm " + a.arm.arm.id + " is transcribed: it has no findings to judge");
+  if (adjudicate) for (const a of arms) if (!a.arm.judgments) blind("arm " + a.arm.arm.id + " has no judgments.tsv: adjudication rules on the blocking findings its judgments leave unmatched, so join them first");
+  const unmatched = new Map(arms.map((a) => [a.arm.arm.id, adjudicate ? matchedBlockers(a.arm.judgments!) : null]));
+  const pick = (a: LoadedArm, u: Unit) => (a.arm.findings!.get(u.id) ?? []).filter((f) => !adjudicate || (mapSeverity(a.arm.arm, f.raw, f.reader) === "CRITICAL" && !unmatched.get(a.arm.arm.id)!.has(f)));
   const rng = seededRandom(o.seed);
   const mask = masker(arms);
   const leaks = leakRules(arms);
@@ -108,9 +121,10 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   for (const u of suite.units) {
     const file = fileName(suite, u);
     const pooled = shuffle(
-      arms.flatMap((a) => (a.arm.findings!.get(u.id) ?? []).map((f) => ({ arm: a.arm.arm.id, f }))),
+      arms.flatMap((a) => pick(a, u).map((f) => ({ arm: a.arm.arm.id, f }))),
       rng,
     );
+    if (adjudicate && !pooled.length) continue;
     const width = String(pooled.length).length;
     const findings = pooled.map(({ arm, f }, i) => {
       const opaque = "F" + String(i + 1).padStart(width, "0");
@@ -122,26 +136,31 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
     bodies.push({ file, unit: u, findings });
   }
   if (problems.length) blind("the packets would leak what blinding hides:\n" + problems.join("\n") + "\nremove it from the source arm's findings and ingest it again");
-  const head = { suite: { id: suite.id, sha256: o.suiteSha256 }, arms: arms.map((a) => ({ id: a.arm.arm.id, tree_sha256: a.treeSha256 })).sort((x, y) => (x.id < y.id ? -1 : 1)), seed: o.seed, mapping_sha256: sha256(JSON.stringify(entries)) };
+  if (adjudicate && !entries.length) blind("no arm has a blocking finding that judgments.tsv leaves unmatched, so there is nothing to adjudicate");
+  const head = { ...(adjudicate ? { kind: "adjudicate" as const } : {}), suite: { id: suite.id, sha256: o.suiteSha256 }, arms: arms.map((a) => ({ id: a.arm.arm.id, tree_sha256: a.treeSha256 })).sort((x, y) => (x.id < y.id ? -1 : 1)), seed: o.seed, mapping_sha256: sha256(JSON.stringify(entries)) };
   const staging = resolve(o.out) + ".staging-" + process.pid;
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(join(staging, "packets"), { recursive: true });
   const packets: JudgeKey["packets"] = [];
   for (const b of bodies) {
-    const packet = {
-      version: JUDGE_VERSION,
-      suite: head.suite.id,
-      unit: { repo: b.unit.repo, pr: b.unit.pr, head: b.unit.head, base: b.unit.base },
-      blockers: b.unit.blockers.map((x) => ({ id: x.id, paths: x.paths, file: x.file, line: x.line, cause: cases.get(x.case)?.defect.summary ?? "" })),
-      findings: b.findings,
-    };
+    const unit = { repo: b.unit.repo, pr: b.unit.pr, head: b.unit.head, base: b.unit.base };
+    const known = (x: Unit["blockers"][number]) => ({ id: x.id, paths: x.paths, file: x.file, line: x.line, cause: cases.get(x.case)?.defect.summary ?? "" });
+    const packet = adjudicate
+      ? { version: JUDGE_VERSION, kind: "adjudicate", suite: head.suite.id, unit, known_informational: b.unit.blockers.filter((x) => x.counts === "over-blocking").map(known), findings: b.findings }
+      : { version: JUDGE_VERSION, suite: head.suite.id, unit, blockers: b.unit.blockers.map(known), findings: b.findings };
     const bytes = Buffer.from(JSON.stringify(packet, null, 2) + "\n");
     writeFileSync(join(staging, b.file), bytes);
     packets.push({ file: b.file, unit: b.unit.id, sha256: sha256(bytes) });
   }
   const batch = batchDigest({ ...head, packets });
   const reply = { batch, judge: "<judge name and model>", packets: packets.slice(0, 1).map((p) => ({ file: p.file, sha256: p.sha256, blockers: [{ id: "B1", matches: bodies[0]!.findings.slice(0, 1).map((f) => f.id) }] })) };
-  writeFileSync(
+  const first = bodies.find((b) => b.findings.length);
+  if (adjudicate)
+    writeFileSync(
+      join(staging, "batch.json"),
+      JSON.stringify({ version: JUDGE_VERSION, kind: "adjudicate", batch, suite: head.suite, packets, adjudication: "A second judge rules every finding the primary rules not-defect or known-informational plus a seeded " + SECOND_SAMPLE * 100 + "% sample of the rest; a third read rules every finding where the two judges differ. judge-join names each set.", reply_format: { batch, judge: "<judge name and model>", packets: [{ file: packets[0]!.file, sha256: packets[0]!.sha256, findings: [{ id: first!.findings[0]!.id, ruling: "not-defect" }] }] }, reply_rules: "One JSON reply per judge: batch, judge, and for each packet its file, its sha256 and a ruling for every finding you rule: defect when it names a real defect at the PR head, not-defect when it does not, known-informational when it raises the unit's known informational case (known_informational) as a blocker. Judge the defect, not the severity: every finding here was raised as blocking." }, null, 2) + "\n",
+    );
+  else writeFileSync(
     join(staging, "batch.json"),
     JSON.stringify({ version: JUDGE_VERSION, batch, suite: head.suite, judging_rule: suite.judging_rule, packets, adjudication: "A second judge answers every blocker where the arms' outcomes differ plus a seeded " + SECOND_SAMPLE * 100 + "% sample of the rest; a third read answers every blocker where the two judges differ. judge-join names each set.", reply_format: reply, reply_rules: "One JSON reply per judge: batch, judge, and for each packet its file, its sha256 and every blocker you answer with the ids of the findings that name the same defect (an empty list when none does). Judge the defect, not the severity: severity is applied mechanically." }, null, 2) + "\n",
   );
@@ -158,8 +177,8 @@ interface Reply {
   digest: string;
 }
 
-/** Validates a reply against the key: its batch, each packet's digest, known blockers and opaque ids. */
-function readReply(path: string, key: JudgeKey, suite: Suite, role: string): Reply {
+/** Reads a reply file and checks its batch, judge and each packet's digest; returns each packet body with its key entry. */
+function readReplyFile(path: string, key: JudgeKey, role: string): { judge: string; digest: string; packets: Array<{ known: JudgeKey["packets"][number]; body: Record<string, unknown> }> } {
   let bytes: Buffer;
   let r: { batch?: unknown; judge?: unknown; packets?: unknown };
   try {
@@ -171,11 +190,20 @@ function readReply(path: string, key: JudgeKey, suite: Suite, role: string): Rep
   if (r.batch !== key.batch) blind("the " + role + " reply names batch " + JSON.stringify(r.batch) + ", not this key's batch " + key.batch + "; a reply only joins the batch whose packets it judged");
   if (typeof r.judge !== "string" || !r.judge.trim() || /[\t\r\n]/.test(r.judge)) blind("the " + role + " reply needs a judge name on one line");
   if (!Array.isArray(r.packets)) blind("the " + role + " reply needs a packets list");
-  const answers = new Map<string, Set<string>>();
-  for (const p of r.packets as Array<{ file?: unknown; sha256?: unknown; blockers?: unknown }>) {
+  const packets = (r.packets as Array<Record<string, unknown>>).map((p) => {
     const known = key.packets.find((k) => k.file === p.file);
     if (!known) blind("the " + role + " reply answers packet " + JSON.stringify(p.file) + ", which this batch does not have");
     if (p.sha256 !== known!.sha256) blind("the " + role + " reply's " + known!.file + " has digest " + JSON.stringify(p.sha256) + ", not " + known!.sha256 + "; it judged a stale or swapped packet");
+    return { known: known!, body: p };
+  });
+  return { judge: (r.judge as string).trim(), digest: sha256(bytes!), packets };
+}
+
+/** Validates a reply against the key: its batch, each packet's digest, known blockers and opaque ids. */
+function readReply(path: string, key: JudgeKey, suite: Suite, role: string): Reply {
+  const file = readReplyFile(path, key, role);
+  const answers = new Map<string, Set<string>>();
+  for (const { known, body: p } of file.packets) {
     const unit = suite.units.find((u) => u.id === known!.unit)!;
     const opaques = new Set(key.entries.filter((e) => e.packet === known!.file).map((e) => e.opaque));
     for (const b of (Array.isArray(p.blockers) ? p.blockers : []) as Array<{ id?: unknown; matches?: unknown }>) {
@@ -187,7 +215,26 @@ function readReply(path: string, key: JudgeKey, suite: Suite, role: string): Rep
       answers.set(k, new Set(b.matches as string[]));
     }
   }
-  return { judge: (r.judge as string).trim(), answers, digest: sha256(bytes!) };
+  return { judge: file.judge, answers, digest: file.digest };
+}
+
+/** Validates an adjudication reply: a known ruling for opaque ids of each packet, known-informational only where the unit has that case. */
+function readRulings(path: string, key: JudgeKey, suite: Suite, role: string): { judge: string; rulings: Map<string, Ruling>; digest: string } {
+  const file = readReplyFile(path, key, role);
+  const rulings = new Map<string, Ruling>();
+  for (const { known, body } of file.packets) {
+    const unit = suite.units.find((u) => u.id === known.unit)!;
+    const opaques = new Set(key.entries.filter((e) => e.packet === known.file).map((e) => e.opaque));
+    for (const f of (Array.isArray(body.findings) ? body.findings : []) as Array<{ id?: unknown; ruling?: unknown }>) {
+      const k = known.file + " " + String(f.id);
+      if (typeof f.id !== "string" || !opaques.has(f.id)) blind("the " + role + " reply rules finding " + JSON.stringify(f.id) + " in " + known.file + ", which that packet does not have");
+      if (rulings.has(k)) blind("the " + role + " reply rules " + k + " twice");
+      if (!RULINGS.includes(f.ruling as Ruling)) blind("the " + role + " reply's ruling for " + k + " is " + JSON.stringify(f.ruling) + ", not " + RULINGS.join(", "));
+      if (f.ruling === "known-informational" && !unit.blockers.some((b) => b.counts === "over-blocking")) blind("the " + role + " reply rules " + k + " known-informational, but that unit has no known informational case");
+      rulings.set(k, f.ruling as Ruling);
+    }
+  }
+  return { judge: file.judge, rulings, digest: file.digest };
 }
 
 interface Cell {
@@ -209,14 +256,15 @@ function cellsFor(key: JudgeKey, arms: Map<string, Arm>, unit: Unit, matches: Se
   return cells;
 }
 
-function kappa(pairs: Array<[Outcome, Outcome]>): number | null {
+function kappa<T extends string>(pairs: Array<[T, T]>, categories: readonly T[]): number | null {
   if (!pairs.length) return null;
   const po = pairs.filter(([x, y]) => x === y).length / pairs.length;
-  const pe = (["F", "D", "M"] as Outcome[]).reduce((s, o) => s + (pairs.filter(([x]) => x === o).length / pairs.length) * (pairs.filter(([, y]) => y === o).length / pairs.length), 0);
+  const pe = categories.reduce((s, o) => s + (pairs.filter(([x]) => x === o).length / pairs.length) * (pairs.filter(([, y]) => y === o).length / pairs.length), 0);
   return pe < 1 ? Math.round(((po - pe) / (1 - pe)) * 1e4) / 1e4 : null;
 }
 
 export interface JoinResult {
+  kind: "judgments" | "adjudication";
   batch: string;
   arms: string[];
   second_required: number;
@@ -225,13 +273,31 @@ export interface JoinResult {
   out: string;
 }
 
-/**
- * Joins the judges' replies into judgments.tsv for every arm of the batch, written under out/<arm id>/ with the arm's
- * other contract files, ready for noloss ingest. Refuses until the second and third reads the batch requires are given.
- */
-export function judgeJoin(o: { suite: Suite; suiteSha256: string; key: string; primary: string; second: string | null; third: string | null; arms: LoadedArm[]; out: string; replace: string | null }): JoinResult {
+/** Writes out/<arm id>/ for every arm and the join record through a staging directory, replacing what was there. */
+function writeJoined(out: string, written: Map<string, Map<string, Buffer>>, recordName: string, record: unknown): void {
+  const staging = resolve(out) + ".join-" + process.pid;
+  rmSync(staging, { recursive: true, force: true });
+  for (const [id, files] of written) for (const [name, bytes] of files) {
+    mkdirSync(join(staging, id, name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : ""), { recursive: true });
+    writeFileSync(join(staging, id, name), bytes);
+  }
+  writeFileSync(join(staging, recordName), JSON.stringify(record, null, 2) + "\n");
+  mkdirSync(out, { recursive: true });
+  for (const name of readdirSync(staging)) {
+    const dest = join(out, name);
+    const old = join(out, "." + name + ".old-" + process.pid);
+    if (existsSync(dest)) renameSync(dest, old);
+    renameSync(join(staging, name), dest);
+    rmSync(old, { recursive: true, force: true });
+  }
+  rmSync(staging, { recursive: true, force: true });
+}
+
+type JoinInput = { suite: Suite; suiteSha256: string; key: string; primary: string; second: string | null; third: string | null; arms: LoadedArm[]; out: string; replace: string | null };
+
+/** Reads the key and checks it against its own digests, the suite and the arms' trees. */
+function loadKey(o: JoinInput): JudgeKey {
   const { suite } = o;
-  if (suite.sealed && insideRepo(o.out)) blind("suite " + suite.id + " is sealed, so judged arms must be written outside the repo");
   let key: JudgeKey;
   try {
     key = JSON.parse(readFileSync(o.key, "utf8"));
@@ -248,6 +314,69 @@ export function judgeJoin(o: { suite: Suite; suiteSha256: string; key: string; p
     const t = key.arms.find((x) => x.id === a.arm.arm.id)!.tree_sha256;
     if (t !== a.treeSha256) blind("arm " + a.arm.arm.id + " changed since the packets were built (tree " + t + ", now " + a.treeSha256 + "); build a new batch");
   }
+  return key;
+}
+
+/** Joins adjudication replies into adjudication.tsv for every arm of the batch, under out/<arm id>/, ready for noloss ingest. */
+function adjudicationJoin(o: JoinInput, key: JudgeKey): JoinResult {
+  const { suite } = o;
+  const arms = new Map(o.arms.map((a) => [a.arm.arm.id, a.arm]));
+  const ids = key.entries.map((e) => e.packet + " " + e.opaque);
+  const list = (ks: Set<string>) => ids.filter((k) => ks.has(k)).join(", ");
+  const primary = readRulings(o.primary, key, suite, "primary");
+  const missing = ids.filter((k) => !primary.rulings.has(k));
+  if (missing.length) blind("the primary reply leaves " + missing.length + " findings unruled: " + missing.join(", "));
+  const rest = ids.filter((k) => primary.rulings.get(k) === "defect");
+  const secondSet = new Set([...ids.filter((k) => primary.rulings.get(k) !== "defect"), ...shuffle(rest, seededRandom(key.seed + 1)).slice(0, Math.ceil(SECOND_SAMPLE * rest.length))]);
+  if (!o.second) blind("scoring waits for the second judge: send these " + secondSet.size + " findings (every one the primary ruled not-defect or known-informational, plus a seeded " + SECOND_SAMPLE * 100 + "% sample of the rest) with the same packets, then pass --second: " + list(secondSet));
+  const second = readRulings(o.second!, key, suite, "second");
+  if (second.judge === primary.judge) blind("the second reply is from " + second.judge + ", the primary judge; a second read needs another judge");
+  const extra = [...second.rulings.keys()].filter((k) => !secondSet.has(k)).length;
+  const short = [...secondSet].filter((k) => !second.rulings.has(k)).length;
+  if (extra || short) blind("the second reply must rule exactly the " + secondSet.size + " findings judge-join named (" + short + " missing, " + extra + " extra): " + list(secondSet));
+  const thirdSet = new Set([...secondSet].filter((k) => second.rulings.get(k) !== primary.rulings.get(k)));
+  let third: ReturnType<typeof readRulings> | null = null;
+  if (thirdSet.size) {
+    if (!o.third) blind("scoring waits for a third read: the two judges differ on these " + thirdSet.size + " findings; send them with the same packets, then pass --third: " + list(thirdSet));
+    third = readRulings(o.third!, key, suite, "third");
+    if (third.judge === primary.judge || third.judge === second.judge) blind("the third read is from " + third.judge + ", who already ruled these findings; a third read needs a third judge");
+    const x = [...third.rulings.keys()].filter((k) => !thirdSet.has(k)).length;
+    const s = [...thirdSet].filter((k) => !third!.rulings.has(k)).length;
+    if (x || s) blind("the third reply must rule exactly the " + thirdSet.size + " findings judge-join named (" + s + " missing, " + x + " extra): " + list(thirdSet));
+  } else if (o.third) blind("the two judges agree on every finding, so there is no third read to join; drop --third");
+  for (const a of o.arms) if (a.arm.adjudications && o.replace === null) blind("arm " + a.arm.arm.id + " already has adjudication.tsv; pass --replace \"<reason>\" to replace it");
+  for (const id of arms.keys()) if (existsSync(join(o.out, id)) && o.replace === null) blind(join(o.out, id) + " already exists; pass --replace \"<reason>\" to overwrite it");
+  const written = new Map<string, Map<string, Buffer>>();
+  for (const a of o.arms) {
+    const rows = [ADJUDICATION_COLUMNS.join("\t")];
+    for (const e of key.entries.filter((x) => x.arm === a.arm.arm.id)) {
+      const k = e.packet + " " + e.opaque;
+      const unit = suite.units.find((u) => u.id === key.packets.find((p) => p.file === e.packet)!.unit)!;
+      const f = a.arm.findings!.get(unit.id)!.find((x) => x.id === e.finding && x.pass === e.pass)!;
+      const adjudicated = thirdSet.has(k);
+      rows.push([unitRef(suite, unit), /[;\s]/.test(f.id) ? "#" + f.index : f.id, String(e.pass), (adjudicated ? third! : primary).rulings.get(k)!, adjudicated ? third!.judge + " (third read)" : primary.judge, "no", String(ADJUDICATION_VERSION), key.batch, adjudicated ? "the primary and second judges differed; the third read decides" : ""].join("\t"));
+    }
+    const files = new Map(a.files);
+    files.delete("ingest.json");
+    files.set("adjudication.tsv", Buffer.from(rows.join("\n") + "\n"));
+    parseArm(files, suite, o.suiteSha256);
+    written.set(a.arm.arm.id, files);
+  }
+  const k = kappa([...secondSet].map((s) => [primary.rulings.get(s)!, second.rulings.get(s)!] as [Ruling, Ruling]), RULINGS);
+  const record = { version: JUDGE_VERSION, kind: "adjudicate", batch: key.batch, suite: key.suite, arms: key.arms, judges: { primary: primary.judge, second: second.judge, third: third?.judge ?? null }, replies_sha256: { primary: primary.digest, second: second.digest, third: third?.digest ?? null }, second_required: secondSet.size, third_required: thirdSet.size, kappa_primary_second: k, replaced: o.replace };
+  writeJoined(o.out, written, "adjudication-" + key.batch.slice(0, 12) + ".json", record);
+  return { kind: "adjudication", batch: key.batch, arms: [...arms.keys()], second_required: secondSet.size, third_required: thirdSet.size, kappa_primary_second: k, out: o.out };
+}
+
+/**
+ * Joins the judges' replies into judgments.tsv for every arm of the batch, written under out/<arm id>/ with the arm's
+ * other contract files, ready for noloss ingest. Refuses until the second and third reads the batch requires are given.
+ */
+export function judgeJoin(o: JoinInput): JoinResult {
+  const { suite } = o;
+  if (suite.sealed && insideRepo(o.out)) blind("suite " + suite.id + " is sealed, so judged arms must be written outside the repo");
+  const key = loadKey(o);
+  if (key.kind === "adjudicate") return adjudicationJoin(o, key);
   const arms = new Map(o.arms.map((a) => [a.arm.arm.id, a.arm]));
   const cellKeys = suite.units.flatMap((u) => u.blockers.map((b) => ({ u, b, k: u.id + " " + b.id, packet: fileName(suite, u) })));
   const primary = readReply(o.primary, key, suite, "primary");
@@ -297,23 +426,8 @@ export function judgeJoin(o: { suite: Suite; suiteSha256: string; key: string; p
     parseArm(files, suite, o.suiteSha256);
     written.set(arm.arm.id, files);
   }
-  const k = kappa([...secondSet].flatMap((s) => [...first.get(s)!].map(([ck, c]) => [c.outcome, secondCells.get(s)!.get(ck)!.outcome] as [Outcome, Outcome])));
+  const k = kappa([...secondSet].flatMap((s) => [...first.get(s)!].map(([ck, c]) => [c.outcome, secondCells.get(s)!.get(ck)!.outcome] as [Outcome, Outcome])), ["F", "D", "M"]);
   const record = { version: JUDGE_VERSION, batch: key.batch, suite: key.suite, arms: key.arms, judges: { primary: primary.judge, second: second.judge, third: third?.judge ?? null }, replies_sha256: { primary: primary.digest, second: second.digest, third: third?.digest ?? null }, second_required: secondSet.size, arms_differed: disagree.length, third_required: thirdSet.size, kappa_primary_second: k, replaced: o.replace };
-  const staging = resolve(o.out) + ".join-" + process.pid;
-  rmSync(staging, { recursive: true, force: true });
-  for (const [id, files] of written) for (const [name, bytes] of files) {
-    mkdirSync(join(staging, id, name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : ""), { recursive: true });
-    writeFileSync(join(staging, id, name), bytes);
-  }
-  writeFileSync(join(staging, "join-" + key.batch.slice(0, 12) + ".json"), JSON.stringify(record, null, 2) + "\n");
-  mkdirSync(o.out, { recursive: true });
-  for (const name of readdirSync(staging)) {
-    const dest = join(o.out, name);
-    const old = join(o.out, "." + name + ".old-" + process.pid);
-    if (existsSync(dest)) renameSync(dest, old);
-    renameSync(join(staging, name), dest);
-    rmSync(old, { recursive: true, force: true });
-  }
-  rmSync(staging, { recursive: true, force: true });
-  return { batch: key.batch, arms: [...arms.keys()], second_required: secondSet.size, third_required: thirdSet.size, kappa_primary_second: k, out: o.out };
+  writeJoined(o.out, written, "join-" + key.batch.slice(0, 12) + ".json", record);
+  return { kind: "judgments", batch: key.batch, arms: [...arms.keys()], second_required: secondSet.size, third_required: thirdSet.size, kappa_primary_second: k, out: o.out };
 }
