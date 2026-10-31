@@ -211,7 +211,21 @@ describe("plan judge packets (B6, open item 11)", () => {
     expect(PLAN_HEADING_WORDS_SHA256).toBe("ecb56e71518091b9e7b41bc5c3507ca3c29de228304e48c8f51398d50d03f853");
   });
 
-  test("planMaterial refuses a head the clone lacks, a head with no plan.md and a tree over the cap", () => {
+  test("a plan finding with no section is refused from packets", async () => {
+    const d = tmp("noloss-plan-nosection-");
+    const src = writePlanArm(join(d, "src"), panel.suite, { id: "nosection", passes: 1, raw: true, outcome: () => "F", text: () => ({ section: "", claim: "A finding.", evidence: "context/goals.md", fix: "Fix it." }) });
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", join(d, "arms"), ...S])).code).toBe(0);
+    const r = await run(["judge-packet", "--suite", panel.stubPath, "--arm", join(d, "arms", "planpanel-test", "nosection"), "--seed", "7", "--out", join(d, "p"), "--key", join(d, "k.json"), "--source", "example/plan-panel=" + panel.clone, ...S]);
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("it has no section, and a plan finding names the plan.md heading it is about")]);
+  });
+
+  test("sealedLeaks names 7-character commits and the unit repo, and a stub refuses a title that names one", () => {
+    const u = panel.suite.units[0]!;
+    expect(sealedLeaks(panel.suite, "see " + u.head.slice(0, 7) + " in " + u.repo)).toEqual([u.head.slice(0, 7), u.repo].sort());
+    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's title, purpose or custody: " + u.base.slice(0, 7));
+  });
+
+  test("planMaterial refuses a head the clone lacks, a head with no plan.md, a tree over the cap and an object it cannot read", () => {
     const u = panel.suite.units[0]!;
     expect(() => planMaterial(panel.clone, "0".repeat(40))).toThrow("does not hold head " + "0".repeat(40));
     expect(() => planMaterial(panel.clone, u.base)).toThrow("head " + u.base + " in " + panel.clone + " has no plan.md");
@@ -228,19 +242,6 @@ describe("plan judge packets (B6, open item 11)", () => {
     expect(() => planMaterial(big, u.head)).toThrow("cannot read context/goals.md at head " + u.head);
   });
 
-  test("a plan finding with no section is refused from packets", async () => {
-    const d = tmp("noloss-plan-nosection-");
-    const src = writePlanArm(join(d, "src"), panel.suite, { id: "nosection", passes: 1, raw: true, outcome: () => "F", text: () => ({ section: "", claim: "A finding.", evidence: "context/goals.md", fix: "Fix it." }) });
-    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", join(d, "arms"), ...S])).code).toBe(0);
-    const r = await run(["judge-packet", "--suite", panel.stubPath, "--arm", join(d, "arms", "planpanel-test", "nosection"), "--seed", "7", "--out", join(d, "p"), "--key", join(d, "k.json"), "--source", "example/plan-panel=" + panel.clone, ...S]);
-    expect([r.code, r.err]).toEqual([2, expect.stringContaining("it has no section, and a plan finding names the plan.md heading it is about")]);
-  });
-
-  test("sealedLeaks names 7-character commits and the unit repo, and a stub refuses a title that names one", () => {
-    const u = panel.suite.units[0]!;
-    expect(sealedLeaks(panel.suite, "see " + u.head.slice(0, 7) + " in " + u.repo)).toEqual([u.head.slice(0, 7), u.repo].sort());
-    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's title, purpose or custody: " + u.base.slice(0, 7));
-  });
 });
 
 describe("the decoy-only false-alarm gate and the volume-matched reading (open item 7)", () => {
