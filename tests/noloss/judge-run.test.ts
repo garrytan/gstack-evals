@@ -111,6 +111,37 @@ describe("judge-run on a matching batch", () => {
     for (const id of ["alpha", "beta"]) expect((await run(["ingest", join(out, "joined", id), "--suite", "gsta167-14pr", "--root", join(dir, "judged")])).code).toBe(0);
   });
 
+  test("an answer whose entries are not objects is a refusal, not a crash", async () => {
+    const sent: Sent[] = [];
+    const out = join(dir, "run-null");
+    const honest = matching(key);
+    recordApproval(record, { action: "init", item: "judge-null", cap_micros: 100_000_000, quotes: [QUOTE], admission: "warn" });
+    const r = await judgeRun(args(out).map((a) => (a === "judge" ? "judge-null" : a)), upstream(sent, (model, file, packet) => (model === "claude-opus-5-5" && file === "packets/3593.json" ? JSON.stringify({ packets: [{ file, blockers: [null] }] }) : honest(file, packet))));
+    expect(r.code).toBe(0);
+    expect(sent.filter((s) => s.model === "claude-opus-5-5" && s.file === "packets/3593.json").length).toBe(2);
+    expect(JSON.parse(readFileSync(join(out, "unjudged.json"), "utf8")).entries.map((e: { packet: string }) => e.packet)).toEqual(["packets/3593.json"]);
+    expect(readItem(record, "judge-null").leases.map((l) => l.close?.how)).toEqual(["settled"]);
+  });
+
+  test("a provider failure mid-run stops every worker, settles the lease and writes no reply file", async () => {
+    const sent: Sent[] = [];
+    const out = join(dir, "run-down");
+    const honest = matching(key);
+    recordApproval(record, { action: "init", item: "judge-down", cap_micros: 100_000_000, quotes: [QUOTE], admission: "warn" });
+    const base = upstream(sent, (_m, file, packet) => honest(file, packet));
+    const flaky = async (url: string, init: RequestInit) => {
+      if (String(init.body).includes("=== Packet: packets/3596.json ===")) throw new Error("connection reset");
+      return base(url, init);
+    };
+    const r = await judgeRun(args(out).map((a) => (a === "judge" ? "judge-down" : a)), flaky);
+    expect(r.code).toBe(2);
+    const runFile = JSON.parse(readFileSync(join(out, "run.json"), "utf8"));
+    expect(runFile).toMatchObject({ state: "stopped" });
+    expect(runFile.stop).toBeTruthy();
+    for (const f of ["primary.json", "second.json", "third.json", "impact.tsv"]) expect(existsSync(join(out, f))).toBe(false);
+    expect(readItem(record, "judge-down").leases.map((l) => l.close?.how)).toEqual(["settled"]);
+  });
+
   test("an answer judge-join would refuse is asked again once, and a second refusal leaves the packet unjudged", async () => {
     const sent: Sent[] = [];
     const out = join(dir, "run2");

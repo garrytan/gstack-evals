@@ -222,6 +222,8 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   const replies = new Map<JudgeRole, Map<string, Answer>>(ROLES.map((r) => [r, new Map()]));
   const unjudged: Unjudged[] = [];
   let stop: ScoreError | null = null;
+  let crash: unknown = null;
+  let proxy: MeteringProxy | undefined;
   let requests = 0;
   let lease: { lease_id: string; reserved_micros: number };
   try {
@@ -230,7 +232,6 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
     local.close();
     throw e;
   }
-  const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "gse-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: { attempts: 1, elapsed_ms: UPSTREAM_DEADLINE_MS }, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS });
 
   const validate = (role: JudgeRole, p: (typeof packets)[number], answer: string, need: string[]): Answer | string => {
     let body: Record<string, any> | undefined;
@@ -246,8 +247,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
     try {
       got = adjudicate ? packetRulings(p, { findings: body.findings }, key, suite, role) : packetAnswers(p, { blockers: body.blockers }, key, suite, role);
     } catch (e) {
-      if (e instanceof ScoreError) return e.message;
-      throw e;
+      return (e as Error).message;
     }
     const short = need.filter((k) => !got.has(k));
     if (short.length) return "the answer leaves " + short.length + " of the " + need.length + (adjudicate ? " findings it must rule unruled: " : " blockers it must answer unanswered: ") + short.join(", ");
@@ -261,16 +261,16 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
     let reason = "";
     for (let attempt = 1; attempt <= 2; attempt++) {
       if (stop) return;
-      const binding = proxy.bind({ cell: { run_id: runId, arm: role, task: p.file, model: m.model, trial: 1, attempt }, models: [m.provider + ":" + m.model], allowance_micros: lease.reserved_micros });
+      const binding = proxy!.bind({ cell: { run_id: runId, arm: role, task: p.file, model: m.model, trial: 1, attempt }, models: [m.provider + ":" + m.model], allowance_micros: lease.reserved_micros });
       let res: Response;
       let text: string;
       try {
         requests++;
-        res = await fetch("http://127.0.0.1:" + proxy.port + "/" + binding.slot + "/" + m.provider + JUDGE_ROUTE[m.provider], { method: "POST", headers: { authorization: "Bearer " + binding.token, "content-type": "application/json" }, body: JSON.stringify(request(role, p)), timeout: false } as RequestInit);
+        res = await fetch("http://127.0.0.1:" + proxy!.port + "/" + binding.slot + "/" + m.provider + JUDGE_ROUTE[m.provider], { method: "POST", headers: { authorization: "Bearer " + binding.token, "content-type": "application/json" }, body: JSON.stringify(request(role, p)), timeout: false } as RequestInit);
         text = await res.text();
       } finally {
-        await proxy.finalize(binding.meter_id);
-        proxy.unbind(binding.slot);
+        await proxy!.finalize(binding.meter_id);
+        proxy!.unbind(binding.slot);
       }
       let answer: string | null = null;
       try {
@@ -299,7 +299,14 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
     const queue = [...jobs];
     await Promise.all(
       Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-        while (!stop && queue.length) await queue.shift()!();
+        while (!stop && queue.length) {
+          try {
+            await queue.shift()!();
+          } catch (e) {
+            if (!(e instanceof ScoreError)) crash ??= e;
+            stop ??= e instanceof ScoreError ? e : new ScoreError("E_INTERNAL", "noloss judge-run: " + (e as Error).message + "; the run stops with no reply files, so start a fresh one");
+          }
+        }
       }),
     );
   };
@@ -309,6 +316,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
     packets.filter((p) => judged.some((c) => c.packet === p.file && set.has(c.k))).map((p) => () => ask(role, p, judged.filter((c) => c.packet === p.file && set.has(c.k)).map((c) => c.k)));
 
   try {
+    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "gse-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: { attempts: 1, elapsed_ms: UPSTREAM_DEADLINE_MS }, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS });
     proxy.start();
     await pool(packets.map((p) => () => ask("primary", p, adjudicate ? key.entries.filter((e) => e.packet === p.file).map((e) => p.file + " " + e.opaque) : p.unitOf.blockers.map((b) => p.unit + " " + b.id))));
     if (!stop) {
@@ -320,11 +328,14 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
       await pool(readers("third", second.third!, second.judged));
     }
   } finally {
-    proxy.stop();
+    proxy?.stop();
     try {
-      const reconciled = await reconcileJournal(journal, local);
-      for (const r of reconciled.refused) warn(r.code as ReasonCode, "reconciling reservation " + (r.reservation_id ?? "(a lost reserve)") + " was refused: " + r.message);
-      ledgerStep(() => settleLease(record, local, lease.lease_id, warn));
+      try {
+        const reconciled = await reconcileJournal(journal, local);
+        for (const r of reconciled.refused) warn(r.code as ReasonCode, "reconciling reservation " + (r.reservation_id ?? "(a lost reserve)") + " was refused: " + r.message);
+      } finally {
+        ledgerStep(() => settleLease(record, local, lease.lease_id, warn));
+      }
     } finally {
       local.close();
     }
@@ -332,7 +343,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   const runFile = (state: string) => JSON.stringify({ version: 1, run_id: runId, state, stop: stop?.code ?? null, kind: adjudicate ? "adjudication" : "matching", batch: key.batch, suite: key.suite, brief: { path: briefPath, sha256: sha256(brief) }, models: Object.fromEntries(ROLES.map((r) => [r, models[r].id])), item, lease_id: lease.lease_id, requests, unjudged: unjudged.length, files: Object.fromEntries([...written].sort(([a], [b]) => (a < b ? -1 : 1))) }, null, 2) + "\n";
   if (stop) {
     writeFileSync(join(out, "run.json"), runFile("stopped"));
-    throw stop;
+    throw crash ?? stop;
   }
   const final = judgeSets(key, suite, armMap, merged("primary"), merged("second"), unjudged);
   unjudged.sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role) || key.packets.findIndex((p) => p.file === a.packet) - key.packets.findIndex((p) => p.file === b.packet));
