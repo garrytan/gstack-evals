@@ -1,0 +1,74 @@
+[
+  {
+    "id": "admin-route-flag",
+    "prompt": "Support found that POST /admin/refunds works without the admin token. We fixed the same hole on /admin/export a while ago, and now it is back on a new route. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" admin-route-flag",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" admin-route-flag"
+  },
+  {
+    "id": "migration-rollback",
+    "prompt": "Rolling back the latest migration on staging left a stray email column on users, and the next deploy failed when it tried to add the column again. Rollback has left schema behind before, with the sessions migration. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" migration-rollback",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" migration-rollback"
+  },
+  {
+    "id": "missing-translation",
+    "prompt": "French customers see the raw text profile.save on the profile page's save button. The checkout page showed checkout.pay the same way before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" missing-translation",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" missing-translation"
+  },
+  {
+    "id": "timeout-units",
+    "prompt": "Every call to the email service fails with \"email timed out after 10 ms\". Search had the same problem when it was added. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" timeout-units",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" timeout-units"
+  },
+  {
+    "id": "env-flag-strings",
+    "prompt": "Staging has SEND_EMAILS=false, but it still sent emails to real customers. Last month MAINTENANCE_MODE=false put the whole site into maintenance. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" env-flag-strings",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" env-flag-strings"
+  },
+  {
+    "id": "config-key-typo",
+    "prompt": "Customers on the new pro plan can only create one project. Team plans had a similar problem with seats a while back. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" config-key-typo",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" config-key-typo"
+  },
+  {
+    "id": "secret-file-mode",
+    "prompt": "The session token file the CLI writes is readable by every user on the machine. The API key file had the same problem before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" secret-file-mode",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" secret-file-mode"
+  },
+  {
+    "id": "html-escape",
+    "prompt": "A user put a script tag in their profile bio, and it ran for everyone who opened the profile. Comments had the same hole before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" html-escape",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" html-escape"
+  },
+  {
+    "id": "open-redirect",
+    "prompt": "A link like /logout?next=https://evil.example sends people to an outside site after logout, and phishers are using it. Login had the same open redirect before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" open-redirect",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" open-redirect"
+  },
+  {
+    "id": "empty-average",
+    "prompt": "The sales dashboard shows NaN for the average order value on days with no orders, and the nightly export chokes on it. The latency report did the same in quiet hours before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" empty-average",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" empty-average"
+  },
+  {
+    "id": "month-end",
+    "prompt": "A customer who started a trial on January 31 had it end on March 2 instead of the last day of February. Invoice dates rolled over the same way before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" month-end",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" month-end"
+  },
+  {
+    "id": "limit-off-by-one",
+    "prompt": "Our API rate limit is documented as 100 requests per key, but clients get 101 before the first refusal. The login limiter let one extra attempt through the same way before. Fix it, and make sure this kind of mistake can't come back. CI runs `bun run check`. Keep the existing files and exported names. Work on your own without stopping to ask questions.",
+    "setup": "sh \"$SKILL_EVAL_FIXTURES/seed.sh\" limit-off-by-one",
+    "check": "bun --no-env-file --config=\"$SKILL_EVAL_FIXTURES/bunfig.toml\" --tsconfig-override=\"$SKILL_EVAL_FIXTURES/tsconfig.json\" \"$SKILL_EVAL_FIXTURES/grade.ts\" limit-off-by-one"
+  }
+]

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "tasks": {
+    "file": "tasks.json",
+    "sha256": "d239ef0af5c04e41e5076c71e3d6e379c4de606a1dea1362f711cfb2d7127963"
+  },
+  "ext": null,
+  "policy": {
+    "file": "models.json",
+    "sha256": "a00180abac95f46036d83c5bab8e67d6d365f02c7b8029d7f22ff229b95a40b1"
+  },
+  "skill": {
+    "name": "stack-neutral",
+    "tree_sha256": "941411236e035486856bd35af813d8b51eac6c12c1f770fe6e23f9478277715c",
+    "files": [
+      {
+        "path": "SKILL.md",
+        "sha256": "6ab7c7e781af6049478e572f63f041da387c7010cc641e9dd2cdb075f8691d13",
+        "load": "always"
+      }
+    ]
+  },
+  "extractor": {
+    "version": 1,
+    "sha256": "6baa40c6485b02a86881230a453c1c713fb823751b53370e03bb12738aa464d7"
+  },
+  "classifier_sha256": "edcfe29a5c0f12f411b6d768afafb851ce137d4f5d2e8f9b8664de13c7e18c95",
+  "coverage_rule": "A line counts as covered only when an old-arm run of a task in its tasks list reached it: the run passed, read the line's file, and, for an ask line, asked a question of the line's category (any question when it is \"any\"). For other lines the claiming task's check observes the line's gated event or required output, so a passing run is that observation. Claimed lines no run reached, and unclaimed lines, are uncovered.",
+  "lines": [
+  ]
+}

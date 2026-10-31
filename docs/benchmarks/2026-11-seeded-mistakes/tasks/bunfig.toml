@@ -1,0 +1,5 @@
+# The grader's own Bun config. Every task's check runs grade.ts under it, and grade.ts runs each oracle and the mutants'
+# bun steps under it, so a bunfig.toml in the graded tree cannot change how they run. Each of those calls also passes
+# --no-env-file; env = false keeps .env files out even if a call drops the flag. The repo's own `bun run check` still
+# reads the tree's config, as its CI would.
+env = false
