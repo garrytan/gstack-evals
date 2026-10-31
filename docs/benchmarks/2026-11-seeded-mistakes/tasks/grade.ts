@@ -26,11 +26,16 @@
 // passes only when the report shows its own tests ran and none that count failed, so tree code that ends the process
 // early, or a paths entry that swaps the test file, fails it. The copies keep symlinks as links; a link that leaves the
 // copy it is in, or points nowhere, fails the grade before anything runs in that copy, so no mutant writes outside its
-// copy. Tree code that writes outside its own copy, keeps state between its runs or leaves a process running is out of
-// reach of these rules.
+// copy. Tree code that writes outside its own copy, keeps state between its runs, leaves a process running or ignores
+// SIGTERM is out of reach of these rules.
 // Prints one JSON line with every scenario. Exit 0 passes, 1 fails. A tree that cannot be copied (a FIFO, a socket, an
-// unreadable file) fails, and so does a scenario whose oracle or check does not finish (a timeout, a signal or an exit
-// code above 128), so a hung or killed check never counts as a caught mistake. Exit 2 means the grader itself failed
+// unreadable file) fails, and so does a scenario whose oracle or check does not finish (a timeout, a signal, an exit
+// code above 128, or a process left holding its stderr), so a hung or killed check never counts as a caught mistake.
+// Each step gets at most 300 seconds and the whole grade 540 seconds, a minute under the trial's check timeout, which is
+// the session's timeout (600 seconds by default). When the grade runs out of time, the scenario in progress and every
+// scenario not yet run fail with the reason, so a hung tree records a fail, never an unjudged trial. GRADE_DEADLINE_MS
+// in grade.ts's own environment can only shorten the grade, for the tests; no step passes it on, and --no-env-file
+// keeps the tree's .env from setting it. Exit 2 means the grader itself failed
 // and nothing was judged: an unknown task, a seed that failed, a mutant that failed on the seed too, a step that could
 // not start, a copy that could not be removed, or a full disk. Git runs with auto maintenance off, so no commit in a
 // seed leaves a process behind that could change the seed while it is removed.
@@ -44,19 +49,27 @@ const MUST_PASS = ["final", "touch", "fresh-ok"];
 const UNBROKEN = "with no mistake in place";
 const ORACLE = "__grade__/oracle.test.ts";
 const STEP_MS = 300_000;
+const DEADLINE_MS = 540_000;
 const COPY = { recursive: true, verbatimSymlinks: true };
 const NO_GIT_CONFIG = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "maintenance.auto", GIT_CONFIG_VALUE_0: "false" };
 const DISK_FAULTS = ["ENOSPC", "EDQUOT", "EIO", "ENOMEM", "EMFILE", "ENFILE"];
 
 const task = process.argv[2] ?? "";
 const taskDir = join(import.meta.dir, task);
+const asked = Number(process.env.GRADE_DEADLINE_MS);
+const limitMs = asked > 0 ? Math.min(asked, DEADLINE_MS) : DEADLINE_MS;
+const deadline = Date.now() + limitMs;
+class OutOfTime extends Error {}
 const env: Record<string, string> = {};
 for (const name of ["PATH", "HOME", "LANG", "TERM"]) if (process.env[name] !== undefined) env[name] = process.env[name]!;
 type Step = { status: number; done: boolean; why: string };
 const run = (cmd: string[], cwd: string, extra: Record<string, string> = {}): Step => {
-  const r = spawnSync(cmd[0]!, cmd.slice(1), { cwd, env: { ...env, ...extra }, timeout: STEP_MS, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  const left = deadline - Date.now();
+  if (left <= 0) throw new OutOfTime();
+  const r = spawnSync(cmd[0]!, cmd.slice(1), { cwd, env: { ...env, ...extra }, timeout: Math.min(STEP_MS, left), encoding: "utf8", stdio: ["ignore", "ignore", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   if (!r.pid) throw new Error(cmd.join(" ") + " could not start: " + r.error?.message);
-  const done = r.status !== null && r.status <= 128;
+  const done = !r.error && r.status !== null && r.status <= 128;
+  if (!done && Date.now() >= deadline) throw new OutOfTime();
   return { status: r.status ?? -1, done, why: done ? (r.stderr ?? "").trim() : cmd.join(" ") + " did not finish: " + (r.error?.message ?? "ended by " + (r.signal ?? "exit " + r.status)) };
 };
 
@@ -107,44 +120,49 @@ function grade(root: string): { pass: boolean; [key: string]: unknown } {
     [order[i], order[j]] = [order[j]!, order[i]!];
   }
   const scenarios: Record<string, Scenario> = {};
-  for (const name of order) {
-    cpSync(tree, dir, COPY);
-    const linked = refused(dir);
-    if (linked) return linked;
-    if (name !== "final") {
-      mkdirSync(pristine);
-      const seed = run(["sh", join(import.meta.dir, "seed.sh"), task], pristine, NO_GIT_CONFIG);
-      if (seed.status !== 0) throw new Error("seed.sh failed: " + seed.why);
-      const mutate = (cwd: string) => run(["sh", join(taskDir, "mutants.sh"), name], cwd, { PRISTINE: pristine, ...NO_GIT_CONFIG });
-      const m = mutate(dir);
-      if (m.status !== 0) {
-        const probe = mutate(pristine);
-        if (probe.status !== 0) throw new Error(name + " did not apply to the seed: " + probe.why);
-        scenarios[name] = { check: null, oracle: null, ok: false, reason: "the tree's layout stopped the " + name + " mutant: " + m.why };
-        for (const path of [pristine, dir]) remove(path);
-        continue;
+  try {
+    for (const name of order) {
+      cpSync(tree, dir, COPY);
+      const linked = refused(dir);
+      if (linked) return linked;
+      if (name !== "final") {
+        mkdirSync(pristine);
+        const seed = run(["sh", join(import.meta.dir, "seed.sh"), task], pristine, NO_GIT_CONFIG);
+        if (!seed.done || seed.status !== 0) throw new Error("seed.sh failed: " + seed.why);
+        const mutate = (cwd: string) => run(["sh", join(taskDir, "mutants.sh"), name], cwd, { PRISTINE: pristine, ...NO_GIT_CONFIG });
+        const m = mutate(dir);
+        if (!m.done || m.status !== 0) {
+          const probe = mutate(pristine);
+          if (!probe.done || probe.status !== 0) throw new Error(name + " did not apply to the seed: " + probe.why);
+          scenarios[name] = { check: null, oracle: null, ok: false, reason: "the tree's layout stopped the " + name + " mutant: " + m.why };
+          for (const path of [pristine, dir]) remove(path);
+          continue;
+        }
+        remove(pristine);
       }
-      remove(pristine);
+      cpSync(dir, graded, COPY);
+      const copied = refused(graded);
+      if (copied) return copied;
+      rmSync(join(graded, "__grade__"), { recursive: true, force: true });
+      mkdirSync(join(graded, "__grade__"));
+      copyFileSync(join(taskDir, "oracle.ts"), join(graded, ORACLE));
+      const must = MUST_PASS.includes(name);
+      const o = run([process.execPath, "--no-env-file", "--config=" + join(import.meta.dir, "bunfig.toml"), "test", "--reporter=junit", "--reporter-outfile=" + report, "./" + ORACLE], graded);
+      const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
+      const cases = [...xml.matchAll(/<testcase\s([^>]*?)(\/?)>/g)].map(([, attrs, closed]) => ({ unbroken: attrs!.includes(' classname="' + UNBROKEN + '"'), file: /\sfile="([^"]*)"/.exec(attrs!)?.[1], pass: closed === "/" }));
+      const ran = cases.length > 0 && cases.every((c) => c.file === ORACLE) && cases.some((c) => c.unbroken) && cases.some((c) => !c.unbroken);
+      const oracle = o.done ? ran && (o.status === 0 || (!must && o.status === 1)) && cases.every((c) => c.pass || (c.unbroken && !must)) : null;
+      for (const path of [graded, report]) remove(path);
+      const added = existsSync(join(dir, ".git")) ? run(["git", "add", "-A"], dir, NO_GIT_CONFIG) : undefined;
+      const c = added?.done === false ? added : run(["bun", "run", "check"], dir);
+      const check = c.done ? c.status === 0 : null;
+      const unfinished = [o, c].filter((step) => !step.done).map((step) => step.why);
+      scenarios[name] = { check, oracle, ok: !unfinished.length && (must ? check === true && oracle === true : check === false || oracle === true), ...(unfinished.length ? { reason: unfinished.join("; ") } : {}) };
+      remove(dir);
     }
-    cpSync(dir, graded, COPY);
-    const copied = refused(graded);
-    if (copied) return copied;
-    rmSync(join(graded, "__grade__"), { recursive: true, force: true });
-    mkdirSync(join(graded, "__grade__"));
-    copyFileSync(join(taskDir, "oracle.ts"), join(graded, ORACLE));
-    const must = MUST_PASS.includes(name);
-    const o = run([process.execPath, "--no-env-file", "--config=" + join(import.meta.dir, "bunfig.toml"), "test", "--reporter=junit", "--reporter-outfile=" + report, "./" + ORACLE], graded);
-    const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
-    const cases = [...xml.matchAll(/<testcase\s([^>]*?)(\/?)>/g)].map(([, attrs, closed]) => ({ unbroken: attrs!.includes(' classname="' + UNBROKEN + '"'), file: /\sfile="([^"]*)"/.exec(attrs!)?.[1], pass: closed === "/" }));
-    const ran = cases.length > 0 && cases.every((c) => c.file === ORACLE) && cases.some((c) => c.unbroken) && cases.some((c) => !c.unbroken);
-    const oracle = o.done ? ran && (o.status === 0 || (!must && o.status === 1)) && cases.every((c) => c.pass || (c.unbroken && !must)) : null;
-    for (const path of [graded, report]) remove(path);
-    const added = existsSync(join(dir, ".git")) ? run(["git", "add", "-A"], dir, NO_GIT_CONFIG) : undefined;
-    const c = added?.done === false ? added : run(["bun", "run", "check"], dir);
-    const check = c.done ? c.status === 0 : null;
-    const unfinished = [o, c].filter((step) => !step.done).map((step) => step.why);
-    scenarios[name] = { check, oracle, ok: !unfinished.length && (must ? check === true && oracle === true : check === false || oracle === true), ...(unfinished.length ? { reason: unfinished.join("; ") } : {}) };
-    remove(dir);
+  } catch (error) {
+    if (!(error instanceof OutOfTime)) throw error;
+    for (const name of order) scenarios[name] ??= { check: null, oracle: null, ok: false, reason: "the grade's " + limitMs / 1000 + "-second deadline passed before this scenario finished" };
   }
   return { pass: Object.values(scenarios).every((s) => s.ok), order, scenarios: Object.fromEntries(SCENARIOS.map((name) => [name, scenarios[name]])) };
 }

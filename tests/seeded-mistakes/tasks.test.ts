@@ -541,4 +541,22 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       expect(events.filter((e) => /"argv":\[[^\]]*"maintenance"|"label":"detach"/.test(e))).toEqual([]);
     });
   }, 240_000);
+
+  // Value: protects=a check that hangs, or passes but leaves a process holding its stderr, fails every scenario with a reason by the grade's own deadline, so the trial's check timeout never fires first and a hung tree records a fail, not an unjudged trial; fails_when=grade.ts loses its total deadline, stops capping each step at the time left, or counts a step that timed out with status 0 as finished; why_new=#87's /ship pass 4 red-team finding 1 (GST-413); seam=grade.ts's deadline, lowered through GRADE_DEADLINE_MS in grade.ts's own environment, which no step passes on to the tree; no_claim=that grade.ts can stop tree code that ignores SIGTERM
+  test("a check that hangs in every scenario fails the grade, with a reason, by the grade's deadline", async () => {
+    await inRoot(async (root) => {
+      const loop = seed(root, ID, "loop", ["fix"]);
+      write(loop, { "tests/loop.test.ts": 'import { test } from "bun:test";\n\ntest("waits for the month to end", () => {\n  while (true) {}\n});\n' });
+      const held = seed(root, ID, "held", ["fix"]);
+      write(held, { "tests/server.test.ts": 'import { test } from "bun:test";\nimport { spawn } from "node:child_process";\n\ntest("starts a server", () => {\n  spawn("sleep", ["60"], { stdio: ["ignore", "ignore", "inherit"], detached: true }).unref();\n});\n' });
+      const started = Date.now();
+      const grades = await Promise.all([loop, held].map((dir) => grade(dir, ID, { GRADE_DEADLINE_MS: "15000" })));
+      expect(Date.now() - started).toBeLessThan(25_000);
+      for (const g of grades) {
+        expect(g).toMatchObject({ code: 1, pass: false });
+        expect(Object.values(g.scenarios).some((s) => s.reason?.includes("15-second deadline passed"))).toBe(true);
+        for (const name of g.order) expect([name, g.scenarios[name]!.ok, typeof g.scenarios[name]!.reason]).toEqual([name, false, "string"]);
+      }
+    });
+  }, 60_000);
 });
