@@ -1,0 +1,183 @@
+{
+  "name": "planning-r1a-ceo-panel-v1",
+  "bundle": "planning-r1a-ceo-panel-v1.tar.age",
+  "bundle_sha256": "2898122b24bc826ec2d8bcda7459a0526aa06beaca035781ae96a8ccb57d2f67",
+  "tar_sha256": "32da862a4a106e609bcb26683411fb6ee8b6b44a301f38337f1cb4270a1b40b9",
+  "recipient": "age1qru8aggfw8sgaxrx7whjfjksptqr4rnqaaxns4xq9auxxepe9susevg7vr",
+  "counts": [
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "mode": "greenfield",
+      "units": 8
+    },
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "mode": "added-capability",
+      "units": 8
+    },
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "mode": "fix",
+      "units": 8
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "core",
+      "mode": "greenfield",
+      "units": 2
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "core",
+      "mode": "added-capability",
+      "units": 2
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "core",
+      "mode": "fix",
+      "units": 2
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "extension",
+      "mode": "greenfield",
+      "units": 2
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "extension",
+      "mode": "added-capability",
+      "units": 2
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "extension",
+      "mode": "fix",
+      "units": 2
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "mode": "greenfield",
+      "units": 2
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "mode": "added-capability",
+      "units": 1
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "mode": "fix",
+      "units": 1
+    },
+    {
+      "stratum": "real-neutral",
+      "decoy_set": null,
+      "mode": "greenfield",
+      "units": 1
+    },
+    {
+      "stratum": "real-neutral",
+      "decoy_set": null,
+      "mode": "added-capability",
+      "units": 1
+    }
+  ],
+  "tag_counts": [
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "tag": "W:T1",
+      "units": 12
+    },
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "tag": "W:T2",
+      "units": 12
+    },
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "tag": "B:T1",
+      "units": 12
+    },
+    {
+      "stratum": "seeded",
+      "decoy_set": null,
+      "tag": "B:T2",
+      "units": 12
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "core",
+      "tag": "bait:T1",
+      "units": 3
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "core",
+      "tag": "bait:T2",
+      "units": 3
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "extension",
+      "tag": "bait:T1",
+      "units": 3
+    },
+    {
+      "stratum": "decoy",
+      "decoy_set": "extension",
+      "tag": "bait:T2",
+      "units": 3
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "tag": "W:T1",
+      "units": 2
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "tag": "W:T2",
+      "units": 2
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "tag": "B:T1",
+      "units": 2
+    },
+    {
+      "stratum": "pilot",
+      "decoy_set": null,
+      "tag": "B:T2",
+      "units": 2
+    },
+    {
+      "stratum": "real-neutral",
+      "decoy_set": null,
+      "tag": "W:real",
+      "units": 1
+    },
+    {
+      "stratum": "real-neutral",
+      "decoy_set": null,
+      "tag": "B:real",
+      "units": 1
+    }
+  ],
+  "authored_plan_bytes": {
+    "min": 2761,
+    "max": 4007
+  }
+}
