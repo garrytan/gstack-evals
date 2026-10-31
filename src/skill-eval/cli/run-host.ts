@@ -400,8 +400,8 @@ const PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KE
  * Builds each arm's image from its install on the trial image, and its calibration copy (the arm image plus its
  * SKILL.md with the sentinel appended). A base arm's first layer is built once as its own image, so every arm on one
  * base shares it. With retain, every layer tree is kept there by digest. An arm with cells (src/arms/cells.ts) gets one
- * image per cell whose settings add a layer. Writes <out>/arms.json: per arm its provenance (repo, sha, subtree path, git
- * tree and tree sha256 for a stack), layers, plugin roots, image and cells. Returns each image tag by arm name, by
+ * image per cell whose settings add a layer, and that layer is kept like the arm's own. Writes <out>/arms.json: per arm
+ * its provenance (repo, sha, subtree path, git tree and tree sha256 for a stack), layers, plugin roots, image and cells. Returns each image tag by arm name, by
  * name#calibration for the copies and by name@model for the cells.
  */
 export function armImages(o: { trialImage: string; home: string; installs: readonly ArmInstall[]; marks: Readonly<Record<string, string>>; tasksDir: string; state: string; docker: string; out: string; retain: string | null; noCache?: boolean; cells?: Readonly<Record<string, readonly CellSettings[]>> }): Map<string, string> {
@@ -431,11 +431,12 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
       calibration = build(image.tag, [sentinelLayer(arm, withSentinel(readFileSync(arm.skill.file, "utf8"), o.marks[arm.name]!), dir)]);
     }
     images.set(arm.name + "#calibration", calibration.tag);
-    const layers = arm.layers.map((l) => ({ dest: l.dest, ...(o.retain ? { retained: retainTree(l.src, o.retain) } : { tree_sha256: dirTreeSha256(l.src) }) }));
+    const kept = (l: Layer) => ({ dest: l.dest, ...(o.retain ? { retained: retainTree(l.src, o.retain) } : { tree_sha256: dirTreeSha256(l.src) }) });
+    const layers = arm.layers.map(kept);
     const cells = (o.cells?.[arm.name] ?? []).map((c) => {
       const built = c.layer ? build(image.tag, [c.layer]) : image;
       images.set(arm.name + "@" + c.cell.model, built.tag);
-      return { model: c.cell.model, voice: c.cell.voice, tree_sha256: c.tree_sha256, gstack_config: c.gstack_config, codex: c.codex, image: { tag: built.tag, digest: built.digest } };
+      return { model: c.cell.model, voice: c.cell.voice, tree_sha256: c.tree_sha256, gstack_config: c.gstack_config, codex: c.codex, layer: c.layer ? kept(c.layer) : null, image: { tag: built.tag, digest: built.digest } };
     });
     record.push({ name: arm.name, provenance: arm.provenance, tree_sha256: arm.tree_sha256, layers, ...(arm.plugins.length ? { plugins: arm.plugins } : {}), image: { tag: image.tag, digest: image.digest, dropped: image.dropped }, calibration_image: { tag: calibration.tag, digest: calibration.digest }, ...(cells.length ? { cells } : {}) });
   }

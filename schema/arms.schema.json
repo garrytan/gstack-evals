@@ -29,7 +29,7 @@
       "description": "The arm's name, such as before, after, before2, none, placebo or bare."
     },
     "stackRef": {
-      "description": "A repository pinned at a full commit sha.",
+      "description": "A repository pinned at a full commit sha, or one folder of it (path).",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -44,6 +44,11 @@
         "sha": {
           "type": "string",
           "pattern": "^[0-9a-f]{40}$"
+        },
+        "path": {
+          "description": "A folder of the commit, relative to the repository root and made of plain names, such as harness/pstack/claude-code: the arm installs that subtree alone.",
+          "type": "string",
+          "pattern": "^(?!(.*/)?\\.\\.?(/|$))[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
         }
       }
     },

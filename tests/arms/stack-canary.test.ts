@@ -5,11 +5,11 @@
 // its skill body is in the first model request, the stack's nested agents start, tstack's Sol subagent reaches
 // gpt-6.1-sol through the Codex CLI on the session's own proxy slot, and poteto-mode's scripts find their dependencies
 // with no registry. GSTACK_EVALS_CANARY_DOCKER=1 runs the same sessions from the trial image: the builder container
-// installs each stack, the arm and cell images are built, each session runs in its image, and <state>/canary/arms.json
-// records the arms. Without the sources, the CLIs or the variable, the tiers skip.
+// installs each stack, the arm and cell images are built and their layers retained, each session runs in its image, and
+// <state>/canary/arms.json records the arms. Without the sources, the CLIs or the variable, the tiers skip.
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { claudeCodeDriver } from "../../src/adapters/claude-code/driver.ts";
@@ -178,20 +178,22 @@ describe.skipIf(!DOCKER)("stack canary from the trial image", () => {
     const out = join(state, "canary");
     mkdirSync(out, { recursive: true });
     const tasks = temp("tasks");
-    const images = armImages({ trialImage: pin.pin.tag, home, installs: Object.values(installs), marks: { pstack: "gstack-evals-sentinel: canary-pstack", tstack: "gstack-evals-sentinel: canary-tstack" }, tasksDir: tasks, state, docker: "docker", out, retain: null, cells });
+    const retain = temp("retain");
+    const images = armImages({ trialImage: pin.pin.tag, home, installs: Object.values(installs), marks: { pstack: "gstack-evals-sentinel: canary-pstack", tstack: "gstack-evals-sentinel: canary-tstack" }, tasksDir: tasks, state, docker: "docker", out, retain, cells });
     const tier: Tier = {
       homeOf: () => home,
       session: (arm, cell, work, env) => ({ home, open: () => dockerSandbox({ trialImage: pin.pin.tag, armImage: images.get(arm.name + "@" + cell.cell.model)! }).agent("canary", { work, env: env(home, "/usr/local/bin:/usr/bin:/bin"), network: "host" }) }),
     };
     await pstackCanary(tier, installs.pstack!, cells.pstack![0]!);
     await tstackCanary(tier, installs.tstack!, cells.tstack![0]!);
-    const record = JSON.parse(readFileSync(join(out, "arms.json"), "utf8")) as { arms: { name: string; provenance: { stack: Record<string, string> }; tree_sha256: string; image: { digest: string }; cells: { model: string; tree_sha256: string; image: { digest: string } }[] }[] };
+    const record = JSON.parse(readFileSync(join(out, "arms.json"), "utf8")) as { arms: { name: string; provenance: { stack: Record<string, string> }; tree_sha256: string; image: { digest: string }; cells: { model: string; tree_sha256: string; layer: { dest: string; retained: { ref: string; file: string } } | null; image: { digest: string } }[] }[] };
     for (const k of STACKS) {
       const arm = record.arms.find((a) => a.name === k.name)!;
       expect(arm.provenance.stack).toMatchObject({ repo: k.repo, sha: k.pin.sha, git_tree: k.pin.git_tree, ...(k.path ? { path: k.path } : {}) });
       expect(arm.provenance.stack.tree_sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(arm.image.digest).toMatch(/^sha256:/);
       expect(arm.cells.every((c) => c.image.digest.startsWith("sha256:") && /^[0-9a-f]{64}$/.test(c.tree_sha256))).toBe(true);
+      expect(arm.cells.every((c) => (k.plugin ? c.layer?.dest === "" && /^[0-9a-f]{64}$/.test(c.layer.retained.ref) && existsSync(join(retain, c.layer.retained.file)) : c.layer === null))).toBe(true);
     }
   }, 3_600_000);
 });
