@@ -49,6 +49,18 @@ describe("noloss flag-scan: the frozen contamination rules", () => {
     expect([glob(H + "/.claude/skills/gstack/lib/a.ts"), glob(H + "/.claude/skills/gstack/lib/sub/a.ts")]).toEqual(["read", null]);
     const ls = touchRule(touches("Bash", { command: "ls ~/.local/share/gstack/lib" }, "/work/t").paths[0]!);
     expect([ls(H + "/.local/share/gstack/lib/a.ts"), ls(H + "/.local/share/gstack/lib/sub/a.ts"), ls(H + "/.local/share/gstack/lib")]).toEqual(["list", null, "list"]);
+    const f = H + "/.local/share/gstack/lib/ship-budget.ts";
+    const fromRoot = touches("Bash", { command: "find / -name ship-budget.ts 2>/dev/null" }, "/work/t").paths[0]!;
+    const grepRoot = touches("Grep", { pattern: "12345", path: "/" }, "/work/t").paths[0]!;
+    expect([touchRule(fromRoot)(f), touchRule(grepRoot)(f), inRoots("gstack", grepRoot), inRoots("gstack", touches("Bash", { command: "ls /" }, "/work/t").paths[0]!)]).toEqual(["list", "recursive", true, false]);
+    const skills = touches("Bash", { command: "find ~/.claude/skills -name SKILL.md" }, "/work/t").paths[0]!;
+    expect([touchRule(skills)(H + "/.claude/skills/gstack/lib/ship-budget.ts"), touchRule(skills)(H + "/.claude/skills/gstack/SKILL.md")]).toEqual([null, "list"]);
+    expect(touchRule(touches("Bash", { command: "find ~/.claude/skills -name SKILL.md -o -name '*.ts'" }, "/work/t").paths[0]!)(H + "/.claude/skills/gstack/lib/ship-budget.ts")).toBe("list");
+    expect(["find ~/.local/share/gstack -maxdepth 1 -type d", "tree -L 1 ~/.local/share/gstack", "tree -L 2 ~/.local/share/gstack"].map((command) => touchRule(touches("Bash", { command }, "/work/t").paths[0]!)(f))).toEqual([null, null, "list"]);
+    expect(touchRule(touches("Glob", { pattern: "**/*.{ts,md}", path: H + "/.local/share/gstack" }, "/work/t").paths[0]!)(f)).toBe("list");
+    expect(touchRule(touches("Bash", { command: "cat ~/.local/share/gstack/{lib,bin}/ship-budget.ts" }, "/work/t").paths[0]!)(f)).toBe("read");
+    const odd = touches("Bash", { command: "sed 's/[^a-Z]//g' /work/t/x && cd ~/.local/share/gstack && grep -rE '[\\d-a]+' ." }, "/work/t").paths;
+    expect(() => odd.map((p) => [touchRule(p)(f), inRoots("gstack", p)])).not.toThrow();
     const lsDir = touchRule(touches("Bash", { command: "ls -ld ~/.local/share/gstack/lib" }, "/work/t").paths[0]!);
     expect([lsDir(H + "/.local/share/gstack/lib/a.ts"), lsDir(H + "/.local/share/gstack/lib")]).toEqual([null, "list"]);
     expect(touchRule(touches("Glob", { pattern: "**/a.ts", path: H + "/.local/share/gstack" }, "/work/t").paths[0]!)(H + "/.local/share/gstack/lib/sub/a.ts")).toBe("list");

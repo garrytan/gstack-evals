@@ -14,7 +14,8 @@
 // - recursive: a Grep call, or a Bash grep -r, rgrep, rg, ag, ack, git grep or diff -r, whose path is a directory
 //   holding such a file at any depth, an ancestor of an install root included.
 // - list: a listing that shows such a file's name. ls and LS list a directory's entries, so they flag a file directly in
-//   it, except ls -d, which lists only the directory itself; ls -R, find and tree list every file below their path, an ancestor of an install root included; a Glob, or a
+//   it, except ls -d, which lists only the directory itself; ls -R, find and tree list every file below their path, an ancestor of an install root or / included, narrowed only by
+//   find's one -name test, find -maxdepth and tree -L; a Glob, or a
 //   listing that names the file itself, flags each file it matches.
 // - search: a call with any path in the roots, or a recursive call from an ancestor of a root, whose Grep pattern or
 //   Bash words hold the unit's PR number as a whole number, or 7 or more leading hex characters of a fix commit of one
@@ -60,26 +61,44 @@ export interface Touch {
   reach: "path" | "entries" | "tree";
   /** The call shows names, not bytes. */
   list: boolean;
+  /** A tree reach shows only files whose name matches this glob (find -name). */
+  name?: string;
+  /** A tree reach goes at most this many levels below the path (find -maxdepth, tree -L). */
+  depth?: number;
 }
 
 const fail = (message: string): never => {
   throw new ScoreError("E_USAGE", "noloss flag-scan: " + message);
 };
 
-/** A shell glob as a regex source: * and ? stay within a path segment, ** crosses segments, [...] is a class. */
+const compiles = (source: string) => {
+  try {
+    new RegExp(source);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** A shell glob as a regex source: * and ? stay within a path segment, ** crosses segments, [...] is a class (a literal [
+ * when the regex engine rejects it), {a,b} is a choice. */
 export function globSource(path: string): string {
   let re = "";
   for (let i = 0; i < path.length; i++) {
     const c = path[i]!;
-    const close = c === "[" ? path.indexOf("]", i + 2) : -1;
+    const close = c === "[" ? path.indexOf("]", i + 2) : c === "{" ? path.indexOf("}", i + 1) : -1;
+    const cls = c === "[" && close > 0 ? "[" + path.slice(i + 1, close).replace(/^!/, "^").replace(/\\/g, "\\\\") + "]" : null;
     if (c === "*" && path[i + 1] === "*") {
       const slash = path[i + 2] === "/";
       re += slash ? "(?:[^/]+/)*" : ".*";
       i += slash ? 2 : 1;
     } else if (c === "*") re += "[^/]*";
     else if (c === "?") re += "[^/]";
-    else if (close > 0) {
-      re += "[" + path.slice(i + 1, close).replace(/^!/, "^").replace(/\\/g, "\\\\") + "]";
+    else if (cls && compiles(cls)) {
+      re += cls;
+      i = close;
+    } else if (c === "{" && close > 0 && path.slice(i + 1, close).includes(",")) {
+      re += "(?:" + path.slice(i + 1, close).split(",").map(globSource).join("|") + ")";
       i = close;
     } else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   }
@@ -111,7 +130,7 @@ const sessionPaths = (arm: string, file: string, home: string) =>
 
 /** Whether a touch reaches into one of the arm's roots: a path at or under a root, or a recursive call from above one. */
 export function inRoots(arm: string, t: Touch, home = SESSION_HOME): boolean {
-  const segs = t.path.split("/");
+  const segs = t.path === "/" ? [""] : t.path.split("/");
   return (ROOTS[arm] ?? []).some((r) => {
     const root = (home + "/" + r).split("/");
     for (let i = 0; i < root.length; i++) {
@@ -126,14 +145,17 @@ export function inRoots(arm: string, t: Touch, home = SESSION_HOME): boolean {
 /** The rule a touch fires on a session path, or null: read or list on the path itself, list on an entry, recursive or list below. */
 export function touchRule(t: Touch): (path: string) => Flag["rule"] | null {
   const re = globSource(t.path);
+  const under = t.path === "/" ? "" : re;
   const same = new RegExp("^" + re + "$");
-  const entry = new RegExp("^" + re + "/[^/]+$");
-  const below = new RegExp("^" + re + "/.+$");
+  const entry = new RegExp("^" + under + "/[^/]+$");
+  const below = new RegExp("^" + under + "/(.+)$");
+  const name = t.name === undefined ? null : new RegExp("^" + globSource(t.name) + "$");
   return (path) => {
     if (same.test(path)) return t.list ? "list" : "read";
     if (t.reach === "entries" && entry.test(path)) return "list";
-    if (t.reach === "tree" && below.test(path)) return t.list ? "list" : "recursive";
-    return null;
+    const rest = t.reach === "tree" ? below.exec(path)?.[1] : undefined;
+    if (rest === undefined || (t.depth !== undefined && rest.split("/").length > t.depth) || (name && !name.test(posix.basename(path)))) return null;
+    return t.list ? "list" : "recursive";
   };
 }
 
@@ -162,6 +184,12 @@ export function touches(tool: string, input: Record<string, unknown>, cwd: strin
     }
     const flags = argv.filter((w) => w.startsWith("-"));
     const list = LISTINGS.has(name);
+    const after = (flag: string) => (argv.indexOf(flag) > 0 ? argv[argv.indexOf(flag) + 1] : undefined);
+    const pattern = after("-name");
+    const tests = argv.filter((w) => /^-i?(name|path|regex|wholename)$/.test(w) || w === "-o" || w === "-or" || w === "!" || w === "-not");
+    const depth = Number(name === "find" ? after("-maxdepth") : name === "tree" ? after("-L") : undefined);
+    const filter: Pick<Touch, "name" | "depth"> = { ...(name === "find" && pattern !== undefined && tests.length === 1 && tests[0] === "-name" ? { name: pattern } : {}), ...(Number.isInteger(depth) && depth >= 0 ? { depth } : {}) };
+    const touch = (path: string, r: Touch["reach"]): Touch => ({ path, reach: r, list, ...(r === "tree" ? filter : {}) });
     const recursive = RECURSIVE.has(name) || (GREPS.has(name) && flags.some((f) => /^-[A-Za-z]*[rR]/.test(f) || f === "--recursive" || f === "--dereference-recursive")) || (name === "git" && argv.includes("grep")) || (name === "diff" && flags.some((f) => /^-[A-Za-z]*r/.test(f) || f === "--recursive")) || name === "find" || name === "tree" || (name === "ls" && flags.some((f) => /^-[A-Za-z]*R/.test(f) || f === "--recursive"));
     const directoryOnly = name === "ls" && flags.some((f) => /^-[A-Za-z]*d/.test(f) || f === "--directory");
     const reach = directoryOnly ? "path" : recursive ? "tree" : list ? "entries" : "path";
@@ -169,10 +197,10 @@ export function touches(tool: string, input: Record<string, unknown>, cwd: strin
       words.push(w);
       const v = w.startsWith("--") && w.includes("=") ? w.slice(w.indexOf("=") + 1) : w;
       if (!v || v.startsWith("-") || /^[a-z]+:\/\//i.test(v)) continue;
-      if (v.includes("/") || v.startsWith("~") || v.startsWith("$HOME") || v.startsWith("${HOME}") || here !== cwd) paths.push({ path: abs(v, here), reach, list });
+      if (v.includes("/") || v.startsWith("~") || v.startsWith("$HOME") || v.startsWith("${HOME}") || here !== cwd) paths.push(touch(abs(v, here), reach));
     }
     const named = name === "find" ? !!argv[1] && !argv[1].startsWith("-") : argv.slice(1).some((w) => !w.startsWith("-"));
-    if (here !== cwd) paths.push({ path: here, reach: list && named ? "path" : reach, list });
+    if (here !== cwd) paths.push(touch(here, list && named ? "path" : reach));
   }
   return { paths, words };
 }
