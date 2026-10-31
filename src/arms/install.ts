@@ -16,7 +16,8 @@
 //   own state into (~/.claude, ~/.codex, ~/.local, ~/.local/share), which become 1777 like HOME itself, so the agent's
 //   uid can add files there but cannot change the root-owned install. Every layer is laid out from HOME. Each install
 //   and derived layer is cached under <state>/installs/ by a hash of its inputs, and checked against its recorded
-//   digest when reused (E_STACK_DIGEST).
+//   digest when reused (E_STACK_DIGEST). A run holds each entry it uses (a file named for the run in <entry>.holds/),
+//   and releaseInstalls deletes the entries the run built once no other run holds them.
 // - A base arm is two layers: the base tree minus the target skill, installed (the none arm), then every file that
 //   installing the arm's skill folder in its place adds or changes. Each base arm runs the base's installer on its own
 //   tree, so the host's render of the skill (Codex renders gstack-<skill> from its template) is the installer's own.
@@ -28,7 +29,7 @@
 //   names it in its front matter. Its roots are every path that reaches that folder.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_SEED, placeboSkill } from "../../quick/laneb/arms/placebo/placebo.ts";
@@ -237,9 +238,25 @@ function outsideLink(dir: string, rel = ""): string | null {
 }
 
 /** A content-addressed directory under <state>/installs: built once into home/, reused only while it still hashes to its recorded digest. */
-function cached(state: string, key: string, meta: Record<string, unknown>, build: (home: string) => void): { dir: string; tree_sha256: string } {
+/** A run's claim on the install cache: each entry it uses gets a hold file named for the run, saying whether the run built it. */
+export interface CacheHold {
+  run: string;
+  /** Every entry directory the run used. */
+  entries: string[];
+}
+
+function cached(state: string, key: string, meta: Record<string, unknown>, build: (home: string) => void, hold?: CacheHold): { dir: string; tree_sha256: string } {
   const dir = join(state, "installs", key.slice(0, 32));
   const record = join(dir, "install.json");
+  const mark = (word: "used" | "built") => {
+    if (!hold) return;
+    mkdirSync(dir + ".holds", { recursive: true });
+    writeFileSync(join(dir + ".holds", hold.run), word + "\n");
+  };
+  if (hold) {
+    if (!existsSync(join(dir + ".holds", hold.run))) mark("used");
+    hold.entries.push(dir);
+  }
   if (existsSync(record)) {
     const recorded = (JSON.parse(readFileSync(record, "utf8")) as { tree_sha256: string }).tree_sha256;
     const now = dirTreeSha256(join(dir, "home"));
@@ -254,10 +271,42 @@ function cached(state: string, key: string, meta: Record<string, unknown>, build
     writeFileSync(join(tmp, "install.json"), JSON.stringify({ schema_version: 1, ...meta, tree_sha256: tree }, null, 2) + "\n");
     rmSync(dir, { recursive: true, force: true });
     renameSync(tmp, dir);
+    mark("built");
     return { dir: join(dir, "home"), tree_sha256: tree };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+/**
+ * Ends a run's holds. An entry the run built is deleted with its log once no other run holds it; while another run does,
+ * that run's hold is marked built instead, so the last run to let go deletes it. Entries the run only reused stay.
+ * Returns the entries deleted.
+ */
+export function releaseInstalls(hold: CacheHold): string[] {
+  const deleted: string[] = [];
+  for (const dir of new Set(hold.entries)) {
+    const holds = dir + ".holds";
+    const mine = join(holds, hold.run);
+    const built = existsSync(mine) && readFileSync(mine, "utf8").trim() === "built";
+    rmSync(mine, { force: true });
+    const others = existsSync(holds) ? readdirSync(holds).sort() : [];
+    if (others.length) {
+      if (built) writeFileSync(join(holds, others[0]!), "built\n");
+      continue;
+    }
+    if (built && existsSync(dir)) {
+      const doomed = dir + ".rm-" + randomBytes(4).toString("hex");
+      renameSync(dir, doomed);
+      rmSync(doomed, { recursive: true, force: true });
+      rmSync(dir + ".log", { force: true });
+      deleted.push(dir);
+    }
+    try {
+      rmdirSync(holds);
+    } catch {}
+  }
+  return deleted;
 }
 
 /** Follows links one component at a time inside tree; the real path relative to tree, or null when it is missing or leaves the tree. */
@@ -340,7 +389,7 @@ function overlay(full: string, base: string, to: string): string[] {
 }
 
 /** Installs every arm of a call for one host. Throws InstallError with a reason code. */
-export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: string | null; base: { ref: StackRef; root: string | null } | null; sources: readonly string[]; runner: InstallRunner; state: string }): ArmInstall[] {
+export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: string | null; base: { ref: StackRef; root: string | null } | null; sources: readonly string[]; runner: InstallRunner; state: string; hold?: CacheHold }): ArmInstall[] {
   const skillsDir = SKILL_DIRS[o.host];
   const work = join(o.state, "installs", "work-" + randomBytes(6).toString("hex"));
   const trees = new Map<string, ReturnType<typeof stackTree> & { dir: string }>();
@@ -365,7 +414,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
       const failed = o.runner.run(src, { name, command, keep, out: home, log: join(o.state, "installs", key.slice(0, 32) + ".log") });
       if (failed) throw new InstallError("E_IMAGE_BUILD", "installing " + label + " for " + o.host + " with `" + command + "` failed: " + failed);
       canonicalize(home, o.runner.home);
-    });
+    }, o.hold);
   };
   const digestOf = (layer: Layer, known?: string) => layer.dest + " " + (known ?? dirTreeSha256(layer.src));
   const gstackIn = (tree: string) => (isFile(tree, resolveIn(tree, skillsDir + "/gstack/bin/gstack-skill-start")) ? skillsDir + "/gstack/bin/gstack-skill-start" : null);
@@ -392,7 +441,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         const made = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, loose: dirTreeSha256(arm.dir!), at })), { loose: arm.dir, at }, (home) => {
           cpSync(arm.dir!, join(home, at), { recursive: true, verbatimSymlinks: true, filter: (from) => !from.split("/").includes(".git") });
           canonicalize(home, null);
-        });
+        }, o.hold);
         const layer = { src: made.dir, dest: "" };
         done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, made.tree_sha256)), skill: { roots: [at], skillMd: at + "/SKILL.md", dir: join(made.dir, at), file: join(made.dir, at, "SKILL.md") }, gstack: null, provenance: { kind: "overlay", dir: arm.dir, tree_sha256: made.tree_sha256 } });
         fulls.set(arm.name, made.dir);
@@ -413,7 +462,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         const top = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, overlay: full.tree_sha256, on: none.tree_sha256 })), { overlay_of: full.tree_sha256, on: none.tree_sha256 }, (home) => {
           const lost = overlay(full.dir, none.dir, home);
           if (lost.length) throw new InstallError("E_IMAGE_BUILD", "installing arm " + arm.name + "'s skill folder on the base removes " + lost.slice(0, 5).join(", ") + (lost.length > 5 ? " and " + (lost.length - 5) + " more" : "") + ", which a layer on the base cannot remove");
-        });
+        }, o.hold);
         const second = { src: top.dir, dest: "" };
         done.push({ name: arm.name, layers: [first, second], tree_sha256: sha(digestOf(first, none.tree_sha256) + "\n" + digestOf(second, top.tree_sha256)), skill: need(arm.name, full.dir), gstack: gstackIn(full.dir), provenance: { kind: "base", base, dir: arm.dir, install: { command, runner: o.runner.id, tree_sha256: full.tree_sha256 } } });
         fulls.set(arm.name, full.dir);
@@ -445,7 +494,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
             writeFileSync(join(home, skillsDir, folder, "SKILL.md"), text);
           }
           canonicalize(home, null);
-        });
+        }, o.hold);
         const layer = { src: made.dir, dest: "" };
         done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, made.tree_sha256)), skill: need(arm.name, made.dir), gstack: null, provenance: { kind: "placebo", of: arm.of, seed: DEFAULT_SEED, generator_sha256: generator, tree_sha256: made.tree_sha256 } });
         fulls.set(arm.name, made.dir);

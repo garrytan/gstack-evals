@@ -92,7 +92,8 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 6. **Lock.** `tasks.lock.json` must be committed and clean at HEAD (LOCK_MISSING prints the exact `--lock` command and git steps). A changed tasks file, sidecar, policy, before copy or extractor, or a hand-edited row, is LOCK_DRIFT.
 7. **Ledger and cap.** The line item needs an approved cap on record, and `--spend-cap` must fit within it and what is left (E_LEDGER_MISSING, E_ITEM_BOUND). A cap below one arm-balanced round is E_CAP_TOO_LOW. With no `--spend-cap`, the stop prints the dry-run matrix and never a cap to copy.
 8. **PDF flag.** A task that sends a PDF gets the PDF_INPUT warning.
-9. **Host adapter.** The fake host is ready. A real host is ready for every arm kind but loadout under `--isolation docker`; a loadout arm or a persona task stops here with E_USAGE.
+9. **Disk.** On a real host, the filesystems the call fills need room for its peak: 10 GB free for the state root and 10 GB for Docker's root dir, or 20 GB when they share one (E_DISK_LOW; docs/rig.md, Disk space). The fake host and `--dry-run` skip it.
+10. **Host adapter.** The fake host is ready. A real host is ready for every arm kind but loadout under `--isolation docker`; a loadout arm or a persona task stops here with E_USAGE.
 
 `skill-eval --lock` runs the contract and vacuity checks first and refuses to lock a set that fails them, so a rebuilt task set is checked and locked fresh. It runs the controls in containers on the pinned trial image when Docker answers, and otherwise as you with the trial's env allowlist; its vacuity line says which.
 

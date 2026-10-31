@@ -97,6 +97,23 @@ On a `warn` item, such as a caller's own Lane A run, the same checks print the R
 
 A record is write-once. The first attempt for slot 1 is `items/<item>/admission-0001.json`; a later attempt at the same slot is written beside it as `admission-0001.2.json`, `admission-0001.3.json` and so on, and the highest attempt decides. So a red attempt never strands an item, and a green attempt older than a red one never admits. Only names `rig admit` writes count as attempts, and a file whose `attempt` field differs from its name's counts as a record that does not parse, so copying an older green record to a higher name does not admit either. Never edit or delete a record file.
 
+## Disk space
+
+A real-host call fills two places: the state root (`~/.capy/work/gstack-evals` on Capy, `$XDG_STATE_HOME/gstack-evals` or `~/.local/state/gstack-evals` elsewhere) and Docker's root dir. GST-361 measured U11's /learn call on a Capy machine: base gstack@7204a39a27ba, arms before, after and none.
+
+| What | Where | Size | After the run |
+|---|---|---|---|
+| Arm installs: three gstack trees of about 1.2 GB each, and two small overlays | `<state>/installs/` | 3.6 GB on Claude Code, 3.6 GB on Codex | Deleted |
+| Layer trees kept by digest | `<state>/retained/trees/` | 1.2 GB | Kept |
+| Trial image tar | `<state>/retained/images/` | 0.8 GB, once per trial image | Kept |
+| Arm images, calibration copies and their build cache | Docker's root dir | 5.9 GB | Kept |
+
+The peak is about 11.6 GB when both places share a filesystem: 5.7 GB under the state root and 5.9 GB under Docker's root dir. Preflight refuses a real-host call with E_DISK_LOW, before any lease, when the state root's filesystem has less than 10 GB free or Docker's has less than 10 GB, or less than 20 GB when they share one, as they do on Capy. Each share is the measured peak with about 70% headroom, which covers a fourth gstack install (about 3.9 GB with its tree and images) and the trials' own files. The fake host and `--dry-run` skip the step.
+
+**Installs.** A run holds every install entry it uses. When it ends, and when its start fails after the installs, it deletes the entries it built, with their logs, unless another run still holds them; then the last run to let go deletes them. Entries a run only reused stay, so a cache someone kept is not touched. A run that dies (killed, or a machine that slept) keeps its installs, and `--resume` takes over its claim and deletes them when it ends. A resume after a run deleted its installs reinstalls them, about 1.5 minutes for three gstack trees. Reinstalls are byte-identical, so every journaled cell keeps its session key: measured for U11's arms on both hosts, and `tests/arms/gstack-reinstall.test.ts` repeats the check with `GSTACK_EVALS_DOCKER=1 GSTACK_EVALS_GSTACK_SOURCE=<a gstack clone>`.
+
+**What stays.** Retained trees and the trial image tar are a run's provenance, kept by digest, and Docker keeps the arm images and build cache. A call with a new arm set still leaves about 7 GB. Between calls, `docker builder prune` and `docker image rm` of `gstack-evals-arm` images no run needs reclaim most of it; archive `<state>/retained/` before deleting any of it. Delete `<state>/installs` by hand only while no run is going.
+
 ## Where the Docker tier runs
 
 - On GitHub: `.github/workflows/rig.yml` runs on pull requests and main pushes that touch a rig path, and on `workflow_dispatch`. Its token is read-only, it reads no secret and it posts no check of its own.

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { REPO_ROOT } from "../../src/cli.ts";
 import { lockCommand } from "../../src/skill-eval/lock/cli.ts";
 import { skillEvalCommand } from "../../src/skill-eval/cli/skill-eval.ts";
+import { DISK_NEED, diskReadings } from "../../src/skill-eval/cli/preflight.ts";
 import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { allowanceMicros, JUDGE_ALLOWANCE, SESSION_ALLOWANCE } from "../../src/skill-eval/cli/dry-run.ts";
 import { priceRequest, reservationMicros } from "../../src/runner/pricing/prices.ts";
@@ -278,5 +279,36 @@ describe("the session allowance", () => {
     const reserved = reservationMicros(priceRequest("anthropic", body, 32_768, "/v1/messages"));
     expect(reserved).toBeGreaterThan(1_600_000 * 0.1 + 32_000 * 0.5);
     expect(reserved).toBeLessThan(haiku);
+  });
+});
+
+describe("free disk on a real host (GST-361)", () => {
+  const fakeDocker = (root: string) => {
+    const bin = join(mkdtempSync(join(TMP, "docker-")), "docker");
+    writeFileSync(bin, '#!/bin/sh\n[ "$1" = info ] && echo ' + root + " && exit 0\nexit 1\n", { mode: 0o755 });
+    return bin;
+  };
+
+  // Value: protects=a real-host call whose filesystems have less free than a call's measured peak is refused with E_DISK_LOW naming the filesystem, in preflight, so no lease is opened and no run.json is written; the fake host and --dry-run skip the step; fails_when=a call starts on a disk it would fill (U11 hit ENOSPC on a 65 GB disk), or the step runs on the fake host or under --dry-run; why_new=GST-361; seam=skillEvalCommand's preflight wiring, preflight's disk step, diskReadings; no_claim=the footprint itself, measured once (docs/rig.md, Disk space)
+  test("a real-host call is refused before any lease when a filesystem it fills is low", async () => {
+    const { args } = await lockedLearn();
+    const env = { ...KEYS, XDG_STATE_HOME: join(TMP, "disk-state"), GSTACK_EVALS_DOCKER_BIN: fakeDocker("/proc") };
+    const real = await run(args("claude", "claude-opus-5-5"), env, "run");
+    expect([real.code, real.err]).toEqual([2, expect.stringContaining("E_DISK_LOW Docker's root dir at /proc has 0.0 GB free; a real-host call can need 10.0 GB there at its peak")]);
+    expect(real.err).toContain("E_DISK_LOW fix: Free space there");
+    expect(existsSync(join(TMP, "out", "run.json"))).toBe(false);
+    const fake = await run(args("claude", "claude-opus-5-5"), { ...env, ...FAKE });
+    const dry = await run(args("claude", "claude-opus-5-5", ["--dry-run"]), env);
+    expect([fake.out + fake.err, dry.out + dry.err].map((t) => /E_DISK_LOW|ok disk:/.test(t))).toEqual([false, false]);
+  });
+
+  // Value: protects=one reading per filesystem: the state root and Docker's root dir on one filesystem need both shares together, a root dir docker info cannot name or that is not on this machine is not read, and a separate root dir is read on its own; fails_when=a shared filesystem is checked against one share, or a missing root dir fails the step; why_new=GST-361; seam=diskReadings; no_claim=Docker Desktop's VM disk, which this machine cannot read
+  test("diskReadings counts a shared filesystem once, with both shares", () => {
+    const state = { XDG_STATE_HOME: join(TMP, "disk-state") };
+    const read = (root: string) => diskReadings({ ...state, GSTACK_EVALS_DOCKER_BIN: fakeDocker(root) }).map((d) => [d.what, d.path, d.need]);
+    const root = join(TMP, "disk-state", "gstack-evals");
+    expect(read(TMP)).toEqual([["the state root and Docker's root dir", root, DISK_NEED.state + DISK_NEED.docker]]);
+    expect(read("/no/such/dir")).toEqual([["the state root", root, DISK_NEED.state]]);
+    expect(read("/proc")).toEqual([["the state root", root, DISK_NEED.state], ["Docker's root dir", "/proc", DISK_NEED.docker]]);
   });
 });

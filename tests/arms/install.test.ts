@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installArms, InstallError, localInstaller, stackInstall, stackTree, WRITABLE, type ArmInstall } from "../../src/arms/install.ts";
+import { installArms, InstallError, localInstaller, releaseInstalls, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
 import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
 import { FIXTURE_PATH } from "../../src/trial/image.ts";
 import type { Host } from "../../src/types.ts";
@@ -161,5 +161,34 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     const none = byName(install("codex", state)).none!.layers[0]!.src;
     writeFileSync(join(none, ".local", "share", "gstack", "other", "SKILL.md"), "tampered\n");
     expect(stop(() => install("codex", state))).toBe("E_STACK_DIGEST");
+  });
+
+  // Value: protects=a run deletes only the install entries it built, once no other run holds them (the last holder deletes a shared one), keeps entries it only reused, a resumed run keeps the claim of the run it continues, and a reinstall after the cleanup gives the same arm trees, so --resume keeps its session keys; fails_when=cleanup deletes an entry another run holds or one the run only reused, leaks an entry the run built or its log, or a reinstall changes a tree; why_new=GST-361 (each Lane A call left about 3.6 GB of installs and U11's 65 GB disk filled); seam=installArms' hold, cached, releaseInstalls; no_claim=gstack's real setup (tests/arms/gstack-reinstall.test.ts) and the Docker rig's close and failed start (the Docker tier)
+  test("a run deletes the installs it built once no run holds them, and a reinstall gives the same trees", () => {
+    const state = scratch("state");
+    const hold = (run: string): CacheHold => ({ run, entries: [] });
+    const installed = (h?: CacheHold) => installArms({ host: "codex", arms: resolved.arms, skill: "demo", base: resolved.base, sources: [stack.root], runner: localInstaller(scratch("runner")), state, ...(h ? { hold: h } : {}) }).map((a) => a.tree_sha256);
+    const left = () => readdirSync(join(state, "installs")).sort();
+    const [a, b] = [hold("a"), hold("b")];
+    const trees = installed(a);
+    const built = left().filter((n) => !n.includes(".")).map((n) => join(state, "installs", n));
+    expect(built.length).toBeGreaterThan(3);
+    installed(b);
+    expect(releaseInstalls(a)).toEqual([]);
+    expect(left().filter((n) => !n.includes("."))).toHaveLength(built.length);
+    expect(releaseInstalls(b).sort()).toEqual(built);
+    expect(left()).toEqual([]);
+
+    expect(installed(hold("c"))).toEqual(trees);
+    const resumed = hold("c");
+    installed(resumed);
+    expect(releaseInstalls(resumed).sort()).toEqual(built);
+    expect(left()).toEqual([]);
+
+    installed();
+    const warm = left();
+    const d = hold("d");
+    installed(d);
+    expect([releaseInstalls(d), left()]).toEqual([[], warm]);
   });
 });
