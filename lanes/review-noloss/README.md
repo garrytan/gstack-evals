@@ -25,13 +25,13 @@ gstack-evals noloss suite --check [--suite <id|path>] [--prereg <file>]
 gstack-evals noloss suite --from-catalog <dir>... --id <id> --released <YYYY-MM-DD> [--with <suite>] [--out <path>] [--stratum <stratum>]...
 gstack-evals noloss suite --stub --suite <path> --sealed-root <dir> --custody <text> [--out <path>]
 gstack-evals noloss ingest <arm dir> --suite <id|path> [--check] [--root <dir>] [--digest-only <finding id>|all]... [--replace <reason>]
-gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--false-blocker-drop <n>] [--json] [--expect <outcomes>]
+gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--false-blocker-drop <n>] [--false-alarm-gate <n>] [--json] [--expect <outcomes>]
 gstack-evals noloss export [--check]
-gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>]
+gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>] [--alpha <a>] [--dependence <share>]
 gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
 gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] [--unjudged <file>] --arm <dir>... --out <dir>
 gstack-evals noloss judge-run --suite <id> --packets <dir> --key <file> --arm <dir>... --brief <file> --primary <provider/model> --second <provider/model> --third <provider/model> --item <ledger item> --out <dir> [--source <owner/repo>=<clone>]... [--dry-run]
-gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge>]
+gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge> | --first-k <k>]
 gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
 gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
 ```
