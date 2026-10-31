@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installArms, InstallError, localInstaller, releaseInstalls, runHold, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
 import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
+import { newRunId } from "../../src/skill-eval/cli/call.ts";
 import { FIXTURE_PATH } from "../../src/trial/image.ts";
 import type { Host } from "../../src/types.ts";
 import { commitAll, git } from "../cli/helpers.ts";
@@ -305,13 +306,14 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     expect(releaseInstalls(resumed)).toEqual(hold.entries);
   });
 
-  // Value: protects=a run id that is not a plain name (a tampered run.json on --resume) is refused before a hold path is built from it; fails_when=runHold joins ../ segments into a hold path and releaseInstalls deletes or writes outside the state root; why_new=PR #85 /ship security review; seam=runHold; no_claim=fresh runs, whose ids newRunId makes
+  // Value: protects=a run id that is not a plain name (a tampered run.json on --resume) is refused before a hold path is built from it, and every id newRunId makes for a fresh run is accepted; fails_when=runHold joins ../ segments or a non-string into a hold path and releaseInstalls deletes or writes outside the state root, or a fresh run whose label has no ASCII letter is refused; why_new=PR #85 /ship security and red-team review; seam=runHold, newRunId; no_claim=none
   test("a run id that is not a plain name is refused before a hold path is built from it", () => {
     const root = scratch("hold");
     const state = join(root, "state");
     mkdirSync(join(state, "installs", "entry.holds"), { recursive: true });
     writeFileSync(join(root, "canary"), "keep\n");
-    for (const run of ["../../../canary", "..", ".", "a/b", ""]) expect(stop(() => runHold(state, run))).toBe("E_NOT_RESUMABLE");
+    for (const run of ["../../../canary", "..", ".", "a/b", "", null, 123, ["ok"]]) expect(stop(() => runHold(state, run as string))).toBe("E_USAGE");
     expect(readFileSync(join(root, "canary"), "utf8")).toBe("keep\n");
+    for (const label of ["demo", "", "_", "評価"]) expect(runHold(state, newRunId(label)).entries).toEqual([]);
   });
 });

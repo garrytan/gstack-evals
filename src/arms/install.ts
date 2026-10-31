@@ -249,7 +249,7 @@ export interface CacheHold {
 
 /** The hold of a run that may already hold entries: a resumed run takes over every entry of the run it continues, those its arms no longer use included. */
 export function runHold(state: string, run: string): CacheHold {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(run)) throw new InstallError("E_NOT_RESUMABLE", "the run id " + JSON.stringify(run) + " is not a plain name, so it cannot name an install hold", "Resume only an out dir whose run.json gstack-evals wrote.");
+  if (typeof run !== "string" || !/^[A-Za-z0-9._-]+$/.test(run) || run === "." || run === "..") throw new InstallError("E_USAGE", "the run id " + JSON.stringify(run) + " is not a plain name, so it cannot name an install hold", "Resume only an out dir whose run.json gstack-evals wrote.");
   const installs = join(state, "installs");
   const names = existsSync(installs) ? readdirSync(installs).sort() : [];
   return { run, entries: names.filter((n) => n.endsWith(".holds") && existsSync(join(installs, n, run))).map((n) => join(installs, n.slice(0, -".holds".length))) };
