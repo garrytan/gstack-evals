@@ -108,7 +108,7 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     for (const u of sent) {
       expect(new URL(u.url).origin + new URL(u.url).pathname).toBe("https://openrouter.ai/api/v1/responses");
       expect(u.headers.get("authorization")).toBe("Bearer " + KEYS.OPENROUTER_API_KEY);
-      expect(u.body.provider).toEqual({ max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
+      expect(u.body.provider).toEqual({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     }
   }, 180_000);
 });

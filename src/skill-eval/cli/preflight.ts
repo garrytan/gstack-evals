@@ -160,7 +160,7 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
   const offHost = subjects.filter((s) => s.provider && !HOST_PROVIDERS[call.host].includes(s.provider));
   if (offHost.length) stop("E_USAGE", "--host " + call.host + " runs " + HOST_PROVIDERS[call.host].join(" and ") + " models; " + offHost.map((s) => s.model + " is " + s.provider).join(", "));
 
-  const policy: string[] = call.models.flatMap((m) => modelProblem(call.policy, m, "subject", { smoke: call.smoke }) ?? []);
+  const policy: string[] = call.models.flatMap((m) => modelProblem(call.policy, m, "subject", { smoke: call.smoke, item: call.item }) ?? []);
   const judgeProvider = providerOf(call.policy, call.judgeModel);
   const judgeProblem = modelProblem(call.policy, call.judgeModel, "judge", { smoke: call.smoke });
   if (judgeProblem) policy.push(judgeProblem);

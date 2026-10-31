@@ -13,7 +13,7 @@ import { parseStackRef, type ResolvedArms } from "../../skill-eval/cli/arms.ts";
 import type { ArmSpec } from "../../types.ts";
 import { HOST_PROVIDERS, newRunId } from "../../skill-eval/cli/call.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
-import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
+import { DEFAULT_POLICY, loadPolicy, modelProblem, providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
 import { adapterSha256, dockerRig } from "../../skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../cache.ts";
 import { volatilePathProblem } from "../durable.ts";
@@ -130,6 +130,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   for (const m of models) {
     const provider = providerOf(policy as LoadedPolicy, m);
     if (!provider || !HOST_PROVIDERS.claude.includes(provider)) throw new Usage("--models: " + m + " has no Claude Code route in the policy (anthropic or openrouter)");
+    const problem = (policy as LoadedPolicy).policy.models[m]?.smoke_only ? modelProblem(policy as LoadedPolicy, m, "subject", { smoke: false, item: one("--item") }) : null;
+    if (problem) throw new Usage("--models: " + problem);
   }
   const specs: ArmSpec[] = flags.get("--arms")!.map((s) => {
     if (s === "none") return { name: "none", kind: "bare" };

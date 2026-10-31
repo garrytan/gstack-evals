@@ -40,7 +40,7 @@ export interface ChatPrice extends TokenPrices {
  */
 export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // OpenRouter's models API (https://openrouter.ai/api/v1/models), read 2026-10-30: $0.10 input, $1 output, $0.003 cache read.
-  "particle-ai/particle-1": { input: 0.1, output: 1, cache_read: 0.003 },
+  "particle-ai/particle-1": { input: 0.1, output: 1, cache_read: 0.003, providers: ["particle-ai"] },
   // DeepSeek's own endpoint at its weekday peak price, an upper bound (off-peak is half).
   "deepseek/deepseek-v4.1-flash-1017": { input: 0.3, output: 1.2, cache_read: 0.006, providers: ["deepseek"] },
 };
@@ -58,8 +58,8 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
 };
 
-/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers, if any, and its prices as the most OpenRouter may route to, with no per-request or per-image charge. */
-export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), max_price: { prompt: price.input, completion: price.output, request: 0, image: 0 } });
+/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers, if any, no provider that may train on or keep the data (data_collection deny), and its prices as the most OpenRouter may route to, with no per-request or per-image charge. */
+export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), data_collection: "deny" as const, max_price: { prompt: price.input, completion: price.output, request: 0, image: 0 } });
 
 /** A file part: OpenRouter fetches a URL in it, and parses a PDF it cannot pass to the model with a paid OCR engine. */
 const filePart = (value: unknown): boolean =>

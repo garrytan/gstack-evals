@@ -66,6 +66,16 @@ describe("the default model policy", () => {
 });
 
 describe("a caller's own policy", () => {
+  // Value: protects=Fable 5.1 runs as a capped rung only under a ledger item its policy row names (Garry, 2026-10-31, "Do it" on B1) and stays smoke_only everywhere else; fails_when=a lane whose prereg does not name the rung can run Fable as a subject; why_new=new; seam=modelProblem; no_claim=the lanes' own checks (preflight, review-units)
+  test("a smoke_only model runs as a subject only in smoke runs or under a ledger item its rungs name", () => {
+    const rung = custom("rung", { ...def.policy.models, "claude-fable-5-1": { ...def.policy.models["claude-fable-5-1"]!, rungs: ["planning-r1a"] } });
+    const as = (p: LoadedPolicy, item: string | null) => modelProblem(p, "claude-fable-5-1", "subject", { smoke: false, item });
+    expect(as(rung, "planning-r1a")).toBeNull();
+    expect(as(rung, "stacks-r1")).toContain("only in smoke runs (--smoke) or as a capped rung of ledger item planning-r1a; ledger item stacks-r1 is not named");
+    expect(as(rung, null)).toContain("only in smoke runs");
+    expect(as(def, "planning-r1a")).toContain("ledger item planning-r1a is not named, so its prereg does not name this rung");
+  });
+
   // Value: protects=--policy lets another project narrow or widen the subject list (brief item 1, GST-225); fails_when=a custom policy cannot drop a model or allow one the default refuses; why_new=new; seam=none; no_claim=preflight's use (tests/cli/preflight.test.ts)
   test("it can narrow or widen the subject list", () => {
     const narrow = custom("narrow", { "claude-opus-5-5": { provider: "anthropic", roles: ["subject", "judge", "adjudicator"] }, "gpt-6.1-sol": { provider: "openai", roles: ["judge", "adjudicator", "usersim"] }, "gpt-6-luna": { provider: "openai", roles: ["usersim"] } });

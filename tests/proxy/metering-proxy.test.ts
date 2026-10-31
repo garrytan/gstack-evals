@@ -569,10 +569,10 @@ describe("OpenRouter route", () => {
     expect(t.calls[0]!.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(t.calls[0]!.headers.get("authorization")).toBe(`Bearer ${OPENROUTER_KEY}`);
     expect(t.calls[0]!.headers.get("x-api-key")).toBeNull();
-    expect(t.calls[0]!.body.provider).toEqual({ max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
+    expect(t.calls[0]!.body.provider).toEqual({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     expect(t.calls[0]!.body.max_tokens).toBe(32_768);
     expect(t.calls[0]!.body.max_completion_tokens).toBeUndefined();
-    expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, max_price: { prompt: 0.3, completion: 1.2, request: 0, image: 0 } });
+    expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.3, completion: 1.2, request: 0, image: 0 } });
     expect(t.ledger.settles).toEqual([
       ["res_1", { kind: "spent", spent_micros: 1000 * 0.1 + 200 * 1, usage: { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 } }],
       ["res_2", { kind: "spent", spent_micros: Math.ceil(200 * 0.3 + 800 * 0.006 + 100 * 1.2), usage: { input: 200, output: 100, reasoning: 0, cache_read: 800, cache_write: 0 } }],

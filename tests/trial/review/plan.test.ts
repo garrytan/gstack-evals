@@ -270,6 +270,12 @@ describe("review-units --plan arguments (keyless)", () => {
     const GSTACK = "gstack=garrytan/gstack@" + "a".repeat(40);
     const base = ["--suite", panel.stubPath, "--sealed-root", panel.sealedRoot, "--units", "all", "--models", OPUS, "particle-ai/particle-1", "--out", out, "--source", PANEL_REPO + "=" + panel.clone, "--base-branch", PANEL_REPO + "=main"];
     expect((await run([...base, "--arms", "none"])).err).toMatch(/^E_USAGE .*is a plan suite; pass --plan <lens>/);
+    const fable = ["--suite", panel.stubPath, "--sealed-root", panel.sealedRoot, "--units", "all", "--models", "claude-fable-5-1", "--out", out, "--source", PANEL_REPO + "=" + panel.clone, "--base-branch", PANEL_REPO + "=main", "--plan", "ceo", "--arms", "none", "--item", "planning-r1a", "--dry-run"];
+    expect((await run(fable)).err).toMatch(/^E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs \(--smoke\); ledger item planning-r1a is not named/);
+    const rungPolicy = join(scratch("plan-policy-"), "models.json");
+    const def = JSON.parse(readFileSync(DEFAULT_POLICY, "utf8"));
+    writeFileSync(rungPolicy, JSON.stringify({ ...def, models: { ...def.models, "claude-fable-5-1": { ...def.models["claude-fable-5-1"], rungs: ["planning-r1a"] } } }));
+    expect((await run([...fable, "--policy", rungPolicy])).code).toBe(0);
     expect((await run([...base, "--plan", "eng", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan takes a lens: ceo/);
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", OPUS, "--out", out, "--source", "garrytan/gstack=/nowhere", "--plan", "ceo", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan needs a plan suite, and suite gsta167-14pr is noloss/);
     expect((await run([...base.slice(0, 2), ...base.slice(4), "--plan", "ceo", "--arms", "none"])).err).toMatch(/pass --sealed-root <dir>/);

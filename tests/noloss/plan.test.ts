@@ -113,6 +113,14 @@ describe("the sealed root and the stub (open item 1)", () => {
     expect(() => loadSuite(counted, { sealedRoot: panel.sealedRoot })).toThrow(/counts .*, not the stub's/);
   });
 
+  test("a public suite read from outside the repo finds its catalogs under --sealed-root, and refuses with a code without it", async () => {
+    const p = planPanel(tmp("noloss-plan-public-"), { seeded: 2, decoy: 1 }, { id: "planpanel-public", visibility: "public" });
+    const bare = await run(["suite", "--check", "--suite", p.suitePath]);
+    expect([bare.code, bare.err]).toEqual([2, expect.stringMatching(/^E_NOLOSS_SUITE suite planpanel-public names catalog catalog\/plans, which is not under .*; a suite read from outside the repo finds its catalogs under --sealed-root <dir>/)]);
+    const held = await run(["suite", "--check", "--suite", p.suitePath, "--sealed-root", p.sealedRoot]);
+    expect([held.code, held.err]).toEqual([0, ""]);
+  });
+
   test("a sealed case or a whole sealed suite inside the repo tree is refused", async () => {
     const dir = join(REPO_ROOT, ".noloss-plan-test-" + process.pid);
     inRepo.push(dir);
