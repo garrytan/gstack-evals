@@ -50,7 +50,9 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
   finding's pass, cost.tsv; no judgments.tsv, so the arm is raw), plus units.json, parses.tsv, refusals.tsv,
   cells.ndjson and progress.json. The model tag is a Claude model's family (opus, haiku), else the model id.
 - Parse outcomes per unit-pass: findings, empty (a real zero), missing (no fenced json block: zero, flagged), malformed
-  (flagged, never zero) and incomplete (the session did not complete: never scored as zero).
+  (flagged, never zero) and incomplete (the session did not complete: never scored as zero). A malformed or incomplete
+  unit-pass is a coverage gap: the arm is written with status stopped and coverage_gaps naming each one, so scoring gives
+  it no verdict instead of reading the pass as an empty review.
 - cost.tsv: an all row and, in a cell with a voice, a voice row per unit-pass, from the proxy journal (meter_source
   proxy-journal). usd comes from spent_micros; a call with an unknown outcome makes its row's usd and tokens
   unavailable. requests, refused and unknown_calls are extra columns; refusals.tsv marks an arm and cell degraded when

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Runner } from "../../../src/trial/image.ts";
 import { buildTrialImage, stateRoot } from "../../../src/trial/image.ts";
@@ -50,6 +50,14 @@ describe("unit repositories from head-only fetches (T5)", () => {
     expect(problems.some((p) => p.startsWith("the working tree is not clean"))).toBe(true);
     expect(() => buildUnitRepo({ unit: { ...unitOf(s), repo: "someone/else" }, source: s.root, dest: join(scratch("x"), "u") })).toThrow(/^E_UNIT_REPO: .*no default branch/);
     expect(unitTaskId(unitOf(s))).toBe("gstack-7-" + s.head.slice(0, 8));
+  });
+
+  // Value: protects=a source clone named by a relative path is fetched from where the caller named it, not from inside the new unit repository; fails_when=git fetch resolves the path against the unit's directory and cannot find the clone; why_new=Capy review of #93 (a relative --source failed at the fetch); seam=buildUnitRepo; no_claim=none
+  test("a relative source path", () => {
+    const s = sourceRepo();
+    const dest = join(scratch("relative"), "unit");
+    const repo = buildUnitRepo({ unit: unitOf(s), source: relative(process.cwd(), s.root), dest });
+    expect(historyProblems(dest, repo)).toEqual([]);
   });
 });
 

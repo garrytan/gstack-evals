@@ -3,8 +3,8 @@
 // trial network and the metering proxy) and runs runReviewUnits. --dry-run prints the plan and writes nothing. Whatever
 // it cannot do refuses with E_USAGE before anything is built or spent.
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { loadSuite, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
 import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
 import { recipeHash, recipeInputs } from "../../rig/recipe.ts";
@@ -86,7 +86,8 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
       return 2;
     }
     const message = (e as Error).message;
-    io.err(/^E_[A-Z_]+[: ]/.test(message) ? message : "E_INTERNAL review-units: " + message);
+    const code = (e as { code?: unknown }).code;
+    io.err(/^E_[A-Z_]+[: ]/.test(message) ? message : (typeof code === "string" && /^E_[A-Z_]+$/.test(code) ? code : "E_INTERNAL") + " review-units: " + message);
     return 2;
   }
 }
@@ -228,6 +229,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   }
   const runId = newRunId("review-units");
   const tasks = join(out, "fixtures", "tasks.json");
+  mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
   const resolved: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };

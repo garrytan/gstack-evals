@@ -36,7 +36,7 @@ const files = (dir: string) => {
 };
 
 describe("review units in the run loop (keyless)", () => {
-  // Value: protects=each review is a trial on its own proxy slot: findings files and cost.tsv with usd from the real journal, the voice admitted only in its cell, missing and malformed outputs counted apart, resume reusing every cell with no spend, a changed key refused with E_CACHE_STALE, receipts copied to the sink, and arms that parse under contract v1; fails_when=any of those regress; why_new=GEVA-70 build step 2; seam=runReviewUnits on a test rig with the harness proxy; no_claim=Claude Code and the Docker rig, which the canary and the Docker tier cover
+  // Value: protects=each review is a trial on its own proxy slot: findings files and cost.tsv with usd from the real journal, the voice admitted only in its cell, missing and malformed outputs counted apart (a malformed or incomplete pass stops its arm with a coverage gap, so it is never scored as an empty review; a missing block stays a flagged zero), resume reusing every cell with no spend, a changed key refused with E_CACHE_STALE, receipts copied to the sink, and arms that parse under contract v1; fails_when=any of those regress; why_new=GEVA-70 build step 2; seam=runReviewUnits on a test rig with the harness proxy; no_claim=Claude Code and the Docker rig, which the canary and the Docker tier cover
   test("findings, cost, voice, resume and a changed key", async () => {
     const h = harness(() => [{ type: "text", text: "ok" }]);
     roots.push(h.dir);
@@ -110,6 +110,11 @@ describe("review units in the run loop (keyless)", () => {
       expect(units.units[0]).toMatchObject({ id: unit.id, task: unitTaskId(unit), merge_base: s.mergeBase, base_branch: "main", tree_sha256: prepared.tree_sha256 });
       const suite = { schema_version: 1, id: "review-test", title: "t", kind: "noloss", units: [{ ...unit, cluster: "garrytan/gstack#7", group: null, blockers: [] }] } as unknown as Suite;
       for (const id of ["none-opus", "none-haiku", "gstack-opus", "gstack-haiku"]) expect(() => parseArm(files(join(out, "arms", id)), suite)).not.toThrow();
+      const malformed = JSON.parse(readFileSync(join(out, "arms", "none-opus", "arm.json"), "utf8"));
+      expect(malformed.status).toBe("stopped");
+      expect(malformed.coverage_gaps).toEqual([expect.stringMatching(new RegExp("^" + unit.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " pass 1: malformed, "))]);
+      expect(JSON.parse(readFileSync(join(out, "arms", "none-haiku", "arm.json"), "utf8"))).toMatchObject({ status: "complete" });
+      expect(JSON.parse(readFileSync(join(out, "arms", "none-haiku", "arm.json"), "utf8")).coverage_gaps).toBeUndefined();
       expect(JSON.parse(readFileSync(join(out, "arms", "gstack-opus", "arm.json"), "utf8"))).toMatchObject({ id: "gstack-opus", passes: 1, status: "complete", models: [{ role: "driver", model: OPUS }, { role: "voice", model: "gpt-6.1-sol" }], cell_tree_sha256: "gstack-opus" });
       expect(existsSync(join(sink, "arms", "gstack-opus", "cost.tsv"))).toBe(true);
       expect(existsSync(join(sink, "cells.ndjson"))).toBe(true);

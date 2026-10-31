@@ -16,7 +16,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { dirTreeSha256 } from "../cache.ts";
 import { removeTree } from "../cleanup.ts";
 import { dockerRun, retainTree, type Retained, type Runner } from "../image.ts";
@@ -113,7 +113,7 @@ export function buildUnitRepo(o: { unit: UnitRef; source: string; dest: string; 
   const headBranch = "pr-" + unit.pr;
   const steps: Array<[string[], string]> = [
     [["init", "-q", "-b", headBranch], "git init"],
-    [["-c", "uploadpack.allowAnySHA1InWant=true", "fetch", "-q", "--no-tags", "--no-write-fetch-head", o.source, head], "fetch the head commit"],
+    [["-c", "uploadpack.allowAnySHA1InWant=true", "fetch", "-q", "--no-tags", "--no-write-fetch-head", resolve(o.source), head], "fetch the head commit"],
     [["update-ref", "refs/heads/" + headBranch, head], "write the head branch"],
     [["update-ref", "refs/heads/" + baseBranch, mergeBase], "write the base branch"],
     [["update-ref", "refs/remotes/origin/" + baseBranch, mergeBase], "write origin/" + baseBranch],

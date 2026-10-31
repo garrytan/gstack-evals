@@ -275,6 +275,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, "findings"), { recursive: true });
     const counts: Record<string, number> = { findings: 0, empty: 0, missing: 0, malformed: 0, incomplete: 0, not_run: 0 };
+    const gaps: string[] = [];
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
     for (const unit of o.units) {
@@ -287,6 +288,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         }
         const label = outcomeLabel(e.parse);
         counts[label]!++;
+        if (label === "malformed" || label === "incomplete") gaps.push(unit.unit.id + " pass " + pass + ": " + label + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : ""));
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), label, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (e.parse.kind === "findings") for (const f of renderFindings(e.parse.findings, pass, "/work/" + unit.task)) lines.push(JSON.stringify(f));
         sessions.push({ pr: unit.unit.id, pass, wall_ms: e.record.wall_ms, cost: e.cost });
@@ -305,7 +307,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const source = provenance && typeof provenance.repo === "string" && typeof provenance.sha === "string" ? { repo: provenance.repo, sha: provenance.sha } : null;
     const armJson = {
       contract_version: 1, id, label: arm.name + " on " + model, suite: o.suite.id, ...(o.suite.sha256 ? { suite_sha256: o.suite.sha256 } : {}), date: o.date, passes: o.passes, provenance: "live",
-      status: counts.not_run || stops.length ? "stopped" : "complete", ...(source ? { source } : {}),
+      status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(source ? { source } : {}),
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: { arm: arm.told, prefix: TOLD_PREFIX[arm.told], template_sha256: TOLD_SHA256 }, parser_sha256: PARSER_SHA256,
