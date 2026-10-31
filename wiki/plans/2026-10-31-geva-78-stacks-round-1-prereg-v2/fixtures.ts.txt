@@ -1,0 +1,150 @@
+// Stacks round 1 dry run fixtures (GST-456). Writes, under <out>: raw review arms on stacks-r1 for the seven arms
+// the comparisons files name (src/<arm>/), a review-units out dir whose session transcripts exercise flag-scan (run/),
+// TB2 Harbor job folders with proxy session rows and analysis configs (tb2/), and the two judge ledger items (record/).
+// Everything is synthetic and seeded; no finding, reward or transcript here comes from a model.
+// Usage: R=<repo> bun fixtures.ts <out> <stacks-r1.json> <severity-map.json> <contamination.tsv> <tb2 final.json> <ql3 analysis-config.md>
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const R = process.env.R!;
+const { loadSuite, unitRef } = await import(R + "/lanes/review-noloss/suite.ts");
+const { recordApproval } = await import(R + "/src/runner/ledger/ledger.ts");
+const [out, suitePath, mapPath, auditPath, finalPath, ql3Path] = process.argv.slice(2) as [string, string, string, string, string, string];
+const { suite, sha256: suiteSha256 } = loadSuite(suitePath);
+const sevmap = JSON.parse(readFileSync(mapPath, "utf8"));
+
+function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const r = rng(20261101);
+const write = (path: string, text: string) => {
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, text);
+};
+
+const OPUS = "anthropic/claude-opus-5-5";
+const PARTICLE = "openrouter/particle-ai/particle-1";
+const ARMS = [
+  { id: "none-opus", stack: "none", model: OPUS, passes: 2, find: 0.4 },
+  { id: "gstack-opus", stack: "gstack", model: OPUS, passes: 2, find: 0.65 },
+  { id: "pstack-opus", stack: "pstack", model: OPUS, passes: 2, find: 0.6 },
+  { id: "tstack-opus", stack: "tstack", model: OPUS, passes: 2, find: 0.55 },
+  { id: "none-particle-1", stack: "none", model: PARTICLE, passes: 1, find: 0.3 },
+  { id: "gstack-particle-1", stack: "gstack", model: PARTICLE, passes: 1, find: 0.35 },
+  { id: "pstack-particle-1", stack: "pstack", model: PARTICLE, passes: 1, find: 0.3 },
+];
+// [label, reader] per stack: the first maps to blocking under the primary map, the second to informational.
+const LABELS: Record<string, Array<[string, string | null]>> = {
+  none: [["HIGH", null], ["MEDIUM", null]],
+  gstack: [["CRITICAL", null], ["INFORMATIONAL", null]],
+  pstack: [["HIGH", "confirmed"], ["MEDIUM", "unconfirmed"]],
+  tstack: [["BLOCKER", null], ["NIT", null]],
+};
+const pick = <T>(xs: T[]) => xs[Math.floor(r() * xs.length)]!;
+const label = (stack: string, blocking: boolean): [string, string | null] => {
+  if (stack === "pstack" && blocking) return [pick(["HIGH", "MEDIUM", "LOW"]), "confirmed"];
+  if (stack === "tstack" && blocking) return [r() < 0.7 ? "BLOCKER" : "SHOULD", null];
+  return LABELS[stack]![blocking ? 0 : 1]!;
+};
+
+const gapUnit = suite.units[5]!;
+for (const arm of ARMS) {
+  const dir = join(out, "src", arm.id);
+  const gap = arm.id === "tstack-opus";
+  write(join(dir, "arm.json"), JSON.stringify({
+    contract_version: 1, id: arm.id, label: arm.id + " (synthetic dry-run arm)", suite: suite.id, suite_sha256: suiteSha256, date: "2026-11-01", passes: arm.passes,
+    kind: arm.stack === "gstack" ? "reference" : "variant", provenance: "live", status: gap ? "stopped" : "complete",
+    ...(gap ? { coverage_gaps: [unitRef(suite, gapUnit) + " pass 2: session timeout (synthetic)"] } : {}),
+    source: { repo: "garrytan/gstack-evals", ref: "dry-run", sha: "0".repeat(40) }, models: [{ role: "reviewer", model: arm.model, effort: "medium" }],
+    run_by: "GEVA-78 dry run (synthetic)", severity_map: sevmap[arm.stack], notes: "Synthetic. Seeded fixture for the GST-456 dry run; its scores mean nothing.",
+  }, null, 2) + "\n");
+  const cost = ["pr\tscope\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\treasoning_tokens\ttotal_tokens\tusd\twall_seconds\tmeter_source\tcovers"];
+  for (const u of suite.units) {
+    const ref = unitRef(suite, u);
+    const lines: string[] = [];
+    for (let pass = 1; pass <= arm.passes; pass++) {
+      if (gap && u === gapUnit && pass === 2) continue;
+      for (const b of u.blockers) {
+        if (r() >= arm.find) continue;
+        const [lab, reader] = label(arm.stack, r() < 0.8);
+        lines.push(JSON.stringify({ id: b.id.toLowerCase() + "-p" + pass, pass, severity: lab, ...(reader ? { reader } : {}), path: b.file, line: b.line, summary: "Fixture finding at " + b.file + " line " + b.line + ": the change breaks the behavior this line guards.", fix: "Restore the guard.", evidence: "Fixture evidence: the line now returns before the check." }));
+      }
+      for (let k = 0; k < 2; k++) {
+        if (r() >= 0.3) continue;
+        const b = pick(u.blockers);
+        const [lab, reader] = label(arm.stack, true);
+        lines.push(JSON.stringify({ id: "x" + k + "-p" + pass, pass, severity: lab, ...(reader ? { reader } : {}), path: b.file, line: Math.max(1, b.line - 20 - k), summary: "Fixture finding at " + b.file + ": a nearby branch looks unguarded.", fix: "Add a guard.", evidence: "Fixture evidence: the branch has no test." }));
+      }
+    }
+    write(join(dir, "findings", ref + ".jsonl"), lines.length ? lines.join("\n") + "\n" : "");
+    cost.push([ref, "all", "", "", "", "", "", String(1000 + Math.floor(r() * 9000)), (0.5 + r()).toFixed(4), "60", "proxy-journal", ""].join("\t"));
+  }
+  write(join(dir, "cost.tsv"), cost.join("\n") + "\n");
+}
+
+// A review-units out dir for flag-scan: every stack session of the Opus cell, benign calls, plus planted touches.
+const H = "/home/agent";
+const audit = readFileSync(auditPath, "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
+const listed = (u: { id: string }) => audit.filter((row) => row[0] === u.id && row[2] === "diff-path").map((row) => row[3]!);
+const call = (name: string, input: Record<string, unknown>, id: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } });
+const task = (u: { pr: number; head: string }) => "t" + u.pr + "-" + u.head.slice(0, 8);
+write(join(out, "run", "units.json"), JSON.stringify({ units: suite.units.map((u: { id: string; pr: number; head: string }) => ({ id: u.id, task: task(u) })) }));
+const planted = suite.units.filter((u: { id: string }) => listed(u).some((p) => !p.endsWith("SKILL.md"))).slice(0, 2);
+for (const stack of ["none", "gstack", "pstack", "tstack"])
+  for (const u of suite.units)
+    for (let pass = 1; pass <= 2; pass++) {
+      const calls = [call("Read", { file_path: "/work/" + task(u) + "/" + u.blockers[0].file }, "c1"), call("Bash", { command: "git diff HEAD~1 --stat" }, "c2")];
+      if (stack === "gstack" && pass === 1 && planted.includes(u)) calls.push(call("Read", { file_path: H + "/.local/share/gstack/" + listed(u).find((p) => !p.endsWith("SKILL.md")) }, "c3"));
+      if (stack === "pstack" && pass === 2 && u === suite.units[0]) calls.push(call("Bash", { command: "grep -rn " + u.pr + " ~/.local/share/pstack" }, "c3"));
+      write(join(out, "run", "runs", "anthropic_claude-opus-5-5", stack, task(u), "p" + pass, "host", "transcript.ndjson"), calls.join("\n") + "\n");
+    }
+
+// The judge ledger items, as the superseding post splits #95's one judge item.
+const record = join(out, "record");
+const quote = { words: "Dry run: keyless fixture items, no spend", by: "GEVA-78", source: "dry-run fixtures" };
+recordApproval(record, { action: "init", item: "stacks-r1-review-judge-match", cap_micros: 90_000_000, quotes: [quote], admission: "warn" });
+recordApproval(record, { action: "init", item: "stacks-r1-review-judge-adjudicate", cap_micros: 110_000_000, quotes: [quote], admission: "warn" });
+
+// TB2: quick look 3's 40 tasks, three replicates, the arms #95 section 8 names per model.
+const tasks: string[] = JSON.parse(readFileSync(finalPath, "utf8")).tasks;
+const ql3 = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(readFileSync(ql3Path, "utf8"))![1]!);
+const CELLS: Record<string, string[]> = { "claude-opus-5-5": ["none", "gstack", "pstack"], "claude-haiku-5-5": ["none", "gstack", "placebo", "pstack", "pstack-placebo"], "particle-1": ["none", "gstack", "placebo", "pstack", "pstack-placebo"] };
+const BASE: Record<string, number> = { "claude-opus-5-5": 0.75, "claude-haiku-5-5": 0.6, "particle-1": 0.5 };
+const LIFT: Record<string, number> = { none: 0, gstack: 0.03, placebo: 0.01, pstack: 0.06, "pstack-placebo": 0.02 };
+const OPEN: Record<string, string> = { gstack: "/root/.claude/skills/investigate/SKILL.md", placebo: "/root/.claude/skills/investigate/SKILL.md", pstack: "/root/.local/share/pstack/skills/poteto-mode/SKILL.md", "pstack-placebo": "/root/.local/share/pstack/skills/poteto-mode/SKILL.md" };
+const job = join(out, "tb2", "jobs", "stacks-r1-tb2");
+const sessions: string[] = [];
+let n = 0;
+const ease = new Map(tasks.map((t) => [t, r() - 0.5]));
+for (const [model, arms] of Object.entries(CELLS))
+  for (const arm of arms)
+    for (const t of tasks)
+      for (let rep = 1; rep <= 3; rep++) {
+        const name = t + "__" + (n++).toString(36).padStart(7, "0");
+        const d = join(job, name);
+        const special = n % 211 === 0 ? "verifier-timeout" : n % 307 === 0 ? "infra" : n % 401 === 0 ? "agent-timeout" : null;
+        const pass = r() < BASE[model]! + LIFT[arm]! + 0.4 * ease.get(t)!;
+        const reward = special === "verifier-timeout" || special === "infra" ? undefined : pass ? 1 : 0;
+        const exc = special === "verifier-timeout" ? "VerifierTimeoutError" : special === "infra" ? "RuntimeError" : special === "agent-timeout" ? "AgentTimeoutError" : null;
+        write(join(d, "config.json"), JSON.stringify({ task: { path: "/w/run/tasks/" + t }, agent: { model_name: "anthropic/" + model, kwargs: { arm, upstream_model: model } } }));
+        write(join(d, "result.json"), JSON.stringify({ trial_name: name, task_name: t, verifier_result: reward === undefined ? null : { rewards: { reward } }, exception_info: exc ? { exception_type: exc, exception_message: "synthetic" } : null }));
+        const responded = special !== "infra";
+        const msgs = responded ? [JSON.stringify({ type: "AssistantMessage", content: OPEN[arm] && r() < 0.8 ? [{ name: "Read", input: { file_path: OPEN[arm] } }] : [{ type: "text", text: "working" }] })] : [];
+        write(join(d, "agent", "sdk-messages.jsonl"), msgs.join("\n") + (msgs.length ? "\n" : ""));
+        const spent = responded ? Math.floor((model === "claude-opus-5-5" ? 170000 : model === "particle-1" ? 70000 : 9000) * (0.5 + r())) : 0;
+        write(join(d, "agent", "laneb-summary.json"), JSON.stringify({ wall_s: 100 + Math.floor(r() * 500), session: { spent_micros: spent, requests: responded ? 4 : 0, ok_responses: responded ? 4 : 0, refused: 0, refused_budget: 0 } }));
+        sessions.push(JSON.stringify({ id: "s" + n, trial: name + "__env", model, spent_micros: spent, requests: responded ? 4 : 0, ok_responses: responded ? 4 : 0, refused: 0, refused_budget: 0, opened_at: "2026-11-01T00:00:00Z", closed_at: "2026-11-01T00:10:00Z" }));
+      }
+write(join(out, "tb2", "proxy-sessions.jsonl"), sessions.join("\n") + "\n");
+const models = Object.keys(CELLS);
+const subsets = { original_20: ql3.subsets.original_20 };
+write(join(out, "tb2", "stacks-tb2.config.json"), JSON.stringify({ models, reference: "claude-opus-5-5", jobs: [job], sessions: [join(out, "tb2", "proxy-sessions.jsonl")], subsets }, null, 2) + "\n");
+write(join(out, "tb2", "tag-analyze.config.json"), JSON.stringify({ models, arms: ["none", "gstack", "placebo", "pstack", "pstack-placebo"], reference: "claude-opus-5-5", seed: 20261031, b: 10000, jobs: [job], subsets }, null, 2) + "\n");
+console.log("fixtures: " + ARMS.length + " raw arms on " + suite.id + " (" + suite.units.length + " units), flag-scan run dir with planted reads on " + planted.map((u: { id: string }) => u.id).join(", ") + ", " + n + " TB2 trials, 2 judge items");

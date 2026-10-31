@@ -7,7 +7,7 @@ author: GEVA-76
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-10-31
-status: open
+status: superseded
 links:
   - 2026-10-30-geva-59-stacks-round-1-plan
   - 2026-10-29-gsta-30-laneb-quick-3-prereg
