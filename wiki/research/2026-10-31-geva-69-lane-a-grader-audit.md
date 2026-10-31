@@ -64,7 +64,7 @@ Process isolation: under `--isolation process`, a check that runs the agent's co
 
 Bun, for Bun-based suites: a fixture-owned `--config` replaces the tree's bunfig.toml for `bun file.ts` and `bun test`, but the tree's .env still loads. `--no-env-file`, or a fixture-owned working directory, stops it. No committed Lane A check runs Bun.
 
-What opened no route: .gitattributes cannot hide an edit from `git diff` (no driver config is reachable), and a tree tsconfig.json or node_modules cannot change how a fixture file resolves its own imports.
+What opened no route: .gitattributes cannot hide an edit from `git diff` (no driver config is reachable). The audit also found that a tree tsconfig.json or node_modules could not change how a fixture file resolves its imports, but GEVA-67's later work on #87 showed that is wrong for the entry file: a `paths` entry in the tree's tsconfig.json swaps even `bun /abs/grade.ts` for the tree's own file. A Bun check needs `--tsconfig-override` beside `--config`, which is rule E's job (GST-375). Rules A to D do not depend on it.
 
 ## U11 was not affected
 

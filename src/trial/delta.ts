@@ -106,12 +106,13 @@ export function importDelta(baseline: string, after: string, grade: string, path
   const before = scan(baseline);
   const now = scan(after);
   const scope = (paths ?? []).map((s) => s.replace(/\/+$/, ""));
-  const under = (p: string, roots: readonly string[]) => roots.some((s) => p === s || p.startsWith(s + "/"));
-  const kept: string[] = [];
-  const inScope = (p: string) => (!scope.length || under(p, scope)) && !under(p, kept);
+  const kept = new Set<string>();
+  const inScope = (p: string) => (!scope.length || scope.some((s) => p === s || p.startsWith(s + "/"))) && !p.split("/").some((_, i, parts) => kept.has(parts.slice(0, i + 1).join("/")));
   const delta: Delta = { added: [], changed: [], deleted: [], dropped: [] };
-  const relinked = () => [...now].find(([p, e]) => e.kind === "l" && before.get(p)?.kind === "d" && !delta.dropped.some((d) => d.path === p) && (inScope(p) || scope.some((s) => s.startsWith(p + "/"))))?.[0];
-  for (let p = relinked(); p !== undefined; p = relinked()) {
+  const relinked = (entries: Map<string, Entry>) => [...entries].filter(([p, e]) => e.kind === "l" && before.get(p)?.kind === "d").map(([p]) => p);
+  const queue = relinked(now);
+  for (const p of queue) {
+    if (!inScope(p) && !scope.some((s) => s.startsWith(p + "/"))) continue;
     const target = now.get(p)!.target!;
     let real = "";
     try {
@@ -120,9 +121,11 @@ export function importDelta(baseline: string, after: string, grade: string, path
     const dir = real.startsWith(root + "/") ? statSync(real) : undefined;
     const follow = dir?.isDirectory() === true;
     if (follow) {
+      const inside = walk(join(after, p), p, new Map());
       now.set(p, { kind: "d", mode: dir!.mode & 0o7777, size: dir!.size });
-      walk(join(after, p), p, now);
-    } else kept.push(p);
+      inside.forEach((e, q) => now.set(q, e));
+      queue.push(...relinked(inside));
+    } else kept.add(p);
     delta.dropped.push({ path: p, reason: "directory replaced by a symlink to " + target + "; graded as " + (follow ? "the directory it points to" : "the baseline's directory") });
   }
   const graded = new Map([...before].filter(([p]) => !inScope(p)).concat([...now].filter(([p]) => inScope(p))));
@@ -130,7 +133,7 @@ export function importDelta(baseline: string, after: string, grade: string, path
   const modes = dirModes(grade);
   for (const path of modes.keys()) chmodSync(path, 0o700);
   for (const p of [...before.keys()].filter((p) => !now.has(p) && inScope(p)).sort((a, b) => depth(b) - depth(a))) {
-    if (gitConfig(p)) {
+    if (gitConfig(p) && (dirname(p) === "." || now.get(dirname(p))?.kind === "d")) {
       if (GIT_CONFIG.has(basename(p))) delta.dropped.push({ path: p, reason: "deleted, and git reads the baseline's " + basename(p) });
       continue;
     }

@@ -277,6 +277,25 @@ describe("delta import", () => {
     expect([delta.added, delta.changed, delta.deleted]).toEqual([["src/merge.py"], [], []]);
   });
 
+  // Value: protects=a git config file under a directory the agent deleted or replaced with a file goes with it, and delta.json says so; fails_when=the import names the file as kept, and the verdict warns DELTA_DROPPED, while the grade tree has lost it with its parent; why_new=#90 review; seam=importDelta; no_claim=none beyond protects
+  test("a git config file goes with a directory the agent deleted or replaced, and is not named as kept", () => {
+    const root = scratch("gitconfig-parent");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    for (const d of ["gone", "flat"]) {
+      mkdirSync(join(baseline, d), { recursive: true });
+      writeFileSync(join(baseline, d, ".gitignore"), "*.log\n");
+    }
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    removeTree(join(after, "gone"));
+    removeTree(join(after, "flat"));
+    writeFileSync(join(after, "flat"), "now a file\n");
+    const delta = importDelta(baseline, after, grade);
+    expect(delta.dropped).toEqual([]);
+    expect(delta.deleted.toSorted()).toEqual(["flat/.gitignore", "gone", "gone/.gitignore"]);
+    expect([existsSync(join(grade, "gone")), readFileSync(join(grade, "flat"), "utf8")]).toEqual([false, "now a file\n"]);
+  });
+
   // Value: protects=a baseline directory the agent swaps for a symlink stays a directory in the grade tree, so find and a sidecar paths list still see inside it; fails_when=.gstack-home becomes a link find -P does not descend, or a graded path vanishes under a relinked ancestor; why_new=GEVA-68 audit rule D; seam=importDelta; no_claim=what a link out of the tree pointed at, which the grader cannot see
   test("a baseline directory replaced by a symlink stays a directory: the one it points to in the tree, else the baseline's", () => {
     const root = scratch("relinked-dir");
@@ -386,12 +405,11 @@ describe("U11 grader routes (keyless, on this machine)", () => {
   }, 300_000);
 });
 
-// Value: protects=a counted run never uses --isolation process, whose check runs agent code unsandboxed on this machine, while keyless dev use (the fake host, these tests) keeps it; fails_when=a real host, which leases from a ledger line item under a rig admission, starts under process isolation; why_new=GEVA-68 audit (process isolation row); seam=hostReadiness; no_claim=bubblewrap's own isolation
+// Value: protects=a counted run never uses --isolation process, whose check runs agent code unsandboxed on this machine; fails_when=a real host, which leases from a ledger line item under a rig admission, starts under process isolation; why_new=GEVA-68 audit (process isolation row); seam=hostReadiness; no_claim=bubblewrap's own isolation, and the fake host keeping process isolation, which tests/cli/fake-host.test.ts covers
 test("--isolation process is refused for a counted run, and docker is not", () => {
   const call = { host: "claude", arms: { arms: [] }, item: "u11-row-7", spendCap: 1_000_000 } as unknown as Parameters<typeof hostReadiness>[0];
   expect(hostReadiness({ ...call, isolation: "process" }, [])?.code).toBe("E_ISOLATION_COUNTED");
   expect(hostReadiness({ ...call, isolation: "docker" }, [])).toBeNull();
-  expect(local.isolation).toBe("process");
 });
 
 test("--isolation process refuses without bubblewrap", () => {
