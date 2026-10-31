@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadContract } from "../../src/skill-eval/contract/sidecar.ts";
@@ -296,63 +296,21 @@ describe("delta import", () => {
     expect([existsSync(join(grade, "gone")), readFileSync(join(grade, "flat"), "utf8")]).toEqual([false, "now a file\n"]);
   });
 
-  // Value: protects=a baseline directory the agent swaps for a symlink stays a directory in the grade tree, so find and a sidecar paths list still see inside it; fails_when=.gstack-home becomes a link find -P does not descend, or a graded path vanishes under a relinked ancestor; why_new=GEVA-68 audit rule D; seam=importDelta; no_claim=what a link out of the tree pointed at, which the grader cannot see
-  test("a baseline directory replaced by a symlink stays a directory: the one it points to in the tree, else the baseline's", () => {
-    const root = scratch("relinked-dir");
+  // Value: protects=a git config file stays the baseline's when the agent replaces its directory with a fifo, which the import drops and the grade tree keeps as a directory; fails_when=the grade tree keeps the directory but loses its .gitignore, and delta.json lists it as deleted; why_new=#90 review; seam=importDelta; no_claim=none beyond protects
+  test("a git config file stays when its directory becomes a fifo the import drops", () => {
+    const root = scratch("gitconfig-fifo");
     const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
-    for (const d of [".gstack-home/projects", "keep", "app/models"]) mkdirSync(join(baseline, d), { recursive: true });
-    writeFileSync(join(baseline, ".gstack-home", "config.yaml"), "seed\n");
-    writeFileSync(join(baseline, "keep", "x"), "k");
-    writeFileSync(join(baseline, "app", "models", "user.rb"), "u\n");
+    mkdirSync(join(baseline, "a"), { recursive: true });
+    writeFileSync(join(baseline, "a", ".gitignore"), "*.log\n");
     snapshot(baseline, after);
     snapshot(baseline, grade);
-    renameSync(join(after, ".gstack-home"), join(after, ".gh"));
-    symlinkSync(".gh", join(after, ".gstack-home"));
-    writeFileSync(join(after, ".gh", "projects", "csvmerge-design-1.md"), "d");
-    removeTree(join(after, "keep"));
-    symlinkSync(root, join(after, "keep"));
+    removeTree(join(after, "a"));
+    spawnSync("mkfifo", [join(after, "a")]);
     const delta = importDelta(baseline, after, grade);
-    expect(lstatSync(join(grade, ".gstack-home")).isDirectory()).toBe(true);
-    expect(readdirSync(join(grade, ".gstack-home", "projects"))).toEqual(["csvmerge-design-1.md"]);
-    expect(readFileSync(join(grade, ".gstack-home", "config.yaml"), "utf8")).toBe("seed\n");
-    expect(readFileSync(join(grade, "keep", "x"), "utf8")).toBe("k");
-    expect(delta.dropped.map((d) => d.path).toSorted()).toEqual([".gstack-home", "keep"]);
-    expect(delta.added).toContain(".gstack-home/projects/csvmerge-design-1.md");
-
-    const narrow = join(root, "narrow");
-    snapshot(baseline, narrow);
-    removeTree(join(after, "app"));
-    mkdirSync(join(after, "app2", "models"), { recursive: true });
-    writeFileSync(join(after, "app2", "models", "user.rb"), "edited\n");
-    symlinkSync("app2", join(after, "app"));
-    const scoped = importDelta(baseline, after, narrow, ["app/models"]);
-    expect(readFileSync(join(narrow, "app", "models", "user.rb"), "utf8")).toBe("edited\n");
-    expect([scoped.changed, scoped.dropped.map((d) => d.path)]).toEqual([["app/models/user.rb"], ["app"]]);
+    expect(readFileSync(join(grade, "a", ".gitignore"), "utf8")).toBe("*.log\n");
+    expect([delta.deleted, delta.dropped.map((d) => d.path).toSorted()]).toEqual([[], ["a", "a/.gitignore"]]);
   });
 
-  // Value: protects=rule D follows a replaced directory only where the kernel lands it, inside the work tree; fails_when=a link inside a followed directory is checked at its graded path but read through the real links on disk, so the import copies files from outside the work tree or throws on a target that is missing on disk; why_new=#90 review; seam=importDelta; no_claim=links changed while the import runs
-  test("a link inside a followed directory is checked where the kernel reads it, so nothing outside the work tree comes in", () => {
-    for (const target of ["../../outside", "../../gone"]) {
-      const root = scratch("nested-link");
-      const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
-      mkdirSync(join(baseline, "a", "b", "c", "d"), { recursive: true });
-      writeFileSync(join(baseline, "a", "b", "c", "d", "keep.txt"), "k");
-      snapshot(baseline, after);
-      snapshot(baseline, grade);
-      mkdirSync(join(root, "outside"));
-      writeFileSync(join(root, "outside", "secret.txt"), "s");
-      removeTree(join(after, "a", "b", "c"));
-      mkdirSync(join(after, "x"));
-      symlinkSync("../../x", join(after, "a", "b", "c"));
-      symlinkSync(target, join(after, "x", "d"));
-      mkdirSync(join(after, "a", "outside"));
-      mkdirSync(join(after, "a", "gone"));
-      const delta = importDelta(baseline, after, grade);
-      expect(readdirSync(join(grade, "a", "b", "c", "d"))).toEqual(["keep.txt"]);
-      expect(readdirSync(grade, { recursive: true }).filter((p) => String(p).endsWith("secret.txt"))).toEqual([]);
-      expect(delta.dropped.map((d) => d.path)).toEqual(expect.arrayContaining(["a/b/c", "a/b/c/d"]));
-    }
-  });
 });
 
 /** The committed U11 tasks (docs/benchmarks/2026-11-lanea-shakedown/tasks), vendored from gstack: their setup and check commands as locked. */
@@ -363,7 +321,7 @@ const u11Check = async (skill: string, t: ContractTask, steps: string[]) => {
   return { check: run.record.check, dropped: run.delta?.dropped.map((d) => d.path) ?? [], record: run.record, logs: JSON.parse(readFileSync(join(run.dir, "trial.json"), "utf8")).logs };
 };
 
-// Value: protects=the three routes GEVA-68's audit proved on committed U11 checks no longer flip a verdict: each route grades as its control does, and the trial names what the import dropped; fails_when=an agent .gitignore, an escaping symlink at a forbidden path, or a symlinked state root makes a failing check pass; why_new=GEVA-68 audit rule F (GST-374); seam=runTrial, importDelta, replayAgent; no_claim=content written outside the work tree, which no check can see
+// Value: protects=two of the three routes GEVA-68's audit proved on committed U11 checks no longer flip a verdict: each route grades as its control does, and the trial names what the import dropped; fails_when=an agent .gitignore or an escaping symlink at a forbidden path makes a failing check pass; why_new=GEVA-68 audit rule F (GST-374); seam=runTrial, importDelta, replayAgent; no_claim=content written outside the work tree, which no check can see, or a state root swapped for an in-tree symlink (GST-390, GST-387)
 describe("U11 grader routes (keyless, on this machine)", () => {
   const design = "dana-main-design-20261031.md";
 
@@ -388,13 +346,6 @@ describe("U11 grader routes (keyless, on this machine)", () => {
     expect((await u11Check("office-hours", gate, ["mkdir -p docs/designs && printf 'd\\n' > docs/designs/csvmerge.md"])).check).toBe(false);
     const designs = await u11Check("office-hours", gate, ['mkdir -p docs "$HOME/designs" && ln -s "$HOME/designs" docs/designs && printf \'d\\n\' > docs/designs/csvmerge.md']);
     expect([designs.check, designs.dropped]).toEqual([false, ["docs/designs"]]);
-  }, 300_000);
-
-  test("office-hours/approach-approval-gate: a state root swapped for an in-tree symlink is still searched", async () => {
-    const gate = u11("office-hours", "approach-approval-gate");
-    expect((await u11Check("office-hours", gate, ["mkdir -p .gstack-home/projects/csvmerge && printf 'd\\n' > .gstack-home/projects/csvmerge/" + design])).check).toBe(false);
-    const swapped = await u11Check("office-hours", gate, ["mv .gstack-home .gh && ln -s .gh .gstack-home && mkdir -p .gh/projects/csvmerge && printf 'd\\n' > .gh/projects/csvmerge/" + design]);
-    expect([swapped.check, swapped.dropped]).toEqual([false, [".gstack-home"]]);
   }, 300_000);
 
   // Value: protects=rule C: a check can read the evaluator's own delta, which no file in the tree can edit; fails_when=SKILL_EVAL_DELTA is unset, unreadable from the check, or misses a file git was told to ignore; why_new=GEVA-68 audit rule C; seam=runTrial; no_claim=the agent never sees it, which the env allowlist and the Docker tier's canary cover

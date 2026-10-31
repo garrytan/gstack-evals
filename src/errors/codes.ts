@@ -766,7 +766,7 @@ export const CODES = {
   },
   DELTA_DROPPED: {
     exit: null,
-    meaning: "A trial's delta import left some of the agent's output out or graded it as something else: a symlink out of the work tree (an empty directory stands in), an agent .gitignore, .gitattributes or .gitmodules (the baseline's stays), a directory replaced by a symlink (it stays a directory), or a fifo, socket or device. The trial's delta.json names each path and why.",
+    meaning: "A trial's delta import left some of the agent's output out or graded it as something else: a symlink out of the work tree (an empty directory stands in), an agent .gitignore, .gitattributes or .gitmodules (the baseline's stays), or a fifo, socket or device. The trial's delta.json names each path and why.",
     fix: "Read the trial's delta.json and transcript. Honest runs rarely write these; when the check's result turns on such a path, grade that trial by hand.",
     owner: "U9",
   },

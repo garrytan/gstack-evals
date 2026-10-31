@@ -3,7 +3,7 @@
 // files anywhere in the work tree, untracked and git-excluded files included (so .gstack-home comes across). Excluded:
 // every .git entry (the repository, its config and its hooks stay the baseline's, so an agent's commit cannot move the
 // grader's HEAD), and fifos, sockets and devices. A sidecar paths list narrows the import. The check then runs on the
-// grade tree, never on the agent's. Three rules keep agent-written config from changing what a check sees (GEVA-68's
+// grade tree, never on the agent's. Two rules keep agent-written config from changing what a check sees (GEVA-68's
 // audit), and each records what it did in delta.dropped:
 // - git's in-tree config (.gitignore, .gitattributes, .gitmodules) stays the baseline's, so an agent cannot hide new
 //   files from git ls-files or change how git diffs. One whose directory the agent deleted or replaced with a file goes
@@ -12,10 +12,8 @@
 //   find and git's untracked list all still see that something was written at that path. After a pass, runTrial runs the
 //   check again without these placeholders and passes only when that run passes too, so a placeholder cannot satisfy a
 //   check that needs the path.
-// - a baseline directory the agent replaced with a symlink (such as .gstack-home) stays a directory: graded as the
-//   directory the link points to when that is in the tree, else as the baseline's.
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 type Kind = "f" | "d" | "l" | "o";
@@ -47,21 +45,22 @@ export const PLACEHOLDER = ".gstack-evals-dropped-symlink";
 /** Git reads these from the work tree; the grade tree keeps the baseline's copies. */
 const GIT_CONFIG = new Set([".gitignore", ".gitattributes", ".gitmodules"]);
 
-/** Adds every entry under dir to out, keyed by its path under rel. Symlinks are recorded, never followed. */
-function walk(dir: string, rel: string, out: Map<string, Entry>): Map<string, Entry> {
-  for (const name of readdirSync(dir)) {
-    if (name === ".git") continue;
-    const path = join(dir, name);
-    const relPath = rel ? rel + "/" + name : name;
-    const st = lstatSync(path);
-    const kind: Kind = st.isSymbolicLink() ? "l" : st.isDirectory() ? "d" : st.isFile() ? "f" : "o";
-    out.set(relPath, { kind, mode: st.mode & 0o7777, size: st.size, ...(kind === "l" ? { target: readlinkSync(path) } : {}) });
-    if (kind === "d") walk(path, relPath, out);
-  }
+function scan(root: string): Map<string, Entry> {
+  const out = new Map<string, Entry>();
+  const walk = (dir: string, rel: string) => {
+    for (const name of readdirSync(dir)) {
+      if (name === ".git") continue;
+      const path = join(dir, name);
+      const relPath = rel ? rel + "/" + name : name;
+      const st = lstatSync(path);
+      const kind: Kind = st.isSymbolicLink() ? "l" : st.isDirectory() ? "d" : st.isFile() ? "f" : "o";
+      out.set(relPath, { kind, mode: st.mode & 0o7777, size: st.size, ...(kind === "l" ? { target: readlinkSync(path) } : {}) });
+      if (kind === "d") walk(path, relPath);
+    }
+  };
+  walk(root, "");
   return out;
 }
-
-const scan = (root: string) => walk(root, "", new Map());
 
 const depth = (p: string) => p.split("/").length;
 
@@ -105,38 +104,18 @@ function dirModes(root: string, out = new Map<string, number>()): Map<string, nu
 /** Imports the agent's changes (after) against the baseline into grade, a copy of the baseline. */
 export function importDelta(baseline: string, after: string, grade: string, paths?: readonly string[]): Delta {
   spawnSync("chmod", ["-R", "u+rX", after], { stdio: "ignore" });
-  const root = realpathSync(after);
   const before = scan(baseline);
   const now = scan(after);
   const scope = (paths ?? []).map((s) => s.replace(/\/+$/, ""));
-  const kept = new Set<string>();
-  const inScope = (p: string) => (!scope.length || scope.some((s) => p === s || p.startsWith(s + "/"))) && !p.split("/").some((_, i, parts) => kept.has(parts.slice(0, i + 1).join("/")));
+  const inScope = (p: string) => !scope.length || scope.some((s) => p === s || p.startsWith(s + "/"));
   const delta: Delta = { added: [], changed: [], deleted: [], dropped: [] };
-  const relinked = (entries: Map<string, Entry>) => [...entries].filter(([p, e]) => e.kind === "l" && before.get(p)?.kind === "d").map(([p]) => p);
-  const queue = relinked(now);
-  for (const p of queue) {
-    if (!inScope(p) && !scope.some((s) => s.startsWith(p + "/"))) continue;
-    const target = now.get(p)!.target!;
-    let real = "";
-    try {
-      real = realpathSync(join(after, p));
-    } catch {}
-    const dir = real.startsWith(root + "/") ? statSync(real) : undefined;
-    const follow = dir?.isDirectory() === true;
-    if (follow) {
-      const inside = walk(join(after, p), p, new Map());
-      now.set(p, { kind: "d", mode: dir!.mode & 0o7777, size: dir!.size });
-      inside.forEach((e, q) => now.set(q, e));
-      queue.push(...relinked(inside));
-    } else kept.add(p);
-    delta.dropped.push({ path: p, reason: "directory replaced by a symlink to " + target + "; graded as " + (follow ? "the directory it points to" : "the baseline's directory") });
-  }
   const graded = new Map([...before].filter(([p]) => !inScope(p)).concat([...now].filter(([p]) => inScope(p))));
   const gitConfig = (p: string) => p.split("/").some((s) => GIT_CONFIG.has(s));
   const modes = dirModes(grade);
   for (const path of modes.keys()) chmodSync(path, 0o700);
   for (const p of [...before.keys()].filter((p) => !now.has(p) && inScope(p)).sort((a, b) => depth(b) - depth(a))) {
-    if (gitConfig(p) && (dirname(p) === "." || now.get(dirname(p))?.kind === "d")) {
+    const parent = dirname(p) === "." ? "d" : now.get(dirname(p))?.kind;
+    if (gitConfig(p) && (parent === "d" || parent === "o")) {
       if (GIT_CONFIG.has(basename(p))) delta.dropped.push({ path: p, reason: "deleted, and git reads the baseline's " + basename(p) });
       continue;
     }

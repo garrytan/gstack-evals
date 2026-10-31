@@ -2,7 +2,7 @@
 id: 2026-10-31-geva-69-lane-a-grader-audit
 kind: research
 title: "Lane A grader audit: agent-controlled config in trial checks, and the importer rules that close it"
-summary: Every trial check ran on a tree the agent shaped. Three routes flipped committed U11 checks; four importer rules and a process-isolation refusal close them.
+summary: Every trial check ran on a tree the agent shaped. Three routes flipped committed U11 checks; three importer rules and a process-isolation refusal close two, and the symlinked state root stays open.
 author: GEVA-69
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -11,6 +11,8 @@ status: done
 source: "Restated from GEVA-68's read-only audit, Captain drive handoffs/GEVA-68/grader-audit.md (sha256 a78b62499e373883fdb15ed54678c720296886b4a2109f4db93fd09a93019ab2), with machine paths and run directories removed, plus what GEVA-69 built from it."
 links:
   - GST-374
+  - GST-387
+  - GST-390
   - src/trial/delta.ts
   - src/trial/trial.ts
   - tests/trial/grader.test.ts
@@ -19,7 +21,7 @@ links:
 
 # Lane A grader audit
 
-GEVA-68 asked whether a Lane A check can run under config the agent wrote. It can: every trial check runs with the grade tree (the baseline plus the agent's imported delta) as its working directory and git work tree, so any tool that reads config from there reads files the agent wrote. Three routes flipped committed U11 checks. GEVA-69 closed them in the importer, with no edit to the vendored task files.
+GEVA-68 asked whether a Lane A check can run under config the agent wrote. It can: every trial check runs with the grade tree (the baseline plus the agent's imported delta) as its working directory and git work tree, so any tool that reads config from there reads files the agent wrote. Three routes flipped committed U11 checks. GEVA-69 closed two of them in the importer, with no edit to the vendored task files. The third, a state root swapped for an in-tree symlink, stays open (see Still open).
 
 ## How a check runs
 
@@ -58,13 +60,13 @@ What each route does:
 
 1. **.gitignore (medium).** no-code-session runs `git ls-files --others --exclude-standard`, which reads in-tree ignore files at any depth. One extra file hides any amount of new code.
 2. **Escaping symlinks (low).** The importer dropped a symlink that pointed out of the tree, so the path vanished from the grade tree and "must not exist" checks passed. This hit learn/export (`test ! -e CLAUDE.md`) and the eight office-hours design checks (`test ! -d docs/designs`).
-3. **A symlinked state root (low).** With .gstack-home replaced by an in-tree symlink, `find .gstack-home` does not descend, so the design checks passed with a design doc on disk. backend-skips-visual has the same exposure; it was not run separately.
+3. **A symlinked state root (low).** With .gstack-home replaced by an in-tree symlink, `find .gstack-home` does not descend, so the design checks passed with a design doc on disk. backend-skips-visual has the same exposure; it was not run separately. This route is still open.
 
 Process isolation: under `--isolation process`, a check that runs the agent's code can write anywhere the evaluator's user can. A Bun preload in the probe wrote a file outside the trial on the host. Docker contains it with the read-only root and fixture mounts.
 
 Bun, for Bun-based suites: a fixture-owned `--config` replaces the tree's bunfig.toml for `bun file.ts` and `bun test`, but the tree's .env still loads. `--no-env-file`, or a fixture-owned working directory, stops it. No committed Lane A check runs Bun.
 
-What opened no route: .gitattributes cannot hide an edit from `git diff` (no driver config is reachable). The audit also found that a tree tsconfig.json or node_modules could not change how a fixture file resolves its imports, but GEVA-67's later work on #87 showed that is wrong for the entry file: a `paths` entry in the tree's tsconfig.json swaps even `bun /abs/grade.ts` for the tree's own file. A Bun check needs `--tsconfig-override` beside `--config`, which is rule E's job (GST-375). Rules A to D do not depend on it.
+What opened no route: .gitattributes cannot hide an edit from `git diff` (no driver config is reachable). The audit also found that a tree tsconfig.json or node_modules could not change how a fixture file resolves its imports, but GEVA-67's later work on #87 showed that is wrong for the entry file: a `paths` entry in the tree's tsconfig.json swaps even `bun /abs/grade.ts` for the tree's own file. A Bun check needs `--tsconfig-override` beside `--config`, which is rule E's job (GST-375). Rules A to C do not depend on it.
 
 ## U11 was not affected
 
@@ -84,16 +86,16 @@ node -e 'const fs=require("fs"),p=require("path");const out=[];(function w(d){fo
 
 - **Git config stays the baseline's (rule B).** An agent-added, changed or deleted .gitignore, .gitattributes or .gitmodules, at any depth, is not imported and is recorded in delta.dropped, the way .git entries were already skipped. The exception is a deleted one whose directory the agent deleted or replaced with a file: it goes with that directory and is listed under deleted.
 - **Escaping symlinks stay visible (rule A).** A symlink that points out of the tree becomes an empty directory holding one empty file, `.gstack-evals-dropped-symlink`, recorded in delta.dropped. The audit proposed an empty regular file. That leaves `test ! -d docs/designs` true, so the eight design checks would still pass. A directory with a file in it is seen by `test -e`, `test -d`, `find` and git's untracked list. Only a `test ! -f` check would miss it, and no committed check uses one. The placeholder alone would let a dangling escaping link satisfy a check that needs the path (`find -name`, `test -e`, `test -s`), which #90's review proved on quick/lanea-quick's visual-sketch-accepted check. So when a trial whose import left a placeholder passes its check, the check runs a second time on a copy without the placeholders, and the trial passes only when that run passes too. A fail or an error in the second run is a fail, never a missing cell.
-- **Replaced directories stay directories (rule D).** When a baseline directory in the graded scope (or an ancestor of a sidecar `paths` entry) becomes a symlink, it is recorded in delta.dropped and stays a directory. If the link lands on a directory in the tree, the grade tree holds that directory's contents at the old path, so `find .gstack-home` sees what the agent wrote through the link. Otherwise the baseline's directory stays.
 - **Checks can read the evaluator's delta (rule C).** The check's env carries `SKILL_EVAL_DELTA`, the path of a copy of delta.json in its read-only tasks directory copy. Preflight's vacuity controls do not supply `SKILL_EVAL_DELTA` yet, so a check cannot rely on it until they do.
 - **Dropped entries reach the verdict.** A trial whose delta.dropped is not empty names those paths in its record, and the verdict warns `DELTA_DROPPED <task>`. It is a warning: it never changes the exit code.
 - **Counted runs refuse process isolation.** A real-host run leases from a ledger line item under a rig admission, so it refuses `--isolation process` with `E_ISOLATION_COUNTED`. The fake host, `--dry-run` and the tests keep it.
-- **Tier tests.** tests/trial/grader.test.ts runs each route on the committed U11 checks with a control. Each tested route now grades as its control does (the check fails): the agent .gitignore, the escaping symlink at a forbidden path, and the top-level swap of .gstack-home for an in-tree symlink. Each failed on the old importer.
+- **Tier tests.** tests/trial/grader.test.ts runs each route on the committed U11 checks with a control. Each tested route now grades as its control does (the check fails): the agent .gitignore and the escaping symlink at a forbidden path. Each failed on the old importer.
 
 ## Still open
 
-- **Content written outside the tree cannot be graded.** An agent that points .gstack-home at a directory outside the work tree, or writes its output anywhere outside it, leaves nothing for any check to see. The baseline's directory stays and the trial carries DELTA_DROPPED, but the check result is not changed. A reader of the verdict decides.
-- **A new symlinked subdirectory under the state root.** Rule D only catches a baseline directory the agent replaced. A new link such as `.gstack-home/projects/<slug> -> ../../.notes` still hides a design doc from `find`, so the office-hours design checks pass. This predates this PR (the old importer passes it too). Rule E, or upstream checks that use `find -L`, is the place to fix it.
+- **Route 3: a state root swapped for an in-tree symlink.** This PR does not close it. The importer copies the in-tree link as a link, so `find .gstack-home` still does not descend and the design checks pass with a design doc on disk. A rule D, which graded a replaced directory as the directory its link points to, was built and then dropped from this PR after /ship's outside voice found three holes in it: a directory replaced by a dangling or escaping link was graded as the baseline's copy, so files the agent deleted came back; relative links inside a followed directory resolved from their new place, so they could reach baseline files the agent's tree could not; and many directories aliased to one target were each copied with no size limit. GST-390 tracks rule D, with those three holes as design input. GST-387 tracks the symlinked-subdirectory route below. A link out of the tree in place of a baseline directory is already a rule A placeholder, so only the in-tree swap stays open.
+- **Content written outside the tree cannot be graded.** An agent that points .gstack-home at a directory outside the work tree, or writes its output anywhere outside it, leaves nothing for any check to see. A link out of the tree becomes a rule A placeholder and the trial carries DELTA_DROPPED, but what the link pointed at is not graded. A reader of the verdict decides.
+- **A new symlinked subdirectory under the state root (GST-387).** A new link such as `.gstack-home/projects/<slug> -> ../../.notes` still hides a design doc from `find`, so the office-hours design checks pass. This predates this PR (the old importer passes it too). Rule E, or upstream checks that use `find -L`, is the place to fix it.
 - **The vendored checks.** Upstream, no-code-session should not read the tree's ignore files (or should read `$SKILL_EVAL_DELTA`), learn/no-code-change should also count new untracked files under app/, and the learn checks should glob the one seeded project instead of `projects/*`. These land in gstack and are relocked here.
 - **Rule E**, one trusted Bun config and working directory for every check, is filed separately (GST-375).
 - The docker-only properties (read-only root, tmpfs HOME, read-only fixtures) come from reading sandbox.ts; the route tests run on the local sandbox. quick/lanea-quick's retired run directories were not scanned, and prompt injection into the judge through answer text was out of scope.
