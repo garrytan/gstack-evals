@@ -15,7 +15,7 @@
 //   holding such a file at any depth, an ancestor of an install root included.
 // - list: a listing that shows such a file's name. ls and LS list a directory's entries, so they flag a file directly in
 //   it, except ls -d, which lists only the directory itself; ls -R, find and tree list every file below their path, an ancestor of an install root or / included, narrowed only by
-//   find's one -name test, find -maxdepth and tree -L; a Glob, or a
+//   find's one -name test and find -maxdepth when find runs no action (-exec, -execdir, -ok, -okdir or ,), and tree -L; a Glob, or a
 //   listing that names the file itself, flags each file it matches.
 // - search: a call with any path in the roots, or a recursive call from an ancestor of a root, whose Grep pattern or
 //   Bash words hold the unit's PR number as a whole number, or 7 or more leading hex characters of a fix commit of one
@@ -188,7 +188,7 @@ export function touches(tool: string, input: Record<string, unknown>, cwd: strin
     const pattern = after("-name");
     const tests = argv.filter((w) => /^-i?(name|path|regex|wholename)$/.test(w) || w === "-o" || w === "-or" || w === "!" || w === "-not");
     const depth = Number(name === "find" ? after("-maxdepth") : name === "tree" ? after("-L") : undefined);
-    const filter: Pick<Touch, "name" | "depth"> = { ...(name === "find" && pattern !== undefined && tests.length === 1 && tests[0] === "-name" ? { name: pattern } : {}), ...(Number.isInteger(depth) && depth >= 0 ? { depth } : {}) };
+    const filter: Pick<Touch, "name" | "depth"> = argv.some((w) => /^-(exec|execdir|ok|okdir)$/.test(w) || w === ",") ? {} : { ...(name === "find" && pattern !== undefined && tests.length === 1 && tests[0] === "-name" ? { name: pattern } : {}), ...(Number.isInteger(depth) && depth >= 0 ? { depth } : {}) };
     const touch = (path: string, r: Touch["reach"]): Touch => ({ path, reach: r, list, ...(r === "tree" ? filter : {}) });
     const recursive = RECURSIVE.has(name) || (GREPS.has(name) && flags.some((f) => /^-[A-Za-z]*[rR]/.test(f) || f === "--recursive" || f === "--dereference-recursive")) || (name === "git" && argv.includes("grep")) || (name === "diff" && flags.some((f) => /^-[A-Za-z]*r/.test(f) || f === "--recursive")) || name === "find" || name === "tree" || (name === "ls" && flags.some((f) => /^-[A-Za-z]*R/.test(f) || f === "--recursive"));
     const directoryOnly = name === "ls" && flags.some((f) => /^-[A-Za-z]*d/.test(f) || f === "--directory");

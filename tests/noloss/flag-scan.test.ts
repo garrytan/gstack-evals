@@ -57,6 +57,7 @@ describe("noloss flag-scan: the frozen contamination rules", () => {
     expect([touchRule(skills)(H + "/.claude/skills/gstack/lib/ship-budget.ts"), touchRule(skills)(H + "/.claude/skills/gstack/SKILL.md")]).toEqual([null, "list"]);
     expect(touchRule(touches("Bash", { command: "find ~/.claude/skills -name SKILL.md -o -name '*.ts'" }, "/work/t").paths[0]!)(H + "/.claude/skills/gstack/lib/ship-budget.ts")).toBe("list");
     expect(["find ~/.local/share/gstack -maxdepth 1 -type d", "tree -L 1 ~/.local/share/gstack", "tree -L 2 ~/.local/share/gstack"].map((command) => touchRule(touches("Bash", { command }, "/work/t").paths[0]!)(f))).toEqual([null, null, "list"]);
+    expect(["find ~/.local/share/gstack -name lib -type d -exec grep -rn budget {} +", "find ~/.local/share/gstack -maxdepth 1 -execdir ls {} +", "find ~/.local/share/gstack -name lib , -print"].map((command) => touchRule(touches("Bash", { command }, "/work/t").paths[0]!)(f))).toEqual(["list", "list", "list"]);
     expect(touchRule(touches("Glob", { pattern: "**/*.{ts,md}", path: H + "/.local/share/gstack" }, "/work/t").paths[0]!)(f)).toBe("list");
     expect(touchRule(touches("Bash", { command: "cat ~/.local/share/gstack/{lib,bin}/ship-budget.ts" }, "/work/t").paths[0]!)(f)).toBe("read");
     const odd = touches("Bash", { command: "sed 's/[^a-Z]//g' /work/t/x && cd ~/.local/share/gstack && grep -rE '[\\d-a]+' ." }, "/work/t").paths;
