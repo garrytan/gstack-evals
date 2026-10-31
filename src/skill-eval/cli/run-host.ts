@@ -31,6 +31,7 @@ import { homedir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
 import { dockerInstaller, installArms, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
+import type { CellSettings } from "../../arms/cells.ts";
 import { hostDriver, skillRoot } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
@@ -67,7 +68,7 @@ export interface HostRig {
   bind(request: BindRequest): Promise<Binding>;
   finalize(meterId: string): Promise<Meter>;
   /** Each arm's install: its session key tree, the target skill's paths under HOME and gstack-skill-start, if any. */
-  arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack">>>;
+  arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack"> & Partial<Pick<ArmInstall, "plugins">>>>;
   /** The sandbox whose agent HOME holds the arm, or the arm's calibration copy. */
   sandbox(arm: string, calibration: boolean): Sandbox;
   /** A sandbox with no skill installed, for judge sessions. */
@@ -276,12 +277,14 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const armName = s.arm?.name ?? JUDGE_ARM;
     const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: [provider + ":" + s.model], allowance_micros: s.allowance });
     const home = s.sandbox.homePath(s.dir);
-    const installed = s.arm ? rig.arms[s.arm.name]!.skill : null;
+    const armInstall = s.arm ? rig.arms[s.arm.name]! : null;
+    const installed = armInstall?.skill ?? null;
+    const plugins = (armInstall?.plugins ?? []).map((p) => posix.join(home, p));
     const holds = installed !== null;
     const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null, ...(s.sentinel ? { sentinel: s.sentinel } : {}) } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
-    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}) });
+    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}) });
     const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros + (usersim ? await usersim.close() : 0);
@@ -396,10 +399,12 @@ const PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KE
 /**
  * Builds each arm's image from its install on the trial image, and its calibration copy (the arm image plus its
  * SKILL.md with the sentinel appended). A base arm's first layer is built once as its own image, so every arm on one
- * base shares it. With retain, every layer tree is kept there by digest. Writes <out>/arms.json; returns each image tag
- * by arm name, and by name#calibration for the copies.
+ * base shares it. With retain, every layer tree is kept there by digest. An arm with cells (src/arms/cells.ts) gets one
+ * image per cell whose settings add a layer, and that layer is kept like the arm's own. Writes <out>/arms.json: per arm
+ * its provenance (repo, sha, subtree path, git tree and tree sha256 for a stack), layers, plugin roots, image and cells. Returns each image tag by arm name, by
+ * name#calibration for the copies and by name@model for the cells.
  */
-export function armImages(o: { trialImage: string; home: string; installs: readonly ArmInstall[]; marks: Readonly<Record<string, string>>; tasksDir: string; state: string; docker: string; out: string; retain: string | null; noCache?: boolean }): Map<string, string> {
+export function armImages(o: { trialImage: string; home: string; installs: readonly ArmInstall[]; marks: Readonly<Record<string, string>>; tasksDir: string; state: string; docker: string; out: string; retain: string | null; noCache?: boolean; cells?: Readonly<Record<string, readonly CellSettings[]>> }): Map<string, string> {
   const images = new Map<string, string>();
   const shared = new Map<string, string>();
   const record: Record<string, unknown>[] = [];
@@ -426,8 +431,16 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
       calibration = build(image.tag, [sentinelLayer(arm, withSentinel(readFileSync(arm.skill.file, "utf8"), o.marks[arm.name]!), dir)]);
     }
     images.set(arm.name + "#calibration", calibration.tag);
-    const layers = arm.layers.map((l) => ({ dest: l.dest, ...(o.retain ? { retained: retainTree(l.src, o.retain) } : { tree_sha256: dirTreeSha256(l.src) }) }));
-    record.push({ name: arm.name, provenance: arm.provenance, tree_sha256: arm.tree_sha256, layers, image: { tag: image.tag, digest: image.digest, dropped: image.dropped }, calibration_image: { tag: calibration.tag, digest: calibration.digest } });
+    const kept = (l: Layer) => ({ dest: l.dest, ...(o.retain ? { retained: retainTree(l.src, o.retain) } : { tree_sha256: dirTreeSha256(l.src) }) });
+    const layers = arm.layers.map(kept);
+    const models = (o.cells?.[arm.name] ?? []).map((c) => c.cell.model);
+    if (new Set(models).size !== models.length) throw new Error("E_USAGE: arm " + arm.name + " has two cells on one model; cell images are keyed by arm and model");
+    const cells = (o.cells?.[arm.name] ?? []).map((c) => {
+      const built = c.layer ? build(image.tag, [c.layer]) : image;
+      images.set(arm.name + "@" + c.cell.model, built.tag);
+      return { model: c.cell.model, voice: c.cell.voice, tree_sha256: c.tree_sha256, gstack_config: c.gstack_config, codex: c.codex, layer: c.layer ? kept(c.layer) : null, image: { tag: built.tag, digest: built.digest } };
+    });
+    record.push({ name: arm.name, provenance: arm.provenance, tree_sha256: arm.tree_sha256, layers, ...(arm.plugins.length ? { plugins: arm.plugins } : {}), image: { tag: image.tag, digest: image.digest, dropped: image.dropped }, calibration_image: { tag: calibration.tag, digest: calibration.digest }, ...(cells.length ? { cells } : {}) });
   }
   mkdirSync(o.out, { recursive: true });
   writeFileSync(join(o.out, "arms.json"), JSON.stringify({ schema_version: 1, trial_image: o.trialImage, arms: record }, null, 2) + "\n");

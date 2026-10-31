@@ -23,6 +23,8 @@ export type CommandMain = (argv: string[]) => Promise<number>;
 export interface StackRef {
   repo: string;
   sha: string;
+  /** A folder of the commit, such as harness/pstack/claude-code: the arm installs that subtree alone (name=<repo>@<sha>:<path>). */
+  path?: string;
 }
 
 export type ArmKind = "bare" | "placebo" | "stack" | "overlay" | "loadout";

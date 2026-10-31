@@ -11,7 +11,7 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | adapters/claude-code/ | Claude Code on the Agent SDK | U10 |
 | adapters/codex/ | Codex through `codex exec --json`, non-interactive tasks only | U10 |
 | adapters/_fake/ | The keyless fake host | U7 |
-| arms/ | Arm resolution: overlays, placebo, loadouts | not assigned; the arm-spec grammar (U7) is its first user |
+| arms/ | Arm resolution: overlays, placebo, loadouts; stack installs (install.ts), the pstack and tstack kinds (stacks.ts) and per-cell settings (cells.ts) | not assigned; the arm-spec grammar (U7) is its first user |
 | usersim/ | The user simulator; classifier.ts is U5's | U10 |
 | grade/ | Scoring and blinded adjudication | U10 |
 | runner/proxy/ | The metering proxy, vendored from harness-evals | U3 |

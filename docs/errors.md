@@ -106,6 +106,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [CLEANUP_INCOMPLETE](#cleanup_incomplete) | warning | U9 |
 | [E_STACK_SOURCE](#e_stack_source) | 2 | U10 |
 | [E_STACK_DIGEST](#e_stack_digest) | 2 | U10 |
+| [E_CELL_RULE](#e_cell_rule) | 2 | U10 |
+| [E_CODEX_CONFIG](#e_codex_config) | 2 | U10 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -695,6 +697,22 @@ A stack tree did not verify by digest: the bytes git archive extracted do not ha
 Fix: Run git fsck on the source repository and check the tree for export-ignore, export-subst or filter attributes, which change what git archive writes. For a cached install, remove the directory the message names; it is rebuilt from the verified tree.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_CELL_RULE
+
+A pstack arm's per-cell model rule could not be derived: the pinned tree's setup-pstack SKILL.md has no rule shape with role lines in its step 5. No image was built for the cell.
+
+Fix: Check that the arm pins pstack's Claude Code tree (cursor/plugins at harness/pstack/claude-code) at a commit whose setup-pstack still shows the rule shape, and re-pin it in the preregistration if the shape moved. Do not --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_CODEX_CONFIG
+
+The Claude Code adapter could not write the session's Codex config (~/.codex/config.toml) for an arm whose cell keeps a cross-family voice, so Claude Code never started. The cell is missing, not an arm failure, and nothing was spent.
+
+Fix: Check that the arm image leaves HOME and ~/.codex writable for the agent (mode 1777) and that no layer installs its own ~/.codex/config.toml, then rerun the cell with --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U10.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

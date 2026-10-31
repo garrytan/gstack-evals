@@ -187,3 +187,16 @@ describe("calibration's sentinel proof of a skill read", () => {
     expect(skillUse(codex.calls, { name: "learn", roots: [home + "/.codex/skills/learn"], sentinel: sentinel("before2") }, codex.outputs)).toEqual({ opened: true, files: ["SKILL.md"] });
   });
 });
+
+describe("Skill calls through a plugin namespace", () => {
+  // Value: protects=a Skill call that names the skill through a plugin namespace (pstack:interrogate, gstack:review) opens it, and another skill of the namespace or a longer name does not; fails_when=only gstack: counts, so a pstack arm loaded as a plugin under-reports opened; why_new=ship #88 red team (pstack loads as a plugin, so its skills answer as pstack:<name>); seam=skillUse; no_claim=how a told slash command shows in the transcript
+  test("pstack:<name> opens the skill; other names do not", () => {
+    const call = (skill: string) => ({ id: "c1", tool: "Skill", input: { skill }, ok: true }) as unknown as Call;
+    const ref = { name: "interrogate", roots: ["/sandbox/pstack/skills/interrogate"] };
+    expect(skillUse([call("pstack:interrogate")], ref).opened).toBe(true);
+    expect(skillUse([call("gstack:interrogate")], ref).opened).toBe(true);
+    expect(skillUse([call("interrogate")], ref).opened).toBe(true);
+    expect(skillUse([call("pstack:poteto-mode")], ref).opened).toBe(false);
+    expect(skillUse([call("pre-interrogate")], ref).opened).toBe(false);
+  });
+});
