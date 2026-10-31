@@ -249,7 +249,7 @@ function newBlockingFindings(suite: Suite, arm: Arm): { per_pass: number; per_pr
 
 interface FalseBlockerTally {
   /** Per unit id, summed over passes. */
-  units: Map<string, { false: number; unadjudicated: number }>;
+  units: Map<string, { false: number; unadjudicated: number; new: number }>;
   not_defect: number;
   known_informational: number;
   new_blockers: number;
@@ -263,14 +263,14 @@ interface FalseBlockerTally {
  * defect, an over-blocking blocker alone makes it over-block the known informational case. adjudication.tsv rules on
  * the rest; a finding with no row is unadjudicated and is never counted as not a defect.
  */
-function tallyFalseBlockers(suite: Suite, arm: Arm): FalseBlockerTally | { reason: string } {
+export function tallyFalseBlockers(suite: Suite, arm: Arm): FalseBlockerTally | { reason: string } {
   if (!arm.findings) return { reason: "arm " + arm.arm.id + " is transcribed: it has no findings to adjudicate" };
   const matched = matchedBlockers(arm.judgments ?? []);
   const rows = arm.adjudications ?? [];
   const ruled = new Map(rows.map((a) => [a.finding, a.ruling]));
   const t: FalseBlockerTally = { units: new Map(), not_defect: 0, known_informational: 0, new_blockers: 0, unadjudicated: 0, labelled: rows.some((a) => a.saw_label), blind: rows.some((a) => !a.saw_label) };
   for (const u of suite.units) {
-    const cell = { false: 0, unadjudicated: 0 };
+    const cell = { false: 0, unadjudicated: 0, new: 0 };
     for (const f of arm.findings.get(u.id) ?? []) {
       if (mapSeverity(arm.arm, f.raw, f.reader) !== "CRITICAL") continue;
       const blockers = matched.get(f) ?? [];
@@ -279,7 +279,10 @@ function tallyFalseBlockers(suite: Suite, arm: Arm): FalseBlockerTally | { reaso
       if (ruling === undefined) {
         cell.unadjudicated++;
         t.unadjudicated++;
-      } else if (ruling === "defect") t.new_blockers++;
+      } else if (ruling === "defect") {
+        cell.new++;
+        t.new_blockers++;
+      }
       else {
         cell.false++;
         if (ruling === "not-defect") t.not_defect++;

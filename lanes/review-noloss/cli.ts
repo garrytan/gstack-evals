@@ -11,9 +11,13 @@ import { errorLines, errorRecord, scrubSecrets } from "../../src/skill-eval/verd
 import { ContractError } from "./contract.ts";
 import { buildExport, COMPARISONS_DIR, loadArms, loadComparisons, renderExport, TABLE_PATH, tableText } from "./export.ts";
 import { ARMS_ROOT, prepare, publish, readArmDir, snapshot } from "./ingest.ts";
+import { derive } from "./derive.ts";
+import { flagScan, flagsTsv } from "./flag-scan.ts";
 import { judgeJoin, judgePacket } from "./judge.ts";
+import { judgeRunCmd } from "./judge-run.ts";
 import { powerTable, renderPowerTable, spreadValue, suiteClusters } from "./power.ts";
-import { DEFAULT_DRAWS, DEFAULT_SEED, falseBlockerTable, renderRecord, scoreComparisons, ScoreError, type Comparison, type LossFamily } from "./score.ts";
+import { ideaWins, newBlockers } from "./secondary.ts";
+import { armMetrics, DEFAULT_DRAWS, DEFAULT_SEED, falseBlockerTable, renderRecord, scoreComparisons, ScoreError, type Comparison, type LossFamily } from "./score.ts";
 import { OUTCOMES, readScoreRun, verdictLine } from "./verdict.ts";
 import { blockerCount, checkSuite, insideRepo, loadSuite, SuiteError, suiteFromCatalog } from "./suite.ts";
 
@@ -70,12 +74,45 @@ Scores review variants on the blockers a reference review catches. No command ca
       findings pooled in a seeded shuffle under opaque ids, with path, line and text only, severity words masked. A
       text naming an arm id or label, "arm <id>", a model id or a hyphenated reader is refused. --key, which maps ids
       back to arms, must sit outside --out.
+  derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit ref>]... [--drop-file <tsv>]
+        [--drop-gaps] [--detection-only <unit ref>:<blocker>]... [--severity-map <file> | --impact <impact.tsv> --key <file> --impact-judge <judge>]
+      Re-derive a suite and every arm ingested on it for a secondary or sensitivity reading, so score runs on it unchanged:
+      drop units for every arm alike (named, listed in a TSV's unit column, or every unit with a coverage gap or a judgment
+      with coverage incomplete), count blockers as detection-only, or re-map severity (a map per arm id or arm name, or one
+      judge's impact ratings from judge-run's impact.tsv with the matching batch's key). Findings, matches and rulings never
+      change: a re-map recomputes outcomes from the judges' matches. A stopped arm whose every coverage gap is dropped, and
+      that left no session unrun, is complete in the derived suite. Writes <out>/<id>.json, <out>/arms/<id>/<arm>/ (ingested),
+      <out>/comparisons.<id>.json (the comparisons file with its suite set to <id>) and <out>/derive.json.
+  flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
+      Flag each stack-arm unit-pass whose session touched, in that arm's install roots, a file the contamination audit lists
+      for the unit, or searched there for the unit's PR number or fix commit (rules in lanes/review-noloss/flag-scan.ts).
+      Writes one row per flag (unit, arm, model, pass, rule, tool, call, path, audit_path); derive --drop-file reads it.
+  secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
+      The secondaries score does not compute: each arm's recall at any severity beside its blocking recall (per blocker,
+      PR-clustered interval); new blockers (unmatched blocking findings adjudicated a defect) per pass per
+      PR, paired by PR with the clustered interval and exact two-sided sign-flip; and idea-card wins (blocking blockers the
+      variant found in every pass and the reference in none) beside a null from random within-unit label swaps, its mean
+      and 95th percentile. Defaults: --draws 10000, --permutations 10000.
   judge-join --suite <id|path> --key <file> --reply <file> [--second <file>] [--third <file>] --arm <dir>... --out <dir>
-        [--replace <reason>]
+        [--replace <reason>] [--unjudged <file>]
       Check each reply against the key's batch and packet digests, apply severity mechanically (the highest mapped
       severity among a blocker's matches wins), and write <out>/<arm id>/ with judgments.tsv (saw_label no) for every
       arm at once, ready for noloss ingest. It names and waits for the second judge (every blocker where the arms
       differ, plus a seeded 20% sample) and a third read (every blocker where the judges differ).
+      --unjudged takes judge-run's unjudged.json for the same batch: the blockers of a packet a judge's reply was refused
+      twice for are written with coverage incomplete (outcome M) and its findings get no adjudication row.
+  judge-run --suite <id|path> --packets <dir> --key <file> --arm <dir>... --brief <file> --primary <provider/model>
+        --second <provider/model> --third <provider/model> --item <ledger item> --out <dir> [--source <owner/repo>=<clone>]...
+        [--concurrency <n>] [--ledger <path>] [--record <dir>] [--policy <file>] [--dry-run]
+      Send each judge the brief, the batch's batch.json and one packet per request (no tools, no system prompt, at most
+      16000 output tokens, reasoning effort medium on the OpenAI route) through an in-process metering proxy on a lease
+      of the ledger item. The primary reads every packet, the second and third every packet holding a blocker or finding
+      of the sets judge-join names. A reply judge-join would refuse is asked again once; a second refusal goes to
+      unjudged.json. Writes primary.json, second.json and third.json for judge-join, impact.tsv or verifiable.tsv,
+      raw answers under raw/, and run.json with every file's sha256, then prints the judge-join command. Adjudication
+      packets go out with an evidence sheet (the finding's masked evidence and the unit head's code from the --source
+      clone of its repo) and the run writes unverifiable.tsv. --dry-run checks everything, prints each request's worst
+      case and spends and writes nothing. Defaults: --concurrency 4, the default model policy.
 
 Exit codes. Verification reads the verdict line and the first reason code, never exit 2 alone. score: 0 NO_LOSS with the size rule met, 1 LOSS, 2 otherwise (NOT_DISTINGUISHED, a NO_LOSS below or
 without the size rule, which warns NOLOSS_UNDERPOWERED, no verdict, or a refusal). Other commands: 0 on success, 2 on
@@ -295,14 +332,86 @@ function judgePacketCmd(argv: string[], io: NolossIo): number {
 }
 
 function judgeJoinCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--key": "value", "--reply": "value", "--second": "value", "--third": "value", "--arm": "repeat", "--out": "value", "--replace": "value" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--key": "value", "--reply": "value", "--second": "value", "--third": "value", "--arm": "repeat", "--out": "value", "--replace": "value", "--unjudged": "value" });
   if (positional.length) throw new Usage("noloss judge-join takes arms with --arm <dir>");
   for (const f of ["--suite", "--key", "--reply", "--out"]) if (!flags.has(f)) throw new Usage("noloss judge-join needs " + f);
   const { suite, sha256 } = loadSuite(flags.get("--suite")![0]!);
   const arms = (flags.get("--arm") ?? []).map((d) => readArmDir(resolve(d), suite, sha256));
   const opt = (f: string) => (flags.has(f) ? resolve(flags.get(f)![0]!) : null);
-  const r = judgeJoin({ suite, suiteSha256: sha256, key: resolve(flags.get("--key")![0]!), primary: resolve(flags.get("--reply")![0]!), second: opt("--second"), third: opt("--third"), arms, out: resolve(flags.get("--out")![0]!), replace: flags.get("--replace")?.[0] ?? null });
+  const r = judgeJoin({ suite, suiteSha256: sha256, key: resolve(flags.get("--key")![0]!), primary: resolve(flags.get("--reply")![0]!), second: opt("--second"), third: opt("--third"), unjudged: opt("--unjudged"), arms, out: resolve(flags.get("--out")![0]!), replace: flags.get("--replace")?.[0] ?? null });
   io.out("judge-join: batch " + r.batch + ", wrote " + (r.kind === "adjudication" ? "adjudication.tsv" : "judgments") + " for " + r.arms.join(", ") + " under " + r.out + "; second judge on " + r.second_required + " blockers (kappa " + (r.kappa_primary_second ?? "n/a") + "), third read on " + r.third_required + ". Ingest each arm with noloss ingest.");
+  return 0;
+}
+
+function deriveCmd(argv: string[], io: NolossIo): number {
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--comparisons": "value", "--root": "value", "--id": "value", "--out": "value", "--drop": "repeat", "--drop-file": "value", "--drop-gaps": "bool", "--detection-only": "repeat", "--severity-map": "value", "--impact": "value", "--key": "value", "--impact-judge": "value" });
+  if (positional.length) throw new Usage("noloss derive takes no positional arguments");
+  for (const f of ["--suite", "--comparisons", "--id", "--out"]) if (!flags.has(f)) throw new Usage("noloss derive needs " + f);
+  const impact = flags.get("--impact")?.[0];
+  if (impact && (!flags.has("--key") || !flags.has("--impact-judge"))) throw new Usage("--impact needs --key <matching batch key> and --impact-judge <judge>");
+  const r = derive({ suite: flags.get("--suite")![0]!, comparisons: flags.get("--comparisons")![0]!, root: flags.get("--root")?.[0] ?? ARMS_ROOT, id: flags.get("--id")![0]!, out: flags.get("--out")![0]!, drop: flags.get("--drop") ?? [], dropFile: flags.get("--drop-file")?.[0] ?? null, dropGaps: flags.has("--drop-gaps"), detectionOnly: flags.get("--detection-only") ?? [], severityMap: flags.get("--severity-map")?.[0] ?? null, impact: impact ? { tsv: impact, key: flags.get("--key")![0]!, judge: flags.get("--impact-judge")![0]! } : null });
+  io.out("derive " + r.suite.id + ": " + r.operations.join("; "));
+  io.out("suite " + r.suite.path + " sha256 " + r.suite.sha256 + ": " + r.suite.units + " units, " + r.suite.blocking + " blocking blockers on " + r.suite.clusters + " PRs; " + r.dropped.length + " units dropped" + (r.dropped.length ? " (" + r.dropped.map((d) => d.unit).join(", ") + ")" : ""));
+  io.out("comparisons " + r.comparisons.path + " sha256 " + r.comparisons.sha256);
+  for (const a of r.arms) io.out("arm " + a.id + ": " + (a.status_before === a.status ? a.status : a.status_before + " -> " + a.status) + (a.coverage_gaps ? ", " + a.coverage_gaps + " coverage gaps left" : "") + (a.cost_rows_dropped ? ", " + a.cost_rows_dropped + " cost rows dropped" : "") + ", tree " + a.tree_sha256);
+  io.out("score with: gstack-evals noloss score --suite " + r.suite.path + " --root " + join(resolve(flags.get("--out")![0]!), "arms") + " --prereg " + r.comparisons.path + " --variant <id> --reference <id>");
+  return 0;
+}
+
+function flagScanCmd(argv: string[], io: NolossIo): number {
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--run": "repeat", "--audit": "value", "--out": "value", "--home": "value" });
+  if (positional.length) throw new Usage("noloss flag-scan takes no positional arguments");
+  for (const f of ["--suite", "--run", "--audit"]) if (!flags.has(f)) throw new Usage("noloss flag-scan needs " + f);
+  const { suite } = loadSuite(flags.get("--suite")![0]!);
+  const all = flags.get("--run")!.map((run) => flagScan({ suite, run: resolve(run), audit: flags.get("--audit")![0]!, home: flags.get("--home")?.[0] }));
+  const text = flagsTsv(all.flatMap((r) => r.flags));
+  const out = flags.get("--out")?.[0];
+  if (out) writeFileSync(out, text);
+  const arms = [...new Set(all.flatMap((r) => Object.keys(r.sessions)))].sort();
+  for (const arm of arms) {
+    const units = [...new Set(all.flatMap((r) => r.flagged[arm]?.units ?? []))];
+    io.out("flag-scan " + arm + ": " + all.reduce((n, r) => n + (r.sessions[arm] ?? 0), 0) + " sessions, " + all.reduce((n, r) => n + (r.flagged[arm]?.passes ?? 0), 0) + " unit-passes flagged on " + units.length + " units" + (units.length ? " (" + units.join(", ") + ")" : ""));
+  }
+  if (!out) io.out(text.trimEnd());
+  return 0;
+}
+
+function secondaryCmd(argv: string[], io: NolossIo): number {
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--variant": "value", "--reference": "value", "--seed": "value", "--root": "value", "--draws": "value", "--permutations": "value", "--json": "bool" });
+  if (positional.length) throw new Usage("noloss secondary takes no positional arguments");
+  for (const f of ["--suite", "--variant", "--reference", "--seed"]) if (!flags.has(f)) throw new Usage("noloss secondary needs " + f);
+  const int = (f: string, d: number) => {
+    const v = Number(flags.get(f)?.[0] ?? d);
+    if (!Number.isInteger(v) || v < 1) throw new Usage(f + " takes a whole number above 0");
+    return v;
+  };
+  const { suite, sha256 } = loadSuite(flags.get("--suite")![0]!);
+  const arms = loadArms(resolve(flags.get("--root")?.[0] ?? ARMS_ROOT), suite, sha256);
+  const scored = (f: string) => arms.get(flags.get(f)![0]!) ?? (() => { throw new ScoreError("E_NOLOSS_ARM", "noloss secondary: no arm " + flags.get(f)![0] + " is ingested on suite " + suite.id); })();
+  const sv = scored("--variant");
+  const sr = scored("--reference");
+  const v = sv.arm;
+  const r = sr.arm;
+  const seed = int("--seed", 0);
+  const draws = int("--draws", DEFAULT_DRAWS);
+  if (draws < 1000) throw new Usage("--draws takes an integer of at least 1000");
+  const recall = [sv, sr].map((s) => {
+    const m = armMetrics(suite, s, { seed, draws });
+    return { arm: s.arm.arm.id, blocking: m.blocking, any_severity: m.detection };
+  });
+  const nb = newBlockers(suite, v, r, { seed, draws });
+  const wins = ideaWins(suite, v, r, { seed, permutations: int("--permutations", 10000) });
+  if (flags.has("--json")) {
+    io.out(JSON.stringify({ suite: { id: suite.id, sha256 }, variant: v.arm.id, reference: r.arm.id, seed, recall, new_blockers: nb, idea_wins: wins }, null, 2));
+    return 0;
+  }
+  io.out("noloss secondary: " + v.arm.id + " vs " + r.arm.id + " on " + suite.id + " (sha256 " + sha256 + "), seed " + seed);
+  const rate = (x: (typeof recall)[number]["blocking"]) => (x ? x.found + "/" + x.n + " = " + x.recall + " [" + (x.ci95?.join(", ") ?? "n/a") + "]" : "n/a");
+  for (const x of recall) io.out("recall, " + x.arm + ": blocking " + rate(x.blocking) + "; at any severity " + rate(x.any_severity));
+  if (!nb.complete) io.out("new blockers: no reading: " + nb.reasons.join("; "));
+  else io.out("new blockers per pass per PR: variant " + nb.per_pr!.variant + ", reference " + nb.per_pr!.reference + " (" + nb.totals!.variant + " and " + nb.totals!.reference + " in all, " + nb.prs + " PRs); difference " + nb.difference + " [" + (nb.ci95?.join(", ") ?? "n/a") + "], exact two-sided sign-flip p " + (nb.p_two_sided ?? "n/a") + " (min p " + (nb.min_p ?? "n/a") + ")");
+  io.out("idea-card wins: " + wins.wins + " of " + wins.blockers + " blocking blockers (found by " + v.arm.id + " in every pass and by " + r.arm.id + " in none; " + wins.left_out + " left out); null from " + int("--permutations", 10000) + " within-unit label swaps: mean " + wins.null_mean + ", 95th percentile " + wins.null_p95 + "; above the null: " + (wins.above_null ? "yes" : "no"));
+  for (const w of wins.won) io.out("  won: " + w);
   return 0;
 }
 
@@ -339,6 +448,10 @@ export async function nolossCli(argv: string[], io: NolossIo): Promise<number> {
     if (cmd === "power") return powerCmd(rest, io);
     if (cmd === "judge-packet") return judgePacketCmd(rest, io);
     if (cmd === "judge-join") return judgeJoinCmd(rest, io);
+    if (cmd === "judge-run") return await judgeRunCmd(rest, io);
+    if (cmd === "derive") return deriveCmd(rest, io);
+    if (cmd === "flag-scan") return flagScanCmd(rest, io);
+    if (cmd === "secondary") return secondaryCmd(rest, io);
     throw new Usage("unknown noloss command " + JSON.stringify(cmd) + "; gstack-evals noloss --help lists them");
   } catch (error) {
     if (error instanceof Usage) return report(io, "E_USAGE", "noloss " + cmd, error.message);
