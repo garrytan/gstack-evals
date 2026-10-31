@@ -184,7 +184,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   for (const arm of o.arms) for (const model of o.models) {
     const id = armId(arm.name, model);
     if (!ARM_ID.test(id)) throw new Error("E_USAGE: arm id " + JSON.stringify(id) + " (arm " + arm.name + ", model " + model + ") does not match " + ARM_ID + "; use a shorter arm name");
-    if (ids.has(id)) throw new Error("E_USAGE: arm id " + id + " names two arm and model pairs; rename an arm or drop one of the models");
+    if (ids.has(id)) throw new Error("E_USAGE: arm id " + JSON.stringify(id) + " names two arm and model pairs (arm " + arm.name + ", model " + model + "); rename an arm or drop one of the models");
     ids.add(id);
   }
   const allowance = (model: string): number => {
@@ -327,6 +327,8 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
 
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
   const receipts = [journal, join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
-  const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
+  const target = "sink" in sink ? sink.sink : null;
+  if (target) rmSync(join(target, "arms"), { recursive: true, force: true });
+  const copied = target ? copyToSink(o.out, receipts, target) : [];
   return result(armDirs, copied);
 }

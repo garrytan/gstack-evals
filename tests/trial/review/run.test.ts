@@ -133,9 +133,9 @@ describe("review units in the run loop (keyless)", () => {
       expect(existsSync(join(sink, "cells.ndjson"))).toBe(true);
 
       const calls = h.upstream.length;
-      mkdirSync(join(out, "arms", "none-particle-ai-particle-1"), { recursive: true });
-      const again = await runReviewUnits({ ...input, reuse: readReviewJournal(out), env: {} }, rig);
-      expect(existsSync(join(out, "arms", "none-particle-ai-particle-1"))).toBe(false);
+      for (const d of [out, sink]) mkdirSync(join(d, "arms", "none-particle-ai-particle-1"), { recursive: true });
+      const again = await runReviewUnits({ ...input, reuse: readReviewJournal(out) }, rig);
+      for (const d of [out, sink]) expect(existsSync(join(d, "arms", "none-particle-ai-particle-1"))).toBe(false);
       expect(again.stops).toEqual([]);
       expect(again.spent).toBe(0);
       expect(h.upstream.length).toBe(calls);
