@@ -98,7 +98,7 @@ async function session(home: string, prompt: string): Promise<Record<string, any
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C.UTF-8",
-    ANTHROPIC_API_KEY: "sk-ant-fake-session-token",
+    ANTHROPIC_API_KEY: "placeholder-not-a-key",
     ANTHROPIC_BASE_URL: "http://127.0.0.1:" + server.port,
     ANTHROPIC_MODEL: model,
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
