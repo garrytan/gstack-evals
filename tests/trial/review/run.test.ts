@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { parseArm } from "../../../lanes/review-noloss/contract.ts";
 import type { Suite } from "../../../lanes/review-noloss/suite.ts";
 import { REPO_ROOT } from "../../../src/cli.ts";
@@ -45,6 +45,23 @@ describe("arm ids", () => {
     const long = modelTag("vendor/" + "x".repeat(40));
     expect(long).toHaveLength(24);
     expect(long).not.toBe(modelTag("vendor/" + "x".repeat(41)));
+  });
+});
+
+describe("receipts sink", () => {
+  // Value: protects=receipts copied to the sink survive the run; fails_when=a sink equal to the out dir, under <out>/arms, or a symlink into <out>/arms is accepted, so the run-level removal of <out>/arms wipes it before the copy; why_new=native adversarial pass at 21c444c on #93; seam=runReviewUnits, sinkOverlapProblem
+  test("a sink that is the out dir or sits under its arms/ is refused before anything is removed", async () => {
+    const out = durable();
+    const kept = join(out, "arms", "keep", "receipt.json");
+    mkdirSync(dirname(kept), { recursive: true });
+    writeFileSync(kept, "{}");
+    const link = join(durable(), "link");
+    symlinkSync(join(out, "arms"), link);
+    const input: ReviewRunInput = { host: "claude", suite: { id: "review-test", sha256: null }, units: [], arms: [{ name: "none", told: "none" }], models: [OPUS], passes: 1, parallel: 1, timeoutS: 120, cap: 0, runId: "review-sink", out, date: "2026-10-31", policy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: join(out, "journal.ndjson") };
+    for (const sink of [out, join(out, "arms"), join(out, "arms", "keep"), join(link, "keep")]) {
+      await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, {} as HostRig)).rejects.toThrow("E_USAGE: the receipts sink");
+    }
+    expect(existsSync(kept)).toBe(true);
   });
 });
 

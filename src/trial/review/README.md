@@ -61,7 +61,7 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
   unavailable. requests, refused and unknown_calls are extra columns; refusals.tsv marks an arm and cell degraded when
   more than 2% of its requests were refused.
 - The out dir must outlive the machine (E_RECEIPTS_VOLATILE). With GSTACK_EVALS_EPHEMERAL=1 the receipts are copied to
-  GSTACK_EVALS_RECEIPTS.
+  GSTACK_EVALS_RECEIPTS, which the run refuses (E_USAGE) when it is the out dir or sits under <out>/arms.
 
 The rig's arm installer takes one target skill for every arm, so one invocation runs arms that share a told skill:
 none with gstack, or none with one other stack. `--dry-run` prints the plan and writes nothing.

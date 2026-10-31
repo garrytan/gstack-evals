@@ -27,7 +27,7 @@ import { armNamespaces, armTree, codexOption, slotModels, type HostRig } from ".
 import type { ContractTask } from "../../skill-eval/contract/tasks.ts";
 import type { Host, TrialRecord } from "../../types.ts";
 import { cacheStale, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../cache.ts";
-import { copyToSink, receiptsSink, volatilePathProblem } from "../durable.ts";
+import { copyToSink, receiptsSink, sinkOverlapProblem, volatilePathProblem } from "../durable.ts";
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
@@ -180,6 +180,8 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     stops.push({ code: "E_RECEIPTS_VOLATILE", message: volatile });
     return result();
   }
+  const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
+  if (overlap) throw new Error("E_USAGE: " + overlap);
   const ids = new Set<string>();
   for (const arm of o.arms) for (const model of o.models) {
     const id = armId(arm.name, model);

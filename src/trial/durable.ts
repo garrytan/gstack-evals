@@ -45,6 +45,14 @@ export function receiptsSink(env: Env = process.env): { sink: string | null } | 
   return { sink: resolve(env.GSTACK_EVALS_RECEIPTS) };
 }
 
+/** Why a run writing to out would wipe or overwrite its own receipts sink, or null when the two are apart. Compares real paths. */
+export function sinkOverlapProblem(out: string, sink: string): string | null {
+  const o = real(out);
+  const s = real(sink);
+  if (s !== o && !under(s, join(o, "arms"))) return null;
+  return "the receipts sink " + s + " is the run's out dir " + o + " or sits under its arms/, which every run deletes and rebuilds, so the receipts copied there would be lost; set GSTACK_EVALS_RECEIPTS outside " + join(o, "arms") + " and apart from the out dir";
+}
+
 /**
  * Copies the run's receipts and journal to the sink, keeping their paths under the run's out dir. A file outside out has
  * no place under the sink, so the copy refuses before it writes anything; the run keeps its journal under out.
