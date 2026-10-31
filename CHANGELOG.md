@@ -2,6 +2,8 @@
 
 What each gstack-evals release changed. Versions follow `VERSION` and `package.json`. Unit pull requests leave this file and `VERSION` alone; the Captain writes each entry at release.
 
+`.gstack/ship-policy.json` sets `"bump": "never"`, so `/ship` keeps `VERSION` on unit pull requests and asks nothing at Step 12. Under the rule above, Step 13 writes nothing here, not even an `## [Unreleased]` section.
+
 ## [0.0.1] - 2026-10-28
 
 ### U1: repo skeleton and shared registries (M0)
