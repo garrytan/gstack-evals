@@ -58,9 +58,9 @@ The run records the 11 open High findings as tasks T1 to T11. None changes the l
 
 Four edits to the reviewed text, made on the Captain's word after gate rev 2. Review did not see them.
 
-- Big decision I: Garry's word is pending (the Captain has asked him), and the item now says how the plan runs either way.
+- Big decision I: dropped on Garry's word. The item now says each stack runs as published at its pinned commit, and that this plan's text is the fidelity record.
 - Big decision J: approved by the Captain as a build task after this plan merges.
-- Section 10: one paragraph for J and one for I, after the numbered steps.
+- Section 10: one paragraph for J, after the numbered steps.
 - Section 15: the Needs line for I and J.
 
 ## Implementation plan
@@ -94,7 +94,7 @@ Each has options, the pick, why, and what would flip it. Section numbers point t
 - F. Placebo (section 3). Pick: gstack-placebo and pstack-placebo on Haiku and particle-1 in TB2 only. Why: Lane B found cheap-rung effects that a placebo explained; quick look 2 already measured gstack against its placebo on Opus. Flip: a large pstack TB2 effect on Opus.
 - G. Cap and stops (section 9). Options: review stop $1,950; review stop $2,050. Pick: $2,400 cap, review stop $2,050, TB2 stop $300, an exposure-based start rule after each pilot and a fixed drop order. Why: at $1,950 the start rule clears the central estimate by about $30, so any pilot overrun would return the lane to the Captain. Flip: the Captain prefers the lower stop.
 - H. A proof gate on gstack's own findings in round 1 (CEO review). Options: add a rig-written proof gate arm now; keep round 1 to the stacks as their authors ship them. Pick: keep. Why: writing a proof gate for gstack is a port, which GStack Minder owns; a pstack false-blocker drop in round 1 triggers a paired test of GStack Minder's port in round 2 (section 1). Flip: the Captain wants an answer on the port before GStack Minder writes one.
-- I. A fidelity window with the authors (CEO review). Pending Garry's word, which the Captain has asked for, because it reaches people outside the repo. If he approves, the arm manifest and told text go to Lauren Tan and Theo Browne for 3 days, in parallel with build steps 1 to 3, so the window adds no delay; anything they flag is settled in the preregistration before any paid call. If he does not, the plan runs as written. Why: a public head-to-head should run each stack the way its author would.
+- I. A fidelity window with the authors (CEO review). Dropped. Garry, 2026-10-30: "Oh no don't talk to them". Nobody contacts Lauren Tan or Theo Browne, before the run or after it. Each stack runs as published, at the commit pinned in section 3, invoked the way its own docs describe (section 4); the rig adaptations each arm needs are listed in sections 3 to 5. This plan's text is the fidelity record.
 - J. Seeded-mistake Lane A tasks for pstack correct (CEO review). Approved by the Captain (GEVA-2, 2026-10-30) as a build task after this plan merges; it is not part of this plan's pull request. Keyless and with no spend, written during round 1's build window, so round 2 starts with its tasks written first.
 ### 1. The top ideas and what round 1 says about each
 
@@ -252,8 +252,6 @@ Keyless first; each step is its own unit and pull request. Steps 2 and 3 share n
 
 Approved by the Captain (item J): write the seeded-mistake Lane A tasks for pstack correct as their own keyless unit during steps 1 to 3, with no spend. It ships in its own pull request, not in this plan's.
 
-If Garry approves item I: the 3-day fidelity window with Lauren Tan and Theo Browne runs in parallel with steps 1 to 3 and closes before step 4, so it adds no delay. If he does not, the steps run as listed.
-
 Target: results within 10 working days of this plan's approval.
 
 ### 11. When another stack wins: idea cards
@@ -288,7 +286,7 @@ Each card names the stack and skill with its author, the mechanism in our own wo
 
 ### 15. Needs
 
-- Garry's standing "rec" (2026-10-30), applied at gate_rev 1 and gate_rev 2. The Captain approved J. I waits for Garry's word, which the Captain has asked for; the plan works either way.
+- Garry's standing "rec" (2026-10-30), applied at gate_rev 1 and gate_rev 2. The Captain approved J. Garry dropped I.
 - The Captain's cap approval under R42 (given in the brief).
 - For round 2: an opening in harness-evals for a pstack arm on HARN-14.
 
