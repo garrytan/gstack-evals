@@ -59,7 +59,7 @@ export interface JudgeKey {
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const wholeWord = (s: string, flags = "i") => new RegExp("(?<![A-Za-z0-9_])" + escape(s) + "(?![A-Za-z0-9_])", flags);
 const fileName = (suite: Suite, u: Unit) => "packets/" + unitRef(suite, u).replace(/\//g, "__") + ".json";
-const batchDigest = (k: Pick<JudgeKey, "kind" | "suite" | "arms" | "seed" | "mapping_sha256" | "packets">) => sha256(JSON.stringify({ version: JUDGE_VERSION, ...(k.kind ? { kind: k.kind } : {}), suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
+export const batchDigest = (k: Pick<JudgeKey, "kind" | "suite" | "arms" | "seed" | "mapping_sha256" | "packets">) => sha256(JSON.stringify({ version: JUDGE_VERSION, ...(k.kind ? { kind: k.kind } : {}), suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
 const inside = (child: string, dir: string) => resolve(child) === resolve(dir) || resolve(child).startsWith(resolve(dir) + sep);
 
 /** Texts a packet must never carry: arm ids and labels (3 or more characters), "arm <id>", model ids, and reader names with a hyphen or digit. */

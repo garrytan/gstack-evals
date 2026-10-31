@@ -15,6 +15,7 @@ import { basename, join, resolve } from "node:path";
 import { mapSeverity, parseTsv, rawLabel, type ArmJson, type Mapped } from "./contract.ts";
 import { loadComparisons } from "./export.ts";
 import { prepare, publish, readIngested } from "./ingest.ts";
+import { batchDigest, type JudgeKey } from "./judge.ts";
 import { ScoreError } from "./score.ts";
 import { loadSuite, resolveUnit, sha256, type Suite, type Unit } from "./suite.ts";
 
@@ -146,18 +147,20 @@ export function derive(o: DeriveOptions): DeriveResult {
   };
   let impact: Map<string, keyof typeof IMPACT_MAP> | null = null;
   if (o.impact) {
-    const key = JSON.parse(readFileSync(o.impact.key, "utf8")) as { kind?: string; suite?: { id: string; sha256: string }; arms: Array<{ id: string }>; packets: Array<{ file: string; unit: string }>; entries: Array<{ packet: string; opaque: string; arm: string; pass: number; finding: string }> };
+    const key = JSON.parse(readFileSync(o.impact.key, "utf8")) as JudgeKey;
     if (key.kind === "adjudicate") usage("--key is an adjudication batch's key; impact ratings come from the matching batch");
     if (key.suite?.id !== suite.id || key.suite.sha256 !== base.sha256) usage("--key was built on suite " + key.suite?.id + " at " + key.suite?.sha256 + ", not " + suite.id + " at " + base.sha256);
     for (const a of arms) if (!key.arms.some((k) => k.id === a.arm.arm.id)) usage("arm " + a.arm.arm.id + " is not in the batch --key names, so its findings have no impact rating");
+    if (sha256(JSON.stringify(key.entries)) !== key.mapping_sha256 || batchDigest(key) !== key.batch) usage("--key " + o.impact.key + " does not hash to its own batch digest; it was edited or swapped");
     const entries = new Map(key.entries.map((e) => [e.packet + " " + e.opaque, e]));
     const packetUnit = new Map(key.packets.map((p) => [p.file, p.unit]));
     const text = readFileSync(o.impact.tsv, "utf8");
     const t = parseTsv(text);
-    for (const c of ["packet", "opaque", "judge", "impact"]) if (!t.header.includes(c)) usage("--impact " + o.impact.tsv + " needs a " + c + " column");
+    for (const c of ["packet", "opaque", "judge", "impact", "batch"]) if (!t.header.includes(c)) usage("--impact " + o.impact.tsv + " needs a " + c + " column");
     impact = new Map();
     for (const { line, cells } of t.rows) {
       if (cells.judge !== o.impact.judge) continue;
+      if (cells.batch !== key.batch) usage("--impact line " + line + " is from batch " + cells.batch + ", not --key's batch " + key.batch);
       const e = entries.get(cells.packet + " " + cells.opaque) ?? usage("--impact line " + line + " rates " + cells.packet + " " + cells.opaque + ", which --key does not hold");
       if (cells.impact === "missing") continue;
       if (cells.impact !== "blocking" && cells.impact !== "non-blocking") usage("--impact line " + line + ": impact is blocking, non-blocking or missing, not " + JSON.stringify(cells.impact));
@@ -166,7 +169,7 @@ export function derive(o: DeriveOptions): DeriveResult {
       impact.set(k, cells.impact === "blocking" ? "IMPACT-BLOCKING" : "IMPACT-NONBLOCKING");
     }
     if (!impact.size) usage("--impact " + o.impact.tsv + " holds no rating from judge " + o.impact.judge);
-    operations.push("re-map severity by judge " + o.impact.judge + "'s impact ratings in " + basename(o.impact.tsv) + " (sha256 " + sha256(text) + "); an unrated finding counts as non-blocking");
+    operations.push("re-map severity by judge " + o.impact.judge + "'s impact ratings in " + basename(o.impact.tsv) + " (sha256 " + sha256(text) + ") from batch " + key.batch + "; an unrated finding counts as non-blocking");
   }
 
   const units = suite.units.filter((u) => !dropped.has(u.id)).map((u) => ({ ...u, blockers: u.blockers.map((b) => (detection.has(u.id + " " + b.id) ? { ...b, counts: "detection" as const } : b)) }));

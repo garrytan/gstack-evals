@@ -363,7 +363,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   if (final.third!.size) put("third.json", reply("third", final.third));
   if (unjudged.length) put("unjudged.json", JSON.stringify({ batch: key.batch, entries: unjudged }, null, 2) + "\n");
   const column = adjudicate ? "verifiable" : "impact";
-  put(column + ".tsv", [["packet", "opaque", "judge", column].join("\t"), ...ROLES.flatMap((r) => packets.flatMap((p) => [...(replies.get(r)!.get(p.file)?.rated ?? [])].map(([opaque, v]) => [p.file, opaque, models[r].id, v].join("\t"))))].join("\n") + "\n");
+  put(column + ".tsv", [["packet", "opaque", "judge", column, "batch"].join("\t"), ...ROLES.flatMap((r) => packets.flatMap((p) => [...(replies.get(r)!.get(p.file)?.rated ?? [])].map(([opaque, v]) => [p.file, opaque, models[r].id, v, key.batch].join("\t"))))].join("\n") + "\n");
   for (const [file, text] of sheets) put(join("sheets", basename(file)), text);
 
   if (adjudicate) {

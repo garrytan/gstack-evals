@@ -101,6 +101,7 @@ describe("judge-run on a matching batch", () => {
     const impact = tsvRows(join(out, "impact.tsv"));
     expect(impact.filter((row) => row[2] === OPUS).length).toBe(key.entries.length);
     expect(new Set(impact.map((row) => row[3]))).toEqual(new Set(["blocking", "non-blocking"]));
+    expect(new Set(impact.map((row) => row[4]))).toEqual(new Set([key.batch]));
     const runFile = JSON.parse(readFileSync(join(out, "run.json"), "utf8"));
     expect(runFile).toMatchObject({ state: "finished", batch: key.batch, brief: { sha256: sha256(readFileSync(BRIEF)) }, models: { primary: OPUS, second: SOL, third: SONNET }, item: "judge", unjudged: 0 });
     for (const f of ["primary.json", "second.json", "third.json", "impact.tsv"]) expect(runFile.files[f]).toBe(sha256(readFileSync(join(out, f))));
