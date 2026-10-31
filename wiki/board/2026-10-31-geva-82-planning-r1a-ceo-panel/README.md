@@ -14,7 +14,7 @@ links:
   - GST-538
 attachments:
   - 120f0ea999b6ff5162c0177b0c3aacff417f58a4bc0b7d6f11749247b6aa4fdd  echo-terms.txt
-  - 8bb2303ee63a3da10933c1640ed2e1a7cfa05988506940f68455032586fda285  panel.json
+  - c3f0ec55b0c1e425d9efa145a40d9f4dc05f38fd3e411eb31efb98651a9c4246  panel.json
   - afff4c938fbc011016f679e06385dbcf83e02a427fddb36489e7975e119be202  real-neutral.md
   - 7067b1a69604698a3b6f0e7c1cf34fa896fc13a1fe8e68a5bb8e42b6d4f0b662  taxonomy-2.md
 ---
@@ -54,7 +54,7 @@ The bodies and keys are held in **procedural custody (interim, Captain drive, en
 - Decoy baits: half resemble a T1 category and half a T2 category, three and three in each decoy set. A bait is a deliberate choice that the unit's context justifies, so flagging it as must-fix is a false alarm.
 - The modes follow Open item 6: greenfield (a new product), added capability (a feature on an existing product) and fix (a known problem in an existing product).
 - Every unit is a small git repo. Its base commit holds context/ (3 to 6 markdown files: goals, research notes, tickets, metrics, what exists today, constraints) and, in 4 authored units, a small src/. Its head commit adds plan.md and nothing else. Authored plans are 2,761 to 4,007 bytes. The products are fresh and fictional.
-- panel.json has one row per unit with no ids: stratum, decoy set, mode, source tags, plan bytes, file count, tree sha256, key sha256 and head commit.
+- panel.json holds the bundle digests, unit counts by stratum, decoy set and mode, source tag counts and the authored plan-byte range. The per-unit table (unit, kind, mode, tags, tree sha256, plan bytes, file count, head and base commits, key sha256) lives in the bundle's manifest.json, which the bundle and tar sha256 cover.
 
 ## Two taxonomies
 
@@ -111,7 +111,7 @@ real-neutral.md (attached) gives the two real-neutral CEO units, R01 and R02, in
 
 - Cite the bundle sha256 and panel.json.
 - Choose 6 or 12 decoys before the pilot. Both sets are balanced by mode and by bait source.
-- The pilot units are the four rows whose stratum is pilot. They are never scored, and their ids are in the Captain drive handoff.
+- The four pilot units are never scored, and their ids are in the Captain drive handoff.
 - Report recall by source (T1, T2) and by mode, beside the headline.
 - 24 seeded units is a floor (Open item 12). Freeze the panel size after the pilot.
 
