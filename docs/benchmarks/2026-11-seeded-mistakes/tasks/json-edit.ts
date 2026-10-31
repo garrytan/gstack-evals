@@ -26,7 +26,7 @@ const read = (path: string): Json => JSON.parse(readFileSync(path, "utf8"));
 const doc = read(file);
 
 function stop(why: string): never {
-  console.error("json-edit: " + file + ": " + why);
+  console.error("E_TASKS_INVALID: json-edit: " + file + ": " + why);
   process.exit(3);
 }
 

@@ -319,6 +319,24 @@ describe("grade.ts grades the tree, not the tree's config", () => {
     });
   }, 240_000);
 
+  // Value: protects=the check cannot read the oracle's verdict or run the oracle's copy; fails_when=the oracle's report or its copy of the tree is still on disk while the check runs; why_new=the /ship Red Team at 032c9c9 (GST-348): a check that failed when ../oracle.xml showed a failing test passed every scenario with the fix alone; seam=grade.ts's scenario loop; no_claim=that tree code cannot find the grader's own files some other way, which the README puts out of reach
+  test("the check cannot read the oracle's report or run the oracle's copy", async () => {
+    await inRoot(async (root) => {
+      const probes = { verdict: 'grep -qs "<failure" ../oracle.xml && exit 1; bun test', oracle: "if [ -d ../oracle/__grade__ ]; then (cd ../oracle && bun test ./__grade__) || exit 1; fi; bun test" };
+      const dirs = Object.entries(probes).map(([name, script]) => {
+        const dir = seed(root, ID, name, ["fix"]);
+        const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+        pkg.scripts.check = script;
+        write(dir, { "package.json": JSON.stringify(pkg, null, 2) + "\n" });
+        return dir;
+      });
+      for (const g of await Promise.all(dirs.map((dir) => grade(dir, ID)))) {
+        expect(g).toMatchObject({ code: 1, pass: false });
+        expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
+      }
+    });
+  }, 240_000);
+
   // Value: protects=fresh is not free for a tree that stops loading files from a folder: the new route or migration must be served or listed; fails_when=the admin-route-flag or migration-rollback oracle stops checking that fresh's file is wired in; why_new=the /ship Red Team on GEVA-67 (GST-348): a fixed route list plus a test for one route passed every scenario; seam=admin-route-flag/oracle.ts and migration-rollback/oracle.ts; no_claim=that other tasks' fresh files cannot be left unloaded, which they cannot be today because they are imported by name or by every caller
   test("admin-route-flag and migration-rollback: a fresh file the tree never loads does not pass fresh", async () => {
     await inRoot(async (root) => {
@@ -398,7 +416,7 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       expect(sound).toMatchObject({ code: 0, pass: true });
       expect(gone).toMatchObject({ code: 1, pass: false });
       expect(gone.scenarios.final).toEqual({ check: true, oracle: true, ok: true });
-      for (const s of ["revert-a", "revert-c", "fresh", "fresh-ok"]) expect(gone.scenarios[s]).toMatchObject({ check: null, oracle: null, ok: false, reason: expect.stringContaining("the tree's layout stopped the " + s + " mutant: json-edit: config/plans.json: no ") });
+      for (const s of ["revert-a", "revert-c", "fresh", "fresh-ok"]) expect(gone.scenarios[s]).toMatchObject({ check: null, oracle: null, ok: false, reason: expect.stringContaining("the tree's layout stopped the " + s + " mutant: E_TASKS_INVALID: json-edit: config/plans.json: no ") });
     });
   }, 240_000);
 
@@ -465,12 +483,17 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       mkdirSync(join(blocked, "src/reports/latency.ts"));
       const killed = seed(root, ID, "killed", ["fix"]);
       write(killed, { "package.json": '{ "scripts": { "check": "kill -9 $$" } }\n' });
-      const [pipe, mutant, signal] = await Promise.all([grade(fifo, ID), grade(blocked, ID), grade(killed, ID)]);
+      const hung = seed(root, "html-escape", "hung", ["fix", "alt"]);
+      write(hung, { "package.json": '{ "scripts": { "check": "kill -9 $$" } }\n' });
+      const [pipe, mutant, signal, harmless] = await Promise.all([grade(fifo, ID), grade(blocked, ID), grade(killed, ID), grade(hung, "html-escape")]);
       expect(pipe).toMatchObject({ code: 1, pass: false, reason: expect.stringContaining("the tree could not be copied") });
       expect(mutant).toMatchObject({ code: 1, pass: false });
       expect(mutant.scenarios["revert-a"]).toMatchObject({ check: null, oracle: null, ok: false, reason: expect.stringContaining("the tree's layout stopped the revert-a mutant") });
       expect(signal).toMatchObject({ code: 1, pass: false });
       expect(signal.scenarios.final).toMatchObject({ check: null, ok: false, reason: expect.stringContaining("bun run check did not finish") });
+      expect(harmless).toMatchObject({ code: 1, pass: false });
+      expect(Object.values(harmless.scenarios).map((s) => s.ok)).toEqual([false, false, false, false, false, false]);
+      expect(harmless.scenarios["revert-c"]).toMatchObject({ check: null, oracle: true, ok: false, reason: expect.stringContaining("bun run check did not finish") });
     });
   }, 240_000);
 

@@ -19,7 +19,8 @@
 // that scenario and removed before any tree code runs. The JSON mutants find their key wherever the tree keeps it, and
 // fail when they find nothing to change. A mutant that fails on the tree but applies to the seed failed because of the
 // tree's layout, so its scenario fails, with the reason in the JSON line.
-// The oracle runs first, in its own copy of the scenario's tree, so nothing the check does reaches it. Nothing in its
+// The oracle runs first, in its own copy of the scenario's tree, so nothing the check does reaches it. That copy and its
+// report are removed before the check runs, so the check cannot read the oracle's verdict. Nothing in its
 // environment or arguments names the scenario: it runs every test every time, and grade.ts reads each test's result from
 // its JUnit report. Tests in its "with no mistake in place" block count in the must-pass scenarios only. The oracle
 // passes only when the report shows its own tests ran and none that count failed, so tree code that ends the process
@@ -133,12 +134,13 @@ function grade(root: string): { pass: boolean; [key: string]: unknown } {
     const cases = [...xml.matchAll(/<testcase\s([^>]*?)(\/?)>/g)].map(([, attrs, closed]) => ({ unbroken: attrs!.includes(' classname="' + UNBROKEN + '"'), file: /\sfile="([^"]*)"/.exec(attrs!)?.[1], pass: closed === "/" }));
     const ran = cases.length > 0 && cases.every((c) => c.file === ORACLE) && cases.some((c) => c.unbroken) && cases.some((c) => !c.unbroken);
     const oracle = o.done ? ran && (o.status === 0 || (!must && o.status === 1)) && cases.every((c) => c.pass || (c.unbroken && !must)) : null;
+    for (const path of [graded, report]) remove(path);
     const added = existsSync(join(dir, ".git")) ? run(["git", "add", "-A"], dir, NO_GIT_CONFIG) : undefined;
     const c = added?.done === false ? added : run(["bun", "run", "check"], dir);
     const check = c.done ? c.status === 0 : null;
     const unfinished = [o, c].filter((step) => !step.done).map((step) => step.why);
-    scenarios[name] = { check, oracle, ok: must ? check === true && oracle === true : check === false || oracle === true, ...(unfinished.length ? { reason: unfinished.join("; ") } : {}) };
-    for (const path of [dir, graded, report]) remove(path);
+    scenarios[name] = { check, oracle, ok: !unfinished.length && (must ? check === true && oracle === true : check === false || oracle === true), ...(unfinished.length ? { reason: unfinished.join("; ") } : {}) };
+    remove(dir);
   }
   return { pass: Object.values(scenarios).every((s) => s.ok), order, scenarios: Object.fromEntries(SCENARIOS.map((name) => [name, scenarios[name]])) };
 }
