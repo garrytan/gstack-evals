@@ -184,7 +184,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   for (const arm of o.arms) for (const model of o.models) {
     const id = armId(arm.name, model);
     if (!ARM_ID.test(id)) throw new Error("E_USAGE: arm id " + JSON.stringify(id) + " (arm " + arm.name + ", model " + model + ") does not match " + ARM_ID + "; use a shorter arm name");
-    if (ids.has(id)) throw new Error("E_USAGE: arm id " + id + " names two arm and model pairs; give the arms distinct names");
+    if (ids.has(id)) throw new Error("E_USAGE: arm id " + id + " names two arm and model pairs; rename an arm or drop one of the models");
     ids.add(id);
   }
   const allowance = (model: string): number => {
@@ -274,10 +274,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const parseRows = [["arm_id", "arm", "model", "unit", "pass", "outcome", "findings", "reason"].join("\t")];
   const refusals: CellRefusals[] = [];
   const armDirs: string[] = [];
+  rmSync(join(o.out, "arms"), { recursive: true, force: true });
   for (const arm of o.arms) for (const model of o.models) {
     const id = armId(arm.name, model);
     const dir = join(o.out, "arms", id);
-    rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, "findings"), { recursive: true });
     const counts: Record<string, number> = { findings: 0, empty: 0, missing: 0, malformed: 0, incomplete: 0, not_run: 0 };
     const gaps: string[] = [];

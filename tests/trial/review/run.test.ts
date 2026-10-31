@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { parseArm } from "../../../lanes/review-noloss/contract.ts";
@@ -133,7 +133,9 @@ describe("review units in the run loop (keyless)", () => {
       expect(existsSync(join(sink, "cells.ndjson"))).toBe(true);
 
       const calls = h.upstream.length;
+      mkdirSync(join(out, "arms", "none-particle-ai-particle-1"), { recursive: true });
       const again = await runReviewUnits({ ...input, reuse: readReviewJournal(out), env: {} }, rig);
+      expect(existsSync(join(out, "arms", "none-particle-ai-particle-1"))).toBe(false);
       expect(again.stops).toEqual([]);
       expect(again.spent).toBe(0);
       expect(h.upstream.length).toBe(calls);

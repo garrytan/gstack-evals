@@ -26,6 +26,10 @@ describe("review-units arguments (keyless)", () => {
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", "claude-opus-5-5", "--out", out, "--arms", "none"])).err).toMatch(/^E_USAGE .*no --source for garrytan\/gstack/);
     expect((await run([...base(out), "--arms", "none", "placebo"])).err).toMatch(/^E_USAGE .*--arms takes none/);
     expect((await run([...base(out), "--arms", GSTACK.replace(/^gstack/, "g".repeat(30)), "--dry-run"])).err).toMatch(/^E_USAGE .*arm id "g{30}-opus"/);
+    const policy = await Bun.file(new URL("../../../policy/models.json", import.meta.url)).json();
+    policy.models["vendor-b/particle-1"] = policy.models["particle-ai/particle-1"];
+    await Bun.write(out + "-policy.json", JSON.stringify(policy));
+    expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", "particle-ai/particle-1", "vendor-b/particle-1", "--out", out, "--source", "garrytan/gstack=/nowhere", "--arms", "none", "--policy", out + "-policy.json", "--dry-run"])).err).toMatch(/^E_USAGE .*arm id "none-particle-1" names both none on particle-ai\/particle-1 and none on vendor-b\/particle-1/);
     const mixed = await run([...base(out), "--arms", GSTACK, PSTACK, "--dry-run"]);
     expect(mixed.code).toBe(0);
     expect(mixed.out).toContain("/review");

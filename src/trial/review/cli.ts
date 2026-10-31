@@ -134,9 +134,13 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!told) throw new Usage("arm " + a.name + " (" + a.kind + "): review units run none, gstack, pstack and tstack arms only");
     return { name: a.name, told };
   });
+  const ids = new Map<string, string>();
   for (const a of arms) for (const m of models) {
     const id = armId(a.name, m);
     if (!ARM_ID.test(id)) throw new Usage("arm id " + JSON.stringify(id) + " (arm " + a.name + ", model " + m + ") does not match " + ARM_ID + "; use a shorter arm name");
+    const pair = a.name + " on " + m;
+    if (ids.has(id)) throw new Usage("arm id " + JSON.stringify(id) + " names both " + ids.get(id) + " and " + pair + "; rename an arm or drop one of the models");
+    ids.set(id, pair);
   }
   const skills = Object.fromEntries(arms.flatMap((a) => {
     const skill = toldSkill(a.told);
