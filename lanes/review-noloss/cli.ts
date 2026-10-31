@@ -394,6 +394,7 @@ function secondaryCmd(argv: string[], io: NolossIo): number {
   const r = sr.arm;
   const seed = int("--seed", 0);
   const draws = int("--draws", DEFAULT_DRAWS);
+  if (draws < 1000) throw new Usage("--draws takes an integer of at least 1000");
   const recall = [sv, sr].map((s) => {
     const m = armMetrics(suite, s, { seed, draws });
     return { arm: s.arm.arm.id, blocking: m.blocking, any_severity: m.detection };

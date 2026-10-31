@@ -69,5 +69,6 @@ describe("noloss secondary", () => {
     expect(r.out).toMatch(/^recall, alpha: blocking \d+\/\d+ = [\d.]+ \[[\d., ]+\]; at any severity \d+\/\d+ = /m);
     expect(r.out).toMatch(/^recall, beta: blocking /m);
     expect((await run(["secondary", "--suite", "gsta167-14pr", "--root", root, "--variant", "alpha", "--reference", "beta"])).err).toStartWith("E_USAGE");
+    expect((await run(["secondary", "--suite", "gsta167-14pr", "--root", root, "--variant", "alpha", "--reference", "beta", "--seed", "1", "--draws", "200"])).err).toStartWith("E_USAGE");
   });
 });

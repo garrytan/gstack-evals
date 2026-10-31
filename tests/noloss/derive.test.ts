@@ -143,6 +143,28 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
     expect([bad.code, bad.err]).toEqual([2, expect.stringMatching(/^E_USAGE .*impact is blocking, non-blocking or missing, not "maybe"/)]);
   });
 
+  test("--impact keeps ratings apart when two units' findings share an id", async () => {
+    const shared = (files: Map<string, Buffer>) => {
+      const m = new Map(files);
+      for (const pr of ["3596", "3524"]) m.set("findings/" + pr + ".jsonl", Buffer.from(m.get("findings/" + pr + ".jsonl")!.toString("utf8").replace('"id":"ex-' + pr + '-b1"', '"id":"p1-1"')));
+      return editJudgments(m, (c) => {
+        if (c[3] === "ex-3596-b1" || c[3] === "ex-3524-b1") c[3] = "p1-1";
+      });
+    };
+    const sharedRoot = join(dir, "arms-shared");
+    for (const id of ["alpha", "beta"]) expect((await run(["ingest", writeArm(join(dir, "src-shared", id), shared(arm(id))), "--suite", "gsta167-14pr", "--root", sharedRoot])).code).toBe(0);
+    const keyPath = join(dir, "key-shared.json");
+    expect((await run(["judge-packet", "--suite", "gsta167-14pr", "--arm", join(sharedRoot, "gsta167-14pr", "alpha"), "--arm", join(sharedRoot, "gsta167-14pr", "beta"), "--seed", "7", "--out", join(dir, "packets-shared"), "--key", keyPath])).code).toBe(0);
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as { packets: Array<{ file: string; unit: string }>; entries: Array<{ packet: string; opaque: string; finding: string }> };
+    const unitOf = new Map(key.packets.map((p) => [p.file, p.unit]));
+    const rows = key.entries.map((e) => [e.packet, e.opaque, "judge-a", e.finding === "p1-1" && unitOf.get(e.packet) === U3596 ? "blocking" : "non-blocking"].join("\t"));
+    const impact = json("impact-shared.tsv", ["packet\topaque\tjudge\timpact", ...rows].join("\n") + "\n");
+    const d = await run(["derive", "--suite", "gsta167-14pr", "--comparisons", comparisons, "--root", sharedRoot, "--id", "gsta167-shared", "--out", join(dir, "gsta167-shared"), "--impact", impact, "--key", keyPath, "--impact-judge", "judge-a"]);
+    expect([d.code, d.err]).toEqual([0, expect.not.stringContaining("E_USAGE")]);
+    const label = (pr: string) => readFileSync(join(dir, "gsta167-shared", "arms", "gsta167-shared", "alpha", "findings", pr + ".jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((f) => f.id === "p1-1").label;
+    expect([label("3596"), label("3524")]).toEqual(["IMPACT-BLOCKING", "IMPACT-NONBLOCKING"]);
+  });
+
   test("refusals: the base id, a used out dir, a drop file with no unit column", async () => {
     expect((await deriveTo("gsta167-14pr", [])).err).toMatch(/^E_USAGE .*--id must differ/);
     expect((await deriveTo("gsta167-cc", ["--drop-gaps"])).err).toMatch(/^E_USAGE .*is not empty/);
