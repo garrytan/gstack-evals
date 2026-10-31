@@ -43,7 +43,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
   /sol-loop with "Run one review round and stop before any fix.") and the base branch.
 - Session key: the unit tree's digest in fixture_tree, the told template's sha256 in task, the parser's source sha256 in
   verifier. --resume reuses a cell whose key matches and refuses a changed key with E_CACHE_STALE before any spend;
-  --repair reruns those cells.
+  --repair reruns those cells. --resume also keeps the run id in `<out>/run.json`, so the run still owns its ledger item
+  and the install cache entries the crashed run held.
 - A round is the next units with every arm for one pass and one model, as many as --parallel holds, and it starts only
   when its worst case at the allowance fits under --spend-cap (CAP_STOP otherwise).
 - Outputs: `<out>/arms/<arm>-<model tag>/` per arm and model in arm contract v1 (arm.json, findings/<unit>.jsonl with each

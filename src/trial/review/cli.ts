@@ -227,10 +227,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     for (const p of problems) io.err(p);
     return 2;
   }
-  const runId = newRunId("review-units");
   const tasks = join(out, "fixtures", "tasks.json");
   mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
+  const runFile = join(out, "run.json");
+  const runId = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string }).run_id : newRunId("review-units");
+  writeFileSync(runFile, JSON.stringify({ run_id: runId }, null, 2) + "\n");
   const resolved: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap });

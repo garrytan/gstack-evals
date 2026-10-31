@@ -43,7 +43,7 @@ describe("review-units arguments (keyless)", () => {
 });
 
 describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("review-units startup (Docker tier, GSTACK_EVALS_DOCKER=1)", () => {
-  // Value: protects=a run on a fresh --out prepares its unit (repo, tree and offline check in containers), writes the rig's fixtures and reaches the ledger lease, which refuses an item with no approval before any spend, under the ledger's own reason code; fails_when=startup dies on a missing directory (E_INTERNAL ENOENT), anything before the lease fails, or a ledger refusal prints as E_INTERNAL; why_new=Capy review of #93 (a fresh run threw ENOENT writing <out>/fixtures/tasks.json); seam=main's non-dry path through unit preparation into dockerRig; no_claim=a session, which needs an approved line item
+  // Value: protects=a run on a fresh --out prepares its unit (repo, tree and offline check in containers), writes the rig's fixtures and reaches the ledger lease, which refuses an item with no approval before any spend, under the ledger's own reason code, and --resume on that out dir keeps the run id in <out>/run.json; fails_when=startup dies on a missing directory (E_INTERNAL ENOENT), anything before the lease fails, a ledger refusal prints as E_INTERNAL, or --resume mints a new run id; why_new=Capy review of #93 (a fresh run threw ENOENT writing <out>/fixtures/tasks.json; after the main merge, a resume minted a new run id, so the item's binding and the crashed run's install holds named another run); seam=main's non-dry path through unit preparation into dockerRig; no_claim=a session, which needs an approved line item
   test("a fresh run reaches the lease", async () => {
     const built = buildTrialImage({ state: stateRoot() });
     if (!built.ok) throw new Error(built.message);
@@ -55,7 +55,8 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("review-units startup (
     const out = join(root, "out");
     const io = collect();
     const env = process.env.XDG_STATE_HOME ? { XDG_STATE_HOME: process.env.XDG_STATE_HOME } : {};
-    const code = await main(["--suite", join(root, "suite.json"), "--units", "all", "--arms", "none", "--models", "claude-opus-5-5", "--out", out, "--source", "garrytan/gstack=" + s.root, "--install", "garrytan/gstack=true", "--test", "garrytan/gstack=true", "--item", "review-units-start", "--spend-cap", "1", "--ledger", join(root, "ledger.sqlite"), "--record", join(root, "record")], io, env);
+    const argv = ["--suite", join(root, "suite.json"), "--units", "all", "--arms", "none", "--models", "claude-opus-5-5", "--out", out, "--source", "garrytan/gstack=" + s.root, "--install", "garrytan/gstack=true", "--test", "garrytan/gstack=true", "--item", "review-units-start", "--spend-cap", "1", "--ledger", join(root, "ledger.sqlite"), "--record", join(root, "record")];
+    const code = await main(argv, io, env);
     const { err } = io.text();
     try {
       expect(err).not.toContain("ENOENT");
@@ -64,6 +65,11 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("review-units startup (
       expect(existsSync(join(out, "units", "gstack-7-" + s.head.slice(0, 8), "unit.json"))).toBe(true);
       expect(code).toBe(2);
       expect(err).toMatch(/^E_LEDGER_MISSING review-units: no approved cap is on record for line item review-units-start/);
+      const runId = (JSON.parse(readFileSync(join(out, "run.json"), "utf8")) as { run_id: string }).run_id;
+      const again = collect();
+      expect(await main([...argv, "--resume"], again, env)).toBe(2);
+      expect(again.text().err).toMatch(/^E_LEDGER_MISSING review-units: /);
+      expect((JSON.parse(readFileSync(join(out, "run.json"), "utf8")) as { run_id: string }).run_id).toBe(runId);
     } finally {
       removeTree(root);
     }
