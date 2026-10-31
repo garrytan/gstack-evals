@@ -7,7 +7,7 @@ author: GSTA-51
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-30
-status: open
+status: superseded
 supersedes: [2026-10-30-gsta-42-lanea-shakedown-prereg]
 links:
   - 2026-10-30-gsta-42-lanea-shakedown-prereg
