@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { getEncoding } from "js-tiktoken";
-import { cellSettings, PSTACK_RULE, pstackModelsRule } from "../../src/arms/cells.ts";
+import { cellFor, cellSettings, PSTACK_RULE, pstackModelsRule } from "../../src/arms/cells.ts";
 import { installArms, InstallError, localInstaller, stackTree, type ArmInstall } from "../../src/arms/install.ts";
 import { SOL_AGENT, stackKind, STACKS } from "../../src/arms/stacks.ts";
 import { claudeCodeDriver, claudeCodeEnv, codexConfigCommand } from "../../src/adapters/claude-code/driver.ts";
@@ -200,6 +200,34 @@ describe("pstack and tstack installs", () => {
       const y = cellSettings(pstack, cheap, shared);
       expect(readFileSync(join(x.layer!.src, PSTACK_RULE), "utf8")).toContain("opus xhigh");
       expect(readFileSync(join(y.layer!.src, PSTACK_RULE), "utf8")).not.toContain("opus");
+    });
+
+    // Value: protects=a rule value the cell map does not know refuses with E_CELL_RULE, naming the role and value, instead of becoming inherit-parent, while a Grok seat still maps to inherit-parent; fails_when=an unknown slug (a GPT seat, a bare family, a typo) silently runs on the session model; why_new=#88 /ship Step 11 (both voices: unknown rule values became inherit-parent); seam=pstackModelsRule, cellSettings; no_claim=pstack vocabulary past the pinned shape, which a re-pin rechecks
+    test("an unknown rule value refuses with E_CELL_RULE", () => {
+      const shape = (value: string) => "### 5. Write\n\n```\nreviewers: claude-opus-5-5-xhigh, " + value + "\n```\n";
+      expect(pstackModelsRule(shape("grok-4.7-xhigh-fast"), opus)).toBe("reviewers: opus xhigh, inherit-parent\n");
+      expect(pstackModelsRule(shape("grok-4.7-xhigh-fast"), cheap)).toBe("reviewers: inherit-parent, inherit-parent\n");
+      for (const v of ["gpt-6.1-sol-high", "opus", "claude-opus", "grok-latest"]) {
+        expect(stop(() => pstackModelsRule(shape(v), opus))).toBe("E_CELL_RULE");
+        expect(stop(() => pstackModelsRule(shape(v), cheap))).toBe("E_CELL_RULE");
+      }
+      expect(() => pstackModelsRule(shape("gpt-6.1-sol-high"), opus)).toThrow(/"reviewers" the value "gpt-6.1-sol-high"/);
+      expect(cellFor("claude-opus-5-5")).toEqual(opus);
+      expect(cellFor("claude-haiku-5-5")).toEqual(cheap);
+      expect(cellFor("particle-1").voice).toBeNull();
+    });
+
+    // Value: protects=a cell layer is published by rename, so a folder left with other bytes by a crashed or concurrent build is replaced whole, the tree is the same as a clean build's, and no temp folder stays behind; fails_when=a stale folder is reused as is, or a .tmp- folder is left in the cells dir; why_new=#88 /ship Step 11 (both voices: concurrent builds on one state dir raced on a layer folder); seam=cellSettings; no_claim=two processes racing, which rename's atomicity covers
+    test("cell layers publish whole", () => {
+      const dir = scratch("cells");
+      const a = cellSettings(pstack, opus, dir);
+      writeFileSync(join(a.layer!.src, PSTACK_RULE), "half");
+      const b = cellSettings(pstack, opus, dir);
+      expect(b.layer!.src).toBe(a.layer!.src);
+      expect(readFileSync(join(b.layer!.src, PSTACK_RULE), "utf8")).toContain("opus xhigh");
+      expect(b.tree_sha256).toBe(a.tree_sha256);
+      expect(cellSettings(pstack, opus, dir).tree_sha256).toBe(a.tree_sha256);
+      expect(readdirSync(dir).filter((n) => n.includes(".tmp-"))).toEqual([]);
     });
 
     // Value: protects=gstack's cell keys pin readers to the parent and turn the outside voice on only in a voice cell, and a voice stack (tstack) gets the codex option only there; fails_when=a cheap cell enables codex_reviews or the voice, or an Opus cell drops it; why_new=GST-370 step 1 (per-cell gstack preferences, Codex for gstack's outside voice and tstack's reviewer); seam=cellSettings; no_claim=gstack honouring the keys, which gstack's own tests cover

@@ -25,14 +25,18 @@
 //   the run's lease for the call's usersim model (src/usersim/persona.ts). Each answer is one request with no tools from
 //   the judge's sandbox, its meter adds to the run's spend and to <out>/usersim.ndjson, and a round's worst case counts a
 //   usersim allowance per persona session. The usersim model comes from the policy, whose sha256 is in the session key.
+// - A stack arm runs in its cell for each model (src/arms/cells.ts): the cell's image (pstack's model rule), its gstack
+//   config appended to the state root, the Codex config for its cross-family voice, and a proxy slot that admits the
+//   session's model and that voice only. The cell's tree is the session key's arm tree.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
 import { dockerInstaller, installArms, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
-import type { CellSettings } from "../../arms/cells.ts";
-import { hostDriver, skillRoot } from "../../adapters/host.ts";
+import { cellFor, cellSettings, type CellSettings } from "../../arms/cells.ts";
+import type { CodexProvider } from "../../adapters/codex/driver.ts";
+import { hostDriver, skillRoot, type HostDriverOptions } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
 import { rigAdmission } from "../../rig/admission.ts";
@@ -45,7 +49,7 @@ import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_REASONING_EFFORT, PERSONA_TIMEOUT_S,
 import { buildArmImage, checkImagePin, dockerRun, retainImage, retainTree, stateRoot } from "../../trial/image.ts";
 import { createTrialNetwork, recoverRun, removeTrialNetwork, startProxyContainer } from "../../trial/proxy.ts";
 import { dockerSandbox, type Sandbox } from "../../trial/sandbox.ts";
-import { runTrial, type TrialRun } from "../../trial/trial.ts";
+import { runTrial, type AgentDriver, type TrialRun } from "../../trial/trial.ts";
 import type { ArmSpec, CalibrationResult, Host, TrialRecord } from "../../types.ts";
 import type { SidecarTask } from "../contract/sidecar.ts";
 import type { ContractTask } from "../contract/tasks.ts";
@@ -69,8 +73,12 @@ export interface HostRig {
   finalize(meterId: string): Promise<Meter>;
   /** Each arm's install: its session key tree, the target skill's paths under HOME and gstack-skill-start, if any. */
   arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack"> & Partial<Pick<ArmInstall, "plugins">>>>;
-  /** The sandbox whose agent HOME holds the arm, or the arm's calibration copy. */
-  sandbox(arm: string, calibration: boolean): Sandbox;
+  /** Each stack arm's cell settings by model (src/arms/cells.ts). An arm or model with no entry runs with no cell settings. */
+  cells?: Readonly<Record<string, Readonly<Record<string, CellSettings>>>>;
+  /** The sandbox whose agent HOME holds the arm (its cell's image for model, when it has one), or the arm's calibration copy. */
+  sandbox(arm: string, calibration: boolean, model?: string): Sandbox;
+  /** Builds an arm session's agent driver; unset means hostDriver. A keyless test rig sets it to record the options. */
+  driver?: (o: HostDriverOptions) => AgentDriver;
   /** A sandbox with no skill installed, for judge sessions. */
   judgeSandbox(): Sandbox;
   /** The evaluator's egress probe to a non-model host, from an agent session on the agents' network. */
@@ -158,6 +166,58 @@ export interface HostRun {
   stale: CacheStop[];
 }
 
+/** The models a session's proxy slot admits: its own model, and the cell's voice when the cell keeps one. */
+export function slotModels(policy: LoadedPolicy, model: string, cell: CellSettings | null): string[] {
+  const at = (m: string) => {
+    const provider = providerOf(policy, m);
+    if (!provider) throw new Error("E_MODEL_POLICY: " + m + " has no provider in the policy");
+    return provider + ":" + m;
+  };
+  return [at(model), ...(cell?.codex ? [at(cell.codex.model)] : [])];
+}
+
+/** The Claude Code driver's codex option for a cell: the voice and the route the policy gives it, or null. */
+export function codexOption(policy: LoadedPolicy, cell: CellSettings | null): { provider: CodexProvider; model: string } | null {
+  if (!cell?.codex) return null;
+  const provider = providerOf(policy, cell.codex.model);
+  if (provider !== "openai" && provider !== "openrouter") throw new Error("E_MODEL_POLICY: the cell's voice " + cell.codex.model + " needs an openai or openrouter route for the Codex CLI, and the policy gives " + (provider ?? "none"));
+  return { provider, model: cell.codex.model };
+}
+
+/** The namespaces a Skill call may use for an arm's skill: each plugin's manifest name (else its folder name), and gstack for an arm that installs gstack. */
+export function armNamespaces(install: Pick<ArmInstall, "gstack"> & Partial<Pick<ArmInstall, "layers" | "plugins">>): string[] {
+  const names = (install.plugins ?? []).map((p) => {
+    for (const layer of install.layers ?? []) {
+      const manifest = join(layer.src, p, ".claude-plugin", "plugin.json");
+      if (!existsSync(manifest)) continue;
+      const name = (JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown }).name;
+      if (typeof name === "string" && name) return name;
+    }
+    return posix.basename(p);
+  });
+  return [...new Set([...names, ...(install.gstack ? ["gstack"] : [])])];
+}
+
+/**
+ * Each stack arm's cell settings for each model of the run, by arm and model. A cell whose voice the policy cannot route
+ * refuses, so a stack never loses its voice silently and scores its reviewer's absence as a loss.
+ */
+export function armCells(installs: readonly ArmInstall[], models: readonly string[], policy: LoadedPolicy, dir: string): Record<string, Record<string, CellSettings>> {
+  const out: Record<string, Record<string, CellSettings>> = {};
+  for (const install of installs) {
+    if (install.provenance.kind !== "stack") continue;
+    out[install.name] = Object.fromEntries(models.map((model) => {
+      const settings = cellSettings(install, cellFor(model), dir);
+      codexOption(policy, settings);
+      return [model, settings];
+    }));
+  }
+  return out;
+}
+
+/** The session key's arm tree: the arm's cell tree for the model when it has a cell, else the arm's own. */
+export const armTree = (rig: Pick<HostRig, "arms" | "cells">, arm: string, model: string): string => rig.cells?.[arm]?.[model]?.tree_sha256 ?? rig.arms[arm]!.tree_sha256;
+
 /** The arm installs the target skill: a skill folder, alone or on a base, a stack that holds it, or its placebo. */
 const holdsSkill = (arm: ArmSpec): boolean => (arm.kind === "overlay" && arm.dir !== null) || arm.kind === "stack" || arm.kind === "placebo";
 
@@ -228,7 +288,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   const fixtureTree = dirTreeSha256(o.tasksDir);
   const keyOf = (model: string, arm: ArmSpec, task: ContractTask): SessionKey => {
     const entry = o.entries[task.id];
-    return sessionKey({ ...o.keyBase, arm_tree: rig.arms[arm.name]!.tree_sha256, task, sidecar_entry: entry ?? null, fixture_tree: fixtureTree, model, timeout_s: o.timeoutS, env_values: envValuesHash(entry?.env ?? [], process.env), judge_model: entry?.judge ? o.judgeModel : null, policy: o.policy.sha256 });
+    return sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task, sidecar_entry: entry ?? null, fixture_tree: fixtureTree, model, timeout_s: o.timeoutS, env_values: envValuesHash(entry?.env ?? [], process.env), judge_model: entry?.judge ? o.judgeModel : null, policy: o.policy.sha256 });
   };
 
   const reuse = new Map<string, JournalEntry>();
@@ -275,17 +335,20 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   const session = async (s: SessionSpec): Promise<TrialRun & { calls: HostCall[] }> => {
     const provider = providerOf(o.policy, s.model)!;
     const armName = s.arm?.name ?? JUDGE_ARM;
-    const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: [provider + ":" + s.model], allowance_micros: s.allowance });
+    const cell = s.arm ? (rig.cells?.[s.arm.name]?.[s.model] ?? null) : null;
+    const codex = s.host === "claude" ? codexOption(o.policy, cell) : null;
+    const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: s.arm ? slotModels(o.policy, s.model, codex ? cell : null) : [provider + ":" + s.model], allowance_micros: s.allowance });
     const home = s.sandbox.homePath(s.dir);
     const armInstall = s.arm ? rig.arms[s.arm.name]! : null;
     const installed = armInstall?.skill ?? null;
     const plugins = (armInstall?.plugins ?? []).map((p) => posix.join(home, p));
     const holds = installed !== null;
-    const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null, ...(s.sentinel ? { sentinel: s.sentinel } : {}) } : null;
+    const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null, ...(s.sentinel ? { sentinel: s.sentinel } : {}), namespaces: armInstall ? armNamespaces(armInstall) : [] } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
-    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : hostDriver({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}) });
-    const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network });
+    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : (rig.driver ?? hostDriver)({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
+    const stateConfig = cell && Object.keys(cell.gstack_config).length ? { stateConfig: cell.gstack_config } : {};
+    const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network, ...stateConfig });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros + (usersim ? await usersim.close() : 0);
     run.record.cost_micros = meter.micros;
@@ -304,7 +367,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const probes = calibrationProbes({ host: o.host, skill: o.skill ?? "target", arms: o.arms.map((a) => ({ name: a.name, holdsSkill: rig.arms[a.name]!.skill !== null, gstack: rig.arms[a.name]!.gstack })), interactive, nonce: o.nonce });
     const runs = await pool(probes, o.parallel, async (probe): Promise<ProbeRun> => {
       const arm = o.arms.find((a) => a.name === probe.arm)!;
-      const run = await session({ host: o.host, model, arm, round: 1, trial: 0, task: probe.task, ...(probe.entry ? { entry: probe.entry } : {}), interactive: probe.interactive, sandbox: rig.sandbox(arm.name, true), allowance: allowance(model), watchSkill: true, ...(marks[arm.name] ? { sentinel: marks[arm.name] } : {}), dir: join(o.out, "calibration", model.replaceAll("/", "_"), probe.task.id), tasksDir: empty });
+      const run = await session({ host: o.host, model, arm, round: 1, trial: 0, task: probe.task, ...(probe.entry ? { entry: probe.entry } : {}), interactive: probe.interactive, sandbox: rig.sandbox(arm.name, true, model), allowance: allowance(model), watchSkill: true, ...(marks[arm.name] ? { sentinel: marks[arm.name] } : {}), dir: join(o.out, "calibration", model.replaceAll("/", "_"), probe.task.id), tasksDir: empty });
       return { probe, outcome: run.record, calls: run.calls };
     });
     const judged = judgeCalibration({ host: o.host, model, nonce: o.nonce, sentinels: marks, runs, egress, usersim: interactive && o.host === "claude" });
@@ -354,7 +417,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
         const reused = reuse.get(cellId(c.cell));
         if (reused) return reused.record;
         const dir = join(o.out, "runs", c.cell.model.replaceAll("/", "_"), c.arm.name, c.task.id, "r" + r + "-t" + trial);
-        const run = await session({ host: o.host, model: c.cell.model, arm: c.arm, round: r, trial, task: byId.get(c.task.id)!, ...(o.entries[c.task.id] ? { entry: o.entries[c.task.id] } : {}), interactive: c.task.interactive, sandbox: rig.sandbox(c.arm.name, false), allowance: allowance(c.cell.model), watchSkill: false, dir, tasksDir: o.tasksDir });
+        const run = await session({ host: o.host, model: c.cell.model, arm: c.arm, round: r, trial, task: byId.get(c.task.id)!, ...(o.entries[c.task.id] ? { entry: o.entries[c.task.id] } : {}), interactive: c.task.interactive, sandbox: rig.sandbox(c.arm.name, false, c.cell.model), allowance: allowance(c.cell.model), watchSkill: false, dir, tasksDir: o.tasksDir });
         await adjudicate(c.cell, c.task, run, dir);
         const g = gradeTrial(c.task, run.record);
         wall += run.record.wall_ms ?? 0;
@@ -458,7 +521,8 @@ export function dockerRig(call: Call, o: { env: Env; skill: string | null; nonce
   const retain = join(state, "retained");
   const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
   if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
-  const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain });
+  const cells = armCells(installs, call.models, call.policy, join(state, "cells"));
+  const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
   const local = openLocalLedger(call.ledger);
   const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
   let net: ReturnType<typeof createTrialNetwork> | null = null;
@@ -477,7 +541,8 @@ export function dockerRig(call: Call, o: { env: Env; skill: string | null; nonce
       bind: (request) => control.bind(request),
       finalize: (meterId) => control.finalize(meterId),
       arms: Object.fromEntries(installs.map((i) => [i.name, i])),
-      sandbox: (arm, calibration) => dockerSandbox({ trialImage: pin.pin.tag, armImage: images.get(arm + (calibration ? "#calibration" : ""))!, docker: bin }),
+      cells,
+      sandbox: (arm, calibration, model) => dockerSandbox({ trialImage: pin.pin.tag, armImage: images.get(calibration ? arm + "#calibration" : model && images.has(arm + "@" + model) ? arm + "@" + model : arm)!, docker: bin }),
       judgeSandbox: () => dockerSandbox({ trialImage: pin.pin.tag, docker: bin }),
       egress() {
         const work = join(call.out.path, "calibration", "egress");

@@ -44,6 +44,8 @@ export interface SkillRef {
   home?: string;
   /** In calibration, the sentinel only this arm's copy holds: a call whose output quotes it read the copy's SKILL.md. */
   sentinel?: string;
+  /** The arm's own namespaces (its plugins' names, and gstack for an arm that installs gstack): a Skill call may name the skill as <namespace>:<name> only through one of these. */
+  namespaces?: readonly string[];
 }
 
 export interface SkillUse {
@@ -253,7 +255,7 @@ export function skillUse(calls: readonly Call[], skill: SkillRef | null, outputs
       read("SKILL.md");
     }
     if (c.ok !== true) continue;
-    if (c.tool === "Skill" && (c.input.skill === skill.name || (c.input.skill ?? "").endsWith(":" + skill.name))) {
+    if (c.tool === "Skill" && (c.input.skill === skill.name || (skill.namespaces ?? []).some((ns) => c.input.skill === ns + ":" + skill.name))) {
       opened = true;
       read("SKILL.md");
       continue;
