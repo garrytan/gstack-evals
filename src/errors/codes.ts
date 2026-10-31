@@ -817,8 +817,8 @@ export const CODES = {
   },
   E_CELL_RULE: {
     exit: 2,
-    meaning: "A pstack arm's per-cell model rule could not be derived: the pinned tree's setup-pstack SKILL.md has no rule shape with role lines in its step 5. No image was built for the cell.",
-    fix: "Check that the arm pins pstack's Claude Code tree (cursor/plugins at harness/pstack/claude-code) at a commit whose setup-pstack still shows the rule shape, and re-pin it in the preregistration if the shape moved. Do not --resume.",
+    meaning: "A pstack arm's per-cell model rule could not be derived: the pinned tree's setup-pstack SKILL.md has no rule shape with role lines in its step 5, or a role's value is not a Claude slug, a Grok slug, auto or inherit-parent, so the cell cannot say which model that role runs on. No image was built for the cell.",
+    fix: "Check that the arm pins pstack's Claude Code tree (cursor/plugins at harness/pstack/claude-code) at a commit whose setup-pstack still shows the rule shape, and re-pin it in the preregistration if the shape moved. A new kind of value needs its own mapping in src/arms/cells.ts, with a test, before any cell uses it. Do not --resume.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
