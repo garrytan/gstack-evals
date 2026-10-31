@@ -183,6 +183,17 @@ describe("exit codes and reasons", () => {
 });
 
 describe("rules that come from grading", () => {
+  // Value: protects=a trial whose graded delta left agent output out or graded it as something else is named in the verdict; fails_when=record.dropped is set and the verdict stays silent, or the warning changes the exit code; why_new=GEVA-68 audit rule A (GST-374); seam=analyzeModel; no_claim=whether that trial's check was right, which a reader decides from its delta.json
+  test("a trial whose delta import dropped a path gets a DELTA_DROPPED warning, and the exit code stands", () => {
+    const tasks = ["a", "b", "c", "d", "e"].map((id) => task(id));
+    const records = grid("m", Object.fromEntries(tasks.map((x) => [x.id, { before: "110", after: "110" }])));
+    const plain = decide(input(tasks, records));
+    records.find((r) => r.task === "c" && r.arm === "after")!.dropped = [".gitignore"];
+    const flagged = decide(input(tasks, records));
+    expect(flagged.warnings).toContain("DELTA_DROPPED c");
+    expect([flagged.exit_code, flagged.reasons]).toEqual([plain.exit_code, plain.reasons]);
+  });
+
   test("a task whose judge answered unknown in more than 10% of its runs is not measurable", () => {
     const tasks = ["a", "b", "c", "d", "e", "j"].map((id) => task(id, { judge: id === "j" }));
     const records = grid("m", Object.fromEntries(tasks.map((x) => [x.id, { before: "110", after: "110" }])));

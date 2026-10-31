@@ -56,6 +56,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [VACUOUS_CHECK](#vacuous_check) | 2 | U5 |
 | [E_TASKS_INVALID](#e_tasks_invalid) | 2 | U5 |
 | [E_ISOLATION_UNSAFE](#e_isolation_unsafe) | 2 | U9 |
+| [E_ISOLATION_COUNTED](#e_isolation_counted) | 2 | U9 |
 | [E_CACHE_STALE](#e_cache_stale) | 2 | U9 |
 | [E_NOT_RESUMABLE](#e_not_resumable) | 2 | U10 |
 | [E_SLOT_DENIED](#e_slot_denied) | 2 | U3 |
@@ -95,6 +96,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [FLAKY_SAFETY](#flaky_safety) | warning | U6 |
 | [CEILING](#ceiling) | warning | U6 |
 | [NONE_MATCHES](#none_matches) | warning | U6 |
+| [DELTA_DROPPED](#delta_dropped) | warning | U9 |
 | [BROKEN_TASK](#broken_task) | warning | U6 |
 | [REPLY_MISALIGNED](#reply_misaligned) | warning | U10 |
 | [PDF_INPUT](#pdf_input) | warning | U7 |
@@ -454,6 +456,14 @@ Fix: Start Docker, or pass --isolation process on purpose; it runs the agent und
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
 
+### E_ISOLATION_COUNTED
+
+A counted run, one that leases spend from a ledger line item under a rig admission (every real-host run), asked for --isolation process. Under process isolation setup and check run on this machine as this user, so a check that runs the agent's code could write outside the trial.
+
+Fix: Run counted runs under --isolation docker. --isolation process stays for keyless dev runs: the fake host, --dry-run and the tests.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
+
 ### E_CACHE_STALE
 
 A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).
@@ -777,6 +787,14 @@ The none arm passed a task as often as before did, so the skill's lines for that
 Fix: Consider cutting those lines, then check the cut with a new before/after run.
 
 Warning. Owner: U6.
+
+### DELTA_DROPPED
+
+A trial's delta import left some of the agent's output out or graded it as something else: a symlink out of the work tree (an empty directory stands in), an agent .gitignore, .gitattributes or .gitmodules (the baseline's stays), a directory replaced by a symlink (it stays a directory), or a fifo, socket or device. The trial's delta.json names each path and why.
+
+Fix: Read the trial's delta.json and transcript. Honest runs rarely write these; when the check's result turns on such a path, grade that trial by hand.
+
+Warning. Owner: U9.
 
 ### BROKEN_TASK
 

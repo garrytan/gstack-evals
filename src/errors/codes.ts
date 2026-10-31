@@ -417,6 +417,15 @@ export const CODES = {
     resumable: false,
     owner: "U9",
   },
+  E_ISOLATION_COUNTED: {
+    exit: 2,
+    meaning: "A counted run, one that leases spend from a ledger line item under a rig admission (every real-host run), asked for --isolation process. Under process isolation setup and check run on this machine as this user, so a check that runs the agent's code could write outside the trial.",
+    fix: "Run counted runs under --isolation docker. --isolation process stays for keyless dev runs: the fake host, --dry-run and the tests.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U9",
+  },
   E_CACHE_STALE: {
     exit: 2,
     meaning: "A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).",
@@ -754,6 +763,12 @@ export const CODES = {
     meaning: "The none arm passed a task as often as before did, so the skill's lines for that task are candidates to cut.",
     fix: "Consider cutting those lines, then check the cut with a new before/after run.",
     owner: "U6",
+  },
+  DELTA_DROPPED: {
+    exit: null,
+    meaning: "A trial's delta import left some of the agent's output out or graded it as something else: a symlink out of the work tree (an empty directory stands in), an agent .gitignore, .gitattributes or .gitmodules (the baseline's stays), a directory replaced by a symlink (it stays a directory), or a fifo, socket or device. The trial's delta.json names each path and why.",
+    fix: "Read the trial's delta.json and transcript. Honest runs rarely write these; when the check's result turns on such a path, grade that trial by hand.",
+    owner: "U9",
   },
   BROKEN_TASK: {
     exit: null,

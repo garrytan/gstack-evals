@@ -2,7 +2,9 @@
 // the baseline snapshot, the agent with the work dir only, the filesystem delta imported against the baseline, and the
 // check run on the grade tree from a read-only copy of the tasks directory. The answer key never enters the agent's
 // environment: the tasks directory, the sidecar, mutants and hidden tasks reach setup and check only. Evaluator records
-// (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it.
+// (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it. The check reads a copy of delta.json
+// in its tasks directory copy through SKILL_EVAL_DELTA, and a trial whose import dropped anything names those paths in
+// its record (dropped), which the verdict reports as DELTA_DROPPED.
 import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
@@ -13,7 +15,7 @@ import type { Category } from "../usersim/classifier.ts";
 import type { Termination, TokenUsage, TrialRecord } from "../types.ts";
 import { removeTree, type CleanupOptions } from "./cleanup.ts";
 import { importDelta, snapshot, type Delta } from "./delta.ts";
-import { trialEnv, TrialEnvError } from "./env.ts";
+import { DELTA_VAR, trialEnv, TrialEnvError } from "./env.ts";
 import type { AgentSession, Sandbox, StepResult } from "./sandbox.ts";
 import { seedStateRoot, type Proactive } from "./state-root.ts";
 
@@ -68,6 +70,8 @@ export interface TrialRun {
 }
 
 const PATH = "/usr/local/bin:/usr/bin:/bin";
+/** The check's copy of delta.json, in the trial's copy of the tasks directory. */
+const DELTA_FILE = ".skill-eval-delta.json";
 const tail = (r: StepResult) => r.stderr.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
 export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
@@ -122,10 +126,13 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);
-    writeFileSync(join(spec.dir, "delta.json"), JSON.stringify(delta, null, 2) + "\n");
+    const deltaJson = JSON.stringify(delta, null, 2) + "\n";
+    writeFileSync(join(spec.dir, "delta.json"), deltaJson);
+    if (delta.dropped.length) record.dropped = delta.dropped.map((d) => d.path);
     if (task.check !== undefined) {
       const gradePath = sandbox.workPath(grade, task.id);
-      const r = sandbox.step("check", task.check, task.id, { work: grade, fixtures, env: childEnv("check", stateVars(gradePath)), timeoutMs });
+      writeFileSync(join(fixtures, DELTA_FILE), deltaJson);
+      const r = sandbox.step("check", task.check, task.id, { work: grade, fixtures, env: childEnv("check", { ...stateVars(gradePath), [DELTA_VAR]: sandbox.fixturesPath(fixtures) + "/" + DELTA_FILE }), timeoutMs });
       logs.check = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       const verdict = judgeCheck(r, gradePath);
       if (verdict.kind === "error") {
