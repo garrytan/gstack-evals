@@ -6,10 +6,12 @@
 // grade tree, never on the agent's. Three rules keep agent-written config from changing what a check sees (GEVA-68's
 // audit), and each records what it did in delta.dropped:
 // - git's in-tree config (.gitignore, .gitattributes, .gitmodules) stays the baseline's, so an agent cannot hide new
-//   files from git ls-files or change how git diffs.
+//   files from git ls-files or change how git diffs. One whose directory the agent deleted or replaced with a file goes
+//   with that directory and is listed under deleted, not dropped.
 // - a symlink that points outside the work tree becomes an empty directory holding PLACEHOLDER, so test -e, test -d,
-//   find and git's untracked list all still see that something was written at that path. runTrial also runs the check
-//   without these placeholders and passes only when both runs pass, so a placeholder cannot satisfy a check that needs the path.
+//   find and git's untracked list all still see that something was written at that path. After a pass, runTrial runs the
+//   check again without these placeholders and passes only when that run passes too, so a placeholder cannot satisfy a
+//   check that needs the path.
 // - a baseline directory the agent replaced with a symlink (such as .gstack-home) stays a directory: graded as the
 //   directory the link points to when that is in the tree, else as the baseline's.
 import { spawnSync } from "node:child_process";

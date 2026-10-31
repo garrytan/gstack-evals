@@ -4,10 +4,11 @@
 // environment: the tasks directory, the sidecar, mutants and hidden tasks reach setup and check only. Evaluator records
 // (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it. The check reads a copy of delta.json
 // in its tasks directory copy through SKILL_EVAL_DELTA, and a trial whose import dropped anything names those paths in
-// its record (dropped), which the verdict reports as DELTA_DROPPED. When the import stood in for an escaping symlink, the
-// check runs again on a copy without those placeholders, and the trial passes only when both runs pass.
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// its record (dropped), which the verdict reports as DELTA_DROPPED. When the import stood in for an escaping symlink and the
+// check passed, it runs again on a copy without those placeholders, and the trial passes only when that run passes too. A
+// fail or an error in that run, or a copy that cannot be built, is a fail, never a missing cell.
+import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 import { judgeCheck } from "../skill-eval/contract/check.ts";
 import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
@@ -133,26 +134,38 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     if (delta.dropped.length) record.dropped = delta.dropped.map((d) => d.path);
     if (task.check !== undefined) {
       writeFileSync(join(fixtures, DELTA_FILE), deltaJson);
-      const placeholders = delta.dropped.map((d) => d.path).filter((p) => existsSync(join(grade, p, PLACEHOLDER)));
-      if (placeholders.length) {
-        snapshot(grade, bare);
-        for (const p of placeholders) rmSync(join(bare, p), { recursive: true, force: true });
-      }
       const check = (tree: string) => {
         const path = sandbox.workPath(tree, task.id);
         const r = sandbox.step("check", task.check!, task.id, { work: tree, fixtures, env: childEnv("check", { ...stateVars(path), [DELTA_VAR]: sandbox.fixturesPath(fixtures) + "/" + DELTA_FILE }), timeoutMs });
         return { log: { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) }, verdict: judgeCheck(r, path) };
       };
-      const runs = [check(grade), ...(placeholders.length ? [check(bare)] : [])];
-      logs.check = runs[0]!.log;
-      if (runs[1]) logs.check_bare = runs[1].log;
-      for (const { verdict } of runs) {
-        if (verdict.kind !== "error") continue;
+      const first = check(grade);
+      logs.check = first.log;
+      if (first.verdict.kind === "error") {
         record.termination = { kind: "missing", code: "E_VERIFIER" };
-        logs.missing = verdict.reason;
+        logs.missing = first.verdict.reason;
         return finish(delta);
       }
-      record.check = runs.every((run) => run.verdict.kind === "pass");
+      record.check = first.verdict.kind === "pass";
+      const placeholders = delta.dropped.map((d) => d.path).filter((p) => existsSync(join(grade, p, PLACEHOLDER)));
+      if (!record.check || !placeholders.length) return finish(delta);
+      try {
+        snapshot(grade, bare);
+        for (const p of placeholders) {
+          const parent = dirname(join(bare, p));
+          const mode = statSync(parent).mode & 0o7777;
+          chmodSync(parent, mode | 0o700);
+          rmSync(join(bare, p), { recursive: true, force: true });
+          chmodSync(parent, mode);
+        }
+      } catch (error) {
+        logs.check_bare = { error: "the copy without placeholders could not be built: " + (error instanceof Error ? error.message : String(error)) };
+        record.check = false;
+        return finish(delta);
+      }
+      const second = check(bare);
+      logs.check_bare = second.log;
+      record.check = second.verdict.kind === "pass";
     }
     return finish(delta);
   } catch (error) {

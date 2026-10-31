@@ -360,7 +360,7 @@ const U11 = join(import.meta.dir, "../../docs/benchmarks/2026-11-lanea-shakedown
 const u11 = (skill: string, id: string): ContractTask => loadContract(join(U11, skill, "tasks.json")).tasks.tasks.find((t) => t.id === id)!;
 const u11Check = async (skill: string, t: ContractTask, steps: string[]) => {
   const run = await runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: t, tasksDir: join(U11, skill), sandbox: local, agent: replayAgent({ steps, turns: ["done"] }), dir: scratch("u11-" + t.id), timeoutS: 120 });
-  return { check: run.record.check, dropped: run.delta?.dropped.map((d) => d.path) ?? [], record: run.record };
+  return { check: run.record.check, dropped: run.delta?.dropped.map((d) => d.path) ?? [], record: run.record, logs: JSON.parse(readFileSync(join(run.dir, "trial.json"), "utf8")).logs };
 };
 
 // Value: protects=the three routes GEVA-68's audit proved on committed U11 checks no longer flip a verdict: each route grades as its control does, and the trial names what the import dropped; fails_when=an agent .gitignore, an escaping symlink at a forbidden path, or a symlinked state root makes a failing check pass; why_new=GEVA-68 audit rule F (GST-374); seam=runTrial, importDelta, replayAgent; no_claim=content written outside the work tree, which no check can see
@@ -415,6 +415,26 @@ describe("U11 grader routes (keyless, on this machine)", () => {
     expect((await u11Check("office-hours", sized, ["ln -s /nonexistent/report.txt report.txt"])).check).toBe(false);
     const venv = await u11Check("office-hours", sized, ["printf 'r\\n' > report.txt && mkdir -p .venv/bin && ln -s /usr/bin/python3 .venv/bin/python"]);
     expect([venv.check, venv.dropped]).toEqual([true, [".venv/bin/python"]]);
+  }, 300_000);
+
+  // Value: protects=the run without placeholders can only turn a pass into a fail: an error there is a fail, and it runs only after a pass, so neither order makes a missing cell; fails_when=an error in the run without placeholders, or one after a fail on the grade tree, drops the cell as E_VERIFIER; why_new=#90 review pass 2 (security, red team, testing, performance); seam=runTrial; no_claim=an error on the grade tree, which stays E_VERIFIER
+  test("an error in the run without placeholders is a fail, and that run follows only a pass", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const link = ["ln -s /nonexistent/report.txt report.txt"];
+    const errs = await u11Check("office-hours", { ...base, check: "test -e report.txt || exit 2" }, link);
+    expect([errs.record.termination, errs.check, errs.logs.check_bare?.exitCode]).toEqual([{ kind: "completed" }, false, 2]);
+    const failed = await u11Check("office-hours", { ...base, check: "if test -e report.txt; then exit 1; else exit 2; fi" }, link);
+    expect([failed.record.termination, failed.check, failed.logs.check_bare]).toEqual([{ kind: "completed" }, false, undefined]);
+  }, 300_000);
+
+  // Value: protects=a read-only directory around an escaping link grades instead of throwing, and the copy without placeholders keeps the agent's modes; fails_when=removing a placeholder under a 0555 directory throws EACCES out of runTrial, or leaves that directory writable; why_new=#90 review pass 2 (red team); seam=runTrial; no_claim=root, which ignores the modes
+  test.skipIf(process.getuid?.() === 0)("a read-only directory around an escaping link grades, and keeps its mode", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const steps = ["mkdir out && ln -s /nonexistent/x out/x && chmod 555 out"];
+    const mode = await u11Check("office-hours", { ...base, check: "test ! -w out" }, steps);
+    expect([mode.record.termination, mode.check, mode.dropped]).toEqual([{ kind: "completed" }, true, ["out/x"]]);
+    const needs = await u11Check("office-hours", { ...base, check: "test -e out/x" }, steps);
+    expect([needs.record.termination, needs.check, needs.logs.check_bare?.exitCode]).toEqual([{ kind: "completed" }, false, 1]);
   }, 300_000);
 });
 
