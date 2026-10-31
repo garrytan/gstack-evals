@@ -20,7 +20,7 @@ import { loadComparisons } from "./export.ts";
 import { prepare, publish, readIngested } from "./ingest.ts";
 import { batchDigest, type JudgeKey } from "./judge.ts";
 import { ScoreError } from "./score.ts";
-import { loadSuite, resolveUnit, sha256, type Suite, type Unit } from "./suite.ts";
+import { insideRepo, loadSuite, resolveUnit, sha256, type Suite, type Unit } from "./suite.ts";
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 /** The labels an impact re-map writes, and the severity each maps to. */
@@ -91,6 +91,7 @@ export function derive(o: DeriveOptions): DeriveResult {
   if ([o.severityMap, o.impact, o.firstK].filter((x) => x !== undefined && x !== null).length > 1) usage("give one of --severity-map, --impact and --first-k");
   if (o.firstK !== undefined && o.firstK !== null && !(Number.isSafeInteger(o.firstK) && o.firstK >= 1)) usage("--first-k is a whole number from 1");
   const out = resolve(o.out);
+  if (suite.sealed && insideRepo(out)) usage("suite " + suite.id + " is sealed, and --out " + o.out + " is inside the repo; derive it outside this checkout, such as under the sealed root");
   if (existsSync(out) && readdirSync(out).length) usage("--out " + o.out + " is not empty; derive each reading into a new directory");
   const dir = join(resolve(o.root), suite.id);
   const names = existsSync(dir) ? readdirSync(dir).filter((n) => !n.startsWith(".") && lstatSync(join(dir, n)).isDirectory()).sort() : [];

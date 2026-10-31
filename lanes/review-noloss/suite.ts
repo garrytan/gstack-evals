@@ -284,8 +284,7 @@ export function suiteStub(suite: Suite, text: string, root: string, custody: str
   if (!suite.sealed) throw new SuiteError("suite " + suite.id + " is not sealed, so it needs no stub; commit it whole");
   if (!custody.startsWith(PROCEDURAL_CUSTODY)) throw new SuiteError("--custody must start \"" + PROCEDURAL_CUSTODY + "\", such as \"" + PROCEDURAL_CUSTODY + ": an age-encrypted bundle, key held apart\"");
   const stub: SuiteStub = { schema_version: 1, id: suite.id, title: suite.title, kind: suite.kind, sealed: true, stub: true, purpose: suite.purpose, sha256: sha256(text), catalogs_sha256: catalogsDigest(suite, root), counts: stubCounts(suite), custody };
-  const { sha256: _suiteDigest, catalogs_sha256: _catalogsDigest, ...named } = stub;
-  const leaks = sealedLeaks(suite, JSON.stringify(named));
+  const leaks = sealedLeaks(suite, [stub.id, stub.title, stub.purpose, stub.custody, ...Object.keys(stub.counts.groups)].join("\n"));
   if (leaks.length) throw new SuiteError("the stub would publish what the seal hides in the suite's id, title, purpose, custody or group names: " + leaks.join(", ") + "; reword them in the sealed suite");
   return stub;
 }

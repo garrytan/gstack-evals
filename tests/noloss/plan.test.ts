@@ -154,6 +154,11 @@ describe("the sealed root and the stub (open item 1)", () => {
     const grouped = { ...panel.suite, groups: { ...panel.suite.groups, [caseId]: "a group" }, units: panel.suite.units.map((u, i) => (i === 0 ? { ...u, group: caseId } : u)) };
     expect(() => suiteStub(grouped, text, panel.sealedRoot, CUSTODY)).toThrow(refused);
   });
+
+  test("a stub scans its values, not its JSON keys, so a sealed cluster named like a key still stubs", () => {
+    const keyed = { ...panel.suite, units: panel.suite.units.map((u, i) => (i === 0 ? { ...u, cluster: "units" } : u)) };
+    expect(suiteStub(keyed, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY).id).toBe(panel.suite.id);
+  });
 });
 
 describe("power at a Holm step and with flaws that move together (B1, open item 12)", () => {
@@ -375,6 +380,14 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     const out = join(dir, "k-legacy");
     const r = await run(["derive", "--suite", "gsta167-14pr", "--comparisons", join(REPO_ROOT, "lanes/review-noloss/comparisons/gsta167-14pr.json"), "--root", join(REPO_ROOT, "lanes/review-noloss/arms"), "--id", "k-legacy", "--out", out, "--first-k", "1"]);
     expect([r.code, r.err]).toEqual([2, expect.stringContaining("--first-k cuts each arm's findings, and arms A, A2, B, C are transcribed, with no findings to cut")]);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("derive refuses a sealed suite's --out inside the repo before it writes anything", async () => {
+    const out = join(REPO_ROOT, ".noloss-derive-sealed-" + process.pid);
+    inRepo.push(out);
+    const r = await run(["derive", "--suite", panel.stubPath, "--comparisons", prereg, "--root", root, "--id", "planpanel-inrepo", "--out", out, "--first-k", "1", ...S]);
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("is sealed, and --out " + out + " is inside the repo")]);
     expect(existsSync(out)).toBe(false);
   });
 
