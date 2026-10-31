@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { codexArgs } from "../../src/adapters/codex/driver.ts";
 import { recipeHash } from "../../src/rig/recipe.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
 import { buildArmImage, buildTrialImage, checkImagePin, imageFixtures, retainImage, retainTree, trialTag, type Runner } from "../../src/trial/image.ts";
@@ -158,6 +159,19 @@ describe.skipIf(!DOCKER)("trial and arm images (Docker tier, GSTACK_EVALS_DOCKER
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("git version");
   }, 900_000);
+
+  // Value: protects=a Codex trial on a gpt-6 model can run a tool: codex 0.166 offers gpt-6 models Code Mode only and spawns codex-code-mode-host from its own directory; fails_when=the trial image lacks the host, so the tool call fails closed with "Code Mode is unavailable" while the turn still completes; why_new=GST-360 (U11's Codex calibration failed silently on main's image); seam=docker/trial.Dockerfile, codexArgs; no_claim=a real model choosing the tool, or Codex's own sandbox, which the adapter bypasses
+  test("a Code Mode tool call runs in the trial image under the adapter's own flags and returns its output", () => {
+    const argv = codexArgs({ model: "gpt-6.1-sol", provider: "openai", proxy: { baseUrl: "http://127.0.0.1:8080", slot: "s", token: "t" } });
+    const serve = "bun /fake/responses.ts /tmp/ready & for i in $(seq 100); do [ -e /tmp/ready ] && break; sleep 0.1; done; echo 'Run echo.' | timeout 60 codex \"$@\"";
+    const server = join(import.meta.dir, "fixtures", "code-mode-responses.ts");
+    const r = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "1000:1000", "-v", server + ":/fake/responses.ts:ro", "-e", "OPENAI_API_KEY=t", trial, "sh", "-c", serve, "sh", ...argv], { encoding: "utf8", timeout: 120_000 });
+    const items = r.stdout.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l) as { type: string; item?: Record<string, unknown> }).flatMap((e) => (e.type === "item.completed" && e.item ? [e.item] : []));
+    expect(r.stdout + r.stderr).not.toContain("Code Mode is unavailable");
+    expect(items).toContainEqual(expect.objectContaining({ type: "command_execution", aggregated_output: expect.stringContaining("gse-code-mode-ok"), exit_code: 0 }));
+    expect(items).toContainEqual(expect.objectContaining({ type: "agent_message", text: expect.stringContaining("gse-code-mode-ok") }));
+    expect(r.status).toBe(0);
+  }, 300_000);
 
   // Value: protects=no arm image holds the skill's eval fixtures; fails_when=tasks.json, seed.sh or a byte-identical copy reaches an arm image, or the scan misses a planted one; why_new=Lane A's /learn image once shipped tasks.json (Captain brief item 3); seam=buildArmImage, imageFixtures; no_claim=fixtures renamed and edited by the arm's author
   test("an arm image built from a tree holding the fixtures holds none of them, and the scan catches a planted copy", () => {
