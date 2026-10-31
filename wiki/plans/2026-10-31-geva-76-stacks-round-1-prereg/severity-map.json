@@ -1,0 +1,43 @@
+{
+  "none": {
+    "default": {
+      "BLOCKER": "CRITICAL",
+      "BLOCKING": "CRITICAL",
+      "HIGH": "CRITICAL",
+      "P0": "CRITICAL",
+      "MEDIUM": "INFORMATIONAL",
+      "LOW": "INFORMATIONAL",
+      "NIT": "INFORMATIONAL",
+      "INFO": "INFORMATIONAL"
+    }
+  },
+  "gstack": {
+    "default": {}
+  },
+  "pstack": {
+    "default": {
+      "HIGH": "INFORMATIONAL",
+      "MEDIUM": "INFORMATIONAL",
+      "LOW": "INFORMATIONAL"
+    },
+    "by_reader": {
+      "confirmed": {
+        "HIGH": "CRITICAL",
+        "MEDIUM": "CRITICAL",
+        "LOW": "CRITICAL"
+      },
+      "unconfirmed": {
+        "HIGH": "INFORMATIONAL",
+        "MEDIUM": "INFORMATIONAL",
+        "LOW": "INFORMATIONAL"
+      }
+    }
+  },
+  "tstack": {
+    "default": {
+      "BLOCKER": "CRITICAL",
+      "SHOULD": "CRITICAL",
+      "NIT": "INFORMATIONAL"
+    }
+  }
+}

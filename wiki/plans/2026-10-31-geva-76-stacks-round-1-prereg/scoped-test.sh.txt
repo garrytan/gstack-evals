@@ -1,0 +1,1 @@
+git config --global user.name unit-check && git config --global user.email unit-check@example.invalid && files=$(git diff --name-only --diff-filter=AM origin/HEAD...HEAD -- '*.test.ts' '*.test.tsx' '*.test.js' | tr '\n' ' ') && if [ -n "$files" ]; then bun test $files; else echo 'no test file in the diff'; fi

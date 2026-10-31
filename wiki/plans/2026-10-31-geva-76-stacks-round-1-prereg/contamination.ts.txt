@@ -1,0 +1,49 @@
+// Keyless contamination audit for the stacks prereg (GEVA-76; plan findings T3 and T11).
+// For each round unit and each arm's install root, list files that (a) share a path with the unit's diff when the root is
+// the unit's own repository, or (b) mention the unit's PR as "#<pr>" or "<repo>#<pr>"/"pull/<pr>", or its fix commit's
+// first 7+ characters. Roots are read from git trees at the pinned commits.
+import { spawnSync } from "node:child_process";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
+const W = process.env.HOME + "/.capy/work/geva76";
+const suite = JSON.parse(readFileSync(W + "/stacks-combined.json", "utf8"));
+const git = (dir: string, args: string[]) => { const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", maxBuffer: 1 << 30 }); if (r.status !== 0) throw new Error(args.join(" ") + ": " + r.stderr); return r.stdout; };
+const roots = [
+  { arm: "gstack", dir: W + "/src/gstack", rev: "53522b1bbc60b3dc820842371f80ebc9db7911ec", prefix: "", repo: "garrytan/gstack" },
+  { arm: "pstack", dir: W + "/plugins", rev: "c742dd61706fbacc1b95f1a20b7b988cf096ce6c", prefix: "harness/pstack/claude-code/", repo: "cursor/plugins" },
+  { arm: "tstack", dir: W + "/tstack", rev: "1085050f3baed1ac724caa4a8166145fb2ac88af", prefix: "", repo: "t3dotgg/tstack" },
+];
+const CAT = "/workspace/gstack-evals/lanes/review-replay/catalog/";
+const caseFile = (id: string) => [CAT + "noloss/" + id + ".json", CAT + "public/" + id + ".json"].find(existsSync)!;
+const rows: string[] = ["unit\tarm\trule\tpath\tdetail"];
+const summary: string[] = [];
+for (const r of roots) {
+  const files = git(r.dir, ["ls-tree", "-r", "--name-only", r.rev, "--", r.prefix || "."]).split("\n").filter(Boolean).filter((f) => !/(^|\/)skill[-_]?evals?(\/|$)/i.test(f));
+  (r as any).files = new Set(files.map((f) => f.slice(r.prefix.length)));
+}
+for (const u of suite.units) {
+  if (!u.blockers.some((b: any) => b.counts === "blocking" || b.counts === "over-blocking")) continue;
+  const src = W + "/src/" + u.repo.split("/")[1];
+  const mb = git(src, ["merge-base", u.head, u.base]).trim();
+  const diffPaths = git(src, ["diff", "--name-only", mb, u.head]).split("\n").filter(Boolean);
+  const fixes = u.blockers.map((b: any) => JSON.parse(readFileSync(caseFile(b.case), "utf8")).fix?.commit).filter(Boolean);
+  const needles = ["#" + u.pr + "\\b", "pull/" + u.pr + "\\b", ...fixes.map((f: string) => f.slice(0, 7))];
+  let hits = 0;
+  for (const r of roots) {
+    const files: Set<string> = (r as any).files;
+    if (r.repo === u.repo) for (const p of diffPaths) if (files.has(p)) {
+      const same = spawnSync("git", ["-C", r.dir, "diff", "--quiet", u.head, r.rev, "--", p]).status === 0;
+      rows.push([u.id, r.arm, "diff-path", p, same ? "same bytes as the unit head" : "differs from the unit head"].join("\t")); hits++;
+    }
+    const g = spawnSync("git", ["-C", r.dir, "grep", "-I", "-n", "-E", "-e", needles.join("|"), r.rev, "--", r.prefix || "."], { encoding: "utf8", maxBuffer: 1 << 30 });
+    for (const line of (g.stdout || "").split("\n").filter(Boolean)) {
+      const m = /^[0-9a-f]+:([^:]+):(\d+):(.*)$/.exec(line); if (!m) continue;
+      const path = m[1]!.slice(r.prefix.length);
+      if (/(^|\/)skill[-_]?evals?(\/|$)/i.test(path)) continue;
+      const which = (m[3]!.match(new RegExp(needles.join("|")))?.[0]) ?? "";
+      rows.push([u.id, r.arm, "mention", path + ":" + m[2], which].join("\t")); hits++;
+    }
+  }
+  summary.push(u.id + " diff_paths=" + diffPaths.length + " hits=" + hits);
+}
+writeFileSync(W + "/contamination.tsv", rows.join("\n") + "\n");
+console.log(summary.join("\n"));

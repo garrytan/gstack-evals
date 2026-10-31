@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "note": "Pins for stacks round 1 (wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg, section 2). Installed tree sha256 values and image digests are recorded at run time in each invocation's arms.json and units.json; the values here from step 1's canary are for comparison, not a gate.",
+  "heads_reread_at": "2026-10-31T09:10Z",
+  "rig": {
+    "repo": "garrytan/gstack-evals",
+    "commit": "2194879",
+    "full": "2194879eed457ed88d43628c8c6e2d43ba56f654",
+    "trial_image_recipe": "e742c72a07d63feb",
+    "trial_image_digest_here": "sha256:b0872f07585dbf50e2f5d28e91e0a3d62fc2d93133969d695cbcdb1ce1fbbc3d"
+  },
+  "tb2_runner": {
+    "repo": "garrytan/gstack-evals",
+    "tag": "laneb-stacks-1-runner",
+    "tag_object": "e72648d4b23d11cd62eb3396a72cae3756a128e0",
+    "commit": "bcf91cbba2afb8c2a822e937e0e23be9e541e110",
+    "base_tag": "laneb-quick-3-runner",
+    "base_commit": "9c4e2121ba461d17eef0d38a8607a3e132593f2c",
+    "skill_map_sha256": "e0d23b93611ec227ef671f231e7c55e072dd28c4c81d120b5aa22431fc2dbe7f",
+    "manifests_sha256": {
+      "none.json": "e0e9df0a63d481dd13a833acf55d707225976061817363a1a6d12eedc18dbe98",
+      "gstack.json": "77975469c5deb83e007e38ce8a6b167353c92637a1c09f8c2fb76a12e3f6e8c8",
+      "placebo.json": "1fe671bd29947a43858c2f87542f4705c5717aa4d74c1632039e3602cc94d13e",
+      "pstack.json": "c2f9d665dbfee33674dafb4409f6ce38bb8a6d38a9945c1e62a3978305cb4899",
+      "pstack-placebo.json": "2fe010b891b7fe56b7fd1c9e54e13ce25189aab771553ad421a861b4941d474c"
+    },
+    "harbor": "f3a5a923",
+    "claude_code": "2.1.312"
+  },
+  "review_arms": {
+    "none": {
+      "kind": "bare"
+    },
+    "gstack": {
+      "repo": "garrytan/gstack",
+      "sha": "53522b1bbc60b3dc820842371f80ebc9db7911ec",
+      "version": "1.91.342.0",
+      "arm_spec": "gstack=garrytan/gstack@53522b1bbc60b3dc820842371f80ebc9db7911ec",
+      "head_at_reread": "89f203300498596cfcee37017f9966af9b0ebc3a",
+      "head_version": "1.91.358.0",
+      "drift": "16 commits; under review/ only review/sections/adversarial.md (8 lines) and a new review/specialists/targeted.md (38 lines)"
+    },
+    "pstack": {
+      "repo": "cursor/plugins",
+      "sha": "c742dd61706fbacc1b95f1a20b7b988cf096ce6c",
+      "subtree": "harness/pstack/claude-code",
+      "git_tree": "cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb",
+      "arm_spec": "pstack=cursor/plugins@c742dd61706fbacc1b95f1a20b7b988cf096ce6c:harness/pstack/claude-code",
+      "head_at_reread": "4dd1d05818d19792e7cd6e818f1667f95f7e1dbe",
+      "subtree_at_head": "cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb",
+      "drift": "none: no commit touches pstack/ or harness/pstack/ after the pin",
+      "step1_canary": {
+        "tree_sha256": "eb7aeda94b0e",
+        "opus_cell_tree": "82d976158c28"
+      }
+    },
+    "tstack": {
+      "repo": "t3dotgg/tstack",
+      "sha": "1085050f3baed1ac724caa4a8166145fb2ac88af",
+      "git_tree": "a939d866f545629c277cc9fdf766051385f3e9d9",
+      "arm_spec": "tstack=t3dotgg/tstack@1085050f3baed1ac724caa4a8166145fb2ac88af",
+      "head_at_reread": "1085050f3baed1ac724caa4a8166145fb2ac88af",
+      "drift": "none: the head is the pin",
+      "sol_agent_sha256": "6bdfc26fd62a95dbe1657f279ba378f760712645ada05c0117e507bddf7798e9",
+      "step1_canary": {
+        "tree_sha256": "0abdb52c9996",
+        "opus_cell_tree": "b0b7c40c78ba"
+      }
+    }
+  },
+  "models": {
+    "opus": "claude-opus-5-5",
+    "haiku": "claude-haiku-5-5",
+    "particle": "particle-ai/particle-1",
+    "voice": "gpt-6.1-sol",
+    "judges": [
+      "claude-opus-5-5",
+      "gpt-6.1-sol"
+    ]
+  },
+  "openrouter_programming_ranking": {
+    "endpoint": "GET https://openrouter.ai/api/v1/datasets/rankings-daily?category=programming",
+    "meta_as_of": "2026-10-31T09:13:38.678Z",
+    "response_sha256": "2f72ecf791eab472f4013586c877c67c9a791634f49dcae922f3b535b949f967",
+    "latest_bucket": "2026-10-26",
+    "first": "deepseek/deepseek-v4.1-flash-20261017 (23.9% of programming tokens)"
+  }
+}

@@ -1,0 +1,1365 @@
+{
+  "seed": 1,
+  "sims": 2000,
+  "alpha": 0.05,
+  "self_check_max_error": 0,
+  "arms": [
+    {
+      "arm": "C (14pr)",
+      "dir": "arm-C",
+      "units": 14,
+      "critical": [
+        120,
+        126
+      ],
+      "fb": [
+        97,
+        99
+      ],
+      "fb_per_unit": 7,
+      "sd_pass1_minus_pass2": 4.912,
+      "sd_within_per_pass": 3.474,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "G1 (14pr)",
+      "dir": "arm-G1",
+      "units": 14,
+      "critical": [
+        125,
+        124
+      ],
+      "fb": [
+        97,
+        91
+      ],
+      "fb_per_unit": 6.714,
+      "sd_pass1_minus_pass2": 4.502,
+      "sd_within_per_pass": 3.183,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "G1old (14pr)",
+      "dir": "arm-G1old",
+      "units": 14,
+      "critical": [
+        106,
+        104
+      ],
+      "fb": [
+        84,
+        77
+      ],
+      "fb_per_unit": 5.75,
+      "sd_pass1_minus_pass2": 3.976,
+      "sd_within_per_pass": 2.811,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "L (14pr)",
+      "dir": "arm-L",
+      "units": 14,
+      "critical": [
+        126,
+        118
+      ],
+      "fb": [
+        96,
+        88
+      ],
+      "fb_per_unit": 6.571,
+      "sd_pass1_minus_pass2": 2.793,
+      "sd_within_per_pass": 1.975,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "LC (14pr)",
+      "dir": "arm-LC",
+      "units": 14,
+      "critical": [
+        121,
+        120
+      ],
+      "fb": [
+        95,
+        96
+      ],
+      "fb_per_unit": 6.821,
+      "sd_pass1_minus_pass2": 2.615,
+      "sd_within_per_pass": 1.849,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "A3668 (14pr)",
+      "dir": "arm-A3668/gsta167-14pr",
+      "units": 14,
+      "critical": [
+        114,
+        121
+      ],
+      "fb": [
+        86,
+        96
+      ],
+      "fb_per_unit": 6.5,
+      "sd_pass1_minus_pass2": 2.585,
+      "sd_within_per_pass": 1.828,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "C6 (u14)",
+      "dir": "arm-C6",
+      "units": 12,
+      "critical": [
+        83,
+        80
+      ],
+      "fb": [
+        77,
+        71
+      ],
+      "fb_per_unit": 6.167,
+      "sd_pass1_minus_pass2": 2.111,
+      "sd_within_per_pass": 1.492,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "L6 (u14)",
+      "dir": "arm-L6",
+      "units": 12,
+      "critical": [
+        94,
+        85
+      ],
+      "fb": [
+        83,
+        79
+      ],
+      "fb_per_unit": 6.75,
+      "sd_pass1_minus_pass2": 1.969,
+      "sd_within_per_pass": 1.393,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    },
+    {
+      "arm": "A3668 (u14)",
+      "dir": "arm-A3668/gsta167-u14",
+      "units": 12,
+      "critical": [
+        85,
+        86
+      ],
+      "fb": [
+        77,
+        77
+      ],
+      "fb_per_unit": 6.417,
+      "sd_pass1_minus_pass2": 1.477,
+      "sd_within_per_pass": 1.044,
+      "over_blocking_blockers": 0,
+      "adjudication_rows": 0
+    }
+  ],
+  "pairs": [
+    {
+      "label": "G1 − C (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.714,
+      "reference_per_pr": 7,
+      "mean_d": -0.286,
+      "sd_d": 1.878,
+      "p_two_sided": 0.649,
+      "sd_within_variant": 3.183,
+      "sd_within_reference": 3.474,
+      "pass_noise_share_of_var_d": 3.146,
+      "shared_fb_lines": 0.229,
+      "d": [
+        -1.5,
+        -0.5,
+        -1,
+        -0.5,
+        1.5,
+        -5,
+        -1,
+        0,
+        0.5,
+        -0.5,
+        1.5,
+        1,
+        3,
+        -1.5
+      ]
+    },
+    {
+      "label": "G1old − C (14pr)",
+      "n": 14,
+      "variant_per_pr": 5.75,
+      "reference_per_pr": 7,
+      "mean_d": -1.25,
+      "sd_d": 1.899,
+      "p_two_sided": 0.029,
+      "sd_within_variant": 2.811,
+      "sd_within_reference": 3.474,
+      "pass_noise_share_of_var_d": 2.769,
+      "shared_fb_lines": 0.267,
+      "d": [
+        -4,
+        -0.5,
+        -1.5,
+        -1.5,
+        -1.5,
+        -5.5,
+        -2,
+        0,
+        0.5,
+        -0.5,
+        1,
+        0,
+        1,
+        -3
+      ]
+    },
+    {
+      "label": "L − C (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.571,
+      "reference_per_pr": 7,
+      "mean_d": -0.429,
+      "sd_d": 2.027,
+      "p_two_sided": 0.484,
+      "sd_within_variant": 1.975,
+      "sd_within_reference": 3.474,
+      "pass_noise_share_of_var_d": 1.943,
+      "shared_fb_lines": 0,
+      "d": [
+        -4.5,
+        -0.5,
+        -1,
+        -3,
+        1.5,
+        -1.5,
+        -1.5,
+        0.5,
+        0.5,
+        -0.5,
+        2,
+        1,
+        3,
+        -2
+      ]
+    },
+    {
+      "label": "LC − C (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.821,
+      "reference_per_pr": 7,
+      "mean_d": -0.179,
+      "sd_d": 1.489,
+      "p_two_sided": 0.797,
+      "sd_within_variant": 1.849,
+      "sd_within_reference": 3.474,
+      "pass_noise_share_of_var_d": 3.495,
+      "shared_fb_lines": 0.796,
+      "d": [
+        -3,
+        0,
+        0,
+        -2.5,
+        0,
+        3.5,
+        -0.5,
+        0.5,
+        0,
+        0,
+        0.5,
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "label": "A3668 − C (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.5,
+      "reference_per_pr": 7,
+      "mean_d": -0.5,
+      "sd_d": 2,
+      "p_two_sided": 0.407,
+      "sd_within_variant": 1.828,
+      "sd_within_reference": 3.474,
+      "pass_noise_share_of_var_d": 1.926,
+      "shared_fb_lines": 0,
+      "d": [
+        -4.5,
+        -1,
+        -0.5,
+        -3.5,
+        1.5,
+        -2.5,
+        -1.5,
+        -0.5,
+        0.5,
+        0.5,
+        0.5,
+        0,
+        3,
+        1
+      ]
+    },
+    {
+      "label": "G1old − G1 (14pr)",
+      "n": 14,
+      "variant_per_pr": 5.75,
+      "reference_per_pr": 6.714,
+      "mean_d": -0.964,
+      "sd_d": 0.97,
+      "p_two_sided": 0.002,
+      "sd_within_variant": 2.811,
+      "sd_within_reference": 3.183,
+      "pass_noise_share_of_var_d": 9.584,
+      "shared_fb_lines": 1,
+      "d": [
+        -2.5,
+        0,
+        -0.5,
+        -1,
+        -3,
+        -0.5,
+        -1,
+        0,
+        0,
+        0,
+        -0.5,
+        -1,
+        -2,
+        -1.5
+      ]
+    },
+    {
+      "label": "L − G1 (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.571,
+      "reference_per_pr": 6.714,
+      "mean_d": -0.143,
+      "sd_d": 1.473,
+      "p_two_sided": 0.906,
+      "sd_within_variant": 1.975,
+      "sd_within_reference": 3.183,
+      "pass_noise_share_of_var_d": 3.233,
+      "shared_fb_lines": 0.788,
+      "d": [
+        -3,
+        0,
+        0,
+        -2.5,
+        0,
+        3.5,
+        -0.5,
+        0.5,
+        0,
+        0,
+        0.5,
+        0,
+        0,
+        -0.5
+      ]
+    },
+    {
+      "label": "LC − G1 (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.821,
+      "reference_per_pr": 6.714,
+      "mean_d": 0.107,
+      "sd_d": 2.69,
+      "p_two_sided": 0.962,
+      "sd_within_variant": 1.849,
+      "sd_within_reference": 3.183,
+      "pass_noise_share_of_var_d": 0.936,
+      "shared_fb_lines": 0,
+      "d": [
+        -1.5,
+        0.5,
+        1,
+        -2,
+        -1.5,
+        8.5,
+        0.5,
+        0.5,
+        -0.5,
+        0.5,
+        -1,
+        -1,
+        -3,
+        0.5
+      ]
+    },
+    {
+      "label": "A3668 − G1 (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.5,
+      "reference_per_pr": 6.714,
+      "mean_d": -0.214,
+      "sd_d": 1.614,
+      "p_two_sided": 0.677,
+      "sd_within_variant": 1.828,
+      "sd_within_reference": 3.183,
+      "pass_noise_share_of_var_d": 2.586,
+      "shared_fb_lines": 0,
+      "d": [
+        -3,
+        -0.5,
+        0.5,
+        -3,
+        0,
+        2.5,
+        -0.5,
+        -0.5,
+        0,
+        1,
+        -1,
+        -1,
+        0,
+        2.5
+      ]
+    },
+    {
+      "label": "L − G1old (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.571,
+      "reference_per_pr": 5.75,
+      "mean_d": 0.821,
+      "sd_d": 1.409,
+      "p_two_sided": 0.057,
+      "sd_within_variant": 1.975,
+      "sd_within_reference": 2.811,
+      "pass_noise_share_of_var_d": 2.974,
+      "shared_fb_lines": 0.788,
+      "d": [
+        -0.5,
+        0,
+        0.5,
+        -1.5,
+        3,
+        4,
+        0.5,
+        0.5,
+        0,
+        0,
+        1,
+        1,
+        2,
+        1
+      ]
+    },
+    {
+      "label": "LC − G1old (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.821,
+      "reference_per_pr": 5.75,
+      "mean_d": 1.071,
+      "sd_d": 2.48,
+      "p_two_sided": 0.08,
+      "sd_within_variant": 1.849,
+      "sd_within_reference": 2.811,
+      "pass_noise_share_of_var_d": 0.921,
+      "shared_fb_lines": 0,
+      "d": [
+        1,
+        0.5,
+        1.5,
+        -1,
+        1.5,
+        9,
+        1.5,
+        0.5,
+        -0.5,
+        0.5,
+        -0.5,
+        0,
+        -1,
+        2
+      ]
+    },
+    {
+      "label": "A3668 − G1old (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.5,
+      "reference_per_pr": 5.75,
+      "mean_d": 0.75,
+      "sd_d": 1.696,
+      "p_two_sided": 0.143,
+      "sd_within_variant": 1.828,
+      "sd_within_reference": 2.811,
+      "pass_noise_share_of_var_d": 1.956,
+      "shared_fb_lines": 0,
+      "d": [
+        -0.5,
+        -0.5,
+        1,
+        -2,
+        3,
+        3,
+        0.5,
+        -0.5,
+        0,
+        1,
+        -0.5,
+        0,
+        2,
+        4
+      ]
+    },
+    {
+      "label": "LC − L (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.821,
+      "reference_per_pr": 6.571,
+      "mean_d": 0.25,
+      "sd_d": 1.858,
+      "p_two_sided": 0.695,
+      "sd_within_variant": 1.849,
+      "sd_within_reference": 1.975,
+      "pass_noise_share_of_var_d": 1.06,
+      "shared_fb_lines": 0.204,
+      "d": [
+        1.5,
+        0.5,
+        1,
+        0.5,
+        -1.5,
+        5,
+        1,
+        0,
+        -0.5,
+        0.5,
+        -1.5,
+        -1,
+        -3,
+        1
+      ]
+    },
+    {
+      "label": "A3668 − L (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.5,
+      "reference_per_pr": 6.571,
+      "mean_d": -0.071,
+      "sd_d": 1.107,
+      "p_two_sided": 0.918,
+      "sd_within_variant": 1.828,
+      "sd_within_reference": 1.975,
+      "pass_noise_share_of_var_d": 2.955,
+      "shared_fb_lines": 0.005,
+      "d": [
+        0,
+        -0.5,
+        0.5,
+        -0.5,
+        0,
+        -1,
+        0,
+        -1,
+        0,
+        1,
+        -1.5,
+        -1,
+        0,
+        3
+      ]
+    },
+    {
+      "label": "A3668 − LC (14pr)",
+      "n": 14,
+      "variant_per_pr": 6.5,
+      "reference_per_pr": 6.821,
+      "mean_d": -0.321,
+      "sd_d": 2.09,
+      "p_two_sided": 0.667,
+      "sd_within_variant": 1.828,
+      "sd_within_reference": 1.849,
+      "pass_noise_share_of_var_d": 0.774,
+      "shared_fb_lines": 0.005,
+      "d": [
+        -1.5,
+        -1,
+        -0.5,
+        -1,
+        1.5,
+        -6,
+        -1,
+        -1,
+        0.5,
+        0.5,
+        0,
+        0,
+        3,
+        2
+      ]
+    },
+    {
+      "label": "L6 − C6 (u14)",
+      "n": 12,
+      "variant_per_pr": 6.75,
+      "reference_per_pr": 6.167,
+      "mean_d": 0.583,
+      "sd_d": 1.998,
+      "p_two_sided": 0.371,
+      "sd_within_variant": 1.393,
+      "sd_within_reference": 1.492,
+      "pass_noise_share_of_var_d": 0.522,
+      "shared_fb_lines": 0.006,
+      "d": [
+        2.5,
+        -1,
+        1.5,
+        0.5,
+        4,
+        1,
+        1.5,
+        1,
+        -4,
+        -1,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "A3668 − C6 (u14)",
+      "n": 12,
+      "variant_per_pr": 6.417,
+      "reference_per_pr": 6.167,
+      "mean_d": 0.25,
+      "sd_d": 1.994,
+      "p_two_sided": 0.723,
+      "sd_within_variant": 1.044,
+      "sd_within_reference": 1.492,
+      "pass_noise_share_of_var_d": 0.417,
+      "shared_fb_lines": 0,
+      "d": [
+        2,
+        -2.5,
+        1,
+        -1.5,
+        4,
+        1.5,
+        0.5,
+        0.5,
+        -2.5,
+        -1,
+        -1,
+        2
+      ]
+    },
+    {
+      "label": "A3668 − L6 (u14)",
+      "n": 12,
+      "variant_per_pr": 6.417,
+      "reference_per_pr": 6.75,
+      "mean_d": -0.333,
+      "sd_d": 1.008,
+      "p_two_sided": 0.338,
+      "sd_within_variant": 1.044,
+      "sd_within_reference": 1.393,
+      "pass_noise_share_of_var_d": 1.493,
+      "shared_fb_lines": 0,
+      "d": [
+        -0.5,
+        -1.5,
+        -0.5,
+        -2,
+        0,
+        0.5,
+        -1,
+        -0.5,
+        1.5,
+        0,
+        -1,
+        1
+      ]
+    },
+    {
+      "label": "L∘G1 − C′ (L−C on 14pr, L6−C6 on u14)",
+      "n": 26,
+      "variant_per_pr": 6.654,
+      "reference_per_pr": 6.615,
+      "mean_d": 0.038,
+      "sd_d": 2.039,
+      "p_two_sided": 0.962,
+      "sd_within_variant": 1.7,
+      "sd_within_reference": 2.703,
+      "pass_noise_share_of_var_d": 1.226,
+      "shared_fb_lines": 0.003,
+      "d": [
+        -4.5,
+        -0.5,
+        -1,
+        -3,
+        1.5,
+        -1.5,
+        -1.5,
+        0.5,
+        0.5,
+        -0.5,
+        2,
+        1,
+        3,
+        -2,
+        2.5,
+        -1,
+        1.5,
+        0.5,
+        4,
+        1,
+        1.5,
+        1,
+        -4,
+        -1,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "A3668 − L∘G1 (A3668−L on 14pr, A3668−L6 on u14)",
+      "n": 26,
+      "variant_per_pr": 6.462,
+      "reference_per_pr": 6.654,
+      "mean_d": -0.192,
+      "sd_d": 1.05,
+      "p_two_sided": 0.415,
+      "sd_within_variant": 1.511,
+      "sd_within_reference": 1.7,
+      "pass_noise_share_of_var_d": 2.348,
+      "shared_fb_lines": 0.003,
+      "d": [
+        0,
+        -0.5,
+        0.5,
+        -0.5,
+        0,
+        -1,
+        0,
+        -1,
+        0,
+        1,
+        -1.5,
+        -1,
+        0,
+        3,
+        -0.5,
+        -1.5,
+        -0.5,
+        -2,
+        0,
+        0.5,
+        -1,
+        -0.5,
+        1.5,
+        0,
+        -1,
+        1
+      ]
+    },
+    {
+      "label": "A3668 − C′ (A3668−C on 14pr, A3668−C6 on u14)",
+      "n": 26,
+      "variant_per_pr": 6.462,
+      "reference_per_pr": 6.615,
+      "mean_d": -0.154,
+      "sd_d": 1.994,
+      "p_two_sided": 0.733,
+      "sd_within_variant": 1.511,
+      "sd_within_reference": 2.703,
+      "pass_noise_share_of_var_d": 1.206,
+      "shared_fb_lines": 0,
+      "d": [
+        -4.5,
+        -1,
+        -0.5,
+        -3.5,
+        1.5,
+        -2.5,
+        -1.5,
+        -0.5,
+        0.5,
+        0.5,
+        0.5,
+        0,
+        3,
+        1,
+        2,
+        -2.5,
+        1,
+        -1.5,
+        4,
+        1.5,
+        0.5,
+        0.5,
+        -2.5,
+        -1,
+        -1,
+        2
+      ]
+    }
+  ],
+  "mdd": {
+    "L∘G1 − C′ (L−C on 14pr, L6−C6 on u14)": {
+      "20": [
+        {
+          "share": 1,
+          "size_at_0": 0.046,
+          "mdd_drop": 1.3,
+          "mdd_rise": 1.4,
+          "normal": 1.277,
+          "power_drop_at_0_5": 0.163
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.046,
+          "mdd_drop": 0.65,
+          "mdd_rise": 0.7,
+          "normal": 0.638,
+          "power_drop_at_0_5": 0.571
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.046,
+          "mdd_drop": 0.35,
+          "mdd_rise": 0.35,
+          "normal": 0.319,
+          "power_drop_at_0_5": 0.995
+        }
+      ],
+      "22": [
+        {
+          "share": 1,
+          "size_at_0": 0.051,
+          "mdd_drop": 1.25,
+          "mdd_rise": 1.3,
+          "normal": 1.217,
+          "power_drop_at_0_5": 0.177
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.051,
+          "mdd_drop": 0.65,
+          "mdd_rise": 0.65,
+          "normal": 0.609,
+          "power_drop_at_0_5": 0.6
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.051,
+          "mdd_drop": 0.35,
+          "mdd_rise": 0.35,
+          "normal": 0.304,
+          "power_drop_at_0_5": 0.998
+        }
+      ],
+      "24": [
+        {
+          "share": 1,
+          "size_at_0": 0.051,
+          "mdd_drop": 1.2,
+          "mdd_rise": 1.25,
+          "normal": 1.166,
+          "power_drop_at_0_5": 0.185
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.051,
+          "mdd_drop": 0.6,
+          "mdd_rise": 0.65,
+          "normal": 0.583,
+          "power_drop_at_0_5": 0.642
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.051,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.35,
+          "normal": 0.291,
+          "power_drop_at_0_5": 0.999
+        }
+      ],
+      "26": [
+        {
+          "share": 1,
+          "size_at_0": 0.053,
+          "mdd_drop": 1.15,
+          "mdd_rise": 1.2,
+          "normal": 1.12,
+          "power_drop_at_0_5": 0.209
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.053,
+          "mdd_drop": 0.6,
+          "mdd_rise": 0.6,
+          "normal": 0.56,
+          "power_drop_at_0_5": 0.689
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.053,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.28,
+          "power_drop_at_0_5": 0.999
+        }
+      ],
+      "28": [
+        {
+          "share": 1,
+          "size_at_0": 0.049,
+          "mdd_drop": 1.1,
+          "mdd_rise": 1.15,
+          "normal": 1.079,
+          "power_drop_at_0_5": 0.221
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.049,
+          "mdd_drop": 0.55,
+          "mdd_rise": 0.6,
+          "normal": 0.54,
+          "power_drop_at_0_5": 0.735
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.049,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.27,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "30": [
+        {
+          "share": 1,
+          "size_at_0": 0.048,
+          "mdd_drop": 1.05,
+          "mdd_rise": 1.1,
+          "normal": 1.042,
+          "power_drop_at_0_5": 0.243
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.55,
+          "mdd_rise": 0.55,
+          "normal": 0.521,
+          "power_drop_at_0_5": 0.772
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.261,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "32": [
+        {
+          "share": 1,
+          "size_at_0": 0.048,
+          "mdd_drop": 1,
+          "mdd_rise": 1.1,
+          "normal": 1.009,
+          "power_drop_at_0_5": 0.263
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.5,
+          "mdd_rise": 0.55,
+          "normal": 0.505,
+          "power_drop_at_0_5": 0.812
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.25,
+          "mdd_rise": 0.3,
+          "normal": 0.252,
+          "power_drop_at_0_5": 1
+        }
+      ]
+    },
+    "A3668 − L∘G1 (A3668−L on 14pr, A3668−L6 on u14)": {
+      "20": [
+        {
+          "share": 1,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.75,
+          "mdd_rise": 0.65,
+          "normal": 0.657,
+          "power_drop_at_0_5": 0.556
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.4,
+          "mdd_rise": 0.35,
+          "normal": 0.329,
+          "power_drop_at_0_5": 0.963
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.048,
+          "mdd_drop": 0.2,
+          "mdd_rise": 0.2,
+          "normal": 0.164,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "22": [
+        {
+          "share": 1,
+          "size_at_0": 0.066,
+          "mdd_drop": 0.7,
+          "mdd_rise": 0.6,
+          "normal": 0.627,
+          "power_drop_at_0_5": 0.589
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.066,
+          "mdd_drop": 0.35,
+          "mdd_rise": 0.3,
+          "normal": 0.313,
+          "power_drop_at_0_5": 0.972
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.066,
+          "mdd_drop": 0.2,
+          "mdd_rise": 0.15,
+          "normal": 0.157,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "24": [
+        {
+          "share": 1,
+          "size_at_0": 0.064,
+          "mdd_drop": 0.65,
+          "mdd_rise": 0.6,
+          "normal": 0.6,
+          "power_drop_at_0_5": 0.618
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.064,
+          "mdd_drop": 0.35,
+          "mdd_rise": 0.3,
+          "normal": 0.3,
+          "power_drop_at_0_5": 0.979
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.064,
+          "mdd_drop": 0.2,
+          "mdd_rise": 0.15,
+          "normal": 0.15,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "26": [
+        {
+          "share": 1,
+          "size_at_0": 0.058,
+          "mdd_drop": 0.65,
+          "mdd_rise": 0.6,
+          "normal": 0.576,
+          "power_drop_at_0_5": 0.639
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.058,
+          "mdd_drop": 0.35,
+          "mdd_rise": 0.3,
+          "normal": 0.288,
+          "power_drop_at_0_5": 0.99
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.058,
+          "mdd_drop": 0.2,
+          "mdd_rise": 0.15,
+          "normal": 0.144,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "28": [
+        {
+          "share": 1,
+          "size_at_0": 0.06,
+          "mdd_drop": 0.6,
+          "mdd_rise": 0.55,
+          "normal": 0.555,
+          "power_drop_at_0_5": 0.669
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.06,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.278,
+          "power_drop_at_0_5": 0.991
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.06,
+          "mdd_drop": 0.15,
+          "mdd_rise": 0.15,
+          "normal": 0.139,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "30": [
+        {
+          "share": 1,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.6,
+          "mdd_rise": 0.55,
+          "normal": 0.537,
+          "power_drop_at_0_5": 0.705
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.268,
+          "power_drop_at_0_5": 0.996
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.15,
+          "mdd_rise": 0.15,
+          "normal": 0.134,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "32": [
+        {
+          "share": 1,
+          "size_at_0": 0.063,
+          "mdd_drop": 0.55,
+          "mdd_rise": 0.55,
+          "normal": 0.519,
+          "power_drop_at_0_5": 0.716
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.063,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.26,
+          "power_drop_at_0_5": 0.995
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.063,
+          "mdd_drop": 0.15,
+          "mdd_rise": 0.15,
+          "normal": 0.13,
+          "power_drop_at_0_5": 1
+        }
+      ]
+    },
+    "G1 − C (14pr)": {
+      "20": [
+        {
+          "share": 1,
+          "size_at_0": 0.055,
+          "mdd_drop": 1.15,
+          "mdd_rise": 1.35,
+          "normal": 1.176,
+          "power_drop_at_0_5": 0.213
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.6,
+          "mdd_rise": 0.7,
+          "normal": 0.588,
+          "power_drop_at_0_5": 0.691
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.35,
+          "normal": 0.294,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "22": [
+        {
+          "share": 1,
+          "size_at_0": 0.055,
+          "mdd_drop": 1.1,
+          "mdd_rise": 1.25,
+          "normal": 1.121,
+          "power_drop_at_0_5": 0.243
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.55,
+          "mdd_rise": 0.65,
+          "normal": 0.561,
+          "power_drop_at_0_5": 0.731
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.055,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.35,
+          "normal": 0.28,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "24": [
+        {
+          "share": 1,
+          "size_at_0": 0.053,
+          "mdd_drop": 1.05,
+          "mdd_rise": 1.2,
+          "normal": 1.073,
+          "power_drop_at_0_5": 0.253
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.053,
+          "mdd_drop": 0.55,
+          "mdd_rise": 0.6,
+          "normal": 0.537,
+          "power_drop_at_0_5": 0.784
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.053,
+          "mdd_drop": 0.3,
+          "mdd_rise": 0.3,
+          "normal": 0.268,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "26": [
+        {
+          "share": 1,
+          "size_at_0": 0.054,
+          "mdd_drop": 1,
+          "mdd_rise": 1.15,
+          "normal": 1.031,
+          "power_drop_at_0_5": 0.285
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.054,
+          "mdd_drop": 0.5,
+          "mdd_rise": 0.6,
+          "normal": 0.516,
+          "power_drop_at_0_5": 0.826
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.054,
+          "mdd_drop": 0.25,
+          "mdd_rise": 0.3,
+          "normal": 0.258,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "28": [
+        {
+          "share": 1,
+          "size_at_0": 0.059,
+          "mdd_drop": 0.95,
+          "mdd_rise": 1.1,
+          "normal": 0.994,
+          "power_drop_at_0_5": 0.288
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.059,
+          "mdd_drop": 0.5,
+          "mdd_rise": 0.55,
+          "normal": 0.497,
+          "power_drop_at_0_5": 0.842
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.059,
+          "mdd_drop": 0.25,
+          "mdd_rise": 0.3,
+          "normal": 0.248,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "30": [
+        {
+          "share": 1,
+          "size_at_0": 0.057,
+          "mdd_drop": 0.9,
+          "mdd_rise": 1.05,
+          "normal": 0.96,
+          "power_drop_at_0_5": 0.31
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.057,
+          "mdd_drop": 0.45,
+          "mdd_rise": 0.55,
+          "normal": 0.48,
+          "power_drop_at_0_5": 0.876
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.057,
+          "mdd_drop": 0.25,
+          "mdd_rise": 0.3,
+          "normal": 0.24,
+          "power_drop_at_0_5": 1
+        }
+      ],
+      "32": [
+        {
+          "share": 1,
+          "size_at_0": 0.052,
+          "mdd_drop": 0.9,
+          "mdd_rise": 1,
+          "normal": 0.93,
+          "power_drop_at_0_5": 0.327
+        },
+        {
+          "share": 0.5,
+          "size_at_0": 0.052,
+          "mdd_drop": 0.45,
+          "mdd_rise": 0.5,
+          "normal": 0.465,
+          "power_drop_at_0_5": 0.903
+        },
+        {
+          "share": 0.25,
+          "size_at_0": 0.052,
+          "mdd_drop": 0.25,
+          "mdd_rise": 0.25,
+          "normal": 0.232,
+          "power_drop_at_0_5": 1
+        }
+      ]
+    }
+  }
+}
