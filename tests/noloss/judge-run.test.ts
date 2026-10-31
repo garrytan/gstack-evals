@@ -2,8 +2,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { snapshot } from "../../lanes/review-noloss/ingest.ts";
-import { judgeRunCmd } from "../../lanes/review-noloss/judge-run.ts";
+import { readArmDir, snapshot } from "../../lanes/review-noloss/ingest.ts";
+import { findingSha256 } from "../../lanes/review-noloss/judge.ts";
+import { JUDGE_RETRY, judgeRunCmd } from "../../lanes/review-noloss/judge-run.ts";
 import { ScoreError } from "../../lanes/review-noloss/score.ts";
 import { loadSuite, REPO_ROOT, setSealedRoot, sha256, unitId } from "../../lanes/review-noloss/suite.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -40,11 +41,11 @@ const upstream = (sent: Sent[], answer: Answer) => async (_url: string, init: Re
     ? Response.json({ id: "r", object: "response", status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }], usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 0 }, output_tokens: 50, output_tokens_details: { reasoning_tokens: 0 } } })
     : Response.json({ id: "m", type: "message", role: "assistant", content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 100, output_tokens: 50 } });
 };
-const judgeRun = async (argv: string[], fetch?: (url: string, init: RequestInit) => Promise<Response>) => {
+const judgeRun = async (argv: string[], fetch?: (url: string, init: RequestInit) => Promise<Response>, sleep?: (ms: number) => Promise<void>) => {
   const out: string[] = [];
   const err: string[] = [];
   try {
-    const code = await judgeRunCmd(argv, { out: (t) => out.push(t), err: (t) => err.push(t) }, { env: KEYS, fetch });
+    const code = await judgeRunCmd(argv, { out: (t) => out.push(t), err: (t) => err.push(t) }, { env: KEYS, fetch, sleep });
     return { code, out: out.join("\n"), err: err.join("\n") };
   } catch (e) {
     if (e instanceof ScoreError) return { code: 2, out: out.join("\n"), err: e.code + " " + e.message };
@@ -52,6 +53,12 @@ const judgeRun = async (argv: string[], fetch?: (url: string, init: RequestInit)
   }
 };
 const nextCommand = (out: string) => out.split("\n").find((l) => l.startsWith("next: "))!.slice("next: gstack-evals noloss ".length).split(" ");
+/** The journal's outcomes for one role's requests on one packet, in send order: [status, spent micros]. */
+const outcomes = (out: string, role: string, file: string) => {
+  const lines = readFileSync(join(out, "journal.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const ids = lines.filter((l) => l.kind === "request" && l.cell.arm === role && l.cell.task === file).map((l) => l.reservation_id);
+  return ids.map((id) => lines.find((l) => l.kind === "outcome" && l.reservation_id === id)).map((l) => [l.status, l.outcome.spent_micros]);
+};
 const tsvRows = (path: string) => readFileSync(path, "utf8").replace(/\n+$/, "").split("\n").slice(1).map((l) => l.split("\t"));
 /** An honest matching judge: a finding matches the blocker its synthetic id names; flip lists blockers it answers with no match. */
 const matching = (key: Key, flip: string[] = []) => (file: string, packet: any) =>
@@ -103,6 +110,12 @@ describe("judge-run on a matching batch", () => {
     expect(impact.filter((row) => row[2] === OPUS).length).toBe(key.entries.length);
     expect(new Set(impact.map((row) => row[3]))).toEqual(new Set(["blocking", "non-blocking"]));
     expect(new Set(impact.map((row) => row[4]))).toEqual(new Set([key.batch]));
+    const suite = loadSuite("gsta167-14pr");
+    const held = (row: string[]) => {
+      const e = key.entries.find((x) => x.packet === row[0] && x.opaque === row[1])!;
+      return findingSha256(readArmDir(armDir(e.arm), suite.suite, suite.sha256).arm.findings!.get(key.packets.find((p) => p.file === e.packet)!.unit)!.find((f) => f.id === e.finding && f.pass === e.pass)!.fields);
+    };
+    expect(impact.slice(0, 5).map((row) => row[5])).toEqual(impact.slice(0, 5).map(held));
     const runFile = JSON.parse(readFileSync(join(out, "run.json"), "utf8"));
     expect(runFile).toMatchObject({ state: "finished", batch: key.batch, brief: { sha256: sha256(readFileSync(BRIEF)) }, models: { primary: OPUS, second: SOL, third: SONNET }, item: "judge", unjudged: 0 });
     for (const f of ["primary.json", "second.json", "third.json", "impact.tsv"]) expect(runFile.files[f]).toBe(sha256(readFileSync(join(out, f))));
@@ -142,6 +155,64 @@ describe("judge-run on a matching batch", () => {
     expect(runFile.stop).toBeTruthy();
     for (const f of ["primary.json", "second.json", "third.json", "impact.tsv"]) expect(existsSync(join(out, f))).toBe(false);
     expect(readItem(record, "judge-down").leases.map((l) => l.close?.how)).toEqual(["settled"]);
+  });
+
+  test("a 429 then a 200 completes the run: the proxy waits, sends again, and charges the request once", async () => {
+    const sent: Sent[] = [];
+    const slept: number[] = [];
+    const out = join(dir, "run-429");
+    const honest = matching(key);
+    recordApproval(record, { action: "init", item: "judge-429", cap_micros: 100_000_000, quotes: [QUOTE], admission: "warn" });
+    const base = upstream(sent, (_m, file, packet) => honest(file, packet));
+    let limited = false;
+    const once = async (url: string, init: RequestInit) => {
+      if (!limited && String(init.body).includes("=== Packet: packets/3593.json ===")) {
+        limited = true;
+        return new Response(JSON.stringify({ type: "error", error: { type: "rate_limit_error" } }), { status: 429, headers: { "content-type": "application/json", "retry-after-ms": "250" } });
+      }
+      return base(url, init);
+    };
+    const r = await judgeRun(args(out).map((a) => (a === "judge" ? "judge-429" : a)), once, async (ms) => {
+      slept.push(ms);
+      await Bun.sleep(ms);
+    });
+    expect(r.code).toBe(0);
+    expect(slept.length).toBeGreaterThan(0);
+    expect(slept.every((ms) => ms > 0 && ms <= 250)).toBe(true);
+    expect(JSON.parse(readFileSync(join(out, "run.json"), "utf8"))).toMatchObject({ state: "finished", unjudged: 0 });
+    const tries = outcomes(out, "primary", "packets/3593.json");
+    expect(tries.map(([status]) => status)).toEqual([429, 200]);
+    expect(tries[0]![1]).toBe(0);
+    expect(tries[1]![1]).toBeGreaterThan(0);
+    const all = readFileSync(join(out, "journal.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.kind === "outcome");
+    expect(readItem(record, "judge-429").leases[0]!.close).toMatchObject({ how: "settled", spent_micros: all.reduce((n, l) => n + l.outcome.spent_micros, 0) });
+  });
+
+  test("a 5xx on every send stops the run after the retry budget's sends, with no reply file", async () => {
+    const sent: Sent[] = [];
+    const slept: number[] = [];
+    const out = join(dir, "run-5xx");
+    const honest = matching(key);
+    recordApproval(record, { action: "init", item: "judge-5xx", cap_micros: 100_000_000, quotes: [QUOTE], admission: "warn" });
+    const base = upstream(sent, (_m, file, packet) => honest(file, packet));
+    let failed = 0;
+    const down = async (url: string, init: RequestInit) => {
+      const body = String(init.body);
+      if (body.includes("=== Packet: packets/3596.json ===") && body.includes('"model":"claude-opus-5-5"')) {
+        failed++;
+        return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error" } }), { status: 529, headers: { "content-type": "application/json" } });
+      }
+      return base(url, init);
+    };
+    const r = await judgeRun(args(out).map((a) => (a === "judge" ? "judge-5xx" : a)), down, async (ms) => void slept.push(ms));
+    expect([r.code, r.err]).toEqual([2, expect.stringMatching(/^UPSTREAM the primary judge \(anthropic\/claude-opus-5-5\) on packets\/3596\.json: UPSTREAM: metering proxy: anthropic answered 529 on attempt 3, and the retry budget \(3 attempts, 900000 ms\) is spent; the run stops with no reply files/)]);
+    expect([failed, slept]).toEqual([JUDGE_RETRY.attempts, [1000, 2000]]);
+    const tries = outcomes(out, "primary", "packets/3596.json");
+    expect(tries.map(([status]) => status)).toEqual([529, 529, 529]);
+    expect(tries.every(([, spent]) => spent > 0)).toBe(true);
+    expect(JSON.parse(readFileSync(join(out, "run.json"), "utf8"))).toMatchObject({ state: "stopped", stop: "UPSTREAM" });
+    for (const f of ["primary.json", "second.json", "third.json", "impact.tsv"]) expect(existsSync(join(out, f))).toBe(false);
+    expect(readItem(record, "judge-5xx").leases.map((l) => l.close?.how)).toEqual(["settled"]);
   });
 
   test("an answer judge-join would refuse is asked again once, and a second refusal leaves the packet unjudged", async () => {
@@ -190,14 +261,23 @@ describe("judge-run on a matching batch", () => {
     expect([sent.length, existsSync(out)]).toEqual([0, false]);
   });
 
-  test("--dry-run prints each request's worst case and spends and writes nothing", async () => {
+  test("--dry-run prints each request's worst case at the retry budget's sends, sets the total beside the item's cap, and spends and writes nothing", async () => {
     const leases = readItem(record, "judge").leases.length;
     const out = join(dir, "dry");
     const r = await run(["judge-run", ...args(out), "--dry-run"]);
     expect(r.code).toBe(0);
-    expect(r.out.split("\n").filter((l) => /^(primary|second|third) {2}\S+ {2}packets\/\S+ {2}worst case \$/.test(l)).length).toBe(42);
-    expect(r.out).toMatch(/worst case: primary \$[\d.]+ on 14 packets; .* Nothing was sent or written\.$/);
+    const lines = r.out.split("\n").map((l) => /^(primary|second|third) {2}\S+ {2}packets\/\S+ {2}worst case \$([\d.]+) \(3 sends at \$([\d.]+)\)$/.exec(l)).filter((m) => m !== null);
+    expect(lines.length).toBe(42);
+    for (const m of lines) expect(Number(m[2])).toBeCloseTo(3 * Number(m[3]), 5);
+    const total = /^worst case: primary \$[\d.]+ on 14 packets; .* \$([\d.]+) in all, \$([\d.]+) if every answer is asked again\. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation\. Nothing was sent or written\.$/m.exec(r.out)!;
+    expect(Number(total[1])).toBeCloseTo(lines.reduce((n, m) => n + Number(m[2]), 0), 4);
+    const committed = readItem(record, "judge").committed_micros / 1e6;
+    const item = /^item judge: cap \$100\.00, \$([\d.]+) committed, \$([\d.]+) left; the worst case \$[\d.]+ (fits|does not fit), and asked again \$[\d.]+ (fits|does not fit)\. The cap stops the run wherever it falls\.$/m.exec(r.out)!;
+    expect(Number(item[1])).toBeCloseTo(committed, 5);
+    expect(item[3]).toBe(Number(total[1]) <= 100 - committed ? "fits" : "does not fit");
     expect([existsSync(out), readItem(record, "judge").leases.length]).toEqual([false, leases]);
+    const fresh = await run(["judge-run", ...args(join(dir, "dry-new")).map((a) => (a === "judge" ? "judge-unapproved" : a)), "--dry-run"]);
+    expect([fresh.code, fresh.out]).toEqual([0, expect.stringContaining("item judge-unapproved: no approval yet, so there is no cap to compare.")]);
   });
 });
 

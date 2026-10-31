@@ -2,7 +2,7 @@
 // noloss derive (stacks round 1, GST-452 and GST-454): re-derives a suite and every arm ingested on it for a secondary
 // or sensitivity reading, so that noloss score scores the reading unchanged. It drops units for every arm alike (units
 // named on the command line, units a file lists, or every unit with a coverage gap), marks blockers detection-only, or
-// re-maps severity (a map per arm, or one judge's impact ratings). It never changes a finding's text, a judge's match or
+// re-maps severity (a map per arm, or one judge's impact ratings, each bound to the rated finding's sha256). It never changes a finding's text, a judge's match or
 // a ruling. A dropped unit takes its findings, judgments, adjudication and cost rows with it. A re-map recomputes each
 // judgment's outcome from the findings the judges matched, the way judge-join applies severity, and drops adjudication
 // rows of findings that no longer map to CRITICAL. A stopped arm whose every coverage gap names a dropped unit (as
@@ -18,7 +18,7 @@ import { basename, join, resolve } from "node:path";
 import { mapSeverity, parseTsv, rawLabel, type ArmJson, type Mapped } from "./contract.ts";
 import { loadComparisons } from "./export.ts";
 import { prepare, publish, readIngested } from "./ingest.ts";
-import { batchDigest, type JudgeKey } from "./judge.ts";
+import { batchDigest, findingSha256, type JudgeKey } from "./judge.ts";
 import { ScoreError } from "./score.ts";
 import { insideRepo, loadSuite, resolveUnit, sha256, type Suite, type Unit } from "./suite.ts";
 
@@ -91,7 +91,7 @@ export function derive(o: DeriveOptions): DeriveResult {
   if ([o.severityMap, o.impact, o.firstK].filter((x) => x !== undefined && x !== null).length > 1) usage("give one of --severity-map, --impact and --first-k");
   if (o.firstK !== undefined && o.firstK !== null && !(Number.isSafeInteger(o.firstK) && o.firstK >= 1)) usage("--first-k is a whole number from 1");
   const out = resolve(o.out);
-  if (suite.sealed && insideRepo(out)) usage("suite " + suite.id + " is sealed, and --out " + o.out + " is inside the repo; derive it outside this checkout, such as under the sealed root");
+  if (suite.sealed && insideRepo(out)) usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; derive sealed readings outside it");
   if (existsSync(out) && readdirSync(out).length) usage("--out " + o.out + " is not empty; derive each reading into a new directory");
   const dir = join(resolve(o.root), suite.id);
   const names = existsSync(dir) ? readdirSync(dir).filter((n) => !n.startsWith(".") && lstatSync(join(dir, n)).isDirectory()).sort() : [];
@@ -168,15 +168,18 @@ export function derive(o: DeriveOptions): DeriveResult {
     const packetUnit = new Map(key.packets.map((p) => [p.file, p.unit]));
     const text = readFileSync(o.impact.tsv, "utf8");
     const t = parseTsv(text);
-    for (const c of ["packet", "opaque", "judge", "impact", "batch"]) if (!t.header.includes(c)) usage("--impact " + o.impact.tsv + " needs a " + c + " column");
+    for (const c of ["packet", "opaque", "judge", "impact", "batch", "finding_sha256"]) if (!t.header.includes(c)) usage("--impact " + o.impact.tsv + " needs a " + c + " column");
+    const held = new Map(arms.flatMap(({ arm }) => [...(arm.findings ?? [])].flatMap(([unit, list]) => list.map((f) => [unit + "\0" + arm.arm.id + "\0" + f.pass + "\0" + f.id, findingSha256(f.fields)] as const))));
     impact = new Map();
     for (const { line, cells } of t.rows) {
       if (cells.judge !== o.impact.judge) continue;
       if (cells.batch !== key.batch) usage("--impact line " + line + " is from batch " + cells.batch + ", not --key's batch " + key.batch);
       const e = entries.get(cells.packet + " " + cells.opaque) ?? usage("--impact line " + line + " rates " + cells.packet + " " + cells.opaque + ", which --key does not hold");
+      const k = (packetUnit.get(e.packet) ?? usage("--key names no unit for packet " + e.packet)) + "\0" + e.arm + "\0" + e.pass + "\0" + e.finding;
+      if (!arms.some(({ arm }) => arm.arm.id === e.arm)) bad("--impact line " + line + " rates finding " + JSON.stringify(e.finding) + " of arm " + e.arm + ", which is not ingested under --root " + o.root + "; pass the --root that holds it");
+      if (held.get(k) !== cells.finding_sha256) bad("--impact line " + line + " rates finding " + JSON.stringify(e.finding) + " of arm " + e.arm + ", pass " + e.pass + ", in " + packetUnit.get(e.packet) + " as judged (sha256 " + cells.finding_sha256 + "), but the arm now holds " + (held.has(k) ? "sha256 " + held.get(k) : "no such finding") + "; the finding changed since judge-run read it, so judge it again");
       if (cells.impact === "missing") continue;
       if (cells.impact !== "blocking" && cells.impact !== "non-blocking") usage("--impact line " + line + ": impact is blocking, non-blocking or missing, not " + JSON.stringify(cells.impact));
-      const k = (packetUnit.get(e.packet) ?? usage("--key names no unit for packet " + e.packet)) + "\0" + e.arm + "\0" + e.pass + "\0" + e.finding;
       if (impact.has(k)) usage("--impact line " + line + " rates " + cells.packet + " " + cells.opaque + " a second time");
       impact.set(k, cells.impact === "blocking" ? "IMPACT-BLOCKING" : "IMPACT-NONBLOCKING");
     }

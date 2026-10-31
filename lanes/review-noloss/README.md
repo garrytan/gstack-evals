@@ -36,6 +36,8 @@ gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --au
 gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
 ```
 
+A sealed suite's `--out` for `derive` and `flag-scan` must sit outside the repo. `secondary` counts judgments with coverage incomplete as
+misses, and refuses (E_NOLOSS_BLIND) an arm that mixes labelled and blind judgments or a pair judged one each way.
 `gstack-evals noloss --help` has the details. Every refusal starts with its reason code (E_NOLOSS_SUITE, E_NOLOSS_ARM,
 E_NOLOSS_JUDGMENT, E_NOLOSS_COST, E_NOLOSS_BLIND, E_NOLOSS_STALE) and names the file, row and field. `score` exits 0 on
 NO_LOSS with the size rule met, 1 on LOSS and 2 otherwise. E_NOLOSS_ADJUDICATION and E_NOLOSS_EXPECT are refusals too.
@@ -194,7 +196,8 @@ and at most 16,000 output tokens. The primary reads every packet; the second and
 blockers or findings judge-join will ask them for (the same `judgeSets` code), and their reply files keep only those.
 The runner writes each reply's batch, judge, file and digest itself. An answer judge-join would refuse is asked again
 once, and a second refusal goes to unjudged.json, which `judge-join --unjudged` turns into coverage incomplete rows (or
-no adjudication row). `impact` and `verifiable` go to impact.tsv and verifiable.tsv, never into a reply. Adjudication
+no adjudication row). `impact` and `verifiable` go to impact.tsv and verifiable.tsv, never into a reply, and each row carries the sha256 of the finding it rated; `derive` refuses a rating whose finding changed. Adjudication
 packets go out with an evidence sheet built from each finding's masked evidence and the unit head's code in a `--source`
-clone, and the run writes unverifiable.tsv for the frozen sensitivity count. `--dry-run` prints each request's worst
-case and spends nothing. A ledger item binds to one run, so the matching and adjudication batches need an item each.
+clone, and the run writes unverifiable.tsv for the frozen sensitivity count. The proxy retries a 429 or 5xx within a budget of 3 sends in 900 s; past it, or on a
+transport error, the run stops. `--dry-run` prints each request's worst case at 3 sends and the item's cap beside the
+total, and spends nothing. A ledger item binds to one run, so the matching and adjudication batches need an item each.

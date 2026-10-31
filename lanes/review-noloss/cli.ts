@@ -16,7 +16,7 @@ import { flagScan, flagsTsv } from "./flag-scan.ts";
 import { judgeJoin, judgePacket } from "./judge.ts";
 import { judgeRunCmd } from "./judge-run.ts";
 import { powerTable, renderPowerTable, spreadValue, suiteClusters } from "./power.ts";
-import { ideaWins, newBlockers } from "./secondary.ts";
+import { ideaWins, labelledJudging, newBlockers } from "./secondary.ts";
 import { armMetrics, DEFAULT_DRAWS, DEFAULT_SEED, falseBlockerTable, renderRecord, scoreComparisons, ScoreError, type Comparison, type LossFamily } from "./score.ts";
 import { OUTCOMES, readScoreRun, verdictLine } from "./verdict.ts";
 import type { PlanStratum } from "../review-replay/catalog/catalog.ts";
@@ -99,22 +99,27 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       Re-derive a suite and every arm ingested on it for a secondary or sensitivity reading, so score runs on it unchanged:
       drop units for every arm alike (named, listed in a TSV's unit column, or every unit with a coverage gap or a judgment
       with coverage incomplete), count blockers as detection-only, or re-map severity (a map per arm id or arm name, or one
-      judge's impact ratings from judge-run's impact.tsv with the matching batch's key), or keep each unit-pass's first k
-      must-fix findings as must-fix (--first-k, the volume-matched reading, which refuses a transcribed arm: it has no
-      findings to cut). Findings, matches and rulings never
-      change: a re-map recomputes outcomes from the judges' matches. A stopped arm whose every coverage gap is dropped, and
+      judge's impact ratings from judge-run's impact.tsv with the matching batch's key; a rating whose finding_sha256 no
+      longer matches the arm's finding is refused), or keep each unit-pass's first k must-fix findings as must-fix
+      (--first-k, the volume-matched reading, which refuses a transcribed arm: it has no findings to cut). Findings,
+      matches and rulings never change: a re-map recomputes outcomes from the judges' matches. A sealed suite's --out must
+      sit outside the repo. A stopped arm whose every coverage gap is dropped, and
       that left no session unrun, is complete in the derived suite. Writes <out>/<id>.json, <out>/arms/<id>/<arm>/ (ingested),
       <out>/comparisons.<id>.json (the comparisons file with its suite set to <id>) and <out>/derive.json.
   flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
-      Flag each stack-arm unit-pass whose session touched, in that arm's install roots, a file the contamination audit lists
-      for the unit, or searched there for the unit's PR number or fix commit (rules in lanes/review-noloss/flag-scan.ts).
+      Flag each stack-arm unit-pass whose session read, listed, grepped or diffed, in that arm's install roots, a file the
+      contamination audit lists for the unit, or searched there for the unit's PR number or fix commit (rules in
+      lanes/review-noloss/flag-scan.ts). A catalog problem or a blocker whose case does not load fails the scan.
       Writes one row per flag (unit, arm, model, pass, rule, tool, call, path, audit_path); derive --drop-file reads it.
+      A sealed suite's --out must sit outside the repo.
   secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
       The secondaries score does not compute: each arm's recall at any severity beside its blocking recall (per blocker,
       PR-clustered interval); new blockers (unmatched blocking findings adjudicated a defect) per pass per
       PR, paired by PR with the clustered interval and exact two-sided sign-flip; and idea-card wins (blocking blockers the
       variant found in every pass and the reference in none) beside a null from random within-unit label swaps, its mean
-      and 95th percentile. Defaults: --draws 10000, --permutations 10000.
+      and 95th percentile. Each recall line counts the arm's judgments with coverage incomplete, which count as misses;
+      the new-blocker test needs complete coverage. score's blinding guards apply, and labelled lines say so.
+      Defaults: --draws 10000, --permutations 10000.
   judge-join --suite <id|path> --key <file> --reply <file> [--second <file>] [--third <file>] --arm <dir>... --out <dir>
         [--replace <reason>] [--unjudged <file>]
       Check each reply against the key's batch and packet digests, apply severity mechanically (the highest mapped
@@ -129,12 +134,14 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       Send each judge the brief, the batch's batch.json and one packet per request (no tools, no system prompt, at most
       16000 output tokens, reasoning effort medium on the OpenAI route) through an in-process metering proxy on a lease
       of the ledger item. The primary reads every packet, the second and third every packet holding a blocker or finding
-      of the sets judge-join names. A reply judge-join would refuse is asked again once; a second refusal goes to
-      unjudged.json. Writes primary.json, second.json and third.json for judge-join, impact.tsv or verifiable.tsv,
+      of the sets judge-join names. The proxy retries a 429 or 5xx within the retry budget (3 sends within 900 s); past
+      it, or on a transport error, the run stops. A reply judge-join would refuse is asked again once; a second refusal
+      goes to unjudged.json. Writes primary.json, second.json and third.json for judge-join, impact.tsv or verifiable.tsv,
       raw answers under raw/, and run.json with every file's sha256, then prints the judge-join command. Adjudication
       packets go out with an evidence sheet (the finding's masked evidence and the unit head's code from the --source
-      clone of its repo) and the run writes unverifiable.tsv. --dry-run checks everything, prints each request's worst
-      case and spends and writes nothing. Defaults: --concurrency 4, the default model policy.
+      clone of its repo) and the run writes unverifiable.tsv. impact.tsv and verifiable.tsv bind each row to its batch and
+      the finding's sha256. --dry-run checks everything, prints each request's worst case at 3 sends and the item's cap
+      beside the total, and spends and writes nothing. Defaults: --concurrency 4, the default model policy.
 
 Exit codes. Verification reads the verdict line and the first reason code, never exit 2 alone. score: 0 NO_LOSS with the size rule met, 1 LOSS, 2 otherwise (NOT_DISTINGUISHED, a NO_LOSS below or
 without the size rule, which warns NOLOSS_UNDERPOWERED, no verdict, or a refusal). Other commands: 0 on success, 2 on
@@ -413,9 +420,10 @@ function flagScanCmd(argv: string[], io: NolossIo): number {
   if (positional.length) throw new Usage("noloss flag-scan takes no positional arguments");
   for (const f of ["--suite", "--run", "--audit"]) if (!flags.has(f)) throw new Usage("noloss flag-scan needs " + f);
   const { suite } = loadSuite(flags.get("--suite")![0]!);
+  const out = flags.get("--out")?.[0];
+  if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write its flags outside it");
   const all = flags.get("--run")!.map((run) => flagScan({ suite, run: resolve(run), audit: flags.get("--audit")![0]!, home: flags.get("--home")?.[0] }));
   const text = flagsTsv(all.flatMap((r) => r.flags));
-  const out = flags.get("--out")?.[0];
   if (out) writeFileSync(out, text);
   const arms = [...new Set(all.flatMap((r) => Object.keys(r.sessions)))].sort();
   for (const arm of arms) {
@@ -447,20 +455,22 @@ function secondaryCmd(argv: string[], io: NolossIo): number {
   if (draws < 1000) throw new Usage("--draws takes an integer of at least 1000");
   const recall = [sv, sr].map((s) => {
     const m = armMetrics(suite, s, { seed, draws });
-    return { arm: s.arm.arm.id, blocking: m.blocking, any_severity: m.detection };
+    return { arm: s.arm.arm.id, blocking: m.blocking, any_severity: m.detection, incomplete: m.incomplete };
   });
+  const labelled = labelledJudging(v, r);
   const nb = newBlockers(suite, v, r, { seed, draws });
   const wins = ideaWins(suite, v, r, { seed, permutations: int("--permutations", 10000) });
   if (flags.has("--json")) {
-    io.out(JSON.stringify({ suite: { id: suite.id, sha256 }, variant: v.arm.id, reference: r.arm.id, seed, recall, new_blockers: nb, idea_wins: wins }, null, 2));
+    io.out(JSON.stringify({ suite: { id: suite.id, sha256 }, variant: v.arm.id, reference: r.arm.id, seed, labelled_judging: labelled, recall, new_blockers: nb, idea_wins: wins }, null, 2));
     return 0;
   }
   io.out("noloss secondary: " + v.arm.id + " vs " + r.arm.id + " on " + suite.id + " (sha256 " + sha256 + "), seed " + seed);
   const rate = (x: (typeof recall)[number]["blocking"]) => (x ? x.found + "/" + x.n + " = " + x.recall + " [" + (x.ci95?.join(", ") ?? "n/a") + "]" : "n/a");
-  for (const x of recall) io.out("recall, " + x.arm + ": blocking " + rate(x.blocking) + "; at any severity " + rate(x.any_severity));
-  if (!nb.complete) io.out("new blockers: no reading: " + nb.reasons.join("; "));
-  else io.out("new blockers per pass per PR: variant " + nb.per_pr!.variant + ", reference " + nb.per_pr!.reference + " (" + nb.totals!.variant + " and " + nb.totals!.reference + " in all, " + nb.prs + " PRs); difference " + nb.difference + " [" + (nb.ci95?.join(", ") ?? "n/a") + "], exact two-sided sign-flip p " + (nb.p_two_sided ?? "n/a") + " (min p " + (nb.min_p ?? "n/a") + ")");
-  io.out("idea-card wins: " + wins.wins + " of " + wins.blockers + " blocking blockers (found by " + v.arm.id + " in every pass and by " + r.arm.id + " in none; " + wins.left_out + " left out); null from " + int("--permutations", 10000) + " within-unit label swaps: mean " + wins.null_mean + ", 95th percentile " + wins.null_p95 + "; above the null: " + (wins.above_null ? "yes" : "no"));
+  const flag = labelled ? "labelled judging: " : "";
+  for (const x of recall) io.out(flag + "recall, " + x.arm + ": blocking " + rate(x.blocking) + "; at any severity " + rate(x.any_severity) + "; " + x.incomplete + " judgment" + (x.incomplete === 1 ? "" : "s") + " with coverage incomplete" + (x.incomplete ? ", counted as misses, so the complete-case derivation is the reading" : ""));
+  if (!nb.complete) io.out((nb.labelled ? "labelled adjudication: " : "") + "new blockers: no reading: " + nb.reasons.join("; "));
+  else io.out((nb.labelled ? "labelled adjudication: " : "") + "new blockers per pass per PR: variant " + nb.per_pr!.variant + ", reference " + nb.per_pr!.reference + " (" + nb.totals!.variant + " and " + nb.totals!.reference + " in all, " + nb.prs + " PRs); difference " + nb.difference + " [" + (nb.ci95?.join(", ") ?? "n/a") + "], exact two-sided sign-flip p " + (nb.p_two_sided ?? "n/a") + " (min p " + (nb.min_p ?? "n/a") + ")");
+  io.out(flag + "idea-card wins: " + wins.wins + " of " + wins.blockers + " blocking blockers (found by " + v.arm.id + " in every pass and by " + r.arm.id + " in none; " + wins.left_out + " left out); null from " + int("--permutations", 10000) + " within-unit label swaps: mean " + wins.null_mean + ", 95th percentile " + wins.null_p95 + "; above the null: " + (wins.above_null ? "yes" : "no"));
   for (const w of wins.won) io.out("  won: " + w);
   return 0;
 }
