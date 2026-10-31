@@ -471,6 +471,15 @@ export const CODES = {
     resumable: true,
     owner: "U3",
   },
+  E_DISK_LOW: {
+    exit: 2,
+    meaning: "A filesystem a real-host call fills has less free space than the call can need at its peak: the state root (arm installs, retained trees, the trial image tar) or Docker's root dir (arm images and build cache), or both when they share one. Preflight checks it before any lease.",
+    fix: "Free space on the filesystem the message names: delete <state>/installs while no run is going, prune Docker's build cache and arm images no run needs, or point XDG_STATE_HOME at a larger disk. Then run the same call again, with --resume <out> if it was a resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U10",
+  },
   E_IMAGE_BUILD: {
     exit: 2,
     meaning: "gstack-evals could not build the trial image (doctor) or an arm image, or a built arm image holds the skill's eval fixtures: a skill-evals path or a file with the same bytes as one in the tasks directory, which would put the answer key in the agent's reach.",

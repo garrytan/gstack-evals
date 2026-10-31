@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { getEncoding } from "js-tiktoken";
 import { cellSettings, PSTACK_RULE, pstackModelsRule } from "../../src/arms/cells.ts";
-import { installArms, InstallError, localInstaller, stackTree, type ArmInstall } from "../../src/arms/install.ts";
+import { installArms, InstallError, localInstaller, releaseInstalls, runHold, stackTree, type ArmInstall } from "../../src/arms/install.ts";
 import { SOL_AGENT, stackKind, STACKS } from "../../src/arms/stacks.ts";
 import { claudeCodeDriver, claudeCodeEnv, codexConfigCommand } from "../../src/adapters/claude-code/driver.ts";
 import { parseStackRef } from "../../src/skill-eval/cli/arms.ts";
@@ -161,6 +161,17 @@ describe("pstack and tstack installs", () => {
     expect((t.provenance as { files: Record<string, string> }).files).toEqual({ ".claude/agents/sol.md": sha(readFileSync(SOL_AGENT)) });
     expect(t.skill!.skillMd).toBe(".claude/skills/sol-loop/SKILL.md");
     expect(t.plugins).toEqual([]);
+  });
+
+  // Value: protects=a run holds tstack's Sol subagent layer like its install, and its release deletes both entries it built; fails_when=the files layer is built without the run's hold, so every tstack run leaves that entry in the install cache; why_new=GST-361 merge with #88 (the stack files layer is a cache entry that #85's holds did not reach); seam=installArms stack branch (files layer), releaseInstalls; no_claim=the Docker rig's close, which the Docker tier runs
+  test("tstack: a run holds both layers it built and deletes them on release", () => {
+    const state = scratch("state");
+    const hold = runHold(state, "r");
+    const [t] = installArms({ host: "claude", arms: [stackArm("tstack", ts.ref)], skill: "sol-loop", base: null, sources: [ts.root], runner: localInstaller(scratch("runner")), state, hold }) as [ArmInstall];
+    const entries = t.layers.map((l) => dirname(l.src)).sort();
+    expect(entries.map((e) => readFileSync(join(e + ".holds", "r"), "utf8"))).toEqual(["built\n", "built\n"]);
+    expect(releaseInstalls(hold).sort()).toEqual(entries);
+    expect(entries.filter((e) => existsSync(e))).toEqual([]);
   });
 
   // Value: protects=pstack's installer runs its own bootstrap and fails when the tree has none, so an arm never ships without poteto-mode's script dependencies; fails_when=the installer skips a missing bootstrap and the arm installs anyway; why_new=ship #88 red team (a re-pinned tree whose bootstrap moved would score as pstack losses); seam=PSTACK_INSTALL through installArms; no_claim=the real bootstrap's dependency install, which the canary runs

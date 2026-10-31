@@ -41,10 +41,10 @@ export function treeDigest(entries: Entry[]): string {
   return sha256(entries.filter((e) => e.type !== "dir").map((e) => e.sha256 + "  " + e.path + "\n").join(""));
 }
 
-export function skillNames(root: string): string[] {
+export function skillNames(root: string, skillsDir = ".claude/skills"): string[] {
   try {
-    return readdirSync(join(root, ".claude/skills"), { withFileTypes: true })
-      .filter((d) => d.isDirectory() && readdirSync(join(root, ".claude/skills", d.name)).includes("SKILL.md"))
+    return readdirSync(join(root, skillsDir), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && readdirSync(join(root, skillsDir, d.name)).includes("SKILL.md"))
       .map((d) => d.name)
       .sort();
   } catch {
@@ -52,9 +52,9 @@ export function skillNames(root: string): string[] {
   }
 }
 
-export function manifest(arm: string, root: string, tarPath: string, meta: Record<string, string>) {
+export function manifest(arm: string, root: string, tarPath: string, meta: Record<string, string>, skillsDir = ".claude/skills") {
   const entries = walk(root);
-  const skillsPrefix = ".claude/skills/";
+  const skillsPrefix = skillsDir + "/";
   const files = entries.filter((e) => e.type === "file");
   const skillEntries = entries.filter((e) => e.path.startsWith(skillsPrefix)).map((e) => ({ ...e, path: e.path.slice(skillsPrefix.length) }));
   const tar = readFileSync(tarPath);
@@ -70,10 +70,10 @@ export function manifest(arm: string, root: string, tarPath: string, meta: Recor
       digest: treeDigest(entries),
     },
     skills: {
-      count: skillNames(root).length,
+      count: skillNames(root, skillsDir).length,
       tree_digest: treeDigest(skillEntries),
       skill_md_digest: treeDigest(skillEntries.filter((e) => /^[^/]+\/SKILL\.md$/.test(e.path))),
-      names: skillNames(root),
+      names: skillNames(root, skillsDir),
     },
   };
   const list = ["sha256\tbytes\tmode\ttype\tpath", ...entries.map((e) => [e.sha256, e.size, e.mode.toString(8), e.type, e.path].join("\t"))];
