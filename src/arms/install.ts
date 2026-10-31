@@ -20,10 +20,16 @@
 // - A base arm is two layers: the base tree minus the target skill, installed (the none arm), then every file that
 //   installing the arm's skill folder in its place adds or changes. Each base arm runs the base's installer on its own
 //   tree, so the host's render of the skill (Codex renders gstack-<skill> from its template) is the installer's own.
-// - A stack arm is one layer: the stack at its sha, installed whole.
+// - A stack arm is the stack at its sha, or one subtree of it (StackRef.path, verified against git rev-parse <sha>:<path>),
+//   installed whole by its installer: gstack's setup, or the one src/arms/stacks.ts lists for pstack and tstack, with
+//   the checkout named for the stack. A stack listed with rig-authored files gets them as a second layer, and its
+//   provenance records each file's sha256. A stack that is a Claude Code plugin records its plugin root (plugins), which
+//   the host loads as a plugin directory, and the target skill is also looked up under the plugin's skills/.
 // - A placebo arm is one layer that Lane B's placebo generator (quick/laneb/arms/placebo/placebo.ts, its default seed)
 //   makes from the named arm's installed skills directory: every skill folder keeps one SKILL.md with its front matter
-//   (less hooks) and the router's routing text, and every other body becomes prose of the same o200k token count.
+//   (less hooks) and the router's routing text, and every other body becomes prose of the same o200k token count. For a
+//   plugin arm (pstack) the same is done under the plugin's skills/, and the plugin keeps only its manifest
+//   (.claude-plugin/plugin.json): no playbooks, scripts, references or agents.
 // - The target skill is the folder under the host's skills directory whose SKILL.md (links followed inside the tree)
 //   names it in its front matter. Its roots are every path that reaches that folder.
 import { spawnSync } from "node:child_process";
@@ -38,6 +44,7 @@ import { gstackCheckouts, NAME } from "../skill-eval/cli/arms.ts";
 import { dirTreeSha256 } from "../trial/cache.ts";
 import { FIXTURE_PATH, WRITABLE } from "../trial/image.ts";
 import type { ArmSpec, Host, StackRef } from "../types.ts";
+import { stackKind } from "./stacks.ts";
 
 /** A directory on this machine and where it lands, relative to the agent's HOME ("" for HOME itself). */
 export interface Layer {
@@ -65,6 +72,8 @@ export interface ArmInstall {
   skill: ArmSkill | null;
   /** gstack-skill-start relative to HOME, when the arm installs a gstack tree: calibration's config check runs it. */
   gstack: string | null;
+  /** Plugin roots relative to HOME that the host loads for each session as plugin directories (pstack); empty for most arms. */
+  plugins: string[];
   provenance: Record<string, unknown>;
 }
 
@@ -93,7 +102,7 @@ const cleanEnv = (): Record<string, string> => Object.fromEntries(Object.entries
 const git = (cwd: string, args: string[], env: Record<string, string> = cleanEnv()) => spawnSync("git", args, { cwd, env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 const sourceGit = (cwd: string, args: string[]) => git(cwd, ["--no-replace-objects", ...args], { ...cleanEnv(), GIT_NO_LAZY_FETCH: "1" });
 const quote = (s: string): string => "'" + s.replaceAll("'", "'\\''") + "'";
-const checkoutName = (ref: StackRef): string => ref.repo.split("/").pop()!;
+const checkoutName = (ref: StackRef): string => stackKind(ref)?.name ?? ref.repo.split("/").pop()!;
 const kept = (host: Host, name: string): string[] => [".local/share/" + name, SKILL_DIRS[host], ...(host === "claude" ? [".claude/settings.json"] : [])];
 
 /** Repositories that may hold a stack's commit, in search order: the inferred checkout, gstack checkouts, <state>/sources/*. */
@@ -110,18 +119,20 @@ const INSTALL_RECIPE = 2;
 
 const NO_ATTRIBUTES = "* -text -eol -crlf -filter -ident -diff -merge -export-subst -export-ignore -working-tree-encoding\n";
 
-/** The tree at ref.sha from the first source that holds the commit, extracted into to and verified against the commit's tree id. */
+/** The tree at ref.sha (or its subtree at ref.path) from the first source that holds the commit, extracted into to and verified against that tree's id. */
 export function stackTree(ref: StackRef, sources: readonly string[], to: string): { source: string; git_tree: string; tree_sha256: string } {
-  const name = ref.repo + "@" + ref.sha;
+  const name = ref.repo + "@" + ref.sha + (ref.path ? ":" + ref.path : "");
   const source = sources.find((s) => existsSync(s) && sourceGit(s, ["cat-file", "-e", ref.sha + "^{commit}"]).status === 0);
   if (!source) throw new InstallError("E_STACK_SOURCE", name + " is in no local repository (searched: " + (sources.join(", ") || "none") + ")", "Fetch the commit into a gstack checkout (git -C ~/.local/share/gstack fetch origin " + ref.sha + ") or clone the repository under <state>/sources/, then run again. The rig never fetches.");
-  const gitTree = sourceGit(source, ["rev-parse", ref.sha + "^{tree}"]).stdout.trim();
+  const treeish = ref.path ? ref.sha + ":" + ref.path : ref.sha + "^{tree}";
+  if (ref.path && sourceGit(source, ["cat-file", "-t", treeish]).stdout.trim() !== "tree") throw new InstallError("E_STACK_SOURCE", name + ": commit " + ref.sha + " in " + source + " has no folder at " + ref.path, "Check the subtree path, relative to the repository root: git -C " + source + " ls-tree " + ref.sha + " " + ref.path);
+  const gitTree = sourceGit(source, ["rev-parse", treeish]).stdout.trim();
   const scratch = to + ".x-" + randomBytes(4).toString("hex");
   const tree = join(scratch, "tree");
   mkdirSync(tree, { recursive: true });
   try {
     const tar = join(scratch, "tree.tar");
-    const archived = sourceGit(source, ["archive", "--format=tar", "-o", tar, ref.sha]);
+    const archived = sourceGit(source, ["archive", "--format=tar", "-o", tar, ref.path ? treeish : ref.sha]);
     const extracted = archived.status === 0 ? spawnSync("tar", ["-x", "-f", tar, "-C", tree], { encoding: "utf8" }) : archived;
     if (extracted.status !== 0) throw new InstallError("E_STACK_SOURCE", "cannot extract " + name + " from " + source + ": " + (extracted.stderr || "").trim());
     rmSync(tar);
@@ -284,8 +295,17 @@ function resolveIn(tree: string, rel: string, depth = 0): string | null {
 const frontName = (text: string): string | null => /^name:\s*["']?([A-Za-z0-9_.:-]+)["']?\s*$/m.exec(/^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "")?.[1] ?? null;
 const isFile = (tree: string, rel: string | null): rel is string => rel !== null && lstatSync(join(tree, rel), { throwIfNoEntry: false })?.isFile() === true;
 
-/** The target skill in an installed tree: every folder under skillsDir whose SKILL.md names it, with its real folder and aliases. */
-export function findSkill(tree: string, skillsDir: string, skill: string): ArmSkill | null {
+/** The target skill in an installed tree: under the host's skills directory, then each plugin root's skills/. */
+export function findSkill(tree: string, skillsDir: string, skill: string, plugins: readonly string[] = []): ArmSkill | null {
+  for (const dir of [skillsDir, ...plugins.map((p) => p + "/skills")]) {
+    const found = skillIn(tree, dir, skill);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Every folder under skillsDir whose SKILL.md names the skill, with its real folder and aliases. */
+function skillIn(tree: string, skillsDir: string, skill: string): ArmSkill | null {
   const top = join(tree, skillsDir);
   if (!existsSync(top)) return null;
   const entries = readdirSync(top).sort();
@@ -345,8 +365,10 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
   const work = join(o.state, "installs", "work-" + randomBytes(6).toString("hex"));
   const trees = new Map<string, ReturnType<typeof stackTree> & { dir: string }>();
   const extract = (ref: StackRef) => {
-    let t = trees.get(ref.sha);
-    if (!t) trees.set(ref.sha, (t = { ...stackTree(ref, o.sources, join(work, "src-" + ref.sha)), dir: join(work, "src-" + ref.sha) }));
+    const id = ref.repo + "@" + ref.sha + ":" + (ref.path ?? "");
+    const dir = join(work, "src-" + sha(id).slice(0, 24));
+    let t = trees.get(id);
+    if (!t) trees.set(id, (t = { ...stackTree(ref, o.sources, dir), dir }));
     return t;
   };
   const install = (ref: StackRef, folder: string | null | undefined, command: string, label: string) => {
@@ -369,9 +391,9 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
   };
   const digestOf = (layer: Layer, known?: string) => layer.dest + " " + (known ?? dirTreeSha256(layer.src));
   const gstackIn = (tree: string) => (isFile(tree, resolveIn(tree, skillsDir + "/gstack/bin/gstack-skill-start")) ? skillsDir + "/gstack/bin/gstack-skill-start" : null);
-  const need = (name: string, tree: string): ArmSkill => {
-    const found = findSkill(tree, skillsDir, o.skill!);
-    if (!found) throw new InstallError("E_USAGE", "arm " + name + " installs no skill named " + o.skill + " under ~/" + skillsDir + " (no folder there has a SKILL.md whose front matter names it)");
+  const need = (name: string, tree: string, plugins: readonly string[] = []): ArmSkill => {
+    const found = findSkill(tree, skillsDir, o.skill!, plugins);
+    if (!found) throw new InstallError("E_USAGE", "arm " + name + " installs no skill named " + o.skill + " under ~/" + [skillsDir, ...plugins.map((p) => p + "/skills")].join(" or ~/") + " (no folder there has a SKILL.md whose front matter names it)");
     return found;
   };
   const done: ArmInstall[] = [];
@@ -380,7 +402,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
   if (o.skill && !NAME.test(o.skill)) throw new InstallError("E_USAGE", "--skill " + JSON.stringify(o.skill) + " is not a skill name: a lowercase letter, then lowercase letters, digits, - or _");
   try {
     for (const arm of o.arms) {
-      const empty = (provenance: Record<string, unknown>): ArmInstall => ({ name: arm.name, layers: [], tree_sha256: arm.kind + ":" + arm.name, skill: null, gstack: null, provenance });
+      const empty = (provenance: Record<string, unknown>): ArmInstall => ({ name: arm.name, layers: [], tree_sha256: arm.kind + ":" + arm.name, skill: null, gstack: null, plugins: [], provenance });
       if (arm.kind === "bare" || (arm.kind === "overlay" && arm.base === null && arm.dir === null)) {
         done.push(empty({ kind: arm.kind }));
       } else if (arm.kind === "loadout") {
@@ -394,7 +416,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
           canonicalize(home, null);
         });
         const layer = { src: made.dir, dest: "" };
-        done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, made.tree_sha256)), skill: { roots: [at], skillMd: at + "/SKILL.md", dir: join(made.dir, at), file: join(made.dir, at, "SKILL.md") }, gstack: null, provenance: { kind: "overlay", dir: arm.dir, tree_sha256: made.tree_sha256 } });
+        done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, made.tree_sha256)), skill: { roots: [at], skillMd: at + "/SKILL.md", dir: join(made.dir, at), file: join(made.dir, at, "SKILL.md") }, gstack: null, plugins: [], provenance: { kind: "overlay", dir: arm.dir, tree_sha256: made.tree_sha256 } });
         fulls.set(arm.name, made.dir);
       } else if (arm.kind === "overlay") {
         const ref = arm.base!;
@@ -405,7 +427,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         const first = { src: none.dir, dest: "" };
         if (arm.dir === null) {
           if (findSkill(none.dir, skillsDir, o.skill!)) throw new InstallError("E_USAGE", "arm " + arm.name + ": the base still installs " + o.skill + " after its " + o.skill + "/ folder is removed, so none would hold the skill");
-          done.push({ name: arm.name, layers: [first], tree_sha256: sha(digestOf(first, none.tree_sha256)), skill: null, gstack: gstackIn(none.dir), provenance: { kind: "base", base, install: { command, runner: o.runner.id, tree_sha256: none.tree_sha256 } } });
+          done.push({ name: arm.name, layers: [first], tree_sha256: sha(digestOf(first, none.tree_sha256)), skill: null, gstack: gstackIn(none.dir), plugins: [], provenance: { kind: "base", base, install: { command, runner: o.runner.id, tree_sha256: none.tree_sha256 } } });
           fulls.set(arm.name, none.dir);
           continue;
         }
@@ -415,39 +437,61 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
           if (lost.length) throw new InstallError("E_IMAGE_BUILD", "installing arm " + arm.name + "'s skill folder on the base removes " + lost.slice(0, 5).join(", ") + (lost.length > 5 ? " and " + (lost.length - 5) + " more" : "") + ", which a layer on the base cannot remove");
         });
         const second = { src: top.dir, dest: "" };
-        done.push({ name: arm.name, layers: [first, second], tree_sha256: sha(digestOf(first, none.tree_sha256) + "\n" + digestOf(second, top.tree_sha256)), skill: need(arm.name, full.dir), gstack: gstackIn(full.dir), provenance: { kind: "base", base, dir: arm.dir, install: { command, runner: o.runner.id, tree_sha256: full.tree_sha256 } } });
+        done.push({ name: arm.name, layers: [first, second], tree_sha256: sha(digestOf(first, none.tree_sha256) + "\n" + digestOf(second, top.tree_sha256)), skill: need(arm.name, full.dir), gstack: gstackIn(full.dir), plugins: [], provenance: { kind: "base", base, dir: arm.dir, install: { command, runner: o.runner.id, tree_sha256: full.tree_sha256 } } });
         fulls.set(arm.name, full.dir);
       } else if (arm.kind === "stack") {
-        const command = arm.install[o.host] ?? stackInstall(o.host);
+        const kind = stackKind(arm.stack);
+        const command = arm.install[o.host] ?? (kind ? kind.install[o.host] : stackInstall(o.host));
+        if (!command) throw new InstallError("E_USAGE", "arm " + arm.name + ": " + kind!.name + " has no installer for " + o.host + "; it installs on " + Object.keys(kind!.install).join(" and "));
         const t = extract(arm.stack);
-        const full = install(arm.stack, undefined, command, arm.stack.repo + "@" + arm.stack.sha.slice(0, 12));
-        const layer = { src: full.dir, dest: "" };
-        done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, full.tree_sha256)), skill: need(arm.name, full.dir), gstack: gstackIn(full.dir), provenance: { kind: "stack", stack: { repo: arm.stack.repo, sha: arm.stack.sha, source: t.source, git_tree: t.git_tree, tree_sha256: t.tree_sha256 }, install: { command, runner: o.runner.id, tree_sha256: full.tree_sha256 } } });
+        const full = install(arm.stack, undefined, command, arm.stack.repo + "@" + arm.stack.sha.slice(0, 12) + (arm.stack.path ? ":" + arm.stack.path : ""));
+        const layers: Layer[] = [{ src: full.dir, dest: "" }];
+        const digests = [digestOf(layers[0]!, full.tree_sha256)];
+        const files = Object.entries(o.host === "claude" ? (kind?.files ?? {}) : {}).map(([dest, src]) => ({ dest, src, sha256: sha(readFileSync(src)) }));
+        if (files.length) {
+          const added = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, files: files.map((f) => [f.dest, f.sha256]) })), { files: files.map((f) => ({ dest: f.dest, sha256: f.sha256 })) }, (home) => {
+            for (const f of files) {
+              mkdirSync(join(home, posix.dirname(f.dest)), { recursive: true });
+              writeFileSync(join(home, f.dest), readFileSync(f.src));
+            }
+            canonicalize(home, null);
+          });
+          layers.push({ src: added.dir, dest: "" });
+          digests.push(digestOf(layers[1]!, added.tree_sha256));
+        }
+        const plugins = kind?.plugin ? [".local/share/" + kind.name] : [];
+        done.push({ name: arm.name, layers, tree_sha256: sha(digests.join("\n")), skill: need(arm.name, full.dir, plugins), gstack: gstackIn(full.dir), plugins, provenance: { kind: "stack", stack: { repo: arm.stack.repo, sha: arm.stack.sha, ...(arm.stack.path ? { path: arm.stack.path } : {}), source: t.source, git_tree: t.git_tree, tree_sha256: t.tree_sha256 }, install: { command, runner: o.runner.id, tree_sha256: full.tree_sha256 }, ...(files.length ? { files: Object.fromEntries(files.map((f) => [f.dest, f.sha256])) } : {}) } });
         fulls.set(arm.name, full.dir);
       } else {
         const of = done.find((d) => d.name === arm.of);
         if (!of?.skill) throw new InstallError("E_USAGE", "placebo arm " + arm.name + " is generated from arm " + arm.of + ", which installs no skill");
         const tree = fulls.get(of.name)!;
         const generator = sha(readFileSync(PLACEBO_GENERATOR));
-        const made = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, placebo: of.tree_sha256, generator, seed: DEFAULT_SEED, skillsDir })), { placebo_of: of.tree_sha256, generator_sha256: generator, seed: DEFAULT_SEED }, (home) => {
-          const folders = readdirSync(join(tree, skillsDir)).sort().flatMap((e) => {
-            const real = resolveIn(tree, skillsDir + "/" + e + "/SKILL.md");
-            return isFile(tree, real) ? [[e, join(tree, real)] as const] : [];
-          });
+        const plugins = of.plugins;
+        const roots = [skillsDir, ...plugins.map((p) => p + "/skills")];
+        const made = cached(o.state, sha(JSON.stringify({ recipe: INSTALL_RECIPE, placebo: of.tree_sha256, generator, seed: DEFAULT_SEED, skillsDir, ...(plugins.length ? { plugins } : {}) })), { placebo_of: of.tree_sha256, generator_sha256: generator, seed: DEFAULT_SEED }, (home) => {
+          const folders = roots.flatMap((root) => (existsSync(join(tree, root)) ? readdirSync(join(tree, root)).sort() : []).flatMap((e) => {
+            const real = resolveIn(tree, root + "/" + e + "/SKILL.md");
+            return isFile(tree, real) ? [[root + "/" + e, join(tree, real)] as const] : [];
+          }));
           for (const [folder, file] of folders) {
             let text: string;
             try {
-              text = placeboSkill(folder, readFileSync(file, "utf8"), DEFAULT_SEED).output;
+              text = placeboSkill(posix.basename(folder), readFileSync(file, "utf8"), DEFAULT_SEED).output;
             } catch (error) {
-              throw new InstallError("E_IMAGE_BUILD", "the placebo generator cannot rewrite " + skillsDir + "/" + folder + "/SKILL.md: " + (error as Error).message);
+              throw new InstallError("E_IMAGE_BUILD", "the placebo generator cannot rewrite " + folder + "/SKILL.md: " + (error as Error).message);
             }
-            mkdirSync(join(home, skillsDir, folder), { recursive: true });
-            writeFileSync(join(home, skillsDir, folder, "SKILL.md"), text);
+            mkdirSync(join(home, folder), { recursive: true });
+            writeFileSync(join(home, folder, "SKILL.md"), text);
+          }
+          for (const p of plugins) {
+            mkdirSync(join(home, p, ".claude-plugin"), { recursive: true });
+            writeFileSync(join(home, p, ".claude-plugin", "plugin.json"), readFileSync(join(tree, p, ".claude-plugin", "plugin.json")));
           }
           canonicalize(home, null);
         });
         const layer = { src: made.dir, dest: "" };
-        done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, made.tree_sha256)), skill: need(arm.name, made.dir), gstack: null, provenance: { kind: "placebo", of: arm.of, seed: DEFAULT_SEED, generator_sha256: generator, tree_sha256: made.tree_sha256 } });
+        done.push({ name: arm.name, layers: [layer], tree_sha256: sha(digestOf(layer, made.tree_sha256)), skill: need(arm.name, made.dir, plugins), gstack: null, plugins, provenance: { kind: "placebo", of: arm.of, seed: DEFAULT_SEED, generator_sha256: generator, tree_sha256: made.tree_sha256, ...(plugins.length ? { plugins } : {}) } });
         fulls.set(arm.name, made.dir);
       }
     }

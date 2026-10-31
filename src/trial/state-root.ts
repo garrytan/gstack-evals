@@ -24,16 +24,16 @@ export function seedConfig(proactive: Proactive): Record<string, string> {
 
 /**
  * Seeds <work>/.gstack-home and returns the two variables for the env allowlist, pointing at it under the work dir's
- * path in the child (workPath). Existing files are kept; the harness's config keys are appended after any the fixture
+ * path in the child (workPath). extra overrides seed keys, such as a stack cell's gstack config (src/arms/cells.ts). Existing files are kept; the harness's config keys are appended after any the fixture
  * wrote, and gstack reads the last value of a key.
  */
-export function seedStateRoot(work: string, workPath: string, proactive: Proactive = "core"): { GSTACK_STATE_ROOT: string; GSTACK_HOME: string } {
+export function seedStateRoot(work: string, workPath: string, proactive: Proactive = "core", extra: Record<string, string> = {}): { GSTACK_STATE_ROOT: string; GSTACK_HOME: string } {
   const root = join(work, STATE_ROOT_DIR);
   mkdirSync(root, { recursive: true });
   for (const marker of ONBOARDING_MARKERS) if (!existsSync(join(root, marker))) writeFileSync(join(root, marker), "");
   const config = join(root, "config.yaml");
   const before = existsSync(config) ? readFileSync(config, "utf8") : "";
-  const lines = Object.entries(seedConfig(proactive)).map(([k, v]) => k + ": " + v);
+  const lines = Object.entries({ ...seedConfig(proactive), ...extra }).map(([k, v]) => k + ": " + v);
   writeFileSync(config, before + (before && !before.endsWith("\n") ? "\n" : "") + "# seeded by gstack-evals for a trial\n" + lines.join("\n") + "\n");
   const path = workPath.replace(/\/+$/, "") + "/" + STATE_ROOT_DIR;
   return { GSTACK_STATE_ROOT: path, GSTACK_HOME: path };
