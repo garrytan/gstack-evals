@@ -1,0 +1,15 @@
+noloss power --suite stacks-r1.json --margin 10 --passes 2 --recall 0.65
+| Design | PRs | Blocking blockers | Passes per arm | Equal arm NO_LOSS at 10 pts | False NO_LOSS at delta -10 |
+|---|---|---|---|---|---|
+| stacks-r1 | 26 | 42 | 2 | 45.0% | 4.1% |
+
+holm-power.ts.txt stacks-r1.json
+PR clusters 26, blocking blockers 42, 2 passes per arm, 2,000 suites, seed 1
+| Loss (points) | LOSS at alpha 0.05 | LOSS at alpha 0.0125 (Holm, strictest step) |
+|---|---|---|
+| 10 | 35.0% | 15.3% |
+| 15 | 64.5% | 36.0% |
+| 20 | 86.2% | 62.5% |
+| 23 | 93.5% | 76.3% |
+| 25 | 95.7% | 84.0% |
+| 30 | 99.1% | 95.0% |

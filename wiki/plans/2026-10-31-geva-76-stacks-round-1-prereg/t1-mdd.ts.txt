@@ -1,0 +1,284 @@
+#!/usr/bin/env bun
+// GEVA-76 / GST-432, finding T1: the minimum detectable difference (MDD) of the review-noloss false-blocker test.
+// Keyless and read-only: it reads GSTA-167's judged arms with the lane's own code (suite.ts loadSuite, ingest.ts
+// snapshot, contract.ts parseArm, mapSeverity and matchedBlockers), builds per-unit false-blocker proxy counts, and
+// simulates the frozen test (exact two-sided sign flip over PR clusters, stats.ts) under a location shift.
+// Run: env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u UBICLOUD_API_KEY bun t1-mdd.ts
+// Paths: GSTACK_EVALS (repo), GSTA167_DIR (handoff folder), T1_OUT (output folder). Seed 1, 2,000 suites per cell.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const REPO = process.env.GSTACK_EVALS ?? "/workspace/gstack-evals";
+const DATA = process.env.GSTA167_DIR ?? join(process.env.HOME ?? "/home/user", ".capy/drive/org-gstack-gbrain/handoffs/GSTA-167");
+const OUT = process.env.T1_OUT ?? join(process.env.HOME ?? "/home/user", ".capy/work/geva76/t1");
+const LANE = join(REPO, "lanes/review-noloss");
+
+const { parseArm, mapSeverity, matchedBlockers } = await import(join(LANE, "contract.ts"));
+const { loadSuite } = await import(join(LANE, "suite.ts"));
+const { snapshot } = await import(join(LANE, "ingest.ts"));
+const { twoSidedSignFlip, ALPHA } = await import(join(LANE, "stats.ts"));
+const { seededRandom } = await import(join(REPO, "src/runner/stats/paired.ts"));
+
+const SEED = 1;
+const SIMS = 2000;
+const NS = [20, 22, 24, 26, 28, 30, 32];
+const SHARES = [1, 0.5, 0.25];
+const DELTAS = Array.from({ length: 141 }, (_, i) => Math.round(i * 5) / 100);
+const POWER = 0.8;
+
+const SUITES: Record<string, string> = { "14pr": join(LANE, "suites/gsta167-14pr.json"), u14: join(DATA, "gsta167-u14.json") };
+const ARMS = [
+  { key: "C", suite: "14pr", dir: "arm-C" },
+  { key: "G1", suite: "14pr", dir: "arm-G1" },
+  { key: "G1old", suite: "14pr", dir: "arm-G1old" },
+  { key: "L", suite: "14pr", dir: "arm-L" },
+  { key: "LC", suite: "14pr", dir: "arm-LC" },
+  { key: "A3668", suite: "14pr", dir: "arm-A3668/gsta167-14pr" },
+  { key: "C6", suite: "u14", dir: "arm-C6" },
+  { key: "L6", suite: "u14", dir: "arm-L6" },
+  { key: "A3668", suite: "u14", dir: "arm-A3668/gsta167-u14" },
+];
+
+const mean = (x: number[]) => x.reduce((s, v) => s + v, 0) / x.length;
+const sd = (x: number[]) => {
+  const m = mean(x);
+  return Math.sqrt(x.reduce((s, v) => s + (v - m) ** 2, 0) / (x.length - 1));
+};
+const r3 = (x: number) => Math.round(x * 1000) / 1000;
+
+interface UnitCounts {
+  unit: string;
+  cluster: string;
+  /** False-blocker proxy per pass: blocking findings matched to no blocker, or only to over-blocking blockers. */
+  fb: number[];
+  critical: number[];
+  /** Summaries of every finding per pass, to detect reader output two arms share. */
+  lines: Array<Set<string>>;
+  fbLines: string[][];
+}
+
+const loaded = ARMS.map((a) => {
+  const { suite, sha256 } = loadSuite(SUITES[a.suite]!);
+  const arm = parseArm(snapshot(join(DATA, a.dir)), suite, sha256);
+  if (arm.arm.passes !== 2 || (arm.arm.status ?? "complete") !== "complete" || !arm.findings || !arm.judgments) throw new Error(a.dir + ": need a complete, judged, live 2-pass arm");
+  const matched = matchedBlockers(arm.judgments);
+  const units: UnitCounts[] = suite.units.map((u: any) => {
+    const c: UnitCounts = { unit: u.id, cluster: u.cluster, fb: [0, 0], critical: [0, 0], lines: [new Set(), new Set()], fbLines: [[], []] };
+    for (const f of arm.findings.get(u.id) ?? []) {
+      c.lines[f.pass - 1]!.add(f.summary);
+      if (mapSeverity(arm.arm, f.raw, f.reader) !== "CRITICAL") continue;
+      c.critical[f.pass - 1]!++;
+      const blockers = matched.get(f) ?? [];
+      if (blockers.some((b: any) => b.counts !== "over-blocking")) continue;
+      c.fb[f.pass - 1]!++;
+      c.fbLines[f.pass - 1]!.push(f.summary);
+    }
+    return c;
+  });
+  const overBlocking = suite.units.reduce((n: number, u: any) => n + u.blockers.filter((b: any) => b.counts === "over-blocking").length, 0);
+  return { ...a, id: arm.arm.id as string, units, overBlocking, adjudicated: arm.adjudications?.length ?? 0 };
+});
+type Loaded = (typeof loaded)[number];
+const name = (a: Loaded) => a.key + " (" + a.suite + ")";
+
+const armRows = loaded.map((a) => {
+  const sum = (k: "fb" | "critical", p: number) => a.units.reduce((s, u) => s + u[k][p]!, 0);
+  const diffs = a.units.map((u) => u.fb[0]! - u.fb[1]!);
+  return {
+    arm: name(a),
+    dir: a.dir,
+    units: a.units.length,
+    critical: [sum("critical", 0), sum("critical", 1)],
+    fb: [sum("fb", 0), sum("fb", 1)],
+    fb_per_unit: r3((sum("fb", 0) + sum("fb", 1)) / 2 / a.units.length),
+    sd_pass1_minus_pass2: r3(sd(diffs)),
+    sd_within_per_pass: r3(sd(diffs) / Math.SQRT2),
+    over_blocking_blockers: a.overBlocking,
+    adjudication_rows: a.adjudicated,
+  };
+});
+
+interface Pair {
+  label: string;
+  parts: Array<[Loaded, Loaded]>;
+}
+const find = (key: string, suite: string) => loaded.find((a) => a.key === key && a.suite === suite)!;
+const pairs: Pair[] = [];
+for (const suite of ["14pr", "u14"]) {
+  const arms = loaded.filter((a) => a.suite === suite);
+  for (let i = 0; i < arms.length; i++) for (let j = i + 1; j < arms.length; j++) pairs.push({ label: arms[j]!.key + " − " + arms[i]!.key + " (" + suite + ")", parts: [[arms[j]!, arms[i]!]] });
+}
+pairs.push({ label: "L∘G1 − C′ (L−C on 14pr, L6−C6 on u14)", parts: [[find("L", "14pr"), find("C", "14pr")], [find("L6", "u14"), find("C6", "u14")]] });
+pairs.push({ label: "A3668 − L∘G1 (A3668−L on 14pr, A3668−L6 on u14)", parts: [[find("A3668", "14pr"), find("L", "14pr")], [find("A3668", "u14"), find("L6", "u14")]] });
+pairs.push({ label: "A3668 − C′ (A3668−C on 14pr, A3668−C6 on u14)", parts: [[find("A3668", "14pr"), find("C", "14pr")], [find("A3668", "u14"), find("C6", "u14")]] });
+
+function pairStats(p: Pair) {
+  const d: number[] = [];
+  const vMean: number[] = [];
+  const rMean: number[] = [];
+  const vPP: number[] = [];
+  const rPP: number[] = [];
+  let shared = 0;
+  let vLines = 0;
+  for (const [v, r] of p.parts)
+    v.units.forEach((u, i) => {
+      const w = r.units[i]!;
+      if (w.unit !== u.unit) throw new Error("unit order differs");
+      vMean.push(mean(u.fb));
+      rMean.push(mean(w.fb));
+      d.push(mean(u.fb) - mean(w.fb));
+      vPP.push(u.fb[0]! - u.fb[1]!);
+      rPP.push(w.fb[0]! - w.fb[1]!);
+      for (const pass of [0, 1]) {
+        vLines += u.fbLines[pass]!.length;
+        shared += u.fbLines[pass]!.filter((s) => w.lines[pass]!.has(s)).length;
+      }
+    });
+  const sdV = sd(vPP) / Math.SQRT2;
+  const sdR = sd(rPP) / Math.SQRT2;
+  const noise = (sdV ** 2 + sdR ** 2) / 2;
+  const test = twoSidedSignFlip(d.map((x) => Math.round(x * 2)));
+  return {
+    label: p.label,
+    n: d.length,
+    variant_per_pr: r3(mean(vMean)),
+    reference_per_pr: r3(mean(rMean)),
+    mean_d: r3(mean(d)),
+    sd_d: r3(sd(d)),
+    p_two_sided: test.p === null ? null : r3(test.p),
+    sd_within_variant: r3(sdV),
+    sd_within_reference: r3(sdR),
+    pass_noise_share_of_var_d: r3(noise / sd(d) ** 2),
+    shared_fb_lines: r3(shared / Math.max(1, vLines)),
+    d,
+  };
+}
+const pairRows = pairs.map(pairStats);
+
+/**
+ * The exact null of the signed sum for values y_i = h/2 * a_i + c, a_i integers: a 2D table over (A = sum s_i a_i,
+ * k = number of + signs). One table serves every share h and shift c, so each simulated suite is convolved once.
+ */
+function signTable(a: number[]) {
+  const N = a.length;
+  const S = a.reduce((s, v) => s + Math.abs(v), 0);
+  const W = 2 * S + 1;
+  let dist = new Float64Array((N + 1) * W);
+  dist[S] = 1;
+  let reach = 0;
+  a.forEach((v, t) => {
+    const next = new Float64Array((N + 1) * W);
+    for (let k = 0; k <= t; k++)
+      for (let A = S - reach; A <= S + reach; A++) {
+        const q = dist[k * W + A]!;
+        if (q === 0) continue;
+        next[(k + 1) * W + A + v]! += q / 2;
+        next[k * W + A - v]! += q / 2;
+      }
+    dist = next;
+    reach += Math.abs(v);
+  });
+  const upper = new Float64Array((N + 1) * (W + 1));
+  const lower = new Float64Array((N + 1) * (W + 1));
+  for (let k = 0; k <= N; k++) {
+    for (let A = W - 1; A >= 0; A--) upper[k * (W + 1) + A] = upper[k * (W + 1) + A + 1]! + dist[k * W + A]!;
+    for (let A = 0; A < W; A++) lower[k * (W + 1) + A + 1] = lower[k * (W + 1) + A]! + dist[k * W + A]!;
+  }
+  return { N, S, W, upper, lower, sumA: a.reduce((s, v) => s + v, 0) };
+}
+
+/** Two-sided p, P(|h/2 A + c B| >= |observed|), B = 2k - N, the observed sum being every sign +. */
+function pTwoSided(t: ReturnType<typeof signTable>, h: number, c: number): number {
+  const half = h / 2;
+  const T = Math.abs(half * t.sumA + c * t.N);
+  if (T < 1e-9) return 1;
+  const eps = 1e-7;
+  let p = 0;
+  for (let k = 0; k <= t.N; k++) {
+    const B = 2 * k - t.N;
+    const hi = Math.ceil((T - c * B) / half - eps) + t.S;
+    const lo = Math.floor((-T - c * B) / half + eps) + t.S;
+    if (hi <= 0) p += t.upper[k * (t.W + 1)]!;
+    else if (hi < t.W) p += t.upper[k * (t.W + 1) + hi]!;
+    if (lo >= t.W - 1) p += t.lower[k * (t.W + 1) + t.W]!;
+    else if (lo >= 0) p += t.lower[k * (t.W + 1) + lo + 1]!;
+  }
+  return Math.min(1, p);
+}
+
+function selfCheck() {
+  const rng = seededRandom(7);
+  let worst = 0;
+  for (let trial = 0; trial < 40; trial++) {
+    const N = 4 + Math.floor(rng() * 9);
+    const a = Array.from({ length: N }, () => Math.floor(rng() * 13) - 6);
+    const h = [1, 0.5, 0.25][trial % 3]!;
+    const c = Math.round((rng() * 4 - 2) * 20) / 20;
+    const y = a.map((v) => (h / 2) * v + c);
+    const obs = Math.abs(y.reduce((s, v) => s + v, 0));
+    let hits = 0;
+    for (let m = 0; m < 1 << N; m++) {
+      let s = 0;
+      for (let i = 0; i < N; i++) s += m & (1 << i) ? y[i]! : -y[i]!;
+      if (Math.abs(s) >= obs - 1e-9) hits++;
+    }
+    const brute = obs < 1e-9 ? 1 : hits / (1 << N);
+    const mine = pTwoSided(signTable(a), h, c);
+    const lane = twoSidedSignFlip(y.map((v) => Math.round(v * 40))).p ?? 1;
+    worst = Math.max(worst, Math.abs(brute - mine), Math.abs(lane - mine));
+  }
+  if (worst > 1e-12) throw new Error("self-check failed: the 2D sign-flip table differs from enumeration by " + worst);
+  return worst;
+}
+
+/** Power curves for one source of paired differences: bootstrap N clusters from the centered d, scaled by h, shifted by delta. */
+function mdd(d: number[]) {
+  const dbar = mean(d);
+  const a0 = d.map((x) => {
+    if (Math.abs(2 * x - Math.round(2 * x)) > 1e-9) throw new Error("d is not a multiple of 0.5");
+    return Math.round(2 * x);
+  });
+  const out: Record<string, any> = {};
+  for (const N of NS) {
+    const rng = seededRandom(SEED);
+    const hits = SHARES.map(() => [DELTAS.map(() => 0), DELTAS.map(() => 0)]);
+    for (let s = 0; s < SIMS; s++) {
+      const t = signTable(Array.from({ length: N }, () => a0[Math.floor(rng() * a0.length)]!));
+      SHARES.forEach((h, hi) =>
+        [-1, 1].forEach((dir, di) =>
+          DELTAS.forEach((delta, k) => {
+            if (pTwoSided(t, h, dir * delta - h * dbar) < ALPHA) hits[hi]![di]![k]!++;
+          }),
+        ),
+      );
+    }
+    out[N] = SHARES.map((h, hi) => {
+      const power = hits[hi]!.map((row) => row.map((x) => x / SIMS));
+      const first = (row: number[]) => {
+        const k = row.findIndex((p, i) => i > 0 && p >= POWER);
+        return k < 0 ? null : DELTAS[k]!;
+      };
+      return { share: h, size_at_0: r3(power[0]![0]!), mdd_drop: first(power[0]!), mdd_rise: first(power[1]!), normal: r3((2.8 * h * sd(d)) / Math.sqrt(N)), power_drop_at_0_5: r3(power[0]![DELTAS.indexOf(0.5)]!) };
+    });
+  }
+  return out;
+}
+
+const check = selfCheck();
+const SOURCES = ["L∘G1 − C′ (L−C on 14pr, L6−C6 on u14)", "A3668 − L∘G1 (A3668−L on 14pr, A3668−L6 on u14)", "G1 − C (14pr)"];
+const mdds = Object.fromEntries(SOURCES.map((label) => [label, mdd(pairRows.find((p) => p.label === label)!.d)]));
+
+mkdirSync(OUT, { recursive: true });
+writeFileSync(join(OUT, "t1-results.json"), JSON.stringify({ seed: SEED, sims: SIMS, alpha: ALPHA, self_check_max_error: check, arms: armRows, pairs: pairRows, mdd: mdds }, null, 2) + "\n");
+
+const md: string[] = [];
+md.push("| Arm | Units | CRITICAL p1 / p2 | Proxy FB p1 / p2 | FB per unit per pass | SD(p1−p2) | Within-arm per-pass SD |", "|---|---|---|---|---|---|---|");
+for (const a of armRows) md.push("| " + [a.arm, a.units, a.critical.join(" / "), a.fb.join(" / "), a.fb_per_unit, a.sd_pass1_minus_pass2, a.sd_within_per_pass].join(" | ") + " |");
+md.push("", "| Pair (V − R) | n | V per PR | R per PR | mean d | SD d | two-sided p | within SD V / R | pass-noise share of Var d | V FB lines also in R |", "|---|---|---|---|---|---|---|---|---|---|");
+for (const p of pairRows) md.push("| " + [p.label, p.n, p.variant_per_pr, p.reference_per_pr, p.mean_d, p.sd_d, p.p_two_sided, p.sd_within_variant + " / " + p.sd_within_reference, p.pass_noise_share_of_var_d, p.shared_fb_lines].join(" | ") + " |");
+for (const [label, byN] of Object.entries(mdds)) {
+  md.push("", "MDD source: " + label, "", "| N | " + SHARES.map((h) => "share " + h + ": MDD drop / rise / normal / size at 0").join(" | ") + " |", "|---|" + SHARES.map(() => "---").join("|") + "|");
+  for (const N of NS) md.push("| " + N + " | " + byN[N].map((x: any) => [x.mdd_drop ?? ">7", x.mdd_rise ?? ">7", x.normal, x.size_at_0].join(" / ")).join(" | ") + " |");
+}
+console.log(md.join("\n"));
+console.error("self-check max error " + check);
