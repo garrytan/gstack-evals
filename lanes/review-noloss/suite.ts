@@ -285,6 +285,8 @@ export function catalogsDigest(suite: Suite, root: string): string {
 export function suiteStub(suite: Suite, text: string, root: string, custody: string): SuiteStub {
   if (!suite.sealed) throw new SuiteError("suite " + suite.id + " is not sealed, so it needs no stub; commit it whole");
   if (!custody.startsWith(PROCEDURAL_CUSTODY)) throw new SuiteError("--custody must start \"" + PROCEDURAL_CUSTODY + "\", such as \"" + PROCEDURAL_CUSTODY + ": an age-encrypted bundle, key held apart\"");
+  const leaks = sealedLeaks(suite, suite.title + "\n" + suite.purpose + "\n" + custody);
+  if (leaks.length) throw new SuiteError("the stub would publish what the seal hides in the suite's title, purpose or custody: " + leaks.join(", ") + "; reword them in the sealed suite");
   return { schema_version: 1, id: suite.id, title: suite.title, kind: suite.kind, sealed: true, stub: true, purpose: suite.purpose, sha256: sha256(text), catalogs_sha256: catalogsDigest(suite, root), counts: stubCounts(suite), custody };
 }
 
@@ -375,11 +377,11 @@ export function checkSuite(suite: Suite, options: { repoRoot?: string; prereg?: 
 
 export const countsFor = (c: CatalogCase): Counts => (c.severity.deserved === "CRITICAL" ? "blocking" : c.severity.deserved === "INFORMATIONAL" ? "over-blocking" : "detection");
 
-/** Every identifier of a sealed suite's units and cases that a text names: unit ids, clusters, commits and case ids. */
+/** Every identifier of a sealed suite's units and cases that a text names: unit ids, clusters, repos, commits (full, 12 and 7 characters) and case ids. */
 export function sealedLeaks(suite: Suite, text: string): string[] {
   const words = new Set<string>();
   for (const u of suite.units) {
-    for (const w of [u.id, u.cluster, u.head, u.head.slice(0, 12), u.base, u.base.slice(0, 12)]) words.add(w);
+    for (const w of [u.id, u.cluster, u.repo, u.head, u.head.slice(0, 12), u.head.slice(0, 7), u.base, u.base.slice(0, 12), u.base.slice(0, 7)]) words.add(w);
     for (const b of u.blockers) words.add(b.case);
   }
   return [...words].filter((w) => text.includes(w)).sort();

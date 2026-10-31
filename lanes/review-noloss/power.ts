@@ -33,7 +33,7 @@ export interface PowerInput {
   alpha_no_loss?: number;
   /** Both tests' alpha (alpha_no_loss, when set, still wins for the no-loss test). Default 0.05. */
   alpha?: number;
-  /** The share of each blocker's beta concentration drawn once per PR cluster, from 0 to 1. Default 0. */
+  /** The chance, per blocker and pass, that a blocker takes its PR cluster's shared draw in place of its own, from 0 to 1. Default 0. */
   dependence?: number;
 }
 

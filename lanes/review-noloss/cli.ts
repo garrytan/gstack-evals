@@ -63,8 +63,8 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       A comparisons file's loss_family Holm-adjusts its comparisons' LOSS p in the declared order under its null, and
       LOSS is decided on the adjusted p. The false-blocker reading pairs false blockers per pass by PR (exact two-sided
       sign-flip, PR-clustered interval, per-PR table); --false-blocker-drop is the smallest per-PR drop that counts.
-      --false-alarm-gate (or a comparison's false_alarm_gate) reads must-fix false alarms on decoy units only (units
-      whose every blocker is a bait) and gates the reference: a LOSS whose reference's excess false alarms per decoy has
+      --false-alarm-gate (or a comparison's false_alarm_gate) reads must-fix false alarms on decoy units only (group
+      decoy in a plan suite, else units whose every blocker is a bait) and gates the reference: a LOSS whose reference's excess false alarms per decoy has
       a 95% interval reaching past the margin warns FALSE_ALARM_GATE_FAIL, and its claim may not be made.
       The text output ends with "verdict: <LOSS|NOT_DISTINGUISHED|NO_LOSS|none> [NOLOSS_UNDERPOWERED]". --expect reads
       the run from that line (or the JSON record) and the first reason code, and exits 0 only when the outcome is one
@@ -82,7 +82,8 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       reference gets NO_LOSS at each margin, the false NO_LOSS rate when the variant is worse by the first margin, and
       with --loss the share of LOSS for that loss. --spread is wide (beta concentration 2, the plan's), narrow (8) or a
       number. --alpha sets both tests' alpha (a Holm family's strictest step is 0.05 over its size); --dependence is
-      the share of a blocker's detection-rate concentration its PR cluster shares (the flaws of one plan move together).
+      the chance, per blocker and pass, that a blocker takes its PR cluster's shared draw in place of its own (the flaws
+      of one plan move together).
       Defaults: --sims 2000, --seed 1, --spread wide, --alpha 0.05, --dependence 0.
   judge-packet --suite <id|path> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate] [--source <owner/repo>=<clone>]...
       --adjudicate packs only the blocking findings judgments.tsv leaves unmatched, with each unit's known informational
@@ -91,7 +92,7 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       findings pooled in a seeded shuffle under opaque ids, with path, line and text only, severity words masked. A
       text naming an arm id or label, "arm <id>", a model id or a hyphenated reader is refused. --key, which maps ids
       back to arms, must sit outside --out. A plan suite's packets show each finding's section, claim, evidence and fix,
-      with gstack's plan review heading words stripped, give each blocker its section, line and cause, and carry the
+      with gstack's plan review heading words removed (no marker), give each blocker its section, line and cause, and carry the
       unit's tree at its head from the --source clone, whose plan.md must hash to every case's plan digest.
   derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit ref>]... [--drop-file <tsv>]
         [--drop-gaps] [--detection-only <unit ref>:<blocker>]... [--severity-map <file> | --impact <impact.tsv> --key <file> --impact-judge <judge> | --first-k <k>]

@@ -2,7 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadCatalog } from "../../lanes/review-replay/catalog/catalog.ts";
-import { PLAN_HEADING_WORDS, PLAN_HEADING_WORDS_SHA256 } from "../../lanes/review-noloss/judge.ts";
+import { PLAN_HEADING_WORDS, PLAN_HEADING_WORDS_SHA256, PLAN_MATERIAL_CAP, planMaterial } from "../../lanes/review-noloss/judge.ts";
+import { spawnSync } from "node:child_process";
 import { simulate } from "../../lanes/review-noloss/power.ts";
 import { checkSealedRoot, checkSuite, loadSuite, PLAN_JUDGING_RULE, REPO_ROOT, sealedLeaks, stubProblems, suiteFromCatalog, suiteStub, SUITES_DIR, type SuiteStub } from "../../lanes/review-noloss/suite.ts";
 import { cleanup, run, tmp } from "./helpers.ts";
@@ -83,7 +84,7 @@ describe("the sealed root and the stub (open item 1)", () => {
     expect(stub.counts).toEqual({ units: 15, clusters: 15, blocking: 21, detection: 0, over_blocking: 4, groups: { seeded: 10, "real-neutral": 1, decoy: 4 } });
     expect(sealedLeaks(panel.suite, r.out)).toEqual([]);
     const head = panel.suite.units[0]!.head;
-    expect(sealedLeaks(panel.suite, "unit " + head)).toEqual([head.slice(0, 12), head].sort());
+    expect(sealedLeaks(panel.suite, "unit " + head)).toEqual([head.slice(0, 7), head.slice(0, 12), head].sort());
     const bare = await run(["suite", "--stub", "--suite", panel.suitePath, "--custody", "an age bundle", ...S]);
     expect([bare.code, bare.err]).toEqual([2, expect.stringContaining('--custody must start "procedural custody"')]);
     expect(stubProblems({ ...stub, custody: "sealed per plan v3.2" })).toEqual(['custody must start "procedural custody": a key held apart is procedural custody, not plan v3.2 sealing']);
@@ -185,7 +186,8 @@ describe("plan judge packets (B6, open item 11)", () => {
     expect(one.blockers).toEqual([{ id: "B1", section: "Problem", line: 3, cause: expect.stringContaining("losing links") }, { id: "B2", section: "Scope", line: 9, cause: expect.stringContaining("three apps") }]);
     const text = files.map((f) => readFileSync(join(dir, "p1", "packets", f), "utf8")).join("\n");
     for (const leak of ["Premise Challenge", "Nuclear Scope Challenge", "GSTACK REVIEW REPORT", "CRITICAL", "HIGH", "flagall", "High"]) expect(text).not.toContain(leak);
-    expect(one.findings[0].claim).toMatch(/^\[severity\]: the \[heading\] finds unit 1 solves the wrong problem\.$/);
+    expect(one.findings[0].claim).toMatch(/^\[severity\]: the finds unit 1 solves the wrong problem\.$/);
+    expect(text).not.toContain("[heading]");
     expect(one.material.plan_sha256).toBe(json(join(catalog, "planpanel-1-1.json")).plan.digest);
     expect(one.material.files.map((f: { path: string }) => f.path)).toEqual(["context/goals.md", "plan.md"]);
     expect(one.material.files[1].text).toBe(planText(1));
@@ -205,8 +207,39 @@ describe("plan judge packets (B6, open item 11)", () => {
   });
 
   test("the heading word list is frozen by its digest", () => {
-    expect(PLAN_HEADING_WORDS.length).toBe(56);
-    expect(PLAN_HEADING_WORDS_SHA256).toBe("2343723ec0b94ed9bf16e59b253c44d96b3cac68f214a594d9334c87d144bb3f");
+    expect(PLAN_HEADING_WORDS.length).toBe(63);
+    expect(PLAN_HEADING_WORDS_SHA256).toBe("ecb56e71518091b9e7b41bc5c3507ca3c29de228304e48c8f51398d50d03f853");
+  });
+
+  test("planMaterial refuses a head the clone lacks, a head with no plan.md and a tree over the cap", () => {
+    const u = panel.suite.units[0]!;
+    expect(() => planMaterial(panel.clone, "0".repeat(40))).toThrow("does not hold head " + "0".repeat(40));
+    expect(() => planMaterial(panel.clone, u.base)).toThrow("head " + u.base + " in " + panel.clone + " has no plan.md");
+    const big = join(tmp("noloss-plan-big-"), "clone");
+    cpSync(panel.clone, big, { recursive: true });
+    const git = (...a: string[]) => spawnSync("git", ["-C", big, ...a], { encoding: "utf8" }).stdout.trim();
+    git("checkout", "-q", "-b", "big", u.head);
+    writeFileSync(join(big, "context", "big.md"), "x".repeat(PLAN_MATERIAL_CAP));
+    git("add", "-A");
+    git("commit", "-q", "-m", "big");
+    expect(() => planMaterial(big, git("rev-parse", "HEAD"))).toThrow("over the plan packet's " + PLAN_MATERIAL_CAP);
+    const blob = git("rev-parse", "HEAD:context/goals.md");
+    rmSync(join(big, ".git", "objects", blob.slice(0, 2), blob.slice(2)));
+    expect(() => planMaterial(big, u.head)).toThrow("cannot read context/goals.md at head " + u.head);
+  });
+
+  test("a plan finding with no section is refused from packets", async () => {
+    const d = tmp("noloss-plan-nosection-");
+    const src = writePlanArm(join(d, "src"), panel.suite, { id: "nosection", passes: 1, raw: true, outcome: () => "F", text: () => ({ section: "", claim: "A finding.", evidence: "context/goals.md", fix: "Fix it." }) });
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", join(d, "arms"), ...S])).code).toBe(0);
+    const r = await run(["judge-packet", "--suite", panel.stubPath, "--arm", join(d, "arms", "planpanel-test", "nosection"), "--seed", "7", "--out", join(d, "p"), "--key", join(d, "k.json"), "--source", "example/plan-panel=" + panel.clone, ...S]);
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("it has no section, and a plan finding names the plan.md heading it is about")]);
+  });
+
+  test("sealedLeaks names 7-character commits and the unit repo, and a stub refuses a title that names one", () => {
+    const u = panel.suite.units[0]!;
+    expect(sealedLeaks(panel.suite, "see " + u.head.slice(0, 7) + " in " + u.repo)).toEqual([u.head.slice(0, 7), u.repo].sort());
+    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's title, purpose or custody: " + u.base.slice(0, 7));
   });
 });
 
@@ -261,6 +294,17 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     expect([rec.result.verdict, rec.false_alarm_gate.per_decoy, rec.false_alarm_gate.result, rec.false_alarm_gate.reasons, rec.loss_claim.eligible]).toEqual(["LOSS", { variant: 0, reference: 1 }, null, ["labelled and blind adjudication are never pooled"], false]);
   });
 
+  test("decoy rulings that are all labelled leave the gate unread beside blind judgments, so the claim may not be made", async () => {
+    const src = writePlanArm(join(dir, "src", "seen"), panel.suite, { ...arms("honest"), id: "seen", noise: 1 });
+    const adj = join(src, "adjudication.tsv");
+    writeFileSync(adj, readFileSync(adj, "utf8").replace(/^(\d+\tp\d+-n1\t\d+\tnot-defect\tsynthetic\t)no\t/gm, "$1yes\t"));
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", root, ...S])).code).toBe(0);
+    const file = join(dir, "seen.json");
+    writeFileSync(file, JSON.stringify({ ...json(prereg), comparisons: [cmp("none", "seen")], loss_family: { order: ["none-vs-seen"], null: "zero", reason: "test" } }));
+    const rec = JSON.parse((await score("none", "seen", ["--json"], panel.stubPath, root, file)).out);
+    expect([rec.result.verdict, rec.judging.labelled, rec.false_alarm_gate.result, rec.false_alarm_gate.reasons, rec.loss_claim.eligible]).toEqual(["LOSS", false, null, ["the decoy rulings are labelled adjudication, and the gate reads blind adjudication only"], false]);
+  });
+
   test("a comparisons file's gate must be a non-negative margin per decoy", async () => {
     const bad = join(dir, "bad.json");
     writeFileSync(bad, JSON.stringify({ ...json(prereg), comparisons: [{ ...cmp("none", "flagall"), false_alarm_gate: { margin: 1 } }], loss_family: { order: ["none-vs-flagall"], null: "zero", reason: "test" } }));
@@ -275,6 +319,9 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     const r = await score("none", "flagall", ["--json"], join(out, "planpanel-k1.json"), join(out, "arms"), join(out, "comparisons.planpanel-k1.json"));
     const rec = JSON.parse(r.out);
     expect([rec.result.verdict === "LOSS", rec.false_alarm_gate.per_decoy, rec.false_alarm_gate.result]).toEqual([false, { variant: 0, reference: 1 }, "PASS"]);
+    const inRepo = join(REPO_ROOT, ".plan-derive-test-" + process.pid);
+    const refused = await run(["derive", "--suite", panel.stubPath, "--comparisons", prereg, "--root", root, "--id", "planpanel-inrepo", "--out", inRepo, "--first-k", "1", ...S]);
+    expect([refused.code, refused.err, existsSync(inRepo)]).toEqual([2, expect.stringContaining("is inside the repo, and suite planpanel-inrepo derives from sealed suite planpanel-test, so it is sealed too"), false]);
     const both = await run(["derive", "--suite", panel.stubPath, "--comparisons", prereg, "--root", root, "--id", "planpanel-k2", "--out", join(dir, "k2"), "--first-k", "1", "--severity-map", prereg, ...S]);
     expect([both.code, both.err]).toEqual([2, expect.stringContaining("give one of --severity-map, --impact and --first-k")]);
   });
@@ -307,7 +354,7 @@ describe("a sealed suite's export table (open item 1)", () => {
     expect((await run(["ingest", leaky, "--suite", id, "--root", root, "--sealed-root", p.sealedRoot])).code).toBe(0);
     writeFileSync(cmpPath, JSON.stringify({ ...json(cmpPath), comparisons: [{ ...json(cmpPath).comparisons[0], id: "none-vs-leaky", reference: "leaky" }], loss_family: { order: ["none-vs-leaky"], null: "zero", reason: "test" } }));
     const leak = await exp(["--publish-sealed-table"]);
-    expect([leak.code, leak.err]).toEqual([2, expect.stringContaining("names what the seal hides, so it is not published: " + head)]);
+    expect([leak.code, leak.err]).toEqual([2, expect.stringContaining("names what the seal hides, so it is not published: " + head.slice(0, 7) + ", " + head)]);
     expect(readFileSync(table, "utf8")).toBe(text);
   });
 });

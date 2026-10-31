@@ -20,7 +20,7 @@ import { loadComparisons } from "./export.ts";
 import { prepare, publish, readIngested } from "./ingest.ts";
 import { batchDigest, type JudgeKey } from "./judge.ts";
 import { ScoreError } from "./score.ts";
-import { loadSuite, resolveUnit, sha256, type Suite, type Unit } from "./suite.ts";
+import { insideRepo, loadSuite, resolveUnit, sha256, type Suite, type Unit } from "./suite.ts";
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 /** The labels an impact re-map writes, and the severity each maps to. */
@@ -192,6 +192,7 @@ export function derive(o: DeriveOptions): DeriveResult {
     units,
     excluded: [...suite.excluded, ...[...dropped].map(([ref, why]) => ({ ref, reason: "dropped by noloss derive: " + why.join("; ") }))],
   };
+  if (derived.sealed && insideRepo(out)) usage("--out " + out + " is inside the repo, and suite " + o.id + " derives from sealed suite " + suite.id + ", so it is sealed too; write it under a directory outside the checkout");
   mkdirSync(out, { recursive: true });
   const suitePath = join(out, o.id + ".json");
   writeFileSync(suitePath, JSON.stringify(derived, null, 2) + "\n");

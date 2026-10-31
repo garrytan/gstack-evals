@@ -35,8 +35,9 @@ export const SECOND_SAMPLE = 0.2;
 const SEVERITY_WORDS = ["CRITICAL", "INFORMATIONAL", "HIGH", "MEDIUM", "LOW", "BLOCKER", "BLOCKING", "FIXABLE", "INVESTIGATE", "NIT", "MAJOR", "MINOR", "SEVERE", "P0", "P1", "P2", "P3"];
 
 /**
- * Heading words of gstack's plan reviews (plan-ceo-review at v1.91.379.0: its SKILL.md and its sections), stripped from
- * plan packets as [heading] so a judge cannot tell which arm used the skill by the review's headings. Frozen: the
+ * Heading words of gstack's plan reviews (plan-ceo-review at v1.91.379.0: its SKILL.md and its sections), removed from
+ * plan packets and evidence sheets with no marker, so a judge cannot tell which arm used the skill by the review's
+ * headings or by a marker where they stood. Frozen: the
  * preregistration pins PLAN_HEADING_WORDS_SHA256, and batch.json carries it.
  */
 export const PLAN_HEADING_WORDS: readonly string[] = [
@@ -44,6 +45,7 @@ export const PLAN_HEADING_WORDS: readonly string[] = [
   "Expansion Framing", "Mode-Specific Analysis", "Persist CEO Plan", "CEO Plan", "Temporal Interrogation", "10x Check", "Platonic Ideal", "Scope Decisions",
   "Accepted Scope", "Deferred to TODOS.md", "Reviewer Concerns", "Spec Review Loop", "Error & Rescue Map", "Error & Rescue Registry", "Failure Modes Registry",
   "Security & Threat Model", "Data Flow & Interaction Edge Cases", "Observability & Debuggability Review", "Deployment & Rollout Review", "Long-Term Trajectory Review",
+  "Architecture Review", "Code Quality Review", "Test Review", "Performance Review", "Design & UX Review", "Mega Plan Review Mode", "Search Before Building",
   "NOT in scope", "What already exists", "Scope Expansion Decisions", "Stale Diagram Audit", "Implementation Tasks", "Completion Summary", "Unresolved Decisions",
   "Plan File Review Report", "GSTACK REVIEW REPORT", "Review Readiness Dashboard", "Taste Calibration", "Landscape Check", "Retrospective Check", "Prime Directives",
   "PRE-REVIEW SYSTEM AUDIT", "SCOPE EXPANSION", "SELECTIVE EXPANSION", "HOLD SCOPE", "SCOPE REDUCTION", "Boil the Ocean", "Outside Voice", "gstack",
@@ -75,7 +77,7 @@ export function planMaterial(clone: string, head: string): PlanMaterial {
   if (!paths.includes("plan.md")) blind("head " + head + " in " + clone + " has no plan.md");
   let bytes = 0;
   const files = paths.map((path) => {
-    const body = gitOut(clone, ["show", head + ":" + path]) ?? Buffer.alloc(0);
+    const body = gitOut(clone, ["show", head + ":" + path]) ?? blind("cannot read " + path + " at head " + head + " in " + clone + " (a blob too big to read, or a broken object), so the plan packet would not carry the unit tree as it is");
     bytes += body.length;
     return { path, text: body.includes(0) ? "[binary file, " + body.length + " bytes]" : body.toString("utf8") };
   });
@@ -145,12 +147,15 @@ export function masker(arms: LoadedArm[]): (text: string) => string {
   return (text) => res.reduce((t, re) => t.replace(re, "[severity]"), text);
 }
 
-/** The mask packets and evidence sheets share: severity words, and on a plan suite gstack's heading words as [heading]. */
+/** A finding field as packets and evidence sheets show it: text as written, anything else as JSON, nothing as empty. */
+export const fieldText = (v: unknown): string => (typeof v === "string" ? v : v === undefined || v === null ? "" : JSON.stringify(v));
+
+/** The mask packets and evidence sheets share: severity words, and on a plan suite gstack's heading words, removed with the space before each. */
 export function packetMask(suite: Suite, arms: LoadedArm[]): (text: string) => string {
   const severityMask = masker(arms);
   if (suite.kind !== "plan") return severityMask;
   const headings = [...PLAN_HEADING_WORDS].sort((a, b) => b.length - a.length).map((w) => wholeWord(w, "gi"));
-  return (text) => headings.reduce((t, re) => t.replace(re, "[heading]"), severityMask(text));
+  return (text) => headings.reduce((t, re) => t.replace(re, "\u0000"), severityMask(text)).replace(/[ \t]?\u0000/g, "");
 }
 
 function shuffle<T>(items: T[], rng: () => number): T[] {
@@ -201,7 +206,8 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
       const opaque = "F" + String(i + 1).padStart(width, "0");
       entries.push({ packet: file, opaque, arm, pass: f.pass, finding: f.id });
       if (plan) {
-        const shown = { section: mask(typeof f.fields.section === "string" ? f.fields.section : ""), claim: mask(f.summary), evidence: mask(typeof f.fields.evidence === "string" ? f.fields.evidence : ""), fix: mask(f.fix) };
+        if (typeof f.fields.section !== "string" || !f.fields.section.trim()) problems.push(unitRef(suite, u) + ", arm " + arm + ", finding " + JSON.stringify(f.id) + ": it has no section, and a plan finding names the plan.md heading it is about");
+        const shown = { section: mask(fieldText(f.fields.section)), claim: mask(f.summary), evidence: mask(fieldText(f.fields.evidence)), fix: mask(f.fix) };
         for (const { rule, re } of leaks) if (Object.values(shown).some((t) => re.test(t))) problems.push(unitRef(suite, u) + ", arm " + arm + ", finding " + JSON.stringify(f.id) + ": its text names " + rule);
         return { id: opaque, line: f.line, ...shown };
       }
