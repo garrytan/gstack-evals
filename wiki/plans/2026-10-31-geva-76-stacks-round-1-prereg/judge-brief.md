@@ -14,7 +14,7 @@ Reply with one JSON object in the reply format the instructions file gives, plus
 
 ## Adjudication packets
 
-The instructions file gives the rulings: defect when the finding names a real defect at the pull request's head, not-defect when it does not, known-informational when it raises the unit's known informational case as a blocker. Every finding in these packets was raised as blocking by some review and matches no known blocker. Rule each one on the code at the head, which you may not see beyond what the finding quotes; when the finding's own evidence does not show a real defect and you cannot tell, rule not-defect. Reply in the instructions file's reply format, nothing else.
+The instructions file gives the rulings: defect when the finding names a real defect at the pull request's head, not-defect when it does not, known-informational when it raises the unit's known informational case as a blocker. Every finding in these packets was raised as blocking by some review and matches no known blocker. An evidence sheet follows each packet: for every finding id, the evidence its review gave (masked the way the packet is) and the head's code from 30 lines before to 30 lines after the line the finding names. Rule each finding on the code at the head as the sheet shows it, using that evidence. Rule not-defect when the evidence and the code shown do not establish a real defect. Add one extra key per packet, `verifiable`, mapping every finding id to true when the sheet was enough to rule either way and false when it was not. Reply in the instructions file's reply format plus that key, nothing else.
 
 ## Fixed settings
 

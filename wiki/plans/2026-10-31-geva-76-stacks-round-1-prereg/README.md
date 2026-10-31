@@ -18,7 +18,7 @@ attachments:
   - bbd2214b05d9b40e5bff7015c5244368c1a4f2d805cb91f13cf9857962cb81ac  contamination.ts.txt
   - da8b365d2619f4247a980c84996f5bc1d2bf0d5310e079b699dccb34353ccc5a  contamination.tsv
   - d44cc60b54f6668ab5f20a0194bdee3674f7fbde4bbaeb0adf44d666e046c824  holm-power.ts.txt
-  - c2a6c923f11c24c28c3ac5366303fe035a04201705f6794de9b68b49c35a4fca  judge-brief.md
+  - 67740937e4ff6af02ee9eaa225300c8b7f786d15d545cbbe2a0d660151c9101a  judge-brief.md
   - 89a4b74fa6d3fe1bb8c6051e6f8298b3aed679e1ef138bb6218c71f09b1fb13e  labels.tsv
   - caccbb7d01049952df7051de48fd0f6c9f8073cb0c2833e66940612e8306e2ec  power.txt
   - 929e669129a5528c676047a975cc6eb09f586ee461dbe5e5e8ad317cbb99c8f2  scoped-test.sh.txt
@@ -73,7 +73,7 @@ The told text is frozen in code at the rig pin and copied in [told.md](told.md):
 
 The primary severity map is [severity-map.json](severity-map.json): gstack CRITICAL, pstack findings its lead confirmed, and tstack BLOCKER and SHOULD count as blocking; pstack findings left unconfirmed count as informational. The none arm's free labels map BLOCKER, BLOCKING, HIGH and P0 to blocking. Sensitivity tables, for every arm alike: recall at any severity; tstack SHOULD as informational; pstack confirmed findings split by pstack's own severity; blocking by the judges' impact rating.
 
-Judges read blinded packets from `noloss judge-packet` at the rig pin, with the frame and impact rubric in [judge-brief.md](judge-brief.md): Opus 5.5 first, gpt-6.1-sol second, and a third read by Opus 5.5 on a reshuffled packet when they disagree. Every finding gets a versioned, blind per-finding judgment, and an over-blocking unit's known informational case is told apart from a new blocker by the suite's frozen bars (section 7).
+Judges read blinded packets from `noloss judge-packet` at the rig pin, with the frame and impact rubric in [judge-brief.md](judge-brief.md): Opus 5.5 first, gpt-6.1-sol second, and a third read by Opus 5.5 in a fresh session on the same packet when they disagree. A reshuffled packet, as the plan wrote, cannot join, since judge-join binds every reply to the batch digest. Every finding gets a versioned, blind per-finding judgment, and an over-blocking unit's known informational case is told apart from a new blocker by the suite's frozen bars (section 7).
 
 ## 4. Suite, units and the unit-image check
 
@@ -142,6 +142,8 @@ The alpha 0.05 column is a single test before Holm. The first test in Holm's ste
 
 A false blocker is a blocking finding that the blinded judges rule not a defect, plus any blocking finding on the 6 over-blocking units. The per-PR count is averaged over passes, paired by PR across arms and tested by exact two-sided sign-flip over PR clusters; the smallest per-PR drop that counts is 0.5. score.ts computes it from versioned per-finding adjudication rows (tests/noloss/adjudication.test.ts), which settles T6 and T9.
 
+**Evidence for adjudication.** At the rig pin, judge-packet puts each finding's claim (and fix) in the packet but not its evidence. A judge with no tools would then miss the proof a review gave, and a not-defect ruling made for want of it would count as a false blocker, which biases against arms that prove their findings. So the judge runner sends an evidence sheet with each adjudication packet. For each opaque id it gives the finding's evidence field, passed through judge-packet's mask and leak rules (a leak refuses the sheet, as it refuses a packet), and the unit head's code 30 lines either side of the finding's line (the file's first 200 lines when the line is null). Judges also return `verifiable` per finding, which the runner keeps out of the reply file like `impact` and writes to verifiable.tsv. Primary false-blocker counts use the rulings as judge-join scores them. A frozen sensitivity count drops every not-defect ruling that either judge marked not verifiable, and the results print how many such rulings each arm had.
+
 **T1.** [t1-mdd.md](t1-mdd.md) computes this test's minimum detectable difference from GSTA-167's judgments ([t1-mdd.ts.txt](t1-mdd.ts.txt), [t1-results.json](t1-results.json), 2,000 simulations, seed 1): about 1.15 false blockers per PR at 26 PRs and about 1.0 at 32 clusters, at 80% power and alpha 0.05. The headline treats every GSTA-167 blocking finding off the blocker list as a false blocker, since that data has no measured not-a-defect share; the friendliest source in it gives 0.65 at 26 PRs. Every reading is above 0.5, so section 1's routing rule applies.
 
 New blockers (unmatched blocking findings that blind adjudication upholds) are pooled into a named secondary table with its own paired test. The gbrain and escaped-defect strata are reported apart.
@@ -198,7 +200,7 @@ The pilot units are the suite units nearest the median and the 90th percentile o
 
 **Check timeouts** (GST-370 note 6, GST-414). Review units run no check, so none can time out; a session timeout is an incomplete pass as above. TB2's verifier timeout is a fail with a reason (section 8).
 
-**Step 5 build item.** The judge runner, which sends each judge the frozen brief, the packet's instructions and the packet through the metering proxy and writes replies for `noloss judge-join`, is keyless code that step 5 lands in its own pull request before any judging spend.
+**Step 5 build item.** The judge runner, which sends each judge the frozen brief, the packet's instructions and the packet through the metering proxy and writes replies for `noloss judge-join`, is keyless code that step 5 lands in its own pull request before any judging spend. It also builds the evidence sheet and keeps `impact` and `verifiable` out of the reply file (section 7).
 
 **Flags step 5 passes**, besides the item and cap: `--suite <this post>/stacks-r1.json`, `--severity-map <this post>/severity-map.json`, `--test garrytan/gstack=true --test garrytan/gbrain=true`, `--source` clones that hold each unit head, and the arms and models above. Scoring uses `--prereg <this post>/comparisons.stacks-r1.json`. TB2 launches set `UBI_OWNER` to the step 5 thread code, `ITEM=stacks-r1-tb2` and `PREREG` to this post's merge commit, and every VM is deleted when its job ends.
 
