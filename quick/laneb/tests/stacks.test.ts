@@ -7,12 +7,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { walk, treeDigest } from "../arms/tree.ts";
-import { CLAUDE_CODE_VERSION, PLUGIN_SKILLS, PSTACK, SETTINGS, settingsFor } from "../arms/stacks.ts";
-import { countTokens, frontmatterFields, proceduralMarkers, splitSkill, stripHooks, topicTerms } from "../arms/placebo/placebo.ts";
+import { manifest, skillNames, walk, treeDigest } from "../arms/tree.ts";
+import { CLAUDE_CODE_VERSION, PLUGIN_SKILLS, PSTACK, SETTINGS, placeboReport, settingsFor } from "../arms/stacks.ts";
+import { countTokens, frontmatterFields, placeboSkill, proceduralMarkers, splitSkill, stripHooks, topicTerms } from "../arms/placebo/placebo.ts";
 import { sse } from "../runner/fake_upstream.ts";
 
 const here = import.meta.dir;
@@ -57,6 +57,37 @@ describe("told skill map for the quick look 3 runner", () => {
     expect(Object.keys(MAP.gstack!).sort()).toEqual([...(show("quick/laneb/tasks/final.json").tasks as string[])].sort());
     const ql3 = show("quick/laneb/runner/skill-map.json") as Record<string, { skill: string }>;
     for (const arm of ["gstack", "placebo"]) expect(MAP[arm]).toEqual(Object.fromEntries(Object.entries(ql3).map(([t, v]) => [t, v.skill])));
+  });
+});
+
+describe("stacks build helpers", () => {
+  const skill = "---\nname: demo\ndescription: A demo skill for the build helper tests.\n---\n# Demo\n\nRead the inputs, then write the report and stop when it is done.\n";
+
+  // Value: protects=the skills section of the pstack manifests, which come from a skills dir other than .claude/skills; fails_when=manifest() or skillNames() ignores skillsDir, or the default dir stops being .claude/skills; why_new=GST-382 review (the real-arm manifest test skips in CI); seam=arms/tree.ts skillsDir; no_claim=the built tars' digests
+  test("skillNames and manifest read the skills dir they are given", () => {
+    const root = temp("tree");
+    for (const dir of [PLUGIN_SKILLS + "/demo", ".claude/skills/other"]) {
+      mkdirSync(join(root, dir), { recursive: true });
+      writeFileSync(join(root, dir, "SKILL.md"), skill);
+    }
+    const tar = join(temp("tar"), "demo.tar");
+    writeFileSync(tar, "tar");
+    expect(skillNames(root, PLUGIN_SKILLS)).toEqual(["demo"]);
+    expect(skillNames(root)).toEqual(["other"]);
+    expect(manifest("demo", root, tar, {}, PLUGIN_SKILLS).summary.skills).toMatchObject({ count: 1, names: ["demo"] });
+    expect(manifest("demo", root, tar, {}).summary.skills).toMatchObject({ count: 1, names: ["other"] });
+  });
+
+  // Value: protects=the build's refusal of a placebo body that is not the generator's output; fails_when=placeboReport() accepts an edited placebo SKILL.md, so a hand-edited body could ship in the tar; why_new=GST-382 review (the guard runs only in the docker build); seam=arms/stacks.ts placeboReport; no_claim=none
+  test("placeboReport refuses a placebo body that is not the generator's output", () => {
+    const seed = "gstack-evals/laneb/placebo/v1";
+    const [pstack, placebo] = [temp("pstack"), temp("placebo")];
+    for (const root of [pstack, placebo]) mkdirSync(join(root, PLUGIN_SKILLS, "demo"), { recursive: true });
+    writeFileSync(join(pstack, PLUGIN_SKILLS, "demo", "SKILL.md"), skill);
+    writeFileSync(join(placebo, PLUGIN_SKILLS, "demo", "SKILL.md"), placeboSkill("demo", skill, seed).output);
+    expect(placeboReport(pstack, placebo, seed).map((r) => r.folder)).toEqual(["demo"]);
+    writeFileSync(join(placebo, PLUGIN_SKILLS, "demo", "SKILL.md"), skill);
+    expect(() => placeboReport(pstack, placebo, seed)).toThrow("E_INTERNAL");
   });
 });
 
@@ -162,6 +193,7 @@ describe.skipIf(!BUILT)("pstack and pstack-placebo arms as built", () => {
     const home = extract("pstack").home;
     rmSync(join(home, SETTINGS));
     const bodies = await session(home, toldPrompt(MAP.pstack![Object.keys(MAP.pstack!)[0]!]!, "Print hello."));
+    expect(bodies.some((b) => (b.tools ?? []).some((t: { name: string }) => t.name === "Bash"))).toBe(true);
     expect(bodies.some((b) => inJson(b, marker(skillMd(pstack(), "poteto-mode"))))).toBe(false);
     expect(bodies.some((b) => inJson(b.messages, "<command-name>" + PSTACK.told.tb2 + "</command-name>"))).toBe(false);
   }, 120_000);
