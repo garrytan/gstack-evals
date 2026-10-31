@@ -145,6 +145,14 @@ export function masker(arms: LoadedArm[]): (text: string) => string {
   return (text) => res.reduce((t, re) => t.replace(re, "[severity]"), text);
 }
 
+/** The mask packets and evidence sheets share: severity words, and on a plan suite gstack's heading words as [heading]. */
+export function packetMask(suite: Suite, arms: LoadedArm[]): (text: string) => string {
+  const severityMask = masker(arms);
+  if (suite.kind !== "plan") return severityMask;
+  const headings = [...PLAN_HEADING_WORDS].sort((a, b) => b.length - a.length).map((w) => wholeWord(w, "gi"));
+  return (text) => headings.reduce((t, re) => t.replace(re, "[heading]"), severityMask(text));
+}
+
 function shuffle<T>(items: T[], rng: () => number): T[] {
   const a = [...items];
   for (let i = a.length - 1; i > 0; i--) {
@@ -175,9 +183,7 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   const unmatched = new Map(arms.map((a) => [a.arm.arm.id, adjudicate ? matchedBlockers(a.arm.judgments!) : null]));
   const pick = (a: LoadedArm, u: Unit) => (a.arm.findings!.get(u.id) ?? []).filter((f) => !adjudicate || (mapSeverity(a.arm.arm, f.raw, f.reader) === "CRITICAL" && !unmatched.get(a.arm.arm.id)!.has(f)));
   const rng = seededRandom(o.seed);
-  const severityMask = masker(arms);
-  const headings = [...PLAN_HEADING_WORDS].sort((a, b) => b.length - a.length).map((w) => wholeWord(w, "gi"));
-  const mask = plan ? (text: string) => headings.reduce((t, re) => t.replace(re, "[heading]"), severityMask(text)) : severityMask;
+  const mask = packetMask(suite, arms);
   const leaks = leakRules(arms);
   const cases = suiteCases(suite).cases;
   const problems: string[] = [];
