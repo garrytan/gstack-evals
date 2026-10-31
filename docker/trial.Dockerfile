@@ -17,11 +17,14 @@ RUN tar -xzf /tmp/claude-code.tgz -C /tmp package/claude \
  && install -m 0755 /tmp/package/claude /usr/local/bin/claude \
  && rm -rf /tmp/claude-code.tgz /tmp/package \
  && claude --version
-# Codex's is the binary @openai/codex's linux-x64 package carries, the one package.json pins for the adapter tests.
+# Codex's are the binaries @openai/codex's linux-x64 package carries in vendor/<triple>/bin, the package package.json pins
+# for the adapter tests. Every one is installed beside codex, as npm lays them out: codex 0.166 runs gpt-6 models in Code
+# Mode only and spawns codex-code-mode-host from its own directory, so without it every tool call fails closed (GST-360).
 ADD --checksum=sha256:cbc00a26d3d0e2ceefc4be8891f8a81ef1e349b3b175bc0ae308762bc001fd93 https://registry.npmjs.org/@openai/codex/-/codex-0.166.0-linux-x64.tgz /tmp/codex.tgz
-RUN tar -xzf /tmp/codex.tgz -C /tmp package/vendor/x86_64-unknown-linux-musl/bin/codex \
- && install -m 0755 /tmp/package/vendor/x86_64-unknown-linux-musl/bin/codex /usr/local/bin/codex \
+RUN tar -xzf /tmp/codex.tgz -C /tmp package/vendor/x86_64-unknown-linux-musl/bin \
+ && install -m 0755 /tmp/package/vendor/x86_64-unknown-linux-musl/bin/* /usr/local/bin/ \
  && rm -rf /tmp/codex.tgz /tmp/package \
- && codex --version
+ && codex --version \
+ && codex-code-mode-host --help >/dev/null
 ENV HOME=/home/agent LANG=C.UTF-8
 WORKDIR /work
