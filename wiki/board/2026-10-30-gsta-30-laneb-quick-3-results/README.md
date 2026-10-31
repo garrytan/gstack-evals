@@ -289,9 +289,9 @@ laneb3-pilot: Sonnet 5.5 and particle-1, arms gstack and placebo, 5 tasks, 1 tri
 
 ## What this means
 
-On these 39 tasks gstack's `/investigate` body does not help any of the four cheaper models, with a body-load rate of 100%. Quick look 2's loss to placebo on Opus, Haiku and DeepSeek V4.1 Flash shows again on Haiku and DeepSeek and extends to Sonnet 5.5 and particle-1, though the losses are small and none is clearly below zero on its own. The skill stays on the two tracks: harder tasks with headroom, or cutting the lines that do not help.
+On these 39 tasks gstack's `/investigate` body showed no benefit over placebo on any of the four cheaper models, with a body-load rate of 100%. Every point estimate is negative, but the intervals still allow gains of up to 5 points, so a small benefit is not ruled out. Quick look 2's loss to placebo on Opus, Haiku and DeepSeek V4.1 Flash shows again on Haiku and DeepSeek and extends to Sonnet 5.5 and particle-1, though the losses are small and none is clearly below zero on its own. The skill stays on the two tracks: harder tasks with headroom, or cutting the lines that do not help.
 
-The ladder question needs harder tasks. Opus 5.5 with no skills passes 79% and DeepSeek with no skills matches it, so there is no gap here for gstack to close. particle-1 is not a cheaper substitute for DeepSeek on this harness.
+The ladder question needs harder tasks. Opus 5.5 with no skills passes 79% and DeepSeek with no skills passes 81%, so this sample shows no gap for gstack to close. That is not parity: DeepSeek minus Opus is +2 [-10, +15], and the post makes no parity claim. particle-1 is not a cheaper substitute for DeepSeek on this harness.
 
 ## Pinned code and artifacts
 
