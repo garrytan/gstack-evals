@@ -35,7 +35,7 @@ export function nextTurn(body: any): Block[] {
   return [{ type: "text", text: "Fixed add() in calc.py." }];
 }
 
-function sse(model: string, blocks: Block[]): string {
+export function sse(model: string, blocks: Block[]): string {
   const stop = blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn";
   const ev: [string, unknown][] = [["message_start", { type: "message_start", message: { id: "msg_fake_" + Date.now(), type: "message", role: "assistant", model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: USAGE.input_tokens, cache_creation_input_tokens: USAGE.cache_creation_input_tokens, cache_read_input_tokens: USAGE.cache_read_input_tokens, output_tokens: 1 } } }]];
   blocks.forEach((b, i) => {
