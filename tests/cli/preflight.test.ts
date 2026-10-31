@@ -228,7 +228,7 @@ describe("preflight's ledger, key and host steps", () => {
     expect(r.err).toContain("E_INTERACTIVE_HOST fix: Use --host claude, or --tasks-only show,search,stats,export,add,prune-conflict,cross-project,empty,no-code-change");
     const real = await run(args("claude", "claude-opus-5-5"), KEYS);
     expect(real.err).not.toContain("GST-272");
-    expect(real.err).toContain("E_USAGE a real host runs under --isolation docker only; process isolation has no arm install");
+    expect(real.err).toContain("E_ISOLATION_COUNTED a real host run is counted (it leases from a ledger line item under a rig admission), so it runs under --isolation docker only");
   });
 
   // Value: protects=brief item 3: preflight flags a task that sends a PDF; fails_when=a PDF in the prompt or fixtures passes silently; why_new=U3 accepted inline base64 PDFs as won't-fix; seam=none; no_claim=how much the reservation is off

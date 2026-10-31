@@ -171,7 +171,7 @@ export function hostReadiness(call: Pick<Call, "host" | "arms" | "isolation" | "
   const stop = (message: string) => ({ code: "E_USAGE" as const, model: null, subject: null, message });
   const loadouts = call.arms.arms.filter((a) => a.kind === "loadout");
   if (loadouts.length) return stop("loadout arm" + (loadouts.length > 1 ? "s " : " ") + loadouts.map((a) => a.name).join(", ") + ": a real host has no loadout install yet; use loose skill folders, none and bare");
-  if (call.isolation !== "docker") return stop("a real host runs under --isolation docker only; process isolation has no arm install");
+  if (call.isolation !== "docker") return { code: "E_ISOLATION_COUNTED", model: null, subject: null, message: "a real host run is counted (it leases from a ledger line item under a rig admission), so it runs under --isolation docker only: under --isolation process the check runs on this machine, where the agent's code could write outside the trial" };
   if (call.item === null || call.spendCap === null) return stop("a real host run needs a ledger line item and --spend-cap");
   return null;
 }

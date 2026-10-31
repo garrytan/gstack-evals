@@ -67,7 +67,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--no-noise-floor` | off | Drop before2. |
 | `--ledger` | `GSTACK_EVALS_LEDGER`, else the state dir | The machine-local SQLite ledger; refused on a network or FUSE mount. |
 | `--ledger-record` | `GSTACK_EVALS_LEDGER_RECORD`, else the state dir | The approval record. On Capy, point it at your Captain drive. |
-| `--isolation` | docker | process must be explicit. Under docker, preflight runs task controls in containers on the trial image `doctor` pinned; with no daemon it stops with E_ISOLATION_UNSAFE, and with no pin for this checkout's recipe with E_IMAGE_STALE. |
+| `--isolation` | docker | process must be explicit, and a counted run (a real host) refuses it with E_ISOLATION_COUNTED. Under docker, preflight runs task controls in containers on the trial image `doctor` pinned; with no daemon it stops with E_ISOLATION_UNSAFE, and with no pin for this checkout's recipe with E_IMAGE_STALE. |
 | `--parallel` | min(4, available parallelism) | Sessions at once. |
 | `--timeout` | 600 | Seconds per session; a sidecar timeout_s overrides it per task. |
 | `--judge-model` | the policy's default for the subjects' provider | The cross-family judge for tasks with a judge rubric. |

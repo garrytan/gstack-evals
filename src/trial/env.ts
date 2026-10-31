@@ -1,7 +1,7 @@
 // The trial env allowlist (plan v3.2, "Execution, isolation and secrets"). Every setup, agent, check and proxy child starts
 // from an explicit list of names for its role, never from the evaluator's environment:
 // - setup and check: PATH, the trial HOME, LANG, TERM, GSTACK_STATE_ROOT and GSTACK_HOME, SKILL_EVAL_FIXTURES, and the
-//   task's declared fixture variables.
+//   task's declared fixture variables; the check also gets SKILL_EVAL_DELTA.
 // - agent: the same without SKILL_EVAL_FIXTURES (the agent never sees the tasks directory), plus the per-session bearer,
 //   the proxy base URL and the host's own settings (model purity, config dirs, session kind). The key and token names
 //   there must carry a per-session bearer from the metering proxy, never a provider key.
@@ -16,6 +16,9 @@
 import { FIXTURES_VAR } from "../skill-eval/contract/tasks.ts";
 
 export type EnvRole = "setup" | "agent" | "check" | "proxy";
+
+/** The check's path to the trial's delta.json (rule C of GEVA-68's audit): the evaluator's list of what the agent added, changed, deleted and dropped. */
+export const DELTA_VAR = "SKILL_EVAL_DELTA";
 
 /** Names the trial sets itself in every role but the proxy; a task may not declare them. */
 export const TRIAL_BASE_ENV: readonly string[] = ["PATH", "HOME", "LANG", "TERM", "GSTACK_STATE_ROOT", "GSTACK_HOME"];
@@ -37,7 +40,7 @@ export const PROVIDER_KEY_ENV: readonly string[] = ["ANTHROPIC_API_KEY", "OPENAI
 
 export const ROLE_ENV: Record<EnvRole, readonly string[]> = {
   setup: [...TRIAL_BASE_ENV, FIXTURES_VAR],
-  check: [...TRIAL_BASE_ENV, FIXTURES_VAR],
+  check: [...TRIAL_BASE_ENV, FIXTURES_VAR, DELTA_VAR],
   agent: [...TRIAL_BASE_ENV, ...SESSION_ENV, ...HOST_ENV],
   proxy: PROXY_ENV,
 };

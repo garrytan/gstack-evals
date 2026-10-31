@@ -2,9 +2,15 @@
 // the baseline snapshot, the agent with the work dir only, the filesystem delta imported against the baseline, and the
 // check run on the grade tree from a read-only copy of the tasks directory. The answer key never enters the agent's
 // environment: the tasks directory, the sidecar, mutants and hidden tasks reach setup and check only. Evaluator records
-// (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it.
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it. The check reads a copy of delta.json
+// in its tasks directory copy through SKILL_EVAL_DELTA; a tasks directory that holds that file's name, or a setup that
+// writes it, is refused as invalid. A trial whose import dropped anything names those paths in its record (dropped),
+// which the verdict reports as DELTA_DROPPED. When the import stood in for an escaping symlink, the grade tree is copied
+// before the check runs; if the check passes, it runs again on that copy without the placeholders, and the trial passes
+// only when that run passes too. A fail or an error in that run, or a copy that cannot be built, is a fail, never a
+// missing cell.
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 import { judgeCheck } from "../skill-eval/contract/check.ts";
 import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
@@ -12,8 +18,8 @@ import { FIXTURES_VAR, type ContractTask } from "../skill-eval/contract/tasks.ts
 import type { Category } from "../usersim/classifier.ts";
 import type { Termination, TokenUsage, TrialRecord } from "../types.ts";
 import { removeTree, type CleanupOptions } from "./cleanup.ts";
-import { importDelta, snapshot, type Delta } from "./delta.ts";
-import { trialEnv, TrialEnvError } from "./env.ts";
+import { importDelta, PLACEHOLDER, snapshot, type Delta } from "./delta.ts";
+import { DELTA_VAR, trialEnv, TrialEnvError } from "./env.ts";
 import type { AgentSession, Sandbox, StepResult } from "./sandbox.ts";
 import { seedStateRoot, type Proactive } from "./state-root.ts";
 
@@ -68,6 +74,8 @@ export interface TrialRun {
 }
 
 const PATH = "/usr/local/bin:/usr/bin:/bin";
+/** The check's copy of delta.json, in the trial's copy of the tasks directory. */
+const DELTA_FILE = ".skill-eval-delta.json";
 const tail = (r: StepResult) => r.stderr.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
 export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
@@ -76,6 +84,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const work = join(spec.dir, "work", task.id);
   const baseline = join(spec.dir, "baseline");
   const grade = join(spec.dir, "grade");
+  const bare = join(spec.dir, "grade-bare");
   const fixtures = join(spec.dir, "fixtures");
   const timeoutMs = (spec.entry?.timeout_s ?? spec.timeoutS) * 1000;
   mkdirSync(work, { recursive: true });
@@ -91,7 +100,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   };
   const finish = (delta: Delta | null): TrialRun => {
     record.wall_ms = Date.now() - started;
-    const leftovers = spec.keep ? [] : [work, baseline, grade, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
+    const leftovers = spec.keep ? [] : [work, baseline, grade, bare, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
     if (leftovers.length) logs.leftovers = leftovers;
     writeFileSync(join(spec.dir, "trial.json"), JSON.stringify({ record, delta, logs }, null, 2) + "\n");
     return { record, delta, dir: spec.dir, leftovers };
@@ -102,6 +111,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     return finish(null);
   };
   try {
+    if (lstatSync(join(fixtures, DELTA_FILE), { throwIfNoEntry: false })) return missing("E_TASKS_INVALID", "the tasks directory holds " + DELTA_FILE + ", a name the evaluator reserves for the check's copy of delta.json");
     const childEnv = (role: "setup" | "check", state: Record<string, string>) => trialEnv(role, { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", [FIXTURES_VAR]: sandbox.fixturesPath(fixtures), ...state }, declared, source);
     const stateVars = (path: string) => ({ GSTACK_STATE_ROOT: path + "/.gstack-home", GSTACK_HOME: path + "/.gstack-home" });
     if (task.setup !== undefined) {
@@ -122,18 +132,58 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);
-    writeFileSync(join(spec.dir, "delta.json"), JSON.stringify(delta, null, 2) + "\n");
+    const deltaJson = JSON.stringify(delta, null, 2) + "\n";
+    writeFileSync(join(spec.dir, "delta.json"), deltaJson);
+    if (delta.dropped.length) record.dropped = delta.dropped.map((d) => d.path);
     if (task.check !== undefined) {
-      const gradePath = sandbox.workPath(grade, task.id);
-      const r = sandbox.step("check", task.check, task.id, { work: grade, fixtures, env: childEnv("check", stateVars(gradePath)), timeoutMs });
-      logs.check = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
-      const verdict = judgeCheck(r, gradePath);
-      if (verdict.kind === "error") {
+      if (lstatSync(join(fixtures, DELTA_FILE), { throwIfNoEntry: false })) return missing("E_TASKS_INVALID", "setup wrote " + DELTA_FILE + ", a name the evaluator reserves for the check's copy of delta.json");
+      const mode = statSync(fixtures).mode & 0o7777;
+      chmodSync(fixtures, mode | 0o700);
+      try {
+        writeFileSync(join(fixtures, DELTA_FILE), deltaJson, { flag: "wx" });
+      } finally {
+        chmodSync(fixtures, mode);
+      }
+      const check = (tree: string) => {
+        const path = sandbox.workPath(tree, task.id);
+        const r = sandbox.step("check", task.check!, task.id, { work: tree, fixtures, env: childEnv("check", { ...stateVars(path), [DELTA_VAR]: sandbox.fixturesPath(fixtures) + "/" + DELTA_FILE }), timeoutMs });
+        return { log: { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) }, verdict: judgeCheck(r, path) };
+      };
+      const placeholders = delta.dropped.map((d) => d.path).filter((p) => existsSync(join(grade, p, PLACEHOLDER)));
+      let copyFailure: unknown;
+      if (placeholders.length) {
+        try {
+          snapshot(grade, bare);
+        } catch (error) {
+          copyFailure = error;
+        }
+      }
+      const first = check(grade);
+      logs.check = first.log;
+      if (first.verdict.kind === "error") {
         record.termination = { kind: "missing", code: "E_VERIFIER" };
-        logs.missing = verdict.reason;
+        logs.missing = first.verdict.reason;
         return finish(delta);
       }
-      record.check = verdict.kind === "pass";
+      record.check = first.verdict.kind === "pass";
+      if (!record.check || !placeholders.length) return finish(delta);
+      try {
+        if (copyFailure !== undefined) throw copyFailure;
+        for (const p of placeholders) {
+          const parent = dirname(join(bare, p));
+          const mode = statSync(parent).mode & 0o7777;
+          chmodSync(parent, mode | 0o700);
+          rmSync(join(bare, p), { recursive: true, force: true });
+          chmodSync(parent, mode);
+        }
+      } catch (error) {
+        logs.check_bare = { error: "the copy without placeholders could not be built: " + (error instanceof Error ? error.message : String(error)) };
+        record.check = false;
+        return finish(delta);
+      }
+      const second = check(bare);
+      logs.check_bare = second.log;
+      record.check = second.verdict.kind === "pass";
     }
     return finish(delta);
   } catch (error) {
