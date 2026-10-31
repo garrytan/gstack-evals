@@ -17,14 +17,16 @@ Each stack runs as its author publishes it, at a pinned commit. The rig never fe
 
 ## Cells
 
-Some settings differ by the cell's model, so arms.json and the session key record a tree per arm and per cell (src/arms/cells.ts). A cell is the session's model and the cross-family voice its proxy allowlist admits: gpt-6.1-sol in the Opus cells, none in cheap cells.
+Some settings differ by the cell's model, so `cellSettings` (src/arms/cells.ts) gives a tree per arm and per cell, for arms.json and the session key. A cell is the session's model and the cross-family voice its proxy allowlist admits: gpt-6.1-sol in the Opus cells, none in cheap cells.
 
 - pstack gets `~/.claude/rules/pstack-models.md`, the rule pstack's setup-pstack writes. The rig derives it from the shape in the pinned setup-pstack skill and maps it the way pstack's Claude Code adapter says. In an Opus cell, Claude slugs keep their family and effort, and every other seat runs on the session model. In a cheap cell, every role runs on the cell's model, and each panel keeps its length.
 - gstack gets state root config keys: `agent_model: host`, so its readers run on the parent model, and `codex_reviews` enabled only in a cell with a voice.
 - In a cell with a voice, gstack's outside voice and tstack's Sol reviewer run the Codex CLI. Before Claude Code starts, the Claude Code adapter writes `~/.codex/config.toml` for the session's proxy slot, and `OPENAI_API_KEY` carries the slot's bearer. No file holds a credential, and no provider key enters the session (E_CODEX_CONFIG if the step fails).
 
+The real-host run loop (src/skill-eval/cli/run-host.ts) loads each arm's plugin roots but does not apply cells yet: it builds no cell images, seeds no cell config and passes no voice. Step 2 of the plan wires them in. Today only the canary applies them.
+
 ## Canary
 
-tests/arms/stack-canary.test.ts is the keyless canary per stack. It installs each stack at its pin through the rig and runs real Claude Code sessions against the fake upstream with a scripted model. It checks that each told command resolves with its skill body in the first request, that the stacks' nested agents start, that the Sol subagent reaches gpt-6.1-sol through Codex on the slot, and that poteto-mode's scripts run with no registry. It skips unless both pinned commits are in `<state>/sources/`.
+tests/arms/stack-canary.test.ts is the keyless canary per stack. It installs each stack at its pin through the rig and runs real Claude Code sessions against the fake upstream with a scripted model. It checks that each told command resolves with its skill body in the first request, that the stacks' nested agents start, that the Sol subagent reaches gpt-6.1-sol through Codex on the slot, and that poteto-mode's scripts run with no registry. It skips unless `bun install` has put the Claude Code and Codex CLIs in node_modules and both pinned commits are in `<state>/sources/`.
 
 `GSTACK_EVALS_CANARY_DOCKER=1 bun test tests/arms/stack-canary.test.ts` runs the same sessions from the trial image. Each stack installs in the builder container, the arm and cell images are built, every session runs in its image, and `<state>/canary/arms.json` records each arm's repo, sha, subtree path, git tree, tree sha256 and image digest, and each cell's tree and image digest.
