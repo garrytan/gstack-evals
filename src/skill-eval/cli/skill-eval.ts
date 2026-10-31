@@ -36,7 +36,7 @@ import { spawnSync } from "node:child_process";
 import { skillName } from "./arms.ts";
 import { isReasonCode } from "../../errors/codes.ts";
 import { flagHelp, parseFlags, SKILL_EVAL_FLAGS } from "./flags.ts";
-import { preflight, type PreflightReport, type Stop } from "./preflight.ts";
+import { diskReadings, preflight, type PreflightReport, type Stop } from "./preflight.ts";
 import { MirrorAliasError, mirrorRun } from "./mirror.ts";
 import { homedir, tmpdir } from "node:os";
 
@@ -142,7 +142,7 @@ export async function skillEvalCommand(argv: string[], io: Io = consoleIo, env: 
   let report: PreflightReport | null = null;
   try {
     const isolated = call.isolation === "docker" && !call.dryRun ? containerRunner(dirname(resolve(call.tasks)), env) : null;
-    report = preflight(call, { env, dryRun: call.dryRun, host: hostCheck(call, env), ...(isolated ? ("runner" in isolated ? { runner: isolated.runner } : { isolationStop: isolated.stop }) : {}) });
+    report = preflight(call, { env, dryRun: call.dryRun, host: hostCheck(call, env), ...(isFakeHost(env) || call.dryRun ? {} : { disk: diskReadings(env) }), ...(isolated ? ("runner" in isolated ? { runner: isolated.runner } : { isolationStop: isolated.stop }) : {}) });
     for (const w of report.warnings) io.err(w.code + " " + w.message);
     const refuse = (stops: readonly Stop[], names: string[]): number => {
       printStops(io, stops);
