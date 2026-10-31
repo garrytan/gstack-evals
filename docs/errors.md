@@ -81,6 +81,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [NOT_DISTINGUISHED](#not_distinguished) | 2 | U13 |
 | [E_NOLOSS_BLIND](#e_noloss_blind) | 2 | U13 |
 | [E_NOLOSS_STALE](#e_noloss_stale) | 2 | U13 |
+| [E_NOLOSS_ADJUDICATION](#e_noloss_adjudication) | 2 | U13 |
+| [E_NOLOSS_EXPECT](#e_noloss_expect) | 2 | U13 |
 | [E_MINE_SOURCE](#e_mine_source) | 2 | U14 |
 | [E_MINE_HAND](#e_mine_hand) | 2 | U14 |
 | [E_MINE_STALE](#e_mine_stale) | 2 | U14 |
@@ -647,6 +649,22 @@ tables/review-noloss.json differs from what noloss export computes from the inge
 Fix: Run gstack-evals noloss export without --check, review the diff, and commit it only if the change is intended.
 
 Exit 2. Side effects: None: export --check writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_ADJUDICATION
+
+An arm's adjudication.tsv breaks arm contract v1: a missing column, a row naming no blocking finding of its unit and pass, a finding judgments.tsv already matches, a second row for one finding, a version other than 1, or a ruling other than defect, not-defect or known-informational (the last only on a unit with an over-blocking blocker).
+
+Fix: Fix the named row, or rebuild the file with noloss judge-packet --adjudicate and judge-join. A blocking finding with no row is not an error: the false-blocker reading reports it as incomplete.
+
+Exit 2. Side effects: None: the arm is not ingested or scored. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_NOLOSS_EXPECT
+
+noloss score --expect: the run's outcome, read from its verdict line or JSON record and its first reason code, is not one --expect lists, or the output cannot be read as an outcome (no verdict line, no reason code, or an exit code that disagrees with the verdict).
+
+Fix: Read the score output above this line. If the outcome is right, fix the --expect list; never accept a bare exit 2, which also covers refusals.
+
+Exit 2. Side effects: None beyond what score itself writes (--out). Retry safe: yes. Resumable: no. Owner: U13.
 
 ### E_MINE_SOURCE
 

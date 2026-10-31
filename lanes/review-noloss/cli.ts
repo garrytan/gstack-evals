@@ -13,7 +13,8 @@ import { buildExport, COMPARISONS_DIR, loadArms, loadComparisons, renderExport, 
 import { ARMS_ROOT, prepare, publish, readArmDir, snapshot } from "./ingest.ts";
 import { judgeJoin, judgePacket } from "./judge.ts";
 import { powerTable, renderPowerTable, spreadValue, suiteClusters } from "./power.ts";
-import { DEFAULT_DRAWS, DEFAULT_SEED, renderRecord, scoreComparisons, ScoreError, type Comparison } from "./score.ts";
+import { DEFAULT_DRAWS, DEFAULT_SEED, falseBlockerTable, renderRecord, scoreComparisons, ScoreError, type Comparison, type LossFamily } from "./score.ts";
+import { OUTCOMES, readScoreRun, verdictLine } from "./verdict.ts";
 import { blockerCount, checkSuite, insideRepo, loadSuite, SuiteError, suiteFromCatalog } from "./suite.ts";
 
 export const HELP = `Usage: gstack-evals noloss <command> [options]
@@ -36,7 +37,7 @@ Scores review variants on the blockers a reference review catches. No command ca
 
   score --suite <id|path> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>)
         [--frozen-bar <round>] [--reference-repeat <id>] [--power <share> --power-source <text> | --power-sims <n> [--spread <s>]]
-        [--root <dir>] [--seed <n>] [--draws <n>] [--json] [--out <file>]
+        [--false-blocker-drop <n>] [--root <dir>] [--seed <n>] [--draws <n>] [--json] [--out <file>] [--expect <outcome>[,<outcome>]...]
       Compare a variant with a reference on blocking recall, paired by blocker, with PRs as clusters. A margin and its
       reason are required; there is no default. --margin names a post hoc comparison; --prereg reads the comparison
       with this variant and reference from a comparisons file (lanes/review-noloss/comparisons/<suite>.json), with its
@@ -44,6 +45,13 @@ Scores review variants on the blockers a reference review catches. No command ca
       interval, losses, gains, both p-values and the minimum reachable p, the size rule, cost and claim eligibility.
       Lines from labelled judging open with "labelled judging". --json prints the versioned record instead; --out also
       writes it to a file. Defaults: --root lanes/review-noloss/arms, --seed ${DEFAULT_SEED}, --draws ${DEFAULT_DRAWS}.
+      A comparisons file's loss_family Holm-adjusts its comparisons' LOSS p in the declared order under its null, and
+      LOSS is decided on the adjusted p. The false-blocker reading pairs false blockers per pass by PR (exact two-sided
+      sign-flip, PR-clustered interval, per-PR table); --false-blocker-drop is the smallest per-PR drop that counts.
+      The text output ends with "verdict: <LOSS|NOT_DISTINGUISHED|NO_LOSS|none> [NOLOSS_UNDERPOWERED]". --expect reads
+      the run from that line (or the JSON record) and the first reason code, and exits 0 only when the outcome is one
+      it lists: LOSS, NOT_DISTINGUISHED, NO_LOSS (a claim), NOLOSS_UNDERPOWERED, NO_VERDICT or a reason code such as
+      E_NOLOSS_ARM; otherwise E_NOLOSS_EXPECT.
   export [--comparisons <file>] [--root <dir>] [--table <path>] [--check]
       Score every ingested arm of the comparisons file's suite and every comparison in it as one Holm family,
       regenerate its power table, write the table (default tables/review-noloss.json) and print a markdown render.
@@ -55,7 +63,9 @@ Scores review variants on the blockers a reference review catches. No command ca
       reference gets NO_LOSS at each margin, the false NO_LOSS rate when the variant is worse by the first margin, and
       with --loss the share of LOSS for that loss. --spread is wide (beta concentration 2, the plan's), narrow (8) or a
       number. Defaults: --sims 2000, --seed 1, --spread wide.
-  judge-packet --suite <id|path> --arm <dir>... --seed <n> --out <dir> --key <file>
+  judge-packet --suite <id|path> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
+      --adjudicate packs only the blocking findings judgments.tsv leaves unmatched, with each unit's known informational
+      case; judge-join on that key writes adjudication.tsv (defect, not-defect or known-informational per finding).
       Build blinded judge packets, one per unit, from arm directories with findings (ingested or source): every arm's
       findings pooled in a seeded shuffle under opaque ids, with path, line and text only, severity words masked. A
       text naming an arm id or label, "arm <id>", a model id or a hyphenated reader is refused. --key, which maps ids
@@ -67,10 +77,10 @@ Scores review variants on the blockers a reference review catches. No command ca
       arm at once, ready for noloss ingest. It names and waits for the second judge (every blocker where the arms
       differ, plus a seeded 20% sample) and a third read (every blocker where the judges differ).
 
-Exit codes. score: 0 NO_LOSS with the size rule met, 1 LOSS, 2 otherwise (NOT_DISTINGUISHED, a NO_LOSS below or
+Exit codes. Verification reads the verdict line and the first reason code, never exit 2 alone. score: 0 NO_LOSS with the size rule met, 1 LOSS, 2 otherwise (NOT_DISTINGUISHED, a NO_LOSS below or
 without the size rule, which warns NOLOSS_UNDERPOWERED, no verdict, or a refusal). Other commands: 0 on success, 2 on
 any refusal. Reason codes: E_NOLOSS_SUITE, E_NOLOSS_ARM, E_NOLOSS_JUDGMENT, E_NOLOSS_COST, E_NOLOSS_BLIND,
-E_NOLOSS_STALE, LOSS, NOT_DISTINGUISHED, NOLOSS_UNDERPOWERED (docs/errors.md).`;
+E_NOLOSS_STALE, E_NOLOSS_ADJUDICATION, E_NOLOSS_EXPECT, LOSS, NOT_DISTINGUISHED, NOLOSS_UNDERPOWERED (docs/errors.md).`;
 
 export interface NolossIo {
   out: (text: string) => void;
@@ -171,7 +181,7 @@ const int = (n: number) => Number.isSafeInteger(n) && n >= 0;
 const points = (n: number) => n >= 0 && Math.abs(n * 10 - Math.round(n * 10)) < 1e-9;
 
 function scoreCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--variant": "value", "--reference": "value", "--margin": "value", "--margin-reason": "value", "--prereg": "value", "--frozen-bar": "value", "--reference-repeat": "value", "--power": "value", "--power-source": "value", "--power-sims": "value", "--spread": "value", "--root": "value", "--seed": "value", "--draws": "value", "--json": "bool", "--out": "value" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--variant": "value", "--reference": "value", "--margin": "value", "--margin-reason": "value", "--prereg": "value", "--frozen-bar": "value", "--reference-repeat": "value", "--power": "value", "--power-source": "value", "--power-sims": "value", "--spread": "value", "--root": "value", "--seed": "value", "--draws": "value", "--json": "bool", "--out": "value", "--false-blocker-drop": "value" });
   if (positional.length) throw new Usage("noloss score takes no positional arguments");
   const need = (name: string): string => {
     const v = flags.get(name)?.[0];
@@ -185,6 +195,7 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   let family: Comparison[] = [];
   let seed = DEFAULT_SEED;
   let draws = DEFAULT_DRAWS;
+  let lossFamily: LossFamily | undefined;
   if (flags.has("--prereg")) {
     if (flags.has("--margin") || flags.has("--margin-reason")) throw new Usage("give --margin or --prereg, not both");
     const { file } = loadComparisons(resolve(need("--prereg")));
@@ -195,6 +206,7 @@ function scoreCmd(argv: string[], io: NolossIo): number {
     family = file.comparisons;
     seed = file.seed;
     draws = file.draws;
+    lossFamily = file.loss_family;
   } else {
     if (!flags.has("--margin")) throw new Usage("noloss score needs --margin <points> with --margin-reason, or --prereg <file>; there is no default margin");
     const margin = num(flags, "--margin", null, points, "a margin in points with at most one decimal");
@@ -203,15 +215,16 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   if (flags.has("--power") && flags.has("--power-sims")) throw new Usage("give --power or --power-sims, not both");
   if (flags.has("--power")) c = { ...c, size_rule: { power: num(flags, "--power", null, (n) => n >= 0 && n <= 1, "a share from 0 to 1"), source: need("--power-source") } };
   if (flags.has("--power-sims")) c = { ...c, size_rule: { power_sims: num(flags, "--power-sims", null, (n) => int(n) && n > 0, "a positive integer"), spread: flags.get("--spread")?.[0] ?? "wide" } };
+  if (flags.has("--false-blocker-drop")) c = { ...c, false_blocker_drop: num(flags, "--false-blocker-drop", null, (n) => Number.isFinite(n) && n >= 0, "a non-negative number of false blockers per PR") };
   seed = num(flags, "--seed", seed, int, "a non-negative integer");
   draws = num(flags, "--draws", draws, (n) => int(n) && n >= 1000, "an integer of at least 1000");
   const out = flags.get("--out")?.[0];
   if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write sealed records outside it");
   const arms = loadArms(resolve(flags.get("--root")?.[0] ?? ARMS_ROOT), suite, sha256);
-  const rec = scoreComparisons(suite, sha256, arms, family.length ? family.map((x) => (x.id === c.id ? c : x)) : [c], { seed, draws }).find((x) => x.id === c.id)!;
+  const rec = scoreComparisons(suite, sha256, arms, family.length ? family.map((x) => (x.id === c.id ? c : x)) : [c], { seed, draws, lossFamily }).find((x) => x.id === c.id)!;
   const json = JSON.stringify(rec, null, 2);
   if (out) writeFileSync(out, json + "\n");
-  io.out(flags.has("--json") ? json : renderRecord(rec).join("\n"));
+  io.out(flags.has("--json") ? json : [...renderRecord(rec), ...falseBlockerTable(rec), verdictLine(rec)].join("\n"));
   for (const w of rec.warnings) io.err(w + " " + rec.id + ": NO_LOSS " + (rec.size_rule.met === null ? "with the size rule unchecked" : "below the size rule (power " + rec.size_rule.power + ")") + "; it is not a no-loss claim. Check it with --power-sims or the prereg's --power.");
   return rec.exit;
 }
@@ -271,12 +284,12 @@ function powerCmd(argv: string[], io: NolossIo): number {
 }
 
 function judgePacketCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--arm": "repeat", "--seed": "value", "--out": "value", "--key": "value" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--arm": "repeat", "--seed": "value", "--out": "value", "--key": "value", "--adjudicate": "bool" });
   if (positional.length) throw new Usage("noloss judge-packet takes arms with --arm <dir>");
   for (const f of ["--suite", "--out", "--key", "--seed"]) if (!flags.has(f)) throw new Usage("noloss judge-packet needs " + f);
   const { suite, sha256 } = loadSuite(flags.get("--suite")![0]!);
   const arms = (flags.get("--arm") ?? []).map((d) => readArmDir(resolve(d), suite, sha256));
-  const r = judgePacket({ suite, suiteSha256: sha256, arms, seed: num(flags, "--seed", null, int, "a non-negative integer"), out: resolve(flags.get("--out")![0]!), key: resolve(flags.get("--key")![0]!) });
+  const r = judgePacket({ suite, suiteSha256: sha256, arms, seed: num(flags, "--seed", null, int, "a non-negative integer"), out: resolve(flags.get("--out")![0]!), key: resolve(flags.get("--key")![0]!), adjudicate: flags.has("--adjudicate") });
   io.out("judge-packet: batch " + r.batch + ", " + r.packets + " packets, " + r.findings + " findings from " + arms.length + " arms; the key is outside the packets");
   return 0;
 }
@@ -289,8 +302,26 @@ function judgeJoinCmd(argv: string[], io: NolossIo): number {
   const arms = (flags.get("--arm") ?? []).map((d) => readArmDir(resolve(d), suite, sha256));
   const opt = (f: string) => (flags.has(f) ? resolve(flags.get(f)![0]!) : null);
   const r = judgeJoin({ suite, suiteSha256: sha256, key: resolve(flags.get("--key")![0]!), primary: resolve(flags.get("--reply")![0]!), second: opt("--second"), third: opt("--third"), arms, out: resolve(flags.get("--out")![0]!), replace: flags.get("--replace")?.[0] ?? null });
-  io.out("judge-join: batch " + r.batch + ", wrote judgments for " + r.arms.join(", ") + " under " + r.out + "; second judge on " + r.second_required + " blockers (kappa " + (r.kappa_primary_second ?? "n/a") + "), third read on " + r.third_required + ". Ingest each arm with noloss ingest.");
+  io.out("judge-join: batch " + r.batch + ", wrote " + (r.kind === "adjudication" ? "adjudication.tsv" : "judgments") + " for " + r.arms.join(", ") + " under " + r.out + "; second judge on " + r.second_required + " blockers (kappa " + (r.kappa_primary_second ?? "n/a") + "), third read on " + r.third_required + ". Ingest each arm with noloss ingest.");
   return 0;
+}
+
+/** score --expect: runs score, reads its outcome from the verdict line or record and the first reason code, and checks it. */
+async function expectScore(rest: string[], io: NolossIo): Promise<number> {
+  const i = rest.indexOf("--expect");
+  const list = rest[i + 1];
+  if (list === undefined || list.startsWith("--") || rest.indexOf("--expect", i + 1) !== -1) throw new Usage("--expect needs one comma-separated list of outcomes");
+  const keys = list.split(",").map((s) => s.trim()).filter(Boolean);
+  const bad = keys.filter((k) => !OUTCOMES.includes(k) && !/^E_[A-Z0-9_]+$/.test(k));
+  if (!keys.length || bad.length) throw new Usage("--expect takes " + OUTCOMES.join(", ") + " or reason codes such as E_NOLOSS_ARM, not " + JSON.stringify(bad.join(",") || list));
+  const out: string[] = [];
+  const err: string[] = [];
+  const exit = await nolossCli(["score", ...rest.slice(0, i), ...rest.slice(i + 2)], { out: (t) => out.push(t), err: (t) => err.push(t) });
+  out.forEach((t) => io.out(t));
+  err.forEach((t) => io.err(t));
+  const reading = readScoreRun({ exit, stdout: out.join("\n"), stderr: err.join("\n") });
+  if (keys.includes(reading.key)) return 0;
+  return report(io, "E_NOLOSS_EXPECT", "noloss score --expect", "the run's outcome is " + reading.key + " (exit " + exit + "), and --expect allows " + keys.join(", "));
 }
 
 export async function nolossCli(argv: string[], io: NolossIo): Promise<number> {
@@ -300,6 +331,7 @@ export async function nolossCli(argv: string[], io: NolossIo): Promise<number> {
     return cmd === undefined ? 2 : 0;
   }
   try {
+    if (cmd === "score" && rest.includes("--expect")) return await expectScore(rest, io);
     if (cmd === "suite") return suiteCmd(rest, io);
     if (cmd === "ingest") return ingestCmd(rest, io);
     if (cmd === "score") return scoreCmd(rest, io);

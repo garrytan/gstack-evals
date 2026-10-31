@@ -9,7 +9,7 @@ import type { PairedItem } from "../../src/runner/stats/paired.ts";
 export const ALPHA = 0.05;
 
 const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b));
-const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
+export const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
 
 /**
  * One-sided p that the signed sum of cluster values is at least the observed (all positive) sum when each value's sign
@@ -52,10 +52,10 @@ export interface SignFlip {
   reason: string | null;
 }
 
-/** Scales a margin in points (at most one decimal) and the pairs' pass shares onto one integer lattice. */
+/** Scales a shift in points (at most one decimal, negative for the LOSS test at the margin) and the pairs' pass shares onto one integer lattice. */
 function lattice(pairs: readonly PairedItem[], passes: readonly number[], marginPoints: number): { scale: number; margin: number } {
   const tenths = Math.round(marginPoints * 10);
-  if (!Number.isFinite(marginPoints) || marginPoints < 0 || Math.abs(tenths - marginPoints * 10) > 1e-9) throw new Error("a margin is a non-negative number of points with at most one decimal");
+  if (!Number.isFinite(marginPoints) || Math.abs(tenths - marginPoints * 10) > 1e-9) throw new Error("a margin is a non-negative number of points with at most one decimal");
   const l = passes.reduce((acc, p) => lcm(acc, p), 1);
   const scale = 1000 * l;
   for (const p of pairs) for (const v of [p.a, p.b]) if (Math.abs(Math.round(v * l) - v * l) > 1e-9) throw new Error("paired value " + v + " is not a share of " + passes.join(" or ") + " passes");
@@ -69,6 +69,11 @@ function lattice(pairs: readonly PairedItem[], passes: readonly number[], margin
  * margin; a true ceiling (every value 1) or floor (every value 0) stays null.
  */
 export function shiftedSignFlip(pairs: readonly PairedItem[], marginPoints: number, passes: readonly number[]): SignFlip {
+  if (!(marginPoints >= 0)) throw new Error("a margin is a non-negative number of points with at most one decimal");
+  return shifted(pairs, marginPoints, passes);
+}
+
+function shifted(pairs: readonly PairedItem[], marginPoints: number, passes: readonly number[]): SignFlip {
   const { scale, margin } = lattice(pairs, passes, marginPoints);
   const byCluster = new Map<string, number>();
   for (const p of pairs) byCluster.set(p.cluster, (byCluster.get(p.cluster) ?? 0) + Math.round((p.b - p.a) * scale) + margin);
@@ -90,7 +95,43 @@ export function decide(pNoLoss: number | null, pLoss: number | null, alphaNoLoss
   return "NOT_DISTINGUISHED";
 }
 
-/** Both tests for one comparison: V against R at the margin, and R against V at margin 0. */
-export function pairedTests(pairs: readonly PairedItem[], marginPoints: number, passes: readonly number[]): { no_loss: SignFlip; loss: SignFlip } {
-  return { no_loss: shiftedSignFlip(pairs, marginPoints, passes), loss: shiftedSignFlip(pairs.map((p) => ({ ...p, a: p.b, b: p.a })), 0, passes) };
+/**
+ * Both tests for one comparison: V against R at the margin, and the LOSS test of R against V. The LOSS null is "V is no
+ * worse than R" at lossNullPoints 0 (the default), or "V is no worse than R by more than lossNullPoints" above it.
+ */
+export function pairedTests(pairs: readonly PairedItem[], marginPoints: number, passes: readonly number[], lossNullPoints = 0): { no_loss: SignFlip; loss: SignFlip } {
+  if (!(lossNullPoints >= 0)) throw new Error("a LOSS null is a non-negative number of points");
+  return { no_loss: shiftedSignFlip(pairs, marginPoints, passes), loss: shifted(pairs.map((p) => ({ ...p, a: p.b, b: p.a })), -lossNullPoints, passes) };
+}
+
+/**
+ * Holm's step-down over a family given in its declared order: the smallest p is tested first at alpha / n, ties keep
+ * the declared order, and each adjusted p is at least the one before it, so testing stops at the first that fails.
+ * step is each comparison's 1-based place in the step-down.
+ */
+export function holmSteps(pValues: readonly number[]): { adjusted: number[]; step: number[] } {
+  if (!pValues.every((p) => Number.isFinite(p) && p >= 0 && p <= 1)) throw new Error("a Holm p-value is a number from 0 to 1");
+  const order = pValues.map((p, index) => ({ p, index })).sort((x, y) => x.p - y.p || x.index - y.index);
+  const adjusted = new Array<number>(pValues.length);
+  const step = new Array<number>(pValues.length);
+  let previous = 0;
+  order.forEach(({ p, index }, rank) => {
+    previous = Math.max(previous, Math.min(1, p * (order.length - rank)));
+    adjusted[index] = previous;
+    step[index] = rank + 1;
+  });
+  return { adjusted, step };
+}
+
+/**
+ * Exact two-sided sign-flip p over integer cluster values: the chance that the signed sum is at least as far from zero
+ * as the observed sum when each cluster's sign is flipped with probability 1/2. min_p is 2^(1-k) over k nonzero clusters.
+ */
+export function twoSidedSignFlip(values: readonly number[]): { p: number | null; min_p: number | null; informative_clusters: number } {
+  const k = values.filter((v) => v !== 0).length;
+  if (values.length < 2) return { p: null, min_p: null, informative_clusters: k };
+  const observed = values.reduce((s, v) => s + v, 0);
+  const min_p = k ? Math.min(1, 2 ** (1 - k)) : null;
+  if (observed === 0) return { p: 1, min_p, informative_clusters: k };
+  return { p: Math.min(1, 2 * signFlipTail(observed > 0 ? values : values.map((v) => -v))), min_p, informative_clusters: k };
 }

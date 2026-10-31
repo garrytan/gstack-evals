@@ -24,16 +24,23 @@ No command here calls a model; running an arm or a judge is paid work that needs
 gstack-evals noloss suite --check [--suite <id|path>] [--prereg <file>]
 gstack-evals noloss suite --from-catalog <dir>... --id <id> --released <YYYY-MM-DD> [--with <suite>] [--out <path>]
 gstack-evals noloss ingest <arm dir> --suite <id|path> [--check] [--root <dir>] [--digest-only <finding id>|all]... [--replace <reason>]
-gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--json]
+gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--false-blocker-drop <n>] [--json] [--expect <outcomes>]
 gstack-evals noloss export [--check]
 gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>]
-gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file>
+gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
 gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] --arm <dir>... --out <dir>
 ```
 
 `gstack-evals noloss --help` has the details. Every refusal starts with its reason code (E_NOLOSS_SUITE, E_NOLOSS_ARM,
 E_NOLOSS_JUDGMENT, E_NOLOSS_COST, E_NOLOSS_BLIND, E_NOLOSS_STALE) and names the file, row and field. `score` exits 0 on
-NO_LOSS with the size rule met, 1 on LOSS and 2 otherwise.
+NO_LOSS with the size rule met, 1 on LOSS and 2 otherwise. E_NOLOSS_ADJUDICATION and E_NOLOSS_EXPECT are refusals too.
+
+Exit 2 covers NOT_DISTINGUISHED, NOLOSS_UNDERPOWERED, no verdict and every refusal, so verification never reads exit 2
+alone. score's text output ends with `verdict: <LOSS|NOT_DISTINGUISHED|NO_LOSS|none> [NOLOSS_UNDERPOWERED]`, and
+`readScoreRun` in verdict.ts reads a run from that line (or the --json record) and the first reason code on stderr into
+LOSS, NOT_DISTINGUISHED, NO_LOSS (a claim), NOLOSS_UNDERPOWERED, NO_VERDICT or the refusal's code, and checks that the
+exit code agrees. `score --expect <list>` does the same and exits 0 only when the outcome is one the comma-separated
+list names, else E_NOLOSS_EXPECT.
 
 ## Arm contract v1
 
@@ -55,6 +62,13 @@ An arm is a directory holding these files and nothing else. Unknown JSON fields 
   `reasoning` and `voice` are accepted aliases). Blank or `unavailable` means unknown. `meter_source` is proxy-journal or
   reader-counter (exact), lane-counter-delta, root-counter-delta (an upper bound) or estimate. A unit's total is its
   `all`-scope row; other scopes are components. `pr` may be `*` with `covers` listing the units.
+- **adjudication.tsv** (optional, version 1): `pr, finding, pass, ruling, judge, saw_label, version, batch, note`. One row
+  per blocking finding (mapped CRITICAL) per pass that judgments.tsv matches to no blocker. `finding` is the finding's
+  id or `#<line>`; `version` is 1; `batch` is the adjudication batch digest. `ruling` is `defect` (a real defect no
+  suite blocker names: a new blocker), `not-defect`, or `known-informational` (it raises the unit's known informational
+  case as a blocker; only on a unit with an over-blocking blocker). A matched finding gets no row, since judgments.tsv
+  already rules it. A blocking finding with no row is unadjudicated: the false-blocker reading says it is incomplete
+  and never counts it as not a defect.
 
 A unit ref (`pr` column, findings file name) is `<pr>`, `<pr>@<head prefix>` or `<owner>/<repo>#<pr>@<head>`; write
 `__` for `/` in a file name. A ref must name one unit of the suite.
@@ -82,7 +96,7 @@ Each blocking blocker gets one value per arm: the share of the arm's passes that
    Otherwise NOT_DISTINGUISHED. The test is exact at any number of PRs (stats.ts) and equals the kit's
    marginShiftedSignFlipP where the kit enumerates. When no blocker differs and R is off ceiling and floor, p is 2^-k
    over k PRs ("no discordant blocker"); a true ceiling or floor stays null. An export Holm-adjusts the no-loss p
-   across its comparisons; the LOSS test is not adjusted. Every verdict line gives delta with its PR-clustered
+   across its comparisons; the LOSS test is not adjusted unless the comparisons file declares a LOSS family (below). Every verdict line gives delta with its PR-clustered
    bootstrap interval, losses, gains, both p-values and the minimum reachable p.
 3. The size rule: the share of simulated runs in which an arm exactly as good as R gets NO_LOSS (`--power-sims`, or
    the prereg's `--power`). A NO_LOSS below 80%, or unchecked, exits 2 with NOLOSS_UNDERPOWERED and is not a claim.
@@ -92,6 +106,26 @@ Each blocking blocker gets one value per arm: the share of the arm's passes that
 
 Labelled and blind judgments are never pooled, and lines from labelled judging open with "labelled judging". A
 stopped arm, or one with blockers recorded as coverage incomplete, gets no verdict.
+
+## LOSS family
+
+A comparisons file may declare `loss_family`: `order` (comparison ids in the declared order), `null` and `reason`. With
+`null` zero the LOSS test asks whether V is worse than R at all; with `margin` it asks whether V is worse than R by
+more than the comparison's margin. The family's LOSS p-values are Holm-adjusted step-down (smallest p first, ties in
+the declared order, each adjusted p at least the one before it), and LOSS is decided on the adjusted p. The verdict line
+gives the raw and adjusted p and the step; the record has `p_loss_holm` and `loss_family`. Comparisons outside the
+family, and files with no family, keep the unadjusted LOSS test.
+
+## False blockers
+
+A false blocker is a blocking finding ruled not-defect, or one that over-blocks a unit's known informational case:
+matched in judgments.tsv only to an over-blocking blocker, or ruled known-informational in adjudication.tsv. Per arm
+and PR the count is averaged over passes. Each comparison pairs the counts by PR and gives the mean difference (V minus
+R, per PR) with its PR-clustered bootstrap interval, an exact two-sided sign-flip p over PRs (stats.ts), the per-PR
+table (PR, V count, R count, difference, findings still unadjudicated), and whether the estimate clears the smallest
+per-PR drop that counts (`false_blocker_drop` in the comparison, or `--false-blocker-drop`). The preregistration sets
+that drop; nothing here defaults it. A transcribed arm gives no reading; an unadjudicated finding, a stopped arm or
+pooled labelled and blind adjudication makes it incomplete and untested.
 
 ## Legacy arms
 
@@ -113,3 +147,9 @@ The batch digest binds the suite, each arm's tree digest, the seed and the key's
 mechanically: the highest mapped severity among a blocker's matches wins. It names and waits for a second judge on
 every blocker where the arms differ plus a seeded 20% sample, and a third read wherever the judges differ. Then it
 writes `<out>/<arm id>/` with judgments.tsv (saw_label no) for every arm at once; ingest each with `--replace`.
+
+`judge-packet --adjudicate` builds the same blinded packets from the blocking findings judgments.tsv leaves unmatched, one
+packet per unit that has any, each with the unit's known informational cases. A reply rules every finding:
+`{batch, judge, packets: [{file, sha256, findings: [{id, ruling}]}]}`. `judge-join` on that key asks a second judge for
+every finding the primary ruled not-defect or known-informational plus a seeded 20% sample of the rest, and a third read
+wherever the two differ, then writes adjudication.tsv for every arm at once; ingest each with `--replace`.

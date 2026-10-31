@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/garrytan/gstack-evals/blob/main/lanes/review-noloss/arm.schema.json",
-  "$comment": "Arm contract version 1: arm.json, and one line of findings/<unit>.jsonl ($defs/finding). judgments.tsv and cost.tsv are TSV; their columns are in lanes/review-noloss/README.md. contract.ts also checks what a schema cannot. Unknown fields are kept and ignored.",
+  "$comment": "Arm contract version 1: arm.json, and one line of findings/<unit>.jsonl ($defs/finding). judgments.tsv, cost.tsv and the optional adjudication.tsv are TSV; their columns are in lanes/review-noloss/README.md. contract.ts also checks what a schema cannot. Unknown fields are kept and ignored.",
   "title": "Review no-loss arm",
   "type": "object",
   "required": [
