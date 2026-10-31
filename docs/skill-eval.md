@@ -10,7 +10,7 @@ This page is for callers: /write-skill (GStack Minder), HARN-1 and GBRA-225. It 
 - `--dry-run`, `--example`, `doctor`, `explain`, `validate`, `init` and `--lock`.
 - Full runs on the keyless fake host, which writes a real verdict through the verdict engine.
 
-Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, a gstack base at a sha (`--base`, or the one inferred from a rendered gstack skill) with the target skill overlaid or removed, stack arms (`<repo>@<sha>`), `placebo`, `none` and `bare` (docs/adapters.md, Arm installs). A task with a persona runs on Claude Code, and the questions its replies do not cover go to the policy's usersim model (docs/adapters.md, User simulator). A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
+Real runs on Claude Code and Codex use the host adapters (src/adapters/claude-code/ and src/adapters/codex/), calibration and the real-host run loop (src/skill-eval/cli/run-host.ts) under `--isolation docker`. Arms on a real host are loose skill folders, a gstack base at a sha (`--base`, or the one inferred from a rendered gstack skill) with the target skill overlaid or removed, stack arms (`<repo>@<sha>`, or `<repo>@<sha>:<path>` for one folder of the commit; docs/stacks.md), `placebo`, `none` and `bare` (docs/adapters.md, Arm installs). A task with a persona runs on Claude Code, and the questions its replies do not cover go to the policy's usersim model (docs/adapters.md, User simulator). A task with a judge rubric sends each run to a blinded judge of the other family (docs/adapters.md, Adjudication).
 
 ## Quickstart
 
@@ -38,7 +38,7 @@ gstack-evals skill-eval --arms before=<dir>,after=<dir>,none --tasks <tasks.json
 
 This is gstack's contract call, plus `--item`, the ledger line item the run spends from, and a committed lock.
 
-- Arms take one grammar: `name=<dir>`, `name=<repo>@<sha>`, `name=<loadout.json>`, `none`, `placebo` and `bare`. before and after are required. The noise floor adds before2, a second copy of before, unless you pass `--no-noise-floor`.
+- Arms take one grammar: `name=<dir>`, `name=<repo>@<sha>[:<path>]`, `name=<loadout.json>`, `none`, `placebo` and `bare`. before and after are required. The noise floor adds before2, a second copy of before, unless you pass `--no-noise-floor`.
 - Base inference: when an arm is a rendered gstack skill folder (`<root>/<skill>/SKILL.md` beside `<root>/bin/gstack-skill-start`), skill-eval infers `--base gstack@<HEAD of root> --skill <name>` and prints it under the effective defaults. A loose folder that calls gstack bins but has no resolvable root is refused with E_LOOSE_GSTACK, since it would measure gstack's degraded mode. Its fix names the checkout's sha or the clone command.
 - Every call prints its effective settings first, each with its source: a flag, a variable, a default or an inference.
 

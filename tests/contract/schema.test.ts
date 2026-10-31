@@ -87,6 +87,7 @@ describe("schema/arms.schema.json", () => {
     { name: "bare", kind: "bare" },
     { name: "placebo", kind: "placebo", of: "before" },
     { name: "gstack", kind: "stack", stack: { repo: "garrytan/gstack", sha: SHA }, install: { claude: "./setup --host claude", codex: "./setup --host codex" } },
+    { name: "pstack", kind: "stack", stack: { repo: "cursor/plugins", sha: SHA, path: "harness/pstack/claude-code" }, install: { claude: "true" } },
     { name: "core", kind: "loadout", manifest: LOADOUT },
   ];
 
@@ -109,6 +110,7 @@ describe("schema/arms.schema.json", () => {
       { name: "x", kind: "overlay", base: null, skill: "learn" },
       { name: "x", kind: "overlay", base: { repo: "gstack", sha: "abc123" }, skill: "learn", dir: null },
       { name: "x", kind: "stack", stack: { repo: "gstack", sha: SHA }, install: {} },
+      ...["../x", "a/../b", "/abs", "a/./b", "a//b", ""].map((path) => ({ name: "x", kind: "stack", stack: { repo: "cursor/plugins", sha: SHA, path }, install: { claude: "true" } })),
       { name: "x", kind: "placebo" },
       { name: "x", kind: "loadout", manifest: { ...LOADOUT, base: "gstack@main" } },
       { name: "x", kind: "loadout", manifest: { ...LOADOUT, modules: [{ kind: "tool", id: "x" }] } },

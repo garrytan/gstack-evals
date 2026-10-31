@@ -31,6 +31,13 @@
 // - CLAUDE_CODE_MAX_OUTPUT_TOKENS holds each request to the proxy's per-call output cap, which Claude Code's default
 //   (128k) passes. CLAUDE_CODE_MAX_RETRIES=0 leaves retries to the proxy, which journals and charges every paid attempt
 //   under its own budget, so the CLI never multiplies them or waits out its backoff on a refusal.
+// - An arm whose stack is a Claude Code plugin (pstack) is loaded for the session as a plugin directory (plugins, the
+//   Agent SDK's --plugin-dir), so its skills answer as /<plugin>:<name>.
+// - In a cell that keeps a cross-family voice (codex), the session can run the Codex CLI on the same proxy slot: before
+//   Claude Code starts, a shell step writes ~/.codex/config.toml with the proxy provider for the slot (the Codex host
+//   adapter's settings, retries off) and the voice's model, and OPENAI_API_KEY carries the slot's bearer, so no file
+//   holds a credential and no provider key enters the session. A step that cannot write it leaves a missing cell,
+//   E_CODEX_CONFIG.
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
@@ -42,6 +49,7 @@ import { DEFAULT_MAX_OUTPUT_TOKENS } from "../../runner/proxy/metering-proxy.ts"
 import type { Termination, TokenUsage } from "../../types.ts";
 import { parseClaudeCode, skillUse, type SkillRef } from "../../grade/transcript.ts";
 import { UserSim } from "../../usersim/sim.ts";
+import { codexConfig, type CodexProvider } from "../codex/driver.ts";
 import type { PersonaAnswer } from "../../usersim/persona.ts";
 import type { AskQuestion } from "../../usersim/classifier.ts";
 
@@ -74,6 +82,10 @@ export interface ClaudeCodeOptions {
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** The Agent SDK's query function; tests pass the real one or a stand-in. */
   query?: QueryFn;
+  /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
+  plugins?: string[];
+  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
+  codex?: { provider: CodexProvider; model: string };
 }
 
 // The slice of the Agent SDK this adapter uses, typed loosely so a test can stand one in.
@@ -81,8 +93,9 @@ type SdkMessage = Record<string, any>;
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
-export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy">): Record<string, string> {
+export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex">): Record<string, string> {
   return {
+    ...(o.codex ? { OPENAI_API_KEY: o.proxy.token } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
     ANTHROPIC_AUTH_TOKEN: o.proxy.token,
     ANTHROPIC_MODEL: o.model,
@@ -98,6 +111,12 @@ export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | 
     DISABLE_AUTOUPDATER: "1",
     DISABLE_TELEMETRY: "1",
   };
+}
+
+/** The shell step that writes the session's Codex config: the proxy provider for the slot and the voice's model, no credential. */
+export function codexConfigCommand(codex: NonNullable<ClaudeCodeOptions["codex"]>, proxy: ClaudeCodeOptions["proxy"]): string {
+  const lines = ["model = " + JSON.stringify(codex.model), ...Object.entries(codexConfig({ provider: codex.provider, proxy })).map(([k, v]) => k + " = " + JSON.stringify(v))];
+  return 'mkdir -p "$HOME/.codex" && cat > "$HOME/.codex/config.toml" <<\'GSE_CODEX\'\n' + lines.join("\n") + "\nGSE_CODEX\n";
 }
 
 /** Names the SDK sets on the CLI it spawns that the adapter passes on; the rest of the SDK's env is the evaluator's and stays out. */
@@ -172,6 +191,13 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
     env: claudeCodeEnv(o),
     async run(session: AgentSession, task: ContractTask, timeoutMs: number): Promise<AgentOutcome> {
       mkdirSync(o.out, { recursive: true });
+      if (o.codex) {
+        const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
+        if (wrote.exitCode !== 0) {
+          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
+          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
+        }
+      }
       const transcript = join(o.out, "transcript.ndjson");
       const query = o.query ?? ((await import("@anthropic-ai/claude-agent-sdk")).query as unknown as QueryFn);
       const messages: SdkMessage[] = [];
@@ -233,6 +259,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
           permissionMode: "default",
           settingSources: ["user", "project", "local"],
           disallowedTools: DISALLOWED_TOOLS,
+          ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
           abortController: abort,
           canUseTool,
           hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },

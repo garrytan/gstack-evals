@@ -18,6 +18,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ArmSpec, LoadoutManifest, StackRef } from "../../types.ts";
+import { stackKind } from "../../arms/stacks.ts";
 
 export const ARM_ORDER = ["before", "before2", "after", "none", "placebo", "bare"];
 const VALUE_ARMS = ["before", "after"];
@@ -61,14 +62,20 @@ export function renderedRoot(dir: string): string | null {
   return existsSync(join(dir, "SKILL.md")) && existsSync(join(root, "bin", "gstack-skill-start")) ? root : null;
 }
 
-/** Parses gstack@<sha> or <owner>/<repo>@<sha>. */
+/** A subtree path: plain names joined by slashes, with no . or .. part. */
+const SUBTREE = /^(?!(.*\/)?\.\.?(\/|$))[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+
+/** Parses gstack@<sha> or <owner>/<repo>@<sha>, either with :<path> for one folder of the commit. */
 export function parseStackRef(text: string): StackRef | string {
   const at = text.lastIndexOf("@");
   const repo = text.slice(0, at);
-  const sha = text.slice(at + 1);
-  if (at < 1 || !REPO.test(repo)) return JSON.stringify(text) + " is not <repo>@<sha>";
+  const colon = text.indexOf(":", at + 1);
+  const sha = colon < 0 ? text.slice(at + 1) : text.slice(at + 1, colon);
+  const path = colon < 0 ? null : text.slice(colon + 1);
+  if (at < 1 || !REPO.test(repo)) return JSON.stringify(text) + " is not <repo>@<sha>[:<path>]";
   if (!SHA.test(sha)) return JSON.stringify(text) + " needs the full 40-character commit sha (git rev-parse " + (sha || "HEAD") + ")";
-  return { repo, sha };
+  if (path !== null && !SUBTREE.test(path)) return JSON.stringify(text) + ": the subtree path must be relative, made of plain names, such as harness/pstack/claude-code";
+  return path === null ? { repo, sha } : { repo, sha, path };
 }
 
 function markdownFiles(dir: string): string[] {
@@ -201,7 +208,7 @@ export function resolveArms(spec: readonly string[], flags: { base?: string; ski
     if (r.name === "bare") return { name: "bare", kind: "bare" };
     if (r.name === "placebo") return { name: "placebo", kind: "placebo", of: "before" };
     if (r.loadout) return { name: r.name, kind: "loadout", manifest: r.loadout };
-    if (r.stack) return { name: r.name, kind: "stack", stack: r.stack, install: {} };
+    if (r.stack) return { name: r.name, kind: "stack", stack: r.stack, install: { ...stackKind(r.stack)?.install } };
     return { name: r.name, kind: "overlay", base: base?.ref ?? null, skill: skill?.name ?? skillName(r.dir!), dir: r.dir! };
   });
   return { arms, base, skill, notes };
