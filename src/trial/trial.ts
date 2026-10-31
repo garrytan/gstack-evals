@@ -4,9 +4,10 @@
 // environment: the tasks directory, the sidecar, mutants and hidden tasks reach setup and check only. Evaluator records
 // (delta.json, trial.json, the steps' logs) sit beside the work dir, never inside it. The check reads a copy of delta.json
 // in its tasks directory copy through SKILL_EVAL_DELTA, and a trial whose import dropped anything names those paths in
-// its record (dropped), which the verdict reports as DELTA_DROPPED. When the import stood in for an escaping symlink and the
-// check passed, it runs again on a copy without those placeholders, and the trial passes only when that run passes too. A
-// fail or an error in that run, or a copy that cannot be built, is a fail, never a missing cell.
+// its record (dropped), which the verdict reports as DELTA_DROPPED. When the import stood in for an escaping symlink, the
+// grade tree is copied before the check runs; if the check passes, it runs again on that copy without the placeholders,
+// and the trial passes only when that run passes too. A fail or an error in that run, or a copy that cannot be built, is a
+// fail, never a missing cell.
 import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
@@ -139,6 +140,15 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
         const r = sandbox.step("check", task.check!, task.id, { work: tree, fixtures, env: childEnv("check", { ...stateVars(path), [DELTA_VAR]: sandbox.fixturesPath(fixtures) + "/" + DELTA_FILE }), timeoutMs });
         return { log: { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) }, verdict: judgeCheck(r, path) };
       };
+      const placeholders = delta.dropped.map((d) => d.path).filter((p) => existsSync(join(grade, p, PLACEHOLDER)));
+      let copyFailure: unknown;
+      if (placeholders.length) {
+        try {
+          snapshot(grade, bare);
+        } catch (error) {
+          copyFailure = error;
+        }
+      }
       const first = check(grade);
       logs.check = first.log;
       if (first.verdict.kind === "error") {
@@ -147,10 +157,9 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
         return finish(delta);
       }
       record.check = first.verdict.kind === "pass";
-      const placeholders = delta.dropped.map((d) => d.path).filter((p) => existsSync(join(grade, p, PLACEHOLDER)));
       if (!record.check || !placeholders.length) return finish(delta);
       try {
-        snapshot(grade, bare);
+        if (copyFailure !== undefined) throw copyFailure;
         for (const p of placeholders) {
           const parent = dirname(join(bare, p));
           const mode = statSync(parent).mode & 0o7777;

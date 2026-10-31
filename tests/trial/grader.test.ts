@@ -436,6 +436,15 @@ describe("U11 grader routes (keyless, on this machine)", () => {
     const needs = await u11Check("office-hours", { ...base, check: "test -e out/x" }, steps);
     expect([needs.record.termination, needs.check, needs.logs.check_bare?.exitCode]).toEqual([{ kind: "completed" }, false, 1]);
   }, 300_000);
+
+  // Value: protects=the run without placeholders starts from the tree as imported, and its placeholder list is read before any check runs; fails_when=a check that writes into its tree (mkdir build) fails the second run on a path it never reads, or a check that deletes the placeholder's marker skips the second run; why_new=#90 review fix-check; seam=runTrial; no_claim=what the first run writes into the grade tree, which the second run never sees
+  test("the run without placeholders starts from the imported tree, not the one the first run left", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const build = await u11Check("office-hours", { ...base, check: "mkdir build && test -s report.txt" }, ["printf 'r\\n' > report.txt && mkdir -p .venv/bin && ln -s /usr/bin/python3 .venv/bin/python"]);
+    expect([build.check, build.logs.check_bare?.exitCode]).toEqual([true, 0]);
+    const marker = await u11Check("office-hours", { ...base, check: "test -e report.txt && rm -f report.txt/" + PLACEHOLDER }, ["ln -s /nonexistent/report.txt report.txt"]);
+    expect([marker.check, marker.logs.check_bare?.exitCode]).toEqual([false, 1]);
+  }, 300_000);
 });
 
 // Value: protects=a counted run never uses --isolation process, whose check runs agent code unsandboxed on this machine; fails_when=a real host, which leases from a ledger line item under a rig admission, starts under process isolation; why_new=GEVA-68 audit (process isolation row); seam=hostReadiness; no_claim=bubblewrap's own isolation, and the fake host keeping process isolation, which tests/cli/fake-host.test.ts covers
