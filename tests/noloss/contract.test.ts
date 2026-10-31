@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { ContractError, mapSeverity, parseArm, type ArmJson } from "../../lanes/review-noloss/contract.ts";
 import { prepare, publish, snapshot } from "../../lanes/review-noloss/ingest.ts";
 import { insideRepo, loadSuite, REPO_ROOT, type Suite } from "../../lanes/review-noloss/suite.ts";
@@ -197,6 +197,18 @@ describe("noloss ingest", () => {
     expect([join(outside, "alias"), join(outside, "alias", "sealed.tsv"), join(outside, "alias", "new", "deeper", "flags.jsonl")].map((d) => insideRepo(d, repo))).toEqual([true, true, true]);
     expect(insideRepo(join(repo, "not-yet", "x.tsv"), join(outside, "alias"))).toBe(true);
     expect([join(outside, "x.tsv"), join(outside, "none", "x.tsv")].map((d) => insideRepo(d, repo))).toEqual([false, false]);
+  });
+
+  test("insideRepo follows a dangling link: a link outside the repo to a repo file that does not exist yet is inside, and a link loop fails closed", () => {
+    const repo = tmp();
+    const outside = tmp();
+    symlinkSync(join(repo, "sealed.tsv"), join(outside, "out.tsv"));
+    symlinkSync("../" + basename(repo) + "/new/flags.tsv", join(outside, "rel.tsv"));
+    symlinkSync(join(outside, "b"), join(outside, "a"));
+    symlinkSync(join(outside, "a"), join(outside, "b"));
+    expect([join(outside, "out.tsv"), join(outside, "rel.tsv"), join(outside, "a")].map((d) => insideRepo(d, repo))).toEqual([true, true, true]);
+    symlinkSync(join(outside, "elsewhere.tsv"), join(outside, "away.tsv"));
+    expect(insideRepo(join(outside, "away.tsv"), repo)).toBe(false);
   });
 
   test("the CLI: ingest --check on the example, suite --check, and refusals start with their code", async () => {
