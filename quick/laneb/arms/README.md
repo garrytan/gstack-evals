@@ -24,6 +24,9 @@ Each arm ships as a tar whose paths are relative to `/root` (`.claude/...`, and 
 | `manifests/placebo-tokens.tsv` | Per skill: original and placebo body tokens, ratio, routing bytes kept. |
 | `../tests/placebo.test.ts` | Keyless tests. |
 | `../tsconfig.json` | Typecheck config for quick/laneb. js-tiktoken 1.0.21 is a pinned dev dependency of the repo root, so root CI runs these tests too. |
+| `stacks.ts` | Builds the stacks round's pstack and pstack-placebo tars and their manifests. See [The pstack arms](#the-pstack-arms-stacks-round-1). |
+| `manifests/pstack*.json`, `manifests/pstack*.files.tsv`, `manifests/pstack-placebo-tokens.tsv` | What `stacks.ts` built, in the same shape as the other manifests, plus the pin and install provenance. |
+| `../tests/stacks.test.ts` | Keyless tests of the pstack arms and the stacks skill map. |
 
 ## The trial runtime these trees expect
 
@@ -84,3 +87,27 @@ If a rebuild does not match, `manifests/gstack.files.tsv` shows which files move
 `check-arms.sh [out-dir] [base ...]` runs each tar on ubuntu:24.04, debian:bookworm-slim and debian:bullseye-slim by default, in a container with the runtime above and `--network none`. It checks the binaries, the skill count, the `investigate` preamble and the onboarding blocks it prints (none are expected), the same preamble inside a git repo when the base has git, a `review` preamble against a tarpit that accepts connections and never answers, the Stop hook and a frontmatter hook. It then points Claude Code at a local stub server that records the request and answers 400, so no model is called, and counts the skill names Claude Code sent.
 
 `bun install --frozen-lockfile` at the repo root, then `bun test quick/laneb`, runs keyless on a fixture tree, and `npx tsc --noEmit -p quick/laneb/tsconfig.json` typechecks. Set `LANEB_GSTACK_SKILLS` to an installed `.claude/skills` to run the same checks on every real skill; `build.sh` does.
+
+## The pstack arms (stacks round 1)
+
+The stacks round ([plan](../../../wiki/plans/2026-10-30-geva-59-stacks-round-1-plan/README.md), section 10 step 3) runs two more arms on TB2: pstack, Lauren Tan's skill stack (MIT, in cursor/plugins), and its placebo. `stacks.ts` builds both with the rig's own install path (src/arms/install.ts), the one step 1 built for the review lane, so the TB2 and review arms install pstack the same way. No pstack text is stored in this repo.
+
+- **pstack**: cursor/plugins at `c742dd61706fbacc1b95f1a20b7b988cf096ce6c`, subtree `harness/pstack/claude-code`, verified against its git tree `cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb`. The tree goes to `.local/share/pstack`, and pstack's own bootstrap installs poteto-mode's script dependencies from their lockfile at build time, so a trial needs no registry.
+- **pstack-placebo**: the rig's placebo arm of pstack. The plugin keeps its manifest (`.claude-plugin/plugin.json`) and one SKILL.md per skill from this folder's generator, with the default seed. Playbooks, references, scripts and agents are left out.
+- **One rig-authored file in each**: `.claude/settings.json`, whose `env` block sets `CLAUDE_CODE_PLUGIN_DIRS` to `~/.local/share/pstack`. The Lane B agent loads the user and project setting sources, so Claude Code 2.1.312 reads it and loads the folder as a plugin, and `/pstack:poteto-mode` resolves with no runner change. Without the file the command does not resolve; a test checks both. Step 1's review rig passes the same folder as `--plugin-dir` instead.
+- Directories are 0755, as in the other arms, because the trial runs Claude Code as root.
+
+Run `bun quick/laneb/arms/stacks.ts [out-dir]` (default `~/.capy/work/laneb-arms`) after cloning cursor/plugins at the pin under the rig's `<state>/sources/` (on Capy, `~/.capy/work/gstack-evals/sources/`). It needs docker, bun, git and network at build time. Every tar and gzip runs in the pinned builder image. It also fetches the Claude Code binary the trial runtime pins into `<out>/claude-code/` for the tests. A rebuild from an empty install cache on 2026-10-31 gave byte-identical tars.
+
+| Arm | Tar sha256 | Tree digest | Files | Skills |
+| --- | --- | --- | --- | --- |
+| pstack | `41a563830efca091a6c66ae37dfa37e83806105362843a382c9cefe9403a0ed6` | `97469e0b744a47bb0309caccf568f1cb7267c7b675cf1a61e544335a1354378e` | 1,607 | 58 |
+| pstack-placebo | `0081750d87baa10d02b2822929807505a00adceed58610b05717be4935cbc157` | `6d22ef104b6371d7835294d6ab64766df761ca1774537083ac4f94bfd83f104b` | 60 | 58 |
+
+Both tar.gz files are kept by digest in the Captain drive at `handoffs/GEVA-71/arms/`, with a SHA256SUMS file.
+
+The placebo's 58 bodies land within one token of pstack's (ratios 0.9545 to 1.0000; the smallest body has 22 tokens). Five skills take words the procedural-marker check flags from their own names or descriptions (for example "never" in principle-never-block-on-the-human, "your" in show-me-your-work), and the generator uses those words as topic terms. The front matter keeps them anyway. The test runs the marker check on the prose with the topic terms removed.
+
+The told prompt opens with the arm's command, as in quick look 3: `/investigate ` for gstack and its placebo, `/pstack:poteto-mode ` for pstack and its placebo. `../runner/skill-map.stacks.json` maps each of quick look 3's 40 tasks to that skill, per arm. Quick look 3's runner (tag `laneb-quick-3-runner`) reads one map per batch and invokes only the arms named gstack and placebo, so the stacks runner commit has to pass each arm its own map and invoke every arm but none.
+
+`LANEB_STACK_ARMS=<out-dir> bun test quick/laneb/tests/stacks.test.ts` checks, on the built tars: each tar against its manifest and the pin; the told line in each arm, in a real Claude Code 2.1.312 session against a fake upstream, with that arm's poteto-mode body in the first model request and pstack's body never in the placebo's; no expansion once the settings file is removed; poteto-mode's bootstrap and watch-pr with the registry pointed at a closed port; and the placebo's files, front matter, prose and token counts. Without the built tars those tests skip, and the skill map tests still run.

@@ -1,18 +1,21 @@
 // Preflight (interface v0.4, "Preflight and the vacuity check"): the free checks every paid command runs before any
 // spend, and gstack-evals preflight runs alone. In order: the contract (sanity), the host, the model policy, keys by
-// name, the vacuity check, the lock, the ledger and the spend cap, the PDF flag, and last the host adapter.
+// name, the vacuity check, the lock, the ledger and the spend cap, the PDF flag, free disk on a real host, and last
+// the host adapter.
 //
 // Vacuity runs before the lock step, so an unlocked task set gets its vacuity and sanity verdict before anyone runs
 // --lock, and skill-eval --lock itself refuses a set that fails them (GST-109 decision 1: a rebuilt set, such as the
 // office-hours set gstack rebuilt in U12, is a new set that is checked and locked fresh; the CLI keeps no numbers
 // across task sets). Every step that can run does, so one call reports every stop.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statfsSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { usd } from "../../runner/ledger/money.ts";
 import { ledgerStatus } from "../../runner/ledger/ledger.ts";
 import { remoteMount, type Mount, readMounts } from "../../runner/ledger/paths.ts";
 import { LedgerError } from "../../runner/ledger/record.ts";
+import { ARM_REPO, stateRoot } from "../../trial/image.ts";
 import { isInteractive, loadContract, type Contract } from "../contract/sidecar.ts";
 import type { ContractTask } from "../contract/tasks.ts";
 import { checkVacuity, type ShellRunner, type VacuityReport } from "../contract/vacuity.ts";
@@ -58,6 +61,37 @@ export interface PreflightOptions {
   /** Why no container runner was given under --isolation docker (U9's containerRunner: no daemon, or no pinned trial image). */
   isolationStop?: Stop;
   mounts?: Mount[];
+  /** The filesystems a real-host call fills and what each has free (diskReadings); absent on the fake host and under --dry-run. */
+  disk?: DiskReading[];
+}
+
+export interface DiskReading {
+  /** What the call keeps there: the state root, Docker's root dir, or both on one filesystem. */
+  what: string;
+  path: string;
+  /** Bytes free to this user. */
+  free: number;
+  /** Bytes a real-host call can need there at its peak. */
+  need: number;
+}
+
+/** A real-host call's peak on each filesystem it fills, from a measured call (docs/rig.md, "Disk space"): installs, retained trees and the trial image tar under the state root; arm images and build cache under Docker's root dir. */
+export const DISK_NEED = { state: 10e9, docker: 10e9 };
+
+/** Free space on the state root's filesystem and on Docker's root dir's, one reading per filesystem. A path not made yet is read at its nearest parent; a root dir that is not on this machine (Docker Desktop's VM) or that docker info cannot name is not read. */
+export function diskReadings(env: Record<string, string | undefined>): DiskReading[] {
+  const state = stateRoot(env);
+  let at = resolve(state);
+  while (!existsSync(at)) at = dirname(at);
+  const free = (path: string) => {
+    const s = statfsSync(path);
+    return s.bavail * s.bsize;
+  };
+  const info = spawnSync(env.GSTACK_EVALS_DOCKER_BIN || "docker", ["info", "--format", "{{.DockerRootDir}}"], { encoding: "utf8", timeout: 30_000 });
+  const docker = info.status === 0 ? info.stdout.trim() : "";
+  if (!docker.startsWith("/") || !existsSync(docker)) return [{ what: "the state root", path: state, free: free(at), need: DISK_NEED.state }];
+  if (statSync(docker).dev === statSync(at).dev) return [{ what: "the state root and Docker's root dir", path: state, free: free(at), need: DISK_NEED.state + DISK_NEED.docker }];
+  return [{ what: "the state root", path: state, free: free(at), need: DISK_NEED.state }, { what: "Docker's root dir", path: docker, free: free(docker), need: DISK_NEED.docker }];
 }
 
 const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'");
@@ -210,6 +244,13 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
 
   const pdf = pdfTasks(contract, tasks);
   if (pdf.length) report.warnings.push({ code: "PDF_INPUT", message: "these tasks may send a PDF, which the metering proxy reserves loosely when it is inline base64: " + pdf.join(", ") });
+
+  if (opts.disk) {
+    const gb = (n: number) => (n / 1e9).toFixed(1) + " GB";
+    const low = opts.disk.filter((d) => d.free < d.need);
+    if (low.length) stop("E_DISK_LOW", low.map((d) => d.what + " at " + d.path + " has " + gb(d.free) + " free; a real-host call can need " + gb(d.need) + " there at its peak").join("\n"), "Free space there, then run the same call again: delete " + join(stateRoot(env), "installs") + " while no run is going, prune Docker's build cache (docker builder prune) and " + ARM_REPO + " images no run needs, or set XDG_STATE_HOME to a larger disk. docs/rig.md, Disk space, has the measured footprint.");
+    else report.passed.push("disk: " + opts.disk.map((d) => d.what + " at " + d.path + ": " + gb(d.free) + " free, " + gb(d.need) + " needed").join("; "));
+  }
 
   const host = opts.host();
   if (host) report.stops.push(host);
