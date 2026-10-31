@@ -327,8 +327,6 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
 
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
   const receipts = [journal, join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
-  const target = "sink" in sink ? sink.sink : null;
-  if (target) rmSync(join(target, "arms"), { recursive: true, force: true });
-  const copied = target ? copyToSink(o.out, receipts, target) : [];
+  const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
   return result(armDirs, copied);
 }

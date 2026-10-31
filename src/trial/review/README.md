@@ -50,7 +50,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 - Outputs: `<out>/arms/<arm>-<model tag>/` per arm and model in arm contract v1 (arm.json, findings/<unit>.jsonl with each
   finding's pass, cost.tsv; no judgments.tsv, so the arm is raw), plus units.json, parses.tsv, refusals.tsv,
   cells.ndjson and progress.json. The model tag is a Claude model's family (opus, haiku), else the model id's last path segment, cut to 17 characters
-  plus a 6-character hash once it passes 24. Each run rebuilds <out>/arms from the journal and replaces the receipts sink's arms, so no stale arm survives a resume.
+  plus a 6-character hash once it passes 24. Each run rebuilds <out>/arms from the journal, so no stale arm survives a resume there. The receipts sink is a
+  merge copy: it keeps any arm an earlier run of the same out dir wrote.
 - Parse outcomes per unit-pass: findings, empty (a real zero), missing (no fenced json block: zero, flagged), malformed
   (flagged, never zero) and incomplete (the session did not complete: never scored as zero). A malformed or incomplete
   unit-pass is a coverage gap: the arm is written with status stopped and coverage_gaps naming each one, so scoring gives
