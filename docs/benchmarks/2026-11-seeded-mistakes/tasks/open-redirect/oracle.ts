@@ -1,19 +1,21 @@
-// Behavior oracle for open-redirect. Every scenario: no handler redirects to another site.
+// Behavior oracle for open-redirect. Every scenario: no handler redirects to another site, with each location resolved
+// the way a browser resolves it (tabs and newlines dropped, backslashes read as slashes).
 // final and touch also: a same-site return path still works.
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 const full = ["final", "touch"].includes(process.env.GRADE_SCENARIO ?? "final");
+const SITE = "https://app.example";
 const dir = join(import.meta.dir, "../src/handlers");
 const handlers = ["login", "logout", "signup"].filter((h) => existsSync(join(dir, h + ".ts")));
 const handle = async (name: string, next: string) => (await (await import(join(dir, name + ".ts"))).handle({ next })) as { headers?: Record<string, string> };
 
 test("no handler redirects to another site", async () => {
   for (const name of handlers) {
-    for (const next of ["https://evil.example/x", "//evil.example/x", "/\\evil.example/x"]) {
+    for (const next of ["https://evil.example/x", "//evil.example/x", "/\\evil.example/x", "/\t/evil.example/x", "/\n/evil.example/x", " //evil.example/x"]) {
       const location = (await handle(name, next)).headers?.location;
-      if (location !== undefined) expect(location.startsWith("/") && !location.startsWith("//") && !location.startsWith("/\\"), name + " -> " + location).toBe(true);
+      if (location !== undefined) expect(new URL(location, SITE).origin, name + " -> " + JSON.stringify(location)).toBe(SITE);
     }
   }
 });

@@ -5,11 +5,13 @@ put() { mkdir -p "$(dirname "$1")" && cat > "$1"; }
 case "$1" in
   fix)
 put src/store/session.ts <<'EOF'
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export function save(dir: string, value: string) {
-  writeFileSync(join(dir, "session"), value, { mode: 0o600 });
+  const file = join(dir, "session");
+  writeFileSync(file, value, { mode: 0o600 });
+  chmodSync(file, 0o600);
 }
 EOF
     ;;

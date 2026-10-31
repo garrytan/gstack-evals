@@ -7,5 +7,5 @@ case "$1" in
   revert-a) json config/services.json 'j.search.timeoutMs = 3;' ;;
   revert-c) json config/services.json 'j.email.timeoutMs = 10;' ;;
   fresh) json config/services.json 'j.sms = { url: "http://sms.example.com", timeoutMs: 2 };' ;;
-  *) echo "mutants.sh: no scenario $1" >&2; exit 2 ;;
+  *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

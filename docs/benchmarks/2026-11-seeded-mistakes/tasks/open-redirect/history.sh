@@ -37,8 +37,12 @@ export function redirect(to: string): Res {
   return { status: 302, headers: { location: to } };
 }
 
+const ORIGIN = "https://site.invalid";
+
 export function safePath(next: string | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  if (!next?.startsWith("/")) return "/";
+  const url = new URL(next, ORIGIN);
+  return url.origin === ORIGIN ? url.pathname + url.search + url.hash : "/";
 }
 EOF
 put src/handlers/login.ts <<'EOF'

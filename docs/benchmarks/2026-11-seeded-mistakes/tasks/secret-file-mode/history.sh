@@ -17,7 +17,7 @@ export function save(dir: string, value: string) {
 EOF
 put tests/store.test.ts <<'EOF'
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { save } from "../src/store/api-key.ts";
@@ -32,16 +32,18 @@ test("the api key reads back", () => {
 EOF
 commit "Store the API key on disk"
 put src/store/api-key.ts <<'EOF'
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export function save(dir: string, value: string) {
-  writeFileSync(join(dir, "api-key"), value, { mode: 0o600 });
+  const file = join(dir, "api-key");
+  writeFileSync(file, value, { mode: 0o600 });
+  chmodSync(file, 0o600);
 }
 EOF
 put tests/store.test.ts <<'EOF'
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { save } from "../src/store/api-key.ts";
@@ -57,6 +59,13 @@ test("the api key reads back", () => {
 test("the api key file is private to its owner", () => {
   const dir = mkdtempSync(join(tmpdir(), "store-"));
   save(dir, "k1");
+  expect(statSync(join(dir, "api-key")).mode & 0o077).toBe(0);
+});
+
+test("an api key file left readable by an older version becomes private", () => {
+  const dir = mkdtempSync(join(tmpdir(), "store-"));
+  writeFileSync(join(dir, "api-key"), "old", { mode: 0o644 });
+  save(dir, "k2");
   expect(statSync(join(dir, "api-key")).mode & 0o077).toBe(0);
 });
 EOF

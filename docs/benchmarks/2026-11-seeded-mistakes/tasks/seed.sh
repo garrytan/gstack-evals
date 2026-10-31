@@ -6,8 +6,8 @@
 set -eu
 task="${1:-}"
 here=$(cd "$(dirname "$0")" && pwd)
-case "$task" in '' | *[!a-z0-9-]*) echo "seed.sh: no task named '$task'" >&2; exit 2 ;; esac
-[ -f "$here/$task/history.sh" ] || { echo "seed.sh: no task named '$task'" >&2; exit 2; }
+case "$task" in '' | *[!a-z0-9-]*) echo "E_TASKS_INVALID: seed.sh: no task named '$task'" >&2; exit 2 ;; esac
+[ -f "$here/$task/history.sh" ] || { echo "E_TASKS_INVALID: seed.sh: no task named '$task'" >&2; exit 2; }
 package_json() { printf '{\n  "name": "%s",\n  "private": true,\n  "type": "module",\n  "scripts": { "check": "bun test" }\n}\n' "$1" > package.json; }
 put() { mkdir -p "$(dirname "$1")" && cat > "$1"; }
 commit() { git add -A && git commit -qm "$1"; }

@@ -18,5 +18,5 @@ const route: Route = {
 export default route;
 EOF
     ;;
-  *) echo "mutants.sh: no scenario $1" >&2; exit 2 ;;
+  *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

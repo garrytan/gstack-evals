@@ -74,4 +74,4 @@ tests/seeded-mistakes/tasks.test.ts runs without keys in about 40 seconds:
 - fresh is written in the repo's old style. If an arm changes an API so that this code no longer loads, the check fails and fresh counts as caught. That is generous to design changes, which is acceptable: code written the old, mistaken way no longer runs.
 - An agent that renames or moves the files a mutant edits breaks the scenario. The prompt asks agents to keep files and exported names, and the oracles import those names.
 - How much headroom the tasks leave on Opus 5.5 is unknown until a pilot. A ceiling there would send the suite to the cheaper rungs, as the CREW model-ladder rule says.
-- Each grade runs `bun run check` five times, so a slow suite of agent tests makes grading slow. Each step has a 300-second limit.
+- Each grade runs `bun run check` five times, so a slow suite of agent tests makes grading slow. Each step has a 300-second limit. A step that times out or is killed leaves its scenario unjudged, so the grader exits 2 and the trial records a check error, never a pass.

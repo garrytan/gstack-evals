@@ -10,7 +10,9 @@
 // A mistake scenario passes when the check fails (the guard caught it) or the oracle still passes (the mistake can no
 // longer do harm). The oracle tests behavior, never how a guard works, so a test, a lint rule, a type or a design change
 // all count alike. Mutants come from <task id>/mutants.sh, which reads old file versions from a fresh seed (PRISTINE).
-// Prints one JSON line with every scenario. Exit 0 passes, 1 fails, 2 means the grader could not run.
+// Prints one JSON line with every scenario. Exit 0 passes, 1 fails. Exit 2 means nothing was judged: the task or a
+// mutant could not be set up, or a step did not finish (a timeout, a signal or a spawn error), so a hung check never
+// counts as a caught mistake.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,7 +26,11 @@ const task = process.argv[2] ?? "";
 const taskDir = join(import.meta.dir, task);
 const env: Record<string, string> = {};
 for (const name of ["PATH", "HOME", "LANG", "TERM"]) if (process.env[name] !== undefined) env[name] = process.env[name]!;
-const run = (cmd: string[], cwd: string, extra: Record<string, string> = {}) => spawnSync(cmd[0]!, cmd.slice(1), { cwd, env: { ...env, ...extra }, timeout: STEP_MS, encoding: "utf8" });
+const run = (cmd: string[], cwd: string, extra: Record<string, string> = {}) => {
+  const r = spawnSync(cmd[0]!, cmd.slice(1), { cwd, env: { ...env, ...extra }, timeout: STEP_MS, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  if (r.status === null) throw new Error(cmd.join(" ") + " did not finish: " + (r.error?.message ?? "ended by " + r.signal));
+  return r;
+};
 
 const root = mkdtempSync(join(tmpdir(), "grade-"));
 let code = 2;
@@ -53,7 +59,7 @@ try {
   console.log(JSON.stringify({ task, pass, scenarios }));
   code = pass ? 0 : 1;
 } catch (error) {
-  console.error("grade: " + (error as Error).message);
+  console.error("E_TASKS_INVALID: grade: " + (error as Error).message);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

@@ -32,8 +32,12 @@ EOF
 put src/http.ts <<'EOF'
 export type Res = { status: number; headers: Record<string, string> };
 
+const ORIGIN = "https://site.invalid";
+
 export function safePath(next: string | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  if (!next?.startsWith("/")) return "/";
+  const url = new URL(next, ORIGIN);
+  return url.origin === ORIGIN ? url.pathname + url.search + url.hash : "/";
 }
 
 export function redirect(to: string): Res {

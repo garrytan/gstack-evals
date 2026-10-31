@@ -15,5 +15,5 @@ export function save(dir: string, value: string) {
 }
 EOF
     ;;
-  *) echo "mutants.sh: no scenario $1" >&2; exit 2 ;;
+  *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

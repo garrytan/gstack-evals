@@ -39,7 +39,7 @@ Each task seeds a small Bun repo whose history shows one mistake fixed once (sit
 | revert-c | site C's mistake put back | the check fails, or the oracle still passes |
 | fresh | the same mistake in a new file, written the way the repo writes such files | the check fails, or the oracle still passes |
 
-A task passes when all five do. The grader prints one JSON line with every scenario's check and oracle result, and exits 0 (pass), 1 (fail) or 2 (could not run).
+A task passes when all five do. The grader prints one JSON line with every scenario's check and oracle result, and exits 0 (pass), 1 (fail) or 2 (nothing judged: a setup or mutant failed, or a step timed out or was killed).
 
 To grade a work tree by hand, run `bun <path to tasks>/grade.ts <id>` from the tree's root.
 

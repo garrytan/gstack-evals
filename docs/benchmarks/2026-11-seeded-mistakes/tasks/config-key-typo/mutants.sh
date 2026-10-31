@@ -7,5 +7,5 @@ case "$1" in
   revert-a) json config/plans.json 'delete j.team.maxSeats; j.team.maxSaets = 10;' ;;
   revert-c) json config/plans.json 'delete j.pro.maxProjects; j.pro.maxProjcts = 50;' ;;
   fresh) json config/plans.json 'j.enterprise = { maxProjects: 500, maxSeat: 100 };' ;;
-  *) echo "mutants.sh: no scenario $1" >&2; exit 2 ;;
+  *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac
