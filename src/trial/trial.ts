@@ -64,6 +64,8 @@ export interface TrialSpec {
   cleanup?: CleanupOptions;
   /** Keys appended to the gstack state root's config.yaml after the seed: a stack cell's gstack config (src/arms/cells.ts). */
   stateConfig?: Record<string, string>;
+  /** Files written at the top of the gstack state root after the seed, such as a plan run's global question preferences. */
+  stateFiles?: Record<string, string>;
   /** A directory copied into the work dir before setup, such as a review unit's repository; it never holds an answer key. */
   seed?: string;
 }
@@ -124,7 +126,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       logs.setup = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       if (r.exitCode !== 0) return missing("E_TASKS_INVALID", "setup " + (r.timedOut ? "timed out" : "exited " + r.exitCode) + ": " + tail(r));
     }
-    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig);
+    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles);
     snapshot(work, baseline);
     const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
     let outcome: AgentOutcome;

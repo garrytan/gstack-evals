@@ -20,6 +20,7 @@ import { volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
 import { ARM_ID, armId, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewArm } from "./run.ts";
+import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planArmLine, planArmOf, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanLens } from "./plan.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -35,10 +36,15 @@ export const REVIEW_UNITS_HELP = [
   "    [--base-branch <owner/repo>=<name>]... [--install <owner/repo>=<command>]... [--test <owner/repo>=<command>]...",
   "    [--parallel <n>] [--timeout <s>] [--allowance <usd>] [--severity-map <file>] [--policy <file>] [--date YYYY-MM-DD]",
   "    [--resume] [--repair <note>] [--dry-run]",
+  "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
+  "",
+  "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha> and gstack-auto=<repo>@<sha>, each with",
+  "its plan line and the frozen plan output block, the rec user, no second model, and no install or test step. --arm-models",
+  "limits an arm to some of --models. --sealed-root names the directory outside the repo that holds a sealed suite.",
 ].join("\n");
 
-const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date"]);
-const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test"]);
+const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root"]);
+const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models"]);
 const BOOL = new Set(["--resume", "--dry-run"]);
 
 class Usage extends Error {}
@@ -100,11 +106,16 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const resume = flags.has("--resume");
   let loaded: ReturnType<typeof loadSuite>;
   try {
-    loaded = loadSuite(one("--suite")!);
+    loaded = loadSuite(one("--suite")!, { sealedRoot: one("--sealed-root") });
   } catch (e) {
     throw new Usage((e as Error).message);
   }
   const { suite } = loaded;
+  const planFlag = one("--plan");
+  if (planFlag !== null && !isPlanLens(planFlag)) throw new Usage("--plan takes a lens: " + Object.keys(PLAN_LENSES).join(", "));
+  const lens: PlanLens | null = planFlag as PlanLens | null;
+  if ((suite.kind === "plan") !== (lens !== null)) throw new Usage(lens ? "--plan needs a plan suite, and suite " + suite.id + " is " + suite.kind : "suite " + suite.id + " is a plan suite; pass --plan <lens>");
+  if (flags.has("--arm-models") && !lens) throw new Usage("--arm-models runs with --plan");
   const refs = flags.get("--units")!;
   const units: Unit[] = refs.length === 1 && refs[0] === "all" ? [...suite.units] : refs.map((ref) => {
     const r = resolveUnit(suite, ref);
@@ -122,6 +133,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   }
   const specs: ArmSpec[] = flags.get("--arms")!.map((s) => {
     if (s === "none") return { name: "none", kind: "bare" };
+    if (lens && s === "lens") return { name: "lens", kind: "bare" };
+    if (lens && s === "placebo") return { name: "placebo", kind: "placebo", of: "gstack" };
     const at = s.indexOf("=");
     if (at <= 0 || !/^[a-z][a-z0-9_-]*$/.test(s.slice(0, at))) throw new Usage("--arms takes none or <name>=<repo>@<sha>[:<subtree>], not " + JSON.stringify(s));
     const stack = parseStackRef(s.slice(at + 1));
@@ -130,12 +143,31 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   });
   if (new Set(specs.map((a) => a.name)).size !== specs.length) throw new Usage("--arms names an arm twice");
   const arms: ReviewArm[] = specs.map((a) => {
+    if (lens) {
+      const plan = planArmOf(a);
+      if (!plan) throw new Usage("arm " + a.name + " (" + a.kind + "): plan units run none, lens, placebo, gstack=<gstack repo>@<sha> and gstack-auto=<gstack repo>@<sha>");
+      if (plan === "gstack-auto" && GSTACK_AUTO.min_version === null) throw new Usage("arm gstack-auto: " + gstackAutoProblem(null));
+      return { name: a.name, told: plan };
+    }
     const told = toldArmOf(a);
     if (!told) throw new Usage("arm " + a.name + " (" + a.kind + "): review units run none, gstack, pstack and tstack arms only");
     return { name: a.name, told };
   });
+  if (lens && specs.some((a) => a.kind === "placebo") && !specs.some((a) => a.name === "gstack")) throw new Usage("the placebo arm is generated from the gstack arm, so --arms needs gstack=<repo>@<sha> too");
+  const armModels = new Map<string, string[]>();
+  for (const v of flags.get("--arm-models") ?? []) {
+    const at = v.indexOf("=");
+    const arm = v.slice(0, at);
+    const list = v.slice(at + 1).split(",").filter(Boolean);
+    if (at <= 0 || !list.length) throw new Usage("--arm-models takes <arm>=<model>[,<model>], not " + JSON.stringify(v));
+    if (!arms.some((a) => a.name === arm)) throw new Usage("--arm-models names arm " + arm + ", which --arms does not run");
+    if (armModels.has(arm)) throw new Usage("--arm-models names arm " + arm + " twice");
+    for (const m of list) if (!models.includes(m)) throw new Usage("--arm-models gives arm " + arm + " model " + m + ", which --models does not run");
+    armModels.set(arm, list);
+  }
+  const modelsOf = (arm: string) => armModels.get(arm) ?? models;
   const ids = new Map<string, string>();
-  for (const a of arms) for (const m of models) {
+  for (const a of arms) for (const m of modelsOf(a.name)) {
     const id = armId(a.name, m);
     if (!ARM_ID.test(id)) throw new Usage("arm id " + JSON.stringify(id) + " (arm " + a.name + ", model " + m + ") does not match " + ARM_ID + "; use a shorter arm name");
     const pair = a.name + " on " + m;
@@ -143,7 +175,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     ids.set(id, pair);
   }
   const skills = Object.fromEntries(arms.flatMap((a) => {
-    const skill = toldSkill(a.told);
+    const skill = lens ? planSkill(a.told as Parameters<typeof planSkill>[0], lens) : toldSkill(a.told as Parameters<typeof toldSkill>[0]);
     return skill ? [[a.name, skill]] : [];
   }));
   const passes = Number(one("--passes") ?? "1");
@@ -168,7 +200,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!sources.has(repo)) throw new Usage("no --source for " + repo + "; name a full local clone as " + repo + "=<path>");
     if (!branches.has(repo) && !DEFAULT_BRANCHES[repo]) throw new Usage("no base branch is known for " + repo + "; pass --base-branch " + repo + "=<name>");
   }
-  let severityMap: Record<string, unknown> | undefined;
+  let severityMap: Record<string, unknown> | undefined = lens ? Object.fromEntries(arms.map((a) => [a.name, PLAN_SEVERITY_MAP])) : undefined;
   const mapFile = one("--severity-map");
   if (mapFile) {
     try {
@@ -179,16 +211,16 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   }
   const out = resolve(one("--out")!);
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
-  const sessions = units.length * arms.length * models.length * passes;
+  const sessions = units.length * passes * arms.reduce((s, a) => s + modelsOf(a.name).length, 0);
   if (dry) {
     io.out("review-units dry run: nothing is built, written or spent");
     io.out("suite " + suite.id + " (sha256 " + loaded.sha256 + ")");
-    io.out("told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
+    io.out(lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
     io.out("units (" + units.length + "):");
-    for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test"));
-    io.out("arms: " + arms.map((a) => a.name + " (told " + a.told + (TOLD_PREFIX[a.told] ? ", " + JSON.stringify(TOLD_PREFIX[a.told]) : "") + ")").join(", "));
+    for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + (lens ? "  plan unit: no install or test" : "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test")));
+    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planArmLine(a.told as Parameters<typeof planArmLine>[0], lens)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + (TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX] ? ", " + JSON.stringify(TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
-    io.out("worst case at the allowance: " + usd(models.reduce((s, m) => s + perSession(m) * units.length * arms.length * passes, 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
+    io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));
     return 0;
   }
@@ -220,10 +252,10 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
       const repo = buildUnitRepo({ unit: u, source: sources.get(u.repo)!, dest: join(root, "repo"), ...(branches.has(u.repo) ? { baseBranch: branches.get(u.repo)! } : {}) });
       const hp = historyProblems(repo.dir, repo);
       if (hp.length) throw new UnitError("E_UNIT_REPO", hp.map((p) => u.id + ": " + p));
-      const built = buildUnitTree({ repo, task, dest: tree, image: pin.pin.tag, test: tests.get(u.repo) ?? "bun test", ...(installs.has(u.repo) ? { install: installs.get(u.repo)! } : {}), scratch: join(out, "units", ".scratch"), retain: join(state, "retained"), docker });
+      const built = buildUnitTree({ repo, task, dest: tree, image: pin.pin.tag, test: lens ? null : (tests.get(u.repo) ?? "bun test"), ...(lens ? { install: null } : installs.has(u.repo) ? { install: installs.get(u.repo)! } : {}), scratch: join(out, "units", ".scratch"), retain: join(state, "retained"), docker });
       rmSync(repo.dir, { recursive: true, force: true });
       if (built.problems.length) throw new UnitError("E_UNIT_IMAGE", built.problems.map((p) => u.id + ": " + p));
-      const check = { install: built.install.command, test: built.test.command, passed: built.test.passed };
+      const check = built.install && built.test ? { install: built.install.command, test: built.test.command, passed: built.test.passed } : null;
       writeFileSync(join(root, "unit.json"), JSON.stringify({ repo, check, retained: built.retained }, null, 2) + "\n");
       prepared.push({ unit: u, task, base_branch: repo.base_branch, merge_base: repo.merge_base, tree, tree_sha256: built.tree_sha256, instructions: repo.instructions, retained: built.retained, check });
     } catch (e) {
@@ -241,12 +273,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const runFile = join(out, "run.json");
   const runId = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string }).run_id : newRunId("review-units");
   writeFileSync(runFile, JSON.stringify({ run_id: runId }, null, 2) + "\n");
-  const resolved: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
+  const resolved: ResolvedArms = { arms: [...specs.filter((a) => a.kind !== "placebo"), ...specs.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256 }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256 }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");

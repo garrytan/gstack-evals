@@ -8,6 +8,7 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 
 - unit.ts: unit repositories and unit trees.
 - told.ts: the frozen told prompt and its sha256.
+- plan.ts: plan units: the plan arms, prompt, rec user, parser and CEO mode (see Plan units).
 - findings.ts: the fixed findings parser and the render to arm contract v1. A finding that says whether it was confirmed gets reader `confirmed` or `unconfirmed`, so an arm's `severity_map.by_reader.unconfirmed` can map unconfirmed findings as informational, as the plan's primary map does for pstack.
 - cost.ts: cost.tsv and refusals.tsv from the metering proxy's journal.
 - run.ts: runReviewUnits, the run loop on a HostRig.
@@ -65,3 +66,27 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 
 The rig's arm installer takes one target skill for every arm, so one invocation runs arms that share a told skill:
 none with gstack, or none with one other stack. `--dry-run` prints the plan and writes nothing.
+
+## Plan units
+
+`--plan ceo` runs plan units from a plan suite (planning lane plan wiki/plans/2026-10-31-geva-79-planning-lane-plan,
+B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what differs:
+
+- Arms: `none` ("Review this plan for problems."), `gstack=<gstack repo>@<sha>` (`/plan-ceo-review` and that line),
+  `lens` (the lens line from the skill's description, then that line), `placebo` (Lane B's placebo tree generated
+  from the gstack arm, with the gstack line) and `gstack-auto=<gstack repo>@<sha>`, a frozen placeholder for
+  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. `--arm-models
+  <arm>=<model>[,<model>]` limits an arm to some of `--models`, so lens runs only on Opus and placebo only on particle-1.
+- TOLD_PLAN_TEMPLATE, pinned by TOLD_PLAN_SHA256, asks for a `plan-findings` fence with severity (Critical, High,
+  Medium, Low), section, line, claim, evidence and fix. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
+- A plan unit installs and tests nothing: its tree is the repository, with the same history check.
+- Every arm runs with the rec user: each question gets "Go with your recommendation.", one that offers another skill or
+  review, or to promote or commit docs, gets "No, not now.", and the simulator's binding rules still refuse gated
+  effects. No model answers for the user. An arm that installs gstack gets every question in its registry set to
+  never-ask (auto-decide) in the trial's throwaway state root.
+- No second model: the slot admits only the driver model, the cell's Codex voice is dropped, codex_reviews is disabled
+  and arm.json lists the driver alone.
+- The parser reads the last `plan-findings` block in any assistant turn. A malformed, missing or incomplete (timed-out)
+  pass is scored as finding nothing and listed in arm.json `diagnostics`; an arm is stopped only by a cell not run or
+  a cap stop.
+- Each session's CEO review mode, from gstack's mode handoff line, goes to modes.tsv and arm.json `ceo_modes`.

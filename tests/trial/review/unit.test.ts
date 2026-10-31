@@ -77,7 +77,7 @@ describe("unit trees", () => {
     const task = unitTaskId(unitOf(s));
     const ok = buildUnitTree({ repo, task, dest: join(dir, "tree"), image: "trial:test", install: "mkdir -p node_modules/x && echo 1 > node_modules/x/i.js", test: "test -f node_modules/x/i.js && touch made-by-test", scratch: join(dir, "scratch"), retain: join(dir, "retain"), run });
     expect(ok.problems).toEqual([]);
-    expect(ok.test.passed).toBe(true);
+    expect(ok.test?.passed).toBe(true);
     expect(calls[0]).not.toContain("none");
     expect(calls[1]!.slice(calls[1]!.indexOf("--network"), calls[1]!.indexOf("--network") + 2)).toEqual(["--network", "none"]);
     expect(calls[0]).toContain(join(dir, "tree") + ":/work/" + task);

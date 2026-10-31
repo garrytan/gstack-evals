@@ -74,7 +74,7 @@ export interface HostRig {
   bind(request: BindRequest): Promise<Binding>;
   finalize(meterId: string): Promise<Meter>;
   /** Each arm's install: its session key tree, the target skill's paths under HOME and gstack-skill-start, if any. */
-  arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack"> & Partial<Pick<ArmInstall, "plugins">>>>;
+  arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack"> & Partial<Pick<ArmInstall, "plugins" | "layers">>>>;
   /** Each stack arm's cell settings by model (src/arms/cells.ts). An arm or model with no entry runs with no cell settings. */
   cells?: Readonly<Record<string, Readonly<Record<string, CellSettings>>>>;
   /** The sandbox whose agent HOME holds the arm (its cell's image for model, when it has one), or the arm's calibration copy. */
