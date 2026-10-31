@@ -112,7 +112,7 @@ The plan's mitigation was to omit each unit's diff paths from the installed gsta
 
 - A gstack-arm unit-pass is flagged when its session reads, lists, greps or diffs any path under ~/.local/share/gstack or ~/.claude/skills that contamination.tsv lists for that unit, or searches there for the unit's PR number or fix commit.
 - The flag comes from the session's tool calls in the transcript, read keylessly before any judging, and is listed per unit-pass in the results.
-- The primary results are reported with and without flagged passes. If dropping flagged passes changes any LOSS verdict in the family, the claims say so.
+- The primary results are reported with and without flagged passes. The pinned scorer cannot drop a single pass, so the reading without them drops every unit that has a flagged pass from the suite, for every arm alike, and rescores the family with the same comparisons file; the derived suite and its sha256 are printed with the results. If that reading changes any LOSS verdict in the family, the claims say so.
 
 pstack and tstack get the same rule against their own roots; with no hits, it flags nothing there.
 
@@ -141,7 +141,7 @@ The alpha 0.05 column is a single test before Holm. The first test in Holm's ste
 
 ## 7. False blockers, new blockers and idea cards
 
-A false blocker is a blocking finding that the blinded judges rule not a defect, plus any blocking finding on the 6 over-blocking units. The per-PR count is averaged over passes, paired by PR across arms and tested by exact two-sided sign-flip over PR clusters; the smallest per-PR drop that counts is 0.5. score.ts computes it from versioned per-finding adjudication rows (tests/noloss/adjudication.test.ts), which settles T6 and T9.
+A false blocker is a blocking finding that the blinded judges rule not-defect or known-informational (raising an over-blocking unit's known informational case as a blocker), as lanes/review-noloss/score.ts (tallyFalseBlockers) counts them. An unmatched blocking finding the judges rule a real defect counts as a new blocker on any unit, the 6 over-blocking units included. The per-PR count is averaged over passes, paired by PR across arms and tested by exact two-sided sign-flip over PR clusters; the smallest per-PR drop that counts is 0.5. score.ts computes it from versioned per-finding adjudication rows (tests/noloss/adjudication.test.ts), which settles T6 and T9.
 
 **Evidence for adjudication.** At the rig pin, judge-packet puts each finding's claim (and fix) in the packet but not its evidence. A judge with no tools would then miss the proof a review gave, and a not-defect ruling made for want of it would count as a false blocker, which biases against arms that prove their findings. So the judge runner sends an evidence sheet with each adjudication packet. For each opaque id it gives the finding's evidence field, passed through judge-packet's mask and leak rules (a leak refuses the sheet, as it refuses a packet), and the unit head's code 30 lines either side of the finding's line (the file's first 200 lines when the line is null). Judges also return `verifiable` per finding, which the runner keeps out of the reply file like `impact` and writes to verifiable.tsv. Primary false-blocker counts use the rulings as judge-join scores them. A frozen sensitivity count drops every not-defect ruling that either judge marked not verifiable, and the results print how many such rulings each arm had.
 
