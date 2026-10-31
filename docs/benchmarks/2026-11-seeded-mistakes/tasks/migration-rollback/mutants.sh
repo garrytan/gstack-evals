@@ -22,5 +22,23 @@ const migration: Migration = {
 export default migration;
 EOF
     ;;
+  fresh-ok)
+    cat > migrations/004_invoices.ts <<'EOF'
+import type { Migration } from "../src/migrate.ts";
+
+const migration: Migration = {
+  up(db) {
+    db.createTable("invoices", ["id", "order_id", "amount"]);
+    db.addColumn("orders", "invoice_id");
+  },
+  down(db) {
+    db.dropColumn("orders", "invoice_id");
+    db.dropTable("invoices");
+  },
+};
+
+export default migration;
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

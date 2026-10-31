@@ -19,5 +19,19 @@ export function allow(key: string): boolean {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/limits/password-reset.ts <<'EOF'
+export const limit = 3;
+
+const counts = new Map<string, number>();
+
+export function allow(key: string): boolean {
+  const n = counts.get(key) ?? 0;
+  if (n >= limit) return false;
+  counts.set(key, n + 1);
+  return true;
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

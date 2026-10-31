@@ -2,7 +2,8 @@
 // passes the contract and preflight's vacuity check, the lock pins it against a stub that holds no stack's text, and on
 // every task the oracle passes the reference solutions while failing the fix alone, a snapshot guard and a guard that
 // remembers only the old mistakes' exact bytes. Nothing in a graded tree (a bunfig.toml, a tsconfig.json, a symlink,
-// code that exits early, a check that rewrites files) changes how grade.ts grades it.
+// code that exits early, a check that rewrites files, a reshaped config, code that looks for its scenario) changes how
+// grade.ts grades it, and a tree's own failures fail it rather than reading as a grader fault.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -75,17 +76,17 @@ function addLiteralGuard(root: string, id: string, dir: string) {
   copyFileSync(join(GUARDS, "literal.ts"), join(dir, "tests/literal.test.ts"));
 }
 
-type Scenario = { check: boolean; oracle: boolean; ok: boolean };
-type Grade = { code: number; pass: boolean; order: string[]; scenarios: Record<string, Scenario> };
+type Scenario = { check: boolean | null; oracle: boolean | null; ok: boolean; reason?: string };
+type Grade = { code: number; pass: boolean; order: string[]; scenarios: Record<string, Scenario>; refused?: string; reason?: string };
 
-async function check(dir: string, id: string): Promise<{ code: number; out: string; err: string }> {
-  const p = Bun.spawn(["sh", "-c", CHECK + id], { cwd: dir, env: { ...ENV, SKILL_EVAL_FIXTURES: TASKS }, stdout: "pipe", stderr: "pipe" });
+async function check(dir: string, id: string, env: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
+  const p = Bun.spawn(["sh", "-c", CHECK + id], { cwd: dir, env: { ...ENV, SKILL_EVAL_FIXTURES: TASKS, ...env }, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
   return { code, out, err };
 }
 
-async function grade(dir: string, id: string): Promise<Grade> {
-  const { code, out, err } = await check(dir, id);
+async function grade(dir: string, id: string, env: Record<string, string> = {}): Promise<Grade> {
+  const { code, out, err } = await check(dir, id, env);
   if (code !== 0 && code !== 1) throw new Error("grade.ts " + id + " exited " + code + ": " + err);
   return { code, ...JSON.parse(out) };
 }
@@ -136,7 +137,7 @@ describe("seeded-mistake tasks", () => {
 });
 
 describe.each(ids)("%s", (id) => {
-  // Value: protects=the oracle grades the guard, not the fix: a reference guard passes (a test, a lint rule or a design change), while the fix alone, a snapshot of the source and a guard that remembers only the old bytes all fail, each on the scenario built to catch it; fails_when=a scenario stops separating them, a mutant stops applying, or an oracle rejects a correct solution; why_new=GST-348; seam=grade.ts, mutants.sh and oracle.ts; no_claim=how models score
+  // Value: protects=the oracle grades the guard, not the fix: a reference guard passes (a test, a lint rule or a design change), fresh-ok included, while the fix alone, a snapshot of the source and a guard that remembers only the old bytes all fail, each on the scenario built to catch it; fails_when=a scenario stops separating them, a mutant stops applying, or an oracle or fresh-ok's file rejects a correct solution; why_new=GST-348; seam=grade.ts, mutants.sh and oracle.ts; no_claim=how models score
   test("the oracle passes the reference solutions and fails the fix alone, a snapshot guard and a literal guard", async () => {
     const root = mkdtempSync(join(tmpdir(), "seeded-" + id + "-"));
     try {
@@ -149,14 +150,14 @@ describe.each(ids)("%s", (id) => {
       const [fix, snap, lit, ...good] = await Promise.all(dirs.map((d) => grade(d, id)));
       for (const g of good) expect(g).toMatchObject({ code: 0, pass: true });
       expect(fix!.pass).toBe(false);
-      expect([fix!.scenarios.final!.ok, fix!.scenarios.touch!.ok]).toEqual([true, true]);
+      expect([fix!.scenarios.final!.ok, fix!.scenarios.touch!.ok, fix!.scenarios["fresh-ok"]!.ok]).toEqual([true, true, true]);
       expect(fix!.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
       expect(fix!.scenarios["revert-a"]).toEqual({ check: false, oracle: false, ok: true });
       expect(snap!.pass).toBe(false);
       expect(snap!.scenarios.final!.ok).toBe(true);
-      expect(["touch", "revert-a", "revert-c", "fresh"].map((s) => snap!.scenarios[s]!.check)).toEqual([false, false, false, false]);
+      expect(["touch", "revert-a", "revert-c", "fresh", "fresh-ok"].map((s) => snap!.scenarios[s]!.check)).toEqual([false, false, false, false, false]);
       expect(lit!.pass).toBe(false);
-      expect([lit!.scenarios.final!.ok, lit!.scenarios.touch!.ok, lit!.scenarios["revert-a"]!.check, lit!.scenarios["revert-c"]!.check]).toEqual([true, true, false, false]);
+      expect([lit!.scenarios.final!.ok, lit!.scenarios.touch!.ok, lit!.scenarios["fresh-ok"]!.ok, lit!.scenarios["revert-a"]!.check, lit!.scenarios["revert-c"]!.check]).toEqual([true, true, true, false, false]);
       expect(lit!.scenarios.fresh).toEqual({ check: true, oracle: false, ok: false });
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -212,13 +213,13 @@ describe("grade.ts grades the tree, not the tree's config", () => {
     });
   }, 240_000);
 
-  // Value: protects=a coverage threshold the repo's own tests meet cannot fail a correct fix through the oracle; fails_when=the oracle reads the tree's [test] config again; why_new=GEVA-64's /ship blocking finding 1 (GST-348); seam=grade.ts's oracle step; no_claim=that the threshold is ignored by the repo's own check
+  // Value: protects=a coverage threshold the repo's own tests meet (fresh-ok's new report included) cannot fail a correct fix through the oracle; fails_when=the oracle reads the tree's [test] config again; why_new=GEVA-64's /ship blocking finding 1 (GST-348); seam=grade.ts's oracle step; no_claim=that the threshold is ignored by the repo's own check
   test("a coverageThreshold in the tree's bunfig.toml does not fail a correct fix", async () => {
     await inRoot(async (root) => {
       const dir = seed(root, ID, "coverage", ["fix", "guard"]);
       writeFileSync(join(dir, "src/reports/latency.ts"), readFileSync(join(dir, "src/reports/latency.ts"), "utf8") + '\nexport function label(): string {\n  return "latency";\n}\n');
       write(dir, {
-        "tests/label.test.ts": 'import { expect, test } from "bun:test";\nimport { label } from "../src/reports/latency.ts";\nimport { summarize } from "../src/reports/order-value.ts";\n\ntest("label and order totals", () => {\n  expect(label()).toBe("latency");\n  expect(summarize([{ total: 10 }, { total: 30 }]).averageOrder).toBe(20);\n});\n',
+        "tests/label.test.ts": 'import { expect, test } from "bun:test";\nimport { readdirSync } from "node:fs";\nimport { join } from "node:path";\nimport { label } from "../src/reports/latency.ts";\nimport { summarize } from "../src/reports/order-value.ts";\n\ntest("label and order totals", () => {\n  expect(label()).toBe("latency");\n  expect(summarize([{ total: 10 }, { total: 30 }]).averageOrder).toBe(20);\n});\n\ntest("every report runs over one row", async () => {\n  const dir = join(import.meta.dir, "../src/reports");\n  for (const file of readdirSync(dir)) expect(await (await import(join(dir, file))).summarize([{ total: 10, seconds: 10 }]), file).toBeDefined();\n});\n',
         "bunfig.toml": "[test]\ncoverage = true\ncoverageThreshold = 1\n",
       });
       const g = await grade(dir, ID);
@@ -241,7 +242,7 @@ describe("grade.ts grades the tree, not the tree's config", () => {
     });
   }, 240_000);
 
-  // Value: protects=a symlink that leaves the tree, or points nowhere, fails the grade before any mutant can write through it; fails_when=grade.ts stops refusing such links; why_new=GEVA-64's /ship blocking finding 2 (GST-348); seam=grade.ts's link check; no_claim=that the trial's delta import lets such links through
+  // Value: protects=a symlink that leaves the tree, or points nowhere, fails the grade before any mutant can write through it, while a link that loops inside the tree is graded like any other file and passes; fails_when=grade.ts stops refusing such links, or starts refusing (or failing on) a loop inside the tree; why_new=GEVA-64's /ship blocking finding 2 (GST-348), and GEVA-73's /ship finding I3 (the loop case only asserted the exit code was not 2); seam=grade.ts's link check; no_claim=that the trial's delta import lets such links through
   test("a symlink that leaves the tree, or points nowhere, fails the grade and nothing outside is written; a loop inside the tree is still judged", async () => {
     await inRoot(async (root) => {
       const outside = seed(root, ID, "outside", ["fix", "guard"]);
@@ -258,12 +259,13 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       symlinkSync(".", join(loop, "src/self"));
       const before = readFileSync(join(root, "elsewhere/latency.ts"), "utf8");
       try {
-        const [out, gone, dir, self] = await Promise.all([grade(outside, ID), grade(dangling, ID), grade(folder, ID), check(loop, ID)]);
+        const [out, gone, dir, self] = await Promise.all([grade(outside, ID), grade(dangling, ID), grade(folder, ID), grade(loop, ID)]);
         expect(readFileSync(join(root, "elsewhere/latency.ts"), "utf8")).toBe(before);
         expect(out).toMatchObject({ code: 1, pass: false, refused: "src/reports/latency.ts" });
         expect(gone).toMatchObject({ code: 1, pass: false, refused: "src/reports/gone.ts" });
         expect(dir).toMatchObject({ code: 1, pass: false, refused: "src/out" });
-        expect(self.code, self.err).not.toBe(2);
+        expect(self).toMatchObject({ code: 0, pass: true });
+        expect(self.refused).toBeUndefined();
       } finally {
         chmodSync(shut, 0o755);
       }
@@ -312,7 +314,7 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       for (const g of await Promise.all(dirs.map((dir) => grade(dir, ID)))) {
         expect(g).toMatchObject({ code: 1, pass: false });
         expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
-        expect([...g.order].sort()).toEqual(["final", "fresh", "revert-a", "revert-c", "touch"]);
+        expect([...g.order].sort()).toEqual(["final", "fresh", "fresh-ok", "revert-a", "revert-c", "touch"]);
       }
     });
   }, 240_000);
@@ -349,21 +351,146 @@ describe("grade.ts grades the tree, not the tree's config", () => {
     });
   }, 240_000);
 
-  // Value: protects=grade.ts exits 2 only when nothing was judged, and a pass is never turned into a failure by cleanup; fails_when=an unknown task, a mutant that cannot apply or a check ended by a signal exits 0 or 1, or a read-only directory makes a pass exit 1; why_new=GEVA-64's /ship non-blocking findings (GST-348); seam=grade.ts's exit codes and cleanup; no_claim=how the trial records exit 2, which judgeCheck covers
-  test("grade.ts exits 2 when nothing was judged, and cleanup never changes a verdict", async () => {
+  // Value: protects=the JSON mutants find their key wherever the tree keeps it: a tree that nests or wraps its config gets each mistake put back where it reads it, so only a real guard passes, while a nested tree with a real guard still passes and a tree whose config has nothing to edit fails rather than passing for free; fails_when=a JSON mutant edits a fixed key path again, or counts as applied when it found nothing to change; why_new=GEVA-73's /ship Red Team finding C1 (GST-348): a config nested under limits passed every scenario with no real guard; seam=json-edit.ts and the mutants.sh of config-key-typo, timeout-units and missing-translation; no_claim=that every possible reshaping keeps its key names, which the prompt asks agents to keep
+  test("the JSON mutants find their key wherever the tree keeps it, and a mutant with nothing to change fails the tree", async () => {
     await inRoot(async (root) => {
-      const plain = seed(root, ID, "plain", ["fix"]);
+      const plans = (dir: string, plan: (limits: string) => string) => {
+        const rows = [["free", 3, 1], ["team", 20, 10], ["pro", 50, 5]].map(([name, projects, seats]) => '  "' + name + '": ' + plan('"maxProjects": ' + projects + ', "maxSeats": ' + seats));
+        write(dir, { "config/plans.json": "{\n" + rows.join(",\n") + "\n}\n" });
+      };
+      const nestPlans = (name: string, guard: string) => {
+        const dir = seed(root, "config-key-typo", name, ["fix"]);
+        plans(dir, (limits) => '{ "limits": { ' + limits + " } }");
+        const src = readFileSync(join(dir, "src/plans.ts"), "utf8");
+        const nested = src.replace("const table: Record<string, Partial<Limits>> = plans;", "const table: Record<string, Partial<Limits>> = Object.fromEntries(Object.entries(plans).map(([name, plan]) => [name, (plan as { limits: Partial<Limits> }).limits]));");
+        expect(nested).not.toBe(src);
+        write(dir, { "src/plans.ts": nested, "tests/plan-shape.test.ts": 'import { expect, test } from "bun:test";\nimport plans from "../config/plans.json";\n\ntest("every plan has its limits", () => {\n  for (const [name, plan] of Object.entries(plans)) ' + guard + "\n});\n" });
+        return dir;
+      };
+      const weakPlans = nestPlans("plans-weak", 'expect(typeof (plan as { limits?: unknown }).limits, name).toBe("object");');
+      const soundPlans = nestPlans("plans-sound", 'expect(Object.keys((plan as { limits: object }).limits).sort(), name).toEqual(["maxProjects", "maxSeats"]);');
+      const services = seed(root, "timeout-units", "services-weak", ["fix"]);
+      write(services, {
+        "config/services.json": '{\n  "payments": { "url": "http://payments.example.com", "limits": { "timeoutMs": 5000 } },\n  "search": { "url": "http://search.example.com", "limits": { "timeoutMs": 3000 } },\n  "email": { "url": "http://email.example.com", "limits": { "timeoutMs": 10000 } }\n}\n',
+        "src/client.ts": readFileSync(join(services, "src/client.ts"), "utf8").replace("type Service = { url: string; timeoutMs: number };", "type Service = { url: string; limits: { timeoutMs: number } };").replace("return service.timeoutMs;", "return service.limits.timeoutMs;"),
+        "tests/service-shape.test.ts": 'import { expect, test } from "bun:test";\nimport services from "../config/services.json";\n\ntest("every service has its limits", () => {\n  for (const [name, s] of Object.entries(services)) expect(typeof s.limits, name).toBe("object");\n});\n',
+      });
+      const locales = seed(root, "missing-translation", "locales-weak", ["fix"]);
+      write(locales, {
+        "locales/en.json": '{\n  "checkout": { "title": "Checkout", "pay": "Pay now" },\n  "profile": { "title": "Profile", "save": "Save changes" }\n}\n',
+        "locales/fr.json": '{\n  "checkout": { "title": "Paiement", "pay": "Payer maintenant" },\n  "profile": { "title": "Profil", "save": "Enregistrer les modifications" }\n}\n',
+        "src/i18n.ts": 'import en from "../locales/en.json";\nimport fr from "../locales/fr.json";\n\nconst messages: Record<string, unknown> = { en, fr };\n\nexport function t(locale: string, key: string): string {\n  const found = key.split(".").reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], messages[locale]);\n  return typeof found === "string" ? found : key;\n}\n',
+        "tests/locale-shape.test.ts": 'import { expect, test } from "bun:test";\nimport { readdirSync, readFileSync } from "node:fs";\nimport { join } from "node:path";\n\nconst dir = join(import.meta.dir, "../locales");\nconst keys = (node: unknown): string[] => (node && typeof node === "object" ? Object.entries(node).flatMap(([k, v]) => [k, ...keys(v)]) : []);\n\ntest("locale files nest their keys", () => {\n  for (const file of readdirSync(dir)) expect(keys(JSON.parse(readFileSync(join(dir, file), "utf8"))).filter((k) => k.includes(".")), file).toEqual([]);\n});\n',
+      });
+      const renamed = seed(root, "config-key-typo", "renamed", ["fix", "guard"]);
+      plans(renamed, (limits) => "{ " + limits.replaceAll('"maxProjects"', '"projects"').replaceAll('"maxSeats"', '"seats"') + " }");
+      write(renamed, {
+        "src/plans.ts": readFileSync(join(renamed, "src/plans.ts"), "utf8").replace("const table: Record<string, Partial<Limits>> = plans;", "const table: Record<string, Partial<Limits>> = Object.fromEntries(Object.entries(plans).map(([name, plan]) => [name, { maxProjects: plan.projects, maxSeats: plan.seats }]));"),
+        "tests/plan-keys.test.ts": 'import { expect, test } from "bun:test";\nimport plans from "../config/plans.json";\n\ntest("every plan sets exactly projects and seats", () => {\n  for (const [name, plan] of Object.entries(plans)) expect(Object.keys(plan).sort(), name).toEqual(["projects", "seats"]);\n});\n',
+      });
+      const [weak, sound, slow, raw, gone] = await Promise.all([grade(weakPlans, "config-key-typo"), grade(soundPlans, "config-key-typo"), grade(services, "timeout-units"), grade(locales, "missing-translation"), grade(renamed, "config-key-typo")]);
+      for (const g of [weak, slow, raw]) {
+        expect(g).toMatchObject({ code: 1, pass: false });
+        expect([g.scenarios.final!.ok, g.scenarios.touch!.ok, g.scenarios["fresh-ok"]!.ok]).toEqual([true, true, true]);
+        expect(g.scenarios["revert-c"]).toEqual({ check: true, oracle: false, ok: false });
+      }
+      expect(weak.scenarios.fresh).toEqual({ check: true, oracle: false, ok: false });
+      expect(sound).toMatchObject({ code: 0, pass: true });
+      expect(gone).toMatchObject({ code: 1, pass: false });
+      expect(gone.scenarios.final).toEqual({ check: true, oracle: true, ok: true });
+      for (const s of ["revert-a", "revert-c", "fresh", "fresh-ok"]) expect(gone.scenarios[s]).toMatchObject({ check: null, oracle: null, ok: false, reason: expect.stringContaining("the tree's layout stopped the " + s + " mutant: json-edit: config/plans.json: no ") });
+    });
+  }, 240_000);
+
+  // Value: protects=a guard that fails on any change in what the config means (a snapshot of the parsed plans) fails the grade: fresh-ok adds a correct plan, which such a guard rejects; fails_when=the grader drops fresh-ok, or fresh-ok's edit writes the mistake or nothing at all; why_new=GEVA-73's /ship Red Team finding C2 (GST-348): touch is cosmetic, so a snapshot of meaning passed every scenario; seam=grade.ts's MUST_PASS and each mutants.sh's fresh-ok; no_claim=that a guard can tell a correct new plan from a wrong one by any means but behavior
+  test("a snapshot of what the config means fails fresh-ok, so it fails the grade", async () => {
+    await inRoot(async (root) => {
+      const dir = seed(root, "config-key-typo", "meaning", ["fix"]);
+      write(dir, { "tests/plans-snapshot.test.ts": 'import { expect, test } from "bun:test";\nimport plans from "../config/plans.json";\n\ntest("plans match their snapshot", () => {\n  expect(plans).toMatchSnapshot();\n});\n' });
+      run(["bun", "test"], dir);
+      expect(existsSync(join(dir, "tests/__snapshots__"))).toBe(true);
+      const g = await grade(dir, "config-key-typo");
+      expect(g).toMatchObject({ code: 1, pass: false });
+      expect(["revert-a", "revert-c", "fresh"].map((s) => g.scenarios[s]!.ok)).toEqual([true, true, true]);
+      expect(g.scenarios["fresh-ok"]).toEqual({ check: false, oracle: true, ok: false });
+    });
+  }, 240_000);
+
+  // Value: protects=a relative link that climbs out through the copy root's name and back in passes in one copy but not another, so each copy is checked where it is used and no mutant writes into the master copy; fails_when=grade.ts checks links in its first copy only; why_new=GEVA-73's /ship finding I1 (GST-348); seam=grade.ts's link check on each copy; no_claim=that tree code cannot write outside its copy at run time
+  test("a link that climbs through the copy root's name is refused in the copy where it would leave", async () => {
+    await inRoot(async (root) => {
+      const dir = seed(root, ID, "tree", ["fix", "guard"]);
+      mkdirSync(join(dir, "lib"));
+      renameSync(join(dir, "src/reports/latency.ts"), join(dir, "lib/latency.ts"));
+      symlinkSync("../../../tree/lib/latency.ts", join(dir, "src/reports/latency.ts"));
+      const before = readFileSync(join(dir, "lib/latency.ts"), "utf8");
+      expect(readFileSync(join(dir, "src/reports/latency.ts"), "utf8")).toBe(before);
+      const g = await grade(dir, ID);
+      expect(readFileSync(join(dir, "lib/latency.ts"), "utf8")).toBe(before);
+      expect(g).toMatchObject({ code: 1, pass: false, refused: "src/reports/latency.ts" });
+    });
+  }, 240_000);
+
+  // Value: protects=nothing the oracle's process can read (its environment or its arguments) names the scenario, so tree code the oracle imports cannot act safe only when a mistake is in place; fails_when=grade.ts passes the scenario to the oracle by env or argv again; why_new=GEVA-73's /ship finding I2 (GST-348): GRADE_SCENARIO sat in the oracle's env; seam=grade.ts's oracle step and the oracles' "with no mistake in place" blocks; no_claim=that tree code cannot tamper with the oracle's process in other ways
+  test("tree code the oracle imports finds no scenario name in its environment or arguments", async () => {
+    await inRoot(async (root) => {
+      const dir = seed(root, ID, "sniff", ["fix", "guard"]);
+      const sniff = 'const SCENARIOS = ["final", "touch", "revert-a", "revert-c", "fresh", "fresh-ok"];\nif ([...Object.values(process.env), ...process.argv].some((v) => SCENARIOS.includes(v ?? ""))) throw new Error("graded in a named scenario");\n';
+      write(dir, { "src/reports/latency.ts": sniff + readFileSync(join(dir, "src/reports/latency.ts"), "utf8") });
+      const g = await grade(dir, ID);
+      expect(g).toMatchObject({ code: 0, pass: true });
+    });
+  }, 240_000);
+
+  // Value: protects=the secret-file-mode oracle removes every folder it saves credentials into, pass or fail; fails_when=the oracle stops cleaning up in a finally block; why_new=GEVA-73's /ship finding I4 (GST-348): one keyless run left 623 credential folders in /tmp; seam=secret-file-mode/oracle.ts; no_claim=that the tree's own check cleans up after itself
+  test("secret-file-mode: the oracle leaves no credential folder behind", async () => {
+    await inRoot(async (root) => {
+      const dir = seed(root, "secret-file-mode", "tree", ["fix", "guard"]);
+      mkdirSync(join(dir, "__grade__"));
+      copyFileSync(join(TASKS, "secret-file-mode/oracle.ts"), join(dir, "__grade__/oracle.test.ts"));
+      const tmp = join(root, "tmp");
+      mkdirSync(tmp);
+      run([process.execPath, "--no-env-file", "--config=" + join(TASKS, "bunfig.toml"), "test", "./__grade__/oracle.test.ts"], dir, { TMPDIR: tmp });
+      expect(readdirSync(tmp).filter((f) => f.startsWith("oracle-"))).toEqual([]);
+    });
+  }, 240_000);
+
+  // Value: protects=a tree whose own steps break fails, rather than exiting 2, which the trial reads as a verifier fault and retries: a copy that fails on a FIFO, a mutant the tree's layout stopped, and a check killed by a signal (a hang ends the same way, by SIGTERM at the step limit); fails_when=any of these exits 2 again, or the layout case stops naming its reason; why_new=GEVA-73's /ship finding I5 (GST-348); seam=grade.ts's step results and the mutant probe on the seed; no_claim=that the trial retries nothing else
+  test("a tree that breaks a step fails the grade instead of exiting 2", async () => {
+    await inRoot(async (root) => {
+      const fifo = seed(root, ID, "fifo", ["fix", "guard"]);
+      run(["mkfifo", join(fifo, "notes.fifo")], fifo);
       const blocked = seed(root, ID, "blocked", ["fix"]);
       rmSync(join(blocked, "src/reports/latency.ts"));
       mkdirSync(join(blocked, "src/reports/latency.ts"));
       const killed = seed(root, ID, "killed", ["fix"]);
       write(killed, { "package.json": '{ "scripts": { "check": "kill -9 $$" } }\n' });
+      const [pipe, mutant, signal] = await Promise.all([grade(fifo, ID), grade(blocked, ID), grade(killed, ID)]);
+      expect(pipe).toMatchObject({ code: 1, pass: false, reason: expect.stringContaining("the tree could not be copied") });
+      expect(mutant).toMatchObject({ code: 1, pass: false });
+      expect(mutant.scenarios["revert-a"]).toMatchObject({ check: null, oracle: null, ok: false, reason: expect.stringContaining("the tree's layout stopped the revert-a mutant") });
+      expect(signal).toMatchObject({ code: 1, pass: false });
+      expect(signal.scenarios.final).toMatchObject({ check: null, ok: false, reason: expect.stringContaining("bun run check did not finish") });
+    });
+  }, 240_000);
+
+  // Value: protects=grade.ts exits 2 only when the grader itself failed (an unknown task, a mutant that fails on the seed too, a step that cannot start), and a pass is never turned into a failure by cleanup; fails_when=a grader fault exits 0 or 1, or a read-only directory makes a pass exit 1; why_new=GEVA-64's /ship non-blocking findings and GEVA-73's finding I5 (GST-348); seam=grade.ts's exit codes and cleanup; no_claim=how the trial records exit 2, which judgeCheck covers
+  test("grade.ts exits 2 only when the grader failed, and cleanup never changes a verdict", async () => {
+    await inRoot(async (root) => {
+      const plain = seed(root, ID, "plain", ["fix", "guard"]);
+      const suite = join(root, "suite");
+      cpSync(TASKS, suite, { recursive: true });
+      writeFileSync(join(suite, ID, "mutants.sh"), "exit 1\n");
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      symlinkSync(process.execPath, join(bin, "bun"));
+      symlinkSync(Bun.which("sh")!, join(bin, "sh"));
       const locked = seed(root, ID, "locked", ["fix", "guard"]);
       write(locked, { "notes/read-only.md": "kept\n" });
       chmodSync(join(locked, "notes"), 0o555);
       try {
-        const [unknown, mutant, signal, pass] = await Promise.all([check(plain, "no-such-task"), check(blocked, ID), check(killed, ID), check(locked, ID)]);
-        for (const r of [unknown, mutant, signal]) {
+        const [unknown, broken, start, pass] = await Promise.all([check(plain, "no-such-task"), check(plain, ID, { SKILL_EVAL_FIXTURES: suite }), check(plain, ID, { PATH: bin }), check(locked, ID)]);
+        for (const r of [unknown, broken, start]) {
           expect(r.code, r.err).toBe(2);
           expect(r.err).toMatch(/^E_TASKS_INVALID: grade: /m);
         }

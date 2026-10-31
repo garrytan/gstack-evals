@@ -13,5 +13,13 @@ export function summarize(sessions: { seconds: number }[]) {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/reports/session-length.ts <<'EOF'
+export function summarize(sessions: { seconds: number }[]) {
+  const total = sessions.reduce((a, s) => a + s.seconds, 0);
+  return { sessions: sessions.length, averageSeconds: sessions.length ? total / sessions.length : 0 };
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

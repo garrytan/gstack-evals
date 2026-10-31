@@ -1,10 +1,9 @@
 // Behavior oracle for limit-off-by-one. Every scenario: no limiter allows more than its limit for one key.
-// final and touch also: each limiter allows exactly its limit.
-import { expect, test } from "bun:test";
+// Counted in the must-pass scenarios only: each limiter allows exactly its limit.
+import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-const full = ["final", "touch"].includes(process.env.GRADE_SCENARIO ?? "final");
 const dir = join(import.meta.dir, "../src/limits");
 const limiters: [string, number][] = [["login", 5], ["api", 100], ["password-reset", 3]];
 const present = limiters.filter(([name]) => existsSync(join(dir, name + ".ts")));
@@ -21,6 +20,8 @@ test("no limiter allows more than its limit", async () => {
   for (const [name, limit] of present) expect(await allowed(name, limit + 5), name).toBeLessThanOrEqual(limit);
 });
 
-test.if(full)("each limiter allows exactly its limit", async () => {
-  for (const [name, limit] of present) expect(await allowed(name, limit + 5), name).toBe(limit);
+describe("with no mistake in place", () => {
+  test("each limiter allows exactly its limit", async () => {
+    for (const [name, limit] of present) expect(await allowed(name, limit + 5), name).toBe(limit);
+  });
 });

@@ -15,5 +15,17 @@ export function save(dir: string, value: string) {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/store/refresh-token.ts <<'EOF'
+import { chmodSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+export function save(dir: string, value: string) {
+  const file = join(dir, "refresh-token");
+  writeFileSync(file, value, { mode: 0o600 });
+  chmodSync(file, 0o600);
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

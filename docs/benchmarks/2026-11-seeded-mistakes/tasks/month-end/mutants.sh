@@ -14,5 +14,15 @@ export function reminderDate(renewal: Date): Date {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/billing/reminder.ts <<'EOF'
+export function reminderDate(renewal: Date): Date {
+  const target = new Date(Date.UTC(renewal.getUTCFullYear(), renewal.getUTCMonth() - 1, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(renewal.getUTCDate(), last));
+  return target;
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

@@ -14,5 +14,14 @@ export function enabled(env: Record<string, string | undefined>): boolean {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/flags/dry-run.ts <<'EOF'
+export const variable = "DRY_RUN";
+
+export function enabled(env: Record<string, string | undefined>): boolean {
+  return env.DRY_RUN === "true";
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

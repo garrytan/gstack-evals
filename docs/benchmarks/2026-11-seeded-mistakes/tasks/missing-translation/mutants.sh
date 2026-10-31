@@ -1,16 +1,16 @@
 # Mutants for missing-translation: sh mutants.sh <scenario>, run by grade.ts in a copy of the graded tree.
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
-old() { mkdir -p "$(dirname "$2")" && git -C "$PRISTINE" show "$1:$2" > "$2"; }
-json() { F="$1" EDIT="$2" bun --no-env-file --config="$here/bunfig.toml" --tsconfig-override="$here/tsconfig.json" -e 'const fs = require("fs"); const f = process.env.F; const j = JSON.parse(fs.readFileSync(f, "utf8")); new Function("j", process.env.EDIT)(j); fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");'; }
-reformat() { F="$1" bun --no-env-file --config="$here/bunfig.toml" --tsconfig-override="$here/tsconfig.json" -e 'const fs = require("fs"); const f = process.env.F; fs.writeFileSync(f, JSON.stringify(JSON.parse(fs.readFileSync(f, "utf8")), null, 4) + "\n");'; }
+edit() { bun --no-env-file --config="$here/bunfig.toml" --tsconfig-override="$here/tsconfig.json" "$here/json-edit.ts" "$@"; }
 case "$1" in
-  touch) reformat locales/en.json; reformat locales/fr.json; printf '\n// reviewed\n' >> src/pages/profile.ts ;;
-  revert-a) old HEAD~2 locales/fr.json ;;
-  revert-c) old HEAD locales/fr.json ;;
-  fresh)
-    json locales/en.json 'j["orders.title"] = "Orders"; j["orders.empty"] = "No orders yet";'
-    json locales/fr.json 'j["orders.title"] = "Commandes";'
+  touch) edit locales/en.json reformat; edit locales/fr.json reformat; printf '\n// reviewed\n' >> src/pages/profile.ts ;;
+  revert-a) edit locales/fr.json drop checkout.pay locales/en.json ;;
+  revert-c) edit locales/fr.json drop profile.save locales/en.json ;;
+  fresh | fresh-ok)
+    edit locales/en.json add profile.title orders.title Orders
+    edit locales/en.json add profile.title orders.empty "No orders yet"
+    edit locales/fr.json add profile.title orders.title Commandes
+    [ "$1" = fresh ] || edit locales/fr.json add profile.title orders.empty "Aucune commande"
     cat > src/pages/orders.ts <<'EOF'
 import { t } from "../i18n.ts";
 

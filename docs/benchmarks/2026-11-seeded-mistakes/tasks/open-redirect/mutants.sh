@@ -14,5 +14,14 @@ export function handle(query: Record<string, string | undefined>): Res {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/handlers/signup.ts <<'EOF'
+import { redirect, safePath, type Res } from "../http.ts";
+
+export function handle(query: Record<string, string | undefined>): Res {
+  return redirect(safePath(query.next ?? "/welcome"));
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

@@ -14,5 +14,14 @@ export function render(review: { title: string; text: string }): string {
 }
 EOF
     ;;
+  fresh-ok)
+    cat > src/views/review.ts <<'EOF'
+import { escape, html } from "../html.ts";
+
+export function render(review: { title: string; text: string }): string {
+  return html`<h2>${escape(review.title)}</h2><p>${escape(review.text)}</p>`;
+}
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

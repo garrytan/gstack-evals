@@ -26,6 +26,7 @@ Each task seeds a small Bun repo whose history shows one mistake fixed once (sit
 - `tasks/seed.sh` and `tasks/<id>/history.sh`: build the repo one commit at a time.
 - `tasks/grade.ts`: the grader. It copies the graded tree once per scenario and runs the task's behavior oracle, `tasks/<id>/oracle.ts`, then the repo's CI entry, `bun run check`.
 - `tasks/<id>/mutants.sh`: the scenarios' edits. They read old file versions from a fresh seed, so the grader does not need the agent's git history.
+- `tasks/json-edit.ts`: the JSON edits of config-key-typo, missing-translation and timeout-units. Each finds its key wherever the tree keeps it (nested, wrapped or in a list) and fails when it finds nothing to change.
 - `tasks/tasks.lock.json`: the lock, built with `gstack-evals skill-eval --lock --tasks docs/benchmarks/2026-11-seeded-mistakes/tasks/tasks.json --before docs/benchmarks/2026-11-seeded-mistakes/stack-neutral`.
 - `stack-neutral/SKILL.md`: the stub the lock names as its before copy. It holds no procedure and no contract lines.
 - `tests/seeded-mistakes/`: the keyless tests and each task's reference solutions.
@@ -38,16 +39,19 @@ Each task seeds a small Bun repo whose history shows one mistake fixed once (sit
 | touch | a comment added, or JSON reformatted, in the files the mistakes live in | the check passes and the oracle passes |
 | revert-a | site A's mistake put back | the check fails, or the oracle still passes |
 | revert-c | site C's mistake put back | the check fails, or the oracle still passes |
-| fresh | the same mistake in a new file, written the way the repo writes such files | the check fails, or the oracle still passes |
+| fresh | the same mistake in a new file or config entry, written the way the repo writes such files | the check fails, or the oracle still passes |
+| fresh-ok | fresh's new file or entry, written without the mistake | the check passes and the oracle passes |
 
-A task passes when all five do. The grader prints one JSON line with every scenario's check and oracle result, and exits 0 (pass), 1 (fail) or 2 (nothing judged: a setup or mutant failed, or a step timed out, was killed or exited above 128).
+A task passes when all six do. fresh-ok is there so a guard that fails on any new file, or on any change to what the config means, fails the grade. The grader prints one JSON line with every scenario's check and oracle result, and exits 0 (pass), 1 (fail) or 2 (nothing judged: the grader itself failed).
+
+Failures the tree causes count as fails, with the reason in the JSON line: a tree that cannot be copied (a FIFO, a socket, an unreadable file), a mutant that fails on the tree but applies to the seed (a file moved, or a config key nowhere to be found), and an oracle or check that times out, is killed or exits above 128. Exit 2 is kept for faults the grader owns: an unknown task, a seed that failed, a mutant that fails on the seed too, a step that could not start, or a full disk.
 
 The repo's own `bun run check` reads the tree's config, as its CI would. Nothing in the tree reaches the grader itself:
 
 - grade.ts, each oracle and the mutants' bun steps run with `--no-env-file` and the suite's bunfig.toml, so the tree's .env, bunfig.toml preloads and [test] options (a coverage threshold, say) do not apply to them. grade.ts also runs with the suite's tsconfig.json, so a paths entry in the tree cannot swap it for another file.
 - Each scenario runs at the same path, in random order (the JSON lists it as `order`), on a fresh copy of the tree. Mutants read a seed made for that scenario and removed before any tree code runs. So the check cannot tell which scenario it is in from where or when it runs.
-- The oracle runs first, in its own copy of the scenario's tree, so nothing the check does to the files reaches it. It passes only when it exits 0 and its JUnit report shows its own tests ran with none failing, so tree code that ends the process early does not pass it.
-- The copies keep symlinks as links. A link that leaves the tree or points nowhere fails the grade (exit 1, with the link named in `refused`) before any mutant runs.
+- The oracle runs first, in its own copy of the scenario's tree, so nothing the check does to the files reaches it. Nothing in its environment or arguments names the scenario: it runs every test every time, and the grader reads each test's result from its JUnit report. Tests in its "with no mistake in place" block count in final, touch and fresh-ok only. It passes only when the report shows its own tests ran with none that count failing, so tree code that ends the process early does not pass it.
+- The copies keep symlinks as links. Each copy's links are checked where that copy sits, before anything runs in it. A link that leaves the copy or points nowhere fails the grade (exit 1, with the link named in `refused`), so no mutant writes outside its copy.
 
 The oracle still imports the tree's code, which is the point of it. Code written to tamper with grading from inside a step (by patching the oracle's process, writing outside its own copy, keeping state between its runs or leaving a process running) is out of reach of these rules.
 

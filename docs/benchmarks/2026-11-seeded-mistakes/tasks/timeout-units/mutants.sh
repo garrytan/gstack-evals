@@ -1,12 +1,15 @@
 # Mutants for timeout-units: sh mutants.sh <scenario>, run by grade.ts in a copy of the graded tree.
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
-json() { F="$1" EDIT="$2" bun --no-env-file --config="$here/bunfig.toml" --tsconfig-override="$here/tsconfig.json" -e 'const fs = require("fs"); const f = process.env.F; const j = JSON.parse(fs.readFileSync(f, "utf8")); new Function("j", process.env.EDIT)(j); fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");'; }
-reformat() { F="$1" bun --no-env-file --config="$here/bunfig.toml" --tsconfig-override="$here/tsconfig.json" -e 'const fs = require("fs"); const f = process.env.F; fs.writeFileSync(f, JSON.stringify(JSON.parse(fs.readFileSync(f, "utf8")), null, 4) + "\n");'; }
+edit() { bun --no-env-file --config="$here/bunfig.toml" --tsconfig-override="$here/tsconfig.json" "$here/json-edit.ts" "$@"; }
 case "$1" in
-  touch) reformat config/services.json ;;
-  revert-a) json config/services.json 'j.search.timeoutMs = 3;' ;;
-  revert-c) json config/services.json 'j.email.timeoutMs = 10;' ;;
-  fresh) json config/services.json 'j.sms = { url: "http://sms.example.com", timeoutMs: 2 };' ;;
+  touch) edit config/services.json reformat ;;
+  revert-a) edit config/services.json set search timeout 3 ;;
+  revert-c) edit config/services.json set email timeout 10 ;;
+  fresh)
+    edit config/services.json clone search sms
+    edit config/services.json set sms timeout 2
+    ;;
+  fresh-ok) edit config/services.json clone search sms ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac

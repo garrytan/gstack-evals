@@ -18,7 +18,7 @@ EOF
   guard)
 put tests/private-files.test.ts <<'EOF'
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,8 +28,12 @@ process.umask(0o022);
 test("every store writes files only their owner can read", async () => {
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
     const out = mkdtempSync(join(tmpdir(), "store-"));
-    (await import(join(dir, file))).save(out, "secret");
-    for (const written of readdirSync(out)) expect(statSync(join(out, written)).mode & 0o077, file).toBe(0);
+    try {
+      (await import(join(dir, file))).save(out, "secret");
+      for (const written of readdirSync(out)) expect(statSync(join(out, written)).mode & 0o077, file).toBe(0);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
   }
 });
 EOF

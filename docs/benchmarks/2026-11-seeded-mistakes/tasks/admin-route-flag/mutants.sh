@@ -18,5 +18,19 @@ const route: Route = {
 export default route;
 EOF
     ;;
+  fresh-ok)
+    cat > src/routes/audit.ts <<'EOF'
+import type { Route } from "./types.ts";
+
+const route: Route = {
+  method: "GET",
+  path: "/admin/audit",
+  admin: true,
+  handler: () => ({ events: [] }),
+};
+
+export default route;
+EOF
+    ;;
   *) echo "E_TASKS_INVALID: mutants.sh: no scenario $1" >&2; exit 2 ;;
 esac
