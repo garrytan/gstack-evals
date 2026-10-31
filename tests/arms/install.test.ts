@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installArms, InstallError, localInstaller, releaseInstalls, runHold, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
@@ -211,23 +211,26 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
       `writeFileSync(ready!, "");`,
       `while (!existsSync(go!)) Bun.sleepSync(20);`,
     ].join("\n"));
-    writeFileSync(join(scripts, "release.ts"), `import { releaseInstalls } from ${JSON.stringify(lib)};\nreleaseInstalls(JSON.parse(process.argv[2]!));\n`);
+    writeFileSync(join(scripts, "release.ts"), `import { writeFileSync } from "node:fs";\nimport { releaseInstalls } from ${JSON.stringify(lib)};\nwriteFileSync(process.argv[3]!, "");\nreleaseInstalls(JSON.parse(process.argv[2]!));\n`);
     writeFileSync(join(scripts, "take.ts"), [
-      `import { existsSync } from "node:fs";`,
+      `import { existsSync, writeFileSync } from "node:fs";`,
       `import { installArms, localInstaller, runHold } from ${JSON.stringify(lib)};`,
       `const options = JSON.parse(process.argv[2]!);`,
+      `writeFileSync(process.argv[4]!, "");`,
       `const arms = installArms({ ...options, runner: localInstaller(process.argv[3]!), hold: runHold(options.state, "b") });`,
       `console.log(JSON.stringify(arms.flatMap((arm) => arm.layers.map((layer) => layer.src)).filter((src) => !existsSync(src))));`,
     ].join("\n"));
-    const [ready, go] = [join(scripts, "ready"), join(scripts, "go")];
-    const lock = Bun.spawn([process.execPath, join(scripts, "lock.ts"), join(state, "installs.lock"), ready, go]);
-    while (!existsSync(ready)) await Bun.sleep(20);
-    const release = Bun.spawn([process.execPath, join(scripts, "release.ts"), JSON.stringify(a)]);
-    const take = Bun.spawn([process.execPath, join(scripts, "take.ts"), JSON.stringify(options), scratch("runner")], { stdout: "pipe" });
-    await Bun.sleep(1500);
+    const [ready, go, releasing, taking] = ["ready", "go", "releasing", "taking"].map((name) => join(scripts, name));
+    const lock = Bun.spawn([process.execPath, join(scripts, "lock.ts"), join(state, "installs.lock"), ready, go!]);
+    while (!existsSync(ready!)) await Bun.sleep(20);
+    const release = Bun.spawn([process.execPath, join(scripts, "release.ts"), JSON.stringify(a), releasing!]);
+    const take = Bun.spawn([process.execPath, join(scripts, "take.ts"), JSON.stringify(options), scratch("runner"), taking!], { stdout: "pipe" });
+    while (!existsSync(releasing!) || !existsSync(taking!)) await Bun.sleep(20);
+    // gstack-timing-ok: both children have started, and without the lock the release finishes in milliseconds; with it they wait until go, however long this takes
+    await Bun.sleep(1000);
     expect([release.exitCode, take.exitCode]).toEqual([null, null]);
     expect(built.filter((dir) => !existsSync(join(dir, "install.json")) || existsSync(join(dir + ".holds", "b")))).toEqual([]);
-    writeFileSync(go, "");
+    writeFileSync(go!, "");
     expect([await lock.exited, await release.exited, await take.exited]).toEqual([0, 0, 0]);
     expect(JSON.parse(await new Response(take.stdout).text())).toEqual([]);
     const b = runHold(state, "b");
@@ -254,5 +257,61 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     expect(entries).toHaveLength(2);
     expect(releaseInstalls(resumed).sort()).toEqual(entries);
     expect(readdirSync(join(state, "installs"))).toEqual([]);
+  });
+
+  const looseArms = (name: string) => {
+    const dir = join(scratch("loose"), "loose");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: loose\n---\n" + name + "\n");
+    return [{ name: "before", kind: "overlay" as const, base: null, skill: "loose", dir }];
+  };
+
+  // Value: protects=a run that only reused an entry keeps it on release and leaves the builder's built claim, and a resumed run that took over such a hold deletes nothing; fails_when=a release by a run that only reused an entry deletes it or moves the builder's claim, or a resumed run's used hold turns into a delete; why_new=PR #85 /ship state-machine review (used x release-shared and used x resume-release untested); seam=runHold, cached, releaseInstalls; no_claim=concurrent runs (the lock test)
+  test("a run that only reused an entry keeps it and the builder's claim, on release and after a resume", () => {
+    const state = scratch("state");
+    const arms = looseArms("reused");
+    const installed = (hold?: CacheHold) => installArms({ host: "claude", arms, skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state, ...(hold ? { hold } : {}) });
+    const x = runHold(state, "x");
+    installed(x);
+    const entry = x.entries[0]!;
+    const y = runHold(state, "y");
+    installed(y);
+    expect(releaseInstalls(y)).toEqual([]);
+    expect([existsSync(join(entry, "install.json")), readFileSync(join(entry + ".holds", "x"), "utf8")]).toEqual([true, "built\n"]);
+    expect(releaseInstalls(x)).toEqual([entry]);
+    installed();
+    const warm = readdirSync(join(state, "installs")).sort();
+    installed(runHold(state, "r"));
+    const resumed = runHold(state, "r");
+    expect(resumed.entries).toEqual([entry]);
+    installed(resumed);
+    expect([releaseInstalls(resumed), readdirSync(join(state, "installs")).sort()]).toEqual([[], warm]);
+  });
+
+  // Value: protects=a release that fails before its entry is gone keeps the run's hold, so --resume can still release the entry; fails_when=the hold is dropped before the rename, so a failed or killed release leaves an entry nobody deletes; why_new=PR #85 review (crash window in releaseInstalls); seam=releaseInstalls, runHold; no_claim=root, whom chmod does not stop
+  test.skipIf(process.getuid?.() === 0)("a release that fails keeps its hold, so --resume can still release the entry", () => {
+    const state = scratch("state");
+    const arms = looseArms("failed release");
+    const hold = runHold(state, "r");
+    installArms({ host: "claude", arms, skill: null, base: null, sources: [], runner: localInstaller(scratch("runner")), state, hold });
+    chmodSync(join(state, "installs"), 0o555);
+    try {
+      expect(() => releaseInstalls(hold)).toThrow();
+    } finally {
+      chmodSync(join(state, "installs"), 0o755);
+    }
+    const resumed = runHold(state, "r");
+    expect(resumed.entries).toEqual(hold.entries);
+    expect(releaseInstalls(resumed)).toEqual(hold.entries);
+  });
+
+  // Value: protects=a run id that is not a plain name (a tampered run.json on --resume) is refused before a hold path is built from it; fails_when=runHold joins ../ segments into a hold path and releaseInstalls deletes or writes outside the state root; why_new=PR #85 /ship security review; seam=runHold; no_claim=fresh runs, whose ids newRunId makes
+  test("a run id that is not a plain name is refused before a hold path is built from it", () => {
+    const root = scratch("hold");
+    const state = join(root, "state");
+    mkdirSync(join(state, "installs", "entry.holds"), { recursive: true });
+    writeFileSync(join(root, "canary"), "keep\n");
+    for (const run of ["../../../canary", "..", ".", "a/b", ""]) expect(stop(() => runHold(state, run))).toBe("E_NOT_RESUMABLE");
+    expect(readFileSync(join(root, "canary"), "utf8")).toBe("keep\n");
   });
 });
