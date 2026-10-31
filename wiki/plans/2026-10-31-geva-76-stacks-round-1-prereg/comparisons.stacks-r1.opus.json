@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "suite": "stacks-r1",
+  "decision_rule": "Preregistered in wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg (sections 6 and 7). Each blocking blocker's value is the share of an arm's passes that FOUND it; PR clusters are the units of the test. Primary: the LOSS family below, four one-sided tests at null zero (V is no worse than R), exact sign-flip over PR clusters, Holm step-down across the four in the declared order, LOSS when the Holm-adjusted p is below 0.05. NO_LOSS needs the margin-shifted test at 10 points and the 80% size rule; at this size it is expected to exit 2 with NOLOSS_UNDERPOWERED and is never a claim. Otherwise NOT_DISTINGUISHED. False blockers: per-PR counts averaged over passes, paired by PR, exact two-sided sign-flip, with the smallest drop that counts set to 0.5 per PR. An arm that stopped or has blockers recorded with coverage incomplete gets no verdict. Comparisons outside the family are secondary and descriptive.",
+  "seed": 20261031,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "pstack-vs-gstack",
+      "variant": "pstack-opus",
+      "reference": "gstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Primary. Idea 1 (Lauren Tan, pstack interrogate)."
+    },
+    {
+      "id": "tstack-vs-gstack",
+      "variant": "tstack-opus",
+      "reference": "gstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Primary. Idea 2 (Theo Browne, tstack sol-loop, first round only)."
+    },
+    {
+      "id": "gstack-vs-pstack",
+      "variant": "gstack-opus",
+      "reference": "pstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Primary mirror (finding T2): can gstack lose to pstack."
+    },
+    {
+      "id": "gstack-vs-tstack",
+      "variant": "gstack-opus",
+      "reference": "tstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Primary mirror (finding T2): can gstack lose to tstack."
+    },
+    {
+      "id": "gstack-vs-none",
+      "variant": "gstack-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Secondary: each arm against no skill, Opus cell."
+    },
+    {
+      "id": "pstack-vs-none",
+      "variant": "pstack-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Secondary: each arm against no skill, Opus cell."
+    },
+    {
+      "id": "tstack-vs-none",
+      "variant": "tstack-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Secondary: each arm against no skill, Opus cell."
+    }
+  ],
+  "loss_family": {
+    "order": [
+      "pstack-vs-gstack",
+      "tstack-vs-gstack",
+      "gstack-vs-pstack",
+      "gstack-vs-tstack"
+    ],
+    "null": "zero",
+    "reason": "Finding T2 and T8: the plan's two LOSS tests of pstack and tstack against gstack plus their mirrors, so gstack can lose too. Null zero asks whether V is worse than R at all, the lane's LOSS test; the order only breaks ties in Holm's step-down."
+  }
+}

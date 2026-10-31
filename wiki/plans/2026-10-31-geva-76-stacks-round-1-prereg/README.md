@@ -15,6 +15,7 @@ links:
 attachments:
   - 3eb96347ba302805d8045ff5760c231a55d67ab273d7a013d3d1030e85f78f6f  arms-pins.json
   - a880a3acdd5337005aeb6fed965b9e3f0721b7d487f512d7875dccb6e83034b6  comparisons.stacks-r1.json
+  - f1669e4d47a2be5c1d148318d222ec495644bdb3bf542c73263b791f8b6e1a1f  comparisons.stacks-r1.opus.json
   - bbd2214b05d9b40e5bff7015c5244368c1a4f2d805cb91f13cf9857962cb81ac  contamination.ts.txt
   - da8b365d2619f4247a980c84996f5bc1d2bf0d5310e079b699dccb34353ccc5a  contamination.tsv
   - d44cc60b54f6668ab5f20a0194bdee3674f7fbde4bbaeb0adf44d666e046c824  holm-power.ts.txt
@@ -166,13 +167,13 @@ The lane runs Lane B quick look 3's design at the TB2 runner tag, told:
 **Ledger items.** The approved cap is $2,400, with hard stops of $2,050 for review and $300 for TB2 (approvals/2026-10-31-stacks-round1-cap.md in the Captain drive). The Captain records each item with `gstack-evals ledger init --admission required`, quoting that approval's words, before its first lease.
 
 - TB2: one item, `stacks-r1-tb2`, cap $300, through the runner's ledger (ITEM=stacks-r1-tb2). The runner's ledger is cumulative across launches, so one item covers the pilot and every replicate.
-- Review: a gstack-evals ledger item binds to one run, and one review-units invocation is one run, so the $2,050 is split into one item per invocation. The caps of all review items together never pass $2,050.
+- Review: a gstack-evals ledger item binds to one run, and one review-units invocation is one run, so the $2,050 is split into one item per invocation. The settled spend of closed review items plus the caps of open ones never passes $2,050.
 
 | Item | Invocation | Cap |
 |---|---|---|
-| `stacks-r1-review-pilot-gstack` | none and gstack, Opus, 2 pilot units, 1 pass | $30 |
-| `stacks-r1-review-pilot-pstack` | pstack, Opus, same units | $20 |
-| `stacks-r1-review-pilot-tstack` | tstack, Opus, same units | $10 |
+| `stacks-r1-review-pilot-gstack` | none and gstack, Opus, 2 pilot units, 1 pass | $60 |
+| `stacks-r1-review-pilot-pstack` | pstack, Opus, same units | $30 |
+| `stacks-r1-review-pilot-tstack` | tstack, Opus, same units | $30 |
 | `stacks-r1-review-opus-gstack` | none and gstack, Opus, 33 units, 2 passes | set by the start rule |
 | `stacks-r1-review-opus-pstack` | pstack, Opus, 33 units, 2 passes | set by the start rule |
 | `stacks-r1-review-opus-tstack` | tstack, Opus, 33 units, 2 passes | set by the start rule |
@@ -181,9 +182,9 @@ The lane runs Lane B quick look 3's design at the TB2 runner tag, told:
 | `stacks-r1-review-judge` | the judge runner | $110, raised only inside the stop |
 | `stacks-r1-review-rerun-<n>` | a fresh rerun allowed below | what the stop has left |
 
-The pilot units are the suite units nearest the median and the 90th percentile of gstack's full-review tokens per PR in lanes/review-noloss/arms/gsta167-14pr/C/cost.tsv: gstack#3524@205ea0e2e82f (28.0M tokens; median 27.8M) and gstack#3527@2684974602c1 (40.4M; 90th percentile 40.3M).
+The pilot units are the suite units nearest the median and the 90th percentile of gstack's full-review tokens per PR in lanes/review-noloss/arms/gsta167-14pr/C/cost.tsv: gstack#3524@205ea0e2e82f (28.0M tokens; median 27.8M) and gstack#3527@2684974602c1 (40.4M; 90th percentile 40.3M). Pilots run at `--parallel 1` with `--allowance 15` per slot. Each pilot cap then holds every round's worst case at the allowance, which review-units checks before it starts a round (CAP_STOP otherwise), and a session as large as gstack#3527's is unlikely to be cut short.
 
-**Start rule**, after the pilots and before each grid invocation, as the plan's section 9 states: settled spend, plus reserved and unknown exposure, plus 1.4 times the arm's pilot cost per unit-pass times its remaining unit-passes, plus the remaining judging estimate, must fit under $2,050. Each grid item's cap is its share of that sum. Each slot's allowance (`--allowance`) is twice the pilot's largest unit-pass for that arm. If the rule fails, drop the particle-1 review cell first. The plan's next two drops (pass 2 on the over-blocking units, then pass 2 of none) split an arm across two runs, which `noloss score` cannot read as one arm; step 5 tries none alone with `--passes 1` only if `--dry-run` accepts it, and otherwise the lane returns to the Captain.
+**Start rule**, after the pilots and before each grid invocation, as the plan's section 9 states: settled spend, plus reserved and unknown exposure, plus 1.4 times the arm's pilot cost per unit-pass times its remaining unit-passes, plus the remaining judging estimate, must fit under $2,050. Each grid item's cap is its share of that sum. Each slot's allowance (`--allowance`) is twice the pilot's largest unit-pass for that arm. If the rule fails, drop the particle-1 review cell first. Scoring then uses [comparisons.stacks-r1.opus.json](comparisons.stacks-r1.opus.json), the same file without the four particle-1 comparisons, because `noloss score` refuses a comparisons file that names an arm that was not ingested (E_NOLOSS_ARM). The plan's next two drops (pass 2 on the over-blocking units, then pass 2 of none) split an arm across two runs, which `noloss score` cannot read as one arm; step 5 tries none alone with `--passes 1` only if `--dry-run` accepts it, and otherwise the lane returns to the Captain.
 
 **Resumes are forbidden** in every paid invocation, review and TB2 (GST-370 note 4, the Captain's default). No `--resume`, no `--repair`, and a fresh out dir and receipts sink for every launch. Two processes resuming one out dir share one hold (GST-383 item 1), nobody has shown that the pstack and tstack installs rebuild byte-identically (item 2), and GST-424, GST-425 and GST-427 are open. A review resume would not help anyway: review-units journals every finished session, incomplete ones included, and reuses it on resume.
 
@@ -244,4 +245,4 @@ The pilot units are the suite units nearest the median and the 90th percentile o
 
 ## Attachments
 
-`arms-pins.json` holds the pins; `comparisons.stacks-r1.json` the decision rule; `stacks-r1.json` the suite; `severity-map.json`, `told.md` and `judge-brief.md` the frozen texts; `labels.tsv` the provable-by-a-run labels; `unit-tests.tsv` each unit's install and test outcome; `contamination.tsv` and `contamination.ts.txt` the audit; `t1-mdd.md`, `t1-mdd.ts.txt` and `t1-results.json` T1; `holm-power.ts.txt` and `power.txt` the power tables; `scoped-test.sh.txt` the diff-scoped command. Scripts are kept as .txt so nothing runs them from the wiki.
+`arms-pins.json` holds the pins; `comparisons.stacks-r1.json` the decision rule, and `comparisons.stacks-r1.opus.json` its Opus-only form for a run without the particle-1 cell; `stacks-r1.json` the suite; `severity-map.json`, `told.md` and `judge-brief.md` the frozen texts; `labels.tsv` the provable-by-a-run labels; `unit-tests.tsv` each unit's install and test outcome; `contamination.tsv` and `contamination.ts.txt` the audit; `t1-mdd.md`, `t1-mdd.ts.txt` and `t1-results.json` T1; `holm-power.ts.txt` and `power.txt` the power tables; `scoped-test.sh.txt` the diff-scoped command. Scripts are kept as .txt so nothing runs them from the wiki.
