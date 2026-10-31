@@ -9,7 +9,7 @@ import type { AgentDriver } from "../trial/trial.ts";
 import type { PersonaAnswer } from "../usersim/persona.ts";
 import type { Host } from "../types.ts";
 import { claudeCodeDriver } from "./claude-code/driver.ts";
-import { codexDriver } from "./codex/driver.ts";
+import { codexDriver, type CodexProvider } from "./codex/driver.ts";
 
 export const SKILL_DIRS: Record<Host, string> = { claude: ".claude/skills", codex: ".codex/skills" };
 
@@ -27,13 +27,17 @@ export interface HostDriverOptions {
   out: string;
   /** The persona's free-form answers for a task with a persona; Claude Code only, since Codex runs no interactive task. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
+  /** Plugin roots in the agent's HOME for the session (Claude Code only). */
+  plugins?: string[];
+  /** The cell's cross-family voice through the Codex CLI (Claude Code only). */
+  codex?: { provider: CodexProvider; model: string };
 }
 
 /** The adapter for one session. Claude Code takes Anthropic and OpenRouter models; Codex takes OpenAI and OpenRouter ones. */
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
   return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
