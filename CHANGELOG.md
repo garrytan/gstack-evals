@@ -2,7 +2,7 @@
 
 What each gstack-evals release changed. Versions follow `VERSION` and `package.json`. Unit pull requests leave this file and `VERSION` alone; the Captain writes each entry at release.
 
-`.gstack/ship-policy.json` sets `"bump": "never"`, so `/ship` keeps `VERSION` on unit pull requests, asks nothing at Step 12 and leaves the entry to the release.
+`.gstack/ship-policy.json` sets `"bump": "never"`, so `/ship` keeps `VERSION` on unit pull requests, asks nothing at Step 12 and writes no CHANGELOG.md entry; the Captain writes it at release.
 
 ## [0.0.1] - 2026-10-28
 
