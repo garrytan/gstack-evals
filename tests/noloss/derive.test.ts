@@ -131,6 +131,18 @@ describe("noloss derive: secondary readings score through the unchanged scorer (
     expect(JSON.parse((await score(suite, armsRoot, prereg, ["--json"])).out).result.verdict).not.toBe(null);
   });
 
+  test("--impact reads judge-run's missing rating as unrated and refuses any other value", async () => {
+    const keyPath = join(dir, "key.json");
+    const key = JSON.parse(readFileSync(keyPath, "utf8")) as { entries: Array<{ packet: string; opaque: string; finding: string }> };
+    const tsv = (name: string, rating: string) => json(name, ["packet\topaque\tjudge\timpact", ...key.entries.map((e) => [e.packet, e.opaque, "judge-a", e.finding === "ex-3596-b1" ? rating : "non-blocking"].join("\t"))].join("\n") + "\n");
+    const d = await deriveTo("gsta167-imp-missing", ["--drop-gaps", "--impact", tsv("impact-missing.tsv", "missing"), "--key", keyPath, "--impact-judge", "judge-a"]);
+    expect([d.code, d.err]).toEqual([0, expect.not.stringContaining("E_USAGE")]);
+    const first = JSON.parse(readFileSync(join(dir, "gsta167-imp-missing", "arms", "gsta167-imp-missing", "alpha", "findings", "3596.jsonl"), "utf8").split("\n")[0]!);
+    expect([first.id, first.label]).toEqual(["ex-3596-b1", "IMPACT-UNRATED"]);
+    const bad = await deriveTo("gsta167-imp-bad", ["--drop-gaps", "--impact", tsv("impact-bad.tsv", "maybe"), "--key", keyPath, "--impact-judge", "judge-a"]);
+    expect([bad.code, bad.err]).toEqual([2, expect.stringMatching(/^E_USAGE .*impact is blocking, non-blocking or missing, not "maybe"/)]);
+  });
+
   test("refusals: the base id, a used out dir, a drop file with no unit column", async () => {
     expect((await deriveTo("gsta167-14pr", [])).err).toMatch(/^E_USAGE .*--id must differ/);
     expect((await deriveTo("gsta167-cc", ["--drop-gaps"])).err).toMatch(/^E_USAGE .*is not empty/);

@@ -158,7 +158,8 @@ export function derive(o: DeriveOptions): DeriveResult {
     for (const { line, cells } of t.rows) {
       if (cells.judge !== o.impact.judge) continue;
       const e = entries.get(cells.packet + " " + cells.opaque) ?? usage("--impact line " + line + " rates " + cells.packet + " " + cells.opaque + ", which --key does not hold");
-      if (cells.impact !== "blocking" && cells.impact !== "non-blocking") usage("--impact line " + line + ": impact is blocking or non-blocking, not " + JSON.stringify(cells.impact));
+      if (cells.impact === "missing") continue;
+      if (cells.impact !== "blocking" && cells.impact !== "non-blocking") usage("--impact line " + line + ": impact is blocking, non-blocking or missing, not " + JSON.stringify(cells.impact));
       impact.set(e.arm + "\0" + e.pass + "\0" + e.finding, cells.impact === "blocking" ? "IMPACT-BLOCKING" : "IMPACT-NONBLOCKING");
     }
     if (!impact.size) usage("--impact " + o.impact.tsv + " holds no rating from judge " + o.impact.judge);
