@@ -57,6 +57,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_TASKS_INVALID](#e_tasks_invalid) | 2 | U5 |
 | [E_ISOLATION_UNSAFE](#e_isolation_unsafe) | 2 | U9 |
 | [E_CACHE_STALE](#e_cache_stale) | 2 | U9 |
+| [E_UNIT_REPO](#e_unit_repo) | 2 | U9 |
+| [E_UNIT_IMAGE](#e_unit_image) | 2 | U9 |
+| [E_RECEIPTS_VOLATILE](#e_receipts_volatile) | 2 | U9 |
 | [E_NOT_RESUMABLE](#e_not_resumable) | 2 | U10 |
 | [E_SLOT_DENIED](#e_slot_denied) | 2 | U3 |
 | [E_ALLOWANCE](#e_allowance) | 2 | U3 |
@@ -463,6 +466,30 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).
 
 Fix: Read which key parts changed, then rerun the affected cells with --repair "&lt;named repair>", which writes a new verdict id.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_UNIT_REPO
+
+A review unit's repository could not be built from its source clone, or it failed the history check: its commits are not exactly the head's ancestry, it carries tags, remotes, a reflog, FETCH_HEAD or unreachable objects, its refs are not the ones written, or origin/&lt;base>, &lt;base> and origin/HEAD do not give the unit's merge-base and diff.
+
+Fix: Read the problems the message lists. Point --source at a full (not shallow) clone that holds the unit's head and base commits, and name the base branch with --base-branch when the repository is not in the default table. Then run again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_UNIT_IMAGE
+
+A review unit's tree failed the unit-image check: its install command failed in the builder container, the install changed tracked files, or the unit's own test command failed offline (--network none).
+
+Fix: Read the install or test output in the message. A unit whose own tests fail offline is dropped for every arm alike before the preregistration freezes (plan section 6): run again without it, or fix the install or test command for its repository.
+
+Exit 2. Side effects: None: refused before any spend. Trees already built stay under &lt;out>/units. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_RECEIPTS_VOLATILE
+
+A run's out directory, which holds its receipts and journal, is on a path that does not outlive the machine (the OS temp dir, /tmp, /var/tmp, /dev/shm, or a tmpfs or ramfs mount), or GSTACK_EVALS_EPHEMERAL=1 is set without GSTACK_EVALS_RECEIPTS.
+
+Fix: Put --out on a disk that outlives the machine, or on a VM the runner deletes afterwards set GSTACK_EVALS_RECEIPTS to a directory the receipts are copied to (src/trial/durable.ts).
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U9.
 

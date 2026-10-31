@@ -1,0 +1,105 @@
+{
+  "none.md": {
+    "kind": "findings",
+    "findings": [
+      {
+        "file": "src/retry.ts",
+        "line": 42,
+        "severity": "high",
+        "claim": "The loop stops before the last attempt, so the third failure is never reported.",
+        "evidence": "for (let i = 1; i < attempts; i++) never reaches i === attempts."
+      }
+    ]
+  },
+  "gstack.md": {
+    "kind": "findings",
+    "findings": [
+      {
+        "file": "src/parse.ts",
+        "line": 17,
+        "severity": "CRITICAL",
+        "claim": "An empty header line now throws instead of returning no fields.",
+        "evidence": "split(':')[1].trim() runs on undefined when the line has no colon."
+      },
+      {
+        "file": "README.md",
+        "line": null,
+        "severity": "INFORMATIONAL",
+        "claim": "The usage example still shows the old flag name.",
+        "evidence": "README.md names --fields, the code reads --columns."
+      }
+    ]
+  },
+  "pstack.md": {
+    "kind": "findings",
+    "findings": [
+      {
+        "file": "/work/gstack-7-0000000/src/cache.ts",
+        "line": 88,
+        "severity": "high",
+        "claim": "Two tasks with the same name share a cache entry across runs.",
+        "evidence": "A script that ran both tasks printed the same key twice.",
+        "confirmed": true
+      },
+      {
+        "file": "./src/timeout.ts",
+        "line": 12,
+        "severity": "medium",
+        "claim": "The timeout may fire before the child process starts.",
+        "evidence": "Read of the code; a rerun with a slow start did not show it.",
+        "confirmed": false
+      }
+    ]
+  },
+  "tstack.md": {
+    "kind": "findings",
+    "findings": [
+      {
+        "file": "lib/queue.ts",
+        "line": 5,
+        "severity": "blocker",
+        "claim": "The queue drops a job when two workers claim it at once.",
+        "evidence": "claim() reads and writes the row without a lock."
+      },
+      {
+        "file": "lib/queue.ts",
+        "line": 30,
+        "severity": "should",
+        "claim": "The error message hides the job id.",
+        "evidence": "throw new Error('failed') carries no id."
+      },
+      {
+        "file": "lib/log.ts",
+        "line": 3,
+        "severity": "nit",
+        "claim": "An unused import remains.",
+        "evidence": "import { join } is never used."
+      }
+    ]
+  },
+  "empty.md": {
+    "kind": "findings",
+    "findings": []
+  },
+  "missing.md": {
+    "kind": "missing"
+  },
+  "malformed-bad-json.md": {
+    "kind": "malformed"
+  },
+  "malformed-not-array.md": {
+    "kind": "malformed"
+  },
+  "malformed-missing-claim.md": {
+    "kind": "malformed"
+  },
+  "malformed-line-string.md": {
+    "kind": "malformed"
+  },
+  "malformed-confirmed-text.md": {
+    "kind": "malformed"
+  },
+  "malformed-unclosed.md": {
+    "kind": "malformed"
+  }
+}

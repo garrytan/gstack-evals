@@ -30,6 +30,7 @@ export const COMMANDS: Command[] = [
   { name: "rig", summary: "Run the Docker tier, run the keyless rig probes, and admit a line item's next lease (docs/rig.md).", module: "src/rig/cli.ts", owner: "U20, M1b" },
   { name: "tokens", summary: "Export the review token table for gstack's review-dispatch-compare.", module: "lanes/review-replay/tokens-cli.ts", owner: "U13, M1c" },
   { name: "noloss", summary: "Review no-loss category: suites, arm ingest, paired scoring, export, power and blinded judge packets.", module: "lanes/review-noloss/cli.ts", owner: "U13, GSTA-43, GSTA-45" },
+  { name: "review-units", summary: "Run review units as Lane A trials: unit repos from head-only fetches, the told prompt, the findings parser and cost.tsv.", module: "src/trial/review/cli.ts", owner: "U9, GST-381" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },
