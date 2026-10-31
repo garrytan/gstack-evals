@@ -202,14 +202,15 @@ export function armNamespaces(install: Pick<ArmInstall, "gstack"> & Partial<Pick
 
 /**
  * Each stack arm's cell settings for each model of the run, by arm and model. A cell whose voice the policy cannot route
- * refuses, so a stack never loses its voice silently and scores its reviewer's absence as a loss.
+ * refuses, so a stack never loses its voice silently and scores its reviewer's absence as a loss. voice false builds
+ * every cell without its voice (a plan run, which runs no second model), so the policy need not route one.
  */
-export function armCells(installs: readonly ArmInstall[], models: readonly string[], policy: LoadedPolicy, dir: string): Record<string, Record<string, CellSettings>> {
+export function armCells(installs: readonly ArmInstall[], models: readonly string[], policy: LoadedPolicy, dir: string, o: { voice?: boolean } = {}): Record<string, Record<string, CellSettings>> {
   const out: Record<string, Record<string, CellSettings>> = {};
   for (const install of installs) {
     if (install.provenance.kind !== "stack") continue;
     out[install.name] = Object.fromEntries(models.map((model) => {
-      const settings = cellSettings(install, cellFor(model), dir);
+      const settings = cellSettings(install, o.voice === false ? { model, voice: null } : cellFor(model), dir);
       codexOption(policy, settings);
       return [model, settings];
     }));
@@ -513,7 +514,7 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
 }
 
 /** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
-export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number }): HostRig {
+export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
@@ -526,7 +527,7 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
     const retain = join(state, "retained");
     const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
     if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
-    const cells = armCells(installs, call.models, call.policy, join(state, "cells"));
+    const cells = armCells(installs, call.models, call.policy, join(state, "cells"), { voice: o.voice ?? true });
     const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
     const local = openLocalLedger(call.ledger);
     const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });

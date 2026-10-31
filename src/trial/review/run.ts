@@ -16,7 +16,8 @@
 //   judgments.tsv, so it is raw and judge-packet can read it. <out>/units.json, parses.tsv and refusals.tsv sit beside.
 // - Receipts never sit on a volatile path (E_RECEIPTS_VOLATILE); with GSTACK_EVALS_EPHEMERAL=1 they are copied to
 //   GSTACK_EVALS_RECEIPTS before the run returns.
-// - Plan units (input.plan; plan.ts) change the prompt, the parser, the user, the voice and the failed-pass rule.
+// - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
+//   that keeps a voice, since a plan arm runs no second model.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
@@ -209,6 +210,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     return micros;
   };
   const prefs = new Map<string, string | null>();
+  if (plan) for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
+    const voice = rig.cells?.[arm.name]?.[model]?.codex?.model;
+    if (voice) throw new Error("E_USAGE: plan units run no second model, but arm " + arm.name + "'s cell on " + model + " keeps the voice " + voice + "; build the rig's cells without voices");
+  }
   for (const arm of plan ? o.arms : []) {
     const install = rig.arms[arm.name]!;
     if (arm.told !== "gstack" && arm.told !== "gstack-auto") continue;
@@ -259,7 +264,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const provider = providerOf(o.policy, cell.model);
     if (!provider) throw new Error("E_MODEL_POLICY: " + cell.model + " has no provider in the policy");
     const settings = rig.cells?.[arm.name]?.[cell.model] ?? null;
-    const codex = o.host === "claude" && !plan ? codexOption(o.policy, settings) : null;
+    const codex = o.host === "claude" ? codexOption(o.policy, settings) : null;
     const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt: 1 }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowance(cell.model) });
     const sandbox = rig.sandbox(arm.name, false, cell.model);
     const dir = join(o.out, "runs", cell.model.replaceAll("/", "_"), arm.name, unit.task, "p" + cell.pass);
@@ -270,7 +275,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm);
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
     const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
-    const config = settings && Object.keys(settings.gstack_config).length ? (plan ? { ...settings.gstack_config, codex_reviews: "disabled" } : settings.gstack_config) : null;
+    const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
     const meter = await rig.finalize(binding.meter_id);
@@ -351,7 +356,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     outcomes[id] = counts;
     writeFileSync(join(dir, "cost.tsv"), costTsv(sessions));
     const settings = rig.cells?.[arm.name]?.[model] ?? null;
-    const voice = o.host === "claude" && !plan ? (codexOption(o.policy, settings)?.model ?? null) : null;
+    const voice = o.host === "claude" ? (codexOption(o.policy, settings)?.model ?? null) : null;
     const provenance = (rig.arms[arm.name] as { provenance?: Record<string, unknown> }).provenance ?? null;
     const source = provenance && typeof provenance.repo === "string" && typeof provenance.sha === "string" ? { repo: provenance.repo, sha: provenance.sha } : null;
     const armJson = {

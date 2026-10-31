@@ -275,7 +275,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   writeFileSync(runFile, JSON.stringify({ run_id: runId }, null, 2) + "\n");
   const resolved: ResolvedArms = { arms: [...specs.filter((a) => a.kind !== "placebo"), ...specs.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
-  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap });
+  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
     run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256 }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), env }, rig, (line) => io.err(line));

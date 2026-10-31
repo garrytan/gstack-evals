@@ -84,8 +84,9 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
   review, or to promote or commit docs, gets "No, not now.", and the simulator's binding rules still refuse gated
   effects. No model answers for the user. An arm that installs gstack gets every question in its registry set to
   never-ask (auto-decide) in the trial's throwaway state root.
-- No second model: the slot admits only the driver model, the cell's Codex voice is dropped, codex_reviews is disabled
-  and arm.json lists the driver alone.
+- No second model: --plan builds every cell without its Codex voice (gstack's config gets codex_reviews disabled and the
+  cell tree records it), the run refuses a cell that keeps one, the slot admits only the driver model and arm.json lists
+  the driver alone.
 - The parser reads the last `plan-findings` block in any assistant turn. A malformed, missing or incomplete (timed-out)
   pass is scored as finding nothing and listed in arm.json `diagnostics`; an arm is stopped only by a cell not run or
   a cap stop.

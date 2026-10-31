@@ -191,7 +191,7 @@ describe("plan units in the run loop (keyless)", () => {
       },
       finalize: (m) => h.proxy.finalize(m),
       arms: { none: { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] }, lens: { tree_sha256: "lens-tree", skill: null, gstack: null, plugins: [] }, gstack: { tree_sha256: "gstack-tree", skill: null, gstack: ".claude/skills/gstack/bin/gstack-skill-start", plugins: [], layers: [{ src: home, dest: "" }] } },
-      cells: { gstack: { [OPUS]: { cell: { model: OPUS, voice: "gpt-6.1-sol" }, layer: null, gstack_config: { agent_model: "host", codex_reviews: "enabled" }, codex: { model: "gpt-6.1-sol" }, tree_sha256: "gstack-opus" } } },
+      cells: { gstack: { [OPUS]: { cell: { model: OPUS, voice: null }, layer: null, gstack_config: { agent_model: "host", codex_reviews: "disabled" }, codex: null, tree_sha256: "gstack-opus" } } },
       sandbox: () => localSandbox(() => {}),
       judgeSandbox: () => localSandbox(() => {}),
       egress: () => ({ open: false, detail: "test rig" }),
@@ -239,6 +239,10 @@ describe("plan units in the run loop (keyless)", () => {
       expect(JSON.parse(readFileSync(join(capped.armDirs[0]!, "arm.json"), "utf8")).status).toBe("stopped");
       const again = await runReviewUnits({ ...input, reuse: readReviewJournal(out) }, rig);
       expect(again.spent).toBe(0);
+      const voiced = { ...rig, cells: { gstack: { [OPUS]: { ...rig.cells!.gstack![OPUS]!, cell: { model: OPUS, voice: "gpt-6.1-sol" }, codex: { model: "gpt-6.1-sol" } } } } };
+      const before = bound.length;
+      await expect(runReviewUnits({ ...input, out: durable() }, voiced)).rejects.toThrow("E_USAGE: plan units run no second model, but arm gstack's cell on " + OPUS + " keeps the voice gpt-6.1-sol");
+      expect(bound.length).toBe(before);
     } finally {
       h.proxy.stop();
     }
