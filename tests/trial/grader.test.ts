@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadContract } from "../../src/skill-eval/contract/sidecar.ts";
 import type { ContractTask } from "../../src/skill-eval/contract/tasks.ts";
+import { hostReadiness } from "../../src/skill-eval/cli/run-host.ts";
 import { gradeTrial, verdictTasks, type VerdictTask } from "../../src/skill-eval/verdict/grade.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
-import { importDelta, snapshot } from "../../src/trial/delta.ts";
+import { importDelta, PLACEHOLDER, snapshot } from "../../src/trial/delta.ts";
 import { buildTrialImage } from "../../src/trial/image.ts";
 import { NOP, replayAgent, type Transcript } from "../../src/trial/replay.ts";
 import { bwrapArgs, dockerSandbox, IsolationError, processSandbox, type Sandbox, type StepResult } from "../../src/trial/sandbox.ts";
@@ -171,7 +172,7 @@ describe("delta import", () => {
     expect(readFileSync(join(grade, "a", "b"), "utf8")).toBe("now a dir");
     expect(readFileSync(join(grade, "d"), "utf8")).toBe("now a file");
     expect(readFileSync(join(grade, "inside"), "utf8")).toBe("now a dir");
-    expect(existsSync(join(grade, "escape"))).toBe(false);
+    expect(readdirSync(join(grade, "escape"))).toEqual([PLACEHOLDER]);
     expect(readFileSync(join(grade, ".git", "HEAD"), "utf8")).toBe("ref: refs/heads/main\n");
     expect(delta.dropped.map((d) => d.path).toSorted()).toEqual(["escape", "pipe"]);
     expect(delta.deleted).toEqual(["d/x"]);
@@ -253,6 +254,177 @@ describe("delta import", () => {
     expect(readFileSync(join(grade, "a", "b", "x"), "utf8")).toBe("x");
     expect(statSync(join(grade, "c", "b")).mode & 0o1000).toBe(0);
   });
+
+  // Value: protects=git reads only the baseline's ignore, attribute and submodule files in the grade tree; fails_when=an agent's .gitignore hides new files from git ls-files, or a deleted one exposes the baseline's differently; why_new=GEVA-68 audit rule B; seam=importDelta; no_claim=git config outside the tree, which .git and the fresh HOME already keep out
+  test("an agent's .gitignore, .gitattributes or .gitmodules is not imported, so git reads the baseline's", () => {
+    const root = scratch("gitconfig");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    mkdirSync(join(baseline, "src"), { recursive: true });
+    writeFileSync(join(baseline, ".gitignore"), "build/\n");
+    writeFileSync(join(baseline, "src", ".gitattributes"), "*.rb diff=ruby\n");
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    writeFileSync(join(after, ".gitignore"), "*\n");
+    rmSync(join(after, "src", ".gitattributes"));
+    writeFileSync(join(after, "src", ".gitignore"), "*\n");
+    writeFileSync(join(after, ".gitmodules"), "[submodule \"x\"]\n");
+    writeFileSync(join(after, "src", "merge.py"), "print(1)\n");
+    const delta = importDelta(baseline, after, grade);
+    expect(readFileSync(join(grade, ".gitignore"), "utf8")).toBe("build/\n");
+    expect(readFileSync(join(grade, "src", ".gitattributes"), "utf8")).toBe("*.rb diff=ruby\n");
+    expect([existsSync(join(grade, "src", ".gitignore")), existsSync(join(grade, ".gitmodules"))]).toEqual([false, false]);
+    expect(delta.dropped.map((d) => d.path).toSorted()).toEqual([".gitignore", ".gitmodules", "src/.gitattributes", "src/.gitignore"]);
+    expect([delta.added, delta.changed, delta.deleted]).toEqual([["src/merge.py"], [], []]);
+  });
+
+  // Value: protects=a git config file under a directory the agent deleted or replaced with a file goes with it, and delta.json says so; fails_when=the import names the file as kept, and the verdict warns DELTA_DROPPED, while the grade tree has lost it with its parent; why_new=#90 review; seam=importDelta; no_claim=none beyond protects
+  test("a git config file goes with a directory the agent deleted or replaced, and is not named as kept", () => {
+    const root = scratch("gitconfig-parent");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    for (const d of ["gone", "flat"]) {
+      mkdirSync(join(baseline, d), { recursive: true });
+      writeFileSync(join(baseline, d, ".gitignore"), "*.log\n");
+    }
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    removeTree(join(after, "gone"));
+    removeTree(join(after, "flat"));
+    writeFileSync(join(after, "flat"), "now a file\n");
+    const delta = importDelta(baseline, after, grade);
+    expect(delta.dropped).toEqual([]);
+    expect(delta.deleted.toSorted()).toEqual(["flat/.gitignore", "gone", "gone/.gitignore"]);
+    expect([existsSync(join(grade, "gone")), readFileSync(join(grade, "flat"), "utf8")]).toEqual([false, "now a file\n"]);
+  });
+
+  // Value: protects=a git config file stays the baseline's when the agent replaces its directory with a fifo, which the import drops and the grade tree keeps as a directory; fails_when=the grade tree keeps the directory but loses its .gitignore, and delta.json lists it as deleted; why_new=#90 review; seam=importDelta; no_claim=none beyond protects
+  test("a git config file stays when its directory becomes a fifo the import drops", () => {
+    const root = scratch("gitconfig-fifo");
+    const [baseline, after, grade] = ["baseline", "after", "grade"].map((n) => join(root, n));
+    mkdirSync(join(baseline, "a"), { recursive: true });
+    writeFileSync(join(baseline, "a", ".gitignore"), "*.log\n");
+    snapshot(baseline, after);
+    snapshot(baseline, grade);
+    removeTree(join(after, "a"));
+    spawnSync("mkfifo", [join(after, "a")]);
+    const delta = importDelta(baseline, after, grade);
+    expect(readFileSync(join(grade, "a", ".gitignore"), "utf8")).toBe("*.log\n");
+    expect([delta.deleted, delta.dropped.map((d) => d.path).toSorted()]).toEqual([[], ["a", "a/.gitignore"]]);
+  });
+
+});
+
+/** The committed U11 tasks (docs/benchmarks/2026-11-lanea-shakedown/tasks), vendored from gstack: their setup and check commands as locked. */
+const U11 = join(import.meta.dir, "../../docs/benchmarks/2026-11-lanea-shakedown/tasks");
+const u11 = (skill: string, id: string): ContractTask => loadContract(join(U11, skill, "tasks.json")).tasks.tasks.find((t) => t.id === id)!;
+const u11Check = async (skill: string, t: ContractTask, steps: string[]) => {
+  const run = await runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task: t, tasksDir: join(U11, skill), sandbox: local, agent: replayAgent({ steps, turns: ["done"] }), dir: scratch("u11-" + t.id), timeoutS: 120 });
+  return { check: run.record.check, dropped: run.delta?.dropped.map((d) => d.path) ?? [], record: run.record, logs: JSON.parse(readFileSync(join(run.dir, "trial.json"), "utf8")).logs };
+};
+
+// Value: protects=two of the three routes GEVA-68's audit proved on committed U11 checks no longer flip a verdict: each route grades as its control does, and the trial names what the import dropped; fails_when=an agent .gitignore or an escaping symlink at a forbidden path makes a failing check pass; why_new=GEVA-68 audit rule F (GST-374); seam=runTrial, importDelta, replayAgent; no_claim=content written outside the work tree, which no check can see, or a state root swapped for an in-tree symlink (GST-390, GST-387)
+describe("U11 grader routes (keyless, on this machine)", () => {
+  const design = "dana-main-design-20261031.md";
+
+  test("office-hours/no-code-session: an agent .gitignore does not hide new code", async () => {
+    const t = u11("office-hours", "no-code-session");
+    expect((await u11Check("office-hours", t, [])).check).toBe(true);
+    expect((await u11Check("office-hours", t, ["printf 'print(1)\\n' > merge.py"])).check).toBe(false);
+    const top = await u11Check("office-hours", t, ["printf 'print(1)\\n' > merge.py && printf '*\\n' > .gitignore"]);
+    expect([top.check, top.dropped, top.record.dropped]).toEqual([false, [".gitignore"], [".gitignore"]]);
+    const nested = await u11Check("office-hours", t, ["mkdir src && printf 'print(1)\\n' > src/merge.py && printf '*\\n' > src/.gitignore"]);
+    expect([nested.check, nested.dropped]).toEqual([false, ["src/.gitignore"]]);
+  }, 300_000);
+
+  test("learn/export and office-hours/approach-approval-gate: a forbidden path written as a symlink out of the tree still fails", async () => {
+    const exp = u11("learn", "export");
+    expect((await u11Check("learn", exp, [])).check).toBe(true);
+    expect((await u11Check("learn", exp, ["printf '# rules\\n' > CLAUDE.md"])).check).toBe(false);
+    const claude = await u11Check("learn", exp, ['mkdir -p "$HOME/out" && ln -s "$HOME/out/CLAUDE.md" CLAUDE.md && printf \'# rules\\n\' > CLAUDE.md']);
+    expect([claude.check, claude.dropped]).toEqual([false, ["CLAUDE.md"]]);
+    const gate = u11("office-hours", "approach-approval-gate");
+    expect((await u11Check("office-hours", gate, [])).check).toBe(true);
+    expect((await u11Check("office-hours", gate, ["mkdir -p docs/designs && printf 'd\\n' > docs/designs/csvmerge.md"])).check).toBe(false);
+    const designs = await u11Check("office-hours", gate, ['mkdir -p docs "$HOME/designs" && ln -s "$HOME/designs" docs/designs && printf \'d\\n\' > docs/designs/csvmerge.md']);
+    expect([designs.check, designs.dropped]).toEqual([false, ["docs/designs"]]);
+  }, 300_000);
+
+  // Value: protects=rule C: a check can read the evaluator's own delta, which no file in the tree can edit; fails_when=SKILL_EVAL_DELTA is unset, unreadable from the check, or misses a file git was told to ignore; why_new=GEVA-68 audit rule C; seam=runTrial; no_claim=the agent never sees it, which the env allowlist and the Docker tier's canary cover
+  test("the check reads the evaluator's delta through SKILL_EVAL_DELTA", async () => {
+    const t = { ...u11("office-hours", "no-code-session"), check: 'grep -q \'"merge.py"\' "$SKILL_EVAL_DELTA"' };
+    expect((await u11Check("office-hours", t, ["printf 'print(1)\\n' > merge.py && printf '*\\n' > .gitignore"])).check).toBe(true);
+    expect((await u11Check("office-hours", t, [])).check).toBe(false);
+  }, 300_000);
+
+  // Value: protects=a read-only tasks directory grades and its check still reads SKILL_EVAL_DELTA, while a tasks directory that holds the delta copy's name is refused before setup instead of overwritten; fails_when=writing the check's copy of delta.json into a 0555 tasks directory copy throws EACCES out of runTrial, or a task's own .skill-eval-delta.json is replaced; why_new=#90 Step 11 native adversarial (trial.ts:137); seam=runTrial; no_claim=root, which ignores the modes
+  test.skipIf(process.getuid?.() === 0)("a read-only tasks directory grades with SKILL_EVAL_DELTA, and one that holds its name, or whose setup writes it, is refused", async () => {
+    const t = { ...u11("office-hours", "no-code-session"), check: 'grep -q \'"merge.py"\' "$SKILL_EVAL_DELTA"' };
+    const tasks = (name: string) => {
+      const dir = join(scratch(name), "office-hours");
+      cpSync(join(U11, "office-hours"), dir, { recursive: true });
+      return dir;
+    };
+    const run = (tasksDir: string, task = t) => runTrial({ cell: { model: "replay", arm: "after", round: 1, trial: 0 }, task, tasksDir, sandbox: local, agent: replayAgent({ steps: ["printf 'print(1)\\n' > merge.py"], turns: ["done"] }), dir: scratch("u11-tasks"), timeoutS: 120 });
+    const readOnly = tasks("ro-tasks");
+    chmodSync(readOnly, 0o555);
+    const ro = await run(readOnly);
+    expect([ro.record.termination, ro.record.check, ro.leftovers]).toEqual([{ kind: "completed" }, true, []]);
+    const holds = tasks("held-tasks");
+    writeFileSync(join(holds, ".skill-eval-delta.json"), "{}\n");
+    const held = await run(holds);
+    const logs = JSON.parse(readFileSync(join(held.dir, "trial.json"), "utf8")).logs;
+    expect([held.record.termination, held.record.check, logs.check, logs.missing]).toEqual([{ kind: "missing", code: "E_TASKS_INVALID" }, null, undefined, expect.stringContaining(".skill-eval-delta.json")]);
+    const late = await run(tasks("setup-tasks"), { ...t, setup: [t.setup, 'printf x > "$SKILL_EVAL_FIXTURES/.skill-eval-delta.json"'].filter(Boolean).join(" && ") });
+    expect([late.record.termination, late.record.check]).toEqual([{ kind: "missing", code: "E_TASKS_INVALID" }, null]);
+  }, 300_000);
+
+  // Value: protects=rule A closes both directions: a dangling escaping symlink satisfies no check that needs its path, while an absolute link at a path the check does not read leaves the result alone; fails_when=the placeholder directory alone passes find -name, test -e or test -s, or the second run fails a check that never reads the dropped path; why_new=#90 review (red team); seam=runTrial; no_claim=what the link pointed at, which the grader cannot see
+  test("a check passes only when it passes both with and without the placeholders", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const found = { ...base, check: 'test -n "$(find . -name sketch.html)"' };
+    expect((await u11Check("office-hours", found, ["printf 'h\\n' > sketch.html"])).check).toBe(true);
+    expect((await u11Check("office-hours", found, ["ln -s /nonexistent/sketch.html sketch.html"])).check).toBe(false);
+    const sized = { ...base, check: "test -s report.txt && test -e report.txt" };
+    expect((await u11Check("office-hours", sized, ["printf 'r\\n' > report.txt"])).check).toBe(true);
+    expect((await u11Check("office-hours", sized, ["ln -s /nonexistent/report.txt report.txt"])).check).toBe(false);
+    const venv = await u11Check("office-hours", sized, ["printf 'r\\n' > report.txt && mkdir -p .venv/bin && ln -s /usr/bin/python3 .venv/bin/python"]);
+    expect([venv.check, venv.dropped]).toEqual([true, [".venv/bin/python"]]);
+  }, 300_000);
+
+  // Value: protects=the run without placeholders can only turn a pass into a fail: an error there is a fail, and it runs only after a pass, so neither order makes a missing cell; fails_when=an error in the run without placeholders, or one after a fail on the grade tree, drops the cell as E_VERIFIER; why_new=#90 review pass 2 (security, red team, testing, performance); seam=runTrial; no_claim=an error on the grade tree, which stays E_VERIFIER
+  test("an error in the run without placeholders is a fail, and that run follows only a pass", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const link = ["ln -s /nonexistent/report.txt report.txt"];
+    const errs = await u11Check("office-hours", { ...base, check: "test -e report.txt || exit 2" }, link);
+    expect([errs.record.termination, errs.check, errs.logs.check_bare?.exitCode]).toEqual([{ kind: "completed" }, false, 2]);
+    const failed = await u11Check("office-hours", { ...base, check: "if test -e report.txt; then exit 1; else exit 2; fi" }, link);
+    expect([failed.record.termination, failed.check, failed.logs.check_bare]).toEqual([{ kind: "completed" }, false, undefined]);
+  }, 300_000);
+
+  // Value: protects=a read-only directory around an escaping link grades instead of throwing, and the copy without placeholders keeps the agent's modes; fails_when=removing a placeholder under a 0555 directory throws EACCES out of runTrial, or leaves that directory writable; why_new=#90 review pass 2 (red team); seam=runTrial; no_claim=root, which ignores the modes
+  test.skipIf(process.getuid?.() === 0)("a read-only directory around an escaping link grades, and keeps its mode", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const steps = ["mkdir out && ln -s /nonexistent/x out/x && chmod 555 out"];
+    const mode = await u11Check("office-hours", { ...base, check: "test ! -w out" }, steps);
+    expect([mode.record.termination, mode.check, mode.dropped]).toEqual([{ kind: "completed" }, true, ["out/x"]]);
+    const needs = await u11Check("office-hours", { ...base, check: "test -e out/x" }, steps);
+    expect([needs.record.termination, needs.check, needs.logs.check_bare?.exitCode]).toEqual([{ kind: "completed" }, false, 1]);
+  }, 300_000);
+
+  // Value: protects=the run without placeholders starts from the tree as imported, and its placeholder list is read before any check runs; fails_when=a check that writes into its tree (mkdir build) fails the second run on a path it never reads, or a check that deletes the placeholder's marker skips the second run; why_new=#90 review fix-check; seam=runTrial; no_claim=what the first run writes into the grade tree, which the second run never sees
+  test("the run without placeholders starts from the imported tree, not the one the first run left", async () => {
+    const base = u11("office-hours", "no-code-session");
+    const build = await u11Check("office-hours", { ...base, check: "mkdir build && test -s report.txt" }, ["printf 'r\\n' > report.txt && mkdir -p .venv/bin && ln -s /usr/bin/python3 .venv/bin/python"]);
+    expect([build.check, build.logs.check_bare?.exitCode]).toEqual([true, 0]);
+    const marker = await u11Check("office-hours", { ...base, check: "test -e report.txt && rm -f report.txt/" + PLACEHOLDER }, ["ln -s /nonexistent/report.txt report.txt"]);
+    expect([marker.check, marker.logs.check_bare?.exitCode]).toEqual([false, 1]);
+  }, 300_000);
+});
+
+// Value: protects=a counted run never uses --isolation process, whose check runs agent code unsandboxed on this machine; fails_when=a real host, which leases from a ledger line item under a rig admission, starts under process isolation; why_new=GEVA-68 audit (process isolation row); seam=hostReadiness; no_claim=bubblewrap's own isolation, and the fake host keeping process isolation, which tests/cli/fake-host.test.ts covers
+test("--isolation process is refused for a counted run, and docker is not", () => {
+  const call = { host: "claude", arms: { arms: [] }, item: "u11-row-7", spendCap: 1_000_000 } as unknown as Parameters<typeof hostReadiness>[0];
+  expect(hostReadiness({ ...call, isolation: "process" }, [])?.code).toBe("E_ISOLATION_COUNTED");
+  expect(hostReadiness({ ...call, isolation: "docker" }, [])).toBeNull();
 });
 
 test("--isolation process refuses without bubblewrap", () => {

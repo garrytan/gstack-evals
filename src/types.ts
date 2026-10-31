@@ -231,6 +231,8 @@ export interface TrialRecord {
   loaded_bytes: number | null;
   /** The trial's values on the run's preregistered metrics, by name; null when it left none. */
   metrics: Record<string, number | null>;
+  /** Paths the graded delta's import dropped or graded as something else (delta.dropped), when there were any; the verdict warns DELTA_DROPPED. */
+  dropped?: string[];
 }
 
 /** Calibration for one model (interface v0.4, "Calibration"): true passed, false failed, null not run for this host or arm set. */
