@@ -365,6 +365,7 @@ function falseAlarmGate(suite: Suite, v: Arm, r: Arm, margin: number, noVerdict:
   const empty = { margin_per_decoy: margin, decoys: decoys.length, per_decoy: { variant: 0, reference: 0 }, excess: null, ci95: null, result: null };
   if ("reason" in tv || "reason" in tr) return { ...empty, reasons };
   if ((tv.labelled || tr.labelled) && (tv.blind || tr.blind)) reasons.push("labelled and blind adjudication are never pooled");
+  else if (tv.labelled || tr.labelled) reasons.push("the decoy rulings are labelled adjudication, and the gate reads blind adjudication only");
   for (const [a, t] of [[v, tv], [r, tr]] as const) {
     const n = decoys.reduce((s, u) => s + t.units.get(u.id)!.unadjudicated, 0);
     if (n) reasons.push("arm " + a.arm.id + " has " + n + " must-fix finding" + (n > 1 ? "s" : "") + " on decoys with no adjudication row");

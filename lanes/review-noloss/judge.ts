@@ -75,7 +75,7 @@ export function planMaterial(clone: string, head: string): PlanMaterial {
   if (!paths.includes("plan.md")) blind("head " + head + " in " + clone + " has no plan.md");
   let bytes = 0;
   const files = paths.map((path) => {
-    const body = gitOut(clone, ["show", head + ":" + path]) ?? Buffer.alloc(0);
+    const body = gitOut(clone, ["show", head + ":" + path]) ?? blind("cannot read " + path + " at head " + head + " in " + clone + " (a blob too big to read, or a broken object), so the plan packet would not carry the unit tree as it is");
     bytes += body.length;
     return { path, text: body.includes(0) ? "[binary file, " + body.length + " bytes]" : body.toString("utf8") };
   });
