@@ -133,8 +133,10 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!told) throw new Usage("arm " + a.name + " (" + a.kind + "): review units run none, gstack, pstack and tstack arms only");
     return { name: a.name, told };
   });
-  const skills = [...new Set(arms.map((a) => toldSkill(a.told)).filter((s): s is string => s !== null))];
-  if (skills.length > 1) throw new Usage("these arms need different told skills (" + skills.join(", ") + "), and the rig's arm installer takes one target skill for every arm (src/arms/install.ts); run one stack per invocation, each with its own --out");
+  const skills = Object.fromEntries(arms.flatMap((a) => {
+    const skill = toldSkill(a.told);
+    return skill ? [[a.name, skill]] : [];
+  }));
   const passes = Number(one("--passes") ?? "1");
   if (!Number.isSafeInteger(passes) || passes < 1 || passes > 20) throw new Usage("--passes must be a whole number from 1 to 20");
   const parallel = Number(one("--parallel") ?? "4");
@@ -227,9 +229,9 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const runId = newRunId("review-units");
   const tasks = join(out, "fixtures", "tasks.json");
   writeFileSync(tasks, "[]\n");
-  const resolved: ResolvedArms = { arms: specs, base: null, skill: skills[0] ? { name: skills[0], source: "the told command" } : null, notes: [] };
+  const resolved: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
-  const rig = dockerRig(call, { env, skill: skills[0] ?? null, nonce: randomBytes(6).toString("hex"), cap });
+  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
     run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256 }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), env }, rig, (line) => io.err(line));

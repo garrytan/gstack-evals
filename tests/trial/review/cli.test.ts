@@ -11,7 +11,7 @@ const GSTACK = "gstack=garrytan/gstack@53522b1bbc60b3dc820842371f80ebc9db7911ec"
 const base = (out: string) => ["--suite", "gsta167-14pr", "--units", "3593", "3596", "--models", "claude-opus-5-5", "--out", out, "--source", "garrytan/gstack=/nowhere"];
 
 describe("review-units arguments (keyless)", () => {
-  // Value: protects=the command refuses what it cannot do with E_USAGE before building or spending, and --dry-run prints the plan and writes nothing; fails_when=a run starts without a line item, a source or a single told skill, or the dry run writes; why_new=GEVA-70 build step 2 (thin CLI); seam=main; no_claim=the Docker rig, which its own tier covers
+  // Value: protects=the command refuses what it cannot do with E_USAGE before building or spending, and --dry-run prints the plan and writes nothing; fails_when=a run starts without a line item or a source, arms with different told skills are refused, or the dry run writes; why_new=GEVA-70 build step 2 (thin CLI); seam=main; no_claim=the Docker rig, which its own tier covers
   test("refusals and the dry run", async () => {
     const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
     const run = async (argv: string[]) => {
@@ -24,8 +24,9 @@ describe("review-units arguments (keyless)", () => {
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", "claude-opus-5-5", "--out", out, "--arms", "none"])).err).toMatch(/^E_USAGE .*no --source for garrytan\/gstack/);
     expect((await run([...base(out), "--arms", "none", "placebo"])).err).toMatch(/^E_USAGE .*--arms takes none/);
     const mixed = await run([...base(out), "--arms", GSTACK, PSTACK, "--dry-run"]);
-    expect(mixed.code).toBe(2);
-    expect(mixed.err).toMatch(/^E_USAGE .*different told skills \(review, interrogate\).*src\/arms\/install\.ts/);
+    expect(mixed.code).toBe(0);
+    expect(mixed.out).toContain("/review");
+    expect(mixed.out).toContain("/pstack:interrogate");
     expect((await run([...base(out), "--arms", "none", "--models", "gpt-6.1-sol"])).err).toMatch(/no Claude Code route/);
     expect((await run([...base(out), "--arms", "none"])).err).toMatch(/^E_USAGE .*--item.*--spend-cap/);
     const dry = await run([...base(out), "--arms", "none", GSTACK, "--passes", "2", "--dry-run", "--spend-cap", "100"]);

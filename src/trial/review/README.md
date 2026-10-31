@@ -8,7 +8,7 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 
 - unit.ts: unit repositories and unit trees.
 - told.ts: the frozen told prompt and its sha256.
-- findings.ts: the fixed findings parser and the render to arm contract v1.
+- findings.ts: the fixed findings parser and the render to arm contract v1. A finding that says whether it was confirmed gets reader `confirmed` or `unconfirmed`, so an arm's `severity_map.by_reader.unconfirmed` can map unconfirmed findings as informational, as the plan's primary map does for pstack.
 - cost.ts: cost.tsv and refusals.tsv from the metering proxy's journal.
 - run.ts: runReviewUnits, the run loop on a HostRig.
 - cli.ts: the command.

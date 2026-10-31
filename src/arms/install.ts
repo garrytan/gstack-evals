@@ -360,7 +360,12 @@ function overlay(full: string, base: string, to: string): string[] {
 }
 
 /** Installs every arm of a call for one host. Throws InstallError with a reason code. */
-export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: string | null; base: { ref: StackRef; root: string | null } | null; sources: readonly string[]; runner: InstallRunner; state: string }): ArmInstall[] {
+/**
+ * Installs every arm. skill is the target skill every arm is measured on; skills names a stack or placebo arm's own
+ * target skill by arm name, over skill, for a run that tells each stack its own command (review units). A base arm always
+ * takes skill.
+ */
+export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: string | null; skills?: Readonly<Record<string, string>>; base: { ref: StackRef; root: string | null } | null; sources: readonly string[]; runner: InstallRunner; state: string }): ArmInstall[] {
   const skillsDir = SKILL_DIRS[o.host];
   const work = join(o.state, "installs", "work-" + randomBytes(6).toString("hex"));
   const trees = new Map<string, ReturnType<typeof stackTree> & { dir: string }>();
@@ -391,15 +396,17 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
   };
   const digestOf = (layer: Layer, known?: string) => layer.dest + " " + (known ?? dirTreeSha256(layer.src));
   const gstackIn = (tree: string) => (isFile(tree, resolveIn(tree, skillsDir + "/gstack/bin/gstack-skill-start")) ? skillsDir + "/gstack/bin/gstack-skill-start" : null);
+  const skillOf = (name: string): string | null => o.skills?.[name] ?? o.skill;
   const need = (name: string, tree: string, plugins: readonly string[] = []): ArmSkill => {
-    const found = findSkill(tree, skillsDir, o.skill!, plugins);
-    if (!found) throw new InstallError("E_USAGE", "arm " + name + " installs no skill named " + o.skill + " under ~/" + [skillsDir, ...plugins.map((p) => p + "/skills")].join(" or ~/") + " (no folder there has a SKILL.md whose front matter names it)");
+    const skill = skillOf(name)!;
+    const found = findSkill(tree, skillsDir, skill, plugins);
+    if (!found) throw new InstallError("E_USAGE", "arm " + name + " installs no skill named " + skill + " under ~/" + [skillsDir, ...plugins.map((p) => p + "/skills")].join(" or ~/") + " (no folder there has a SKILL.md whose front matter names it)");
     return found;
   };
   const done: ArmInstall[] = [];
   const fulls = new Map<string, string>();
-  if (!o.skill && o.arms.some((a) => a.kind === "stack" || a.kind === "placebo" || (a.kind === "overlay" && a.base !== null))) throw new InstallError("E_USAGE", "a base, stack or placebo arm needs the target skill's name (--skill)");
-  if (o.skill && !NAME.test(o.skill)) throw new InstallError("E_USAGE", "--skill " + JSON.stringify(o.skill) + " is not a skill name: a lowercase letter, then lowercase letters, digits, - or _");
+  if (o.arms.some((a) => (a.kind === "overlay" && a.base !== null ? !o.skill : (a.kind === "stack" || a.kind === "placebo") && !skillOf(a.name)))) throw new InstallError("E_USAGE", "a base, stack or placebo arm needs the target skill's name (--skill)");
+  for (const s of new Set([o.skill, ...Object.values(o.skills ?? {})])) if (s && !NAME.test(s)) throw new InstallError("E_USAGE", "--skill " + JSON.stringify(s) + " is not a skill name: a lowercase letter, then lowercase letters, digits, - or _");
   try {
     for (const arm of o.arms) {
       const empty = (provenance: Record<string, unknown>): ArmInstall => ({ name: arm.name, layers: [], tree_sha256: arm.kind + ":" + arm.name, skill: null, gstack: null, plugins: [], provenance });

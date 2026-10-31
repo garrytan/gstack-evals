@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { outcomeLabel, parseFindings, parseFinalTurn, renderFindings } from "../../../src/trial/review/findings.ts";
+import { mapSeverity, rawLabel, type ArmJson } from "../../../lanes/review-noloss/contract.ts";
 
 const DIR = join(import.meta.dir, "fixtures");
 const expected = JSON.parse(readFileSync(join(DIR, "expected.json"), "utf8")) as Record<string, { kind: string }>;
@@ -26,14 +27,17 @@ describe("the findings parser (T10)", () => {
     expect(outcomeLabel(parseFinalTurn(readFileSync(join(DIR, "missing.md"), "utf8")))).toBe("missing");
   });
 
-  // Value: protects=rendered lines carry only contract fields plus evidence and confirmed, with repo-relative paths; fails_when=an absolute work path reaches the arm, or the claim is not the summary; why_new=GEVA-70; seam=renderFindings; no_claim=judge-packet's own masking
+  // Value: protects=rendered lines carry only contract fields plus evidence and confirmed, with repo-relative paths, and a confirmation becomes the reader, so severity_map.by_reader can map unconfirmed findings as informational (the plan's primary map for pstack); fails_when=an absolute work path reaches the arm, the claim is not the summary, or the contract cannot tell a confirmed finding from an unconfirmed one; why_new=GEVA-70; seam=renderFindings; no_claim=judge-packet's own masking
   test("rendering to arm contract v1", () => {
     const parsed = parseFinalTurn(readFileSync(join(DIR, "pstack.md"), "utf8"));
     if (parsed.kind !== "findings") throw new Error("pstack fixture did not parse");
     expect(renderFindings(parsed.findings, 2, "/work/gstack-7-0000000")).toEqual([
-      { severity: "high", path: "src/cache.ts", line: 88, summary: "Two tasks with the same name share a cache entry across runs.", pass: 2, id: "p2-1", evidence: "A script that ran both tasks printed the same key twice.", confirmed: true },
-      { severity: "medium", path: "src/timeout.ts", line: 12, summary: "The timeout may fire before the child process starts.", pass: 2, id: "p2-2", evidence: "Read of the code; a rerun with a slow start did not show it.", confirmed: false },
+      { severity: "high", path: "src/cache.ts", line: 88, summary: "Two tasks with the same name share a cache entry across runs.", pass: 2, id: "p2-1", evidence: "A script that ran both tasks printed the same key twice.", confirmed: true, reader: "confirmed" },
+      { severity: "medium", path: "src/timeout.ts", line: 12, summary: "The timeout may fire before the child process starts.", pass: 2, id: "p2-2", evidence: "Read of the code; a rerun with a slow start did not show it.", confirmed: false, reader: "unconfirmed" },
     ]);
+    const lines = renderFindings(parsed.findings, 2, "/work/gstack-7-0000000");
+    const arm = { severity_map: { default: { high: "CRITICAL", medium: "CRITICAL" }, by_reader: { unconfirmed: { high: "INFORMATIONAL", medium: "INFORMATIONAL" } } } } as unknown as ArmJson;
+    expect(lines.map((l) => mapSeverity(arm, rawLabel(l), (l.reader as string | undefined) ?? null))).toEqual(["CRITICAL", "INFORMATIONAL"]);
     expect(renderFindings([{ file: "/etc/passwd", line: 1, severity: "high", claim: "c", evidence: "e" }], 1, "/work/x")[0]).toMatchObject({ path: null, raw_path: "/etc/passwd" });
   });
 });

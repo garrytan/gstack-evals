@@ -9,7 +9,10 @@
 //
 // Each finding keeps its native severity label and, where the arm gave one, confirmed. renderFindings turns findings into
 // arm contract v1 lines (lanes/review-noloss/README.md): severity, path, line and summary (the claim), plus pass, id and
-// the kept fields evidence and confirmed, so judge-packet sees only path, line and text.
+// the kept fields evidence and confirmed, so judge-packet sees only path, line and text. A finding that says whether it
+// was confirmed also gets reader confirmed or unconfirmed: a review unit has one driver and no reader of its own, and the
+// contract's severity_map.by_reader can then map a stack's unconfirmed findings apart from its confirmed ones, as the
+// plan's primary map does for pstack (section 4).
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -119,7 +122,7 @@ export function repoPath(file: string | null, workPath: string): string | null {
 export function renderFindings(findings: readonly ToldFinding[], pass: number, workPath: string): Record<string, unknown>[] {
   return findings.map((f, i) => {
     const path = repoPath(f.file, workPath);
-    return { severity: f.severity, path, line: f.line, summary: f.claim, pass, id: "p" + pass + "-" + (i + 1), evidence: f.evidence, ...(f.confirmed !== undefined ? { confirmed: f.confirmed } : {}), ...(path === null && f.file !== null ? { raw_path: f.file } : {}) };
+    return { severity: f.severity, path, line: f.line, summary: f.claim, pass, id: "p" + pass + "-" + (i + 1), evidence: f.evidence, ...(f.confirmed !== undefined ? { confirmed: f.confirmed, reader: f.confirmed ? "confirmed" : "unconfirmed" } : {}), ...(path === null && f.file !== null ? { raw_path: f.file } : {}) };
   });
 }
 

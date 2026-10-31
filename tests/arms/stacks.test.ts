@@ -115,6 +115,16 @@ describe("subtree refs", () => {
   });
 });
 
+describe("a target skill per arm", () => {
+  // Value: protects=one installArms call installs stacks told different skills, each found by its own name (pstack interrogate, tstack sol-loop), and a stack arm with no skill of its own or from --skill still refuses; fails_when=one shared skill name is required, so review units cannot pair stacks in one run, or a missing skill installs silently; why_new=GEVA-70 step 2 (review units tell each stack its own command); seam=installArms skills; no_claim=base arms, which always take --skill
+  test("stacks told different skills install together", () => {
+    const [p, t] = installArms({ host: "claude", arms: [stackArm("pstack", ps.ref), stackArm("tstack", ts.ref)], skill: null, skills: { pstack: "interrogate", tstack: "sol-loop" }, base: null, sources: [ps.root, ts.root], runner: localInstaller(scratch("runner")), state: scratch("state") }) as [ArmInstall, ArmInstall];
+    expect(p.skill?.skillMd).toMatch(/skills\/interrogate\/SKILL\.md$/);
+    expect(t.skill?.skillMd).toMatch(/skills\/sol-loop\/SKILL\.md$/);
+    expect(stop(() => installArms({ host: "claude", arms: [stackArm("tstack", ts.ref)], skill: null, skills: { pstack: "interrogate" }, base: null, sources: [ts.root], runner: localInstaller(scratch("runner")), state: scratch("state") }))).toBe("E_USAGE");
+  });
+});
+
 describe("pstack and tstack installs", () => {
   const state = scratch("state");
   const arms = install("claude", [stackArm("pstack", ps.ref), { name: "pstack-placebo", kind: "placebo", of: "pstack" }], "interrogate", [ps.root], state);

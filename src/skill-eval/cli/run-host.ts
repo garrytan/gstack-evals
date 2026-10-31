@@ -511,13 +511,13 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
 }
 
 /** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it. */
-export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; nonce: string; cap: number }): HostRig {
+export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
   if (!pin.ok) throw new Error(pin.code + ": " + pin.message);
   const home = dockerSandbox({ trialImage: pin.pin.tag, docker: bin }).homePath("");
-  const installs = installArms({ host: call.host, arms: call.arms.arms, skill: o.skill, base: call.arms.base, sources: stackSources({ root: call.arms.base?.root ?? null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state });
+  const installs = installArms({ host: call.host, arms: call.arms.arms, skill: o.skill, ...(o.skills ? { skills: o.skills } : {}), base: call.arms.base, sources: stackSources({ root: call.arms.base?.root ?? null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state });
   const retain = join(state, "retained");
   const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
   if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
