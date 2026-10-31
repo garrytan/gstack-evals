@@ -2,11 +2,19 @@
 // work dir snapshotted after setup with its .git, and imports what the agent changed against it: new, changed and deleted
 // files anywhere in the work tree, untracked and git-excluded files included (so .gstack-home comes across). Excluded:
 // every .git entry (the repository, its config and its hooks stay the baseline's, so an agent's commit cannot move the
-// grader's HEAD), fifos, sockets and devices, and symlinks that point outside the work tree. A sidecar paths list narrows
-// the import. The check then runs on the grade tree, never on the agent's.
+// grader's HEAD), and fifos, sockets and devices. A sidecar paths list narrows the import. The check then runs on the
+// grade tree, never on the agent's. Two rules keep agent-written config from changing what a check sees (GEVA-68's
+// audit), and each records what it did in delta.dropped:
+// - git's in-tree config (.gitignore, .gitattributes, .gitmodules) stays the baseline's, so an agent cannot hide new
+//   files from git ls-files or change how git diffs. One whose directory the agent deleted or replaced with a file goes
+//   with that directory and is listed under deleted, not dropped.
+// - a symlink that points outside the work tree becomes an empty directory holding PLACEHOLDER, so test -e, test -d,
+//   find and git's untracked list all still see that something was written at that path. After a pass, runTrial runs the
+//   check again without these placeholders and passes only when that run passes too, so a placeholder cannot satisfy a
+//   check that needs the path.
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join } from "node:path";
 
 type Kind = "f" | "d" | "l" | "o";
 interface Entry {
@@ -20,7 +28,7 @@ export interface Delta {
   added: string[];
   changed: string[];
   deleted: string[];
-  /** Agent output left out of the import, with why. */
+  /** Agent output left out of the import or graded as something else, with why. */
   dropped: { path: string; reason: string }[];
 }
 
@@ -30,6 +38,12 @@ export function snapshot(src: string, dest: string): void {
   const r = spawnSync("cp", ["-a", "--", src, dest], { encoding: "utf8" });
   if (r.status !== 0) throw new Error("snapshot of " + src + " failed: " + r.stderr.trim());
 }
+
+/** The empty file inside the directory that stands in for a symlink pointing outside the work tree. */
+export const PLACEHOLDER = ".gstack-evals-dropped-symlink";
+
+/** Git reads these from the work tree; the grade tree keeps the baseline's copies. */
+const GIT_CONFIG = new Set([".gitignore", ".gitattributes", ".gitmodules"]);
 
 function scan(root: string): Map<string, Entry> {
   const out = new Map<string, Entry>();
@@ -96,9 +110,15 @@ export function importDelta(baseline: string, after: string, grade: string, path
   const inScope = (p: string) => !scope.length || scope.some((s) => p === s || p.startsWith(s + "/"));
   const delta: Delta = { added: [], changed: [], deleted: [], dropped: [] };
   const graded = new Map([...before].filter(([p]) => !inScope(p)).concat([...now].filter(([p]) => inScope(p))));
+  const gitConfig = (p: string) => p.split("/").some((s) => GIT_CONFIG.has(s));
   const modes = dirModes(grade);
   for (const path of modes.keys()) chmodSync(path, 0o700);
   for (const p of [...before.keys()].filter((p) => !now.has(p) && inScope(p)).sort((a, b) => depth(b) - depth(a))) {
+    const parent = dirname(p) === "." ? "d" : now.get(dirname(p))?.kind;
+    if (gitConfig(p) && (parent === "d" || parent === "o")) {
+      if (GIT_CONFIG.has(basename(p))) delta.dropped.push({ path: p, reason: "deleted, and git reads the baseline's " + basename(p) });
+      continue;
+    }
     rmSync(join(grade, p), { recursive: true, force: true });
     delta.deleted.push(p);
   }
@@ -110,20 +130,21 @@ export function importDelta(baseline: string, after: string, grade: string, path
       delta.dropped.push({ path: p, reason: "not a file, directory or symlink" });
       continue;
     }
-    if (e.kind === "l" && !resolveLink(p, e.target!, graded)) {
-      delta.dropped.push({ path: p, reason: "symlink to " + e.target + " points outside the work tree" });
-      if (old) {
-        rmSync(join(grade, p), { recursive: true, force: true });
-        delta.deleted.push(p);
-      }
+    const same = old && old.kind === e.kind && old.mode === e.mode && (e.kind === "d" || (e.kind === "l" ? old.target === e.target : old.size === e.size && readFileSync(join(baseline, p)).equals(readFileSync(join(after, p)))));
+    if (gitConfig(p)) {
+      if (!same && GIT_CONFIG.has(basename(p))) delta.dropped.push({ path: p, reason: "git reads the baseline's " + basename(p) + ", never the agent's" });
       continue;
     }
-    const same = old && old.kind === e.kind && old.mode === e.mode && (e.kind === "d" || (e.kind === "l" ? old.target === e.target : old.size === e.size && readFileSync(join(baseline, p)).equals(readFileSync(join(after, p)))));
-    if (same) continue;
+    const escapes = e.kind === "l" && !resolveLink(p, e.target!, graded);
+    if (same && !escapes) continue;
     const dest = join(grade, p);
-    if (old && (old.kind !== e.kind || e.kind !== "d")) rmSync(dest, { recursive: true, force: true });
+    if (old && (old.kind !== e.kind || e.kind !== "d" || escapes)) rmSync(dest, { recursive: true, force: true });
     mkdirSync(dirname(dest), { recursive: true });
-    if (e.kind === "d") {
+    if (escapes) {
+      delta.dropped.push({ path: p, reason: "symlink to " + e.target + " points outside the work tree; an empty directory stands in for it" });
+      mkdirSync(dest);
+      writeFileSync(join(dest, PLACEHOLDER), "");
+    } else if (e.kind === "d") {
       mkdirSync(dest, { recursive: true, mode: 0o700 });
       modes.set(dest, e.mode);
     } else if (e.kind === "l") symlinkSync(e.target!, dest);

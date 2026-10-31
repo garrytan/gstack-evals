@@ -346,6 +346,7 @@ export function analyzeModel(input: VerdictInput, model: string, records: readon
     if (t.kind === "missing" && t.code === "E_USER_TURNS_MISSING") reasons.push(reason("E_USER_TURNS_MISSING", g.rec.task));
     if (t.kind === "credentials_rejected") reasons.push(reason("E_KEY_REJECTED", g.rec.arm));
     if (t.kind === "cap_stop") reasons.push(reason("CAP_STOP"));
+    if (g.rec.dropped?.length) warnings.push(reason("DELTA_DROPPED", g.rec.task));
   }
 
   const metrics = options.metrics.map((metric): MetricComparison => {
