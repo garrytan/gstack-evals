@@ -253,7 +253,7 @@ export function skillUse(calls: readonly Call[], skill: SkillRef | null, outputs
       read("SKILL.md");
     }
     if (c.ok !== true) continue;
-    if (c.tool === "Skill" && [skill.name, "gstack:" + skill.name].includes(c.input.skill ?? "")) {
+    if (c.tool === "Skill" && (c.input.skill === skill.name || (c.input.skill ?? "").endsWith(":" + skill.name))) {
       opened = true;
       read("SKILL.md");
       continue;
