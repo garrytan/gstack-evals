@@ -302,6 +302,13 @@ describe("free disk on a real host (GST-361)", () => {
     expect([fake.out + fake.err, dry.out + dry.err].map((t) => /E_DISK_LOW|ok disk:/.test(t))).toEqual([false, false]);
   });
 
+  // Value: protects=diskReadings reports the bytes free to this user, as df does, so E_DISK_LOW compares bytes with bytes; fails_when=free counts blocks, the total size or another unit, so every real-host call is refused or none is; why_new=PR #85 /ship review (diskReadings' free value was untested); seam=diskReadings; no_claim=the pass branch at a reading equal to its need, which the CLI path cannot inject
+  test("diskReadings reports bytes free, as df does", () => {
+    const [d] = diskReadings({ XDG_STATE_HOME: join(TMP, "disk-state"), GSTACK_EVALS_DOCKER_BIN: fakeDocker("/no/such/dir") });
+    const df = spawnSync("df", ["-Pk", TMP], { encoding: "utf8" }).stdout.trim().split("\n")[1]!.split(/\s+/);
+    expect(Math.abs(d!.free - Number(df[3]) * 1024)).toBeLessThan(1e8);
+  });
+
   // Value: protects=one reading per filesystem: the state root and Docker's root dir on one filesystem need both shares together, a root dir docker info cannot name or that is not on this machine is not read, and a separate root dir is read on its own; fails_when=a shared filesystem is checked against one share, or a missing root dir fails the step; why_new=GST-361; seam=diskReadings; no_claim=Docker Desktop's VM disk, which this machine cannot read
   test("diskReadings counts a shared filesystem once, with both shares", () => {
     const state = { XDG_STATE_HOME: join(TMP, "disk-state") };

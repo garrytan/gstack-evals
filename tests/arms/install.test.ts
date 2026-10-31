@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { installArms, InstallError, localInstaller, releaseInstalls, runHold, stackInstall, stackTree, WRITABLE, type ArmInstall, type CacheHold } from "../../src/arms/install.ts";
 import { resolveArms, type ResolvedArms } from "../../src/skill-eval/cli/arms.ts";
 import { newRunId } from "../../src/skill-eval/cli/call.ts";
@@ -239,6 +239,32 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     expect(releaseInstalls(b).sort()).toEqual(built);
     expect(readdirSync(join(state, "installs"))).toEqual([]);
   }, 60_000);
+
+  // Value: protects=a run that builds an entry another run commits first drops its own build, reuses the winner's entry and keeps a used hold, so its release deletes nothing and the winner's release deletes the entry; fails_when=the losing run returns its deleted build, marks its hold built, or its release deletes an entry the winner still holds; why_new=PR #85 /ship review (cached()'s lost commit race was untested); seam=cached, releaseInstalls; no_claim=two processes racing, which the lock test covers
+  test("a run that loses the commit race reuses the winner's entry and keeps a used hold", () => {
+    const state = scratch("state");
+    const options = { host: "codex" as const, arms: resolved.arms.filter((a) => a.name === "after"), skill: "demo", base: null, sources: [stack.root], state };
+    const runner = localInstaller(scratch("runner"));
+    const [winner, loser] = [runHold(state, "winner"), runHold(state, "loser")];
+    let raced = false;
+    const racing = {
+      ...runner,
+      run(src: string, o: Parameters<typeof runner.run>[1]) {
+        const failed = runner.run(src, o);
+        if (!raced) {
+          raced = true;
+          installArms({ ...options, runner: localInstaller(scratch("runner")), hold: winner });
+        }
+        return failed;
+      },
+    };
+    const [arm] = installArms({ ...options, runner: racing, hold: loser }) as [ArmInstall];
+    const entry = dirname(arm.layers[0]!.src);
+    expect([raced, readFileSync(join(entry + ".holds", "loser"), "utf8"), readFileSync(join(entry + ".holds", "winner"), "utf8")]).toEqual([true, "used\n", "built\n"]);
+    expect(arm.layers.filter((l) => !existsSync(l.src))).toEqual([]);
+    expect(releaseInstalls(loser)).toEqual([]);
+    expect(releaseInstalls(winner)).toEqual([entry]);
+  });
 
   // Value: protects=a resumed run takes over every hold of the run it continues, so it deletes the entries that run built even when an arm changed before the resume and its old entry is no longer used; fails_when=the resumed run's hold starts empty, so the dead run's holds and installs outlive the resume and block every later run from deleting them; why_new=PR #85 review (resumed holds stranded); seam=runHold, cached, releaseInstalls; no_claim=a run that dies and is never resumed, whose holds keep its entries until --resume
   test("a resumed run takes over the holds of the run it continues, entries its changed arms no longer use included", () => {
