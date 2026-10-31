@@ -31,8 +31,8 @@ gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <d
 gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] [--unjudged <file>] --arm <dir>... --out <dir>
 gstack-evals noloss judge-run --suite <id> --packets <dir> --key <file> --arm <dir>... --brief <file> --primary <provider/model> --second <provider/model> --third <provider/model> --item <ledger item> --out <dir> [--source <owner/repo>=<clone>]... [--dry-run]
 gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge>]
-gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>]
-gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--permutations <n>] [--json]
+gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
+gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
 ```
 
 `gstack-evals noloss --help` has the details. Every refusal starts with its reason code (E_NOLOSS_SUITE, E_NOLOSS_ARM,
