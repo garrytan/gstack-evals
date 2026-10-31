@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadCatalog } from "../../lanes/review-replay/catalog/catalog.ts";
 import { PLAN_HEADING_WORDS, PLAN_HEADING_WORDS_SHA256, PLAN_MATERIAL_CAP, planMaterial } from "../../lanes/review-noloss/judge.ts";
@@ -294,6 +294,36 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     writeFileSync(file, JSON.stringify({ ...json(prereg), comparisons: [cmp("none", "seen")], loss_family: { order: ["none-vs-seen"], null: "zero", reason: "test" } }));
     const rec = JSON.parse((await score("none", "seen", ["--json"], panel.stubPath, root, file)).out);
     expect([rec.result.verdict, rec.judging.labelled, rec.false_alarm_gate.result, rec.false_alarm_gate.reasons, rec.loss_claim.eligible]).toEqual(["LOSS", false, null, ["the decoy rulings are labelled adjudication, and the gate reads blind adjudication only"], false]);
+  });
+
+  const seededRuling = (src: string, sawLabel: "yes" | "no") => {
+    const seeded = panel.suite.units.find((u) => u.blockers.some((b) => b.counts !== "over-blocking"))!;
+    const decoy = panel.suite.units.find((u) => u.blockers.every((b) => b.counts === "over-blocking"))!;
+    const noise = readFileSync(join(src, "findings", decoy.pr + ".jsonl"), "utf8").split("\n").find((l) => l.includes('"id":"p1-n1"'))!;
+    appendFileSync(join(src, "findings", seeded.pr + ".jsonl"), JSON.stringify({ ...JSON.parse(noise), id: "p1-x1" }) + "\n");
+    appendFileSync(join(src, "adjudication.tsv"), [seeded.pr, "p1-x1", 1, "not-defect", "synthetic", sawLabel, 1, "synthetic", ""].join("\t") + "\n");
+  };
+
+  test("blind decoy rulings beside a labelled ruling on a seeded unit's finding still read the gate, with no pooling reason", async () => {
+    const src = writePlanArm(join(dir, "src", "blinddecoys"), panel.suite, { ...arms("honest"), id: "blinddecoys", noise: 1 });
+    seededRuling(src, "yes");
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", root, ...S])).code).toBe(0);
+    const file = join(dir, "blinddecoys.json");
+    writeFileSync(file, JSON.stringify({ ...json(prereg), comparisons: [cmp("none", "blinddecoys")], loss_family: { order: ["none-vs-blinddecoys"], null: "zero", reason: "test" } }));
+    const rec = JSON.parse((await score("none", "blinddecoys", ["--json"], panel.stubPath, root, file)).out);
+    expect([rec.result.verdict, rec.false_alarm_gate.per_decoy, rec.false_alarm_gate.result, rec.false_alarm_gate.reasons]).toEqual(["LOSS", { variant: 0, reference: 1 }, "PASS", []]);
+  });
+
+  test("labelled decoy rulings beside blind rulings on a seeded unit's finding leave the gate unread for the labelled reason, not pooling", async () => {
+    const src = writePlanArm(join(dir, "src", "labelleddecoys"), panel.suite, { ...arms("honest"), id: "labelleddecoys", noise: 1 });
+    const adj = join(src, "adjudication.tsv");
+    writeFileSync(adj, readFileSync(adj, "utf8").replace(/^(\d+\tp\d+-n1\t\d+\tnot-defect\tsynthetic\t)no\t/gm, "$1yes\t"));
+    seededRuling(src, "no");
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", root, ...S])).code).toBe(0);
+    const file = join(dir, "labelleddecoys.json");
+    writeFileSync(file, JSON.stringify({ ...json(prereg), comparisons: [cmp("none", "labelleddecoys")], loss_family: { order: ["none-vs-labelleddecoys"], null: "zero", reason: "test" } }));
+    const rec = JSON.parse((await score("none", "labelleddecoys", ["--json"], panel.stubPath, root, file)).out);
+    expect([rec.result.verdict, rec.false_alarm_gate.result, rec.false_alarm_gate.reasons, rec.loss_claim.eligible]).toEqual(["LOSS", null, ["the decoy rulings are labelled adjudication, and the gate reads blind adjudication only"], false]);
   });
 
   test("a comparisons file's gate must be a non-negative margin per decoy", async () => {

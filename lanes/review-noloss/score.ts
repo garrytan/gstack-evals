@@ -251,7 +251,7 @@ function newBlockingFindings(suite: Suite, arm: Arm): { per_pass: number; per_pr
 
 interface FalseBlockerTally {
   /** Per unit id, summed over passes. */
-  units: Map<string, { false: number; unadjudicated: number; new: number }>;
+  units: Map<string, { false: number; unadjudicated: number; new: number; labelled: boolean; blind: boolean }>;
   not_defect: number;
   known_informational: number;
   new_blockers: number;
@@ -269,15 +269,20 @@ export function tallyFalseBlockers(suite: Suite, arm: Arm): FalseBlockerTally | 
   if (!arm.findings) return { reason: "arm " + arm.arm.id + " is transcribed: it has no findings to adjudicate" };
   const matched = matchedBlockers(arm.judgments ?? []);
   const rows = arm.adjudications ?? [];
-  const ruled = new Map(rows.map((a) => [a.finding, a.ruling]));
+  const ruled = new Map(rows.map((a) => [a.finding, a]));
   const t: FalseBlockerTally = { units: new Map(), not_defect: 0, known_informational: 0, new_blockers: 0, unadjudicated: 0, labelled: rows.some((a) => a.saw_label), blind: rows.some((a) => !a.saw_label) };
   for (const u of suite.units) {
-    const cell = { false: 0, unadjudicated: 0, new: 0 };
+    const cell = { false: 0, unadjudicated: 0, new: 0, labelled: false, blind: false };
     for (const f of arm.findings.get(u.id) ?? []) {
       if (mapSeverity(arm.arm, f.raw, f.reader) !== "CRITICAL") continue;
       const blockers = matched.get(f) ?? [];
       if (blockers.some((b) => b.counts !== "over-blocking")) continue;
-      const ruling = blockers.length ? "known-informational" : ruled.get(f);
+      const row = blockers.length ? undefined : ruled.get(f);
+      const ruling = blockers.length ? "known-informational" : row?.ruling;
+      if (row) {
+        cell.labelled ||= row.saw_label;
+        cell.blind ||= !row.saw_label;
+      }
       if (ruling === undefined) {
         cell.unadjudicated++;
         t.unadjudicated++;
@@ -364,8 +369,10 @@ function falseAlarmGate(suite: Suite, v: Arm, r: Arm, margin: number, noVerdict:
   for (const t of [tv, tr]) if ("reason" in t) reasons.push(t.reason);
   const empty = { margin_per_decoy: margin, decoys: decoys.length, per_decoy: { variant: 0, reference: 0 }, excess: null, ci95: null, result: null };
   if ("reason" in tv || "reason" in tr) return { ...empty, reasons };
-  if ((tv.labelled || tr.labelled) && (tv.blind || tr.blind)) reasons.push("labelled and blind adjudication are never pooled");
-  else if (tv.labelled || tr.labelled) reasons.push("the decoy rulings are labelled adjudication, and the gate reads blind adjudication only");
+  const decoyRulings = (k: "labelled" | "blind") => decoys.some((u) => tv.units.get(u.id)![k] || tr.units.get(u.id)![k]);
+  const labelled = decoyRulings("labelled");
+  if (labelled && decoyRulings("blind")) reasons.push("labelled and blind adjudication are never pooled");
+  else if (labelled) reasons.push("the decoy rulings are labelled adjudication, and the gate reads blind adjudication only");
   for (const [a, t] of [[v, tv], [r, tr]] as const) {
     const n = decoys.reduce((s, u) => s + t.units.get(u.id)!.unadjudicated, 0);
     if (n) reasons.push("arm " + a.arm.id + " has " + n + " must-fix finding" + (n > 1 ? "s" : "") + " on decoys with no adjudication row");
