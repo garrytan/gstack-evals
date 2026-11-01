@@ -34,7 +34,8 @@
 //   reset or a broken pipe), or the machine (a spawn that fails, a session that no longer answers once the CLI ends). An
 //   infra failure leaves a missing cell, E_INFRA_FAILURE, and replaces a timeout or an arm failure already recorded.
 // - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
-//   with text, thinking or a tool call. Scorers read it instead of turns, which hold main-agent text only.
+//   with text, thinking or a tool call. Scorers read it instead of turns, which hold main-agent text only. text_output
+//   says whether the main agent wrote any text, apart from the AskUserQuestion questions turns also hold.
 // - CLAUDE_CODE_MAX_OUTPUT_TOKENS holds each request to the proxy's per-call output cap, which Claude Code's default
 //   (128k) passes. CLAUDE_CODE_MAX_RETRIES=0 leaves retries to the proxy, which journals and charges every paid attempt
 //   under its own budget, so the CLI never multiplies them or waits out its backoff on a refusal.
@@ -215,7 +216,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
           appendFileSync(join(o.out, "cli-stderr.log"), "adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
-          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, model_output: false, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
+          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, model_output: false, text_output: false, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
         }
       }
       const transcript = join(o.out, "transcript.ndjson");
@@ -227,6 +228,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let stop: Termination | null = null;
       let missingQuestion: string | null = null;
       let modelOutput = false;
+      let textOutput = false;
       let cli: ChildProcess | null = null;
       let agentTurns = 0;
       let usage: TokenUsage | null = null;
@@ -325,7 +327,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
               } else {
                 modelOutput = true;
-                if (!m.parent_tool_use_id && text.trim()) turnText = text;
+                if (!m.parent_tool_use_id && text.trim()) {
+                  turnText = text;
+                  textOutput = true;
+                }
               }
             } else if (m.type === "result") {
               agentTurns += m.num_turns ?? 0;
@@ -375,6 +380,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         turns,
         termination: stop ?? { kind: "completed" },
         model_output: modelOutput,
+        text_output: textOutput,
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

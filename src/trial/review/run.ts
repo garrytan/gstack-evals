@@ -20,8 +20,9 @@
 //   that keeps a voice, since a plan arm runs no second model.
 // - A plan session scores by planScore. After the model produced output (the record's model_output, never its turns), a
 //   malformed or missing block, a timeout, the arm's CLI failing, or a session that completed with no text turn is a miss
-//   with a diagnostic note; arm.json counts the last kind as completed_without_text, since the parser reads text turns
-//   only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the arm, as
+//   with a diagnostic note. arm.json counts as completed_without_text every miss whose session completed with no text from
+//   the main agent (no turn, or only AskUserQuestion questions, which parse as missing), since the parser reads text
+//   turns only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the arm, as
 //   is an infra failure (E_INFRA_FAILURE) or any other incomplete session at any point, so the arm gets no verdict.
 //   progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as failed, a gap as
 //   missing.
@@ -368,7 +369,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
-        if (score === "miss" && e.parse.kind === "incomplete" && ended === "completed") withoutText++;
+        if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
         if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
         else if (score === "gap") gaps.push(note + (!plan ? "" : ended === "arm_failure" || ended === "timeout" ? " before any model output" : ended === "completed" ? " and no model output" : ""));
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));

@@ -5,7 +5,7 @@
 // and codex reviews off, the CLAUDE.md routing offer declined (routing_declined, so no base arm's preamble asks to add
 // routing rules or injects its routing instruction block), and proactive mode at the run's preregistered value. Both variables point at it through the env
 // allowlist; the agent's changes under it come across in the graded delta, since the import includes git-excluded files.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const STATE_ROOT_DIR = ".gstack-home";
@@ -26,17 +26,22 @@ export function seedConfig(proactive: Proactive): Record<string, string> {
  * Seeds <work>/.gstack-home and returns the two variables for the env allowlist, pointing at it under the work dir's
  * path in the child (workPath). extra overrides seed keys, such as a stack cell's gstack config (src/arms/cells.ts). Existing files are kept; the harness's config keys are appended after any the fixture
  * wrote, and gstack reads the last value of a key. files are written at the root's top level over any file or symlink the
- * fixture put there, such as a plan run's global question preferences, so the seeded state is what the run records.
+ * fixture put there, such as a plan run's global question preferences, so the seeded state is what the run records. A
+ * state root or config.yaml the fixture made a symlink is replaced, and markers are checked without following symlinks,
+ * so seeding never reads, writes or deletes anything outside the work dir.
  */
 export function seedStateRoot(work: string, workPath: string, proactive: Proactive = "core", extra: Record<string, string> = {}, files: Record<string, string> = {}): { GSTACK_STATE_ROOT: string; GSTACK_HOME: string } {
+  const entry = (path: string) => lstatSync(path, { throwIfNoEntry: false });
   const root = join(work, STATE_ROOT_DIR);
+  if (entry(root)?.isSymbolicLink()) rmSync(root);
   mkdirSync(root, { recursive: true });
-  for (const marker of ONBOARDING_MARKERS) if (!existsSync(join(root, marker))) writeFileSync(join(root, marker), "");
+  for (const marker of ONBOARDING_MARKERS) if (!entry(join(root, marker))) writeFileSync(join(root, marker), "");
   for (const [name, text] of Object.entries(files)) {
     rmSync(join(root, name), { recursive: true, force: true });
     writeFileSync(join(root, name), text);
   }
   const config = join(root, "config.yaml");
+  if (entry(config)?.isSymbolicLink()) rmSync(config);
   const before = existsSync(config) ? readFileSync(config, "utf8") : "";
   const lines = Object.entries({ ...seedConfig(proactive), ...extra }).map(([k, v]) => k + ": " + v);
   writeFileSync(config, before + (before && !before.endsWith("\n") ? "\n" : "") + "# seeded by gstack-evals for a trial\n" + lines.join("\n") + "\n");

@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeCodeDriver } from "../../../src/adapters/claude-code/driver.ts";
@@ -110,6 +110,14 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
   hang: { script: () => async function* (sdk) { yield init; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); } },
   toolsdone: { script: () => async function* () { yield init; yield toolsOnly; yield result; } },
   silent: { script: () => async function* () { yield init; yield result; } },
+  askdone: { script: () => async function* (sdk) {
+    yield init;
+    yield assistant({ type: "tool_use", id: "toolu_ask", name: "AskUserQuestion", input: ASK });
+    await sdk.canUseTool("AskUserQuestion", ASK, { toolUseID: "toolu_ask" });
+    yield { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_ask", content: "answered", is_error: false }] }, parent_tool_use_id: null };
+    yield assistant({ type: "tool_use", id: "toolu_write", name: "Write", input: { file_path: "/work/review.md", content: "findings" } });
+    yield result;
+  } },
   transcript: { script: (out) => async function* () { yield init; yield assistant(text("Reading the plan.")); rmSync(join(out, "transcript.ndjson")); mkdirSync(join(out, "transcript.ndjson")); yield result; } },
   afterturn: { persona: "down", script: () => async function* () { yield init; yield assistant(text("I have read the plan. Should I also review the rollout section?")); yield result; } },
   ask: { persona: "down", script: () => async function* (sdk) {
@@ -232,7 +240,15 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect([armJson("toolsdone").status, armJson("toolsdone").coverage_gaps, armJson("toolsdone").diagnostics, armJson("toolsdone").completed_without_text]).toEqual(["complete", undefined, [note("incomplete, the session completed with no assistant turn; scored as finding nothing")], 1]);
     expect(record("silent")).toEqual({ termination: { kind: "completed" }, model_output: false, turns: 0 });
     expect([armJson("silent").status, armJson("silent").coverage_gaps, armJson("silent").completed_without_text]).toEqual(["stopped", [note("incomplete, the session completed with no assistant turn and no model output")], 0]);
-    expect(arms.filter((a) => armJson(a).completed_without_text !== 0)).toEqual(["toolsdone"]);
+    expect(arms.filter((a) => armJson(a).completed_without_text !== 0)).toEqual(["toolsdone", "askdone"]);
+  });
+
+  // Value: protects=ruling B1's count: a session whose only turn is an AskUserQuestion's question, which then answers through a file and completes, parses as missing (a miss) and still counts as completed_without_text, from the record's text_output flag; fails_when=the question turn hides the textless completion from the count; why_new=Capy review of #106; seam=the driver's text_output, arm.json; no_claim=none beyond protects
+  test("ruling B1: a completed session whose only turn is a question counts as completed_without_text", () => {
+    const r = entry("askdone").record;
+    expect([r.termination, r.model_output, r.text_output, r.turns.length]).toEqual([{ kind: "completed" }, true, false, 1]);
+    expect([armJson("askdone").status, armJson("askdone").diagnostics, armJson("askdone").completed_without_text]).toEqual(["complete", [note("missing; scored as finding nothing")], 1]);
+    expect([entry("ok").record.text_output, armJson("ok").completed_without_text]).toEqual([true, 0]);
   });
 
   // Value: protects=rule 4's repro: the evaluator's own transcript append failing after one text turn is an infra failure, a gap that stops the arm, never the arm's crash or miss; fails_when=the driver's catch tags it arm_failure harness_crash and the turn makes it a miss; why_new=GST-737 rule 4 (driver.ts:275 at 1a6f747); seam=the driver's message loop; no_claim=none beyond protects
@@ -275,7 +291,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 3, 0, 10]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 4, 0, 10]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);
@@ -355,7 +371,7 @@ describe("the seeded question preferences (keyless)", () => {
     expect(arm.question_preferences_sha256).toBe(sha256(seen.prefs!));
   }, 60_000);
 
-  // Value: protects=seeding writes a regular file in the state root, replacing a fixture's file, directory or symlink without writing through the symlink; fails_when=the fixture's file is kept or its symlink's target is overwritten; why_new=GST-737; seam=seedStateRoot; no_claim=a .gstack-home that is itself a symlink
+  // Value: protects=seeding writes a regular file in the state root, replacing a fixture's file, directory or symlink without writing through the symlink; fails_when=the fixture's file is kept or its symlink's target is overwritten; why_new=GST-737; seam=seedStateRoot; no_claim=none beyond protects
   test("seedStateRoot replaces a fixture's file or symlink at a seeded name", () => {
     const outside = join(scratch("plan-scoring-outside-"), "target.json");
     writeFileSync(outside, "outside\n");
@@ -370,5 +386,23 @@ describe("the seeded question preferences (keyless)", () => {
       expect([kind, readFileSync(at, "utf8")]).toEqual([kind, "never\n"]);
     }
     expect(readFileSync(outside, "utf8")).toBe("outside\n");
+  });
+
+  // Value: protects=a fixture's .gstack-home symlinked to a directory outside the trial, or its config.yaml or a marker symlinked out, never lets seeding read, write or delete outside the work dir; fails_when=the seed deletes or rewrites the outside preferences file or config, or creates a marker's dangling target; why_new=Capy review of #106 (a removal through a parent symlink); seam=seedStateRoot; no_claim=none beyond protects
+  test("seedStateRoot never reaches outside the work dir through a fixture's symlinks", () => {
+    const outside = scratch("plan-scoring-host-");
+    writeFileSync(join(outside, GLOBAL_PREFERENCES), "host prefs\n");
+    writeFileSync(join(outside, "config.yaml"), "host: config\n");
+    const linked = scratch("plan-scoring-linked-root-");
+    symlinkSync(outside, join(linked, ".gstack-home"));
+    seedStateRoot(linked, "/work/t", "core", {}, { [GLOBAL_PREFERENCES]: "never\n" });
+    expect([lstatSync(join(linked, ".gstack-home")).isDirectory(), readFileSync(join(linked, ".gstack-home", GLOBAL_PREFERENCES), "utf8"), readFileSync(join(linked, ".gstack-home", "config.yaml"), "utf8").includes("host: config")]).toEqual([true, "never\n", false]);
+    const work = scratch("plan-scoring-linked-entries-");
+    mkdirSync(join(work, ".gstack-home"));
+    symlinkSync(join(outside, "config.yaml"), join(work, ".gstack-home", "config.yaml"));
+    symlinkSync(join(outside, "marker-target"), join(work, ".gstack-home", ".activated"));
+    seedStateRoot(work, "/work/t", "core");
+    expect([lstatSync(join(work, ".gstack-home", "config.yaml")).isSymbolicLink(), readFileSync(join(work, ".gstack-home", "config.yaml"), "utf8").includes("host: config")]).toEqual([false, false]);
+    expect([readFileSync(join(outside, GLOBAL_PREFERENCES), "utf8"), readFileSync(join(outside, "config.yaml"), "utf8"), existsSync(join(outside, "marker-target"))]).toEqual(["host prefs\n", "host: config\n", false]);
   });
 });

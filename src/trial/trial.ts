@@ -29,6 +29,8 @@ export interface AgentOutcome {
   termination: Termination;
   /** Whether the model produced any output (text, thinking or a tool call); set by drivers that see each assistant message. */
   model_output?: boolean;
+  /** Whether the main agent wrote any text block, apart from the AskUserQuestion questions turns also hold. */
+  text_output?: boolean;
   opened: boolean | null;
   files_read: string[];
   asked: (Category | null)[];
@@ -137,7 +139,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     } finally {
       session.stop();
     }
-    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
+    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);

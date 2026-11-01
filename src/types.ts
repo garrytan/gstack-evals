@@ -217,6 +217,8 @@ export interface TrialRecord {
    * Set by adapters that see each assistant message; turns cannot tell, since a session of tool calls alone has none.
    */
   model_output?: boolean;
+  /** Whether the main agent wrote any text block the user saw, apart from the AskUserQuestion questions turns also hold. */
+  text_output?: boolean;
   /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
   check: boolean | null;
   /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */
