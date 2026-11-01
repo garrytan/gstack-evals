@@ -337,7 +337,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 else if (m.error === "authentication_failed") end({ kind: "credentials_rejected" });
                 else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
               } else {
-                modelOutput = true;
+                if ((m.message?.content ?? []).some((b: SdkMessage) => b.type === "text" || b.type === "thinking" || b.type === "tool_use")) modelOutput = true;
                 if (!m.parent_tool_use_id && text.trim()) {
                   turnText = text;
                   textOutput = true;

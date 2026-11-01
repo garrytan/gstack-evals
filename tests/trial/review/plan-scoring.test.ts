@@ -162,6 +162,7 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
     throw new Error("Claude Code process exited with code 137");
   } },
   nospawnnow: { spawn: "fails", eager: true, script: () => async function* () { yield init; } },
+  empty: { script: () => async function* () { yield init; yield assistant(); yield result; } },
 };
 
 describe("the planning lane's failure rule, end to end through the Claude Code driver (keyless)", () => {
@@ -339,10 +340,16 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect([armJson("nospawnnow").status, armJson("nospawnnow").coverage_gaps]).toEqual(["stopped", [note("incomplete, the session ended missing (E_INFRA_FAILURE)")]]);
   });
 
+  // Value: protects=OV3 (#106 /ship): an assistant message with no text, thinking or tool_use block is no model output, so a session that completes after it is a gap, not a miss; fails_when=an empty message sets model_output and scores a miss; why_new=#106 /ship outside voice OV3; seam=the driver's model_output; no_claim=none beyond protects
+  test("OV3: an empty assistant message is no model output, so completing after it is a gap", () => {
+    expect(record("empty")).toEqual({ termination: { kind: "completed" }, model_output: false, turns: 0 });
+    expect([armJson("empty").status, (armJson("empty").coverage_gaps ?? []).length]).toEqual(["stopped", 1]);
+  });
+
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 12]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 13]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);
