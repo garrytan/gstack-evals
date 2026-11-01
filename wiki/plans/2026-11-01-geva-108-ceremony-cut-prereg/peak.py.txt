@@ -1,0 +1,22 @@
+# Peak exposure per review session from a metering-proxy journal: settled spend plus open reservations, at its highest.
+# Usage: python3 peak.py <journal.ndjson>...
+import json,sys,collections
+for path in sys.argv[1:]:
+    open_={}; rid2key={}; settled=collections.Counter(); peak=collections.Counter(); arm={}
+    for l in open(path):
+        d=json.loads(l); k=d['kind']
+        if k=='reserve':
+            m=d['cell']['meter_id']; open_[d['idempotency_key']]=(m,d['max_micros']); arm[m]=d['cell']['arm']
+        elif k=='request':
+            rid2key[d['reservation_id']]=d['idempotency_key']; continue
+        elif k=='outcome':
+            key=rid2key.get(d['reservation_id']); m=d['meter_id']
+            if key in open_: open_.pop(key)
+            settled[m]+=(d.get('outcome') or {}).get('spent_micros') or 0
+        else: continue
+        cur=settled[m]+sum(v for (mm,v) in open_.values() if mm==m)
+        peak[m]=max(peak[m],cur)
+    by=collections.defaultdict(list)
+    for m,p in peak.items(): by[arm.get(m)].append((p/1e6, settled[m]/1e6))
+    for a,v in sorted(by.items()):
+        v.sort(); print(path.split('/')[-4] if '/runs/' in path else path, a,len(v),'peak max',round(v[-1][0],2),'p95',round(v[int(len(v)*.95)][0],2),'settled max',round(max(x[1] for x in v),2))

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "suite": "stacks-r1",
+  "decision_rule": "Secondary and descriptive readings for wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg, section 4. Same scorer rules as comparisons.ceremony-r1.json; nothing here enters the verdict.",
+  "seed": 20261101,
+  "draws": 10000,
+  "loss_family": {
+    "order": [
+      "control-vs-none"
+    ],
+    "null": "zero",
+    "reason": "Secondary file. Its readings are descriptive and enter no verdict; noloss needs a declared family, so it holds one test."
+  },
+  "comparisons": [
+    {
+      "id": "control-vs-none",
+      "variant": "control-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Secondary, the lane's margin.",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Secondary. gstack full render against no gstack, both on the preset."
+    },
+    {
+      "id": "variant-vs-none",
+      "variant": "variant-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Secondary, the lane's margin.",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Secondary. gstack unattended render against no gstack, both on the preset."
+    },
+    {
+      "id": "control-vs-control-sdk",
+      "variant": "control-opus",
+      "reference": "control-sdk-opus",
+      "margin_points": 10,
+      "margin_reason": "Secondary, the lane's margin.",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Secondary. The full render with the preset against the full render with the SDK default (no Claude Code system prompt, as #108 ran)."
+    }
+  ]
+}

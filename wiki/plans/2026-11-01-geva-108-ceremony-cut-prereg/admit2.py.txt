@@ -1,0 +1,12 @@
+
+import csv,collections,statistics as st,math, os
+B=os.environ['W'] + '/review/runs/stacks-r1-review-opus-gstack/out/arms/'
+for arm in ['gstack-opus','none-opus']:
+    rows=[r for r in csv.DictReader(open(B+arm+'/cost.tsv'),delimiter='\t') if r['scope']=='all']
+    U=collections.defaultdict(list); W=collections.defaultdict(list); Q=collections.defaultdict(list)
+    for r in rows: U[r['pr']].append(float(r['usd'])); Q[r['pr']].append(int(r['requests']))
+    units=sorted(U); n=len(units); mu=st.mean([st.mean(U[u]) for u in units])
+    tot=sum(sum(v) for v in U.values())
+    for P in (1,2,3):
+        vd=sum(2*st.variance(U[u])/P for u in units if len(U[u])>1)/n**2
+        print(arm,'units',n,'rows',len(rows),'total',round(tot,2),'mean',round(mu,3),f'P{P} ratio se% {100*math.sqrt(vd)/mu:.2f} hw95% {196*math.sqrt(vd)/mu:.1f}', 'req mean',round(st.mean([x for v in Q.values() for x in v]),1))

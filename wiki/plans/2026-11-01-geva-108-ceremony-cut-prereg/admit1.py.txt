@@ -1,0 +1,47 @@
+
+import json,collections,statistics as st,math,csv,glob,random,os, os
+W=os.path.expanduser('~/.capy/work/geva100')
+rows=json.load(open(W+'/tb2_rows.json'))
+Z95=1.6449; Z80=0.8416
+def tb2(model,arm='gstack'):
+    T=collections.defaultdict(list); C=collections.defaultdict(list); F=collections.defaultdict(list); Q=collections.defaultdict(list)
+    for r in rows:
+        if r['model']==model and r['arm']==arm:
+            T[r['task']].append(1 if r['reward']==1 else 0)
+            if r['spent'] is not None: C[r['task']].append(r['spent']/1e6)
+            if r['first_tokens']: F[r['task']].append(r['first_tokens'])
+            if r['requests']: Q[r['task']].append(r['requests'])
+    tasks=sorted(T); n=len(tasks)
+    out={'model':model,'arm':arm,'tasks':n,'pass':sum(map(sum,T.values()))/sum(map(len,T.values()))}
+    for R in (3,4,5):
+        v=sum(2*(st.mean(T[t])*(1-st.mean(T[t]))*len(T[t])/(len(T[t])-1))/R for t in tasks)
+        se=math.sqrt(v)/n
+        out[f'R{R}_se_pp']=round(100*se,2); out[f'R{R}_ni_mdd80_pp']=round(100*(Z95+Z80)*se,1)
+        for m in (5,7.5,10): out[f'R{R}_power_m{m}']=round(0.5*(1+math.erf(((m/100)/se-Z95)/math.sqrt(2))),3)
+    mu=st.mean([st.mean(C[t]) for t in tasks])
+    out['cost_per_trial']=round(mu,4)
+    for R in (3,4,5):
+        vd=sum(2*st.variance(C[t])/R for t in tasks if len(C[t])>1)/n**2
+        out[f'R{R}_cost_ratio_se_pct']=round(100*math.sqrt(vd)/mu,2)
+        out[f'R{R}_cost_ratio_halfwidth95_pct']=round(196*math.sqrt(vd)/mu,1)
+    out['first_tokens_median']=st.median([x for t in tasks for x in F[t]]) if F else None
+    out['first_tokens_sd']=round(st.pstdev([x for t in tasks for x in F[t]]),1) if F else None
+    out['requests_mean']=round(st.mean([x for t in tasks for x in Q[t]]),2) if Q else None
+    return out
+res=[tb2('claude-opus-5-5','gstack'),tb2('claude-opus-5-5','none'),tb2('particle-1','gstack'),tb2('particle-1','none')]
+# empirical gstack-vs-none cost ratio bootstrap (task clustered) for Opus as a check
+def boot_ratio(model,a,b,B=4000,seed=1):
+    T=collections.defaultdict(lambda:{a:[],b:[]})
+    for r in rows:
+        if r['model']==model and r['arm'] in (a,b) and r['spent'] is not None: T[r['task']][r['arm']].append(r['spent']/1e6)
+    ts=sorted(T); rnd=random.Random(seed); rs=[]
+    for _ in range(B):
+        s=[rnd.choice(ts) for _ in ts]
+        A=sum(st.mean(T[t][a]) for t in s); Bb=sum(st.mean(T[t][b]) for t in s); rs.append(A/Bb)
+    rs.sort(); base=sum(st.mean(T[t][a]) for t in ts)/sum(st.mean(T[t][b]) for t in ts)
+    return model,a,b,round(base,3),round(rs[int(.025*B)],3),round(rs[int(.975*B)],3)
+res.append(boot_ratio('claude-opus-5-5','gstack','none')); res.append(boot_ratio('particle-1','gstack','none'))
+for x in res: print(json.dumps(x))
+# review unit costs
+p=os.environ['W'] + '/review/runs/stacks-r1-review-opus-gstack/out/cost.tsv'
+print(open(p).readline().strip())

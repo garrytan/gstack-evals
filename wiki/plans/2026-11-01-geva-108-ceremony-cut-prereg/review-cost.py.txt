@@ -1,0 +1,62 @@
+# Ceremony-cut review cost readings (wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg, section 4).
+# Reads each arm's cost.tsv (rows with scope "all", one per unit-pass, metered by the proxy journal) and each session's
+# transcript.ndjson for the first request's prompt tokens (input plus cache read plus cache write of the first assistant
+# message). Prints per arm: unit-passes, dollars, dollars per unit-pass, tokens per unit-pass by class, requests, and
+# first-request tokens. Ratios of mean cost per unit-pass (variant/control, control/none, variant/none,
+# control/control-sdk) use a PR-clustered bootstrap: resample PRs with replacement, 10,000 draws, seed 20261101, and take
+# the ratio of summed per-unit mean dollars over the units of the drawn PRs, units metered in both arms only.
+# Usage: python3 review-cost.py <out dir of the review-units run> <arm name map JSON> [--json <file>]
+# The arm name map maps each role to [ingested arm folder under <out>/arms, arm name under <out>/runs/<model>], for example
+# {"control": ["control-opus", "control"], "variant": ["variant-opus", "variant"], "none": ["none-opus", "none"],
+# "control-sdk": ["control-sdk-opus", "control-sdk"]}; the dry run maps them onto stacks round 1's arms.
+import csv, glob, json, os, random, statistics as st, sys
+SEED, DRAWS = 20261101, 10000
+out, names = sys.argv[1], json.loads(sys.argv[2])
+def arm_dir(name):
+    d = os.path.join(out, 'arms', name)
+    if not os.path.isfile(os.path.join(d, 'cost.tsv')): sys.exit('E_USAGE: no cost.tsv for arm ' + name + ' under ' + out + '/arms')
+    return d
+def first_tokens(run_name):
+    vals = {}
+    for f in glob.glob(os.path.join(out, 'runs', '*', run_name, '*', 'p*', 'host', 'transcript.ndjson')):
+        unit, p = f.split('/')[-4], f.split('/')[-3]
+        for line in open(f):
+            try: o = json.loads(line)
+            except ValueError: continue
+            if o.get('type') == 'assistant' and (o.get('message') or {}).get('usage'):
+                u = o['message']['usage']; vals[(unit, p)] = (u.get('input_tokens') or 0) + (u.get('cache_read_input_tokens') or 0) + (u.get('cache_creation_input_tokens') or 0); break
+    return vals
+def load(role):
+    d = arm_dir(names[role][0]); rows = [r for r in csv.DictReader(open(os.path.join(d, 'cost.tsv')), delimiter='\t') if r['scope'] == 'all']
+    units = {}
+    for r in rows: units.setdefault(r['pr'], []).append(r)
+    ft = first_tokens(names[role][1])
+    n = len(rows); usd = sum(float(r['usd']) for r in rows)
+    cls = ['total_tokens', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'reasoning_tokens']
+    f = sorted(ft.values())
+    return dict(role=role, arm=os.path.basename(d), unit_passes=n, units=len(units), usd=round(usd, 4), usd_per_unit_pass=round(usd / n, 4) if n else None,
+                tokens_per_unit_pass={c: round(sum(int(r[c]) for r in rows) / n) for c in cls} if n else None,
+                requests=round(st.mean(int(r['requests']) for r in rows), 2) if n else None,
+                first_request_tokens=dict(median=st.median(f), min=f[0], max=f[-1], n=len(f)) if f else None,
+                per_unit={u: st.mean(float(r['usd']) for r in rs) for u, rs in units.items()})
+def ratio(a, b):
+    units = sorted(set(a['per_unit']) & set(b['per_unit']))
+    by_pr = {}
+    for u in units: by_pr.setdefault(u.split('@')[0], []).append(u)
+    prs = sorted(by_pr)
+    stat = lambda s: sum(a['per_unit'][u] for p in s for u in by_pr[p]) / sum(b['per_unit'][u] for p in s for u in by_pr[p])
+    rnd = random.Random(SEED); reps = sorted(stat([rnd.choice(prs) for _ in prs]) for _ in range(DRAWS))
+    q = lambda x: reps[min(int(x * DRAWS), DRAWS - 1)]
+    return dict(ratio=a['role'] + ' / ' + b['role'], units=len(units), prs=len(prs), point=round(stat(prs), 4), lo95=round(q(0.025), 4), hi95=round(q(0.975), 4))
+arms = {r: load(r) for r in names}
+pairs = [('variant', 'control'), ('control', 'none'), ('variant', 'none'), ('control', 'control-sdk')]
+res = dict(seed=SEED, draws=DRAWS, arms={r: {k: v for k, v in a.items() if k != 'per_unit'} for r, a in arms.items()},
+           ratios=[ratio(arms[x], arms[y]) for x, y in pairs if x in arms and y in arms])
+print('| Role | Arm | Unit-passes | Dollars | Per unit-pass | Tokens per unit-pass | Requests | First-request tokens (median, min, max) |')
+print('|---|---|---|---|---|---|---|---|')
+for r, a in res['arms'].items():
+    ft = a['first_request_tokens'] or {}
+    print(f"| {r} | {a['arm']} | {a['unit_passes']} | ${a['usd']:.2f} | ${a['usd_per_unit_pass']:.3f} | {a['tokens_per_unit_pass']['total_tokens']:,} | {a['requests']} | {ft.get('median')}, {ft.get('min')}, {ft.get('max')} |")
+print('\n| Ratio of mean dollars per unit-pass | Units | PRs | Ratio [95% CI] |\n|---|---|---|---|')
+for x in res['ratios']: print(f"| {x['ratio']} | {x['units']} | {x['prs']} | {x['point']:.3f} [{x['lo95']:.3f}, {x['hi95']:.3f}] |")
+if '--json' in sys.argv: json.dump(res, open(sys.argv[sys.argv.index('--json') + 1], 'w'), indent=1)
