@@ -1,0 +1,1929 @@
+diff --git a/quick/laneb/analysis/discovery-tax.ts b/quick/laneb/analysis/discovery-tax.ts
+new file mode 100644
+index 0000000..e331e18
+--- /dev/null
++++ b/quick/laneb/analysis/discovery-tax.ts
+@@ -0,0 +1,288 @@
++// Readings for GEVA-106's preregistration (sections 5 to 7): Run D, untold skill discovery, and Run T,
++// the told-text tax. Reuses analyze.ts: loadTrial (task, arm, model, reward, cost, budget stops),
++// skillOpensFromMessages (the open rule, applied one tool call at a time), rng and bootstrap.
++//   bun analysis/discovery-tax.ts <config.json>
++// config: { run: "D" | "T", models: [...], jobs: [Harbor job dirs], sessions?: [proxy-sessions.jsonl],
++//   cells?: { role: label }, dropped_tasks?: [...], fit?: [...], listing_check?: { arm: true|false },
++//   bodies?: { arm: { folder: SKILL.md body } }, arm_tars?: { arm: tar path } }
++// Cells are keyed by a label: the arm name today. A later per-batch setting appends "@setting"; armOf strips it.
++import { closeSync, existsSync, openSync, readdirSync, readFileSync, statSync } from "node:fs";
++import { join } from "node:path";
++import { bootstrap, loadTrial, rng, skillOpensFromMessages } from "./analyze.ts";
++import { entryBytes, tarEntries } from "../arms/variants.ts";
++import { splitSkill } from "../arms/placebo/placebo.ts";
++
++export const SEED = 20261101;
++export const RESAMPLES = 10_000;
++export const DRAWS = 100_000;
++export const FIT = ["custom-memory-heap-crash", "overfull-hbox", "fix-code-vulnerability", "fix-git", "db-wal-recovery"];
++const MARKERS: Record<string, RegExp> = { debug_report: /DEBUG REPORT/, phase: /Phase [1-5]\b/, iron_law: /Iron Law/i, root_cause: /root cause/i, hypothesis: /hypothes[ie]s/i };
++const D_CELLS = { none: "none", gstack: "gstack", rewritten: "gstack-rewritten", placebo: "placebo" };
++const T_CELLS = { none: "none", short: "placebo-short", placebo: "placebo" };
++
++export const armOf = (label: string) => label.split("@")[0]!;
++
++export type Rec = {
++  trial: string; task: string; label: string; model: string; status: "graded" | "missing"; pass: number;
++  responded: boolean; refused: boolean; eligible: boolean; opens: string[]; pluginOpens: number; browses: number;
++  loaded: string[]; markers: Record<string, boolean>; bodyLoad: boolean; firstTokens: number | null; requests: number;
++  costUsd: number; budgetStop: boolean; agentTimeout: boolean; retried: boolean;
++};
++export type Ctx = { installed: (arm: string) => string[]; bodies: Record<string, Record<string, string>>; sessions: Map<string, any[]> };
++
++const readJson = (p: string): any => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
++const flat = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b: any) => (typeof b === "string" ? b : typeof b?.text === "string" ? b.text : flat(b?.content))).join("\n") : "");
++
++// A trial's record. A model response reached the agent when an assistant message has a content block that
++// the CLI did not write itself: its refusal and API errors arrive as one "API Error" text block with zero usage.
++export function loadRec(dir: string, ctx: Ctx): Rec | null {
++  const t = loadTrial(dir);
++  if (!t) return null;
++  const msgsPath = join(dir, "agent", "sdk-messages.jsonl");
++  const msgs = (existsSync(msgsPath) ? readFileSync(msgsPath, "utf8").split("\n") : []).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
++  const results = new Map<string, { content: unknown; is_error: boolean }>();
++  for (const m of msgs) if (m.type === "UserMessage" && Array.isArray(m.content)) for (const b of m.content) if (b?.tool_use_id) results.set(b.tool_use_id, { content: b.content, is_error: b.is_error === true });
++  let responded = false;
++  let refused = msgs.some((m) => m.type === "SystemMessage" && String(m.subtype ?? "").startsWith("model_refusal"));
++  const calls: any[] = [];
++  const texts: string[] = [];
++  for (const m of msgs) {
++    if (m.type !== "AssistantMessage" || !Array.isArray(m.content) || !m.content.length) continue;
++    const synthetic = m.content.every((b: any) => typeof b?.text === "string" && b.text.startsWith("API Error")) && !(m.usage?.input_tokens || m.usage?.output_tokens);
++    if (synthetic) { if (m.content.some((b: any) => /safeguards|refus/i.test(b.text))) refused = true; continue; }
++    responded = true;
++    for (const b of m.content) {
++      if (b && typeof b === "object" && "name" in b) calls.push(b);
++      else if (typeof b?.text === "string") texts.push(b.text);
++    }
++  }
++  const arm = armOf(t.arm);
++  const installed = ctx.installed(arm);
++  const opens: string[] = [];
++  const loaded: string[] = [];
++  let pluginOpens = 0;
++  let browses = 0;
++  for (const b of calls) {
++    const name = skillOpensFromMessages([JSON.stringify({ type: "AssistantMessage", content: [b] })])[0];
++    if (name === "plugin-authoring") { pluginOpens++; continue; }
++    if (name !== undefined && installed.includes(name)) {
++      opens.push(name);
++      const r = results.get(b.id);
++      const text = b.name === "Read" ? flat(r?.content).replace(/^\s*\d+(\t|\u2192)/gm, "") : flat(r?.content);
++      const head = ctx.bodies[arm]?.[name]?.slice(0, 200);
++      if (r && !r.is_error && (b.name === "Skill" || (head && text.includes(head)))) loaded.push(name);
++      continue;
++    }
++    if (JSON.stringify(b.input ?? {}).includes("/.claude/skills/")) browses++;
++  }
++  const session = readJson(join(dir, "agent", "laneb-summary.json"))?.session ?? {};
++  const attempts = ctx.sessions.get(t.trialName) ?? [];
++  const graded = responded || refused;
++  return {
++    trial: t.trialName, task: t.task, label: t.arm, model: t.model, status: graded ? "graded" : "missing", pass: t.outcome === "pass" ? 1 : 0,
++    responded, refused, eligible: graded && responded, opens, pluginOpens, browses, loaded,
++    markers: Object.fromEntries(Object.entries(MARKERS).map(([k, re]) => [k, texts.some((x) => re.test(x))])),
++    bodyLoad: session.cmd_expanded === true, firstTokens: session.first_req_prompt_tokens ?? null, requests: t.requests, costUsd: t.costUsd,
++    budgetStop: t.budgetStop, agentTimeout: t.agentTimeout, retried: attempts.slice(0, -1).some((s) => (s.ok_responses ?? 0) > 0),
++  };
++}
++
++// The first 200 characters of every top-level SKILL.md body in an arm tar.
++export function tarBodies(tar: string): Record<string, string> {
++  const fd = openSync(tar, "r");
++  try {
++    return Object.fromEntries(tarEntries(fd).entries.flatMap((e) => {
++      const m = /^(?:\.\/)?\.claude\/skills\/([^/]+)\/SKILL\.md$/.exec(e.name);
++      return m ? [[m[1]!, splitSkill(entryBytes(fd, e).toString("utf8")).body.slice(0, 200)]] : [];
++    }));
++  } finally { closeSync(fd); }
++}
++
++export function loadRun(cfg: any): { recs: Rec[]; dropped: { task: string; trials: number; usd: number }[] } {
++  const sessions = new Map<string, any[]>();
++  for (const f of cfg.sessions ?? []) for (const l of readFileSync(f, "utf8").split("\n").filter(Boolean)) {
++    const s = JSON.parse(l);
++    const key = String(s.trial ?? "").split("__").slice(0, 2).join("__");
++    sessions.set(key, [...(sessions.get(key) ?? []), s].sort((a, b) => String(a.opened_at).localeCompare(String(b.opened_at))));
++  }
++  const bodies: Record<string, Record<string, string>> = { ...(cfg.bodies ?? {}) };
++  for (const [arm, tar] of Object.entries(cfg.arm_tars ?? {})) bodies[arm] = tarBodies(tar as string);
++  const manifests = join(import.meta.dir, "../arms/manifests");
++  const installed = (arm: string) => (bodies[arm] ? Object.keys(bodies[arm]!) : readJson(join(manifests, arm + ".json"))?.skills?.names ?? []);
++  const all: Rec[] = [];
++  for (const job of cfg.jobs) for (const name of readdirSync(job)) {
++    const d = join(job, name);
++    if (!statSync(d).isDirectory()) continue;
++    const r = loadRec(d, { installed, bodies, sessions });
++    if (r) all.push(r);
++  }
++  const drop = new Set<string>(cfg.dropped_tasks ?? []);
++  const dropped = [...drop].map((task) => { const xs = all.filter((r) => r.task === task); return { task, trials: xs.length, usd: xs.reduce((s, r) => s + r.costUsd, 0) }; });
++  return { recs: all.filter((r) => !drop.has(r.task)), dropped };
++}
++
++const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
++const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s[(s.length - 1) >> 1]! + s[s.length >> 1]!) / 2 : NaN; };
++export function perTask(recs: Rec[], value: (r: Rec) => number): Map<string, number> {
++  const acc = new Map<string, number[]>();
++  for (const r of recs) acc.set(r.task, [...(acc.get(r.task) ?? []), value(r)]);
++  return new Map([...acc].map(([k, xs]) => [k, mean(xs)]));
++}
++const bopts = { b: RESAMPLES, seed: SEED };
++export const rate = (map: Map<string, number>) => ({ tasks: map.size, ...bootstrap([...map.keys()].sort(), (s) => mean(s.map((k) => map.get(k)!)), bopts) });
++
++// Two-sided Monte Carlo sign-flip test of the mean per-task difference: p = (1 + hits) / (1 + draws).
++export function signFlip(diffs: number[], draws = DRAWS, seed = SEED): number {
++  if (!diffs.length) return NaN;
++  const r = rng(seed);
++  const obs = Math.abs(mean(diffs)) - 1e-12;
++  let hits = 0;
++  for (let i = 0; i < draws; i++) {
++    let s = 0;
++    for (const d of diffs) s += r() < 0.5 ? -d : d;
++    if (Math.abs(s / diffs.length) >= obs) hits++;
++  }
++  return (1 + hits) / (1 + draws);
++}
++export function contrast(a: Map<string, number>, b: Map<string, number>, test = true) {
++  const tasks = [...a.keys()].filter((k) => b.has(k)).sort();
++  const ci = bootstrap(tasks, (s) => mean(s.map((k) => a.get(k)! - b.get(k)!)), bopts);
++  return { tasks: tasks.length, ...ci, p: test ? signFlip(tasks.map((k) => a.get(k)! - b.get(k)!)) : NaN };
++}
++export function holm(ps: number[]): number[] {
++  const order = ps.map((p, i) => [p, i] as const).filter(([p]) => Number.isFinite(p)).sort((x, y) => x[0] - y[0]);
++  const out = ps.map(() => NaN);
++  let run = 0;
++  order.forEach(([p, i], k) => { run = Math.max(run, Math.min(1, (order.length - k) * p)); out[i] = run; });
++  return out;
++}
++// Equal weight per model: the mean of each model's per-task mean over one shared resample of tasks.
++function pooled(maps: Map<string, number>[]) {
++  const tasks = [...new Set(maps.flatMap((m) => [...m.keys()]))].sort();
++  return bootstrap(tasks, (s) => mean(maps.map((m) => mean(s.filter((k) => m.has(k)).map((k) => m.get(k)!)))), bopts);
++}
++export const zeroBound = (tasks: number) => 1 - Math.pow(0.05, 1 / tasks);
++export function t1Verdict(ci: { lo: number; hi: number }) {
++  const verdict = ci.hi < 0 ? "confirmed" : ci.lo > 0 ? "reversed" : "not confirmed";
++  return { verdict, smallerThanLead: ci.lo > -0.1 };
++}
++
++const pct = (x: number | null) => (x === null || !Number.isFinite(x) ? "n/a" : (100 * x).toFixed(1) + "%");
++const pp = (x: number | null) => (x !== null && Number.isFinite(x) ? (x >= 0 ? "+" : "") + (100 * x).toFixed(1) : "n/a");
++const ci = (c: { point: number; lo: number; hi: number }, f = pct) => `${f(c.point)} [${f(c.lo)}, ${f(c.hi)}]`;
++const pv = (p: number) => (Number.isFinite(p) ? p.toPrecision(3) : "n/a");
++
++function cellLine(recs: Rec[], model: string, label: string, told: boolean) {
++  const all = recs.filter((r) => r.model === model && r.label === label);
++  const g = all.filter((r) => r.status === "graded");
++  const passes = g.reduce((s, r) => s + r.pass, 0);
++  const cost = g.reduce((s, r) => s + r.costUsd, 0);
++  const share = (n: number) => (g.length ? n / g.length : NaN);
++  return {
++    graded: g, eligibleShare: share(g.filter((r) => r.eligible).length), bodyLoadShare: share(g.filter((r) => r.bodyLoad).length),
++    text: `${model} ${label}: graded ${g.length}, missing ${all.length - g.length}, refused ${g.filter((r) => r.refused).length}, retried after a response ${g.filter((r) => r.retried).length}; ` +
++      (told ? `body load ${pct(share(g.filter((r) => r.bodyLoad).length))}; ` : `eligible ${pct(share(g.filter((r) => r.eligible).length))}; `) +
++      `pass ${ci(rate(perTask(g, (r) => r.pass)))}; session-cap stops ${g.filter((r) => r.budgetStop).length} (${pct(share(g.filter((r) => r.budgetStop).length))}), agent timeouts ${g.filter((r) => r.agentTimeout).length}; ` +
++      `median requests ${median(g.map((r) => r.requests))}, median first-request tokens ${median(g.flatMap((r) => (r.firstTokens === null ? [] : [r.firstTokens])))}; ` +
++      `cost per trial $${(g.length ? cost / g.length : 0).toFixed(3)}, per success ${passes ? "$" + (cost / passes).toFixed(3) : "n/a"}`,
++  };
++}
++
++export function runD(recs: Rec[], cfg: any): string[] {
++  const c = { ...D_CELLS, ...(cfg.cells ?? {}) };
++  const out: string[] = ["# Run D: untold discovery"];
++  const failed = Object.entries(cfg.listing_check ?? {}).filter(([, ok]) => ok !== true).map(([a]) => a);
++  out.push(failed.length ? `Listing check FAILED for ${failed.join(", ")}: the run stops before any batch.` : `Listing check: ${Object.keys(cfg.listing_check ?? {}).length ? "passed for every arm" : "not supplied"}.`);
++  const per = cfg.models.map((m: string) => {
++    const cells = [c.none, c.gstack, c.rewritten, c.placebo].map((l) => cellLine(recs, m, l, false));
++    const elig = (l: string) => recs.filter((r) => r.model === m && r.label === l && r.eligible);
++    const opened = (r: Rec) => (r.opens.length ? 1 : 0);
++    const pool = [...elig(c.gstack), ...elig(c.placebo)];
++    const fitOnly = (xs: Rec[]) => xs.filter((r) => (cfg.fit ?? FIT).includes(r.task));
++    const d1Map = perTask(pool, opened);
++    const d1 = rate(d1Map);
++    const d2 = contrast(perTask(elig(c.rewritten), opened), d1Map);
++    return { m, cells, pool, elig, opened, d1, d1Count: pool.filter((r) => r.opens.length).length, d2, flagged: cells.some((x) => !(x.eligibleShare >= 0.9)),
++      fit: { d1: rate(perTask(fitOnly(pool), opened)), d2: contrast(perTask(fitOnly(elig(c.rewritten)), opened), perTask(fitOnly(pool), opened), false) },
++      d1MapRaw: d1Map, rwMap: perTask(elig(c.rewritten), opened) };
++  });
++  const adj = holm(per.map((x: any) => x.d2.p));
++  per.forEach((x: any, i: number) => {
++    out.push("", `## ${x.m}`, ...x.cells.map((cl: any) => cl.text));
++    if (x.flagged) out.push("Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.");
++    const bound = zeroBound(x.d1.tasks);
++    out.push(`D1 (gstack and placebo pooled, eligible): ${x.d1Count} opened of ${x.pool.length} trials, rate ${ci(x.d1)} over ${x.d1.tasks} tasks` + (x.d1Count === 0 ? `, exact one-sided 95% upper bound ${pct(bound)}` : ""));
++    const d1Claim = x.flagged ? "no claim (gate)" : x.d1.lo > 0 ? `claim: opened an untold gstack skill in ${pct(x.d1.point)} of eligible trials` : `claim: fewer than ${pct(x.d1Count === 0 ? bound : x.d1.hi)} (95% upper bound)`;
++    out.push(`D1 ${d1Claim}`);
++    out.push(`D2 (rewritten minus pooled): ${ci(x.d2, pp)} pp over ${x.d2.tasks} tasks, p ${pv(x.d2.p)}, Holm ${pv(adj[i]!)}`);
++    const sig = adj[i]! < 0.05 && (x.d2.lo > 0 || x.d2.hi < 0);
++    out.push(`D2 ${x.flagged ? "no claim (gate)" : sig ? `claim: the rewritten description ${x.d2.lo > 0 ? "raised" : "lowered"} opens by ${pp(x.d2.point)} points` : "no claim"}`);
++    out.push(`Fit stratum (${x.fit.d1.tasks} tasks, no verdict): D1 ${ci(x.fit.d1)}, D2 ${ci(x.fit.d2, pp)} pp`);
++    for (const l of [c.none, c.gstack, c.rewritten, c.placebo]) {
++      const e = x.elig(l) as Rec[];
++      const op = e.filter((r) => r.opens.length);
++      const inv = e.filter((r) => r.loaded.includes("investigate"));
++      const counts: Record<string, number> = {};
++      for (const r of op) for (const s of new Set(r.opens)) counts[s] = (counts[s] ?? 0) + 1;
++      out.push(`${l}: browse ${pct(e.length ? e.filter((r) => r.browses).length / e.length : NaN)}, opened ${op.length}, loaded among opened ${op.length ? pct(op.filter((r) => r.loaded.length).length / op.length) : "n/a"}, ` +
++        `plugin-authoring opens ${e.reduce((s, r) => s + r.pluginOpens, 0)}, loaded /investigate ${inv.length} (DEBUG REPORT ${inv.filter((r) => r.markers.debug_report).length}; ` +
++        Object.keys(MARKERS).filter((k) => k !== "debug_report").map((k) => `${k} ${inv.filter((r) => r.markers[k]).length}`).join(", ") + `), skills opened ${JSON.stringify(counts)}`);
++    }
++    const passMap = (l: string, f: (r: Rec) => number = (r) => r.pass) => perTask(recs.filter((r) => r.model === x.m && r.label === l && r.status === "graded"), f);
++    for (const l of [c.gstack, c.rewritten, c.placebo]) {
++      out.push(`${l} minus none, pass: ${ci(contrast(passMap(l), passMap(c.none), false), pp)} pp; retried-after-response scored 0: ${ci(contrast(passMap(l, (r) => (r.retried ? 0 : r.pass)), passMap(c.none, (r) => (r.retried ? 0 : r.pass)), false), pp)} pp`);
++    }
++  });
++  out.push("", `Pooled across models, equal weight (secondary): D1 ${ci(pooled(per.map((x: any) => x.d1MapRaw)))}; rewritten ${ci(pooled(per.map((x: any) => x.rwMap)))}`);
++  out.push("Retried-trial open sensitivity: at Harbor f3a5a923 a retry deletes the first attempt's trial folder, so no first-attempt messages exist and the reading equals the primary one.");
++  return out;
++}
++
++export const PRIOR = "Prior readings, never pooled: #109 particle-1 -10 [-18, -2], Haiku -5 [-13, +3]; quick look 3 particle-1 +6 [-2, +15], Haiku +0 [-7, +8], DeepSeek -2 [-9, +6].";
++
++export function runT(recs: Rec[], cfg: any): string[] {
++  const c = { ...T_CELLS, ...(cfg.cells ?? {}) };
++  const out: string[] = ["# Run T: told-text tax", PRIOR];
++  const graded = (m: string, l: string, keep: (r: Rec) => boolean = () => true) => recs.filter((r) => r.model === m && r.label === l && r.status === "graded" && keep(r));
++  const passMap = (m: string, l: string, keep?: (r: Rec) => boolean, f: (r: Rec) => number = (r) => r.pass) => perTask(graded(m, l, keep), f);
++  const lead = cfg.lead ?? "particle-1";
++  const per = cfg.models.map((m: string) => {
++    const cells = [c.none, c.short, c.placebo].map((l) => ({ l, ...cellLine(recs, m, l, l !== c.none) }));
++    const flaggedCells = cells.filter((x) => x.l !== c.none && !(x.bodyLoadShare >= 0.95)).map((x) => x.l);
++    return { m, cells, flaggedCells, t2: contrast(passMap(m, c.placebo), passMap(m, c.short)) };
++  });
++  const adj = holm(per.map((x: any) => x.t2.p));
++  per.forEach((x: any, i: number) => {
++    out.push("", `## ${x.m}`, ...x.cells.map((cl: any) => cl.text));
++    if (x.flaggedCells.length) out.push(`Gate: body load under 95% in ${x.flaggedCells.join(", ")}; flagged, no T1 or T2 claim from it.`);
++    if (x.m === lead) {
++      const t1 = contrast(passMap(x.m, c.placebo), passMap(x.m, c.none), false);
++      const v = t1Verdict(t1);
++      out.push(`T1 (placebo minus none): ${ci(t1, pp)} pp over ${t1.tasks} tasks; ${x.flaggedCells.includes(c.placebo) ? "no verdict (gate)" : `verdict ${v.verdict}${v.smallerThanLead ? ", smaller than the lead" : ""}`}`);
++    }
++    const t2 = x.t2;
++    const sig = adj[i]! < 0.05;
++    const claim = x.flaggedCells.length ? "no claim (gate)" : sig && t2.hi < 0 ? "claim: longer told text cost passes" : sig && t2.lo > 0 ? "claim: longer told text raised passes" : "no claim";
++    out.push(`T2 (placebo minus placebo-short): ${ci(t2, pp)} pp, p ${pv(t2.p)}, Holm ${pv(adj[i]!)}; ${claim}`);
++    for (const [a, b] of [[c.placebo, c.none], [c.short, c.none]] as const) {
++      const all = contrast(passMap(x.m, a), passMap(x.m, b), false);
++      const cc = contrast(passMap(x.m, a, (r) => !r.budgetStop), passMap(x.m, b, (r) => !r.budgetStop), false);
++      const stops = contrast(passMap(x.m, a, undefined, (r) => (r.budgetStop ? 1 : 0)), passMap(x.m, b, undefined, (r) => (r.budgetStop ? 1 : 0)), false);
++      const rs = contrast(passMap(x.m, a, undefined, (r) => (r.retried ? 0 : r.pass)), passMap(x.m, b, undefined, (r) => (r.retried ? 0 : r.pass)), false);
++      out.push(`${a} minus ${b}: pass ${ci(all, pp)} pp; session-cap stop rate ${ci(stops, pp)} pp; complete case (descriptive) ${ci(cc, pp)} pp; retried-after-response scored 0 ${ci(rs, pp)} pp`);
++    }
++  });
++  for (const [a, b] of [[c.placebo, c.none], [c.short, c.none], [c.placebo, c.short]] as const) {
++    const diffs = cfg.models.map((m: string) => { const A = passMap(m, a), Bm = passMap(m, b); return new Map([...A].filter(([k]) => Bm.has(k)).map(([k, v]) => [k, v - Bm.get(k)!])); });
++    out.push(`Pooled across models, equal weight (secondary): ${a} minus ${b} ${ci(pooled(diffs), pp)} pp`);
++  }
++  return out;
++}
++
++if (import.meta.main) {
++  const cfg = JSON.parse(readFileSync(Bun.argv[2]!, "utf8"));
++  const { recs, dropped } = loadRun(cfg);
++  const lines = cfg.run === "D" ? runD(recs, cfg) : runT(recs, cfg);
++  if (dropped.length) lines.push("", `Dropped by the oracle rule: ${dropped.map((d) => `${d.task} (${d.trials} trials, $${d.usd.toFixed(2)})`).join(", ")}`);
++  console.log(lines.join("\n"));
++}
+diff --git a/quick/laneb/analysis/mdd-sim.ts b/quick/laneb/analysis/mdd-sim.ts
+new file mode 100644
+index 0000000..0d223d0
+--- /dev/null
++++ b/quick/laneb/analysis/mdd-sim.ts
+@@ -0,0 +1,80 @@
++// Minimum detectable differences for GEVA-106's preregistration (section 11). No data, no key.
++// Run D, 37 tasks, one trial per task per arm: the per-trial open probability that gives 80% power for
++//   D1: gstack and placebo pooled (two trials per task); a claim needs the bootstrap interval to exclude 0;
++//   D2: rewritten minus pooled, shipped rate 0 or 0.02; Holm across 5 models, so the first step needs p < 0.01,
++//       and the interval must exclude 0.
++// Opens are uniform across tasks, or confined to a random 30% of tasks (11 of 37; the rewritten arm's opens in
++// D2, the shipped opens stay uniform). Each power value is 1,000 simulated datasets with 1,000 bootstrap
++// resamples each (and 1,000 sign-flip draws for D2's p), seed 20261101. The search is a bisection to 0.001.
++// Run T is analytic: MDD = 2.8 x 4.08 x sqrt(3 / r) points, and (2.394 + 0.842) x 4.08 x sqrt(3 / r) for T2's
++// first Holm step across three models.
++//   bun analysis/mdd-sim.ts [datasets] [resamples]
++import { rng } from "./analyze.ts";
++
++const TASKS = 37;
++const CONFINED = Math.round(0.3 * TASKS);
++const [DATASETS, RESAMPLES] = [Number(Bun.argv[2] ?? 1000), Number(Bun.argv[3] ?? 1000)];
++const rand = rng(20261101);
++
++const quantile = (s: Float64Array, q: number) => { const pos = (s.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos); return s[lo]! + (s[hi]! - s[lo]!) * (pos - lo); };
++function interval(v: Float64Array) {
++  const reps = new Float64Array(RESAMPLES);
++  for (let b = 0; b < RESAMPLES; b++) { let s = 0; for (let i = 0; i < TASKS; i++) s += v[Math.floor(rand() * TASKS)]!; reps[b] = s / TASKS; }
++  reps.sort();
++  return { lo: quantile(reps, 0.025), hi: quantile(reps, 0.975) };
++}
++function signFlipP(v: Float64Array) {
++  let obs = 0;
++  for (const x of v) obs += x;
++  obs = Math.abs(obs / TASKS) - 1e-12;
++  let hits = 0;
++  for (let b = 0; b < RESAMPLES; b++) { let s = 0; for (const x of v) s += rand() < 0.5 ? -x : x; if (Math.abs(s / TASKS) >= obs) hits++; }
++  return (1 + hits) / (1 + RESAMPLES);
++}
++// Per-task open probabilities with overall per-trial rate p: uniform, or p / 0.3 on a random 11 tasks.
++function probs(p: number, confined: boolean) {
++  const out = new Float64Array(TASKS).fill(confined ? 0 : p);
++  if (!confined) return out;
++  const idx = Array.from({ length: TASKS }, (_, i) => i);
++  for (let i = TASKS - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [idx[i], idx[j]] = [idx[j]!, idx[i]!]; }
++  for (const i of idx.slice(0, CONFINED)) out[i] = Math.min(1, (p * TASKS) / CONFINED);
++  return out;
++}
++const trials = (q: Float64Array, n: number) => q.map((x) => { let k = 0; for (let t = 0; t < n; t++) if (rand() < x) k++; return k / n; });
++
++function powerD1(p: number, confined: boolean) {
++  let ok = 0;
++  for (let d = 0; d < DATASETS; d++) if (interval(trials(probs(p, confined), 2)).lo > 0) ok++;
++  return ok / DATASETS;
++}
++function powerD2(p: number, shipped: number, confined: boolean) {
++  let ok = 0;
++  for (let d = 0; d < DATASETS; d++) {
++    const rw = trials(probs(p, confined), 1), pool = trials(probs(shipped, false), 2);
++    const v = rw.map((x, i) => x - pool[i]!);
++    const ci = interval(v);
++    if ((ci.lo > 0 || ci.hi < 0) && signFlipP(v) < 0.01) ok++;
++  }
++  return ok / DATASETS;
++}
++function mdd(power: (p: number) => number, hi: number) {
++  let lo = 0;
++  if (power(hi) < 0.8) return { p: NaN, power: power(hi) };
++  while (hi - lo > 0.001) { const mid = (lo + hi) / 2; if (power(mid) >= 0.8) hi = mid; else lo = mid; }
++  return { p: hi, power: power(hi) };
++}
++const pct = (x: number) => (Number.isFinite(x) ? (100 * x).toFixed(1) + "%" : "not reached");
++
++console.log(`Run D MDD, 37 tasks, r = 1: ${DATASETS} simulated datasets x ${RESAMPLES} bootstrap resamples per power value (D2 also ${RESAMPLES} sign-flip draws), seed 20261101`);
++console.log("| Reading | Opens | Shipped rate | Per-trial open probability at 80% power | Difference | Power there |");
++console.log("|---|---|---|---|---|---|");
++for (const confined of [false, true]) {
++  const m = mdd((p) => powerD1(p, confined), confined ? 0.3 : 1);
++  console.log(`| D1 | ${confined ? "30% of tasks" : "uniform"} | - | ${pct(m.p)} | - | ${pct(m.power)} |`);
++}
++for (const shipped of [0, 0.02]) for (const confined of [false, true]) {
++  const m = mdd((p) => powerD2(p, shipped, confined), confined ? 0.3 : 1);
++  console.log(`| D2 | ${confined ? "30% of tasks" : "uniform"} | ${pct(shipped)} | ${pct(m.p)} | ${pct(m.p - shipped)} | ${pct(m.power)} |`);
++}
++console.log("", "Run T analytic check (points): | r | MDD 2.8 x 4.08 x sqrt(3/r) | T2 first Holm step (2.394 + 0.842) x 4.08 x sqrt(3/r) |", "|---|---|---|");
++for (let r = 1; r <= 5; r++) console.log(`| ${r} | ${(2.8 * 4.08 * Math.sqrt(3 / r)).toFixed(1)} | ${((2.394 + 0.842) * 4.08 * Math.sqrt(3 / r)).toFixed(1)} |`);
+diff --git a/quick/laneb/arms/manifests/gstack-rewritten.json b/quick/laneb/arms/manifests/gstack-rewritten.json
+new file mode 100644
+index 0000000..29c06fe
+--- /dev/null
++++ b/quick/laneb/arms/manifests/gstack-rewritten.json
+@@ -0,0 +1,93 @@
++{
++  "arm": "gstack-rewritten",
++  "claude_code": "2.1.312",
++  "gstack_sha": "61e201ec08bcf59163ef2d3a69a26e334a536c04",
++  "base_arm": "gstack",
++  "base_tar_sha256": "b93994689107ebc329b83b35c139b6a6e37ce6b4637f5c8a76dce961732c46b1",
++  "changed_entry": ".claude/skills/investigate/SKILL.md",
++  "description_sha256": "af073fc083f2b46d46044cef1b0b62864b84e9467b8947df11c199c44226b651",
++  "variants_ts_sha256": "e6a00e699afbac294c9cf595ef4036728f6f9c4df5b660e807ec21f5f0b3ba5a",
++  "tar": {
++    "file": "gstack-rewritten.tar",
++    "bytes": 1353994240,
++    "sha256": "a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d"
++  },
++  "tree": {
++    "files": 13734,
++    "symlinks": 8,
++    "dirs": 1652,
++    "bytes": 1340699332,
++    "digest": "a17c6d414d2f328bd6acd1ecee4ec542c78d36eb544454c252c5e951c0fb4029"
++  },
++  "skills": {
++    "count": 64,
++    "tree_digest": "d09dc3c3f7c25a1a51913dfb6817fc6f9f5350636d742f83de78d2e3b6ded88a",
++    "skill_md_digest": "33a51d6dc607a366b056269127bdfddfdd87279026a15b30e8d4f8958ec810bb",
++    "names": [
++      "_gstack-command",
++      "autoplan",
++      "benchmark",
++      "benchmark-models",
++      "browse",
++      "canary",
++      "captain",
++      "careful",
++      "codex",
++      "connect-chrome",
++      "context-restore",
++      "context-save",
++      "cso",
++      "design-consultation",
++      "design-html",
++      "design-motion",
++      "design-review",
++      "design-shotgun",
++      "deslop-shared-libs",
++      "devex-review",
++      "diagram",
++      "document-generate",
++      "document-release",
++      "eval-plan",
++      "freeze",
++      "gstack",
++      "gstack-upgrade",
++      "guard",
++      "health",
++      "investigate",
++      "ios-clean",
++      "ios-design-review",
++      "ios-fix",
++      "ios-qa",
++      "ios-sync",
++      "land-and-deploy",
++      "landing-report",
++      "learn",
++      "make-pdf",
++      "modernize",
++      "office-hours",
++      "open-gstack-browser",
++      "pair-agent",
++      "plan-ceo-review",
++      "plan-design-review",
++      "plan-devex-review",
++      "plan-eng-review",
++      "plan-tune",
++      "qa",
++      "qa-only",
++      "retro",
++      "review",
++      "scrape",
++      "setup-browser-cookies",
++      "setup-deploy",
++      "setup-gbrain",
++      "ship",
++      "skillify",
++      "spec",
++      "sync-gbrain",
++      "test-audit",
++      "ubicloud",
++      "unfreeze",
++      "write-skill"
++    ]
++  }
++}
+diff --git a/quick/laneb/arms/manifests/placebo-short-tokens.tsv b/quick/laneb/arms/manifests/placebo-short-tokens.tsv
+new file mode 100644
+index 0000000..0ae8063
+--- /dev/null
++++ b/quick/laneb/arms/manifests/placebo-short-tokens.tsv
+@@ -0,0 +1,2 @@
++skill	original_tokens	placebo_tokens	ratio	routing_kept_bytes	routing_kept_sha256
++investigate	6778	846	0.1248	0	-
+diff --git a/quick/laneb/arms/manifests/placebo-short.json b/quick/laneb/arms/manifests/placebo-short.json
+new file mode 100644
+index 0000000..fa72a77
+--- /dev/null
++++ b/quick/laneb/arms/manifests/placebo-short.json
+@@ -0,0 +1,96 @@
++{
++  "arm": "placebo-short",
++  "claude_code": "2.1.312",
++  "gstack_sha": "61e201ec08bcf59163ef2d3a69a26e334a536c04",
++  "base_arm": "placebo",
++  "base_tar_sha256": "ff6b909d89d87be16780b817bf799361263e0efcf931a2b1543db2b779c406f7",
++  "changed_entry": ".claude/skills/investigate/SKILL.md",
++  "placebo_seed": "gstack-evals/laneb/placebo/v1-short",
++  "placebo_generator_hash": "40ccfd775047bcdbfb80e0fbef2ad3f41d0a19efe7face85fb1eb2bc29af36f5",
++  "target_tokens": 847,
++  "placebo_tokens": 846,
++  "variants_ts_sha256": "e6a00e699afbac294c9cf595ef4036728f6f9c4df5b660e807ec21f5f0b3ba5a",
++  "tar": {
++    "file": "placebo-short.tar",
++    "bytes": 2396160,
++    "sha256": "bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c"
++  },
++  "tree": {
++    "files": 64,
++    "symlinks": 0,
++    "dirs": 66,
++    "bytes": 2307111,
++    "digest": "0b713c2f71b1167dc4ca39cbdd7adb385d039ce2bcdf145621231b1c30476465"
++  },
++  "skills": {
++    "count": 64,
++    "tree_digest": "9d223032acb847628530f27a919e5b54aac8ecdaace3e1cae55ec597932ea41f",
++    "skill_md_digest": "9d223032acb847628530f27a919e5b54aac8ecdaace3e1cae55ec597932ea41f",
++    "names": [
++      "_gstack-command",
++      "autoplan",
++      "benchmark",
++      "benchmark-models",
++      "browse",
++      "canary",
++      "captain",
++      "careful",
++      "codex",
++      "connect-chrome",
++      "context-restore",
++      "context-save",
++      "cso",
++      "design-consultation",
++      "design-html",
++      "design-motion",
++      "design-review",
++      "design-shotgun",
++      "deslop-shared-libs",
++      "devex-review",
++      "diagram",
++      "document-generate",
++      "document-release",
++      "eval-plan",
++      "freeze",
++      "gstack",
++      "gstack-upgrade",
++      "guard",
++      "health",
++      "investigate",
++      "ios-clean",
++      "ios-design-review",
++      "ios-fix",
++      "ios-qa",
++      "ios-sync",
++      "land-and-deploy",
++      "landing-report",
++      "learn",
++      "make-pdf",
++      "modernize",
++      "office-hours",
++      "open-gstack-browser",
++      "pair-agent",
++      "plan-ceo-review",
++      "plan-design-review",
++      "plan-devex-review",
++      "plan-eng-review",
++      "plan-tune",
++      "qa",
++      "qa-only",
++      "retro",
++      "review",
++      "scrape",
++      "setup-browser-cookies",
++      "setup-deploy",
++      "setup-gbrain",
++      "ship",
++      "skillify",
++      "spec",
++      "sync-gbrain",
++      "test-audit",
++      "ubicloud",
++      "unfreeze",
++      "write-skill"
++    ]
++  }
++}
+diff --git a/quick/laneb/arms/variants.ts b/quick/laneb/arms/variants.ts
+new file mode 100644
+index 0000000..ee5a3ef
+--- /dev/null
++++ b/quick/laneb/arms/variants.ts
+@@ -0,0 +1,315 @@
++// One-entry variants of the arm tars for GEVA-106's runs. Each variant is its base tar with one
++// regular-file entry's content replaced in place: that entry's size field and header checksum are
++// rewritten, and every other header and byte (name order, mtime 0, owner) is kept, so the output
++// depends only on the base tar's bytes and this file, never on the host's tar.
++//
++//   gstack-rewritten  gstack.tar with the description line of .claude/skills/investigate/SKILL.md
++//                     replaced by the frozen text of the preregistration, section 3.
++//   placebo-short     placebo.tar with .claude/skills/investigate/SKILL.md's body regenerated at
++//                     847 o200k_base tokens by the placebo generator, frontmatter bytes kept.
++//
++//   bun arms/variants.ts --in <dir with gstack.tar and placebo.tar> --out <dir> [--manifests <dir>]
++//   bun arms/variants.ts --carriers <tar> <text>    lists the regular-file entries whose bytes contain <text>
++//
++// Without --manifests the built tars and manifests are checked against the committed ones in arms/manifests.
++// The tars are read with positional reads and written in chunks, so a 1.35 GB base is never held in memory.
++
++import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync, writeSync } from "node:fs";
++import { createHash } from "node:crypto";
++import { join } from "node:path";
++import { treeDigest, type Entry } from "./tree.ts";
++import { countTokens, frontmatterFields, proceduralMarkers, prng, prose, splitSkill, topicTerms } from "./placebo/placebo.ts";
++import { generatorHash } from "./placebo/generate.ts";
++
++export const SKILL_PATH = ".claude/skills/investigate/SKILL.md";
++export const SHIPPED_LINE = "description: Systematic debugging with root cause investigation. (gstack)";
++export const REWRITTEN_DESCRIPTION =
++  "Systematic debugging with root cause investigation. Use when a task involves something that does not work as expected: " +
++  "a failing build, test, script, service or configuration, an error message or stack trace, wrong or missing output, " +
++  "or broken data to recover. Use it before editing code to fix such a problem. (gstack)";
++export const SHORT_SEED = "gstack-evals/laneb/placebo/v1-short";
++export const SHORT_TARGET = 847;
++
++const BLOCK = 512;
++const RECORD = 10240;
++const CHUNK = 8 << 20;
++const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
++const pad = (n: number) => Math.ceil(n / BLOCK) * BLOCK;
++const cstr = (b: Uint8Array) => {
++  const z = b.indexOf(0);
++  return Buffer.from(z < 0 ? b : b.subarray(0, z)).toString("utf8");
++};
++
++export type TarEntry = { name: string; type: string; header: number; data: number; size: number };
++export type Listing = { entries: TarEntry[]; end: number; size: number };
++
++export function readAt(fd: number, pos: number, len: number): Buffer {
++  const buf = Buffer.alloc(len);
++  for (let off = 0; off < len; ) {
++    const n = readSync(fd, buf, off, len - off, pos + off);
++    if (!n) throw new Error("E_INPUT tar ends early at byte " + (pos + off));
++    off += n;
++  }
++  return buf;
++}
++
++function octal(field: Uint8Array, what: string): number {
++  if (field[0]! & 0x80) throw new Error("E_INPUT tar " + what + " uses base-256, which this reader does not support");
++  const s = cstr(field).trim();
++  if (!/^[0-7]*$/.test(s)) throw new Error("E_INPUT tar " + what + " is not octal: " + JSON.stringify(s));
++  return s ? parseInt(s, 8) : 0;
++}
++
++export function headerChecksum(header: Uint8Array): number {
++  let sum = 0;
++  for (let i = 0; i < BLOCK; i++) sum += i >= 148 && i < 156 ? 0x20 : header[i]!;
++  return sum;
++}
++
++// Every entry of a ustar or GNU tar, with GNU long names (L, K) applied. pax headers are refused:
++// none of the arm tars has one, and a pax size or path would override the fields rewritten here.
++// The end is the first zero block; what follows it must be the zero padding GNU tar writes (two
++// blocks, then up to a 10240-byte record), so a rewrite that pads the same way keeps that rule.
++export function tarEntries(fd: number): Listing {
++  const size = fstatSync(fd).size;
++  const entries: TarEntry[] = [];
++  let pos = 0;
++  let longName: string | null = null;
++  while (pos + BLOCK <= size) {
++    const h = readAt(fd, pos, BLOCK);
++    if (h.every((b) => b === 0)) {
++      const trailer = readAt(fd, pos, size - pos);
++      if (size !== Math.ceil((pos + 2 * BLOCK) / RECORD) * RECORD || !trailer.every((b) => b === 0)) {
++        throw new Error("E_INPUT tar trailer after byte " + pos + " is not two zero blocks padded to a " + RECORD + "-byte record");
++      }
++      return { entries, end: pos, size };
++    }
++    if (octal(h.subarray(148, 156), "checksum") !== headerChecksum(h)) throw new Error("E_INPUT tar header at " + pos + " has a bad checksum");
++    const type = String.fromCharCode(h[156]!);
++    const len = octal(h.subarray(124, 136), "size");
++    const data = pos + BLOCK;
++    if (type === "x" || type === "g") throw new Error("E_INPUT tar has a pax header at " + pos + "; not supported");
++    if (type === "L") longName = cstr(readAt(fd, data, len));
++    else if (type !== "K") {
++      entries.push({ name: longName ?? cstr(h.subarray(0, 100)), type, header: pos, data, size: len });
++      longName = null;
++    }
++    pos = data + pad(len);
++  }
++  throw new Error("E_INPUT tar has no end-of-archive block");
++}
++
++const isFile = (e: TarEntry) => e.type === "0" || e.type === "\0";
++
++export function onlyFile(entries: TarEntry[], path: string): TarEntry {
++  const hits = entries.filter((e) => e.name === path || e.name === "./" + path);
++  if (hits.length !== 1 || !isFile(hits[0]!)) throw new Error("E_INPUT tar must hold exactly one regular file " + path + "; found " + hits.length + " entries");
++  return hits[0]!;
++}
++
++export const entryBytes = (fd: number, e: TarEntry) => readAt(fd, e.data, e.size);
++
++function* chunks(fd: number, from: number, to: number) {
++  for (let pos = from; pos < to; pos += CHUNK) yield readAt(fd, pos, Math.min(CHUNK, to - pos));
++}
++
++export function fileSha256(path: string): string {
++  const fd = openSync(path, "r");
++  try {
++    const hash = createHash("sha256");
++    for (const c of chunks(fd, 0, fstatSync(fd).size)) hash.update(c);
++    return hash.digest("hex");
++  } finally {
++    closeSync(fd);
++  }
++}
++
++// Writes the base tar with one regular file's content replaced: the bytes before its header, its
++// header with a new size and checksum, the new content padded to a block, the bytes after its old
++// data up to the end, then the GNU end padding. Returns the output's size and sha256.
++export function writeReplaced(fd: number, listing: Listing, path: string, content: Uint8Array, outPath: string): { bytes: number; sha256: string } {
++  const e = onlyFile(listing.entries, path);
++  if (content.length > 0o77777777777) throw new Error("E_INPUT content too large for an octal size field");
++  const header = readAt(fd, e.header, BLOCK);
++  header.write(content.length.toString(8).padStart(11, "0") + "\0", 124, 12, "latin1");
++  header.write(headerChecksum(header).toString(8).padStart(6, "0") + "\0 ", 148, 8, "latin1");
++  const tailFrom = e.data + pad(e.size);
++  const body = e.header + BLOCK + pad(content.length) + (listing.end - tailFrom);
++  const total = Math.ceil((body + 2 * BLOCK) / RECORD) * RECORD;
++  const hash = createHash("sha256");
++  const out = openSync(outPath, "w");
++  let bytes = 0;
++  const put = (p: Uint8Array) => {
++    hash.update(p);
++    for (let off = 0; off < p.length; ) off += writeSync(out, p, off, p.length - off);
++    bytes += p.length;
++  };
++  try {
++    for (const c of chunks(fd, 0, e.header)) put(c);
++    put(header);
++    put(content);
++    put(new Uint8Array(pad(content.length) - content.length));
++    for (const c of chunks(fd, tailFrom, listing.end)) put(c);
++    put(new Uint8Array(total - body));
++  } finally {
++    closeSync(out);
++  }
++  return { bytes, sha256: hash.digest("hex") };
++}
++
++// The regular-file entries whose content holds text, read in chunks that overlap by the text's length.
++export function carriers(fd: number, listing: Listing, text: string): string[] {
++  const needle = Buffer.from(text);
++  return listing.entries.filter(isFile).filter((e) => {
++    for (let pos = e.data; pos < e.data + e.size; pos += CHUNK) {
++      const len = Math.min(CHUNK + needle.length - 1, e.data + e.size - pos);
++      if (readAt(fd, pos, len).includes(needle)) return true;
++    }
++    return false;
++  }).map((e) => e.name);
++}
++
++export function rewriteDescription(text: string): string {
++  const { frontmatter, body } = splitSkill(text);
++  const lines = frontmatter.split("\n");
++  const at = lines.flatMap((l, i) => (l === SHIPPED_LINE ? [i] : []));
++  if (at.length !== 1) throw new Error("E_INPUT " + SKILL_PATH + " frontmatter has " + at.length + " copies of the shipped description line");
++  lines[at[0]!] = "description: " + JSON.stringify(REWRITTEN_DESCRIPTION);
++  const out = lines.join("\n");
++  if (frontmatterFields(out).description !== REWRITTEN_DESCRIPTION) throw new Error("E_INTERNAL rewritten description does not parse back to the frozen text");
++  return out + body;
++}
++
++export function shortPlacebo(text: string): { output: string; tokens: number } {
++  const { frontmatter } = splitSkill(text);
++  const { name, description } = frontmatterFields(frontmatter);
++  const body = prose(topicTerms(name, description), SHORT_TARGET, prng(SHORT_SEED, "investigate"));
++  const tokens = countTokens(body);
++  const markers = proceduralMarkers(body);
++  if (markers.length) throw new Error("E_INTERNAL placebo-short body has procedural markers: " + markers.join(", "));
++  if (Math.abs(tokens - SHORT_TARGET) > 1) throw new Error("E_INTERNAL placebo-short body has " + tokens + " tokens, not " + SHORT_TARGET + " +- 1");
++  return { output: frontmatter + body, tokens };
++}
++
++function parseList(tsv: string): Entry[] {
++  return tsv.trimEnd().split("\n").slice(1).map((line) => {
++    const [sha, size, mode, type, ...path] = line.split("\t");
++    return { path: path.join("\t"), type: type as Entry["type"], mode: parseInt(mode!, 8), size: Number(size), sha256: sha! };
++  });
++}
++
++// A variant's manifest is its base manifest with the one changed file's row replaced and the
++// digests recomputed the way tree.ts computes them.
++export function variantManifest(arm: string, base: any, baseList: string, changed: { sha256: string; size: number }, tar: { file: string; bytes: number; sha256: string }, meta: Record<string, unknown>) {
++  const entries = parseList(baseList);
++  if (treeDigest(entries) !== base.tree.digest) throw new Error("E_INTERNAL " + base.arm + ".files.tsv does not reproduce " + base.arm + ".json's tree digest");
++  const row = entries.find((e) => e.path === SKILL_PATH);
++  if (!row || row.type !== "file") throw new Error("E_INPUT " + base.arm + ".files.tsv has no file row " + SKILL_PATH);
++  row.sha256 = changed.sha256;
++  row.size = changed.size;
++  const prefix = ".claude/skills/";
++  const skillEntries = entries.filter((e) => e.path.startsWith(prefix)).map((e) => ({ ...e, path: e.path.slice(prefix.length) }));
++  const files = entries.filter((e) => e.type === "file");
++  const summary = {
++    arm, claude_code: base.claude_code, gstack_sha: base.gstack_sha, ...meta, tar,
++    tree: { files: files.length, symlinks: base.tree.symlinks, dirs: base.tree.dirs, bytes: files.reduce((n, e) => n + e.size, 0), digest: treeDigest(entries) },
++    skills: {
++      count: base.skills.count, tree_digest: treeDigest(skillEntries),
++      skill_md_digest: treeDigest(skillEntries.filter((e) => /^[^/]+\/SKILL\.md$/.test(e.path))), names: base.skills.names,
++    },
++  };
++  const list = ["sha256\tbytes\tmode\ttype\tpath", ...entries.map((e) => [e.sha256, e.size, e.mode.toString(8), e.type, e.path].join("\t"))];
++  return { summary, list: list.join("\n") + "\n" };
++}
++
++export function buildVariants(inDir: string, outDir: string, manifestsDir: string) {
++  const source = sha256(readFileSync(import.meta.path));
++  mkdirSync(outDir, { recursive: true });
++  const variant = (baseArm: string, arm: string, change: (skillMd: string) => { output: string; meta: Record<string, unknown> }) => {
++    const json = JSON.parse(readFileSync(join(manifestsDir, baseArm + ".json"), "utf8"));
++    const list = readFileSync(join(manifestsDir, baseArm + ".files.tsv"), "utf8");
++    const inPath = join(inDir, baseArm + ".tar");
++    if (fileSha256(inPath) !== json.tar.sha256) throw new Error("E_INPUT " + baseArm + ".tar is not the registered " + json.tar.sha256);
++    const fd = openSync(inPath, "r");
++    try {
++      const listing = tarEntries(fd);
++      const changed = change(entryBytes(fd, onlyFile(listing.entries, SKILL_PATH)).toString("utf8"));
++      const content = Buffer.from(changed.output);
++      const tar = { file: arm + ".tar", ...writeReplaced(fd, listing, SKILL_PATH, content, join(outDir, arm + ".tar")) };
++      return variantManifest(arm, json, list, { sha256: sha256(content), size: content.length }, tar, {
++        base_arm: baseArm, base_tar_sha256: json.tar.sha256, changed_entry: SKILL_PATH, ...changed.meta, variants_ts_sha256: source,
++      });
++    } finally {
++      closeSync(fd);
++    }
++  };
++  const rewrittenManifest = variant("gstack", "gstack-rewritten", (text) => ({ output: rewriteDescription(text), meta: { description_sha256: sha256(REWRITTEN_DESCRIPTION) } }));
++  let shortTokens = 0;
++  const shortManifest = variant("placebo", "placebo-short", (text) => {
++    const short = shortPlacebo(text);
++    shortTokens = short.tokens;
++    return { output: short.output, meta: { placebo_seed: SHORT_SEED, placebo_generator_hash: generatorHash(SHORT_SEED), target_tokens: SHORT_TARGET, placebo_tokens: short.tokens } };
++  });
++  const row = readFileSync(join(manifestsDir, "placebo-tokens.tsv"), "utf8").split("\n").find((l) => l.startsWith("investigate\t"));
++  if (!row) throw new Error("E_INPUT placebo-tokens.tsv has no investigate row");
++  const original = Number(row.split("\t")[1]);
++  const tokens = "skill\toriginal_tokens\tplacebo_tokens\tratio\trouting_kept_bytes\trouting_kept_sha256\n" +
++    ["investigate", original, shortTokens, (shortTokens / original).toFixed(4), 0, "-"].join("\t") + "\n";
++  return { manifests: [rewrittenManifest, shortManifest], tokens, shortTokens };
++}
++
++if (import.meta.main) {
++  const args = process.argv.slice(2);
++  const flag = (name: string) => {
++    const i = args.indexOf(name);
++    return i >= 0 ? args[i + 1] : undefined;
++  };
++  const carrierTar = flag("--carriers");
++  if (carrierTar) {
++    const text = args[args.indexOf("--carriers") + 2];
++    if (!text) {
++      console.error("E_USAGE usage: variants.ts --carriers <tar> <text>");
++      process.exit(2);
++    }
++    const fd = openSync(carrierTar, "r");
++    try {
++      for (const name of carriers(fd, tarEntries(fd), text)) console.log(name);
++    } finally {
++      closeSync(fd);
++    }
++    process.exit(0);
++  }
++  const inDir = flag("--in");
++  const outDir = flag("--out");
++  const write = flag("--manifests");
++  if (!inDir || !outDir) {
++    console.error("E_USAGE usage: variants.ts --in <dir with gstack.tar and placebo.tar> --out <dir> [--manifests <dir>]");
++    process.exit(2);
++  }
++  const registered = join(import.meta.dir, "manifests");
++  const built = buildVariants(inDir, outDir, registered);
++  let bad = 0;
++  for (const m of built.manifests) {
++    const arm = m.summary.arm;
++    console.log(arm + " tar_sha256=" + m.summary.tar.sha256 + " bytes=" + m.summary.tar.bytes + " tree_digest=" + m.summary.tree.digest);
++    if (write) {
++      writeFileSync(join(write, arm + ".json"), JSON.stringify(m.summary, null, 2) + "\n");
++      writeFileSync(join(write, arm + ".files.tsv"), m.list);
++      continue;
++    }
++    const path = join(registered, arm + ".json");
++    const same = existsSync(path) && readFileSync(path, "utf8") === JSON.stringify(m.summary, null, 2) + "\n" &&
++      readFileSync(join(registered, arm + ".files.tsv"), "utf8") === m.list;
++    console.log(arm + " manifest " + (same ? "matches" : "DIFFERS from") + " arms/manifests/" + arm + ".json and .files.tsv");
++    if (!same) bad++;
++  }
++  if (write) writeFileSync(join(write, "placebo-short-tokens.tsv"), built.tokens);
++  else {
++    const path = join(registered, "placebo-short-tokens.tsv");
++    const same = existsSync(path) && readFileSync(path, "utf8") === built.tokens;
++    console.log("placebo-short-tokens.tsv " + (same ? "matches" : "DIFFERS"));
++    if (!same) bad++;
++  }
++  console.log("placebo-short investigate body tokens=" + built.shortTokens + " target=" + SHORT_TARGET);
++  if (bad) process.exit(1);
++}
+diff --git a/quick/laneb/config/cells.json b/quick/laneb/config/cells.json
+index f398747..d09a91e 100644
+--- a/quick/laneb/config/cells.json
++++ b/quick/laneb/config/cells.json
+@@ -25,6 +25,11 @@
+       "id": "particle-1",
+       "harbor_model": "anthropic/particle-1",
+       "session_cap_usd": 0.5
++    },
++    {
++      "id": "gpt-6.1-sol",
++      "harbor_model": "anthropic/gpt-6.1-sol",
++      "session_cap_usd": 2.5
+     }
+   ],
+   "max_output_tokens": 32000,
+diff --git a/quick/laneb/config/proxy.json b/quick/laneb/config/proxy.json
+index 1454ca7..1eb1f87 100644
+--- a/quick/laneb/config/proxy.json
++++ b/quick/laneb/config/proxy.json
+@@ -94,6 +94,25 @@
+           "allow_fallbacks": false
+         }
+       }
++    },
++    "gpt-6.1-sol": {
++      "route": "openrouter",
++      "upstream_model": "openai/gpt-6.1-sol",
++      "price_per_mtok": {
++        "input": 2,
++        "output": 10,
++        "cache_write_5m": 2,
++        "cache_write_1h": 2,
++        "cache_read": 0.1
++      },
++      "body_overrides": {
++        "provider": {
++          "only": [
++            "openai"
++          ],
++          "allow_fallbacks": false
++        }
++      }
+     }
+   }
+ }
+diff --git a/quick/laneb/runner/dryrun-direct.py b/quick/laneb/runner/dryrun-direct.py
+new file mode 100644
+index 0000000..289b751
+--- /dev/null
++++ b/quick/laneb/runner/dryrun-direct.py
+@@ -0,0 +1,90 @@
++# Direct listing and told check for the GEVA-106 dry run. The Harbor trial stalled after "Skipping install" with no
++# proxy session opened, so this drives the pinned runtime on the host the way agent/laneb_agent.py drives it in the
++# container: claude-agent-sdk 0.2.174 (Harbor's Python) and Claude Code 2.1.312 (npm pack, as runtime-stages.Dockerfile),
++# the same ClaudeAgentOptions, the same env (CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 included), HOME and CLAUDE_CONFIG_DIR
++# at the arm's extracted .claude/, the same build_prompt, and one proxy session opened and closed like the agent's.
++# The work dir must sit outside <home>: Claude Code also loads .claude/skills from every parent of its cwd, and
++# under <home> it picked up this machine's own gstack install (the container's /testbed has no such parent).
++#   python dryrun-direct.py <arm> <arm tar> <told 0|1> <claude binary> <work dir> <proxy base url> <instruction.md> <wrapper.md>
++import asyncio
++import json
++import shutil
++import subprocess
++import sys
++from pathlib import Path
++
++from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, PermissionResultAllow, ResultMessage, query, __version__
++from laneb_agent import post_json
++from prompt_builder import build_prompt
++
++arm, tar, told, claude, work, base_url, instruction_path, wrapper_path = sys.argv[1:9]
++told = told == "1"
++work = Path(work)
++shutil.rmtree(work, ignore_errors=True)
++home, workdir, host_dir = work / "home", work / "testbed", work / "host"
++for d in (home, workdir, host_dir):
++    d.mkdir(parents=True)
++subprocess.run(["tar", "-xf", tar, "-C", str(home), "--wildcards", "--no-anchored", ".claude/*"], check=False, stderr=subprocess.DEVNULL)
++(home / ".claude").mkdir(exist_ok=True)
++
++control_url = "http://127.0.0.1:8788"
++session = post_json(control_url + "/sessions", {"trial": f"task-public__direct-{arm}-{int(told)}", "model": "claude-opus-5-5", "cap_usd": 6,
++                                               "meta": {"arm": arm, "driver": "direct"}})
++model = "claude-opus-5-5"
++env = {
++    "DISABLE_AUTOUPDATER": "1",
++    "DISABLE_TELEMETRY": "1",
++    "DISABLE_ERROR_REPORTING": "1",
++    "IS_SANDBOX": "1",
++    "ANTHROPIC_API_KEY": session["token"],
++    "ANTHROPIC_BASE_URL": base_url,
++    "ANTHROPIC_MODEL": model,
++    "CLAUDE_CONFIG_DIR": str(home / ".claude"),
++    "HOME": str(home),
++    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
++    "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
++    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32000",
++}
++
++skill = "investigate" if told else None
++prompt_text = build_prompt(Path(wrapper_path).read_text(), Path(instruction_path).read_text(), told, skill, " ")
++wrapper = host_dir / "claude-local"
++wrapper.write_text(f"#!/bin/sh\ncd {workdir} && exec {claude} \"$@\"\n")
++wrapper.chmod(0o755)
++
++
++async def can_use_tool(tool_name, tool_input, ctx):
++    return PermissionResultAllow(updated_input=tool_input)
++
++
++async def keep_open(input_data, tool_use_id, ctx):
++    return {"continue_": True}
++
++
++async def prompt():
++    yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
++
++
++async def run():
++    options = ClaudeAgentOptions(
++        cli_path=str(wrapper), cwd=str(host_dir), env=env, can_use_tool=can_use_tool,
++        hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[keep_open])]}, permission_mode="default", model=model,
++        setting_sources=["user", "project"], max_turns=200, disallowed_tools=["WebSearch", "WebFetch"],
++    )
++    n, subtype = 0, None
++    async for m in query(prompt=prompt(), options=options):
++        n += 1
++        if isinstance(m, ResultMessage):
++            subtype = m.subtype
++            break
++    return n, subtype
++
++
++try:
++    n, subtype = asyncio.run(asyncio.wait_for(run(), 240))
++    outcome = f"{n} SDK messages, result {subtype}"
++except Exception as e:
++    outcome = f"error {type(e).__name__}: {str(e)[:200]}"
++closed = post_json(control_url + f"/sessions/{session['id']}/close", {"reason": "agent_finished"})
++shutil.rmtree(home, ignore_errors=True)
++print(f"direct {arm} told={int(told)}: sdk {__version__}, {outcome}; session close {json.dumps(closed)[:160]}")
+diff --git a/quick/laneb/runner/dryrun-discovery.sh b/quick/laneb/runner/dryrun-discovery.sh
+new file mode 100755
+index 0000000..1977513
+--- /dev/null
++++ b/quick/laneb/runner/dryrun-discovery.sh
+@@ -0,0 +1,172 @@
++#!/usr/bin/env bash
++# Keyless dry run for GEVA-106's preregistration (section 10). No provider key, no Ubicloud call, no spend.
++#   a  builds the variant tars twice and compares digests; prepare-run for Run D (invoke off) and Run T (invoke on)
++#   b  listing and told checks through the real proxy, ledger service and Harbor, with the fake upstream behind a
++#      pass-through shim that records each request body; one arm at a time
++#   c  one lease per run on a temp ledger (b's sessions reserve and settle through the proxy)
++#   d  start rule: each run's planned order, and an over-cap case that writes its note row
++#   e  analysis on synthetic job folders     f  MDD tables     g  the route-check commands each run would use
++# Usage: [ARMS_DIR=<none.tar gstack.tar placebo.tar>] [OUT=<dir>] [TB2=<checkout>] runner/dryrun-discovery.sh [steps]
++set -euo pipefail
++for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY; do
++  if [ -n "${!k:-}" ]; then echo "E_USAGE unset $k: the dry run is keyless" >&2; exit 2; fi
++done
++here=$(cd "$(dirname "$0")" && pwd)
++root=$(cd "$here/.." && pwd)
++armsrc=${ARMS_DIR:-<work>/geva106/arms}
++out=${OUT:-<work>/geva106/dryrun}
++export TB2=${TB2:-<work>/ref/terminal-bench-2}
++steps=" ${*:-a b c d e f g} "
++driver=${DRIVER:-direct}
++sdk_python=${SDK_PYTHON:-$(head -1 "$(command -v harbor)" | sed 's/^#!//')}
++claude_bin=${CLAUDE_BIN:-<work>/geva106/cc/package/claude}
++# Kill whatever still listens on these ports and wait until each is free: a bun server outlived its kill once.
++free_ports() {
++  local p pid
++  for p in "$@"; do
++    for _ in $(seq 1 20); do
++      pid=$(ss -ltnpH "sport = :$p" | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)
++      [ -z "$pid" ] && break
++      kill -9 $pid 2>/dev/null || true; sleep 0.5
++    done
++  done
++}
++has() { [[ "$steps" == *" $1 "* ]]; }
++mkdir -p "$out"
++armdir=$out/arms
++SHIPPED='Systematic debugging with root cause investigation.'
++echo "dry run at $(git -C "$root" rev-parse --short HEAD), $(date -u +%FT%TZ)"
++
++if has a; then
++  echo "== a. variants and prepare-run"
++  rm -rf "$out/variants" "$armdir" "$out/run-d" "$out/run-t"
++  for b in b1 b2; do bun "$root/arms/variants.ts" --in "$armsrc" --out "$out/variants/$b" | grep -E 'manifest|tokens'; done
++  (cd "$out/variants" && sha256sum b1/*.tar b2/*.tar)
++  for t in gstack-rewritten placebo-short; do
++    [ "$(sha256sum < "$out/variants/b1/$t.tar")" = "$(sha256sum < "$out/variants/b2/$t.tar")" ] || { echo "variants: $t digests differ"; exit 1; }
++  done
++  echo "variants: both builds give the same digests"
++  for t in gstack placebo; do echo "entries of $t.tar carrying '$SHIPPED':"; bun "$root/arms/variants.ts" --carriers "$armsrc/$t.tar" "$SHIPPED" | sed 's/^/  /'; done
++  echo "gstack-rewritten investigate frontmatter:"; tar -xOf "$out/variants/b1/gstack-rewritten.tar" .claude/skills/investigate/SKILL.md | sed -n '1,6p' | cut -c1-140 | sed 's/^/  /'
++  mkdir -p "$armdir"
++  for t in none gstack placebo; do ln -sf "$armsrc/$t.tar" "$armdir/$t.tar"; done
++  for t in gstack-rewritten placebo-short; do ln -sf "$out/variants/b1/$t.tar" "$armdir/$t.tar"; done
++  if [ ! -d "$TB2/.git" ]; then
++    git clone -q --filter=blob:none https://github.com/laude-institute/terminal-bench-2.git "$TB2"
++  fi
++  git -C "$TB2" checkout -q 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c
++  final=$(jq -r '.tasks | join(",")' "$root/tasks/final.json")
++  tasks=$(echo "$final" | tr ',' '\n' | grep -vxE 'crack-7z-hash|adaptive-rejection-sampler|largest-eigenval' | paste -sd,)
++  TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-d" discovery-r1-dry claude-haiku-5-5,particle-1,claude-sonnet-5-5,claude-opus-5-5,gpt-6.1-sol none,gstack,gstack-rewritten,placebo "$armdir" 1 12 off
++  TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-t" texttax-r1-dry particle-1 none,placebo-short,placebo "$armdir" 5 12 on
++  for r in run-d run-t; do
++    echo "$r: $(jq '.tasks | length' "$out/$r/job.json") tasks, manifest invoke=$(jq -c '.invoke' "$out/$r/manifest.json") invoke_by_arm=$(jq -c '.invoke_by_arm' "$out/$r/manifest.json")"
++    jq -r '.agents[] | "  \(.kwargs.upstream_model) \(.kwargs.arm): invoke=\(.kwargs.invoke) skill_map=\(.kwargs.skill_map | to_entries | map(.value) | unique | join(",") | if . == "" then "{}" else . + " x" end)\(.kwargs.skill_map | length)"' "$out/$r/job.json"
++  done
++fi
++
++# One harness per run: fake upstream behind the recording shim, the run's temp ledger service, the metering proxy.
++harness_run() {
++  local item=$1 cap=$2 shim_port=8799; shift 2
++  [ "$item" = texttax-r1 ] && shim_port=8796
++  local dir=$out/harness-$item
++  rm -rf "$dir" && mkdir -p "$dir"
++  rm -rf "$dir/task" && cp -r "$here/smoke-task" "$dir/task-public" && sed -i 's/^network_mode = .*/network_mode = "public"/' "$dir/task-public/task.toml"
++  cat > "$dir/proxy.json" <<EOF
++{"routes": {"fake": {"base_url": "http://127.0.0.1:$shim_port", "key_env": "FAKE_UPSTREAM_KEY", "auth": "x-api-key", "count_tokens": "estimate"}},
++ "models": {"claude-opus-5-5": {"route": "fake", "upstream_model": "claude-opus-5-5", "price_per_mtok": {"input": 5, "output": 25, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5}}}}
++EOF
++  bun -e "import {Ledger} from '$here/ledger.ts'; new Ledger('$dir/$item.jsonl','$item').approve($cap, {note: 'GEVA-106 dry run, temp ledger, no spend'})"
++  local gateway pids=()
++  gateway=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
++  FAKE_UPSTREAM_PORT=8798 FAKE_UPSTREAM_LOG="$dir/fake-upstream.jsonl" bun "$here/fake_upstream.ts" & pids+=($!)
++  bun "$here/ledger.ts" serve --path "$dir/$item.jsonl" --item "$item" --port 9911 --prereg dryrun & pids+=($!)
++  FAKE_UPSTREAM_KEY=fake bun "$here/proxy.ts" --config "$dir/proxy.json" --data-host "$gateway" --data-port 8787 --control-port 8788 \
++    --log "$dir/proxy-requests.jsonl" --sessions "$dir/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix dry- & pids+=($!)
++  cat > "$dir/shim.ts" <<'EOF'
++import { appendFileSync, readFileSync } from "node:fs";
++Bun.serve({ hostname: "127.0.0.1", port: Number(process.env.SHIM_PORT), async fetch(req) {
++  const url = new URL(req.url);
++  const body = req.method === "POST" ? await req.text() : undefined;
++  if (body !== undefined) appendFileSync(readFileSync(process.env.SHIM_PTR!, "utf8").trim(), JSON.stringify({ path: url.pathname, bytes: Buffer.byteLength(body), body }) + "\n");
++  const headers = new Headers(req.headers); headers.delete("host"); headers.delete("content-length");
++  const res = await fetch("http://127.0.0.1:8798" + url.pathname + url.search, { method: req.method, headers, body });
++  return new Response(res.body, { status: res.status, headers: res.headers });
++} });
++EOF
++  echo "$dir/requests-start.jsonl" > "$dir/shim-log"
++  SHIM_PTR="$dir/shim-log" SHIM_PORT=$shim_port bun "$dir/shim.ts" & pids+=($!)
++  for a in "$@"; do
++    local arm=${a%:*} told=${a#*:}
++    echo "$dir/requests-$arm.jsonl" > "$dir/shim-log"
++    for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:$shim_port/healthz >/dev/null 2>&1 && break; sleep 0.5; done
++    local extra=()
++    [ "$told" = 1 ] && extra=(--ak invoke=true --ak 'skill_map={"task-public":"investigate"}')
++    echo "-- $item arm $arm told=$told ($(du -h "$armdir/$arm.tar" | cut -f1) tar)"
++    if [ "$driver" = harbor ]; then
++    PYTHONPATH="$here/agent" ANTHROPIC_API_KEY=placeholder-not-a-key timeout 1800 harbor run -y -q -p "$dir/task-public" \
++      -a laneb_agent:LanebAgent -m anthropic/claude-opus-5-5 --base-url "http://$gateway:8787" \
++      --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$(readlink -f "$armdir/$arm.tar")" \
++      --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=/testbed --ak workdir=/testbed "${extra[@]}" \
++      -e docker -o "$dir/jobs" --job-name "dry-$arm" >"$dir/harbor-$arm.log" 2>&1 || echo "harbor exited non-zero for $arm (log: $dir/harbor-$arm.log)"
++    echo "reward: $(cat "$dir"/jobs/dry-$arm/*/verifier/reward.txt 2>/dev/null || echo none)"
++    else
++    PYTHONPATH="$here/agent" timeout 300 "$sdk_python" "$here/dryrun-direct.py" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" "$claude_bin" "/tmp/geva106-direct/$item-$arm" \
++      "http://$gateway:8787" "$dir/task-public/instruction.md" "$here/prompt-wrapper.md" >"$dir/direct-$arm.log" 2>&1 || echo "direct driver exited non-zero for $arm (log: $dir/direct-$arm.log)"
++    echo "$(tail -1 "$dir/direct-$arm.log") ($SECONDS s into the dry run)"
++    fi
++    bun "$here/dryrun-inspect.ts" "$dir/requests-$arm.jsonl" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" || true
++  done
++  for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done
++  free_ports 8787 8788 8798 9911 "$shim_port"
++  wait 2>/dev/null || true
++  echo "-- lease check for $item"
++  jq -c '{trial, spent_micros, requests, ok_responses, ledger_settle, close_reason}' "$dir/proxy-sessions.jsonl"
++  bun -e "
++    import { Ledger, readRows, toMicros } from '$here/ledger.ts';
++    const l = new Ledger('$dir/$item.jsonl', '$item');
++    const rows = readRows(l.path);
++    console.log('approval rows ' + rows.filter((r) => r.kind === 'approval').length + ', reserves ' + rows.filter((r) => r.kind === 'reserve').length + ', settles ' + rows.filter((r) => r.kind === 'settle').length);
++    const s = l.status();
++    console.log('status: cap $' + s.capMicros / 1e6 + ', settled $' + s.settledMicros / 1e6 + ', open reserves ' + s.openIds.length);
++    try { l.approve(1, {}); console.log('second approval: ACCEPTED (bad)'); } catch (e) { console.log('second approval: refused (' + e.message + ')'); }
++    const over = l.reserve('dry-over-cap', s.capMicros - s.settledMicros - s.openReservedMicros + 1);
++    console.log('reserve past the cap: ' + (over.ok ? 'ACCEPTED (bad)' : 'refused (' + over.reason + ')'));
++    if (s.openIds.length || !rows.some((r) => r.kind === 'settle') || over.ok) process.exit(1);
++  "
++}
++
++if has b || has c; then
++  echo "== b, c. listing and told checks, one lease per run"
++  if [ "$driver" = harbor ]; then echo "driver: Harbor trial (laneb_agent in the task container)"; else echo "driver: direct. The Harbor trial stalled after 'Skipping install' with no proxy session, so runner/dryrun-direct.py drives claude-agent-sdk $("$sdk_python" -c 'import claude_agent_sdk as s; print(s.__version__)') and Claude Code $("$claude_bin" --version | cut -d' ' -f1) on the host with laneb_agent.py's options, env and build_prompt, HOME and CLAUDE_CONFIG_DIR at the arm's extracted .claude/, through the metering proxy."; fi
++  harness_run discovery-r1 100 none:0 placebo:0 gstack-rewritten:0 gstack:0
++  harness_run texttax-r1 75 placebo:1 placebo-short:1
++fi
++
++if has d; then
++  echo "== d. start rule"
++  for r in texttax-r1 discovery-r1; do bun "$here/start-rule.ts" plan --run "$r"; done
++  led=$out/start-rule-texttax-r1.jsonl
++  rm -f "$led"
++  bun -e "import {Ledger, toMicros} from '$here/ledger.ts'; const l = new Ledger('$led','texttax-r1'); l.approve(75, {note: 'dry run'}); l.reserve('a', toMicros(60)); l.settle('a', toMicros(60));"
++  if bun "$here/start-rule.ts" check --run texttax-r1 --ledger "$led" --batch deepseek-v4.1-flash-1017 --note; then echo "over-cap case passed (bad)"; exit 1; fi
++  echo "over-cap case refused; note row: $(jq -c 'select(.kind == "note") | {kind, item, pass: .start_rule.pass, bound_usd: .start_rule.bound_usd, cap_usd: .start_rule.cap_usd}' "$led")"
++fi
++
++if has e && [ -f "$root/analysis/discovery-tax.ts" ]; then
++  echo "== e. analysis on synthetic job folders"
++  rm -rf "$out/synthetic"
++  bun "$root/tests/discovery-tax.fixtures.ts" "$out/synthetic"
++  for cfg in "$out"/synthetic/*.json; do echo "--- $(basename "$cfg")"; bun "$root/analysis/discovery-tax.ts" "$cfg"; done
++fi
++
++if has f && [ -f "$root/analysis/mdd-sim.ts" ]; then
++  echo "== f. MDD"
++  bun "$root/analysis/mdd-sim.ts" | tee "$out/mdd.txt"
++fi
++
++if has g; then
++  echo "== g. route-check commands (not run)"
++  echo "PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain-drive>/ledger/discovery-r1.jsonl MODELS='claude-haiku-5-5 particle-1 claude-sonnet-5-5 claude-opus-5-5 gpt-6.1-sol' OUT=<work>/geva106/route-d quick/laneb/runner/route-check.sh"
++  echo "PREREG=<merge sha> ITEM=texttax-r1 LEDGER=<captain-drive>/ledger/texttax-r1.jsonl MODELS='particle-1 claude-haiku-5-5 deepseek-v4.1-flash-1017' OUT=<work>/geva106/route-t quick/laneb/runner/route-check.sh"
++fi
+diff --git a/quick/laneb/runner/dryrun-inspect.ts b/quick/laneb/runner/dryrun-inspect.ts
+new file mode 100644
+index 0000000..2c3c30a
+--- /dev/null
++++ b/quick/laneb/runner/dryrun-inspect.ts
+@@ -0,0 +1,48 @@
++// Reads the first main-loop request a dry-run arm sent (recorded by the dry run's pass-through shim) and
++// prints what reached the model: request bytes, where investigate's description sits, how many skills
++// the listing names, and for a told arm whether the body's first 200 characters came with the /investigate line.
++//   bun runner/dryrun-inspect.ts <shim log> <arm> <arm tar> <told 0|1>
++import { closeSync, openSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++import { entryBytes, onlyFile, REWRITTEN_DESCRIPTION, tarEntries } from "../arms/variants.ts";
++import { splitSkill } from "../arms/placebo/placebo.ts";
++
++const [logPath, arm, tar, told] = Bun.argv.slice(2);
++const SHIPPED = "Systematic debugging with root cause investigation. (gstack)";
++const REWRITTEN_TAIL = REWRITTEN_DESCRIPTION.slice(52, 140);
++const reqs = readFileSync(logPath!, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
++const first = reqs.find((r) => /\/v1\/messages$/.test(r.path) && (JSON.parse(r.body).tools ?? []).length > 0);
++if (!first) {
++  console.log(`${arm}: no main-loop request recorded (${reqs.length} requests)`);
++  process.exit(1);
++}
++const body = JSON.parse(first.body);
++const text = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b: any) => (typeof b?.text === "string" ? b.text : typeof b?.content === "string" ? b.content : "")).join("\n") : "");
++const fields: [string, string][] = [
++  ["system", text(body.system)],
++  ["tools[Skill].description", (body.tools ?? []).find((t: any) => t.name === "Skill")?.description ?? ""],
++  ...(body.messages ?? []).flatMap((m: any, i: number) => (Array.isArray(m.content) ? m.content : [m.content]).map((b: any, j: number) => [`messages[${i}].${m.role}[${j}]`, text([b])] as [string, string])),
++];
++const where = (needle: string) => fields.filter(([, t]) => t.includes(needle)).map(([name, t]) => {
++  const at = t.indexOf(needle);
++  const reminder = t.lastIndexOf("<system-reminder>", at) >= 0 && t.lastIndexOf("</system-reminder>", at) < t.lastIndexOf("<system-reminder>", at);
++  return `${name}${reminder ? " inside <system-reminder>" : ""}, preceded by ${JSON.stringify(t.slice(Math.max(0, at - 90), at))}`;
++});
++const fd = openSync(tar!, "r");
++const listing = tarEntries(fd);
++const names = [...new Set(listing.entries.map((e) => /^(?:\.\/)?\.claude\/skills\/([^/]+)\/SKILL\.md$/.exec(e.name)?.[1]).filter((n): n is string => !!n)), "plugin-authoring"];
++const investigate = listing.entries.some((e) => /^(?:\.\/)?\.claude\/skills\/investigate\/SKILL\.md$/.test(e.name)) ? splitSkill(entryBytes(fd, onlyFile(listing.entries, ".claude/skills/investigate/SKILL.md")).toString("utf8")).body : null;
++closeSync(fd);
++const container = fields.find(([, t]) => t.includes("plugin-authoring"));
++const listed = container ? names.filter((n) => new RegExp("(^|\\n)- " + n.replace(/[-]/g, "\\-") + ":").test(container[1])) : [];
++console.log(`${arm}: first request ${first.bytes} bytes, ${body.tools.length} tools, system ${text(body.system).length} chars: ${JSON.stringify(text(body.system).slice(0, 160))}`);
++console.log(`${arm}: listing in ${container ? container[0] : "nowhere"}; skills listed ${listed.length} (${listed.length <= 3 ? listed.join(", ") : listed.slice(0, 3).join(", ") + ", ..."})`);
++for (const [label, needle] of [["shipped investigate description", SHIPPED], ["rewritten investigate description", REWRITTEN_TAIL]] as const) {
++  const hits = where(needle);
++  console.log(`${arm}: ${label}: ${hits.length ? hits.join("; ") : "absent"}`);
++}
++if (told === "1") {
++  const all = fields.map(([, t]) => t).join("\n");
++  const head = investigate?.slice(0, 200) ?? "";
++  console.log(`${arm}: told: /investigate command line ${all.includes("<command-name>/investigate</command-name>") ? "present" : "absent"}; body's first 200 characters ${head && all.includes(head) ? "present" : "absent"}`);
++}
+diff --git a/quick/laneb/runner/prepare-run.ts b/quick/laneb/runner/prepare-run.ts
+index 4f283c1..71b1fb2 100644
+--- a/quick/laneb/runner/prepare-run.ts
++++ b/quick/laneb/runner/prepare-run.ts
+@@ -1,7 +1,8 @@
+ // Builds a run directory for one Lane B batch: materialized tasks (digest-checked against
+ // tasks/tasks.json), arm tarballs, the proxy config and a Harbor JobConfig whose paths point
+ // at the VM layout launch.sh syncs (runner at <vm>/runner, run dir at <vm>/run).
+-// Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>
++// Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent> [invoke on|off]
++// invoke (default on) is the batch's told switch: off gives every arm the plain prompt and reads no skill map.
+ // Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM's work directory, default below),
+ // NETWORK (default allowlist), WRAPPER (a prompt-wrapper*.md file in this directory, default prompt-wrapper.md), TASKS (comma list from tasks/final.json, default all).
+ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+@@ -21,9 +22,16 @@ export function toldSkillMaps(map: Record<string, Record<string, string>>, arms:
+   }));
+ }
+ 
++export function invokeSwitch(arg: string | undefined): boolean {
++  if (arg === undefined || arg === "on") return true;
++  if (arg === "off") return false;
++  throw new Error(`E_USAGE invoke must be on or off, not ${arg}`);
++}
++
+ if (import.meta.main) {
+-  const [runArg, jobName, modelsCsv, armsCsv, armDir, attempts, concurrent] = Bun.argv.slice(2);
+-  if (!concurrent) throw new Error("E_USAGE usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>");
++  const [runArg, jobName, modelsCsv, armsCsv, armDir, attempts, concurrent, invokeArg] = Bun.argv.slice(2);
++  if (!concurrent) throw new Error("E_USAGE usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent> [invoke on|off]");
++  const invoke = invokeSwitch(invokeArg);
+   const here = import.meta.dir;
+   const root = resolve(here, "..");
+   const run = resolve(runArg);
+@@ -37,7 +45,7 @@ if (import.meta.main) {
+   for (const id of final) if (!finalAll.includes(id)) throw new Error(`E_USAGE task ${id} is not in tasks/final.json`);
+   const wrapper = process.env.WRAPPER ?? "prompt-wrapper.md";
+   if (!/^prompt-wrapper[\w-]*\.md$/.test(wrapper) || !existsSync(join(here, wrapper))) throw new Error(`E_USAGE WRAPPER ${wrapper} is not a prompt-wrapper*.md file in ${here}`);
+-  const skillMaps = toldSkillMaps(JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), armsCsv.split(","), final);
++  const skillMaps = invoke ? toldSkillMaps(JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), armsCsv.split(","), final) : {};
+   const expected = new Map<string, string>([...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
+   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
+   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
+@@ -84,7 +92,7 @@ if (import.meta.main) {
+     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256 }) => ({ name, tar, sha256 })),
+     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`, wrapper,
+     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
+-    skill_maps: skillMaps,
++    invoke, skill_maps: skillMaps,
+   });
+   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
+   if (process.env.ORACLE === "1") {
+@@ -96,7 +104,8 @@ if (import.meta.main) {
+     job_name: jobName, created_at: new Date().toISOString(), network,
+     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
+     wrapper, wrapper_sha256: sha256(join(here, wrapper)), persona_sha256: sha256(join(here, "agent/persona.json")),
+-    skill_map_sha256: sha256(join(here, "skill-map.stacks.json")), invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invokesArm(name)])),
++    invoke, skill_map_sha256: invoke ? sha256(join(here, "skill-map.stacks.json")) : null,
++    invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invoke && invokesArm(name)])),
+     proxy_config_sha256: sha256(join(run, "proxy.json")), cells, arms, tasks,
+   };
+   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+diff --git a/quick/laneb/runner/skill-map.stacks.json b/quick/laneb/runner/skill-map.stacks.json
+index 24b7796..2ab8efb 100644
+--- a/quick/laneb/runner/skill-map.stacks.json
++++ b/quick/laneb/runner/skill-map.stacks.json
+@@ -166,5 +166,47 @@
+     "git-leak-recovery": "pstack:poteto-mode",
+     "git-multibranch": "pstack:poteto-mode",
+     "kv-store-grpc": "pstack:poteto-mode"
++  },
++  "placebo-short": {
++    "filter-js-from-html": "investigate",
++    "dna-insert": "investigate",
++    "model-extraction-relu-logits": "investigate",
++    "chess-best-move": "investigate",
++    "torch-tensor-parallelism": "investigate",
++    "adaptive-rejection-sampler": "investigate",
++    "db-wal-recovery": "investigate",
++    "polyglot-rust-c": "investigate",
++    "break-filter-js-from-html": "investigate",
++    "overfull-hbox": "investigate",
++    "extract-elf": "investigate",
++    "torch-pipeline-parallelism": "investigate",
++    "polyglot-c-py": "investigate",
++    "query-optimize": "investigate",
++    "tune-mjcf": "investigate",
++    "configure-git-webserver": "investigate",
++    "mailman": "investigate",
++    "pytorch-model-cli": "investigate",
++    "cancel-async-tasks": "investigate",
++    "sanitize-git-repo": "investigate",
++    "largest-eigenval": "investigate",
++    "pypi-server": "investigate",
++    "feal-differential-cryptanalysis": "investigate",
++    "pytorch-model-recovery": "investigate",
++    "sparql-university": "investigate",
++    "custom-memory-heap-crash": "investigate",
++    "headless-terminal": "investigate",
++    "openssl-selfsigned-cert": "investigate",
++    "password-recovery": "investigate",
++    "large-scale-text-editing": "investigate",
++    "log-summary-date-ranges": "investigate",
++    "cobol-modernization": "investigate",
++    "code-from-image": "investigate",
++    "constraints-scheduling": "investigate",
++    "crack-7z-hash": "investigate",
++    "fix-code-vulnerability": "investigate",
++    "fix-git": "investigate",
++    "git-leak-recovery": "investigate",
++    "git-multibranch": "investigate",
++    "kv-store-grpc": "investigate"
+   }
+ }
+diff --git a/quick/laneb/runner/start-rule.ts b/quick/laneb/runner/start-rule.ts
+new file mode 100644
+index 0000000..4e9fdf3
+--- /dev/null
++++ b/quick/laneb/runner/start-rule.ts
+@@ -0,0 +1,122 @@
++// The start rule of GEVA-106's preregistration (section 8), checked before each batch launches.
++// The run's settled spend, plus its open reserves, plus 1.4 times the projected cost of the trials not
++// yet finished in this batch and in every batch of the run still running, must be at most the run's cap.
++// Spend comes from the run's ledger file; the projection is the frozen per-trial table below.
++//
++//   bun runner/start-rule.ts check --run <discovery-r1|texttax-r1> --ledger <jsonl> --batch <spec> [--batch <spec> ...] [--note]
++//   bun runner/start-rule.ts plan --run <discovery-r1|texttax-r1>
++//
++// A batch spec is a model id for a batch with every trial still to run, or model:arm=n+arm=n for the
++// trials it has left. List the batch about to launch and every batch of the run still running.
++// --note appends the inputs and the verdict to the ledger as a note row. check exits 1 when the rule fails.
++// plan walks the run's planned order from an empty ledger, each earlier group settled at its projection.
++import { appendFileSync, closeSync, fsyncSync, openSync } from "node:fs";
++import { fromMicros, readRows, toMicros, totals, type Totals } from "./ledger.ts";
++
++const TASKS = 37;
++const MARGIN = 1.4;
++
++// Projected spend per trial in dollars (section 8): model, then arm.
++export const PROJECTION: Record<string, Record<string, number>> = {
++  "claude-opus-5-5": { none: 0.145, gstack: 0.16, "gstack-rewritten": 0.16, placebo: 0.16 },
++  "claude-sonnet-5-5": { none: 0.052, gstack: 0.058, "gstack-rewritten": 0.058, placebo: 0.058 },
++  "claude-haiku-5-5": { none: 0.009, gstack: 0.01, "gstack-rewritten": 0.01, placebo: 0.01, "placebo-short": 0.012 },
++  "particle-1": { none: 0.072, gstack: 0.078, "gstack-rewritten": 0.078, placebo: 0.078, "placebo-short": 0.078 },
++  "deepseek-v4.1-flash-1017": { none: 0.062, "placebo-short": 0.065, placebo: 0.068 },
++  "gpt-6.1-sol": { none: 0.15, gstack: 0.15, "gstack-rewritten": 0.15, placebo: 0.15 },
++};
++// Run T prices placebo from #109 and quick look 3, not the untold figure, so its placebo column differs from Run D's.
++const RUN_T_PLACEBO: Record<string, number> = { "claude-haiku-5-5": 0.013, "particle-1": 0.088, "deepseek-v4.1-flash-1017": 0.068 };
++
++export type RunSpec = { item: string; cap: number; arms: string[]; replicates: Record<string, number>; order: string[][]; price: (model: string, arm: string) => number };
++
++export const RUNS: Record<string, RunSpec> = {
++  "discovery-r1": {
++    item: "discovery-r1", cap: 100, arms: ["none", "gstack", "gstack-rewritten", "placebo"],
++    replicates: { "claude-haiku-5-5": 1, "particle-1": 1, "claude-sonnet-5-5": 1, "claude-opus-5-5": 1, "gpt-6.1-sol": 1 },
++    order: [["claude-haiku-5-5", "particle-1", "claude-sonnet-5-5"], ["claude-opus-5-5"], ["gpt-6.1-sol"]],
++    price: (model, arm) => PROJECTION[model]![arm]!,
++  },
++  "texttax-r1": {
++    item: "texttax-r1", cap: 75, arms: ["none", "placebo-short", "placebo"],
++    replicates: { "particle-1": 5, "claude-haiku-5-5": 5, "deepseek-v4.1-flash-1017": 2 },
++    order: [["particle-1", "claude-haiku-5-5"], ["deepseek-v4.1-flash-1017"]],
++    price: (model, arm) => (arm === "placebo" ? RUN_T_PLACEBO[model]! : PROJECTION[model]![arm]!),
++  },
++};
++
++export type Batch = { model: string; remaining: Record<string, number> };
++
++export function parseBatch(run: RunSpec, spec: string): Batch {
++  const [model, rest] = spec.split(":");
++  const reps = run.replicates[model!];
++  if (!reps) throw new Error(`E_USAGE model ${model} has no batch in ${run.item}`);
++  if (!rest) return { model: model!, remaining: Object.fromEntries(run.arms.map((a) => [a, TASKS * reps])) };
++  const remaining: Record<string, number> = {};
++  for (const part of rest.split("+")) {
++    const [arm, n] = part.split("=");
++    if (!run.arms.includes(arm!) || !/^\d+$/.test(n ?? "") || Number(n) > TASKS * reps) throw new Error(`E_USAGE bad batch part ${part} in ${spec}`);
++    remaining[arm!] = Number(n);
++  }
++  return { model: model!, remaining };
++}
++
++export const batchMicros = (run: RunSpec, b: Batch) => Object.entries(b.remaining).reduce((s, [arm, n]) => s + n * toMicros(run.price(b.model, arm)), 0);
++
++export function startRule(run: RunSpec, status: Totals, batches: Batch[]) {
++  const projectedMicros = batches.reduce((s, b) => s + batchMicros(run, b), 0);
++  const boundMicros = status.settledMicros + status.openReservedMicros + Math.ceil(projectedMicros * MARGIN);
++  return {
++    run: run.item, cap_usd: run.cap, settled_usd: fromMicros(status.settledMicros), open_reserved_usd: fromMicros(status.openReservedMicros),
++    batches: batches.map((b) => ({ model: b.model, remaining: b.remaining, projected_usd: fromMicros(batchMicros(run, b)) })),
++    projected_usd: fromMicros(projectedMicros), margin: MARGIN, bound_usd: fromMicros(boundMicros), pass: boundMicros <= toMicros(run.cap),
++  };
++}
++
++export function plan(run: RunSpec) {
++  let settled = 0;
++  const steps = [];
++  for (const group of run.order) {
++    const running: Batch[] = [];
++    for (const model of group) {
++      running.push(parseBatch(run, model));
++      steps.push({ launch: model, ...startRule(run, { capMicros: toMicros(run.cap), settledMicros: settled, openReservedMicros: 0, openIds: [] }, running) });
++    }
++    settled += running.reduce((s, b) => s + batchMicros(run, b), 0);
++  }
++  return { steps, total_projected_usd: fromMicros(settled) };
++}
++
++export function appendNote(path: string, item: string, verdict: ReturnType<typeof startRule>) {
++  const ts = new Date().toISOString();
++  appendFileSync(path, JSON.stringify({ ts, item, kind: "note", id: "start-rule-" + ts, usd_micros: 0, start_rule: verdict }) + "\n");
++  const fd = openSync(path, "r");
++  try { fsyncSync(fd); } finally { closeSync(fd); }
++}
++
++if (import.meta.main) {
++  const [cmd, ...argv] = Bun.argv.slice(2);
++  const opt = (name: string) => argv.flatMap((a, i) => (a === name ? [argv[i + 1]!] : []));
++  const run = RUNS[opt("--run")[0] ?? ""];
++  if (!run || (cmd !== "check" && cmd !== "plan")) {
++    console.error("E_USAGE usage: start-rule.ts check --run <discovery-r1|texttax-r1> --ledger <jsonl> --batch <spec> ... [--note] | plan --run <name>");
++    process.exit(2);
++  }
++  if (cmd === "plan") {
++    const p = plan(run);
++    for (const s of p.steps) console.log(`${s.run} launch ${s.launch}: settled $${s.settled_usd.toFixed(2)} + 1.4 x $${s.projected_usd.toFixed(2)} = $${s.bound_usd.toFixed(2)} vs cap $${s.cap_usd} -> ${s.pass ? "PASS" : "FAIL"}`);
++    console.log(`${run.item} projected total $${p.total_projected_usd.toFixed(2)}`);
++    process.exit(p.steps.every((s) => s.pass) ? 0 : 1);
++  }
++  const ledger = opt("--ledger")[0];
++  if (!ledger || !opt("--batch").length) {
++    console.error("E_USAGE check needs --ledger and at least one --batch");
++    process.exit(2);
++  }
++  const rows = readRows(ledger);
++  if (rows.find((r) => r.kind === "approval")?.item !== run.item) throw new Error(`E_USAGE ${ledger} is not the ${run.item} ledger`);
++  const verdict = startRule(run, totals(rows), opt("--batch").map((s) => parseBatch(run, s)));
++  console.log(JSON.stringify(verdict));
++  if (argv.includes("--note")) appendNote(ledger, run.item, verdict);
++  process.exit(verdict.pass ? 0 : 1);
++}
+diff --git a/quick/laneb/tests/discovery-runner.test.ts b/quick/laneb/tests/discovery-runner.test.ts
+new file mode 100644
+index 0000000..28a809a
+--- /dev/null
++++ b/quick/laneb/tests/discovery-runner.test.ts
+@@ -0,0 +1,38 @@
++import { describe, expect, test } from "bun:test";
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { jobConfig } from "../runner/grid.ts";
++import { invokeSwitch, toldSkillMaps } from "../runner/prepare-run.ts";
++
++const here = import.meta.dir;
++const final: string[] = JSON.parse(readFileSync(join(here, "../tasks/final.json"), "utf8")).tasks;
++const stacksMap = JSON.parse(readFileSync(join(here, "../runner/skill-map.stacks.json"), "utf8")) as Record<string, Record<string, string>>;
++const RUN_D = ["none", "gstack", "gstack-rewritten", "placebo"];
++
++const batch = (arms: string[], invoke: boolean) => jobConfig({
++  job_name: "d", tasks_dir: "/run/tasks", tasks: final, attempts: 1, n_concurrent: 1, agent_dir: "/r/agent", runner_dir: "/r", base_url: "http://g:8787", max_output_tokens: 32000,
++  verifier_timeout_multiplier: 1, models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }],
++  arms: arms.map((name) => ({ name, tar: `/run/arms/${name}.tar`, sha256: name })),
++  invoke, skill_maps: invoke ? toldSkillMaps(stacksMap, arms, final) : {},
++});
++
++describe("invoke switch", () => {
++  test("on is the default, off is the only other value", () => {
++    expect(invokeSwitch(undefined)).toBe(true);
++    expect(invokeSwitch("on")).toBe(true);
++    expect(invokeSwitch("off")).toBe(false);
++    expect(() => invokeSwitch("no")).toThrow("E_USAGE");
++  });
++
++  test("off: every arm, gstack-rewritten included, gets the plain prompt and an empty skill map", () => {
++    for (const ag of batch(RUN_D, false).agents) {
++      expect(ag.kwargs.invoke).toBe(false);
++      expect(ag.kwargs.skill_map).toEqual({});
++    }
++  });
++
++  test("off needs no skill map entry for an arm the map lacks", () => {
++    expect(() => toldSkillMaps(stacksMap, RUN_D, final)).toThrow("gstack-rewritten");
++    expect(() => batch(RUN_D, false)).not.toThrow();
++  });
++});
+diff --git a/quick/laneb/tests/discovery-tax.fixtures.ts b/quick/laneb/tests/discovery-tax.fixtures.ts
+new file mode 100644
+index 0000000..bdfe0f9
+--- /dev/null
++++ b/quick/laneb/tests/discovery-tax.fixtures.ts
+@@ -0,0 +1,94 @@
++// Synthetic Harbor job folders for analysis/discovery-tax.ts: every row of the preregistration's section 7
++// table and every claim branch of sections 6.1 to 6.3. No real task, transcript or key.
++//   bun tests/discovery-tax.fixtures.ts <dir>   writes the job folders and one config per scenario
++import { mkdirSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { FIT } from "../analysis/discovery-tax.ts";
++
++export const TASKS = [...FIT, ...Array.from({ length: 32 }, (_, i) => `t${String(i + 6).padStart(2, "0")}`)];
++export const BODY = "# Investigate\n\nA body long enough that its first two hundred characters span several lines.\n" + "Line of body text.\n".repeat(20);
++const SKILLS = ["investigate", "review"];
++type Spec = { task: string; arm: string; model: string; reward: number | null; msgs?: object[]; exc?: string; session?: Record<string, unknown>; name?: string };
++
++const said = (text = "working") => ({ type: "AssistantMessage", content: [{ text }], usage: { input_tokens: 10, output_tokens: 5 } });
++export const M = {
++  respond: [said()],
++  refused: [{ type: "SystemMessage", subtype: "model_refusal_no_fallback" }, { type: "AssistantMessage", content: [{ text: "API Error: the safeguards flagged this message." }], usage: { input_tokens: 0, output_tokens: 0 } }],
++  readOpen: (skill: string, id: string, text = "DEBUG REPORT") => [
++    { type: "AssistantMessage", content: [{ id, name: "Read", input: { file_path: `/root/.claude/skills/${skill}/SKILL.md` } }], usage: { input_tokens: 10, output_tokens: 5 } },
++    { type: "UserMessage", content: [{ tool_use_id: id, content: ("---\nname: x\n---\n" + BODY).split("\n").map((l, i) => `${String(i + 1).padStart(6)}\t${l}`).join("\n") }] },
++    said(text),
++  ],
++  skill: (skill: string, id: string) => [{ type: "AssistantMessage", content: [{ id, name: "Skill", input: { skill } }], usage: { input_tokens: 10, output_tokens: 5 } }, { type: "UserMessage", content: [{ tool_use_id: id, content: "Launching skill" }] }],
++  browse: [{ type: "AssistantMessage", content: [{ id: "b1", name: "Bash", input: { command: "ls /root/.claude/skills/" } }], usage: { input_tokens: 10, output_tokens: 5 } }],
++};
++
++let n = 0;
++export function trial(job: string, s: Spec) {
++  const name = s.name ?? `${s.task}__${(n++).toString(36).padStart(7, "0")}`;
++  const dir = join(job, name);
++  mkdirSync(join(dir, "agent"), { recursive: true });
++  writeFileSync(join(dir, "config.json"), JSON.stringify({ agent: { kwargs: { arm: s.arm, upstream_model: s.model } }, task: { path: "/run/tasks/" + s.task } }));
++  writeFileSync(join(dir, "result.json"), JSON.stringify({ trial_name: name, verifier_result: s.reward === null ? null : { rewards: { reward: s.reward } }, exception_info: s.exc ? { exception_type: s.exc, exception_message: "" } : null }));
++  writeFileSync(join(dir, "agent", "sdk-messages.jsonl"), (s.msgs ?? M.respond).map((m) => JSON.stringify(m)).join("\n") + "\n");
++  writeFileSync(join(dir, "agent", "laneb-summary.json"), JSON.stringify({ session: { spent_micros: 20000, requests: 4, refused_budget: 0, cmd_expanded: s.arm !== "none", first_req_prompt_tokens: 1000, ...s.session } }));
++  return name;
++}
++
++const bodies = (arms: string[]) => Object.fromEntries(arms.map((a) => [a, a === "none" ? {} : Object.fromEntries(SKILLS.map((k) => [k, BODY]))]));
++
++function runD(root: string) {
++  const job = join(root, "jobs-d");
++  const sessions: object[] = [];
++  const opens = (model: string, arm: string, i: number) => {
++    if (model === "m-claim") return arm !== "none" && i % 5 < 3;
++    if (model === "m-zero") return arm === "gstack-rewritten" && i % 4 !== 0;
++    if (model === "m-sparse") return (arm === "gstack" || arm === "placebo") && i === 7;
++    return false;
++  };
++  for (const model of ["m-claim", "m-zero", "m-sparse", "m-gate"]) for (const arm of ["none", "gstack", "gstack-rewritten", "placebo"]) TASKS.forEach((task, i) => {
++    const spec: Spec = { task, arm, model, reward: i % 2, msgs: opens(model, arm, i) ? M.readOpen("investigate", `r${i}`, i % 3 ? "DEBUG REPORT: Phase 5, root cause" : "done") : M.respond };
++    if (model === "m-gate" && arm === "none" && i < 5) Object.assign(spec, { msgs: M.refused, reward: 0 });
++    if (model === "m-claim" && i === 10) {
++      if (arm === "none") Object.assign(spec, { reward: null, exc: "AgentTimeoutError" });
++      if (arm === "gstack") Object.assign(spec, { msgs: [], reward: null, exc: "RuntimeError" });
++      if (arm === "placebo") Object.assign(spec, { session: { refused_budget: 1 }, reward: 0 });
++      if (arm === "gstack-rewritten") Object.assign(spec, { msgs: [...M.respond, ...M.skill("plugin-authoring", "p1"), ...M.browse] });
++    }
++    const name = trial(job, spec);
++    if (model === "m-claim" && i === 11 && arm === "none") sessions.push({ trial: name + "__env", ok_responses: 3, opened_at: "2026-11-01T00:00:00Z" }, { trial: name + "__env", ok_responses: 2, opened_at: "2026-11-01T00:10:00Z" });
++  });
++  for (const arm of ["none", "gstack"]) trial(job, { task: "dropped-task", arm, model: "m-claim", reward: 1 });
++  writeFileSync(join(root, "sessions-d.jsonl"), sessions.map((s) => JSON.stringify(s)).join("\n") + "\n");
++  return { run: "D", models: ["m-claim", "m-zero", "m-sparse", "m-gate"], jobs: [job], sessions: [join(root, "sessions-d.jsonl")], dropped_tasks: ["dropped-task"],
++    listing_check: { none: true, gstack: true, "gstack-rewritten": true, placebo: true }, bodies: bodies(["none", "gstack", "gstack-rewritten", "placebo"]) };
++}
++
++// pass(model, arm, i) per scenario; told cells load their body unless bodyLoad says otherwise.
++function runT(root: string, scenario: string, pass: (model: string, arm: string, i: number) => number, bodyLoad: (model: string, arm: string, i: number) => boolean = () => true) {
++  const job = join(root, "jobs-t-" + scenario);
++  const models = ["particle-1", "claude-haiku-5-5", "deepseek-v4.1-flash-1017"];
++  for (const model of models) for (const arm of ["none", "placebo-short", "placebo"]) TASKS.forEach((task, i) => {
++    trial(job, { task, arm, model, reward: pass(model, arm, i), session: { cmd_expanded: arm !== "none" && bodyLoad(model, arm, i), refused_budget: arm === "placebo" && i % 9 === 0 ? 1 : 0 } });
++  });
++  return { run: "T", models, jobs: [job] };
++}
++
++export function scenarios(root: string): Record<string, object> {
++  return {
++    "run-d": runD(root),
++    "run-t-confirmed": runT(root, "confirmed", (m, a, i) => {
++      if (m === "particle-1") return a === "placebo" ? (i % 5 === 0 ? 1 : 0) : 1;
++      if (m === "claude-haiku-5-5") return a === "placebo" ? (i % 4 === 0 ? 1 : 0) : 1;
++      return a === "placebo" ? 1 : i % 4 === 0 ? 1 : 0;
++    }),
++    "run-t-reversed": runT(root, "reversed", (m, a, i) => (m === "particle-1" ? (a === "none" ? (i % 3 === 0 ? 1 : 0) : 1) : i % 2), (m, a, i) => !(m === "deepseek-v4.1-flash-1017" && a === "placebo" && i < 4)),
++    "run-t-not-confirmed": runT(root, "not-confirmed", (m, a, i) => (a === "placebo" && (i === 7 || i === 8) ? 1 - (i % 2) : i % 2)),
++  };
++}
++
++if (import.meta.main) {
++  const root = Bun.argv[2]!;
++  mkdirSync(root, { recursive: true });
++  for (const [name, cfg] of Object.entries(scenarios(root))) writeFileSync(join(root, name + ".json"), JSON.stringify(cfg, null, 2) + "\n");
++}
+diff --git a/quick/laneb/tests/discovery-tax.test.ts b/quick/laneb/tests/discovery-tax.test.ts
+new file mode 100644
+index 0000000..cb7c21c
+--- /dev/null
++++ b/quick/laneb/tests/discovery-tax.test.ts
+@@ -0,0 +1,89 @@
++import { describe, expect, test } from "bun:test";
++import { mkdtempSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { holm, loadRun, runD, runT, signFlip, t1Verdict, zeroBound } from "../analysis/discovery-tax.ts";
++import { scenarios } from "./discovery-tax.fixtures.ts";
++
++const root = mkdtempSync(join(tmpdir(), "discovery-tax-"));
++const cfgs = scenarios(root) as Record<string, any>;
++const d = loadRun(cfgs["run-d"]);
++const dLines = runD(d.recs, cfgs["run-d"]).join("\n");
++const t = (name: string) => runT(loadRun(cfgs[name]).recs, cfgs[name]).join("\n");
++
++describe("section 7 scoring rows", () => {
++  const at = (model: string, arm: string, task: string) => d.recs.filter((r) => r.model === model && r.label === arm && r.task === task);
++  test("reward 1 passes, reward 0 fails, both eligible", () => {
++    expect(at("m-claim", "none", "t06")[0]).toMatchObject({ status: "graded", pass: 1, eligible: true });
++    expect(at("m-claim", "none", "t07")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true });
++  });
++  test("no reward after a response (agent timeout) fails and is eligible; a session-cap stop is graded as it stands", () => {
++    expect(at("m-claim", "none", "t11")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true, agentTimeout: true });
++    expect(at("m-claim", "placebo", "t11")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true, budgetStop: true });
++  });
++  test("a refused first request fails, is not eligible and is counted", () => {
++    expect(at("m-gate", "none", FIRST)[0]).toMatchObject({ status: "graded", pass: 0, refused: true, eligible: false });
++  });
++  test("no model response is an infrastructure trial: missing, out of both rates", () => {
++    expect(at("m-claim", "gstack", "t11")[0]).toMatchObject({ status: "missing", eligible: false });
++  });
++  test("a rerun after a response is graded on the rerun and counted", () => {
++    expect(at("m-claim", "none", "t12")[0]).toMatchObject({ status: "graded", retried: true, pass: 1 });
++  });
++  test("a task dropped by the oracle rule leaves the whole run, with its spend reported", () => {
++    expect(d.recs.some((r) => r.task === "dropped-task")).toBe(false);
++    expect(d.dropped).toEqual([{ task: "dropped-task", trials: 2, usd: 0.04 }]);
++  });
++  test("opens, loads through Read's numbered lines, browses and plugin-authoring opens", () => {
++    const r = at("m-claim", "gstack", FIRST)[0]!;
++    expect(r.opens).toEqual(["investigate"]);
++    expect(r.loaded).toEqual(["investigate"]);
++    const rw = at("m-claim", "gstack-rewritten", "t11")[0]!;
++    expect([rw.pluginOpens, rw.browses, rw.opens.length]).toEqual([1, 1, 0]);
++  });
++});
++const FIRST = "custom-memory-heap-crash";
++
++describe("Run D claims", () => {
++  test("D1 claim, exact zero bound, upper-bound wording, D2 raised, and the eligibility gate", () => {
++    expect(dLines).toMatch(/## m-claim[\s\S]*D1 claim: opened an untold gstack skill in/);
++    expect(dLines).toMatch(/## m-zero[\s\S]*exact one-sided 95% upper bound 7\.8%[\s\S]*D1 claim: fewer than 7\.8%[\s\S]*D2 claim: the rewritten description raised opens/);
++    expect(dLines).toMatch(/## m-sparse[\s\S]*D1 claim: fewer than \d[\s\S]*D2 no claim/);
++    expect(dLines).toMatch(/## m-gate[\s\S]*Gate: a cell is under 90% eligible[\s\S]*D1 no claim \(gate\)/);
++    expect(dLines).toContain("Listing check: passed for every arm.");
++  });
++});
++
++describe("Run T claims", () => {
++  test("T1 confirmed (not smaller than the lead), T2 cost and raised claims", () => {
++    const s = t("run-t-confirmed");
++    expect(s).toMatch(/T1 \(placebo minus none\).*verdict confirmed$/m);
++    expect(s).toMatch(/## claude-haiku-5-5[\s\S]*claim: longer told text cost passes/);
++    expect(s).toMatch(/## deepseek-v4\.1-flash-1017[\s\S]*claim: longer told text raised passes/);
++  });
++  test("T1 reversed, and the body-load gate blocks claims", () => {
++    const s = t("run-t-reversed");
++    expect(s).toMatch(/verdict reversed, smaller than the lead/);
++    expect(s).toMatch(/## deepseek-v4\.1-flash-1017[\s\S]*Gate: body load under 95% in placebo[\s\S]*no claim \(gate\)/);
++  });
++  test("T1 not confirmed and smaller than the lead; no T2 claim", () => {
++    const s = t("run-t-not-confirmed");
++    expect(s).toMatch(/verdict not confirmed, smaller than the lead/);
++    expect(s).not.toContain("claim: longer");
++  });
++  test("labels are fixed: confirmed, reversed, not confirmed, smaller than the lead", () => {
++    expect(t1Verdict({ lo: -0.2, hi: -0.01 })).toEqual({ verdict: "confirmed", smallerThanLead: false });
++    expect(t1Verdict({ lo: 0.01, hi: 0.2 })).toEqual({ verdict: "reversed", smallerThanLead: true });
++    expect(t1Verdict({ lo: -0.05, hi: 0.03 })).toEqual({ verdict: "not confirmed", smallerThanLead: true });
++  });
++});
++
++describe("statistics", () => {
++  test("zero-count bound, Holm, and the seeded sign-flip test", () => {
++    expect(zeroBound(37)).toBeCloseTo(0.0778, 4);
++    expect(holm([0.01, 0.04, 0.03])).toEqual([0.03, 0.06, 0.06]);
++    expect(signFlip([0, 0, 0])).toBe(1);
++    expect(signFlip(Array(20).fill(1), 10_000)).toBeLessThan(0.001);
++    expect(signFlip([1, -1, 1, 0.5], 10_000)).toBe(signFlip([1, -1, 1, 0.5], 10_000));
++  });
++});
+diff --git a/quick/laneb/tests/stacks-runner.test.ts b/quick/laneb/tests/stacks-runner.test.ts
+index 42b24c6..4a487b9 100644
+--- a/quick/laneb/tests/stacks-runner.test.ts
++++ b/quick/laneb/tests/stacks-runner.test.ts
+@@ -50,7 +50,7 @@ describe("stacks batch", () => {
+ 
+   test("gstack and placebo are told what quick look 3 told them", () => {
+     const ql3 = JSON.parse(readFileSync(join(here, "../runner/skill-map.json"), "utf8")) as Record<string, { skill: string }>;
+-    expect(Object.keys(stacksMap).sort()).toEqual(["gstack", "placebo", "pstack", "pstack-placebo"]);
++    expect(Object.keys(stacksMap).sort()).toEqual(["gstack", "placebo", "placebo-short", "pstack", "pstack-placebo"]);
+     for (const arm of ["gstack", "placebo"]) for (const task of final) expect(stacksMap[arm][task]).toBe(ql3[task].skill);
+   });
+ 
+diff --git a/quick/laneb/tests/start-rule.test.ts b/quick/laneb/tests/start-rule.test.ts
+new file mode 100644
+index 0000000..19ea696
+--- /dev/null
++++ b/quick/laneb/tests/start-rule.test.ts
+@@ -0,0 +1,46 @@
++import { describe, expect, test } from "bun:test";
++import { mkdtempSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { Ledger, readRows, totals, toMicros } from "../runner/ledger.ts";
++import { batchMicros, parseBatch, plan, RUNS } from "../runner/start-rule.ts";
++
++const here = import.meta.dir;
++const cli = (...args: string[]) => Bun.spawnSync(["bun", join(here, "../runner/start-rule.ts"), ...args]);
++
++describe("start rule", () => {
++  test("the projections reproduce section 8's per-model figures for Run T", () => {
++    const t = RUNS["texttax-r1"]!;
++    const usd = (m: string) => batchMicros(t, parseBatch(t, m)) / 1e6;
++    expect(usd("particle-1")).toBeCloseTo(44.03, 2);
++    expect(usd("claude-haiku-5-5")).toBeCloseTo(6.29, 2);
++    expect(usd("deepseek-v4.1-flash-1017")).toBeCloseTo(14.43, 2);
++    expect(plan(t).total_projected_usd).toBeCloseTo(64.75, 2);
++    expect(plan(RUNS["discovery-r1"]!).total_projected_usd).toBeCloseTo(66.45, 2);
++  });
++
++  test("each run's planned order passes from an empty ledger", () => {
++    for (const run of Object.values(RUNS)) expect(plan(run).steps.every((s) => s.pass)).toBe(true);
++    const first = plan(RUNS["texttax-r1"]!).steps[1]!;
++    expect(first.bound_usd).toBeCloseTo(1.4 * (44.03 + 6.29), 2);
++  });
++
++  test("settled spend, open reserves and running batches all count; a failing check exits 1 and writes its note row", () => {
++    const path = join(mkdtempSync(join(tmpdir(), "start-rule-")), "texttax-r1.jsonl");
++    const ledger = new Ledger(path, "texttax-r1");
++    ledger.approve(75, { prereg: "test" });
++    ledger.reserve("s1", toMicros(60));
++    ledger.settle("s1", toMicros(55));
++    ledger.reserve("s2", toMicros(5));
++    const ok = cli("check", "--run", "texttax-r1", "--ledger", path, "--batch", "deepseek-v4.1-flash-1017:none=10+placebo=10", "--note");
++    expect(ok.exitCode).toBe(0);
++    const bad = cli("check", "--run", "texttax-r1", "--ledger", path, "--batch", "deepseek-v4.1-flash-1017", "--note");
++    expect(bad.exitCode).toBe(1);
++    const notes = readRows(path).filter((r) => r.kind === "note");
++    expect(notes.map((n: any) => n.start_rule.pass)).toEqual([true, false]);
++    expect((notes[1] as any).start_rule.bound_usd).toBeCloseTo(55 + 5 + 1.4 * 14.43, 2);
++    expect(totals(readRows(path)).settledMicros).toBe(toMicros(55));
++    expect(cli("check", "--run", "discovery-r1", "--ledger", path, "--batch", "particle-1").exitCode).not.toBe(0);
++    expect(() => parseBatch(RUNS["texttax-r1"]!, "claude-opus-5-5")).toThrow("E_USAGE");
++  });
++});
+diff --git a/quick/laneb/tests/variants.test.ts b/quick/laneb/tests/variants.test.ts
+new file mode 100644
+index 0000000..435e3f5
+--- /dev/null
++++ b/quick/laneb/tests/variants.test.ts
+@@ -0,0 +1,94 @@
++import { describe, expect, test } from "bun:test";
++import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { carriers, entryBytes, fileSha256, onlyFile, REWRITTEN_DESCRIPTION, rewriteDescription, SHIPPED_LINE, shortPlacebo, SHORT_TARGET, tarEntries, writeReplaced } from "../arms/variants.ts";
++import { countTokens, frontmatterFields, proceduralMarkers, splitSkill } from "../arms/placebo/placebo.ts";
++
++const SKILL = ".claude/skills/investigate/SKILL.md";
++const LONG = ".claude/skills/" + "x".repeat(120) + "/SKILL.md";
++const skillMd = (body: string) => "---\nname: investigate\n" + SHIPPED_LINE + "\nallowed-tools:\n  - Bash\n---\n" + body;
++
++// A small GNU tar built the way the arm tars are: sorted names, mtime 0, root owner, a long name.
++function fixture() {
++  const dir = mkdtempSync(join(tmpdir(), "variants-"));
++  const root = join(dir, "root");
++  for (const [path, text] of [[SKILL, skillMd("Shipped body.\n")], [".claude/skills/review/SKILL.md", "---\nname: review\ndescription: Review.\n---\nreview body\n"], [LONG, "long " + SHIPPED_LINE + "\n"]]) {
++    mkdirSync(join(root, path, ".."), { recursive: true });
++    writeFileSync(join(root, path), text);
++  }
++  const run = Bun.spawnSync(["tar", "--format=gnu", "--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner", "-cf", join(dir, "base.tar"), "-C", root, ".claude"]);
++  if (run.exitCode !== 0) throw new Error(run.stderr.toString());
++  return { dir, tar: join(dir, "base.tar") };
++}
++
++const replaced = (tar: string, out: string, content: string) => {
++  const fd = openSync(tar, "r");
++  try {
++    return writeReplaced(fd, tarEntries(fd), SKILL, Buffer.from(content), out);
++  } finally {
++    closeSync(fd);
++  }
++};
++const listing = (tar: string) => Bun.spawnSync(["tar", "-tf", tar]).stdout.toString();
++
++describe("tar entry replacement", () => {
++  test("writing the same content back gives the base tar byte for byte", () => {
++    const { dir, tar } = fixture();
++    const fd = openSync(tar, "r");
++    const same = entryBytes(fd, onlyFile(tarEntries(fd).entries, SKILL));
++    closeSync(fd);
++    const out = replaced(tar, join(dir, "same.tar"), same.toString());
++    expect(out.sha256).toBe(fileSha256(tar));
++    expect(readFileSync(join(dir, "same.tar")).equals(readFileSync(tar))).toBe(true);
++  });
++
++  test("a longer entry keeps every other entry, the order and the long name, and GNU tar reads it", () => {
++    const { dir, tar } = fixture();
++    const body = "y".repeat(3000);
++    const out = replaced(tar, join(dir, "new.tar"), body);
++    const again = replaced(tar, join(dir, "again.tar"), body);
++    expect(again.sha256).toBe(out.sha256);
++    expect(out.bytes % 10240).toBe(0);
++    expect(listing(join(dir, "new.tar"))).toEqual(listing(tar));
++    const x = join(dir, "x");
++    mkdirSync(x);
++    expect(Bun.spawnSync(["tar", "-xf", join(dir, "new.tar"), "-C", x]).exitCode).toBe(0);
++    expect(readFileSync(join(x, SKILL), "utf8")).toBe(body);
++    expect(readFileSync(join(x, LONG), "utf8")).toBe("long " + SHIPPED_LINE + "\n");
++    const fd = openSync(join(dir, "new.tar"), "r");
++    expect(carriers(fd, tarEntries(fd), SHIPPED_LINE.slice(13))).toEqual([LONG]);
++    closeSync(fd);
++  });
++
++  test("a tar whose end is not GNU's record padding is refused", () => {
++    const { dir, tar } = fixture();
++    writeFileSync(join(dir, "cut.tar"), readFileSync(tar).subarray(0, readFileSync(tar).length - 512));
++    const fd = openSync(join(dir, "cut.tar"), "r");
++    expect(() => tarEntries(fd)).toThrow("E_INPUT");
++    closeSync(fd);
++  });
++});
++
++describe("rewritten description", () => {
++  test("only the description line changes, to the frozen 319-character text, YAML double-quoted", () => {
++    expect(REWRITTEN_DESCRIPTION.length).toBe(319);
++    const before = skillMd("Shipped body.\n");
++    const after = rewriteDescription(before);
++    expect(after).toBe(before.replace(SHIPPED_LINE, "description: " + JSON.stringify(REWRITTEN_DESCRIPTION)));
++    expect(frontmatterFields(splitSkill(after).frontmatter).description).toBe(REWRITTEN_DESCRIPTION);
++    expect(() => rewriteDescription(after)).toThrow("E_INPUT");
++  });
++});
++
++describe("short placebo", () => {
++  test("847 tokens within 1, no procedural markers, frontmatter kept, deterministic", () => {
++    const text = skillMd("x".repeat(100));
++    const a = shortPlacebo(text);
++    expect(Math.abs(a.tokens - SHORT_TARGET)).toBeLessThanOrEqual(1);
++    expect(countTokens(splitSkill(a.output).body)).toBe(a.tokens);
++    expect(proceduralMarkers(splitSkill(a.output).body)).toEqual([]);
++    expect(splitSkill(a.output).frontmatter).toBe(splitSkill(text).frontmatter);
++    expect(shortPlacebo(text).output).toBe(a.output);
++  });
++});
