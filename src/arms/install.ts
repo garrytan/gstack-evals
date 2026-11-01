@@ -498,6 +498,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         if (!existsSync(join(home, RENDER_DIR, s, "SKILL.md"))) continue;
         const served = join(home, SKILL_DIRS.claude, s);
         if (!lstatSync(served, { throwIfNoEntry: false })?.isDirectory()) throw new InstallError("E_IMAGE_BUILD", "installing " + label + ": the render holds skill " + s + ", which has no served folder ~/" + SKILL_DIRS.claude + "/" + s);
+        for (const p of [served, join(home, RENDER_DIR, s)]) if (relative(realpathSync(home), realpathSync(p)).split("/")[0] === "..") throw new InstallError("E_IMAGE_BUILD", "installing " + label + ": ~/" + relative(home, p) + " resolves outside the install tree through a symlink, so the render is not served from it");
         for (const entry of ["SKILL.md", "sections"]) {
           if (!existsSync(join(home, RENDER_DIR, s, entry))) continue;
           rmSync(join(served, entry), { recursive: true, force: true });
