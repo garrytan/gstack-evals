@@ -219,6 +219,9 @@ export interface TrialRecord {
   model_output?: boolean;
   /** Whether the main agent wrote any text block the user saw, apart from the AskUserQuestion questions turns also hold. */
   text_output?: boolean;
+  /** The agent CLI's exit code and signal when it exited on its own (137 for a kill such as an OOM); null for both when the adapter's abort or teardown killed it. */
+  exit_code?: number | null;
+  signal?: string | null;
   /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
   check: boolean | null;
   /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */

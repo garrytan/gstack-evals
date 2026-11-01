@@ -37,7 +37,9 @@
 //   replace it; cli-stderr.log names it as teardown after that stop.
 // - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
 //   with text, thinking or a tool call. Scorers read it instead of turns, which hold main-agent text only. text_output
-//   says whether the main agent wrote any text, apart from the AskUserQuestion questions turns also hold.
+//   says whether the main agent wrote any text, apart from the AskUserQuestion questions turns also hold. exit_code and
+//   signal record the CLI's own exit; both are null when it did not exit on its own (the adapter's abort or teardown
+//   killed it, or it never ended).
 // - CLAUDE_CODE_MAX_OUTPUT_TOKENS holds each request to the proxy's per-call output cap, which Claude Code's default
 //   (128k) passes. CLAUDE_CODE_MAX_RETRIES=0 leaves retries to the proxy, which journals and charges every paid attempt
 //   under its own budget, so the CLI never multiplies them or waits out its backoff on a refusal.
@@ -218,7 +220,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
           appendFileSync(join(o.out, "cli-stderr.log"), "adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
-          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, model_output: false, text_output: false, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
+          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, model_output: false, text_output: false, exit_code: null, signal: null, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
         }
       }
       const transcript = join(o.out, "transcript.ndjson");
@@ -231,6 +233,8 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let missingQuestion: string | null = null;
       let modelOutput = false;
       let textOutput = false;
+      let exitCode: number | null = null;
+      let exitSignal: string | null = null;
       let cli: ChildProcess | null = null;
       let agentTurns = 0;
       let usage: TokenUsage | null = null;
@@ -308,6 +312,11 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               throw error;
             }
             cli.on("error", infra);
+            cli.on("exit", (code, signal) => {
+              if (abort.signal.aborted) return;
+              exitCode = code;
+              exitSignal = signal;
+            });
             return cli;
           },
         },
@@ -383,6 +392,8 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         termination: stop ?? { kind: "completed" },
         model_output: modelOutput,
         text_output: textOutput,
+        exit_code: exitCode,
+        signal: exitSignal,
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

@@ -102,7 +102,7 @@ const personaDown = async (): Promise<never> => {
 };
 
 /** One arm per case, each running one session on the stand-in. */
-const CASES: Record<string, { script: (out: string) => Script; persona?: "down"; spawn?: "fails"; machine?: "gone" }> = {
+const CASES: Record<string, { script: (out: string) => Script; persona?: "down"; spawn?: "fails"; machine?: "gone"; cli?: "exit137" }> = {
   ok: { script: () => async function* () { yield init; yield assistant(text("Mode: HOLD SCOPE.\n\n" + block([{ severity: "Critical", section: "Problem", line: 3, claim: "Wrong problem.", evidence: "context/goals.md", fix: "Plan offline reading." }]))); yield result; } },
   toolcrash: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; await crash(cli); } },
   tooltimeout: { script: () => async function* (sdk) { yield init; yield toolsOnly; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); } },
@@ -150,6 +150,14 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
   } },
   // gstack-timing-ok: the wait only outlasts the 3 s wall clock, so the timer fires after the infra stop; nothing is asserted on elapsed time
   errortimeout: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; cli.emit("error", new Error("read ECONNRESET")); await new Promise((r) => setTimeout(r, 4500)); } },
+  exit137: { cli: "exit137", script: () => async function* (_sdk, cli) {
+    yield init;
+    yield assistant(text("Reading the plan."));
+    const exited = once(cli, "exit");
+    cli.stdin!.end("\n");
+    await exited;
+    throw new Error("Claude Code process exited with code 137");
+  } },
 };
 
 describe("the planning lane's failure rule, end to end through the Claude Code driver (keyless)", () => {
@@ -180,7 +188,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
           ...base.agent(task, o),
           spawn: () => {
             if (CASES[arm]!.spawn === "fails") throw new Error("spawn docker ENOENT");
-            return spawn("sleep", ["30"], { stdio: ["pipe", "pipe", "pipe"] });
+            return CASES[arm]!.cli === "exit137" ? spawn("sh", ["-c", "read _; exit 137"], { stdio: ["pipe", "pipe", "pipe"] }) : spawn("sleep", ["30"], { stdio: ["pipe", "pipe", "pipe"] });
           },
           ...(CASES[arm]!.machine === "gone" ? { exec: () => ({ exitCode: 1, timedOut: false, stdout: "", stderr: "Error response from daemon: No such container" }) } : {}),
         }),
@@ -314,10 +322,17 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect(stderr("errortimeout")).toContain("adapter: infra failure, not the arm's: read ECONNRESET\n");
   });
 
+  // Value: protects=GST-742's R1a count: the session record keeps the agent CLI's own exit code or signal when it exits on its own, 137 included, and null for both when the adapter's abort or teardown killed it; fails_when=an exit-137 session leaves no trace, or our own kill reads as the CLI's exit; why_new=GST-742 (R1a reports exit-137 sessions per arm); seam=the driver's exit listener, the trial record; no_claim=a real OOM kill
+  test("the record keeps the CLI's own exit status, and null for both when our abort or teardown killed it", () => {
+    const exit = (arm: string) => [entry(arm).record.exit_code, entry(arm).record.signal];
+    expect([exit("exit137"), exit("toolcrash"), exit("ok"), exit("tooltimeout")]).toEqual([[137, null], [null, "SIGKILL"], [null, null], [null, null]]);
+    expect(record("exit137")).toEqual({ termination: { kind: "arm_failure", failure: "harness_crash" }, model_output: true, turns: 1 });
+  });
+
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 6, 0, 11]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 11]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);
