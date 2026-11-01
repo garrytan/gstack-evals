@@ -118,6 +118,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_COVERAGE_GAP](#e_coverage_gap) | 2 | U10 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
+| [E_REAL_SANDBOX_SETUP](#e_real_sandbox_setup) | 2 | U20 |
+| [E_REAL_SANDBOX_EGRESS](#e_real_sandbox_egress) | 2 | U20 |
+| [E_REAL_SANDBOX_RECORD](#e_real_sandbox_record) | 2 | U20 |
+| [E_REAL_ARM_BUILD](#e_real_arm_build) | 2 | U10 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -786,6 +790,38 @@ A review-units arm stopped with a coverage gap, so it gets no verdict, and the r
 Fix: Read the arm's coverage_gaps in arm.json and each named session's host/cli-stderr.log, fix the cause, and start a new run for that arm's verdict. Never rerun a gap inside the same run to change a verdict.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_REAL_SANDBOX_SETUP
+
+The real-outcome ship sandbox could not start or could not open a trial: git (with http-backend) or jq is missing, the sidecar could not listen, the task's bundle does not hold the base commit, the base tree holds project-local Claude Code configuration (a .claude/ directory or .mcp.json, which would give the none arm a skill, plugin or MCP route), or the in-container prep failed. No model was called for the trial.
+
+Fix: Read the message. Install git and jq on the sidecar's host, or fix the task directory (B2) so its image's base branch is at base_commit. A repository with project-local Claude Code configuration is not eligible for this lane; drop it at mining.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_SANDBOX_EGRESS
+
+The trial container's IP-and-port egress allowlist could not be applied or did not verify: the nftables helper failed, the table read back differs from the one written, an allowed endpoint was unreachable, or a denied probe got through. The agent never started.
+
+Fix: Check that Docker can run the pinned helper image with NET_ADMIN on the container's network namespace and that the proxy and sidecar listen on the allowed address and ports. Never run a trial without the rules.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_SANDBOX_RECORD
+
+A trial's shipment record could not be written or copied out, or its journal does not replay to the origin's refs (status rig_error). The trial's outcome is unknown: it is infra, never a fail for the arm.
+
+Fix: Read the record's rig_errors and the sidecar's journal for the trial. A journal_mismatch means something changed the origin outside the sidecar; find it before any counted run.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_ARM_BUILD
+
+A real-outcome arm (none, gstack told or gstack untold) could not be built: the pinned gstack commit or its tree id did not verify, gstack's setup failed, the installed tree reports another version than the pin, or the tree has no question registry to set to auto-decide.
+
+Fix: Fetch the pinned gstack commit into a local checkout (git -C ~/.local/share/gstack fetch origin &lt;sha>), then rebuild with bun lanes/real-outcome/arms/build.ts. Re-pin gstack only in a new preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
