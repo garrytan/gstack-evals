@@ -134,7 +134,9 @@ function prepare(work: string) {
 
 function run(work: string) {
   const ledger = process.env.LEDGER ?? "";
-  if (!process.env.VM_USD_PER_HOUR) throw new Error("E_USAGE set VM_USD_PER_HOUR so the VM hours settle to r3a-screen");
+  const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
+  if (!rate) throw new Error("E_USAGE set VM_USD_PER_HOUR so the VM hours settle to r3a-screen");
+  if (![rate, hours].every((v) => /^\d+(\.\d+)?$/.test(v) && Number(v) > 0)) throw new Error(`E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers (got ${rate} and ${hours})`);
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   const bound = ledger + ".bound";
   try {
@@ -146,7 +148,7 @@ function run(work: string) {
   bindCheck(ledger);
   for (const part of PARTS) {
     const dir = join(work, part.name);
-    const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(CAP_USD)], { ...process.env, LEDGER: ledger, ITEM, VM_RESERVE_HOURS: process.env.VM_RESERVE_HOURS ?? "4" });
+    const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(CAP_USD)], { ...process.env, LEDGER: ledger, ITEM, VM_RESERVE_HOURS: hours });
     writeFileSync(join(work, `${part.name}.launch-exit`), `${rc}\n`);
     if (rc !== 0 || existsSync(join(dir, "pulled/out/cap-stop.json")) || existsSync(join(dir, "vm-cap-stop"))) { console.log(`${part.name}: launch exited ${rc}; the run stops here`); return; }
   }

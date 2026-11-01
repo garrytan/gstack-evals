@@ -39,6 +39,9 @@ vm_up_at=""
 xpid=""
 if [ -n "$vm_rate" ]; then
   vm_hours=${VM_RESERVE_HOURS:?set VM_RESERVE_HOURS with VM_USD_PER_HOUR}
+  num='^[0-9]+(\.[0-9]+)?$'
+  [[ $vm_rate =~ $num && $vm_hours =~ $num ]] && awk -v r="$vm_rate" -v h="$vm_hours" 'BEGIN { exit !(r > 0 && h > 0) }' \
+    || { echo "launch.sh: VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers (got $vm_rate and $vm_hours)" >&2; exit 2; }
   vm_block=$(awk -v r="$vm_rate" -v h="$vm_hours" 'BEGIN { printf "%.6f", r * h }')
   vm_block_micros=$(awk -v b="$vm_block" 'BEGIN { printf "%d", b * 1000000 + 0.5 }')
   vm_block_sec=$(awk -v h="$vm_hours" 'BEGIN { printf "%d", h * 3600 }')
