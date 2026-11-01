@@ -2,7 +2,7 @@
 id: 2026-10-31-geva-83-planning-r1a-prereg
 kind: plan
 title: "Planning R1a preregistration: gstack's CEO plan review against no gstack on the sealed CEO panel"
-summary: "Freezes R1a before any paid call: arms (none primary), suites, Holm families, a 0.5 false-alarm gate, judges, pilot stops, power, a $2,800 cap split into per-run line items with a $95 judge reserve, resume and the dry run."
+summary: "Freezes R1a before any paid call: arms (none primary), suites, Holm families, a 0.5 false-alarm gate, judges, pilot stops, power, a $2,800 cap in per-run line items, resume and the dry run."
 author: GEVA-83
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -28,16 +28,17 @@ attachments:
   - 25d7f666ac52dfaedec7aec125804e4dd3aacf1ba33278ed6abda8b33e8b7240  comparisons.secondary-opus.json
   - c5b4b260c8d21f1bbc0552d7858a20a1076a847f0dd512451d11e2ce6f3d3ce8  comparisons.secondary.json
   - 0d1170e5da6521f688a73efc2f37404c127b99b09f0de537a7c03a0d90eb2a12  convert.py.txt
-  - 154dfe4f9ab8fa823a17e832a16d128efb943db2e63d3d52d58c78a676eead16  dryrun.ts.txt
-  - fe963d42f4dbc513dcaac6185029f8c793c3287372bf3f779939c754854f9a03  dryrun.txt
+  - 55b8c32e438d301e9d6fded0b2e33182ec93c3d15fd8a7640e2f4851ee933949  dryrun.ts.txt
+  - eb7f0d555429395920aecc8e191ac66bd17560fb7504589c0386a968c268139b  dryrun.txt
   - 36a7008358b9a1f1ec8bff454c5ca4221cd04a92e4b07220e902d0557178bda5  fable-subset.tsv
   - a63af263d57f11e653b6da12b6afb06a7dc7c3ba6f3e7d4982ef96d468f55aa9  gate-size.ts.txt
   - fd77e60b79fbc93c29057f227dce9736e98720d6034d0609256c0ac87a109e49  gate-size.txt
   - 64e35c81c8bfdb038a7c21652ffaeaed8e3683d4e67ecc87638703a00d73fc06  judge-brief.md
-  - e3bfc99132b2eca114d42663d99dfa3ca4f46384865e5c9bc16d7d7ae19bb001  policy.json
+  - 7702c9e6c7725c8e2b4383535f8afaa95e67ae1597e339ea984000ef9a2fbf21  pilot-stops.ts.txt
+  - 54ed66da9c4c308285cd862acaac89b1ead0096c981d5ce4682a260d5e88a4cc  policy.json
   - 55120380543c39a8521c40b8ed7eaa4816f9c5ca76179e358a61158e5b853b44  power-grid.txt
   - 1c51b933a24ebc990ecb782a375d17c15d97d0b968502670fd2d1c81e1db29a9  readings.py.txt
-  - 150efbf71b69714e14a0da4b3b7102c82ce5984677219a424230fb66b9be8688  refill-gaps.ts.txt
+  - 76cd3e725757a7eca27bcef5d38b1e3bd670b97602a5edc0181e96db31fcbb5d  refill-gaps.ts.txt
 ---
 
 # Planning R1a preregistration: CEO plan review against no gstack
@@ -188,13 +189,14 @@ The pilot runs the 4 pilot units, one pass, in all 8 cells (32 sessions), judged
 Read before any full-run session:
 
 - (a) none-opus's pilot must-fix recall (`noloss secondary`) above 0.85 or below 0.10: the panel goes back to its author.
-- (b) User-simulator fallback above 10% of replies: the rec user needs repair.
-- (c) particle-1 tool-use failure on more than 20% of its cells: the frozen rung drop, scored with comparisons.secondary-opus.json.
+- (b) User-simulator fallback above 10% of replies: the rec user needs repair. The share is the ask and prose events whose source is fallback, over all such events in the pilot sessions' host/usersim.ndjson logs, where the pinned simulator tags each reply's source (src/adapters/claude-code/driver.ts:371, src/usersim/sim.ts:200 and :224; GSTA-2, 2026-11-01).
+- (c) particle-1 tool-use failure on more than 20% of its cells: the frozen rung drop, scored with comparisons.secondary-opus.json. A failure is a particle-1 pilot session whose parses.tsv outcome is missing, malformed or incomplete, so no plan-findings block was parsed; more than 20% is 3 or more of its 12 pilot sessions (GSTA-2, 2026-11-01).
 - (d) The metered cost per session re-projects each full run under section 9's start rule (GSTA-2, 2026-11-01). A run whose projection does not fit its own line item goes back to the Captain before it starts. The Captain shrinks the round in this order, each step an amendment, until it fits: the Fable rung, then the extension decoys D07 to D12, then the lens cell. The primary pair never shrinks. Or the Captain raises that run's item.
-- (e) Decoy noise for the false-alarm gate (GSTA-2, 2026-11-01). The pilot has no decoys, so its plans stand in: each Opus and particle-1 cell's must-fix findings ruled not-defect by blind adjudication, per pilot plan per pass. If any cell's rate is above 0.25, an honest arm could pass the gate under 80% of the time (section 4, gate-size.txt), so the round returns to the Captain before any full-run session. A pilot rate comes from 4 plans at 1 pass, so it can understate the full-run rate.
+- (e) Decoy noise for the false-alarm gate (GSTA-2, 2026-11-01). The pilot has no decoys, so its plans stand in: each Opus and particle-1 cell's must-fix findings ruled not-defect by blind adjudication (the not-defect rows of its adjudication.tsv), per pilot plan per pass. If any cell's rate is above 0.25, an honest arm could pass the gate under 80% of the time (section 4, gate-size.txt), so the round returns to the Captain before any full-run session. A pilot rate comes from 4 plans at 1 pass, so it can understate the full-run rate.
+- No pinned command prints (b), (c) or (e), so [pilot-stops.ts.txt](pilot-stops.ts.txt) computes all three: `bun pilot-stops.ts <pilot out dir> <adjudicated pilot arms dir>`. It prints each reading, its threshold and whether it fires, and the dry run drives it (GSTA-2, 2026-11-01).
 - Exit-137 sessions per arm (GST-742): any in the pilot halves `--parallel` for the full run (section 10).
 - Each gstack session reached its review output (open item 3), and each gstack session's mode is in modes.tsv (open item 6).
-- **Timeout** (GSTA-2, 2026-11-01). Pilot sessions run with --timeout 3600. The full run's timeout is twice the longest pilot session in any cell (Opus, particle-1 and Fable), rounded up to 300 seconds, at least 1800 and at most 3600. If any pilot session times out, the full run uses 3600. A timeout after model output scores as a miss (section 5), so a timeout set too short would turn slow sessions into misses.
+- **Timeout** (GSTA-2, 2026-11-01). Pilot sessions run with --timeout 3600. The full run's timeout is twice the longest pilot session in any cell (Opus, particle-1 and Fable), read as the largest record.wall_ms in the pilot's cells.ndjson, rounded up to 300 seconds, at least 1800 and at most 3600. If any pilot session times out, the full run uses 3600. A timeout after model output scores as a miss (section 5), so a timeout set too short would turn slow sessions into misses.
 - The power rerun (section 7).
 - Any change the pilot drives merges as an amended prereg before full-run sessions.
 
@@ -218,14 +220,20 @@ Re-projected at gstack's $5 reservation per Opus session (GST-538 item 2), the r
 - **Spend caps.** Every review-units command, pilot, full run and resume alike, passes `--item` with its run's own item and `--spend-cap` set to that item's cap less its committed spend (`gstack-evals ledger status --item <its item>`). review-units starts a round only when that round's worst case at the allowance fits under its `--spend-cap`, so no run takes its item past its cap.
 - **Judge reserve** (GSTA-2, 2026-11-01). The worst case at the rig's allowances is about $3,335 before judges, the sum of the four review-units dry runs, so the items bind before it. A cap stop ends a run incomplete, and it is never retried to change a verdict. Because the sessions stop at the four items' $2,705, judging and adjudication always have their **$95 envelope**. If gstack-auto joins, the amendment records its items under its cap minus the same envelope.
 - **Judge items.** noloss judge-run also mints a new run id on every call (lanes/review-noloss/judge-run.ts:229) and leases its `--item` with it (:241), so one judge item funds one call. Each judge-run call (the pilot's matching and adjudication, then each full run's) takes its own item, planning-r1a-judge-<run>-<match or adjudicate>, recorded just before the call at $95 less the settled spend of every earlier R1a judge item. Judging can never pass $95 in all. A rerun of a stopped call takes a new item the same way, after every lease of the stopped call settles or is reconciled.
+- **Admission** (GSTA-2, 2026-11-01). Every R1a item, run and judge items alike, is recorded with `--admission warn`, so each lease warns RIG_UNPROVEN and opens. Rig admission binds the working tree with untracked files included (src/rig/checkout.ts:1-3), and R1a runs e305ed0 with the sealed stub copied in, so `rig admit` would refuse it. The pin check in section 10 stands in for it before every review-units and judge-run call. The dry run opens warn-mode leases with the openLease call each entry point makes, with the same options (review-units through the rig, src/skill-eval/cli/run-host.ts:533; judge-run, lanes/review-noloss/judge-run.ts:241), and checks the pinned source still makes those calls; it cannot run the entry points themselves that far, since judge-run refuses with E_KEY_MISSING before it leases (judge-run.ts:221) and review-units leases inside a rig that needs keys. The rig's proof is the green CI at e305ed0, ci.yml push run 41302490419 and rig.yml push run 41302490475, and the sealed dry run's transcript, dryrun.txt (sha256 eb7f0d555429395920aecc8e191ac66bd17560fb7504589c0386a968c268139b). Each item is recorded with `gstack-evals ledger init --item <item> --cap <usd> --admission warn --words <the Captain's words> --by <who> --source <ref> --branch <the run's branch>`; from a detached checkout gstack-approvals refuses an approval without `--branch` (APPROVAL_RECORD_NO_BRANCH). A raise, which only an amendment makes, passes it the same way: `gstack-evals ledger raise --item <item> --cap <usd> --words <the Captain's words> --by <who> --source <ref> --branch <the run's branch>`.
 - The dry run records the four run items on a temporary ledger, opens and settles one lease per run with the rig's own lease call and a run id minted as review-units mints it, shows an item refusing a second run id with E_ITEM_BOUND, leases a resume under the same run id, and records two judge items in turn from the $95 envelope (section 13).
 - $600, the plan's figure, buys about 84 Opus sessions after the pilot, particle-1 and judges (GEVA-81's handoff). One Opus cell is 114 sessions, so $600 cannot buy the panel at $5 a session.
 
 ## 10. Run rules
 
 - Order: cap recorded, the pilot and its judging, stop checks, any amendment merged, then the full runs in a frozen order, headline first, then real-neutral, then Fable (GSTA-2, 2026-11-01), then their judging, adjudication and the results PR. Preregistration and results never share a PR.
-- **Run machine** (GST-742). A unit's arms run at the same time with no memory limit, and a round holds floor(`--parallel` / arms) units of one model with every arm (src/trial/review/run.ts:345). R1a runs at `--parallel 4`, on a machine with at least 64 GB of memory, about 5 GB per session. The pilot, headline and real-neutral runs pass 4 arms, so a round is one unit, 3 sessions at once; the Fable run passes 2, so a round is 2 units, 4 sessions at once. So the headline runs its 648 sessions three at a time, which is slow but keeps contention, stalls and memory kills low, since each of those would turn into a gap that stops an arm (GSTA-2, 2026-11-01). A run is resumable: a controller or machine that stops is recovered by the run's one resume (below). The run records the machine's vCPU count and memory beside `--parallel` in its out dir, and the results print them. Any exit-137 session in the pilot halves `--parallel` for the full run, and the results say so.
+- **Run machine** (GST-742). A unit's arms run at the same time with no memory limit, and a round holds floor(`--parallel` / arms) units of one model with every arm (src/trial/review/run.ts:345). R1a runs at `--parallel 4`, on a machine with at least 64 GB of memory, about 5 GB per session. The pilot, headline and real-neutral runs pass 4 arms, so a round is one unit, 3 sessions at once; the Fable run passes 2, so a round is 2 units, 4 sessions at once. So the headline runs its 648 sessions three at a time, which is slow but keeps contention, stalls and memory kills low, since each of those would turn into a gap that stops an arm (GSTA-2, 2026-11-01). A run is resumable: a controller or machine that stops is recovered by the run's one resume (below). The run records the machine's vCPU count and memory beside `--parallel` in its out dir with `{ nproc; free -b; echo parallel=4; } > <out>/machine.txt` before review-units starts, and the results print them. Any exit-137 session in the pilot halves `--parallel` for the full run, and the results say so.
 - Spend only through the ledger: each run spends from its own line item and each judge-run call from its own judge item (section 9). Sessions run with the keys only on the rig.
+- **Pin check** (GSTA-2, 2026-11-01). Before every review-units and judge-run call, resumes included, the run script runs this check on the scorer checkout, appends the time and the result to ~/.capy/work/planning-r1a/pin-checks.log, and stops if it fails:
+
+  `test "$(git -C "$SCORER" rev-parse HEAD)" = e305ed087b3f17bd211287b0e2d5e3f3960b5a4f && test "$(git -C "$SCORER" status --porcelain)" = "?? lanes/review-noloss/suites/planrev-ceo-r1a.json"`
+
+  It passes only at e305ed0 with no tracked change and the sealed stub as the only untracked file (node_modules is ignored). It stands in for rig admission (section 9). The dry run drives it on its own scorer and on four states of a fresh e305ed0 checkout.
 - **OpenRouter route** (eng-native F12). At the pin the proxy sends every particle-1 call with the route `{only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: $0.10 input, $1 output per Mtok}` (sha256 22cb6215a4019fba2cf7949d892df384d96d0a57e12375a40fa3abe7531570d2). The dry run read OpenRouter's public endpoints API and provider feed, keyless, at 2026-11-01T11:37:21.594Z:
   - Particle AI is the only provider listed for particle-1. Its data policy there says no training and no prompt retention, so `data_collection: "deny"` keeps it.
   - It lists $0.05 input and $0.50 output, half of max_price. A listed price above max_price would refuse every particle-1 call, so the pilot and the full run each re-read it first. A price above the row stops the round before any spend; a new price row is a code change, so it comes by amendment.

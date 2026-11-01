@@ -1,0 +1,71 @@
+// R1a pilot stops (b), (c) and (e) (GSTA-2, 2026-11-01): the three section 8 readings no pinned command prints, computed
+// from the files the pinned runner and noloss write. Keyless; it prints counts and shares and never a unit id.
+//   bun pilot-stops.ts <pilot review-units out dir> <adjudicated pilot arms dir, judge-join's --out for the adjudication batch>
+// (b) Every ask and prose event in runs/<model>/<arm>/<task>/p<n>/host/usersim.ndjson, the user simulator's log, which tags
+//     each reply's source (src/adapters/claude-code/driver.ts:371, src/usersim/sim.ts:200 and :224): the share whose source
+//     is fallback. Fires above 0.10.
+// (c) parses.tsv in the out dir: the particle-1 sessions whose outcome is missing, malformed or incomplete, so no
+//     plan-findings block was parsed. Fires above 0.20, which is 3 or more of the pilot's 12.
+// (e) Each Opus and particle-1 cell's adjudication.tsv: the must-fix findings blind adjudication ruled not-defect
+//     (adjudication.tsv rules only blocking findings that matching left unmatched, lanes/review-noloss/contract.ts:5), divided
+//     by the cell's plans (one findings file each) times its passes. Fires above 0.25 in any cell.
+// Cells are found by arm id, <arm>-<model tag> (src/trial/review/run.ts:157-162): -opus and -particle-1.
+// It refuses when the out dir has no parses.tsv, when no session left a usersim.ndjson, or when the arms dir holds no
+// Opus or particle-1 cell.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const fail = (message: string): never => {
+  console.error("E_USAGE " + message);
+  process.exit(2);
+};
+const [out, arms] = process.argv.slice(2).map((p) => resolve(p));
+if (!out || !arms) fail("usage: bun pilot-stops.ts <pilot out dir> <adjudicated pilot arms dir>");
+const isOpusOrP1 = (armId: string) => armId.endsWith("-opus") || armId.endsWith("-particle-1");
+const fired: string[] = [];
+const verdict = (fires: boolean, stop: string) => {
+  if (fires) fired.push(stop);
+  return fires ? "fires" : "does not fire";
+};
+const tsv = (path: string) => {
+  const [head, ...rows] = readFileSync(path, "utf8").split("\n").filter((l) => l.trim());
+  const cols = head!.split("\t");
+  return rows.map((r) => Object.fromEntries(r.split("\t").map((v, i) => [cols[i], v])));
+};
+const dirs = (rel: string, depth: number): string[] =>
+  !existsSync(join(out!, rel)) ? [] : depth === 0 ? [rel] : readdirSync(join(out!, rel), { withFileTypes: true }).filter((d) => d.isDirectory()).flatMap((d) => dirs(join(rel, d.name), depth - 1));
+
+const logs = dirs("runs", 4).map((d) => join(out!, d, "host", "usersim.ndjson")).filter((p) => existsSync(p));
+if (!logs.length) fail("no session in " + out + " left host/usersim.ndjson, so stop (b) cannot be read");
+let events = 0, fallback = 0;
+for (const log of logs)
+  for (const line of readFileSync(log, "utf8").split("\n").filter((l) => l.trim())) {
+    const e = JSON.parse(line);
+    if (e.kind !== "ask" && e.kind !== "prose") continue;
+    events++;
+    if (e.source === "fallback") fallback++;
+  }
+const bShare = events ? fallback / events : 0;
+console.log("(b) user simulator: " + events + " ask and prose events in " + logs.length + " session logs, " + fallback + " fallback, share " + bShare.toFixed(3) + " (stop above 0.10): " + verdict(bShare > 0.1, "b"));
+
+if (!existsSync(join(out!, "parses.tsv"))) fail("parses.tsv is missing from " + out);
+const p1 = tsv(join(out!, "parses.tsv")).filter((r) => r.arm_id!.endsWith("-particle-1"));
+const p1Failed = p1.filter((r) => ["missing", "malformed", "incomplete"].includes(r.outcome!)).length;
+const cShare = p1.length ? p1Failed / p1.length : 0;
+console.log("(c) particle-1: " + p1.length + " pilot sessions, " + p1Failed + " with no parsed plan-findings block, share " + cShare.toFixed(3) + " (stop above 0.20): " + verdict(cShare > 0.2, "c"));
+
+const cells = existsSync(arms!) ? readdirSync(arms!).filter((d) => existsSync(join(arms!, d, "arm.json"))).sort() : [];
+let read = 0, worst = 0;
+for (const cell of cells) {
+  const arm = JSON.parse(readFileSync(join(arms!, cell, "arm.json"), "utf8"));
+  if (!isOpusOrP1(cell)) continue;
+  read++;
+  const plans = existsSync(join(arms!, cell, "findings")) ? readdirSync(join(arms!, cell, "findings")).filter((f) => f.endsWith(".jsonl")).length : 0;
+  const notDefect = existsSync(join(arms!, cell, "adjudication.tsv")) ? tsv(join(arms!, cell, "adjudication.tsv")).filter((r) => r.ruling === "not-defect").length : 0;
+  const rate = plans * arm.passes ? notDefect / (plans * arm.passes) : 0;
+  worst = Math.max(worst, rate);
+  console.log("(e) " + cell + ": " + notDefect + " must-fix findings ruled not-defect over " + plans + " plans x " + arm.passes + " pass" + (arm.passes === 1 ? "" : "es") + " = " + rate.toFixed(3) + " per plan per pass");
+}
+if (!read) fail("no Opus or particle-1 cell in " + arms);
+console.log("(e) highest rate " + worst.toFixed(3) + " (stop above 0.25 in any cell): " + verdict(worst > 0.25, "e"));
+console.log("stops fired: " + (fired.length ? fired.join(", ") : "none"));

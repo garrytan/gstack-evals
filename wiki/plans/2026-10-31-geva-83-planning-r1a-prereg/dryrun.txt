@@ -1,4 +1,4 @@
-# R1a keyless dry run, 2026-11-01T14:04:57.748Z
+# R1a keyless dry run, 2026-11-01T15:08:10.913Z
 scorer HEAD e305ed087b3f17bd211287b0e2d5e3f3960b5a4f
 stub sha256 f8262d93b69048fdabbe8e15b38cdcec266e2e09f56275e31f267530d8e6c533
 post any-severity.json sha256 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367
@@ -119,7 +119,8 @@ start rule, headline: projection $1,682.21 plus its costliest round's excess $6.
 start rule, real-neutral: projection $93.46 plus its costliest round's excess $6.12 (a round is 1 unit of every arm on one model at --parallel 4, admitted at the allowance, run.ts:345-348) = $99.58 against its item cap $106: fits
 start rule, Fable subset: projection $450.00 plus its costliest round's excess $20.40 (a round is 2 units of every arm on one model at --parallel 4, admitted at the allowance, run.ts:345-348) = $470.40 against its item cap $510: fits
 PASS at section 9's rates every run's projection plus its costliest round's excess fits under its own item
-A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. The items use --admission warn: rig admission needs a green rig CI run and probes on the machine that spends, which a keyless dry run cannot give, so each lease warns RIG_UNPROVEN and admission itself is not exercised here.
+A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. Every item uses --admission warn, as section 9 records them: admission binds the working tree with untracked files included, and R1a runs e305ed0 with the sealed stub copied in, so each lease warns RIG_UNPROVEN and opens. The pin check (section 19) stands in for admission.
+PASS the leases here are the pinned entry points' own lease calls: review-units hands --spend-cap to the rig as cap (cli.ts:284), which leases with openLease(..., { item, run_id, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) }) (run-host.ts:533); judge-run leases with openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: "direct" }) }) (judge-run.ts:241), its runId "judge-" and 6 random bytes (:229)
 $ ledger init --item planning-r1a-pilot --cap 184 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
   exit 0  (record planning-r1a-pilot)
     APPROVED: item=planning-r1a-pilot cap=$184.00 admission=warn approval=1 record=$OUT/ledger/record
@@ -136,10 +137,10 @@ $ ledger init --item planning-r1a-fable --cap 510 --admission warn --words "dry 
   exit 0  (record planning-r1a-fable)
     APPROVED: item=planning-r1a-fable cap=$510.00 admission=warn approval=1 record=$OUT/ledger/record
 PASS line item planning-r1a-fable records its cap of $510
-pilot: run id review-units-20261101T140502Z-222c, minted as review-units mints it (cli.ts:280), leases planning-r1a-pilot for $184.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
-headline: run id review-units-20261101T140502Z-e1da, minted as review-units mints it (cli.ts:280), leases planning-r1a-headline for $1,905.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
-real-neutral: run id review-units-20261101T140502Z-a0c0, minted as review-units mints it (cli.ts:280), leases planning-r1a-real for $106.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
-Fable subset: run id review-units-20261101T140502Z-6c9d, minted as review-units mints it (cli.ts:280), leases planning-r1a-fable for $510.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $12.50; left open, as a killed controller leaves it
+pilot: run id review-units-20261101T150815Z-32b4, minted as review-units mints it (cli.ts:280), leases planning-r1a-pilot for $184.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+headline: run id review-units-20261101T150815Z-0925, minted as review-units mints it (cli.ts:280), leases planning-r1a-headline for $1,905.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+real-neutral: run id review-units-20261101T150815Z-9672, minted as review-units mints it (cli.ts:280), leases planning-r1a-real for $106.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+Fable subset: run id review-units-20261101T150815Z-c9a9, minted as review-units mints it (cli.ts:280), leases planning-r1a-fable for $510.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $12.50; left open, as a killed controller leaves it
 PASS each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone
 PASS each lease on a warn item without an admission record warns RIG_UNPROVEN and is not refused
 a second review-units run on planning-r1a-pilot: E_ITEM_BOUND
@@ -148,36 +149,38 @@ the headline's one resume: same run id (review-units keeps it in run.json, cli.t
 PASS a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend
 the Fable run's resume while the killed controller's lease is open: E_LEASE_UNSETTLED
 PASS after a killed controller its lease stays open, and the resume's lease is refused with E_LEASE_UNSETTLED
-$ ledger settle --lease planning-r1a-fable.0001.ba8286
+$ ledger settle --lease planning-r1a-fable.0001.6d9f36
   exit 0  (settle the killed controller's lease on its own machine, before the resume)
-    SETTLED: planning-r1a-fable.0001.ba8286 spent=$12.50 unknown=$0.00 (0 calls) record=$OUT/ledger/record
+    SETTLED: planning-r1a-fable.0001.6d9f36 spent=$12.50 unknown=$0.00 (0 calls) record=$OUT/ledger/record
 PASS once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id
 $ ledger init --item planning-r1a-judge-pilot-match --cap 95 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
   exit 0  (record planning-r1a-judge-pilot-match at $95 less the settled spend of every earlier R1a judge item)
     APPROVED: item=planning-r1a-judge-pilot-match cap=$95.00 admission=warn approval=1 record=$OUT/ledger/record
-planning-r1a-judge-pilot-match: judge-run's run id judge-f397bda1bd5b (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $3.25; settled at $3.25
+planning-r1a-judge-pilot-match: judge-run's run id judge-bce4e86d7a40 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $3.25; settled at $3.25
 PASS planning-r1a-judge-pilot-match refuses a second judge-run call with E_ITEM_BOUND, so each judge-run call takes its own judge item
+PASS planning-r1a-judge-pilot-match: judge-run's warn-mode lease warned RIG_UNPROVEN and opened
 $ ledger init --item planning-r1a-judge-pilot-adjudicate --cap 91.75 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
   exit 0  (record planning-r1a-judge-pilot-adjudicate at $95 less the settled spend of every earlier R1a judge item)
     APPROVED: item=planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn approval=1 record=$OUT/ledger/record
-planning-r1a-judge-pilot-adjudicate: judge-run's run id judge-6b57f2a12410 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $1.10; settled at $1.10
+planning-r1a-judge-pilot-adjudicate: judge-run's run id judge-742c7a56f5c0 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $1.10; settled at $1.10
 PASS planning-r1a-judge-pilot-adjudicate refuses a second judge-run call with E_ITEM_BOUND, so each judge-run call takes its own judge item
+PASS planning-r1a-judge-pilot-adjudicate: judge-run's warn-mode lease warned RIG_UNPROVEN and opened
 PASS judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope ($95.00, then $91.75; $4.35 spent)
 $ ledger status
   exit 0  (every line item on the temporary record)
     RECORD: $OUT/ledger/record (GSTACK_EVALS_LEDGER_RECORD)
     LEDGER: $OUT/ledger/local.sqlite (GSTACK_EVALS_LEDGER)
-    ITEM: planning-r1a-fable cap=$510.00 admission=warn committed=$12.50 left=$497.50 run=review-units-20261101T140502Z-6c9d leases=2 open=-
+    ITEM: planning-r1a-fable cap=$510.00 admission=warn committed=$12.50 left=$497.50 run=review-units-20261101T150815Z-c9a9 leases=2 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-headline cap=$1905.00 admission=warn committed=$5.00 left=$1900.00 run=review-units-20261101T140502Z-e1da leases=2 open=-
+    ITEM: planning-r1a-headline cap=$1905.00 admission=warn committed=$5.00 left=$1900.00 run=review-units-20261101T150815Z-0925 leases=2 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn committed=$1.10 left=$90.65 run=judge-6b57f2a12410 leases=1 open=-
+    ITEM: planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn committed=$1.10 left=$90.65 run=judge-742c7a56f5c0 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-judge-pilot-match cap=$95.00 admission=warn committed=$3.25 left=$91.75 run=judge-f397bda1bd5b leases=1 open=-
+    ITEM: planning-r1a-judge-pilot-match cap=$95.00 admission=warn committed=$3.25 left=$91.75 run=judge-bce4e86d7a40 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-pilot cap=$184.00 admission=warn committed=$5.00 left=$179.00 run=review-units-20261101T140502Z-222c leases=1 open=-
+    ITEM: planning-r1a-pilot cap=$184.00 admission=warn committed=$5.00 left=$179.00 run=review-units-20261101T150815Z-32b4 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-real cap=$106.00 admission=warn committed=$5.00 left=$101.00 run=review-units-20261101T140502Z-a0c0 leases=1 open=-
+    ITEM: planning-r1a-real cap=$106.00 admission=warn committed=$5.00 left=$101.00 run=review-units-20261101T150815Z-9672 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
 PASS the four run items hold $2,705 and the judge envelope $95: $2,800, the cap
 
@@ -506,13 +509,22 @@ PASS pilot: raw arm none-fable ingests
 PASS pilot: raw arm gstack-fable ingests
 $ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/lens-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/placebo-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-fable --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-fable --seed 20261031 --out $OUT/pilot/packets --key $OUT/pilot/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
   exit 0  (pilot: blind packets over every arm, plan trees from the source clone)
-    judge-packet: batch 64c486df91b85e9b536269b90b823c2dbf96fea9615268d7b30431abfc1bdbe8, 4 packets, 28 findings from 8 arms; the key is outside the packets
+    judge-packet: batch 6990d0215057481214ac5ba791e5e57410826f150de4a665c4e30606dde9c778, 4 packets, 31 findings from 8 arms; the key is outside the packets
 PASS pilot: judge-packet exit 0
   judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
 $ noloss judge-join --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --key $OUT/pilot/key.json --out $OUT/pilot/judged --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/lens-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/placebo-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-fable --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-fable --sealed-root $SEALED --reply $OUT/pilot-blockers-primary.json --second $OUT/pilot-blockers--second.json
   exit 0  (pilot: judge-join blockers for every arm at once)
-    judge-join: batch 64c486df91b85e9b536269b90b823c2dbf96fea9615268d7b30431abfc1bdbe8, wrote judgments for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1, none-fable, gstack-fable under $OUT/pilot/judged; second judge on 8 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
+    judge-join: batch 6990d0215057481214ac5ba791e5e57410826f150de4a665c4e30606dde9c778, wrote judgments for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1, none-fable, gstack-fable under $OUT/pilot/judged; second judge on 8 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
 PASS pilot: judge-join exit 0
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --arm $OUT/pilot/judged/none-opus --arm $OUT/pilot/judged/gstack-opus --arm $OUT/pilot/judged/lens-opus --arm $OUT/pilot/judged/none-particle-1 --arm $OUT/pilot/judged/gstack-particle-1 --arm $OUT/pilot/judged/placebo-particle-1 --arm $OUT/pilot/judged/none-fable --arm $OUT/pilot/judged/gstack-fable --seed 20261101 --out $OUT/pilot/adj-packets --key $OUT/pilot/adj-key.json --adjudicate --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (pilot: blind adjudication packets)
+    judge-packet: batch 4d0e1d6bf7b2d6abc3b3afe8676d3a5466c62690aad7f1af0445e4c6272319e8, 2 packets, 3 findings from 8 arms; the key is outside the packets
+PASS pilot: adjudication packets build, or there is nothing to adjudicate
+  judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --key $OUT/pilot/adj-key.json --out $OUT/pilot/adjudicated --arm $OUT/pilot/judged/none-opus --arm $OUT/pilot/judged/gstack-opus --arm $OUT/pilot/judged/lens-opus --arm $OUT/pilot/judged/none-particle-1 --arm $OUT/pilot/judged/gstack-particle-1 --arm $OUT/pilot/judged/placebo-particle-1 --arm $OUT/pilot/judged/none-fable --arm $OUT/pilot/judged/gstack-fable --sealed-root $SEALED --reply $OUT/pilot-findings-primary.json --second $OUT/pilot-findings--second.json
+  exit 0  (pilot: judge-join findings for every arm at once)
+    judge-join: batch 4d0e1d6bf7b2d6abc3b3afe8676d3a5466c62690aad7f1af0445e4c6272319e8, wrote adjudication.tsv for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1, none-fable, gstack-fable under $OUT/pilot/adjudicated; second judge on 3 blockers (kappa n/a), third read on 0. Ingest each arm with noloss ingest.
+PASS pilot: adjudication join exit 0
 PASS pilot: judged arm none-opus ingests
 PASS pilot: judged arm gstack-opus ingests
 PASS pilot: judged arm lens-opus ingests
@@ -521,6 +533,7 @@ PASS pilot: judged arm gstack-particle-1 ingests
 PASS pilot: judged arm placebo-particle-1 ingests
 PASS pilot: judged arm none-fable ingests
 PASS pilot: judged arm gstack-fable ingests
+the synthetic pilot gives none-opus one must-fix finding that names no flaw, on one plan, and gstack-particle-1 one on each of two plans, so blind adjudication has findings to rule on
 PASS no pilot unit, by id or head, sits in the headline, real-neutral or Fable suite
 PASS no frozen comparisons file names the pilot suite (5 files)
 $ noloss score --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --root $OUT/pilot/arms --prereg $POST/comparisons.fable.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
@@ -548,6 +561,37 @@ $ noloss secondary --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --variant n
 pilot none-opus must-fix recall 0/8 = 0; stop (a) fires outside 0.10 to 0.85: fires
 PASS pilot recall reads on the pilot's 8 flaws, from noloss secondary
 PASS the pilot reading carries no verdict and no claim
+pilot stops (b), (c) and (e) through pilot-stops.ts.txt: (e) on the adjudicated synthetic pilot arms above, (b) and (c) on synthetic pilot out dirs
+PASS the synthetic pilot went through blind adjudication, so stop (e) has rulings to read
+$ bun $OUT/pilot-stops.ts $OUT/pilot-out/quiet $OUT/pilot/adjudicated
+  exit 0  (1 fallback in 20 replies, 2 of 12 particle-1 sessions with no parsed block)
+    (b) user simulator: 20 ask and prose events in 10 session logs, 1 fallback, share 0.050 (stop above 0.10): does not fire
+    (c) particle-1: 12 pilot sessions, 2 with no parsed plan-findings block, share 0.167 (stop above 0.20): does not fire
+    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
+    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+    (e) none-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) placebo-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) highest rate 0.500 (stop above 0.25 in any cell): fires
+    stops fired: e
+PASS stop (e) takes the highest cell rate, 0.500, and fires only above 0.25
+PASS stop (b) reads the simulator's reply sources: 1 fallback in 20 events is 0.050 and does not fire
+PASS stop (c) reads parses.tsv: 2 of 12 particle-1 sessions is 0.167 and does not fire
+PASS stop (e) reads each of the 6 Opus and particle-1 cells, and no Fable cell, with the not-defect counts in their adjudication.tsv over 4 plans x 1 pass
+$ bun $OUT/pilot-stops.ts $OUT/pilot-out/noisy $OUT/pilot/adjudicated
+  exit 0  (3 fallbacks in 20 replies, 3 of 12 particle-1 sessions with no parsed block)
+    (b) user simulator: 20 ask and prose events in 10 session logs, 3 fallback, share 0.150 (stop above 0.10): fires
+    (c) particle-1: 12 pilot sessions, 3 with no parsed plan-findings block, share 0.250 (stop above 0.20): fires
+    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
+    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+    (e) none-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) placebo-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) highest rate 0.500 (stop above 0.25 in any cell): fires
+    stops fired: b, c, e
+PASS 3 fallbacks in 20 (0.150) fire stop (b), and 3 of 12 particle-1 sessions (0.250) fire stop (c)
 
 ## 16. Fable 5.1 subset, exploratory
 PASS fable: raw arm none-fable ingests
@@ -586,7 +630,7 @@ $ noloss power --suite planrev-ceo-r1a --passes 3 --recall 0.35 --margin 10 --lo
 PASS power counts 24 clusters and 48 flaws
 
 ## 18. OpenRouter routes: the pinned route, its data policy and price headroom
-read keyless at 2026-11-01T14:05:13.133Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
+read keyless at 2026-11-01T15:08:26.719Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
 particle-ai/particle-1 route {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 22cb6215a4019fba2cf7949d892df384d96d0a57e12375a40fa3abe7531570d2
   endpoint Particle AI (particle-ai, unknown): $0.05 / $0.5 per Mtok, max_price $0.1 / $1 (headroom x2.00 input, x2.00 output); data policy: training false, retains prompts false, kept by data_collection deny
 PASS particle-ai/particle-1: the route pins its providers with no fallbacks and sends data_collection deny
@@ -597,7 +641,7 @@ outside R1a: deepseek/deepseek-v4.1-flash-1017 route {"only":["inference-net"],"
   deepseek/deepseek-v4.1-flash-1017 is not an R1a model; reported for GST-637, not checked
 route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 935feb940de8bb1ac9d84d700af39943af8fc6c2ff1d649ccae87fa1c60839de
 
-## 19. Custody: the run root, the receipts sink and the retained trees
+## 19. Custody and the pin check: the run root, the receipts sink, the retained trees, and HEAD before every call
 run root ~/.capy/work/planning-r1a; frozen --out dirs ~/.capy/work/planning-r1a/pilot, ~/.capy/work/planning-r1a/headline, ~/.capy/work/planning-r1a/real-neutral, ~/.capy/work/planning-r1a/fable; receipts sink, if one is set, ~/.capy/work/planning-r1a/receipts
 PASS every frozen --out and the receipts sink sit under the run root, which sits outside the repo
 PASS the frozen sink is apart from every out dir and its arms/, by the pinned sinkOverlapProblem
@@ -607,6 +651,10 @@ PASS the run's sink rule admits an unset GSTACK_EVALS_RECEIPTS or one under the 
 review-units keeps unit trees under <stateRoot>/retained/trees: on this machine, with XDG_STATE_HOME unset, ~/.capy/work/gstack-evals/retained
 PASS <stateRoot> is ~/.capy/work/gstack-evals on Capy, $XDG_STATE_HOME/gstack-evals when set, as the cleanup rule says
 PASS <stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it beside the run root
+PASS section 10 gives the pin check that runs before every review-units and judge-run call, word for word
+pin check exits: this scorer 0; a fresh e305ed0 checkout without the stub 1, with it 0, with one more untracked file 1, with a tracked change 1
+PASS the pin check passes the dry run's scorer, e305ed0 with the sealed stub as its only untracked file
+PASS the pin check refuses e305ed0 without the stub, with another untracked file, and with a tracked change
 
 ## 20. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink
 $ bun test tests/trial/review/plan-scoring.test.ts tests/adapters/claude-code.test.ts tests/trial/review/run.test.ts (keys unset)
