@@ -148,20 +148,22 @@ describe("launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS
     expect(code).toBe(130);
   }, 60_000);
 
-  test("a ledger service that can't be reached is retried, never latched as a cap stop", async () => {
+  test("a ledger service that can't be reached is retried, and stops the batch only once the current block runs out", async () => {
+    // Blocks of 3 s, the next one due 1 s ahead: block 2 is tried from 2 s on and block 1 runs out at 3 s.
     const r = rig({});
     Object.assign(r.env, { VM_USD_PER_HOUR: "36", VM_RESERVE_HOURS: "0.001", VM_EXTEND_POLL_SEC: "0.2" });
     const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
     for (let i = 0; i < 300 && !existsSync(join(r.vm, "started")); i++) await Bun.sleep(50);
     Bun.spawnSync(["pkill", "-f", `serve --path ${r.ledgerPath}`]);
-    await Bun.sleep(4000);
-    writeFileSync(join(r.vm, "work/run/STOP"), "");
     const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
     const code = await proc.exited;
     clearTimeout(timer);
     const stderr = await new Response(proc.stderr).text();
-    expect(stderr).toContain("launch.sh: VM block 2 reserve got HTTP 000 from the ledger service; retrying");
-    expect(existsSync(join(r.run, "vm-cap-stop"))).toBe(false);
+    const retry = stderr.indexOf("launch.sh: VM block 2 reserve got HTTP 000 from the ledger service; retrying");
+    expect(retry).toBeGreaterThan(-1);
+    expect(stderr.indexOf("launch.sh: VM block 1 ran out with no reserve for block 2 (HTTP 000); stopping the batch")).toBeGreaterThan(retry);
+    expect(readFileSync(join(r.run, "vm-cap-stop"), "utf8")).toContain("the ledger service gave no answer (HTTP 000) before VM block 1 ran out");
+    expect(events(r)).toContain("ssh vm-1 touch work/run/STOP");
     expect(vmRows(r).map((x) => x.kind)).toEqual(["reserve", "settle"]);
     expect(code).toBe(130);
   }, 60_000);

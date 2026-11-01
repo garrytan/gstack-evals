@@ -13,8 +13,9 @@
 # With VM_USD_PER_HOUR and VM_RESERVE_HOURS set, the VM's hours go to the same item in blocks of VM_RESERVE_HOURS: the
 # first block is reserved before the VM starts (a refusal is a cap stop: exit 9, no VM), and each next block through the
 # ledger service before the current one runs out (VM_EXTEND_LEAD_SEC ahead, default 1800, at most half a block). Only
-# the service's refusal (HTTP 409) is a cap stop: the batch is told to stop and $run/vm-cap-stop records it; any other
-# failure (the service unreachable) is retried. Extension ends before the ledger service stops. Once the VM is
+# the service's refusal (HTTP 409) is a cap stop: the batch is told to stop and $run/vm-cap-stop records it. Any other
+# failure (the service unreachable) is retried until the current block runs out, and then stops the batch the same way,
+# since no hours past a reserve may run. Extension ends before the ledger service stops. Once the VM is
 # destroyed, the hours from just before it started settle at rate x hours across every open block the ledger holds, in
 # order; only the last block can settle over its reserve, by the teardown that ran past it. A kept VM leaves its blocks
 # open at their full amounts.
@@ -72,6 +73,12 @@ vm_extend() {
         return 0
         ;;
       *)
+        if [ "$(date +%s)" -ge $((vm_up_at + n * vm_block_sec)) ]; then
+          echo "the ledger service gave no answer (HTTP ${code:-000}) before VM block $n ran out, so block $((n + 1)) is unreserved for $ITEM" > "$run/vm-cap-stop"
+          say "launch.sh: VM block $n ran out with no reserve for block $((n + 1)) (HTTP ${code:-000}); stopping the batch"
+          "$S" ssh "$name" 'touch work/run/STOP' < /dev/null > /dev/null 2>&1 || true
+          return 0
+        fi
         say "launch.sh: VM block $((n + 1)) reserve got HTTP ${code:-000} from the ledger service; retrying"
         sleep "${VM_EXTEND_POLL_SEC:-30}" < /dev/null > /dev/null 2>&1
         ;;
@@ -83,12 +90,16 @@ stop_extend() {
 }
 vm_settle() {
   [ -n "$vm_rate" ] || return 0
-  local hours usd ids blocks i id share
+  local hours usd open ids blocks i id share
   hours=$(awk -v s="${vm_up_at:-$(date +%s)}" -v e="$(date +%s)" 'BEGIN { printf "%.6f", (e - s) / 3600 }')
   usd=$(awk -v r="$vm_rate" -v h="$hours" 'BEGIN { printf "%.6f", r * h }')
-  ids=$(bun "$here/ledger.ts" open --path "$LEDGER" --item "$ITEM" | while read -r id; do
+  if ! open=$(bun "$here/ledger.ts" open --path "$LEDGER" --item "$ITEM"); then
+    say "WARNING: the open VM blocks could not be listed, so none was settled; list them with: bun $here/ledger.ts open --path $LEDGER --item $ITEM, then settle $vm_id and each $vm_id-N in order at \$$vm_block a block, \$$usd in all, with ledger.ts settle"
+    return 0
+  fi
+  ids=$(printf '%s\n' "$open" | while read -r id; do
     if [ "$id" = "$vm_id" ]; then echo "1 $id"; elif [[ "$id" == "$vm_id"-* && "${id#"$vm_id"-}" =~ ^[0-9]+$ ]]; then echo "${id#"$vm_id"-} $id"; fi
-  done | sort -n | cut -d' ' -f2) || true
+  done | sort -n | cut -d' ' -f2)
   blocks=1
   for id in $ids; do i=${id#"$vm_id"}; i=${i#-}; [ "${i:-1}" -le "$blocks" ] || blocks=$i; done
   for id in $ids; do
