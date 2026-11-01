@@ -18,17 +18,22 @@ describe("start rule", () => {
     expect(plan(t).total_projected_usd).toBeCloseTo(64.75, 2);
   });
 
-  test("Run D: preset cells on five models, sdk-default cells on Opus and Haiku, the preset surcharge, $125 and the 1.4 margin", () => {
+  test("Run D: preset cells on Opus, particle-1 and gpt-6.1-sol, sdk-default cells on Opus, Opus's second D3 replicate, the preset surcharge, $125 and the 1.4 margin", () => {
     const d = RUNS["discovery-r1"]!;
     const usd = (m: string) => batchMicros(d, parseBatch(d, m)) / 1e6;
     expect(d.cap).toBe(125);
+    expect(Object.keys(d.cells).sort()).toEqual(["claude-opus-5-5", "claude-opus-5-5/r2", "gpt-6.1-sol", "particle-1"]);
     expect(d.cells["claude-opus-5-5"]).toEqual(["none@claude-code-preset", "gstack@claude-code-preset", "gstack-rewritten@claude-code-preset", "placebo@claude-code-preset", "none@sdk-default", "gstack@sdk-default", "gstack-rewritten@sdk-default"]);
+    expect(d.cells["claude-opus-5-5/r2"]).toEqual(["gstack@claude-code-preset", "gstack@sdk-default"]);
     expect(d.cells["particle-1"]).toHaveLength(4);
     expect(usd("claude-opus-5-5")).toBeCloseTo(37 * (0.145 + 3 * 0.16 + 4 * 0.0117 + 0.145 + 2 * 0.16), 2);
-    expect(usd("claude-haiku-5-5:gstack@sdk-default=37")).toBeCloseTo(0.37, 2);
+    expect(usd("claude-opus-5-5/r2")).toBeCloseTo(37 * (0.16 + 0.0117 + 0.16), 2);
+    expect(usd("claude-opus-5-5/r2:gstack@sdk-default=37")).toBeCloseTo(5.92, 2);
     const total = plan(d).total_projected_usd;
-    expect(total).toBeCloseTo(88.46, 2);
+    expect(total).toBeCloseTo(88.88, 2);
     expect(1.4 * total).toBeLessThanOrEqual(125);
+    expect(() => parseBatch(d, "claude-haiku-5-5")).toThrow("E_USAGE");
+    expect(() => parseBatch(d, "claude-sonnet-5-5")).toThrow("E_USAGE");
     expect(() => parseBatch(d, "particle-1:gstack@sdk-default=1")).toThrow("E_USAGE");
   });
 

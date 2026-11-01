@@ -204,7 +204,7 @@ export function pooledContrast(pairs: [Map<string, number>, Map<string, number>]
   return { tasks: tasks.length, ...bootstrap(tasks, (s) => mean(s.map((k) => per.get(k)!)), bopts), p: test ? signFlip(tasks.map((k) => per.get(k)!)) : NaN };
 }
 export const lab = (arm: string, setting?: string) => (setting ? `${arm}@${setting}` : arm);
-const MIN_POOLED_D2 = 3;
+const MIN_POOLED_D2 = 2;
 
 // Run D. cfg.setting is the primary cells' system prompt (labels arm@setting; absent, bare arm names), cfg.contrast
 // { setting, models } the second setting's cells, cfg.d2 and cfg.d3 "pooled" or "per-model" (section 11's power
@@ -303,7 +303,7 @@ export function runD(recs: Rec[], cfg: any): string[] {
       if (d3Pooled) out.push(`D3 ${x.m}, exploratory: ${ci(x.r, pp)} pp over ${x.r.tasks} tasks, p ${pv(x.r.p)} unadjusted${mdd("d3_per_model")}${x.flagged ? "; gate flagged" : ""}; no claim`);
       else {
         const sig = adj3[i]! < 0.05 && (x.r.lo > 0 || x.r.hi < 0);
-        out.push(`D3 ${x.m}: ${ci(x.r, pp)} pp over ${x.r.tasks} tasks, p ${pv(x.r.p)}, Holm ${pv(adj3[i]!)}; ${x.flagged ? "no claim (gate)" : sig ? `claim: ${P} ${x.r.lo > 0 ? "raised" : "lowered"} opens by ${pp(x.r.point)} points` : "no claim"}`);
+        out.push(`D3 ${x.m}: ${ci(x.r, pp)} pp over ${x.r.tasks} tasks, p ${pv(x.r.p)}, Holm ${pv(adj3[i]!)}${mdd("d3_per_model")}; ${x.flagged ? "no claim (gate)" : sig ? `claim: ${P} ${x.r.lo > 0 ? "raised" : "lowered"} opens by ${pp(x.r.point)} points` : "no claim"}`);
       }
     });
     if (d3Pooled) {

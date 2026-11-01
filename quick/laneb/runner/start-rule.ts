@@ -6,7 +6,7 @@
 //   bun runner/start-rule.ts check --run <discovery-r1|texttax-r1> --ledger <jsonl> --batch <spec> [--batch <spec> ...] [--note]
 //   bun runner/start-rule.ts plan --run <discovery-r1|texttax-r1>
 //
-// A batch spec is a model id for a batch with every trial still to run, or model:cell=n+cell=n for the
+// A batch spec is a batch name (a model id, or claude-opus-5-5/r2 for Run D's second Opus replicate of the D3 cells) for a batch with every trial still to run, or model:cell=n+cell=n for the
 // trials it has left; a cell is its label (gstack@claude-code-preset in Run D, a bare arm name in Run T). List the batch about to launch and every batch of the run still running.
 // --note appends the inputs and the verdict to the ledger as a note row. check exits 1 when the rule fails.
 // plan walks the run's planned order from an empty ledger, each earlier group settled at its projection.
@@ -20,7 +20,6 @@ const MARGIN = 1.4;
 // Projected spend per trial in dollars (section 8): model, then arm.
 export const PROJECTION: Record<string, Record<string, number>> = {
   "claude-opus-5-5": { none: 0.145, gstack: 0.16, "gstack-rewritten": 0.16, placebo: 0.16 },
-  "claude-sonnet-5-5": { none: 0.052, gstack: 0.058, "gstack-rewritten": 0.058, placebo: 0.058 },
   "claude-haiku-5-5": { none: 0.009, gstack: 0.01, "gstack-rewritten": 0.01, placebo: 0.01, "placebo-short": 0.012 },
   "particle-1": { none: 0.072, gstack: 0.078, "gstack-rewritten": 0.078, placebo: 0.078, "placebo-short": 0.078 },
   "deepseek-v4.1-flash-1017": { none: 0.062, "placebo-short": 0.065, placebo: 0.068 },
@@ -28,14 +27,15 @@ export const PROJECTION: Record<string, Record<string, number>> = {
 };
 // Run T prices placebo from #109 and quick look 3, not the untold figure, so its placebo column differs from Run D's.
 // Run D's preset cells add Claude Code's system block (1,892 tokens) to every request: written to the cache once and read
-// on each later request, at the proxy's prices and #109's mean requests per trial (Opus 6.8, Haiku 9.0, particle-1 20.1;
-// Sonnet and gpt-6.1-sol take Haiku's 9.0).
-export const PRESET_SURCHARGE: Record<string, number> = { "claude-opus-5-5": 0.0117, "claude-sonnet-5-5": 0.0062, "claude-haiku-5-5": 0.0004, "particle-1": 0.0016, "gpt-6.1-sol": 0.0053 };
+// on each later request, at the proxy's prices and #109's mean requests per trial (Opus 6.8, particle-1 20.1;
+// gpt-6.1-sol takes Haiku's 9.0).
+export const PRESET_SURCHARGE: Record<string, number> = { "claude-opus-5-5": 0.0117, "particle-1": 0.0016, "gpt-6.1-sol": 0.0053 };
 const PRESET = "claude-code-preset";
 const cellsOf = (arms: string[], system_prompt?: string) => arms.map((name) => armLabel({ name, system_prompt }));
 const D_ARMS = ["none", "gstack", "gstack-rewritten", "placebo"];
 const D_PRESET = cellsOf(D_ARMS, PRESET);
 const D_BOTH = [...D_PRESET, ...cellsOf(["none", "gstack", "gstack-rewritten"], "sdk-default")];
+const D3_CELLS = [...cellsOf(["gstack"], PRESET), ...cellsOf(["gstack"], "sdk-default")];
 const RUN_T_PLACEBO: Record<string, number> = { "claude-haiku-5-5": 0.013, "particle-1": 0.088, "deepseek-v4.1-flash-1017": 0.068 };
 
 export type RunSpec = { item: string; cap: number; cells: Record<string, string[]>; replicates: Record<string, number>; order: string[][]; price: (model: string, arm: string) => number };
@@ -43,10 +43,13 @@ export type RunSpec = { item: string; cap: number; cells: Record<string, string[
 export const RUNS: Record<string, RunSpec> = {
   "discovery-r1": {
     item: "discovery-r1", cap: 125,
-    cells: { "claude-haiku-5-5": D_BOTH, "particle-1": D_PRESET, "claude-sonnet-5-5": D_PRESET, "claude-opus-5-5": D_BOTH, "gpt-6.1-sol": D_PRESET },
-    replicates: { "claude-haiku-5-5": 1, "particle-1": 1, "claude-sonnet-5-5": 1, "claude-opus-5-5": 1, "gpt-6.1-sol": 1 },
-    order: [["claude-haiku-5-5", "particle-1", "claude-sonnet-5-5"], ["claude-opus-5-5"], ["gpt-6.1-sol"]],
-    price: (model, cell) => PROJECTION[model]![cell.split("@")[0]!]! + (cell.endsWith("@" + PRESET) ? PRESET_SURCHARGE[model]! : 0),
+    cells: { "particle-1": D_PRESET, "claude-opus-5-5": D_BOTH, "claude-opus-5-5/r2": D3_CELLS, "gpt-6.1-sol": D_PRESET },
+    replicates: { "particle-1": 1, "claude-opus-5-5": 1, "claude-opus-5-5/r2": 1, "gpt-6.1-sol": 1 },
+    order: [["particle-1"], ["claude-opus-5-5", "claude-opus-5-5/r2"], ["gpt-6.1-sol"]],
+    price: (batch, cell) => {
+      const model = batch.split("/")[0]!;
+      return PROJECTION[model]![cell.split("@")[0]!]! + (cell.endsWith("@" + PRESET) ? PRESET_SURCHARGE[model]! : 0);
+    },
   },
   "texttax-r1": {
     item: "texttax-r1", cap: 75,

@@ -70,13 +70,17 @@ describe("Run D, frozen layout (preset primary, sdk-default contrast, pooled D2 
     expect(s).toMatch(/^D2 pooled claim: the rewritten description raised opens by \+\d+\.\d points, pooled across models$/m);
     expect(s).toMatch(/^Beside D2, no gstack \(pooled over the same models\): gstack@claude-code-preset minus none@claude-code-preset, pass/m);
     const few = runD(f.recs, { ...cfgs["run-d-factor"], models: ["m-claim", "m-gate"] }).join("\n");
-    expect(few).toContain("D2 pooled no claim (fewer than 3 models)");
+    expect(few).toContain("D2 pooled no claim (fewer than 2 models)");
+    const two = runD(f.recs, { ...cfgs["run-d-factor"], models: ["m-claim", "m-zero"] }).join("\n");
+    expect(two).toMatch(/^D2 pooled claim: /m);
   });
   test("D3: preset minus sdk-default on gstack, per-model exploratory and pooled primary, with no gstack beside it", () => {
     expect(s).toMatch(/^D3 m-claim, exploratory: \+61\.1 .* MDD 27 points \(section 11\); no claim$/m);
     expect(s).toMatch(/^D3 m-zero, exploratory: \+0\.0 /m);
     expect(s).toMatch(/^D3 pooled over m-claim, m-zero: \+\d+\.\d .*MDD 15 points \(section 11\); claim: claude-code-preset raised opens by \+\d+\.\d points, pooled$/m);
     expect(s).toMatch(/^Beside D3, no gstack \(pooled over m-claim, m-zero\): gstack@claude-code-preset minus none@claude-code-preset, pass .*; gstack@sdk-default minus none@sdk-default, pass/m);
+    const one = runD(f.recs, { ...cfgs["run-d-factor"], contrast: { setting: "sdk-default", models: ["m-claim"] }, d3: "per-model" }).join("\n");
+    expect(one).toMatch(/^D3 m-claim: \+61\.1 .*Holm .*; MDD 27 points \(section 11\); claim: claude-code-preset raised opens by \+61\.1 points$/m);
   });
   test("sdk-default cells get their own secondary block; built-in opens and turn-cap stops are counted per cell", () => {
     expect(s).toMatch(/### m-claim under sdk-default \(secondary\)[\s\S]*D1 under sdk-default \(gstack alone, eligible\): 0 opened of 37 trials[\s\S]*D2 under sdk-default \(rewritten minus gstack\): \+\d/);

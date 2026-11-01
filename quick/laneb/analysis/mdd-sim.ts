@@ -2,13 +2,14 @@
 // 37 tasks; opens per trial are Bernoulli; every claim needs the 95% task-clustered percentile interval to exclude 0,
 // and a test also needs the two-sided sign-flip p under its alpha. Readings, for the frozen layout:
 //   D1   per model: gstack and placebo pooled under the preset, 2r trials per task; interval only.
-//   D2   per model: gstack-rewritten (r per task) minus the pooled shipped arms (2r per task); Holm across the five
-//        preset models, so the first step needs p < 0.01. Run at r = 1 and r = 2 (option (a), the cheap models).
-//   D2   pooled: the per-task mean over the five models of that difference; one test, p < 0.05. The effect sits on
-//        every model, or on 2 of the 5 (the pooled difference is then 2/5 of the per-model one).
-//   D3   per model: gstack under the preset (r per task) minus gstack under sdk-default (r per task); Holm across
-//        Opus and Haiku, so the first step needs p < 0.025.
-//   D3   pooled: the per-task mean over the two models; one test, p < 0.05.
+//   D2   per model: gstack-rewritten (r per task) minus the pooled shipped arms (2r per task); Holm across the three
+//        preset models, so the first step needs p < 0.05/3. Run at r = 1 and r = 2 (option (a), particle-1). On Opus the
+//        shipped arms have 3 trials per task (gstack's second replicate); the simulation's 2 is the conservative case.
+//   D2   pooled: the per-task mean over the models of that difference; one test, p < 0.05. Over the three models
+//        (Opus 5.5, particle-1, gpt-6.1-sol) with the effect on all 3 or on 1 of 3 (the pooled difference is then 1/3
+//        of the per-model one), and over two if gpt-6.1-sol drops out.
+//   D3   Opus 5.5 alone: gstack under the preset minus gstack under sdk-default, r per task each; one test, p < 0.05.
+//        Run at r = 1 and at r = 2, the frozen layout.
 // The shipped (or sdk-default) rate is 0 or 0.02. Opens are uniform across tasks, or confined to the same random 30%
 // of tasks (11 of 37) on every model, for the arm that carries the effect; the baseline stays uniform. Each power value
 // is DATASETS simulated datasets with RESAMPLES bootstrap resamples and RESAMPLES sign-flip draws each, seed 20261101.
@@ -79,12 +80,13 @@ const pts = (x: number) => (Number.isFinite(x) ? (100 * x).toFixed(1) : "not rea
 
 export const DESIGNS: Design[] = [
   { name: "D1 per model, r = 1 (gstack and placebo pooled, 2 trials per task)", models: 1, affected: 1, effectTrials: 2, baseTrials: 0, alpha: null },
-  { name: "D2 per model, r = 1 (Holm across 5, first step p < 0.01)", models: 1, affected: 1, effectTrials: 1, baseTrials: 2, alpha: 0.01 },
-  { name: "D2 per model, r = 2 (option (a); Holm across 5, first step p < 0.01)", models: 1, affected: 1, effectTrials: 2, baseTrials: 4, alpha: 0.01 },
-  { name: "D2 pooled over 5 models, r = 1, effect on all 5 (one test, p < 0.05)", models: 5, affected: 5, effectTrials: 1, baseTrials: 2, alpha: 0.05 },
-  { name: "D2 pooled over 5 models, r = 1, effect on 2 of 5 (one test, p < 0.05)", models: 5, affected: 2, effectTrials: 1, baseTrials: 2, alpha: 0.05 },
-  { name: "D3 per model, r = 1 (Holm across 2, first step p < 0.025)", models: 1, affected: 1, effectTrials: 1, baseTrials: 1, alpha: 0.025 },
-  { name: "D3 pooled over Opus and Haiku, r = 1 (one test, p < 0.05)", models: 2, affected: 2, effectTrials: 1, baseTrials: 1, alpha: 0.05 },
+  { name: "D2 per model, r = 1 (Holm across 3, first step p < 0.0167)", models: 1, affected: 1, effectTrials: 1, baseTrials: 2, alpha: 0.05 / 3 },
+  { name: "D2 per model, r = 2 (option (a), particle-1; Holm across 3, first step p < 0.0167)", models: 1, affected: 1, effectTrials: 2, baseTrials: 4, alpha: 0.05 / 3 },
+  { name: "D2 pooled over 3 models, r = 1, effect on all 3 (one test, p < 0.05)", models: 3, affected: 3, effectTrials: 1, baseTrials: 2, alpha: 0.05 },
+  { name: "D2 pooled over 3 models, r = 1, effect on 1 of 3 (one test, p < 0.05)", models: 3, affected: 1, effectTrials: 1, baseTrials: 2, alpha: 0.05 },
+  { name: "D2 pooled over 2 models (gpt-6.1-sol out), r = 1, effect on both (one test, p < 0.05)", models: 2, affected: 2, effectTrials: 1, baseTrials: 2, alpha: 0.05 },
+  { name: "D3 Opus 5.5 alone, r = 1 (one test, p < 0.05)", models: 1, affected: 1, effectTrials: 1, baseTrials: 1, alpha: 0.05 },
+  { name: "D3 Opus 5.5 alone, r = 2, the frozen layout (one test, p < 0.05)", models: 1, affected: 1, effectTrials: 2, baseTrials: 2, alpha: 0.05 },
 ];
 
 if (import.meta.main) {

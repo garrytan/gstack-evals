@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Keyless dry run for Run D's preregistration (GEVA-125, section 10). No provider key, no Ubicloud call, no spend.
 #   a  builds the variant tars twice and compares digests; prepare-run for each Run D batch (invoke off, MAX_TURNS=60,
-#      preset cells on every model, sdk-default cells on Opus and Haiku)
+#      preset cells on every model, sdk-default cells on Opus, and the batch of Opus's second D3 replicate)
 #   b  listing check through the real proxy and ledger service, with the fake upstream behind a pass-through shim that
 #      records each request body; one cell at a time, both system prompts
 #   c  one lease for the run on a temp ledger (b's sessions reserve and settle through the proxy)
@@ -27,10 +27,12 @@ claude_bin=$CLAUDE_BIN
 direct_root=${DIRECT_ROOT:-/tmp/rund-direct}
 PRESET=claude-code-preset
 SDK=sdk-default
-MODELS="claude-haiku-5-5 particle-1 claude-sonnet-5-5 claude-opus-5-5 gpt-6.1-sol"
-both() { [ "$1" = claude-opus-5-5 ] || [ "$1" = claude-haiku-5-5 ]; }
+MODELS="particle-1 claude-opus-5-5 gpt-6.1-sol"
+BATCHES="particle-1 claude-opus-5-5 claude-opus-5-5/r2 gpt-6.1-sol"
+both() { [ "$1" = claude-opus-5-5 ]; }
 cells_csv() {
   local m=$1 a cells=()
+  if [ "$m" = claude-opus-5-5/r2 ]; then echo "gstack:system_prompt=$PRESET,gstack:system_prompt=$SDK"; return; fi
   for a in none gstack gstack-rewritten placebo; do cells+=("$a:system_prompt=$PRESET"); done
   if both "$m"; then for a in none gstack gstack-rewritten; do cells+=("$a:system_prompt=$SDK"); done; fi
   (IFS=,; echo "${cells[*]}")
@@ -67,15 +69,16 @@ if has a; then
   git -C "$TB2" checkout -q 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c
   final=$(jq -r '.tasks | join(",")' "$root/tasks/final.json")
   tasks=$(echo "$final" | tr ',' '\n' | grep -vxE 'crack-7z-hash|adaptive-rejection-sampler|largest-eigenval' | paste -sd,)
-  for m in $MODELS; do
-    MAX_TURNS=60 TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-d-$m" "discovery-r1-$m-dry" "$m" "$(cells_csv "$m")" "$armdir" 1 12 off >/dev/null
-    r=$out/run-d-$m
-    echo "run-d-$m: $(jq '.tasks | length' "$r/job.json") tasks, $(jq '.agents | length' "$r/job.json") cells, manifest invoke=$(jq -c '.invoke' "$r/manifest.json") max_turns=$(jq -c '.max_turns' "$r/manifest.json"), arm tars copied $(ls "$r/arms" | wc -l)"
+  for b in $BATCHES; do
+    m=${b%/r2} d=${b//\//-}
+    MAX_TURNS=60 TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-d-$d" "discovery-r1-$d-dry" "$m" "$(cells_csv "$b")" "$armdir" 1 12 off >/dev/null
+    r=$out/run-d-$d
+    echo "run-d-$d: $(jq '.tasks | length' "$r/job.json") tasks, $(jq '.agents | length' "$r/job.json") cells, manifest invoke=$(jq -c '.invoke' "$r/manifest.json") max_turns=$(jq -c '.max_turns' "$r/manifest.json"), arm tars copied $(ls "$r/arms" | wc -l)"
     jq -r '.arms[] | "  manifest \(.label): sha256 \(.sha256[0:12]) system_prompt=\(.system_prompt)"' "$r/manifest.json"
     jq -r '.agents[] | "  job \(.kwargs.upstream_model) \(.kwargs.arm) system_prompt=\(.kwargs.system_prompt) sdk_max_turns=\(.kwargs.sdk_max_turns) invoke=\(.kwargs.invoke) skill_map=\(.kwargs.skill_map | length)"' "$r/job.json"
     rm -rf "$r/arms" "$r/tasks"
   done
-  if MAX_TURNS=60 TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-d-dup" dup claude-haiku-5-5 "gstack:system_prompt=$PRESET,gstack:system_prompt=$PRESET" "$armdir" 1 12 off >/dev/null 2>"$out/dup.err"; then echo "duplicate cell accepted (bad)"; exit 1; fi
+  if MAX_TURNS=60 TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-d-dup" dup claude-opus-5-5 "gstack:system_prompt=$PRESET,gstack:system_prompt=$PRESET" "$armdir" 1 12 off >/dev/null 2>"$out/dup.err"; then echo "duplicate cell accepted (bad)"; exit 1; fi
   echo "a cell listed twice is refused: $(grep -m1 -o '^error: E_USAGE.*' "$out/dup.err")"
 fi
 
