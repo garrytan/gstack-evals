@@ -10,14 +10,22 @@
 // Crash safety: it copies cells.ndjson to refill-gaps.backup.ndjson before it changes anything and writes refill-gaps.done
 // last. A rerun that finds the backup and no done marker removes what the interrupted attempt wrote and does the move
 // again from the backup, provided cells.ndjson still holds one of the two states the move leaves (before or after).
-// It refuses, and changes nothing, when the scorer checkout is not at e305ed0 with no tracked change, when refill-gaps.done
-// exists (a run takes one resume), when refilled-gaps output exists with no backup, when cells.ndjson changed after an
-// interrupted attempt, when a cell has more than one journal line, or when a gap's run directory is missing. It prints
-// digests, per-arm counts and the gaps' metered spend, and never prints a unit id. R1A_REFILL_CRASH=<point> kills it at
+// Controller check (GSTA-2, 2026-11-01): before anything else it reads <out dir>.controller.pid, the pid the run script
+// records beside the out dir with $BASHPID when it starts review-units (section 10), and scans /proc for any process other
+// than itself with cells.ndjson open. It refuses while that pid is alive and either its command line names review-units or
+// it started no later than 2 s after the pid file was written (its start from /proc/<pid>/stat and /proc/uptime, at Linux's
+// 100 clock ticks a second), so a launching shell that wrote its own pid still blocks. Only a live process that started
+// later and does not run review-units is a reused pid. It also refuses while the pid file is missing or names no pid, and
+// while any process holds cells.ndjson open. It prints both checks and appends them, with the time, to refill-gaps.log in
+// the out dir.
+// It refuses, and changes nothing but that log, when the scorer checkout is not at e305ed0 with no tracked change, when
+// the controller check fails, when refill-gaps.done exists (a run takes one resume), when refilled-gaps output exists with
+// no backup, when cells.ndjson changed after an interrupted attempt, when a cell has more than one journal line, or when a
+// gap's run directory is missing. It prints digests, per-arm counts and the gaps' metered spend, and never prints a unit id. R1A_REFILL_CRASH=<point> kills it at
 // that point (after-copy, between-renames or before-done); only the dry run sets it.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const PIN = "e305ed087b3f17bd211287b0e2d5e3f3960b5a4f";
@@ -53,6 +61,67 @@ const stage = (path: string, text: string | Buffer) => {
   syncFile(path + ".tmp");
 };
 
+if (!existsSync(out!)) fail("the out dir " + out + " is missing");
+const pidFile = out + ".controller.pid", at = new Date().toISOString();
+const note = (line: string) => {
+  console.log(line);
+  appendFileSync(join(out!, "refill-gaps.log"), at + " " + line + "\n");
+};
+const argvOf = (pid: string) => {
+  try {
+    return readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+const startedMs = (pid: string) => {
+  try {
+    const stat = readFileSync("/proc/" + pid + "/stat", "utf8");
+    const ticks = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]);
+    const uptime = Number(readFileSync("/proc/uptime", "utf8").split(" ")[0]);
+    return Number.isFinite(ticks) && Number.isFinite(uptime) ? Date.now() - (uptime - ticks / 100) * 1000 : null;
+  } catch {
+    return null;
+  }
+};
+const pidText = existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : "";
+const pidArgv = /^\d+$/.test(pidText) ? argvOf(pidText) : [];
+const lag = pidArgv.length ? (startedMs(pidText) ?? -Infinity) - statSync(pidFile).mtimeMs : 0;
+const controller = !/^\d+$/.test(pidText)
+  ? "refused: the file is missing or names no pid, so the controller cannot be shown to have exited"
+  : !pidArgv.length
+    ? "pid " + pidText + " is not running"
+    : pidArgv.includes("review-units")
+      ? "refused: pid " + pidText + " is alive and runs review-units"
+      : lag <= 2000
+        ? "refused: pid " + pidText + " is alive and started before the pid file was written, or within 2 s after, so it may be the shell that launched the controller"
+        : "pid " + pidText + " is alive but started " + Math.round(lag / 1000) + " s after the pid file was written and does not run review-units (a reused pid), so the controller has exited";
+note("controller check: " + pidFile + " " + controller);
+const target = existsSync(journal) ? realpathSync(journal) : null;
+const holders: string[] = [];
+let scanned = 0, unreadable = 0;
+if (target)
+  for (const p of readdirSync("/proc").filter((p) => /^\d+$/.test(p) && Number(p) !== process.pid)) {
+    let fds: string[];
+    try {
+      fds = readdirSync("/proc/" + p + "/fd");
+    } catch {
+      unreadable++;
+      continue;
+    }
+    scanned++;
+    const holds = fds.some((fd) => {
+      try {
+        return readlinkSync("/proc/" + p + "/fd/" + fd) === target;
+      } catch {
+        return false;
+      }
+    });
+    if (holds) holders.push(p);
+  }
+const held = !target ? "cells.ndjson is absent, so no process holds it" : holders.length ? "refused: pid " + holders.join(", ") + " hold" + (holders.length === 1 ? "s" : "") + " cells.ndjson open" : "no process holds cells.ndjson open (" + scanned + " processes scanned, " + unreadable + " not readable)";
+note("open-file check: " + held);
+if (controller.startsWith("refused") || held.startsWith("refused")) fail("the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs");
 if (existsSync(done)) fail("refill-gaps.done exists: a run takes one resume, and its gaps were moved already");
 const recovering = existsSync(backup);
 const partial = [moved, raws, moved + ".tmp", raws + ".tmp", journal + ".tmp"].filter((p) => existsSync(p));

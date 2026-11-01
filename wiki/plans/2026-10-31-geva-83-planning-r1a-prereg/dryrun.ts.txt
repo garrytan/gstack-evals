@@ -6,9 +6,9 @@
 // summary lines, drops every line that names a unit, and ends with a leak check over every unit's head and base. The
 // ledger checks run on a temporary approval record and local ledger under the scratch dir, with the approval mirror stubbed.
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
 const [scorer, SR, SRC, POST, OUT] = process.argv.slice(2).map((p) => resolve(p));
 const HOME = process.env.HOME ?? "";
@@ -432,23 +432,45 @@ const pr = pj.recall.find((x: any) => x.arm === id("none", OPUS)).blocking;
 say("pilot none-opus must-fix recall " + pr.found + "/" + pr.n + " = " + pr.recall + "; stop (a) fires outside 0.10 to 0.85: " + (pr.recall > 0.85 || pr.recall < 0.1 ? "fires" : "does not fire"));
 check("pilot recall reads on the pilot's 8 flaws, from noloss secondary", ps.code === 0 && pr.n === 8 && typeof pr.recall === "number");
 check("the pilot reading carries no verdict and no claim", !/claim|LOSS|NOT_DISTINGUISHED|NO_LOSS|verdict/i.test(ps.out));
-say("pilot stops (b), (c) and (e) through pilot-stops.ts.txt: (e) on the adjudicated synthetic pilot arms above, (b) and (c) on synthetic pilot out dirs");
+say("pilot stops (b), (c) and (e) through pilot-stops.ts.txt: (e) on the adjudicated synthetic pilot arms above, (b) and (c) on synthetic pilot out dirs whose cells.ndjson and parses.tsv agree, as the pinned runner writes them");
 const PSS = join(OUT, "pilot-stops.ts");
 cpSync(join(POST, "pilot-stops.ts.txt"), PSS);
-const pilotOut = (name: string, fallbacks: number, failed: number) => {
+const SESS: Record<string, { termination: Record<string, string>; output: boolean; parse: Record<string, unknown> }> = {
+  findings: { termination: { kind: "completed" }, output: true, parse: { kind: "findings", findings: [] } },
+  missing: { termination: { kind: "completed" }, output: true, parse: { kind: "missing", reason: "no plan-findings block" } },
+  malformed: { termination: { kind: "completed" }, output: true, parse: { kind: "malformed", reason: "item 0: severity is not Critical, High, Medium or Low" } },
+  "late timeout": { termination: { kind: "timeout" }, output: true, parse: { kind: "incomplete", reason: "the session ended timeout" } },
+  "infra failure": { termination: { kind: "missing", code: "E_INFRA_FAILURE" }, output: true, parse: { kind: "incomplete", reason: "the session ended missing" } },
+  "early timeout": { termination: { kind: "timeout" }, output: false, parse: { kind: "incomplete", reason: "the session ended timeout" } },
+  "early crash": { termination: { kind: "arm_failure" }, output: false, parse: { kind: "incomplete", reason: "the session ended arm_failure" } },
+};
+const P1ARMS = ["none", "gstack", "placebo"];
+const session = (model: string, arm: string, n: number, s: string) => ({ cell: { model, arm, unit: "synthetic/unit-" + n, pass: 1 }, key: {}, meter_id: "pilot-" + arm + "-" + n, record: { task: "task-" + n, termination: SESS[s]!.termination, model_output: SESS[s]!.output, wall_ms: 1000, cost_micros: 0 }, parse: SESS[s]!.parse, cost: null });
+const sessionDir = (e: any) => join("runs", e.cell.model.replaceAll("/", "_"), e.cell.arm, e.record.task, "p" + e.cell.pass);
+const parseLabel = (p: any) => (p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind);
+const writeJournal = (d: string, sessions: any[]) => {
+  writeFileSync(join(d, "cells.ndjson"), sessions.map((e) => JSON.stringify(e) + "\n").join(""));
+  writeFileSync(join(d, "parses.tsv"), ["arm_id\tarm\tmodel\tunit\tpass\toutcome\tfindings\treason", ...sessions.map((e) => [id(e.cell.arm, e.cell.model), e.cell.arm, e.cell.model, e.cell.unit, String(e.cell.pass), parseLabel(e.parse), e.parse.kind === "findings" ? String(e.parse.findings.length) : "", e.parse.reason ?? ""].join("\t"))].join("\n") + "\n");
+};
+const pilotOut = (name: string, fallbacks: number, p1: string[], o: { opus?: string; opusCells?: number; stale?: boolean } = {}) => {
   const d = join(OUT, "pilot-out", name);
-  for (let s = 0; s < 10; s++) {
-    const host = join(d, "runs", OPUS, "gstack", "task-" + s, "p1", "host");
-    mkdirSync(host, { recursive: true });
-    writeFileSync(join(host, "usersim.ndjson"), [{ kind: "start" }, { kind: "ask", source: s < fallbacks ? "fallback" : "scripted" }, { kind: "prose", source: "freeform" }].map((e) => JSON.stringify(e) + "\n").join(""));
+  const sessions = [...p1.map((s, i) => session(P1, P1ARMS[i % 3]!, Math.floor(i / 3), s)), ...Array.from({ length: o.opusCells ?? 12 }, (_, i) => session(OPUS, ["none", "gstack", "lens"][i % 3]!, Math.floor(i / 3), i ? "findings" : (o.opus ?? "missing"))), ...Array.from({ length: 8 }, (_, i) => session(FABLE, ["none", "gstack"][i % 2]!, Math.floor(i / 2), "findings"))];
+  if (o.stale) {
+    mkdirSync(join(d, "runs", OPUS, "gstack", "task-stale", "p1", "host"), { recursive: true });
+    writeFileSync(join(d, "runs", OPUS, "gstack", "task-stale", "p1", "host", "usersim.ndjson"), [{ kind: "ask", source: "fallback" }, { kind: "prose", source: "fallback" }].map((x) => JSON.stringify(x) + "\n").join(""));
   }
-  const row = (model: string, i: number, outcome: string) => [id("none", model), "none", model, "synthetic/unit-" + i, "1", outcome, "", ""].join("\t");
-  writeFileSync(join(d, "parses.tsv"), ["arm_id\tarm\tmodel\tunit\tpass\toutcome\tfindings\treason", ...Array.from({ length: 12 }, (_, i) => row(P1, i, i < failed ? "missing" : "findings")), row(OPUS, 0, "missing")].join("\n") + "\n");
+  sessions.forEach((e, s) => {
+    mkdirSync(join(d, sessionDir(e), "host"), { recursive: true });
+    writeFileSync(join(d, sessionDir(e), "record.json"), "synthetic pilot session\n");
+    if (s < 10) writeFileSync(join(d, sessionDir(e), "host", "usersim.ndjson"), [{ kind: "start" }, { kind: "ask", source: s < fallbacks ? "fallback" : "scripted" }, { kind: "prose", source: "freeform" }].map((x) => JSON.stringify(x) + "\n").join(""));
+  });
+  writeJournal(d, sessions);
   return d;
 };
-const pilotStops = (d: string, label: string) => {
-  const r = spawnSync("bun", [PSS, d, PL.from], { encoding: "utf8", env: KEYLESS });
-  say("$ bun $OUT/pilot-stops.ts " + d + " " + PL.from);
+const p1Mix = (counts: Record<string, number>) => Object.entries(counts).flatMap(([s, n]) => Array.from({ length: n }, () => s));
+const pilotStops = (d: string, label: string, arms: string = PL.from) => {
+  const r = spawnSync("bun", [PSS, scorer, d, arms], { encoding: "utf8", env: KEYLESS });
+  say("$ bun $OUT/pilot-stops.ts $SCORER " + d + " " + arms);
   say("  exit " + r.status + "  (" + label + ")");
   for (const l of ((r.stdout ?? "") + "\n" + (r.stderr ?? "")).split("\n").filter((l) => l.trim() && !UNIT.test(l))) say("    " + l);
   return r;
@@ -456,14 +478,54 @@ const pilotStops = (d: string, label: string) => {
 const eCells = pilotCells.filter((c) => c.endsWith("-opus") || c.endsWith("-particle-1"));
 const notDefect = (c: string) => (existsSync(join(PL.from, c, "adjudication.tsv")) ? readFileSync(join(PL.from, c, "adjudication.tsv"), "utf8").split("\n").filter((l) => l.split("\t")[3] === "not-defect").length : 0);
 check("the synthetic pilot went through blind adjudication, so stop (e) has rulings to read", PL.from.endsWith("adjudicated") && eCells.some((c) => notDefect(c) > 0));
-const quiet = pilotStops(pilotOut("quiet", 1, 2), "1 fallback in 20 replies, 2 of 12 particle-1 sessions with no parsed block");
+say("each synthetic pilot out dir holds the pilot's 32 sessions (12 Opus, 12 particle-1, 8 Fable) in cells.ndjson and parses.tsv; the first has a leftover run directory no journal line names, whose log holds 2 fallback events");
+const quiet = pilotStops(pilotOut("quiet", 1, p1Mix({ missing: 1, "late timeout": 1, findings: 10 }), { stale: true }), "1 fallback in 20 journaled replies; 2 of 12 particle-1 sessions are misses (a missing block, a timeout after model output)");
 const eMax = Math.max(...eCells.map(notDefect)) / 4;
 check("stop (e) takes the highest cell rate, " + eMax.toFixed(3) + ", and fires only above 0.25", eMax > 0 && quiet.stdout.includes("(e) highest rate " + eMax.toFixed(3) + " (stop above 0.25 in any cell): " + (eMax > 0.25 ? "fires" : "does not fire")));
-check("stop (b) reads the simulator's reply sources: 1 fallback in 20 events is 0.050 and does not fire", quiet.status === 0 && /\(b\) user simulator: 20 ask and prose events in 10 session logs, 1 fallback, share 0\.050 \(stop above 0\.10\): does not fire/.test(quiet.stdout));
-check("stop (c) reads parses.tsv: 2 of 12 particle-1 sessions is 0.167 and does not fire", /\(c\) particle-1: 12 pilot sessions, 2 with no parsed plan-findings block, share 0\.167 \(stop above 0\.20\): does not fire/.test(quiet.stdout));
+check("stop (b) reads the journaled sessions' reply sources, not the leftover log: 1 fallback in 20 events is 0.050 and does not fire", quiet.status === 0 && /\(b\) user simulator: 20 ask and prose events in 10 journaled session logs, 1 fallback, share 0\.050 \(stop above 0\.10\): does not fire/.test(quiet.stdout));
+check("stop (c) scores each particle-1 session with the pinned planScore from its cells.ndjson line: 2 misses in 12 is 0.167 and does not fire", /\(c\) the pilot's cells\.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 2 scored miss by the pinned planScore, share 0\.167 \(stop above 0\.20\): does not fire/.test(quiet.stdout));
 check("stop (e) reads each of the " + eCells.length + " Opus and particle-1 cells, and no Fable cell, with the not-defect counts in their adjudication.tsv over 4 plans x 1 pass", eCells.length === 6 && eCells.every((c) => new RegExp("^\\(e\\) " + c + ": " + notDefect(c) + " must-fix findings ruled not-defect over 4 plans x 1 pass = ", "m").test(quiet.stdout)) && !/^\(e\) \S+-fable:/m.test(quiet.stdout) && /^\(e\) highest rate /m.test(quiet.stdout));
-const noisy = pilotStops(pilotOut("noisy", 3, 3), "3 fallbacks in 20 replies, 3 of 12 particle-1 sessions with no parsed block");
-check("3 fallbacks in 20 (0.150) fire stop (b), and 3 of 12 particle-1 sessions (0.250) fire stop (c)", noisy.status === 0 && /share 0\.150 \(stop above 0\.10\): fires/.test(noisy.stdout) && /share 0\.250 \(stop above 0\.20\): fires/.test(noisy.stdout) && /^stops fired: b, c/m.test(noisy.stdout));
+const noisy = pilotStops(pilotOut("noisy", 3, p1Mix({ missing: 1, malformed: 1, "late timeout": 1, findings: 9 })), "3 fallbacks in 20 replies; 3 of 12 particle-1 sessions are misses (a missing block, a malformed block, a timeout after model output)");
+check("3 fallbacks in 20 (0.150) fire stop (b), and 3 misses in 12 particle-1 sessions (0.250) fire stop (c)", noisy.status === 0 && /share 0\.150 \(stop above 0\.10\): fires/.test(noisy.stdout) && /12 pilot sessions, 3 scored miss by the pinned planScore, share 0\.250 \(stop above 0\.20\): fires/.test(noisy.stdout) && /^stops fired: b, c/m.test(noisy.stdout));
+say("an infra outage: 3 particle-1 sessions end in gaps (an infra failure after model output, a timeout and a crash before any), beside 2 misses");
+const outage = pilotOut("outage", 1, p1Mix({ "infra failure": 1, "early timeout": 1, "early crash": 1, missing: 1, "late timeout": 1, findings: 7 }));
+const oldRule = readFileSync(join(outage, "parses.tsv"), "utf8").split("\n").filter((l) => l.split("\t")[2] === P1 && ["missing", "malformed", "incomplete"].includes(l.split("\t")[5]!)).length;
+say("the rule before this fix counted every missing, malformed or incomplete parses.tsv row: " + oldRule + " of 12 = " + (oldRule / 12).toFixed(3) + ", which would fire (c) and drop the rung on an outage");
+const og = pilotStops(outage, "the outage's 3 gaps still in cells.ndjson, before the pilot's one resume");
+check("with the outage's gaps left, pilot-stops refuses and prints no reading, so an infra gap never fires (c)", og.status === 2 && !/^\((b|c|e)\)/m.test(og.stdout) && /E_USAGE 3 of the pilot's 32 journaled sessions score gap by the pinned planScore; the stops are read only once the pilot has no gap left/.test(og.stderr) && oldRule === 5);
+writeFileSync(outage + ".controller.pid", String(spawnSync("true").pid) + "\n");
+cpSync(join(POST, "refill-gaps.ts.txt"), join(OUT, "refill-gaps.ts"));
+const outageRefill = spawnSync("bun", [join(OUT, "refill-gaps.ts"), scorer, outage], { encoding: "utf8", env: KEYLESS });
+say("$ bun $OUT/refill-gaps.ts $SCORER " + outage);
+say("  exit " + outageRefill.status + "  (the pilot's one refill before its resume, after its controller exited)");
+for (const l of (outageRefill.stdout ?? "").split("\n").filter((l) => /^(controller check|open-file check|refilled|moved) /.test(l))) say("    " + l);
+const journalLines = (path: string) => readFileSync(path, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+const rerun = journalLines(join(outage, "refilled-gaps.ndjson")).map((e: any) => ({ ...e, record: { ...e.record, termination: { kind: "completed" }, model_output: true }, parse: { kind: "findings", findings: [] } }));
+appendFileSync(join(outage, "cells.ndjson"), rerun.map((e: any) => JSON.stringify(e) + "\n").join(""));
+writeJournal(outage, journalLines(join(outage, "cells.ndjson")));
+say("the resume reruns the 3 refilled cells (synthetic: each now reaches its findings), and the runner rewrites parses.tsv");
+const or = pilotStops(outage, "the same pilot after its refill and resume");
+check("refill-gaps moves the outage's 3 gaps, and after the resume (c) reads only the 2 misses: 0.167, which does not fire", outageRefill.status === 0 && rerun.length === 3 && or.status === 0 && /12 pilot sessions, 2 scored miss by the pinned planScore, share 0\.167 \(stop above 0\.20\): does not fire/.test(or.stdout));
+const og2 = pilotStops(pilotOut("opus-gap", 1, p1Mix({ missing: 1, findings: 11 }), { opus: "early timeout" }), "a gap left in an Opus session, particle-1 clean");
+check("a gap left in any pilot session, Opus included, refuses every reading", og2.status === 2 && !/^\((b|c|e)\)/m.test(og2.stdout) && /E_USAGE 1 of the pilot's 32 journaled sessions score gap/.test(og2.stderr));
+const short11 = pilotStops(pilotOut("eleven", 1, p1Mix({ missing: 1, findings: 10 })), "11 particle-1 sessions: one cell never ran");
+check("pilot-stops refuses unless parses.tsv holds exactly 12 particle-1 rows", short11.status === 2 && !/^\((b|c|e)\)/m.test(short11.stdout) && /E_USAGE parses\.tsv holds 11 particle-1 rows, not the pilot's 12/.test(short11.stderr));
+const shortOpus = pilotStops(pilotOut("short-opus", 1, p1Mix({ missing: 1, findings: 11 }), { opusCells: 10 }), "2 Opus cells never ran (a cap stop or a killed resume), particle-1 complete");
+check("pilot-stops refuses unless parses.tsv and cells.ndjson hold all 32 pilot sessions, so cells that never ran cannot shrink (e) or (b)", shortOpus.status === 2 && !/^\((b|c|e)\)/m.test(shortOpus.stdout) && /E_USAGE parses\.tsv holds 30 rows and cells\.ndjson 30 sessions; the readings need exactly the pilot's 32 sessions/.test(shortOpus.stderr));
+const armsWithout = (name: string, change: (dir: string) => void) => {
+  const d = join(OUT, "pilot-arms", name);
+  cpSync(PL.from, d, { recursive: true });
+  change(d);
+  return d;
+};
+const quietOut = join(OUT, "pilot-out", "quiet");
+const noLens = pilotStops(quietOut, "the adjudicated pilot arms without " + id("lens", OPUS), armsWithout("no-lens", (d) => rmSync(join(d, id("lens", OPUS)), { recursive: true })));
+check("stop (e) refuses when one of the six arm ids is missing", noLens.status === 2 && !/^\((b|c|e)\)/m.test(noLens.stdout) && new RegExp("E_USAGE arm " + id("lens", OPUS) + " is missing from ").test(noLens.stderr));
+const shortArm = pilotStops(quietOut, "the adjudicated pilot arms with one of " + id("gstack", P1) + "'s 4 findings files removed", armsWithout("short-arm", (d) => rmSync(join(d, id("gstack", P1), "findings", readdirSync(join(d, id("gstack", P1), "findings")).filter((f) => f.endsWith(".jsonl")).sort()[0]!))));
+const zeroArm = eCells.find((c) => notDefect(c) === 0)!;
+const noAdj = pilotStops(quietOut, "the adjudicated pilot arms with " + zeroArm + "'s adjudication.tsv removed, as for an arm whose must-fix findings all matched", armsWithout("no-adjudication", (d) => rmSync(join(d, zeroArm, "adjudication.tsv"), { force: true })));
+check("stop (e) reads an arm with no adjudication.tsv as 0, says why, and does not refuse it", noAdj.status === 0 && new RegExp("^\\(e\\) " + zeroArm + ": 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0\\.000 per plan per pass \\(no adjudication\\.tsv: no must-fix finding was left unmatched\\)$", "m").test(noAdj.stdout));
+check("stop (e) refuses an arm that holds other than 4 findings files", shortArm.status === 2 && !/^\((b|c|e)\)/m.test(shortArm.stdout) && new RegExp("E_USAGE arm " + id("gstack", P1) + " holds 3 findings files, not the pilot's 4").test(shortArm.stderr));
 
 say("\n## 16. Fable 5.1 subset, exploratory");
 const F = await judged("fable", suites[3], fablePath, [id("none", FABLE), id("gstack", FABLE)], 1, true);
@@ -526,7 +588,7 @@ for (const [model, inR1a] of [[P1, true], ["deepseek/deepseek-v4.1-flash-1017", 
 }
 const routeRecord = JSON.stringify({ schema_version: 1, scorer: spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(), routes }, null, 2) + "\n";
 writeFileSync(join(OUT, "route.json"), routeRecord);
-say("route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 " + createHash("sha256").update(routeRecord).digest("hex"));
+say("<out>.route.json, written beside each R1a run's out dir before review-units starts and joined to every session in cells.ndjson: sha256 " + createHash("sha256").update(routeRecord).digest("hex"));
 
 say("\n## 19. Custody and the pin check: the run root, the receipts sink, the retained trees, and HEAD before every call");
 const { insideRepo } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
@@ -618,9 +680,10 @@ const killedRun = (name: string) => {
     writeFileSync(join(d, runOf(n), "record.json"), "synthetic session " + n + "\n");
   }
   writeFileSync(join(d, "cells.ndjson"), ORIGINAL);
+  writeFileSync(d + ".controller.pid", String(spawnSync("true").pid) + "\n");
   return d;
 };
-say("each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, and no units.json, arms/ or arm.json");
+say("each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, no units.json, arms/ or arm.json, and beside it <out>.controller.pid naming the controller's pid, which has exited");
 const refill = (d: string, label: string, o: { scorer?: string; crash?: string } = {}) => {
   const r = spawnSync("bun", [RGS, o.scorer ?? scorer, d], { encoding: "utf8", env: { ...KEYLESS, ...(o.crash ? { R1A_REFILL_CRASH: o.crash } : {}) } });
   say("$ " + (o.crash ? "R1A_REFILL_CRASH=" + o.crash + " " : "") + "bun $OUT/refill-gaps.ts " + (o.scorer ? "<a clean checkout of e305ed0's first parent>" : "$SCORER") + " " + d);
@@ -668,6 +731,120 @@ const pd = killedRun("pin");
 const pinRun = refill(pd, "a scorer checkout at e305ed0's first parent", { scorer: parent });
 spawnSync("git", ["-C", scorer, "worktree", "remove", "--force", parent]);
 check("a scorer checkout not at e305ed0 is refused before anything changes", wt.status === 0 && pinRun.status === 2 && /, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f;/.test(pinRun.stderr) && untouched(pd));
+
+say("the controller check: refill-gaps refuses while the controller's pid runs review-units or any process holds cells.ndjson open, and logs both checks");
+const logged = read(join(ka, "refill-gaps.log")) ?? "";
+check("refill-gaps logs both checks with the time in refill-gaps.log: the controller's pid is not running, and no process holds cells.ndjson open", /^\d{4}-\d\d-\d\dT[\d:.]+Z controller check: \S+\/killed\.controller\.pid pid \d+ is not running$/m.test(logged) && /^\d{4}-\d\d-\d\dT[\d:.]+Z open-file check: no process holds cells\.ndjson open \(\d+ processes scanned, \d+ not readable\)$/m.test(logged));
+const waitFor = async (ok: () => boolean) => {
+  for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 50));
+  return ok();
+};
+const argvOf = (pid: number) => {
+  try {
+    return readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+const holdsOpen = (pid: number, path: string) => {
+  try {
+    return readdirSync("/proc/" + pid + "/fd").some((fd) => {
+      try {
+        return readlinkSync("/proc/" + pid + "/fd/" + fd) === path;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+};
+const reap = async (c: ChildProcess) => {
+  const gone = c.exitCode !== null || c.signalCode !== null ? Promise.resolve() : new Promise((r) => c.once("exit", r));
+  try {
+    process.kill(-c.pid!, "SIGKILL");
+  } catch {
+    c.kill("SIGKILL");
+  }
+  await gone;
+};
+const LAUNCH = "echo $BASHPID > <out>.controller.pid && exec bin/gstack-evals review-units";
+check("section 10 gives the launch line that records the controller's pid, word for word: " + LAUNCH, readFileSync(join(POST, "README.md"), "utf8").includes(LAUNCH));
+const launch = (pidFile: string, script: string) => spawn("bash", ["-c", script, "launcher", pidFile], { detached: true });
+const pidIn = (pidFile: string) => (read(pidFile) ?? "").trim();
+const runsReviewUnits = (pidFile: string) => /^\d+$/.test(pidIn(pidFile)) && argvOf(Number(pidIn(pidFile)))[0] === "review-units";
+const groupRuns = (pgid: number) => readdirSync("/proc").filter((p) => /^\d+$/.test(p)).some((p) => {
+  try {
+    const s = readFileSync("/proc/" + p + "/stat", "utf8");
+    return Number(s.slice(s.lastIndexOf(")") + 2).split(" ")[2]) === pgid && argvOf(Number(p))[0] === "review-units";
+  } catch {
+    return false;
+  }
+});
+const heldDir = killedRun("held");
+const holder = spawn("bash", ["-c", 'exec 3<"$1"; exec sleep 120', "holder", join(heldDir, "cells.ndjson")], { detached: true });
+try {
+  const holding = await waitFor(() => holdsOpen(holder.pid!, realpathSync(join(heldDir, "cells.ndjson"))));
+  const hr = refill(heldDir, "a live process holds cells.ndjson open");
+  check("while a live process holds cells.ndjson open, refill-gaps refuses, names its pid, logs it and changes nothing else", holding && hr.status === 2 && new RegExp("^open-file check: refused: pid " + holder.pid + " holds cells\\.ndjson open$", "m").test(hr.stdout) && new RegExp("Z open-file check: refused: pid " + holder.pid + " holds cells\\.ndjson open$", "m").test(read(join(heldDir, "refill-gaps.log")) ?? "") && untouched(heldDir));
+} finally {
+  await reap(holder);
+}
+const freed = refill(heldDir, "the same out dir once that process has exited");
+check("once the holder has exited, refill-gaps runs on the same out dir", freed.status === 0 && /^open-file check: no process holds cells\.ndjson open/m.test(freed.stdout) && existsSync(join(heldDir, "refill-gaps.done")));
+const liveDir = killedRun("live-controller");
+const controller = spawn("bash", ["-c", "exec -a review-units sleep 120"], { detached: true });
+try {
+  const running = await waitFor(() => argvOf(controller.pid!)[0] === "review-units");
+  writeFileSync(liveDir + ".controller.pid", controller.pid + "\n");
+  const lr = refill(liveDir, "the recorded controller pid is alive and its command line names review-units (a stand-in for a controller still running)");
+  check("while the controller's pid is alive and runs review-units, refill-gaps refuses and changes nothing but its log", running && lr.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + controller.pid + " is alive and runs review-units$", "m").test(lr.stdout) && untouched(liveDir));
+} finally {
+  await reap(controller);
+}
+const reusedDir = killedRun("reused-pid");
+const other = spawn("bash", ["-c", "exec sleep 120"], { detached: true });
+try {
+  const started = await waitFor(() => argvOf(other.pid!)[0] === "sleep");
+  writeFileSync(reusedDir + ".controller.pid", other.pid + "\n");
+  const anHourAgo = new Date(Date.now() - 3_600_000);
+  utimesSync(reusedDir + ".controller.pid", anHourAgo, anHourAgo);
+  const ur = refill(reusedDir, "the recorded pid, written an hour ago, now belongs to a later process that does not run review-units, as after a machine restart");
+  check("a recorded pid held by a process that started after the pid file was written and does not run review-units (a reused pid) does not block, and the check says so", started && ur.status === 0 && new RegExp("^controller check: \\S+ pid " + other.pid + " is alive but started \\d+ s after the pid file was written and does not run review-units \\(a reused pid\\), so the controller has exited$", "m").test(ur.stdout));
+} finally {
+  await reap(other);
+}
+const pipeDir = killedRun("pipelined");
+const piped = launch(pipeDir + ".controller.pid", '{ echo $BASHPID > "$1" && exec -a review-units sleep 120; } | cat');
+try {
+  const up = await waitFor(() => runsReviewUnits(pipeDir + ".controller.pid"));
+  const pr = refill(pipeDir, "the whole launch line, with $BASHPID, as one element of a pipeline (| cat), the controller still running; a stand-in process whose command line names review-units");
+  check("inside a pipeline the launch line still records the controller's own pid, and refill-gaps refuses while it runs", up && pr.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + pidIn(pipeDir + ".controller.pid") + " is alive and runs review-units$", "m").test(pr.stdout) && untouched(pipeDir));
+} finally {
+  await reap(piped);
+}
+const dollarDir = killedRun("pipelined-dollar");
+const dollar = launch(dollarDir + ".controller.pid", 'echo $$ > "$1" && exec -a review-units sleep 120 | cat');
+try {
+  const up = await waitFor(() => pidIn(dollarDir + ".controller.pid") === String(dollar.pid) && groupRuns(dollar.pid!));
+  const dr = refill(dollarDir, "echo $$ > <pid file> && exec ... | cat: the echo runs in the launching shell and only the exec sits in the pipeline, so the file names that shell, the controller still running");
+  check("a launching shell that wrote its own pid, alive since before the pid file was written, blocks refill-gaps by its start time", up && dr.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + dollar.pid + " is alive and started before the pid file was written, or within 2 s after, so it may be the shell that launched the controller$", "m").test(dr.stdout) && untouched(dollarDir));
+} finally {
+  await reap(dollar);
+}
+const bgDir = killedRun("backgrounded");
+const bg = launch(bgDir + ".controller.pid", '( echo $BASHPID > "$1" && exec -a review-units sleep 120 ) & exit 0');
+try {
+  const up = await waitFor(() => runsReviewUnits(bgDir + ".controller.pid"));
+  const br = refill(bgDir, "the launch line in a backgrounded subshell whose launching shell has exited, the controller still running");
+  check("in a backgrounded subshell whose shell has exited, the recorded pid is still the controller's, and refill-gaps refuses", up && br.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + pidIn(bgDir + ".controller.pid") + " is alive and runs review-units$", "m").test(br.stdout) && untouched(bgDir));
+} finally {
+  await reap(bg);
+}
+const noPid = killedRun("no-pid-file");
+rmSync(noPid + ".controller.pid");
+const nr = refill(noPid, "no controller pid file beside the out dir");
+check("with no controller pid file beside the out dir, refill-gaps refuses and changes nothing but its log", nr.status === 2 && /^controller check: \S+ refused: the file is missing or names no pid, so the controller cannot be shown to have exited$/m.test(nr.stdout) && untouched(noPid));
 
 say("\n## Leak check");
 const text = lines.join("\n");

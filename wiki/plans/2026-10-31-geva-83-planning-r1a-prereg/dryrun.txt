@@ -1,4 +1,4 @@
-# R1a keyless dry run, 2026-11-01T15:08:10.913Z
+# R1a keyless dry run, 2026-11-01T16:17:46.719Z
 scorer HEAD e305ed087b3f17bd211287b0e2d5e3f3960b5a4f
 stub sha256 f8262d93b69048fdabbe8e15b38cdcec266e2e09f56275e31f267530d8e6c533
 post any-severity.json sha256 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367
@@ -137,10 +137,10 @@ $ ledger init --item planning-r1a-fable --cap 510 --admission warn --words "dry 
   exit 0  (record planning-r1a-fable)
     APPROVED: item=planning-r1a-fable cap=$510.00 admission=warn approval=1 record=$OUT/ledger/record
 PASS line item planning-r1a-fable records its cap of $510
-pilot: run id review-units-20261101T150815Z-32b4, minted as review-units mints it (cli.ts:280), leases planning-r1a-pilot for $184.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
-headline: run id review-units-20261101T150815Z-0925, minted as review-units mints it (cli.ts:280), leases planning-r1a-headline for $1,905.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
-real-neutral: run id review-units-20261101T150815Z-9672, minted as review-units mints it (cli.ts:280), leases planning-r1a-real for $106.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
-Fable subset: run id review-units-20261101T150815Z-c9a9, minted as review-units mints it (cli.ts:280), leases planning-r1a-fable for $510.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $12.50; left open, as a killed controller leaves it
+pilot: run id review-units-20261101T161750Z-5278, minted as review-units mints it (cli.ts:280), leases planning-r1a-pilot for $184.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+headline: run id review-units-20261101T161750Z-9d5b, minted as review-units mints it (cli.ts:280), leases planning-r1a-headline for $1,905.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+real-neutral: run id review-units-20261101T161750Z-6a39, minted as review-units mints it (cli.ts:280), leases planning-r1a-real for $106.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+Fable subset: run id review-units-20261101T161750Z-e0b2, minted as review-units mints it (cli.ts:280), leases planning-r1a-fable for $510.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $12.50; left open, as a killed controller leaves it
 PASS each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone
 PASS each lease on a warn item without an admission record warns RIG_UNPROVEN and is not refused
 a second review-units run on planning-r1a-pilot: E_ITEM_BOUND
@@ -149,20 +149,20 @@ the headline's one resume: same run id (review-units keeps it in run.json, cli.t
 PASS a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend
 the Fable run's resume while the killed controller's lease is open: E_LEASE_UNSETTLED
 PASS after a killed controller its lease stays open, and the resume's lease is refused with E_LEASE_UNSETTLED
-$ ledger settle --lease planning-r1a-fable.0001.6d9f36
+$ ledger settle --lease planning-r1a-fable.0001.40b479
   exit 0  (settle the killed controller's lease on its own machine, before the resume)
-    SETTLED: planning-r1a-fable.0001.6d9f36 spent=$12.50 unknown=$0.00 (0 calls) record=$OUT/ledger/record
+    SETTLED: planning-r1a-fable.0001.40b479 spent=$12.50 unknown=$0.00 (0 calls) record=$OUT/ledger/record
 PASS once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id
 $ ledger init --item planning-r1a-judge-pilot-match --cap 95 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
   exit 0  (record planning-r1a-judge-pilot-match at $95 less the settled spend of every earlier R1a judge item)
     APPROVED: item=planning-r1a-judge-pilot-match cap=$95.00 admission=warn approval=1 record=$OUT/ledger/record
-planning-r1a-judge-pilot-match: judge-run's run id judge-bce4e86d7a40 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $3.25; settled at $3.25
+planning-r1a-judge-pilot-match: judge-run's run id judge-c43f40619f91 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $3.25; settled at $3.25
 PASS planning-r1a-judge-pilot-match refuses a second judge-run call with E_ITEM_BOUND, so each judge-run call takes its own judge item
 PASS planning-r1a-judge-pilot-match: judge-run's warn-mode lease warned RIG_UNPROVEN and opened
 $ ledger init --item planning-r1a-judge-pilot-adjudicate --cap 91.75 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
   exit 0  (record planning-r1a-judge-pilot-adjudicate at $95 less the settled spend of every earlier R1a judge item)
     APPROVED: item=planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn approval=1 record=$OUT/ledger/record
-planning-r1a-judge-pilot-adjudicate: judge-run's run id judge-742c7a56f5c0 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $1.10; settled at $1.10
+planning-r1a-judge-pilot-adjudicate: judge-run's run id judge-6730998df216 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $1.10; settled at $1.10
 PASS planning-r1a-judge-pilot-adjudicate refuses a second judge-run call with E_ITEM_BOUND, so each judge-run call takes its own judge item
 PASS planning-r1a-judge-pilot-adjudicate: judge-run's warn-mode lease warned RIG_UNPROVEN and opened
 PASS judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope ($95.00, then $91.75; $4.35 spent)
@@ -170,17 +170,17 @@ $ ledger status
   exit 0  (every line item on the temporary record)
     RECORD: $OUT/ledger/record (GSTACK_EVALS_LEDGER_RECORD)
     LEDGER: $OUT/ledger/local.sqlite (GSTACK_EVALS_LEDGER)
-    ITEM: planning-r1a-fable cap=$510.00 admission=warn committed=$12.50 left=$497.50 run=review-units-20261101T150815Z-c9a9 leases=2 open=-
+    ITEM: planning-r1a-fable cap=$510.00 admission=warn committed=$12.50 left=$497.50 run=review-units-20261101T161750Z-e0b2 leases=2 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-headline cap=$1905.00 admission=warn committed=$5.00 left=$1900.00 run=review-units-20261101T150815Z-0925 leases=2 open=-
+    ITEM: planning-r1a-headline cap=$1905.00 admission=warn committed=$5.00 left=$1900.00 run=review-units-20261101T161750Z-9d5b leases=2 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn committed=$1.10 left=$90.65 run=judge-742c7a56f5c0 leases=1 open=-
+    ITEM: planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn committed=$1.10 left=$90.65 run=judge-6730998df216 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-judge-pilot-match cap=$95.00 admission=warn committed=$3.25 left=$91.75 run=judge-bce4e86d7a40 leases=1 open=-
+    ITEM: planning-r1a-judge-pilot-match cap=$95.00 admission=warn committed=$3.25 left=$91.75 run=judge-c43f40619f91 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-pilot cap=$184.00 admission=warn committed=$5.00 left=$179.00 run=review-units-20261101T150815Z-32b4 leases=1 open=-
+    ITEM: planning-r1a-pilot cap=$184.00 admission=warn committed=$5.00 left=$179.00 run=review-units-20261101T161750Z-5278 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
-    ITEM: planning-r1a-real cap=$106.00 admission=warn committed=$5.00 left=$101.00 run=review-units-20261101T150815Z-9672 leases=1 open=-
+    ITEM: planning-r1a-real cap=$106.00 admission=warn committed=$5.00 left=$101.00 run=review-units-20261101T161750Z-6a39 leases=1 open=-
       words: "dry run only" by dryrun.ts (R1a keyless dry run)
 PASS the four run items hold $2,705 and the judge envelope $95: $2,800, the cap
 
@@ -561,37 +561,102 @@ $ noloss secondary --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --variant n
 pilot none-opus must-fix recall 0/8 = 0; stop (a) fires outside 0.10 to 0.85: fires
 PASS pilot recall reads on the pilot's 8 flaws, from noloss secondary
 PASS the pilot reading carries no verdict and no claim
-pilot stops (b), (c) and (e) through pilot-stops.ts.txt: (e) on the adjudicated synthetic pilot arms above, (b) and (c) on synthetic pilot out dirs
+pilot stops (b), (c) and (e) through pilot-stops.ts.txt: (e) on the adjudicated synthetic pilot arms above, (b) and (c) on synthetic pilot out dirs whose cells.ndjson and parses.tsv agree, as the pinned runner writes them
 PASS the synthetic pilot went through blind adjudication, so stop (e) has rulings to read
-$ bun $OUT/pilot-stops.ts $OUT/pilot-out/quiet $OUT/pilot/adjudicated
-  exit 0  (1 fallback in 20 replies, 2 of 12 particle-1 sessions with no parsed block)
-    (b) user simulator: 20 ask and prose events in 10 session logs, 1 fallback, share 0.050 (stop above 0.10): does not fire
-    (c) particle-1: 12 pilot sessions, 2 with no parsed plan-findings block, share 0.167 (stop above 0.20): does not fire
-    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
-    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
-    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+each synthetic pilot out dir holds the pilot's 32 sessions (12 Opus, 12 particle-1, 8 Fable) in cells.ndjson and parses.tsv; the first has a leftover run directory no journal line names, whose log holds 2 fallback events
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/quiet $OUT/pilot/adjudicated
+  exit 0  (1 fallback in 20 journaled replies; 2 of 12 particle-1 sessions are misses (a missing block, a timeout after model output))
+    (b) user simulator: 20 ask and prose events in 10 journaled session logs, 1 fallback, share 0.050 (stop above 0.10): does not fire
+    (c) the pilot's cells.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 2 scored miss by the pinned planScore, share 0.167 (stop above 0.20): does not fire
     (e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
     (e) none-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
     (e) placebo-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
     (e) highest rate 0.500 (stop above 0.25 in any cell): fires
     stops fired: e
 PASS stop (e) takes the highest cell rate, 0.500, and fires only above 0.25
-PASS stop (b) reads the simulator's reply sources: 1 fallback in 20 events is 0.050 and does not fire
-PASS stop (c) reads parses.tsv: 2 of 12 particle-1 sessions is 0.167 and does not fire
+PASS stop (b) reads the journaled sessions' reply sources, not the leftover log: 1 fallback in 20 events is 0.050 and does not fire
+PASS stop (c) scores each particle-1 session with the pinned planScore from its cells.ndjson line: 2 misses in 12 is 0.167 and does not fire
 PASS stop (e) reads each of the 6 Opus and particle-1 cells, and no Fable cell, with the not-defect counts in their adjudication.tsv over 4 plans x 1 pass
-$ bun $OUT/pilot-stops.ts $OUT/pilot-out/noisy $OUT/pilot/adjudicated
-  exit 0  (3 fallbacks in 20 replies, 3 of 12 particle-1 sessions with no parsed block)
-    (b) user simulator: 20 ask and prose events in 10 session logs, 3 fallback, share 0.150 (stop above 0.10): fires
-    (c) particle-1: 12 pilot sessions, 3 with no parsed plan-findings block, share 0.250 (stop above 0.20): fires
-    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
-    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
-    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/noisy $OUT/pilot/adjudicated
+  exit 0  (3 fallbacks in 20 replies; 3 of 12 particle-1 sessions are misses (a missing block, a malformed block, a timeout after model output))
+    (b) user simulator: 20 ask and prose events in 10 journaled session logs, 3 fallback, share 0.150 (stop above 0.10): fires
+    (c) the pilot's cells.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 3 scored miss by the pinned planScore, share 0.250 (stop above 0.20): fires
     (e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
     (e) none-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
     (e) placebo-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
     (e) highest rate 0.500 (stop above 0.25 in any cell): fires
     stops fired: b, c, e
-PASS 3 fallbacks in 20 (0.150) fire stop (b), and 3 of 12 particle-1 sessions (0.250) fire stop (c)
+PASS 3 fallbacks in 20 (0.150) fire stop (b), and 3 misses in 12 particle-1 sessions (0.250) fire stop (c)
+an infra outage: 3 particle-1 sessions end in gaps (an infra failure after model output, a timeout and a crash before any), beside 2 misses
+the rule before this fix counted every missing, malformed or incomplete parses.tsv row: 5 of 12 = 0.417, which would fire (c) and drop the rung on an outage
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/outage $OUT/pilot/adjudicated
+  exit 2  (the outage's 3 gaps still in cells.ndjson, before the pilot's one resume)
+    E_USAGE 3 of the pilot's 32 journaled sessions score gap by the pinned planScore; the stops are read only once the pilot has no gap left, after its one resume (section 10)
+PASS with the outage's gaps left, pilot-stops refuses and prints no reading, so an infra gap never fires (c)
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/pilot-out/outage
+  exit 0  (the pilot's one refill before its resume, after its controller exited)
+    refilled gstack-fable 0, their metered spend $0.00
+    refilled gstack-opus 0, their metered spend $0.00
+    refilled gstack-particle-1 1, their metered spend $0.00
+    refilled lens-opus 0, their metered spend $0.00
+    refilled none-fable 0, their metered spend $0.00
+    refilled none-opus 0, their metered spend $0.00
+    refilled none-particle-1 1, their metered spend $0.00
+    refilled placebo-particle-1 1, their metered spend $0.00
+    moved 3 of 32 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+the resume reruns the 3 refilled cells (synthetic: each now reaches its findings), and the runner rewrites parses.tsv
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/outage $OUT/pilot/adjudicated
+  exit 0  (the same pilot after its refill and resume)
+    (b) user simulator: 20 ask and prose events in 10 journaled session logs, 1 fallback, share 0.050 (stop above 0.10): does not fire
+    (c) the pilot's cells.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 2 scored miss by the pinned planScore, share 0.167 (stop above 0.20): does not fire
+    (e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) none-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
+    (e) placebo-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) highest rate 0.500 (stop above 0.25 in any cell): fires
+    stops fired: e
+PASS refill-gaps moves the outage's 3 gaps, and after the resume (c) reads only the 2 misses: 0.167, which does not fire
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/opus-gap $OUT/pilot/adjudicated
+  exit 2  (a gap left in an Opus session, particle-1 clean)
+    E_USAGE 1 of the pilot's 32 journaled sessions score gap by the pinned planScore; the stops are read only once the pilot has no gap left, after its one resume (section 10)
+PASS a gap left in any pilot session, Opus included, refuses every reading
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/eleven $OUT/pilot/adjudicated
+  exit 2  (11 particle-1 sessions: one cell never ran)
+    E_USAGE parses.tsv holds 11 particle-1 rows, not the pilot's 12 (3 arms x 4 plans x 1 pass)
+PASS pilot-stops refuses unless parses.tsv holds exactly 12 particle-1 rows
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/short-opus $OUT/pilot/adjudicated
+  exit 2  (2 Opus cells never ran (a cap stop or a killed resume), particle-1 complete)
+    E_USAGE parses.tsv holds 30 rows and cells.ndjson 30 sessions; the readings need exactly the pilot's 32 sessions (8 cells x 4 plans x 1 pass), each parses.tsv row naming its own cells.ndjson line, so a cell that never ran refuses them
+PASS pilot-stops refuses unless parses.tsv and cells.ndjson hold all 32 pilot sessions, so cells that never ran cannot shrink (e) or (b)
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/quiet $OUT/pilot-arms/no-lens
+  exit 2  (the adjudicated pilot arms without lens-opus)
+    E_USAGE arm lens-opus is missing from $OUT/pilot-arms/no-lens; stop (e) reads all six Opus and particle-1 arms
+PASS stop (e) refuses when one of the six arm ids is missing
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/quiet $OUT/pilot-arms/short-arm
+  exit 2  (the adjudicated pilot arms with one of gstack-particle-1's 4 findings files removed)
+    E_USAGE arm gstack-particle-1 holds 3 findings files, not the pilot's 4
+$ bun $OUT/pilot-stops.ts $SCORER $OUT/pilot-out/quiet $OUT/pilot-arms/no-adjudication
+  exit 0  (the adjudicated pilot arms with gstack-opus's adjudication.tsv removed, as for an arm whose must-fix findings all matched)
+    (b) user simulator: 20 ask and prose events in 10 journaled session logs, 1 fallback, share 0.050 (stop above 0.10): does not fire
+    (c) the pilot's cells.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 2 scored miss by the pinned planScore, share 0.167 (stop above 0.20): does not fire
+    (e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+    (e) gstack-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass (no adjudication.tsv: no must-fix finding was left unmatched)
+    (e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) none-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) gstack-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
+    (e) placebo-particle-1: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+    (e) highest rate 0.500 (stop above 0.25 in any cell): fires
+    stops fired: e
+PASS stop (e) reads an arm with no adjudication.tsv as 0, says why, and does not refuse it
+PASS stop (e) refuses an arm that holds other than 4 findings files
 
 ## 16. Fable 5.1 subset, exploratory
 PASS fable: raw arm none-fable ingests
@@ -630,7 +695,7 @@ $ noloss power --suite planrev-ceo-r1a --passes 3 --recall 0.35 --margin 10 --lo
 PASS power counts 24 clusters and 48 flaws
 
 ## 18. OpenRouter routes: the pinned route, its data policy and price headroom
-read keyless at 2026-11-01T15:08:26.719Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
+read keyless at 2026-11-01T16:18:03.461Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
 particle-ai/particle-1 route {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 22cb6215a4019fba2cf7949d892df384d96d0a57e12375a40fa3abe7531570d2
   endpoint Particle AI (particle-ai, unknown): $0.05 / $0.5 per Mtok, max_price $0.1 / $1 (headroom x2.00 input, x2.00 output); data policy: training false, retains prompts false, kept by data_collection deny
 PASS particle-ai/particle-1: the route pins its providers with no fallbacks and sends data_collection deny
@@ -639,7 +704,7 @@ outside R1a: deepseek/deepseek-v4.1-flash-1017 route {"only":["inference-net"],"
   endpoint InferenceNet (inference-net/us, fp8): $0.08 / $0.55 per Mtok, max_price $0.08 / $0.55 (headroom x1.00 input, x1.00 output; max_price equals the current price, so any price rise refuses every call); data policy: training false, retains prompts false, kept by data_collection deny
   endpoint InferenceNet (inference-net/fp8, fp8): $0.08 / $0.55 per Mtok, max_price $0.08 / $0.55 (headroom x1.00 input, x1.00 output; max_price equals the current price, so any price rise refuses every call); data policy: training false, retains prompts false, kept by data_collection deny
   deepseek/deepseek-v4.1-flash-1017 is not an R1a model; reported for GST-637, not checked
-route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 935feb940de8bb1ac9d84d700af39943af8fc6c2ff1d649ccae87fa1c60839de
+<out>.route.json, written beside each R1a run's out dir before review-units starts and joined to every session in cells.ndjson: sha256 935feb940de8bb1ac9d84d700af39943af8fc6c2ff1d649ccae87fa1c60839de
 
 ## 19. Custody and the pin check: the run root, the receipts sink, the retained trees, and HEAD before every call
 run root ~/.capy/work/planning-r1a; frozen --out dirs ~/.capy/work/planning-r1a/pilot, ~/.capy/work/planning-r1a/headline, ~/.capy/work/planning-r1a/real-neutral, ~/.capy/work/planning-r1a/fable; receipts sink, if one is set, ~/.capy/work/planning-r1a/receipts
@@ -758,9 +823,11 @@ PASS case: --resume reuses every journaled session, a gap included, and spends n
 
 ## 21. Resume procedure: refill-gaps.ts after a killed controller, at the pin, crash-safe (section 10)
 PASS the synthetic sessions score findings, miss and gap by the pinned planScore
-each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, and no units.json, arms/ or arm.json
+each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, no units.json, arms/ or arm.json, and beside it <out>.controller.pid naming the controller's pid, which has exited
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/killed
   exit 0  (a killed controller's out dir)
+    controller check: $OUT/resume/killed.controller.pid pid 39776 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 91 not readable)
     scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
     cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
     refilled gstack-opus 1, their metered spend $3.00
@@ -774,13 +841,19 @@ PASS refill-gaps.backup.ndjson holds the journal before the move, byte for byte,
 PASS the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap and the never-journaled cell
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/killed
   exit 2  (a second use on the same out dir)
+    controller check: $OUT/resume/killed.controller.pid pid 39776 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
     E_USAGE refill-gaps.done exists: a run takes one resume, and its gaps were moved already
 PASS a second use refuses on refill-gaps.done (one resume per run) and changes nothing
 $ R1A_REFILL_CRASH=after-copy bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-after-copy
   exit SIGKILL  (the script killed at after-copy)
+    controller check: $OUT/resume/crash-after-copy.controller.pid pid 39895 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
 PASS killed at after-copy, before the done marker
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-after-copy
   exit 0  (the rerun after the crash at after-copy)
+    controller check: $OUT/resume/crash-after-copy.controller.pid pid 39895 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
     recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e)
     scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
     cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
@@ -790,9 +863,13 @@ $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-after-copy
 PASS after a crash at after-copy the rerun recovers from the backup and ends in the same bytes as an uninterrupted run
 $ R1A_REFILL_CRASH=between-renames bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-between-renames
   exit SIGKILL  (the script killed at between-renames)
+    controller check: $OUT/resume/crash-between-renames.controller.pid pid 40014 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
 PASS killed between the renames: refilled-gaps.ndjson is in place, cells.ndjson still holds every line, the new journal waits as cells.ndjson.tmp, and there is no done marker
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-between-renames
   exit 0  (the rerun after the crash at between-renames)
+    controller check: $OUT/resume/crash-between-renames.controller.pid pid 40014 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
     recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e)
     scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
     cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
@@ -802,9 +879,13 @@ $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-between-renames
 PASS after a crash at between-renames the rerun recovers from the backup and ends in the same bytes as an uninterrupted run
 $ R1A_REFILL_CRASH=before-done bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-before-done
   exit SIGKILL  (the script killed at before-done)
+    controller check: $OUT/resume/crash-before-done.controller.pid pid 40133 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
 PASS killed at before-done, before the done marker
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-before-done
   exit 0  (the rerun after the crash at before-done)
+    controller check: $OUT/resume/crash-before-done.controller.pid pid 40133 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
     recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e)
     scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
     cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
@@ -814,18 +895,83 @@ $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-before-done
 PASS after a crash at before-done the rerun recovers from the backup and ends in the same bytes as an uninterrupted run
 $ R1A_REFILL_CRASH=between-renames bun $OUT/refill-gaps.ts $SCORER $OUT/resume/edited
   exit SIGKILL  (the script killed between the renames)
+    controller check: $OUT/resume/edited.controller.pid pid 40252 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/edited
   exit 2  (a rerun after cells.ndjson changed (a resume ran before the refill finished))
+    controller check: $OUT/resume/edited.controller.pid pid 40252 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
     E_USAGE cells.ndjson changed after the interrupted refill (it is neither the backup nor the backup less its gaps), so recovery would drop those changes
 PASS a rerun refuses when cells.ndjson changed after the interrupted attempt, and changes nothing
 $ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/missing
   exit 2  (a gap whose run directory is missing)
+    controller check: $OUT/resume/missing.controller.pid pid 40371 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
     E_USAGE a gap's run directory is missing, so its evidence cannot be kept
 PASS a gap with no run directory is refused before anything changes (no backup, no output)
 $ bun $OUT/refill-gaps.ts <a clean checkout of e305ed0's first parent> $OUT/resume/pin
   exit 2  (a scorer checkout at e305ed0's first parent)
     E_USAGE the scorer checkout is at ecf485e002d9fea1ea1acc3f67bad69b8187435a, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f; the resume and this script run at the pinned scorer only
 PASS a scorer checkout not at e305ed0 is refused before anything changes
+the controller check: refill-gaps refuses while the controller's pid runs review-units or any process holds cells.ndjson open, and logs both checks
+PASS refill-gaps logs both checks with the time in refill-gaps.log: the controller's pid is not running, and no process holds cells.ndjson open
+PASS section 10 gives the launch line that records the controller's pid, word for word: echo $BASHPID > <out>.controller.pid && exec bin/gstack-evals review-units
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/held
+  exit 2  (a live process holds cells.ndjson open)
+    controller check: $OUT/resume/held.controller.pid pid 40501 is not running
+    open-file check: refused: pid 40502 holds cells.ndjson open
+    E_USAGE the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs
+PASS while a live process holds cells.ndjson open, refill-gaps refuses, names its pid, logs it and changes nothing else
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/held
+  exit 0  (the same out dir once that process has exited)
+    controller check: $OUT/resume/held.controller.pid pid 40501 is not running
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
+    scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
+    cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
+    refilled gstack-opus 1, their metered spend $3.00
+    copied 1 run directory that no journal line names (sessions in flight when the controller stopped)
+    moved 1 of 3 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+PASS once the holder has exited, refill-gaps runs on the same out dir
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/live-controller
+  exit 2  (the recorded controller pid is alive and its command line names review-units (a stand-in for a controller still running))
+    controller check: $OUT/resume/live-controller.controller.pid refused: pid 40625 is alive and runs review-units
+    open-file check: no process holds cells.ndjson open (15 processes scanned, 90 not readable)
+    E_USAGE the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs
+PASS while the controller's pid is alive and runs review-units, refill-gaps refuses and changes nothing but its log
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/reused-pid
+  exit 0  (the recorded pid, written an hour ago, now belongs to a later process that does not run review-units, as after a machine restart)
+    controller check: $OUT/resume/reused-pid.controller.pid pid 40688 is alive but started 3600 s after the pid file was written and does not run review-units (a reused pid), so the controller has exited
+    open-file check: no process holds cells.ndjson open (15 processes scanned, 90 not readable)
+    scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
+    cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
+    refilled gstack-opus 1, their metered spend $3.00
+    copied 1 run directory that no journal line names (sessions in flight when the controller stopped)
+    moved 1 of 3 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+PASS a recorded pid held by a process that started after the pid file was written and does not run review-units (a reused pid) does not block, and the check says so
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/pipelined
+  exit 2  (the whole launch line, with $BASHPID, as one element of a pipeline (| cat), the controller still running; a stand-in process whose command line names review-units)
+    controller check: $OUT/resume/pipelined.controller.pid refused: pid 40750 is alive and runs review-units
+    open-file check: no process holds cells.ndjson open (17 processes scanned, 90 not readable)
+    E_USAGE the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs
+PASS inside a pipeline the launch line still records the controller's own pid, and refill-gaps refuses while it runs
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/pipelined-dollar
+  exit 2  (echo $$ > <pid file> && exec ... | cat: the echo runs in the launching shell and only the exec sits in the pipeline, so the file names that shell, the controller still running)
+    controller check: $OUT/resume/pipelined-dollar.controller.pid refused: pid 40812 is alive and started before the pid file was written, or within 2 s after, so it may be the shell that launched the controller
+    open-file check: no process holds cells.ndjson open (17 processes scanned, 90 not readable)
+    E_USAGE the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs
+PASS a launching shell that wrote its own pid, alive since before the pid file was written, blocks refill-gaps by its start time
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/backgrounded
+  exit 2  (the launch line in a backgrounded subshell whose launching shell has exited, the controller still running)
+    controller check: $OUT/resume/backgrounded.controller.pid refused: pid 40877 is alive and runs review-units
+    open-file check: no process holds cells.ndjson open (15 processes scanned, 90 not readable)
+    E_USAGE the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs
+PASS in a backgrounded subshell whose shell has exited, the recorded pid is still the controller's, and refill-gaps refuses
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/no-pid-file
+  exit 2  (no controller pid file beside the out dir)
+    controller check: $OUT/resume/no-pid-file.controller.pid refused: the file is missing or names no pid, so the controller cannot be shown to have exited
+    open-file check: no process holds cells.ndjson open (14 processes scanned, 90 not readable)
+    E_USAGE the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs
+PASS with no controller pid file beside the out dir, refill-gaps refuses and changes nothing but its log
 
 ## Leak check
 PASS no unit head or base prefix (7+ hex) appears in this transcript
