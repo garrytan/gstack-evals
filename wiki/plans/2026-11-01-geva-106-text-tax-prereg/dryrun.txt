@@ -1,4 +1,4 @@
-dry run at 665920d, 2026-11-01T18:54:27Z
+dry run at 6d0e960, 2026-11-01T19:14:16Z
 == a. variants and prepare-run
 gstack-rewritten manifest matches arms/manifests/gstack-rewritten.json and .files.tsv
 placebo-short manifest matches arms/manifests/placebo-short.json and .files.tsv
@@ -27,8 +27,8 @@ gstack-rewritten investigate frontmatter:
   version: 1.0.0
   description: "Systematic debugging with root cause investigation. Use when a task involves something that does not work as expected: a faili
   allowed-tools:
-<work>/dryrun/run-d: 37 tasks x 20 (model, arm) cells x 1 attempts, git 665920d
-<work>/dryrun/run-t: 37 tasks x 3 (model, arm) cells x 5 attempts, git 665920d
+<work>/geva106/dryrun/run-d: 37 tasks x 20 (model, arm) cells x 1 attempts, git 6d0e960
+<work>/geva106/dryrun/run-t: 37 tasks x 3 (model, arm) cells x 5 attempts, git 6d0e960
 run-d: 37 tasks, manifest invoke=false invoke_by_arm={"none":false,"gstack":false,"gstack-rewritten":false,"placebo":false}
   claude-haiku-5-5 none: invoke=false skill_map={}0
   claude-haiku-5-5 gstack: invoke=false skill_map={}0
@@ -60,25 +60,25 @@ fake upstream on 127.0.0.1:8798
 ledger: serving discovery-r1 on 127.0.0.1:9911
 laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
 -- discovery-r1 arm none told=0 (0 tar)
-direct none told=0: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-9938b150752d", "trial": "task-public__direct-none-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_token (24 s into the dry run)
+direct none told=0: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-953b75fd269c", "trial": "task-public__direct-none-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_token (23 s into the dry run)
 none: first request 56380 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
 none: listing in messages[1].system[0]; skills listed 1 (plugin-authoring)
 none: shipped investigate description: absent
 none: rewritten investigate description: absent
 -- discovery-r1 arm placebo told=0 (0 tar)
-direct placebo told=0: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-0b87505505c3", "trial": "task-public__direct-placebo-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to (27 s into the dry run)
+direct placebo told=0: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-c0b5566d0b21", "trial": "task-public__direct-placebo-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to (30 s into the dry run)
 placebo: first request 62611 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
 placebo: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
 placebo: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
 placebo: rewritten investigate description: absent
 -- discovery-r1 arm gstack-rewritten told=0 (4.0K tar)
-direct gstack-rewritten told=0: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-893bbf37656b", "trial": "task-public__direct-gstack-rewritten-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": { (32 s into the dry run)
+direct gstack-rewritten told=0: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-2197881485e2", "trial": "task-public__direct-gstack-rewritten-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": { (42 s into the dry run)
 gstack-rewritten: first request 62879 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
 gstack-rewritten: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
 gstack-rewritten: shipped investigate description: absent
 gstack-rewritten: rewritten investigate description: messages[1].system[0], preceded by "ty dashboard. (gstack)\n- investigate: Systematic debugging with root cause investigation. "
 -- discovery-r1 arm gstack told=0 (0 tar)
-direct gstack told=0: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-56e1b98f4b31", "trial": "task-public__direct-gstack-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_tok (37 s into the dry run)
+direct gstack told=0: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-38ab6b60cbe8", "trial": "task-public__direct-gstack-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_tok (73 s into the dry run)
 gstack: first request 62610 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
 gstack: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
 gstack: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
@@ -92,18 +92,18 @@ approval rows 1, reserves 4, settles 4
 status: cap $100, settled $0.2825, open reserves 0
 second approval: refused (approval row already present)
 reserve past the cap: refused (cap)
-fake upstream on 127.0.0.1:8798
 ledger: serving texttax-r1 on 127.0.0.1:9911
+fake upstream on 127.0.0.1:8798
 laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
 -- texttax-r1 arm placebo told=1 (0 tar)
-direct placebo told=1: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-ac58fab591f4", "trial": "task-public__direct-placebo-1", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to (41 s into the dry run)
+direct placebo told=1: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-7f2eaea64329", "trial": "task-public__direct-placebo-1", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to (76 s into the dry run)
 placebo: first request 103724 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.cf6; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
 placebo: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
 placebo: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
 placebo: rewritten investigate description: absent
 placebo: told: /investigate command line present; body's first 200 characters present
 -- texttax-r1 arm placebo-short told=1 (4.0K tar)
-direct placebo-short told=1: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-fcafe380a1f6", "trial": "task-public__direct-placebo-short-1", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"in (43 s into the dry run)
+direct placebo-short told=1: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-f06db83816fe", "trial": "task-public__direct-placebo-short-1", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"in (78 s into the dry run)
 placebo-short: first request 68095 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.cf6; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
 placebo-short: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
 placebo-short: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
@@ -223,6 +223,7 @@ T1 (placebo minus none): -78.4 [-91.9, -64.9] pp over 37 tasks; verdict confirme
 T2 (placebo minus placebo-short): -78.4 [-91.9, -64.9] pp, p 0.0000100, Holm 0.0000300; claim: longer told text cost passes
 placebo minus none: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp; retried-after-response scored 0 -78.4 [-91.9, -64.9] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp; retried-after-response scored 0 -78.4 [-91.9, -64.9] pp
 
 ## claude-haiku-5-5
 claude-haiku-5-5 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
@@ -231,6 +232,7 @@ claude-haiku-5-5 placebo: graded 37, missing 0, refused 0, retried after a respo
 T2 (placebo minus placebo-short): -73.0 [-86.5, -59.5] pp, p 0.0000100, Holm 0.0000300; claim: longer told text cost passes
 placebo minus none: pass -73.0 [-86.5, -59.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -75.0 [-90.6, -59.4] pp; retried-after-response scored 0 -73.0 [-86.5, -59.5] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass -73.0 [-86.5, -59.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -75.0 [-90.6, -59.4] pp; retried-after-response scored 0 -73.0 [-86.5, -59.5] pp
 
 ## deepseek-v4.1-flash-1017
 deepseek-v4.1-flash-1017 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 27.0% [13.5%, 40.5%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.074
@@ -239,6 +241,7 @@ deepseek-v4.1-flash-1017 placebo: graded 37, missing 0, refused 0, retried after
 T2 (placebo minus placebo-short): +73.0 [+59.5, +86.5] pp, p 0.0000100, Holm 0.0000300; claim: longer told text raised passes
 placebo minus none: pass +73.0 [+59.5, +86.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +75.0 [+59.4, +90.6] pp; retried-after-response scored 0 +73.0 [+59.5, +86.5] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +73.0 [+59.5, +86.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +75.0 [+59.4, +90.6] pp; retried-after-response scored 0 +73.0 [+59.5, +86.5] pp
 Pooled across models, equal weight (secondary): placebo minus none -26.1 [-30.6, -21.6] pp
 Pooled across models, equal weight (secondary): placebo-short minus none +0.0 [+0.0, +0.0] pp
 Pooled across models, equal weight (secondary): placebo minus placebo-short -26.1 [-30.6, -21.6] pp
@@ -254,6 +257,7 @@ T1 (placebo minus none): +0.0 [-8.1, +8.1] pp over 37 tasks; verdict not confirm
 T2 (placebo minus placebo-short): +0.0 [-8.1, +8.1] pp, p 1.00, Holm 1.00; no claim
 placebo minus none: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
 
 ## claude-haiku-5-5
 claude-haiku-5-5 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
@@ -262,6 +266,7 @@ claude-haiku-5-5 placebo: graded 37, missing 0, refused 0, retried after a respo
 T2 (placebo minus placebo-short): +0.0 [-8.1, +8.1] pp, p 1.00, Holm 1.00; no claim
 placebo minus none: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
 
 ## deepseek-v4.1-flash-1017
 deepseek-v4.1-flash-1017 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
@@ -270,6 +275,7 @@ deepseek-v4.1-flash-1017 placebo: graded 37, missing 0, refused 0, retried after
 T2 (placebo minus placebo-short): +0.0 [-8.1, +8.1] pp, p 1.00, Holm 1.00; no claim
 placebo minus none: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
 Pooled across models, equal weight (secondary): placebo minus none +0.0 [-8.1, +8.1] pp
 Pooled across models, equal weight (secondary): placebo-short minus none +0.0 [+0.0, +0.0] pp
 Pooled across models, equal weight (secondary): placebo minus placebo-short +0.0 [-8.1, +8.1] pp
@@ -285,6 +291,7 @@ T1 (placebo minus none): +64.9 [+48.6, +78.4] pp over 37 tasks; verdict reversed
 T2 (placebo minus placebo-short): +0.0 [+0.0, +0.0] pp, p 1.00, Holm 1.00; no claim
 placebo minus none: pass +64.9 [+48.6, +78.4] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +75.0 [+59.4, +90.6] pp; retried-after-response scored 0 +64.9 [+48.6, +78.4] pp
 placebo-short minus none: pass +64.9 [+48.6, +78.4] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +64.9 [+48.6, +78.4] pp; retried-after-response scored 0 +64.9 [+48.6, +78.4] pp
+placebo minus placebo-short: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
 
 ## claude-haiku-5-5
 claude-haiku-5-5 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
@@ -293,6 +300,7 @@ claude-haiku-5-5 placebo: graded 37, missing 0, refused 0, retried after a respo
 T2 (placebo minus placebo-short): +0.0 [+0.0, +0.0] pp, p 1.00, Holm 1.00; no claim
 placebo minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
 
 ## deepseek-v4.1-flash-1017
 deepseek-v4.1-flash-1017 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
@@ -302,13 +310,11 @@ Gate: body load under 95% in placebo; flagged, no T1 or T2 claim from it.
 T2 (placebo minus placebo-short): +0.0 [+0.0, +0.0] pp, p 1.00, Holm 1.00; no claim (gate)
 placebo minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
 placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
 Pooled across models, equal weight (secondary): placebo minus none +21.6 [+16.2, +26.1] pp
 Pooled across models, equal weight (secondary): placebo-short minus none +21.6 [+16.2, +26.1] pp
 Pooled across models, equal weight (secondary): placebo minus placebo-short +0.0 [+0.0, +0.0] pp
-== g. route-check commands (not run)
-PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain-drive>/ledger/discovery-r1.jsonl MODELS='claude-haiku-5-5 particle-1 claude-sonnet-5-5 claude-opus-5-5 gpt-6.1-sol' OUT=<work>/geva106/route-d quick/laneb/runner/route-check.sh
-PREREG=<merge sha> ITEM=texttax-r1 LEDGER=<captain-drive>/ledger/texttax-r1.jsonl MODELS='particle-1 claude-haiku-5-5 deepseek-v4.1-flash-1017' OUT=<work>/geva106/route-t quick/laneb/runner/route-check.sh
-== f. MDD (not rerun in this pass: analysis/mdd-sim.ts is unchanged since its full run at 2cb3722, seed 20261101; that output follows)
+== f. MDD
 Run D MDD, 37 tasks, r = 1: 1000 simulated datasets x 1000 bootstrap resamples per power value (D2 also 1000 sign-flip draws), seed 20261101
 | Reading | Opens | Shipped rate | Per-trial open probability at 80% power | Difference | Power there |
 |---|---|---|---|---|---|
@@ -324,3 +330,6 @@ Run D MDD, 37 tasks, r = 1: 1000 simulated datasets x 1000 bootstrap resamples p
 | 3 | 11.4 | 13.2 |
 | 4 | 9.9 | 11.4 |
 | 5 | 8.8 | 10.2 |
+== g. route-check commands (not run)
+PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain-drive>/ledger/discovery-r1.jsonl MODELS='claude-haiku-5-5 particle-1 claude-sonnet-5-5 claude-opus-5-5 gpt-6.1-sol' OUT=<work>/geva106/route-d quick/laneb/runner/route-check.sh
+PREREG=<merge sha> ITEM=texttax-r1 LEDGER=<captain-drive>/ledger/texttax-r1.jsonl MODELS='particle-1 claude-haiku-5-5 deepseek-v4.1-flash-1017' OUT=<work>/geva106/route-t quick/laneb/runner/route-check.sh

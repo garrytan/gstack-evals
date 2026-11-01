@@ -16,7 +16,7 @@ links:
   - GST-823
   - GST-821
 attachments:
-  - 2af63298f216b7484105e2931b175759fe3f5fefc546afb8a8b2391e5cd7fdc0  dryrun.txt
+  - 4fc2ed0c08cc7b6e96686f79c8101efb03b95f0012b15c20609331b3eb634f69  dryrun.txt
 ---
 
 # Preregistration: does told skill text tax cheap models?
@@ -128,7 +128,7 @@ Run T projects to $64.75.
 
 ## 9. Runner
 
-The runner tag `laneb-texttax-1-runner` (665920ddaf4101fdb029ef60c40388ee75de58b1) is `laneb-stacks-1-runner` (bcf91cbba2afb8c2a822e937e0e23be9e541e110), which ran #109, plus the changes below. Both tags are in this repository, so the exact change is `git diff bcf91cbba2afb8c2a822e937e0e23be9e541e110 665920ddaf4101fdb029ef60c40388ee75de58b1 -- quick/laneb`.
+The runner tag `laneb-texttax-2-runner` (6d0e960feeb9e8430dfef9ca1702223e96a86609) is `laneb-stacks-1-runner` (bcf91cbba2afb8c2a822e937e0e23be9e541e110), which ran #109, plus the changes below. Both tags are in this repository, so the exact change is `git diff bcf91cbba2afb8c2a822e937e0e23be9e541e110 6d0e960feeb9e8430dfef9ca1702223e96a86609 -- quick/laneb`.
 
 1. `arms/variants.ts` and the placebo-short manifest, which prepare-run checks.
 2. `runner/skill-map.stacks.json` maps placebo-short to investigate on every task, as it maps placebo.
@@ -140,13 +140,13 @@ Everything else (proxy, ledger, agent, grid, Harbor f3a5a923 with claude-agent-s
 
 ## 10. Keyless dry run
 
-Run at `laneb-texttax-1-runner` on 2026-11-01 with no provider keys set. The output is attached as dryrun.txt, with operator paths shown as `<work>`, `<captain-drive>` and `<home>`. It drives every frozen rule:
+Run at `laneb-texttax-2-runner` on 2026-11-01 with no provider keys set. The output is attached as dryrun.txt, with operator paths shown as `<work>`, `<captain-drive>` and `<home>`. It drives every frozen rule:
 
 1. **Arm builds.** placebo-short (and item 2's gstack-rewritten) built twice in separate processes, streaming the tars, with identical digests both times. placebo-short's body is 846 tokens with no procedural markers. prepare-run for Run T (none, placebo-short, placebo; invoke on) accepted every tar against its manifest and gave none no told line and both placebo arms `/investigate` on all 37 tasks.
 2. **What reaches the model.** The pinned claude-agent-sdk 0.2.174 drove Claude Code 2.1.312 with `laneb_agent.py`'s options, environment and `build_prompt`, through the metering proxy, a fake upstream and a recording shim, with each arm's `.claude/` as its home. Every first request carries a 136-character system field (the SDK's default), and the skill listing sits in the second message, a message with role system. Told placebo: 103,724 bytes, 65 skills listed, the `/investigate` line and the body's first 200 characters present. Told placebo-short: 68,095 bytes, the same 65 skills, the line and the body present. none: 56,380 bytes, one skill listed (plugin-authoring). GEVA-109's separate check found the same placement under the real SDK.
 3. **One lease for the run's ledger item.** On a temporary `texttax-r1` ledger at $75: one approval row, two sessions reserved and settled through the proxy at fake prices, no open reserve; a second approval row refused; a reserve past the cap refused.
 4. **Start rule.** Run T's order passes on an empty ledger at $70.52 of $75. A case past the cap ($60 settled, then DeepSeek) comes to $80.20, is refused, and writes its note row.
-5. **Analysis.** Synthetic job folders hit every row of section 7 and every claim branch: confirmed, reversed, not confirmed, smaller than the lead, the 95% body-load gate, Holm, the session-cap complete-case reading and the retried-trial sensitivity. `bun test quick/laneb`: 92 pass, 1 skip, 0 fail. The quick/laneb typecheck is clean.
+5. **Analysis.** Synthetic job folders hit every row of section 7 and every claim branch: confirmed, reversed, not confirmed, smaller than the lead, the 95% body-load gate, Holm, the session-cap complete-case reading and the retried-trial sensitivity. `bun test quick/laneb`: 94 pass, 1 skip, 0 fail. The quick/laneb typecheck is clean.
 6. **Route check.** The commands are printed, not run.
 
 **What the dry run did not drive.** Harbor's local smoke hung on the dry-run machine before its agent opened a proxy session, so step 2 drives the SDK and CLI directly instead of through Harbor. The Harbor path itself is the stacks tag's, which ran #109's 1,443 trials on Ubicloud VMs. Run T changes nothing on it: the invoke switch defaults to #109's behavior, and the skill map only gains a key. The route check (section 8) is the first run through Harbor on the paid path.
