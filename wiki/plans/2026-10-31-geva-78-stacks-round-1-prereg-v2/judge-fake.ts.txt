@@ -1,0 +1,56 @@
+// Stacks round 1 dry run (GST-456): runs noloss judge-run in process with a fake provider behind its metering proxy.
+// The runner, its proxy, the ledger lease, the evidence sheets and the reply files are the pinned code; only the
+// answers are made up, deterministically from the batch key. Matching: a finding matches the blocker its fixture id
+// names; gpt-6.1-sol drops the first blocker's matches on every fourth packet, so the third judge reads it. Impact
+// alternates by a hash. Adjudication: rulings and verifiable flags by a hash, with gpt-6.1-sol flipping some.
+// Usage: R=<repo> bun judge-fake.ts <noloss judge-run arguments>
+import { readFileSync } from "node:fs";
+
+const R = process.env.R!;
+const { judgeRunCmd } = await import(R + "/lanes/review-noloss/judge-run.ts");
+const { ScoreError } = await import(R + "/lanes/review-noloss/score.ts");
+const argv = process.argv.slice(2);
+const key = JSON.parse(readFileSync(argv[argv.indexOf("--key") + 1]!, "utf8")) as { kind?: string; entries: Array<{ packet: string; opaque: string; finding: string }> };
+const entry = new Map(key.entries.map((e) => [e.packet + " " + e.opaque, e]));
+const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+function answer(model: string, file: string, packet: any): string {
+  const sol = model === "gpt-6.1-sol";
+  if (key.kind === "adjudicate") {
+    const rule = (id: string) => {
+      const h = hash(file + id);
+      const ruling = h % 3 === 1 ? "defect" : "not-defect";
+      return sol && h % 7 === 0 ? (ruling === "defect" ? "not-defect" : "defect") : ruling;
+    };
+    return JSON.stringify({ packets: [{ file, findings: packet.findings.map((f: any) => ({ id: f.id, ruling: rule(f.id) })), verifiable: Object.fromEntries(packet.findings.map((f: any) => [f.id, hash(model + f.id) % 4 !== 0])) }] });
+  }
+  const flip = sol && hash(file) % 4 === 0;
+  return JSON.stringify({
+    packets: [{
+      file,
+      blockers: packet.blockers.map((b: any, i: number) => ({ id: b.id, matches: flip && i === 0 ? [] : packet.findings.filter((f: any) => entry.get(file + " " + f.id)?.finding.startsWith(b.id.toLowerCase() + "-")).map((f: any) => f.id) })),
+      impact: Object.fromEntries(packet.findings.map((f: any) => [f.id, hash(f.id) % 3 === 0 ? "non-blocking" : "blocking"])),
+    }],
+  });
+}
+
+const upstream = async (_url: string, init: RequestInit) => {
+  const body = JSON.parse(String(init.body));
+  const prompt: string = (body.input ?? body.messages)[0].content;
+  const file = /=== Packet: (\S+) ===/.exec(prompt)![1]!;
+  const packet = JSON.parse(prompt.split("=== Packet: " + file + " ===\n")[1]!.split("\n=== ")[0]!);
+  const text = answer(body.model, file, packet);
+  return body.input
+    ? Response.json({ id: "r", object: "response", status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }], usage: { input_tokens: 20000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 2000, output_tokens_details: { reasoning_tokens: 0 } } })
+    : Response.json({ id: "m", type: "message", role: "assistant", content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 20000, output_tokens: 2000 } });
+};
+const env = { ANTHROPIC_API_KEY: "fake-anthropic-dry-run", OPENAI_API_KEY: "fake-openai-dry-run", OPENROUTER_API_KEY: "fake-openrouter-dry-run" };
+try {
+  process.exit(await judgeRunCmd(argv, { out: (t: string) => console.log(t), err: (t: string) => console.error(t) }, { env, fetch: upstream }));
+} catch (e) {
+  if (e instanceof ScoreError) {
+    console.error(e.code + ": noloss judge-run: " + e.message);
+    process.exit(2);
+  }
+  throw e;
+}

@@ -1,0 +1,9 @@
+{
+  "tstack": {
+    "default": {
+      "BLOCKER": "CRITICAL",
+      "SHOULD": "INFORMATIONAL",
+      "NIT": "INFORMATIONAL"
+    }
+  }
+}

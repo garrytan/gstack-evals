@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Keyless checks of comparisons.stacks-r1.nopstack.json at the rig pin.
+# R=<gstack-evals at the rig pin> D=<this post's folder> SRC=<the dry run's judged arms root> bash nopstack-checks.sh.txt <empty dir>
+# SRC is $W/final/arms of #104's dry-run.sh.txt, run at the rig pin. Only its five non-pstack arms are used.
+set -u
+W=$1
+G="$R/bin/gstack-evals noloss"
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+S=$P/stacks-r1.json
+C=$D/comparisons.stacks-r1.nopstack.json
+ARMS="none-opus gstack-opus tstack-opus none-particle-1 gstack-particle-1"
+mkdir -p "$W/log" "$W/arms/stacks-r1"
+n=0
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*"
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}"
+  [ -n "${O:-}" ] && grep -oE -- "$O" "$W/log/$n.txt" | paste -sd ' ' -
+  echo "exit $c (log/$n.txt)"
+}
+V='^(verdict|E_[A-Z_]+)'
+score_all() { # score_all <suite> <root> <comparisons>: every comparison of the file, each with the file's Holm family
+  for id in $(jq -r '.comparisons[].id' "$3"); do
+    O='\(Holm [^)]*\)' step "$V" $G score --suite "$1" --root "$2" --prereg "$3" --variant "$(jq -r --arg i "$id" '.comparisons[] | select(.id == $i) | .variant' "$3")" --reference "$(jq -r --arg i "$id" '.comparisons[] | select(.id == $i) | .reference' "$3")" --out "$2/../score-$id.json"
+  done
+}
+
+echo "## Pins"
+step . git -C "$R" log -1 --format='rig %H %s'
+step . sh -c "git -C $R status --porcelain | wc -l"
+step . sh -c "cd $P && sha256sum stacks-r1.json comparisons.stacks-r1.json && cd $D && sha256sum comparisons.stacks-r1.nopstack.json"
+step . jq -c '{comparisons: [.comparisons[].id], order: .loss_family.order, seed, draws, null: .loss_family.null}' "$C"
+
+echo; echo "## The five non-pstack arms, copied from the dry run's judged arms"
+for a in $ARMS; do cp -R "$SRC/stacks-r1/$a" "$W/arms/stacks-r1/$a"; done
+step . sh -c "ls $W/arms/stacks-r1 && for a in $ARMS; do diff -r $SRC/stacks-r1/\$a $W/arms/stacks-r1/\$a || exit 1; done && echo copies match"
+
+echo; echo "## #95's file names the dropped arms, so score refuses it on these five"
+step "$V" $G score --suite "$S" --root "$W/arms" --prereg "$P/comparisons.stacks-r1.json" --variant gstack-opus --reference none-opus
+
+echo; echo "## Every comparison of the new file (tstack-opus is stopped in the fixtures, so its three read as no verdict)"
+score_all "$S" "$W/arms" "$C"
+
+echo; echo "## A derived reading on the new file: the complete case, then every comparison on it"
+step '^(derive|suite|arm|E_)' $G derive --suite "$S" --comparisons "$C" --root "$W/arms" --id stacks-r1-nopstack-complete --out "$W/complete" --drop-gaps
+score_all "$W/complete/stacks-r1-nopstack-complete.json" "$W/complete/arms" "$W/complete/comparisons.stacks-r1-nopstack-complete.json"
+
+echo; echo "checks done: $n steps"

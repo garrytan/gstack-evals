@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Stacks round 1 dry run (GST-456): every frozen rule of the 2026-10-31 preregistration and of the post that supersedes
+# it, run keyless through the pinned code on seeded synthetic fixtures. It prints each command and its exit code.
+# No step calls a model: the judge steps run noloss judge-run in process against a fake provider (judge-fake.ts).
+# Usage: R=<gstack-evals checkout at the rig pin> SRC=<dir holding gstack/ and gbrain/ clones> bash dry-run.sh <empty work dir>
+set -u
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+D=$(cd "$(dirname "$0")" && pwd)
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+S=$P/stacks-r1.json
+G="$R/bin/gstack-evals noloss"
+export R
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY
+mkdir -p "$W/log"
+for f in fixtures judge-fake; do cp "$D/$f.ts.txt" "$W/$f.ts" 2>/dev/null || cp "$D/$f.ts" "$W/$f.ts"; done
+n=0
+# step <grep pattern for the lines to show> <command...>: runs it, keeps its full output in log/, shows the matching lines.
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*"
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}"
+  echo "exit $c (log/$n.txt)"
+}
+V='^([a-z0-9-]+ vs [a-z0-9-]+ at a |verdict|false blockers|E_[A-Z_]+)'
+ARMS="none-opus gstack-opus pstack-opus tstack-opus none-particle-1 gstack-particle-1 pstack-particle-1"
+OPUS_ARMS="none-opus gstack-opus pstack-opus tstack-opus"
+arms() { for a in $2; do printf -- ' --arm %s' "$1/stacks-r1/$a"; done; }
+score_all() { # score_all <suite> <root> <comparisons>: every comparison of the file, each with the file's Holm family
+  for id in $(jq -r '.comparisons[].id' "$3"); do
+    step "$V" $G score --suite "$1" --root "$2" --prereg "$3" --variant "$(jq -r --arg i "$id" '.comparisons[] | select(.id == $i) | .variant' "$3")" --reference "$(jq -r --arg i "$id" '.comparisons[] | select(.id == $i) | .reference' "$3")" --out "$2/../score-$id.json"
+  done
+}
+
+echo "## Pins"
+step . git -C "$R" log -1 --format='rig %H %s'
+step . sh -c "git -C $R status --porcelain | wc -l"
+step . bash -c "cd $R && bun -e 'import { recipeHash } from \"./src/rig/recipe.ts\"; console.log(\"trial image recipe \" + recipeHash())'"
+step . bash -c "cd $R && sha256sum lanes/review-noloss/{cli,contract,derive,flag-scan,ingest,judge,judge-run,score,secondary,stats,suite,verdict}.ts quick/laneb/analysis/{analyze,model-contrast,stacks-tb2}.ts"
+step . sh -c "cd $P && sha256sum stacks-r1.json comparisons.stacks-r1.json comparisons.stacks-r1.opus.json severity-map.json contamination.tsv judge-brief.md labels.tsv unit-tests.tsv && cd $D && sha256sum severity-map.*.json"
+
+echo; echo "## Fixtures"
+step . bun "$W/fixtures.ts" "$W" "$S" "$P/severity-map.json" "$P/contamination.tsv" "$W/final.json" "$R/wiki/board/2026-10-30-gsta-30-laneb-quick-3-results/analysis-config.md"
+
+echo; echo "## Judging: matching batch (sections 3 and 7)"
+for a in $ARMS; do step 'ingested|E_' $G ingest "$W/src/$a" --suite "$S" --root "$W/raw"; done
+step 'packet|E_' $G judge-packet --suite "$S" $(arms "$W/raw" "$ARMS") --seed 20261031 --out "$W/match" --key "$W/match-key.json"
+J="--suite $S --packets $W/match --key $W/match-key.json $(arms "$W/raw" "$ARMS") --brief $P/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record"
+step '^(worst case|item )|E_' $G judge-run $J --item stacks-r1-review-judge-match --out "$W/judge-match" --dry-run
+step '^(next|wrote|judge-run|E_)|unjudged' bun "$W/judge-fake.ts" $J --item stacks-r1-review-judge-match --out "$W/judge-match" --concurrency 4
+step . jq -c '{state, models, unjudged, files: (.files | keys)}' "$W/judge-match/run.json"
+step . sh -c "echo impact.tsv rows: \$(tail -n +2 $W/judge-match/impact.tsv | wc -l); echo reply files naming impact: \$(grep -l impact $W/judge-match/primary.json $W/judge-match/second.json $W/judge-match/third.json | wc -l)"
+step 'wrote|third|second|E_' $(grep -h '^next: ' "$W"/log/*.txt | tail -1 | sed "s#^next: gstack-evals noloss #$G #")
+for a in $ARMS; do step 'ingested|E_' $G ingest "$W/judge-match/joined/$a" --suite "$S" --root "$W/judged"; done
+
+echo; echo "## Judging: adjudication batch with evidence sheets (section 7)"
+step 'packet|E_' $G judge-packet --suite "$S" $(arms "$W/judged" "$ARMS") --seed 20261031 --out "$W/adj" --key "$W/adj-key.json" --adjudicate
+A="--suite $S --packets $W/adj --key $W/adj-key.json $(arms "$W/judged" "$ARMS") --brief $P/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record --source garrytan/gstack=$SRC/gstack --source garrytan/gbrain=$SRC/gbrain"
+step '^(worst case|item )|E_' $G judge-run $A --item stacks-r1-review-judge-adjudicate --out "$W/judge-adj" --dry-run
+echo; echo "# #95's single judge item: the matching run bound it, so a second judge-run on it is refused."
+step 'E_' bun "$W/judge-fake.ts" $A --item stacks-r1-review-judge-match --out "$W/judge-adj-on-match-item"
+step '^(next|unverifiable|judge-run|E_)' bun "$W/judge-fake.ts" $A --item stacks-r1-review-judge-adjudicate --out "$W/judge-adj" --concurrency 4
+step . sh -c "ls $W/judge-adj/sheets 2>/dev/null | head -3; head -3 $W/judge-adj/verifiable.tsv; cat $W/judge-adj/unverifiable.tsv | head -5"
+step 'wrote|E_' $(grep -h '^next: ' "$W/log/$n.txt" "$W/log/$((n - 1)).txt" 2>/dev/null | tail -1 | sed "s#^next: gstack-evals noloss #$G #")
+for a in $ARMS; do step 'ingested|E_' $G ingest "$W/judge-adj/joined/$a" --suite "$S" --root "$W/final/arms"; done
+
+echo; echo "## Primary family and secondaries (section 6), all seven arms"
+score_all "$S" "$W/final/arms" "$P/comparisons.stacks-r1.json"
+step '^(verdict|E_)' $G score --suite "$S" --root "$W/final/arms" --prereg "$P/comparisons.stacks-r1.json" --variant tstack-opus --reference gstack-opus --expect NO_VERDICT
+
+echo; echo "## Particle-1 drop (section 9): the Opus arms only"
+mkdir -p "$W/opus/arms/stacks-r1"; for a in $OPUS_ARMS; do cp -r "$W/final/arms/stacks-r1/$a" "$W/opus/arms/stacks-r1/"; done
+step "$V" $G score --suite "$S" --root "$W/opus/arms" --prereg "$P/comparisons.stacks-r1.json" --variant pstack-opus --reference gstack-opus
+score_all "$S" "$W/opus/arms" "$P/comparisons.stacks-r1.opus.json"
+
+echo; echo "## Section 7 secondaries: new blockers and idea cards"
+for v in pstack-opus tstack-opus none-opus; do step '^(recall|new|idea|  won)|E_' $G secondary --suite "$S" --root "$W/final/arms" --variant $v --reference gstack-opus --seed 20261031; done
+for v in pstack-particle-1 none-particle-1; do step '^(recall|new|idea|  won)|E_' $G secondary --suite "$S" --root "$W/final/arms" --variant $v --reference gstack-particle-1 --seed 20261031; done
+
+derived() { # derived <id> <derive flags...>: derive the reading, then score every comparison of the full file on it
+  local id=$1; shift
+  step '^(derive|suite|arm|E_)' $G derive --suite "$S" --comparisons "$P/comparisons.stacks-r1.json" --root "$W/final/arms" --id "$id" --out "$W/$id" "$@"
+  score_all "$W/$id/$id.json" "$W/$id/arms" "$W/$id/comparisons.$id.json"
+}
+echo; echo "## Without flagged passes (section 5): flag-scan, then derive"
+step '^flag-scan|E_' $G flag-scan --suite "$S" --run "$W/run" --audit "$P/contamination.tsv" --out "$W/flags.tsv"
+step . cut -f1-6 "$W/flags.tsv"
+derived stacks-r1-unflagged --drop-file "$W/flags.tsv"
+
+echo; echo "## Complete case (section 9): every gap unit dropped"
+derived stacks-r1-complete --drop-gaps
+
+echo; echo "## Strata (section 5): provable by a run, the diff-scoped-tests cut, gbrain; the escaped-defect listing"
+derived stacks-r1-run $(awk -F'\t' 'NR > 1 && $4 == "read" { printf " --detection-only %s:%s", $1, $2 }' "$P/labels.tsv")
+awk -F'\t' 'NR == 1 || $11 == "no"' "$P/unit-tests.tsv" > "$W/tests-cannot.tsv"
+awk -F'\t' 'NR == 1 || $11 == "yes"' "$P/unit-tests.tsv" > "$W/tests-run.tsv"
+derived stacks-r1-tests-run --drop-file "$W/tests-cannot.tsv"
+derived stacks-r1-tests-cannot --drop-file "$W/tests-run.tsv"
+(echo unit; jq -r '.units[] | select(.repo == "garrytan/gstack") | .id' "$S") > "$W/gstack-units.tsv"
+derived stacks-r1-gbrain --drop-file "$W/gstack-units.tsv"
+step . sh -c "jq -r '.units[] | . as \$u | .blockers[] | select(.case | test(\"fixed-by\")) | \"\(\$u.id)\t\(.id)\"' $S | while IFS=\$(printf '\t') read u b; do for a in $ARMS; do awk -F'\t' -v a=\$a -v b=\$b -v u=\"\${u#*#}\" 'NR > 1 && \$2 == b && (u ~ \"^\" \$1 \"(@|\$)\" || \$1 ~ \"^\" u) { print a, \$1, b, \"pass\", \$10, \$3 }' $W/final/arms/stacks-r1/\$a/judgments.tsv; done; done"
+
+echo; echo "## Severity sensitivities (section 3)"
+derived stacks-r1-tstack-should --severity-map "$D/severity-map.tstack-should.json"
+derived stacks-r1-pstack-high --severity-map "$D/severity-map.pstack-high.json"
+derived stacks-r1-pstack-high-medium --severity-map "$D/severity-map.pstack-high-medium.json"
+derived stacks-r1-impact --impact "$W/judge-match/impact.tsv" --key "$W/match-key.json" --impact-judge anthropic/claude-opus-5-5
+
+echo; echo "## TB2 (section 8 and the superseding post)"
+step . sh -c "git -C $R show laneb-stacks-1-runner:quick/laneb/tasks/final.json | sha256sum"
+SHOW=120 step '^(\| [a-z]|## )' bun "$R/quick/laneb/analysis/stacks-tb2.ts" "$W/tb2/stacks-tb2.config.json"
+mkdir -p "$W/tag" && git -C "$R" archive laneb-stacks-1-runner quick/laneb/analysis | tar -x -C "$W/tag"
+echo; echo "# The runner tag's analyze.ts: its fixed pairs give no pstack row, and it drops trials without a reward."
+step '^(\| [a-z0-9.-]+ \| [a-z-]+ - |  "(infra|nTrials)")' bun "$W/tag/quick/laneb/analysis/analyze.ts" "$W/tb2/tag-analyze.config.json"
+SHOW=60 step . sh -c "sed -n '/skillCounts/,/infra/p' $W/log/$n.txt | grep -v '{}\|^  *}' | head -40"
+step . python3 -c "import json,sys; last=lambda p: json.loads(open(p).read()[open(p).read().rindex('\n{'):]); t=last('$W/log/$((n - 1)).txt'); s=last('$W/log/$((n - 2)).txt'); print('stacks-tb2.ts: %d no-reward trials scored 0 (drop reading beside), %d infra' % (len(s['noReward']), len(s['infra']))); print('tag analyze.ts: %d trials dropped as infra' % len(t['infra']))"
+echo; echo "dry run done: $n steps"
