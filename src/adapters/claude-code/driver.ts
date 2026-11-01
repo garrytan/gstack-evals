@@ -411,6 +411,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 throw error;
               }
               cli.on("error", infra);
+              cli.stderr?.on("error", infra);
               cli.stderr?.on("data", (d: Buffer) => {
                 try {
                   appendFileSync(stderrLog, d);

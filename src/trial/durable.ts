@@ -59,6 +59,12 @@ const holdsLink = (path: string): boolean => {
   return !!st && (st.isSymbolicLink() || (st.isDirectory() && readdirSync(path).some((name) => holdsLink(join(path, name)))));
 };
 
+/** Whether a path, or any file under it, has another hard link, so a copy over it would write into that other file. */
+const holdsHardLink = (path: string): boolean => {
+  const st = lstatSync(path, { throwIfNoEntry: false });
+  return !!st && (st.isDirectory() ? readdirSync(path).some((name) => holdsHardLink(join(path, name))) : st.nlink > 1);
+};
+
 /** Whether a symlink whose target is missing sits at path or anywhere above it, up to the filesystem root. */
 const danglingAbove = (path: string): boolean => {
   for (let p = path; ; p = dirname(p)) {
@@ -70,13 +76,15 @@ const danglingAbove = (path: string): boolean => {
 /**
  * Why copying these receipts to the sink could land outside it or fail after the run, or null: a symlink in the sink on
  * the way to a target, at it or under it would carry the copy anywhere, the repo included, and a dangling one at a target
- * or anywhere above it, the sink's own ancestors included, would fail the copy. Compares real paths.
+ * or anywhere above it, the sink's own ancestors included, would fail the copy. A file at or under a target with another
+ * hard link would take the copy into that other file. Compares real paths.
  */
 export function sinkLinkProblem(out: string, files: readonly string[], sink: string): string | null {
   const root = real(sink);
-  const linked = files
-    .map((file) => join(sink, relative(resolve(out), resolve(file))))
-    .filter((target) => !under(real(target), root) || holdsLink(target) || danglingAbove(resolve(target)));
+  const targets = files.map((file) => join(sink, relative(resolve(out), resolve(file))));
+  const linked = targets.filter((target) => !under(real(target), root) || holdsLink(target) || danglingAbove(resolve(target)));
+  const shared = linked.length ? [] : targets.filter(holdsHardLink);
+  if (shared.length) return "the receipts sink " + root + " holds a file with another hard link at or under " + shared.join(", ") + ", so a copy there would write into a file outside it; remove the link or name another GSTACK_EVALS_RECEIPTS";
   return linked.length ? "the receipts sink " + root + " holds a symlink on the way to, at or under " + linked.join(", ") + ", so a copy there could land outside it; remove the link or name another GSTACK_EVALS_RECEIPTS" : null;
 }
 

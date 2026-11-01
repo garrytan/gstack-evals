@@ -307,7 +307,7 @@ describe("the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless
 describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless)", () => {
   const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
   const INFRA = { kind: "missing", code: "E_INFRA_FAILURE" } as const;
-  const stubRun = async (stub: Record<string, string>, o: { timeoutMs?: number; reset?: true; missing?: true; stderrDir?: true; stall?: number; clockStep?: number; persona?: number; stallOn?: { text: string; ms: number } } = {}) => {
+  const stubRun = async (stub: Record<string, string>, o: { timeoutMs?: number; reset?: true; missing?: true; stderrDir?: true; stall?: number; clockStep?: number; persona?: number; stallOn?: { text: string; ms: number }; stderrError?: true } = {}) => {
     const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
     if (o.stderrDir) mkdirSync(join(out, "cli-stderr.log"));
     const calls = { exec: 0, probe: 0 };
@@ -323,6 +323,7 @@ describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (
         }
         const child = o.missing ? spawn(join(out, "no-such-cli"), [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", ...stub }, stdio: ["pipe", "pipe", "pipe"] });
         if (o.reset) child.stdout!.once("data", () => setTimeout(() => child.stdout!.destroy(Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })), 50));
+        if (o.stderrError) child.stderr!.once("data", () => setTimeout(() => child.stderr!.destroy(new Error("synthetic stderr read error")), 20));
         const { stallOn } = o;
         let stalledOnce = false;
         if (stallOn) child.stdout!.on("data", (chunk) => {
@@ -408,6 +409,12 @@ describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (
     expect(ok.log()).toContain("WARN-FROM-STUB\n");
     const bad = await stubRun(content([{ type: "text", text: "Done." }], { STUB_STDERR: "WARN-FROM-STUB\n", STUB_DELAY: "200" }), { stderrDir: true });
     expect(scored(bad.outcome)).toEqual({ termination: INFRA, model_output: true, exit_code: null });
+  }, 30_000);
+
+  // Value: protects=rule 4 (#107 /ship outside voice OV2): a read error on the CLI's stderr stream is the evaluator's failure, infra, never an uncaught exception that ends every session in the process; fails_when=cli.stderr has no error listener
+  test("OV2: a read error on the CLI's stderr stream is infra, never an uncaught exception", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_STDERR: "WARN-FROM-STUB\n", STUB_DELAY: "300" }), { stderrError: true });
+    expect(r.outcome === "hung" ? r.outcome : r.outcome.termination).toEqual(INFRA);
   }, 30_000);
 
   // Value: protects=rule 4 (adversarial 5, outside voice 1, B1): the evaluator's own event loop stalling (another session's synchronous docker step) never times the arm out: a CLI that answers at 300 ms under a 600 ms limit, while the loop stalls 700 ms, past the 60 ms credit cap, ends as infra (E_INFRA_FAILURE), never the arm's timeout; fails_when=the timer fires first after the stall and the healthy session scores a timeout, a miss; why_new=#106 /ship Step 11 outside voice 1, #107 /ship B1; seam=the driver's stall-compensated clock; no_claim=a real docker step

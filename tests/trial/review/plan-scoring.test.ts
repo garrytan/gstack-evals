@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeCodeDriver } from "../../../src/adapters/claude-code/driver.ts";
@@ -435,6 +435,24 @@ describe("a symlink in the receipts sink (keyless)", () => {
   };
 
   // Value: protects=outside voice 3 (#106 /ship): a sink whose subdirectory is a symlink would carry the copy wherever the link points, the repo included, so copyToSink refuses before it writes anything, and a sink with no link still copies; fails_when=cpSync follows a symlinked parent out of the sink; why_new=#106 /ship outside voice OV3; seam=copyToSink, sinkLinkProblem; no_claim=a link created after the check, during the copy
+  // Value: protects=sealed receipts containment (#107 /ship outside voice OV1): a file in the sink with another hard link is refused like a symlink, so the copy never writes held-out receipts into an inode it shares with a file outside the sink, the repo's included; fails_when=sinkLinkProblem checks only symlinks
+  test("OV1: a hard-linked file in the sink refuses the copy before it writes", () => {
+    const base = mkdtempSync(join(tmpdir(), "sink-hardlink-"));
+    const shared = join(base, "public.txt");
+    writeFileSync(shared, "public-original");
+    const out = join(base, "out");
+    mkdirSync(join(out, "receipts"), { recursive: true });
+    const receipt = join(out, "receipts", "r.json");
+    writeFileSync(receipt, "synthetic-private-receipt");
+    const sink = join(base, "sink");
+    mkdirSync(join(sink, "receipts"), { recursive: true });
+    linkSync(shared, join(sink, "receipts", "r.json"));
+    expect(sinkLinkProblem(out, [receipt], sink)).toContain(join(sink, "receipts", "r.json"));
+    expect(sinkLinkProblem(out, [join(out, "receipts")], sink)).toContain(join(sink, "receipts"));
+    expect(() => copyToSink(out, [receipt], sink)).toThrow();
+    expect(readFileSync(shared, "utf8")).toBe("public-original");
+  });
+
   test("OV3: a symlinked directory in the sink refuses the copy before it writes; a plain sink copies", () => {
     const { out, files } = receipts();
     const away = scratch("plan-scoring-away-");
