@@ -40,7 +40,7 @@ export class MemoryLedger implements ReservationLedger {
   }
 }
 
-export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> } | { type: "thinking"; thinking: string } | { type: "redacted_thinking"; data: string };
+export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> } | { type: "thinking"; thinking: string; signature?: string } | { type: "redacted_thinking"; data: string };
 
 export interface Turn {
   /** Tool results so far, by tool_use id. */
@@ -129,7 +129,7 @@ export function messagesResponse(body: Record<string, any>, blocks: Block[], sto
     } else if (b.type === "thinking") {
       events.push(["content_block_start", { type: "content_block_start", index, content_block: { type: "thinking", thinking: "", signature: "" } }]);
       if (b.thinking) events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: b.thinking } }]);
-      events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "signature_delta", signature: "sig" } }]);
+      if (b.signature) events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "signature_delta", signature: b.signature } }]);
     } else if (b.type === "redacted_thinking") {
       events.push(["content_block_start", { type: "content_block_start", index, content_block: b }]);
     } else {

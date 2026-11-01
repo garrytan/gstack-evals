@@ -17,7 +17,7 @@ import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skil
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
-import { copyToSink } from "../../../src/trial/durable.ts";
+import { copyToSink, sinkLinkProblem } from "../../../src/trial/durable.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { seedStateRoot } from "../../../src/trial/state-root.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
@@ -153,7 +153,7 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
     }
   } },
   // gstack-timing-ok: the wait only outlasts the 3 s wall clock, so the timer fires after the infra stop; nothing is asserted on elapsed time
-  errortimeout: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; cli.emit("error", new Error("read ECONNRESET")); await new Promise((r) => setTimeout(r, 4500)); } },
+  errortimeout: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; cli.emit("error", new Error("read ECONNRESET")); await new Promise((r) => setTimeout(r, 13_500)); } },
   exit137: { cli: "read _; exit 137", script: () => async function* (_sdk, cli) {
     yield init;
     yield assistant(text("Reading the plan."));
@@ -232,7 +232,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     };
     const input = baseInput(fx.prepared, fx.panel.suite.id, arms, out, null);
     try {
-      const run = await runReviewUnits({ ...input, suite: { ...input.suite, sealed: true }, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig);
+      const run = await runReviewUnits({ ...input, timeoutS: 12, suite: { ...input.suite, sealed: true }, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig);
       stops = run.stops;
     } finally {
       h.proxy.stop();
@@ -459,6 +459,23 @@ describe("a symlink in the receipts sink (keyless)", () => {
     const rig = { bind: async () => { bound.push("bound"); throw new Error("no session may start"); }, arms: { none: bare("none") }, cells: {} } as unknown as HostRig;
     const sink = scratch("plan-scoring-run-linked-sink-");
     symlinkSync(scratch("plan-scoring-run-away-"), join(sink, "arms"));
+    const input = baseInput(fx.prepared, fx.panel.suite.id, ["none"], durable(), null);
+    await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig)).rejects.toThrow("E_USAGE: the receipts sink ");
+    expect(bound).toEqual([]);
+  });
+
+  // Value: protects=RT1 (#107 /ship red team 1): a sink that is a dangling symlink, or holds one on the way to a receipt, is refused before any session, so a run never spends and then loses its receipts when the copy fails; fails_when=a dangling link reads as a plain missing name; why_new=#107 /ship red team RT1; seam=sinkLinkProblem, runReviewUnits's early sink checks; no_claim=a link created after the check
+  test("RT1: a dangling symlink at the sink or on a receipt's path is refused before any session", async () => {
+    const { out } = receipts();
+    const gone = join(scratch("plan-scoring-gone-"), "missing");
+    const inner = scratch("plan-scoring-dangling-inner-");
+    symlinkSync(gone, join(inner, "arms"));
+    expect(sinkLinkProblem(out, [join(out, "arms", "none-opus", "arm.json")], inner)).toContain("holds a symlink on the way to, at or under " + join(inner, "arms", "none-opus", "arm.json"));
+    const fx = unitFixture();
+    const bound: string[] = [];
+    const rig = { bind: async () => { bound.push("bound"); throw new Error("no session may start"); }, arms: { none: bare("none") }, cells: {} } as unknown as HostRig;
+    const sink = join(scratch("plan-scoring-dangling-sink-"), "sink");
+    symlinkSync(gone, sink);
     const input = baseInput(fx.prepared, fx.panel.suite.id, ["none"], durable(), null);
     await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig)).rejects.toThrow("E_USAGE: the receipts sink ");
     expect(bound).toEqual([]);

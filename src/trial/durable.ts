@@ -59,13 +59,24 @@ const holdsLink = (path: string): boolean => {
   return !!st && (st.isSymbolicLink() || (st.isDirectory() && readdirSync(path).some((name) => holdsLink(join(path, name)))));
 };
 
+/** Whether a symlink whose target is missing sits at path or on the way down to it from top. */
+const danglingOnTheWay = (top: string, path: string): boolean => {
+  for (let p = path; ; p = dirname(p)) {
+    if (lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() && !existsSync(p)) return true;
+    if (p === top || dirname(p) === p) return false;
+  }
+};
+
 /**
- * Why copying these receipts to the sink could land outside it, or null: a symlink in the sink on the way to a target, at
- * it or under it would carry the copy anywhere, the repo included. Compares real paths.
+ * Why copying these receipts to the sink could land outside it or fail after the run, or null: a symlink in the sink on
+ * the way to a target, at it or under it would carry the copy anywhere, the repo included, and a dangling one at the sink
+ * or on the way would fail the copy. Compares real paths.
  */
 export function sinkLinkProblem(out: string, files: readonly string[], sink: string): string | null {
   const root = real(sink);
-  const linked = files.map((file) => join(sink, relative(resolve(out), resolve(file)))).filter((target) => !under(real(target), root) || holdsLink(target));
+  const linked = files
+    .map((file) => join(sink, relative(resolve(out), resolve(file))))
+    .filter((target) => !under(real(target), root) || holdsLink(target) || danglingOnTheWay(resolve(sink), resolve(target)));
   return linked.length ? "the receipts sink " + root + " holds a symlink on the way to, at or under " + linked.join(", ") + ", so a copy there could land outside it; remove the link or name another GSTACK_EVALS_RECEIPTS" : null;
 }
 

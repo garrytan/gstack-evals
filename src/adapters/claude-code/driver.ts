@@ -42,11 +42,15 @@
 //   Once a timeout or an arm failure is recorded, an error from the adapter's own abort or teardown (a kill that hits a
 //   docker exec already gone, a child error after the abort) does not replace it; cli-stderr.log names it as teardown
 //   after that stop.
-// - The session's clock runs only while the evaluator's event loop does: a stall between its 250 ms ticks (another
-//   session's synchronous docker step, say) moves the deadline by the stall, so evaluator latency never times the arm
-//   out. The liveness probe after a crash runs as a spawned process, so it never stalls other sessions.
+// - The session's clock reads performance.now, so a wall-clock step never moves it, and runs only while the evaluator's
+//   event loop does: a stall between its 250 ms ticks (another session's synchronous docker step, say) moves the
+//   deadline by the stall, up to a tenth of the session's timeout in all, and the outcome's credited_stall_ms records the
+//   credit. Once the credit reaches that cap, a timeout is infra (E_INFRA_FAILURE), never the arm's. The liveness probe
+//   after a crash runs as a spawned process, so it never stalls other sessions.
 // - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
-//   with text or thinking that holds more than whitespace (redacted thinking with data counts), or a tool call. Scorers
+//   with text or thinking that holds more than whitespace, a thinking block with a non-empty signature (the API's proof
+//   that the model reasoned, whatever the display mode; rule 2 as GSTA-2 amended it), redacted thinking with data, or a
+//   tool call. Scorers
 //   read it instead of turns, which hold main-agent text only. text_output says whether the main agent wrote any text,
 //   apart from the AskUserQuestion questions turns also hold. exit_code and signal record the CLI's own exit; both are
 //   null when it did not exit on its own (the adapter's abort or teardown, or the SDK closing its input, ended it, or it
@@ -234,11 +238,18 @@ const answers = (session: AgentSession): Promise<boolean> =>
     probe.stdin?.end();
   });
 
-/** Whether an assistant block is model output: text or thinking with something in it (redacted thinking included), or a tool call. */
+/**
+ * Whether an assistant block is model output (rule 2 as GSTA-2 amended it, 2026-11-01): text or thinking with something in
+ * it, a thinking block with a non-empty signature (the API's proof that the model reasoned, whatever the display mode),
+ * redacted thinking with data, or a tool call.
+ */
 export const producedOutput = (b: SdkMessage): boolean =>
-  b.type === "tool_use" || (b.type === "text" && typeof b.text === "string" && b.text.trim() !== "") || (b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim() !== "") || (b.type === "redacted_thinking" && typeof b.data === "string" && b.data !== "");
+  b.type === "tool_use" ||
+  (b.type === "text" && typeof b.text === "string" && b.text.trim() !== "") ||
+  (b.type === "thinking" && ((typeof b.thinking === "string" && b.thinking.trim() !== "") || (typeof b.signature === "string" && b.signature !== ""))) ||
+  (b.type === "redacted_thinking" && typeof b.data === "string" && b.data !== "");
 
-/** The session clock's tick; a gap between ticks past TICK_MS + STALL_MS is the evaluator's event loop stalling, not the arm's time. */
+/** The session clock's tick; a gap between ticks past TICK_MS + STALL_MS is the evaluator's event loop stalling, not the arm's time. The clock credits stalls back up to a tenth of the session's timeout. */
 const TICK_MS = 250;
 const STALL_MS = 250;
 
@@ -302,14 +313,27 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         end(INFRA);
         log("adapter: " + (before ? "after the " + before.kind + " stop, teardown: " : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
       };
-      let deadline = Date.now() + timeoutMs;
-      let last = Date.now();
+      const cap = timeoutMs / 10;
+      let credited = 0;
+      let full = false;
+      let deadline = performance.now() + timeoutMs;
+      let last = performance.now();
       let settled = false;
       let pauses = 0;
       let paused = 0;
       const stalled = (): number => {
-        const now = Date.now();
-        if (pauses === 0 && now - last > TICK_MS + STALL_MS) deadline += now - last - TICK_MS;
+        const now = performance.now();
+        const gap = now - last - TICK_MS;
+        if (pauses === 0 && gap > STALL_MS) {
+          if (gap >= cap - credited) {
+            deadline += cap - credited;
+            credited = cap;
+            full = true;
+          } else {
+            deadline += gap;
+            credited += gap;
+          }
+        }
         last = now;
         return now;
       };
@@ -317,6 +341,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         if (settled) return;
         const now = stalled();
         if (now < deadline) timer = setTimeout(expire, deadline - now);
+        else if (full) infra(new Error("the evaluator's event loop stalled past the session's stall credit of " + cap + " ms, a tenth of its timeout, so the timeout is not the arm's"));
         else end({ kind: "timeout" });
       };
       let timer = setTimeout(expire, timeoutMs);
@@ -325,15 +350,15 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const freeform = persona && (async (text: string, question: string) => {
         if (pauses++ === 0) {
           clearTimeout(timer);
-          paused = Date.now();
+          paused = performance.now();
         }
         let a: Awaited<ReturnType<typeof persona>>;
         try {
           a = await persona(text, question);
         } finally {
           if (--pauses === 0) {
-            deadline += Date.now() - paused;
-            timer = setTimeout(expire, Math.max(0, deadline - Date.now()));
+            deadline += performance.now() - paused;
+            timer = setTimeout(expire, Math.max(0, deadline - performance.now()));
           }
         }
         if ("text" in a) return a.text;
@@ -486,6 +511,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         text_output: textOutput,
         exit_code: exitCode,
         signal: exitSignal,
+        credited_stall_ms: Math.round(credited),
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

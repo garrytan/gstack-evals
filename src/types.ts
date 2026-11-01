@@ -213,7 +213,8 @@ export interface TrialRecord {
    */
   turns: string[];
   /**
-   * Whether the model produced any output: an assistant message with text, thinking or a tool call, as the adapter saw it.
+   * Whether the model produced any output: an assistant message with non-empty text or thinking, a thinking block with a
+   * non-empty signature, or a tool call, as the adapter saw it.
    * Set by adapters that see each assistant message; turns cannot tell, since a session of tool calls alone has none.
    */
   model_output?: boolean;
@@ -222,6 +223,8 @@ export interface TrialRecord {
   /** The agent CLI's exit code and signal when it exited on its own (137 for a kill such as an OOM); null for both when the adapter's abort or teardown killed it. */
   exit_code?: number | null;
   signal?: string | null;
+  /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout; set by adapters whose clock credits stalls. */
+  credited_stall_ms?: number;
   /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
   check: boolean | null;
   /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */

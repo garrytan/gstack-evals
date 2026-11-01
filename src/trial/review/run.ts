@@ -18,7 +18,8 @@
 //   GSTACK_EVALS_RECEIPTS before the run returns.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
 //   that keeps a voice, since a plan arm runs no second model.
-// - A plan session scores by planScore. After the model produced output (the record's model_output, never its turns), a
+// - A plan session scores by planScore. After the model produced output (the record's model_output: non-empty text or
+//   thinking, a thinking block with a non-empty signature, or a tool call; never its turns), a
 //   malformed or missing block, a timeout, the arm's CLI failing, or a session that completed with no text turn is a miss
 //   with a diagnostic note. arm.json counts as completed_without_text every miss whose session completed with no text from
 //   the main agent (no turn, or only AskUserQuestion questions, which parse as missing), since the parser reads text
@@ -30,7 +31,7 @@
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
-//   path is refused too. Both checks run before any session.
+//   path, or a dangling one at the sink, is refused too. Both checks run before any session.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
@@ -236,10 +237,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
   const receipts = [join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
-  const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
-  if (linked) throw new Error("E_USAGE: " + linked);
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
+  const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
+  if (linked) throw new Error("E_USAGE: " + linked);
   const plan = o.plan ?? null;
   if (plan && o.host !== "claude") throw new Error("E_USAGE: plan units score from the Claude Code driver's model_output, which host " + o.host + " does not record; run plan units with host claude");
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
