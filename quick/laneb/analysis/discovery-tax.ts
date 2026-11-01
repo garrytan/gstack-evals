@@ -264,7 +264,7 @@ export function runT(recs: Rec[], cfg: any): string[] {
     const sig = adj[i]! < 0.05;
     const claim = x.flaggedCells.length ? "no claim (gate)" : sig && t2.hi < 0 ? "claim: longer told text cost passes" : sig && t2.lo > 0 ? "claim: longer told text raised passes" : "no claim";
     out.push(`T2 (placebo minus placebo-short): ${ci(t2, pp)} pp, p ${pv(t2.p)}, Holm ${pv(adj[i]!)}; ${claim}`);
-    for (const [a, b] of [[c.placebo, c.none], [c.short, c.none]] as const) {
+    for (const [a, b] of [[c.placebo, c.none], [c.short, c.none], [c.placebo, c.short]] as const) {
       const all = contrast(passMap(x.m, a), passMap(x.m, b), false);
       const cc = contrast(passMap(x.m, a, (r) => !r.budgetStop), passMap(x.m, b, (r) => !r.budgetStop), false);
       const stops = contrast(passMap(x.m, a, undefined, (r) => (r.budgetStop ? 1 : 0)), passMap(x.m, b, undefined, (r) => (r.budgetStop ? 1 : 0)), false);

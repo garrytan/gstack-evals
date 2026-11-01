@@ -78,6 +78,26 @@ describe("Run T claims", () => {
   });
 });
 
+describe("Run T sensitivities", () => {
+  test("every pass-rate contrast, T2's placebo minus placebo-short included, reports stops, complete case and the retried reading for every model", () => {
+    const s = t("run-t-confirmed");
+    const row = (pair: string) => new RegExp(`^${pair}: pass [+-]\\d+\\.\\d \\[[^\\]]+\\] pp; session-cap stop rate [+-]\\d+\\.\\d \\[[^\\]]+\\] pp; complete case \\(descriptive\\) [+-]\\d+\\.\\d \\[[^\\]]+\\] pp; retried-after-response scored 0 [+-]\\d+\\.\\d \\[[^\\]]+\\] pp$`, "m");
+    for (const m of ["particle-1", "claude-haiku-5-5", "deepseek-v4.1-flash-1017"]) {
+      const block = s.split(`## ${m}\n`)[1]!.split("\n## ")[0]!;
+      for (const pair of ["placebo minus none", "placebo-short minus none", "placebo minus placebo-short"]) expect(block).toMatch(row(pair));
+    }
+    expect(s).toContain("placebo minus placebo-short: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp;");
+  });
+  test("the retried reading of placebo minus placebo-short scores a rerun after a response as 0", () => {
+    const cfg = cfgs["run-t-confirmed"];
+    let k = 0;
+    const recs = loadRun(cfg).recs.map((r) => (r.model === "particle-1" && r.label === "placebo-short" && k++ < 10 ? { ...r, retried: true } : r));
+    const s = runT(recs, cfg).join("\n");
+    expect(s).toContain("placebo minus placebo-short: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp; retried-after-response scored 0 -51.4 [");
+    expect(s).toContain("placebo minus none: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp; retried-after-response scored 0 -78.4 [");
+  });
+});
+
 describe("statistics", () => {
   test("zero-count bound, Holm, and the seeded sign-flip test", () => {
     expect(zeroBound(37)).toBeCloseTo(0.0778, 4);
