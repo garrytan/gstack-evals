@@ -27,6 +27,8 @@ This post freezes agenda item 4 of the insight plan (GEVA-98, adopted by Garry o
 
 In #109, particle-1's arm that was told to use a placebo skill passed 10 points fewer TB2 tasks than its no-gstack arm: -10 [-18, -2]. #109 did not preregister that contrast. The placebo arm also hit its session cap 9 times, against 3 for no gstack. Quick look 3 measured the same contrast with the same arm tar on nearly the same tasks and got the opposite sign: +6 [-2, +15] (39 tasks, preregistered as exploratory). On Haiku 5.5 the two readings were -5 [-13, +3] (#109) and +0 [-7, +8] (quick look 3).
 
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
 Run T asks whether told skill text costs cheap models passes, and whether the cost grows with the length of the text. The decision: if it does, gstack should test short variants of its skills for cheap rungs; if it doesn't, gstack doesn't need them for this reason.
 
 ## 2. Tasks
@@ -34,6 +36,8 @@ Run T asks whether told skill text costs cheap models passes, and whether the co
 The 37 TB2 tasks #109 analysed: quick look 3's 40 (`tasks/final.json`, sha256 9ccfec13f01c150f4ec838e19285375a1f034522c1a069c0ee83d75d12dd56d9) less crack-7z-hash, adaptive-rejection-sampler and largest-eigenval, which #109's in-run oracle rule dropped. TB2 is pinned at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c, and prepare-run checks every task digest. Every batch runs the oracle first. A task whose oracle fails on a batch's VM is dropped from every model, arm and replicate of Run T, with no swaps, and reported with the spend its trials had already used.
 
 **Headroom.** A tax needs room below. With no gstack, particle-1 passed 82.9% and Haiku 75.7% of these tasks in #109, and DeepSeek V4.1 Flash passed 81% of quick look 3's 39.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
 
 ## 3. Arms and harness
 
@@ -49,7 +53,7 @@ placebo is exactly #109's told placebo arm. placebo-short keeps the told instruc
 
 `arms/variants.ts` on the runner tag builds placebo-short by rewriting the one tar entry in a stream and keeping every other entry byte for byte, so a rebuild anywhere gives the same sha256. Its body uses the generator's topic terms for investigate and the seed `gstack-evals/laneb/placebo/v1-short` with the generator's per-folder stream, and the generator's procedural-marker check finds nothing in it.
 
-**System prompt.** GEVA-104 found that the pinned Claude Agent SDK (0.2.174) passes an empty `--system-prompt` by default, and Lane B's agent sets none. So #109, the quick looks and this run all run without Claude Code's own system prompt. Run T keeps that setting on purpose, because it replicates #109. Its results describe Claude Code driven this way, not Claude Code as people usually run it. Item 2's preregistration makes the system prompt a factor once GEVA-109's harness change merges.
+**System prompt.** GEVA-104 found that the pinned Claude Agent SDK (0.2.174) passes an empty `--system-prompt` by default, and Lane B's agent sets none. So the model gets only the SDK's stub system prompt: a billing header and "You are a Claude agent, built on Anthropic's Claude Agent SDK.", 136 characters in all (section 10), and never Claude Code's own system prompt. #109 and the quick looks ran on this stub. Run T runs on it on purpose, so that it replicates #109 exactly. Its results describe Claude Code driven this way, not Claude Code as people usually run it. Item 2's preregistration makes the system prompt a factor once GEVA-109's harness change merges.
 
 ## 4. Models, cells and replicates
 
@@ -88,6 +92,10 @@ All intervals are 95% percentile intervals from a task-clustered bootstrap: 10,0
 **Gate.** Body load per told cell is reported beside every verdict. A told cell under 95% body load is flagged, and no T1 or T2 claim is made from it.
 
 **Prior readings shown beside T1 and T2, never pooled with them:** #109 (particle-1 -10 [-18, -2], Haiku -5 [-13, +3]) and quick look 3 (particle-1 +6 [-2, +15], Haiku +0 [-7, +8], DeepSeek -2 [-9, +6]).
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+**Disclosure.** Run T's results post prints that line, verbatim, beside every particle-1 result it reports.
 
 ## 7. Scoring and failure rules
 
@@ -156,6 +164,8 @@ One trap the dry run found: Claude Code also loads `.claude/skills` from every p
 ## 11. Power and admission
 
 The minimum detectable difference (80% power, two-sided 0.05) comes from #109's standard error for this contrast on these tasks: its particle-1 placebo minus none, -10 [-18, -2] at 3 replicates, gives about 4.08 points. It scales by the square root of 3 over the replicates. Haiku's #109 interval had the same width, and DeepSeek's quick look 3 interval was a little narrower.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
 
 | Replicates | MDD (T1, alpha 0.05) | T2, first Holm step (alpha 0.05/3) |
 |---|---|---|
