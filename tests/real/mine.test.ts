@@ -73,6 +73,26 @@ describe("exposure window", () => {
     expect(c18.reasons).toContain("exposure_incomplete");
     expect(c18.exposure.missing).toEqual(["issue #26"]);
   });
+
+  test("a pull request whose closing issues or commits were cut off is incomplete", () => {
+    const meta = calcMeta(sha);
+    meta.prs.find((p) => p.number === 12)!.truncated = true;
+    const cut = mineRepo({ repoDir: join(tmp.dir, "calc"), repo: "fixture/calc", branch: "main", meta, window: WINDOW });
+    expect(cut.candidates.some((c) => c.kind === "K1" && c.change === sha.c4)).toBe(false);
+    const c4 = cut.candidates.find((c) => c.kind === "K3" && c.change === sha.c4)!;
+    expect(c4).toMatchObject({ eligible: false, stratum: null });
+    expect(c4.reasons).toContain("exposure_incomplete");
+    expect(c4.exposure.missing).toEqual(["pull request #12 has more closing issues or commits than the metadata holds"]);
+  });
+
+  test("an as-of run ignores every change merged after the mining date", () => {
+    const early = mineRepo({ repoDir: join(tmp.dir, "calc"), repo: "fixture/calc", branch: "main", meta: calcMeta(sha), window: { ...WINDOW, mined_at: "2026-07-31" } });
+    expect(early.candidates.map((c) => [c.kind, c.change])).toEqual([
+      ["K3", sha.c3],
+      ["K3", sha.c4],
+    ]);
+    expect(early.candidates.find((c) => c.change === sha.c4)).toMatchObject({ eligible: true, stratum: "window" });
+  });
 });
 
 describe("K2 and K3", () => {
@@ -177,9 +197,9 @@ describe("gstack family, sampling and the panel", () => {
 
 describe("fetch and the CLI", () => {
   test("parses a GraphQL page of merged pull requests", () => {
-    const page = parsePrPage({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: true, endCursor: "c1" }, nodes: [{ number: 3, title: "t", body: "b", createdAt: "2026-07-02T00:00:00Z", mergedAt: "2026-07-03T00:00:00Z", updatedAt: "2026-07-03T00:00:00Z", mergeCommit: { oid: "a".repeat(40) }, labels: { nodes: [{ name: "bug" }] }, closingIssuesReferences: { nodes: [{ number: 2, title: "i", createdAt: "2026-07-01T00:00:00Z", labels: { nodes: [] } }] }, commits: { nodes: [{ commit: { oid: "b".repeat(40), authoredDate: "2026-06-30T00:00:00Z", committedDate: "2026-07-02T00:00:00Z" } }] } }] } } } });
+    const page = parsePrPage({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: true, endCursor: "c1" }, nodes: [{ number: 3, title: "t", body: "b", createdAt: "2026-07-02T00:00:00Z", mergedAt: "2026-07-03T00:00:00Z", updatedAt: "2026-07-03T00:00:00Z", mergeCommit: { oid: "a".repeat(40) }, labels: { nodes: [{ name: "bug" }] }, closingIssuesReferences: { totalCount: 1, nodes: [{ number: 2, title: "i", createdAt: "2026-07-01T00:00:00Z", labels: { nodes: [] } }] }, commits: { totalCount: 101, nodes: [{ commit: { oid: "b".repeat(40), authoredDate: "2026-06-30T00:00:00Z", committedDate: "2026-07-02T00:00:00Z" } }] } }] } } } });
     expect(page.next).toBe("c1");
-    expect(page.prs[0]).toMatchObject({ number: 3, merge_commit: "a".repeat(40), closing_issues: [2], labels: ["bug"], commits: [{ sha: "b".repeat(40), authored_at: "2026-06-30T00:00:00Z" }] });
+    expect(page.prs[0]).toMatchObject({ number: 3, merge_commit: "a".repeat(40), closing_issues: [2], labels: ["bug"], commits: [{ sha: "b".repeat(40), authored_at: "2026-06-30T00:00:00Z" }], truncated: true });
     expect(page.issues).toEqual([{ number: 2, title: "i", created_at: "2026-07-01T00:00:00Z", labels: [] }]);
   });
 

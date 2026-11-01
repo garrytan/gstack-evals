@@ -3,14 +3,13 @@
 // builder's output and readTask's tamper checks, and prepare.sh's restore rules run on host directories.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
 import { buildTask } from "../../lanes/real-outcome/task/build.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
 import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, statementLeaks, TaskError, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
-import { stripPatch } from "../../lanes/real-outcome/task/verify.ts";
 import { buildRepo, calcCommits, calcSpecs, clampyRepo, MIT, tempDir } from "./fixture.ts";
 
 let tmp: ReturnType<typeof tempDir>;
@@ -37,6 +36,7 @@ const code = (fn: () => unknown): string => {
 describe("per-test record", () => {
   test("pytest phases become pass, skip, assertion, missing-name and load results; unreported ids are missing", () => {
     const lines = [
+      { event: "phase", id: "t.py::a", when: "setup", outcome: "passed" },
       { event: "phase", id: "t.py::a", when: "call", outcome: "passed" },
       { event: "phase", id: "t.py::a", when: "teardown", outcome: "passed" },
       { event: "phase", id: "t.py::b", when: "call", outcome: "failed", exc: "AssertionError", msg: "AssertionError: assert 1 == 2" },
@@ -55,6 +55,16 @@ describe("per-test record", () => {
     expect(resultFor(p, "t.py::f")).toMatchObject({ status: "fail", cls: "assert" });
     expect(resultFor(p, "u.py::g")).toMatchObject({ status: "fail", cls: "missing_name", name: "extra" });
     expect(resultFor(p, "t.py::zz")).toEqual({ status: "missing" });
+  });
+
+  test("a pytest id passes only when setup, call and teardown all reported passed", () => {
+    const lines = [
+      { event: "phase", id: "t.py::died_in_call", when: "setup", outcome: "passed" },
+      { event: "phase", id: "t.py::died_in_teardown", when: "setup", outcome: "passed" },
+      { event: "phase", id: "t.py::died_in_teardown", when: "call", outcome: "passed" },
+    ];
+    const p = parsePytest(lines.map((l) => JSON.stringify(l)).join("\n"));
+    for (const id of ["t.py::died_in_call", "t.py::died_in_teardown"]) expect(resultFor(p, id)).toMatchObject({ status: "fail", cls: "load" });
   });
 
   test("go test -json results, with a build failure failing every id in its package", () => {
@@ -83,11 +93,6 @@ describe("per-test record", () => {
 });
 
 describe("policies", () => {
-  test("stripPatch drops sections inside installed-dependency directories", () => {
-    const patch = "diff --git a/src/a.py b/src/a.py\n+x\ndiff --git a/.venv/lib/pytest.py b/.venv/lib/pytest.py\n+y\ndiff --git a/web/node_modules/x/i.js b/web/node_modules/x/i.js\n+z\n";
-    expect(stripPatch(patch)).toEqual({ patch: "diff --git a/src/a.py b/src/a.py\n+x\n", stripped: [".venv/lib/pytest.py", "web/node_modules/x/i.js"] });
-  });
-
   test("installs must hold to a lockfile", () => {
     const pytest = { kind: "pytest" as const, python: "python3", config: "pytest.ini" };
     const lock = "pytest==8.3.3 --hash=sha256:" + "a".repeat(64) + "\n";
@@ -236,5 +241,35 @@ describe("the real dispatcher", () => {
     expect(out[2]).toContain("gstack-evals real mine");
     expect(err.join("\n")).toMatch(/^E_USAGE check needs a task directory$/m);
     expect(err.join("\n")).toMatch(/^E_USAGE .*bogus/m);
+  });
+});
+
+describe("prepare.sh and installed dependencies", () => {
+  test("dependency directories come only from the image, whatever the patch's format or path quoting", () => {
+    const root = join(tmp.dir, "prep-deps");
+    const src = join(root, "src");
+    const v = join(root, "verifier");
+    const out = join(root, "out");
+    for (const d of [src + "/.venv/lib/site", src + "/calc", src + "/web/node_modules/m", v, root + "/input", out, root + "/status"]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(src, "calc/ops.py"), "x = 1\n");
+    writeFileSync(join(src, ".venv/lib/site/pytest.py"), "real pytest\n");
+    writeFileSync(join(src, "web/node_modules/m/i.js"), "real m\n");
+    writeFileSync(join(v, "restore.list"), "");
+    writeFileSync(join(v, "protect.ere"), PROTECT_ERE);
+    const patch = [
+      "diff --git a/calc/ops.py b/calc/ops.py\n--- a/calc/ops.py\n+++ b/calc/ops.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n",
+      'diff --git "a/.venv/lib/site/\\303\\244.pth" "b/.venv/lib/site/\\303\\244.pth"\nnew file mode 100644\n--- /dev/null\n+++ "b/.venv/lib/site/\\303\\244.pth"\n@@ -0,0 +1 @@\n+import evil\n',
+      "--- a/web/node_modules/m/i.js\n+++ b/web/node_modules/m/i.js\n@@ -1 +1 @@\n-real m\n+fake m\n",
+      "diff --git a/.venv/lib/site/pytest.py b/pytest.py\nsimilarity index 100%\nrename from .venv/lib/site/pytest.py\nrename to pytest.py\n",
+    ].join("");
+    writeFileSync(join(root, "input/tree.patch"), patch);
+    const r = spawnSync("sh", [join(VERIFIER_DIR, "prepare.sh")], { env: { PATH: process.env.PATH, SRC: src, V: v, PATCH: join(root, "input/tree.patch"), OUT: out, STATUS: join(root, "status") }, encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(readFileSync(join(root, "status/skipped.txt"), "utf8")).toBe('".venv/lib/site/\\303\\244.pth"\nweb/node_modules/m/i.js\n');
+    expect(readFileSync(join(root, "status/restored.txt"), "utf8")).toBe(".venv\n");
+    expect(readFileSync(join(out, "calc/ops.py"), "utf8")).toBe("x = 2\n");
+    expect(readdirSync(join(out, ".venv/lib/site"))).toEqual(["pytest.py"]);
+    expect(readFileSync(join(out, ".venv/lib/site/pytest.py"), "utf8")).toBe("real pytest\n");
+    expect(readFileSync(join(out, "web/node_modules/m/i.js"), "utf8")).toBe("real m\n");
   });
 });

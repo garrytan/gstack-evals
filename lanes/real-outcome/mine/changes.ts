@@ -112,8 +112,8 @@ export function listChanges(repoDir: string, branch: string, since: string, meta
     }
     if (pr) parts.push({ source: "pr", ref: "#" + pr.number, at: pr.created_at });
     else if (prRef && meta !== null) missing.push("pull request #" + prRef[1]);
-    const dates = pr && pr.commits.length > 0 ? pr.commits : commitDates(repoDir, commits);
-    for (const c of dates) {
+    if (pr?.truncated) missing.push("pull request #" + pr.number + " has more closing issues or commits than the metadata holds");
+    for (const c of [...(pr?.commits ?? []), ...commitDates(repoDir, commits)]) {
       parts.push({ source: "commit", ref: c.sha, at: c.authored_at });
       parts.push({ source: "commit", ref: c.sha, at: c.committed_at });
     }

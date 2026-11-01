@@ -64,6 +64,7 @@ export function parsePytest(jsonl: string): Parsed {
   const order: string[] = [];
   const notes: string[] = [];
   const collectFails: { id: string; msg: string }[] = [];
+  const passed = new Map<string, Set<string>>();
   for (const line of jsonl.split("\n")) {
     if (!line.trim()) continue;
     let e: PyEvent;
@@ -78,6 +79,7 @@ export function parsePytest(jsonl: string): Parsed {
     if (e.event === "collect" && e.id !== undefined) collectFails.push({ id: e.id, msg: e.msg ?? "" });
     if (e.event !== "phase" || !e.id) continue;
     const r = results[e.id] ?? { status: "pass" };
+    if (!passed.has(e.id)) passed.set(e.id, new Set());
     if (e.outcome === "failed") {
       const text = (e.msg ?? "") + "";
       const name = missingName(text);
@@ -85,7 +87,11 @@ export function parsePytest(jsonl: string): Parsed {
       if (r.status !== "fail") results[e.id] = { status: "fail", cls, ...(cls === "missing_name" ? { name: name! } : {}), exc: e.exc ?? undefined, msg: text.slice(0, 300) };
     } else if (e.outcome === "skipped") {
       if (r.status !== "fail") results[e.id] = { status: "skip", msg: e.xfail ? "xfail" : (e.msg ?? "").slice(0, 300) };
-    } else if (!(e.id in results)) results[e.id] = r;
+    } else passed.get(e.id)!.add(e.when ?? "");
+  }
+  for (const [id, phases] of passed) {
+    if (id in results) continue;
+    results[id] = ["setup", "call", "teardown"].every((w) => phases.has(w)) ? { status: "pass" } : { status: "fail", cls: "load", msg: "incomplete: the run stopped before this test's setup, call and teardown all reported" };
   }
   for (const { id, msg } of collectFails) {
     const name = missingName(msg);

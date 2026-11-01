@@ -19,6 +19,8 @@ export interface PrMeta {
   labels: string[];
   closing_issues: number[];
   commits: CommitDates[];
+  /** Set when GitHub held more closing issues or commits than the query read; the exposure is then incomplete. */
+  truncated?: boolean;
 }
 
 export interface IssueMeta {

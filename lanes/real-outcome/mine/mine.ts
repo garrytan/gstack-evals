@@ -77,7 +77,7 @@ export function mineRepo(o: MineOptions): MineResult {
   const names = inspectCheckout(o.repoDir, head).package_names;
   if (names.some((n) => (o.excludedPackages ?? []).includes(n))) repoReasons.push("runtime_package");
 
-  const changes = listChanges(o.repoDir, o.branch, o.window.start, o.meta);
+  const changes = listChanges(o.repoDir, o.branch, o.window.start, o.meta).filter((c) => Date.parse(c.merged_at) <= Date.parse(o.window.mined_at));
   const order = new Map(changes.map((c, i) => [c.id, i]));
   const byId = new Map(changes.map((c) => [c.id, c]));
   const owner = ownerMap(changes);

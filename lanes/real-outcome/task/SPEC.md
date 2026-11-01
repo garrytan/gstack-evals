@@ -88,9 +88,12 @@ shell.
 
 `gstack-evals real task verify` and the checker grade a tree under test, given as a patch against the starting tree:
 
-1. Sections of the patch inside installed-dependency directories (`.venv`, `node_modules` and the like) are dropped.
+1. Installed dependencies come only from the image. `git apply` skips every patch section inside an
+   installed-dependency directory (`.venv`, `venv`, `node_modules`, `.tox`, `__pypackages__`, at any depth), by
+   git's own reading of the paths, so quoted paths and plain unified diffs are covered. After the apply, every
+   dependency directory the tree still changed, created or replaced is reset to the image's copy.
 2. Prepare, as root in a container from the task image with no network and an empty environment: copy the pristine
-   `/testbed` (with its installed dependencies) into a fresh volume and apply the patch. Every file at a protected
+   `/testbed` (with its installed dependencies) into a fresh volume and apply the patch as in step 1. Every file at a protected
    path that gold lacks is deleted. No symlink, and no file standing where a directory should be, may sit at or above
    a restored path. Every restored path then holds gold's bytes, and gold's pytest config is copied to the tree root as
    `.real-verifier-config.<ext>`.
@@ -100,7 +103,8 @@ shell.
    options only from gold's config (`-c`), shuffles the tests with a recorded seed and writes each test's phases to
    the record as it goes. Go runs `go test -json -count=1 -shuffle=<seed>` with `GOFLAGS=-mod=readonly` and
    `GOPROXY=off`.
-4. The host parses the record. Every required id must be present and passed; a missing id fails.
+4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
+   only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it.
 
 Failure classes: `assert` (the test body ran and failed), `missing_name` (an attribute, import or symbol that
 doesn't exist) and `load` (collection, import, setup or build failed otherwise).

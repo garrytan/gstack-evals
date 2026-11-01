@@ -14,10 +14,12 @@ metadata.
    requests, their commits' dates and their closing issues from GitHub's GraphQL API through gh.
 3. `gstack-evals real mine repo --repo-dir <full clone> --repo <owner/name> --meta meta.json --mined-at <date>` mines
    one repository:
-   - A change is one first-parent commit on the default branch (a merge commit counts as its pull request's net change).
+   - A change is one first-parent commit on the default branch (a merge commit counts as its pull request's net change),
+     merged on or before the mining date. Later changes never enter SZZ or revert pairing, so a run is as of that date.
    - Its exposure is the earliest of its closing issues opening, its pull request opening and its commits' author and
-     committer dates. It is eligible only when that exposure is on or after the window start (2026-07-01) and complete;
-     the strict stratum starts 2026-10-01.
+     committer dates, from both the metadata and the clone. It is eligible only when that exposure is on or after the
+     window start (2026-07-01) and complete; the strict stratum starts 2026-10-01. A pull request with more closing
+     issues or commits than the metadata read is incomplete.
    - K2 closes an issue; K3 does not. Both must touch source and tests, touch at least 2 non-test source files or add at
      least 80 non-test source lines, change no dependency (lockfiles, manifest dependency sets), have no Rust inline
      test edits and hold no Claude project config at base.

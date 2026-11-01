@@ -8,26 +8,11 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { INSTALL_DIRS } from "../mine/paths.ts";
 import { docker } from "./docker.ts";
 import { TaskError, targetOf, type TaskJson } from "./format.ts";
 import { parseGoTest, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
 
 export const RUN_UID = "10001:10001";
-
-/** Drops a patch's file sections that touch installed-dependency directories; they come from the image, never the tree. */
-export function stripPatch(patch: string): { patch: string; stripped: string[] } {
-  const sections = patch.split(/(?=^diff --git )/m);
-  const kept: string[] = [];
-  const stripped: string[] = [];
-  for (const s of sections) {
-    const m = /^diff --git a\/(\S+) b\/(\S+)/.exec(s);
-    const paths = m ? [m[1], m[2]] : [];
-    if (paths.some((p) => p.split("/").some((part) => INSTALL_DIRS.includes(part)))) stripped.push(paths[1]);
-    else kept.push(s);
-  }
-  return { patch: kept.join(""), stripped };
-}
 
 export interface RunRecord {
   seed: number;
@@ -39,7 +24,9 @@ export interface RunRecord {
 
 export interface TreeResult {
   label: string;
-  prepare: { patch: string; deleted: string[]; unlinked: string[]; stripped: string[] };
+  /** skipped: patch sections git apply left out because they sit in installed-dependency directories; restored:
+   * dependency directories the tree still changed, created or replaced, reset to the image's copy. */
+  prepare: { patch: string; deleted: string[]; unlinked: string[]; skipped: string[]; restored: string[] };
   runs: RunRecord[];
 }
 
@@ -84,8 +71,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
   rmSync(dir, { recursive: true, force: true });
   for (const d of ["input", "status"]) mkdirSync(join(dir, d), { recursive: true });
   chmodSync(join(dir, "status"), 0o777);
-  const { patch, stripped } = stripPatch(o.patch);
-  writeFileSync(join(dir, "input/tree.patch"), patch);
+  writeFileSync(join(dir, "input/tree.patch"), o.patch);
   const volume = "real-verify-" + randomBytes(6).toString("hex");
   const tests = join(o.taskDir, "tests");
   const limits = o.task.limits;
@@ -119,7 +105,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
       const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, existsSync(join(out, "stderr.txt")) ? readFileSync(join(out, "stderr.txt"), "utf8") : "", r.module);
       runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, exit: r.kind === "pytest" ? res.status : Number(readLines(join(out, "exit"))[0] ?? res.status), parsed });
     }
-    return { label: o.label, prepare: { patch: prepState[0] ?? "", deleted: readLines(join(dir, "status/deleted.txt")), unlinked: readLines(join(dir, "status/unlinked.txt")), stripped }, runs };
+    return { label: o.label, prepare: { patch: prepState[0] ?? "", deleted: readLines(join(dir, "status/deleted.txt")), unlinked: readLines(join(dir, "status/unlinked.txt")), skipped: readLines(join(dir, "status/skipped.txt")), restored: readLines(join(dir, "status/restored.txt")) }, runs };
   } finally {
     docker(["volume", "rm", "-f", volume]);
   }

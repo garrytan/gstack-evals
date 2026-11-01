@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import type { IssueMeta, PrMeta, RepoMeta } from "./meta.ts";
 
 export const PR_QUERY =
-  "query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){pullRequests(states:MERGED,first:50,after:$cursor,orderBy:{field:UPDATED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{number title body createdAt mergedAt updatedAt mergeCommit{oid} labels(first:20){nodes{name}} closingIssuesReferences(first:10){nodes{number title createdAt labels(first:20){nodes{name}}}} commits(first:100){nodes{commit{oid authoredDate committedDate}}}}}}}";
+  "query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){pullRequests(states:MERGED,first:50,after:$cursor,orderBy:{field:UPDATED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{number title body createdAt mergedAt updatedAt mergeCommit{oid} labels(first:20){nodes{name}} closingIssuesReferences(first:10){totalCount nodes{number title createdAt labels(first:20){nodes{name}}}} commits(first:100){totalCount nodes{commit{oid authoredDate committedDate}}}}}}}";
 
 type Names = { nodes: { name: string }[] };
 interface PrNode {
@@ -17,8 +17,8 @@ interface PrNode {
   updatedAt: string;
   mergeCommit: { oid: string } | null;
   labels: Names;
-  closingIssuesReferences: { nodes: { number: number; title: string; createdAt: string; labels: Names }[] };
-  commits: { nodes: { commit: { oid: string; authoredDate: string; committedDate: string } }[] };
+  closingIssuesReferences: { totalCount: number; nodes: { number: number; title: string; createdAt: string; labels: Names }[] };
+  commits: { totalCount: number; nodes: { commit: { oid: string; authoredDate: string; committedDate: string } }[] };
 }
 
 export interface PrPage {
@@ -44,6 +44,7 @@ export function parsePrPage(json: unknown): PrPage {
       labels: n.labels.nodes.map((l) => l.name),
       closing_issues: n.closingIssuesReferences.nodes.map((i) => i.number),
       commits: n.commits.nodes.map((c) => ({ sha: c.commit.oid, authored_at: c.commit.authoredDate, committed_at: c.commit.committedDate })),
+      ...([n.closingIssuesReferences, n.commits].some((c) => !(c.totalCount <= c.nodes.length)) ? { truncated: true } : {}),
     };
   });
   return { prs, issues, next: conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null };
