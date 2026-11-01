@@ -99,10 +99,21 @@ describe("the committed wiki", () => {
     chmodSync(join(root, "bin/git"), 0o755);
     process.env.PATH = join(root, "bin") + ":" + path;
     try {
-      expect(() => gitBaseFiles(root, tree)).toThrow("unreadable reply for " + DECISION);
+      expect(() => gitBaseFiles(root, tree)).toThrow("could not read " + DECISION);
     } finally {
       process.env.PATH = path;
     }
+  });
+
+  test("reading posts at a commit fails when the tree or a blob is missing", () => {
+    const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    expect(() => gitBaseFiles(root, "3".repeat(40))).toThrow("git ls-tree failed listing wiki/");
+    const oid = spawnSync("git", ["rev-parse", tree + ":" + DECISION], { cwd: root }).stdout.toString().trim();
+    unlinkSync(join(root, ".git", "objects", oid.slice(0, 2), oid.slice(2)));
+    expect(() => gitBaseFiles(root, tree)).toThrow("could not read " + DECISION + " at " + tree);
   });
 });
 
