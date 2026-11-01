@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# GEVA-93 TB2 master (GST-763), from GEVA-89's grid2.sh. Replicate 2 reruns whole, once, on infrastructure grounds
+# (#95 section 9): fresh VMs, fresh run dirs, 38 tasks, oracle first. Replicate 3 follows. Each replicate is three
+# per-model batches at once (Opus, Haiku, particle-1), each on its own standard-30 VM at 12 concurrent, behind a
+# recorded start rule with nothing in flight. One ledger service on 9911 under ledger-sup.sh. Batches start under
+# setsid, so no exit here can hang one up, and a stop waits for every running batch before the master exits.
+# Usage: grid3.sh <replicate>...   (r2x, r3)       Markers in $W: STATE, BLOCKED (reason inside), DONE.
+set -uo pipefail
+W=$HOME/.capy/work/geva93
+R=$W/runs
+L=<captain-drive>/ledger
+LT=$W/runner-export/quick/laneb/runner/ledger.ts
+PILOT=runs/pilot-d/pilot-trials.jsonl
+export TB2=$W/ref/terminal-bench-2
+TASKS38=$(jq -r '.tasks | map(select(. != "crack-7z-hash" and . != "adaptive-rejection-sampler")) | join(",")' $W/runner/quick/laneb/tasks/final.json)
+RULE_TEXT="settled plus open across both TB2 files (open reserves of every running batch included), plus 1.4 x each cell's pilot cost per trial x its remaining trials, must be at most \$320"
+SERVE_PAT='ledger\.ts serve --path [^ ]*stacks-r1-tb2-grid\.jsonl'
+BAD=""
+REATT=""
+echo $$ > $W/master.pid
+log() { echo "$(date -u +%FT%TZ) $*" >> $W/grid-master.log; }
+state() { echo "$(date -u +%FT%TZ) $*" > $W/STATE; log "STATE $*"; }
+room() { bun -e 'import { readRows, totals } from "'$LT'"; const t = totals(readRows("'$L'/stacks-r1-tb2-grid.jsonl")); console.log(((t.capMicros - t.settledMicros - t.openReservedMicros) / 1e6).toFixed(6))'; }
+rule() { (cd $W && bun scripts/tb2ledger.ts rule "$@"); }
+record_rule() { # label evaluation
+  (cd $W && bun scripts/tb2ledger.ts note start-rule-$1 "$(echo "$2" | jq -c --arg r "$RULE_TEXT" '{start_rule: ., rule: $r, in_flight: [], replicate_note: "GEVA-93 (GST-763): replicate 2 reruns whole once on infrastructure grounds as r2x; replicate 3 runs as r3"}')")
+}
+batch_ok() { # run dir -> 0 ended ok, 1 running, 2 ended badly, 3 cap stop
+  local run=$1
+  if [ -e $run.exit ]; then
+    [ "$(cat $run.exit)" = 0 ] || return 2
+    [ "$(jq -r '.cap_stop // empty' $run/pulled/out/proxy-totals.json 2>/dev/null)" = "" ] || return 3
+    return 0
+  fi
+  tail -1 $run.ctl.log 2>/dev/null | grep -v 'progress:' | grep -qE 'results not fully pulled|setup failed before any trial|up failed|detached start failed|refusing' && return 2
+  return 1
+}
+ctl_alive() { pgrep -f "batch\.sh (start|attach) $R/$(basename $1)( |\$)" >/dev/null; }
+watch() { # run dir: a controller that died while its VM batch runs is re-attached once, under setsid
+  local run=$1 b; b=$(basename $1)
+  ctl_alive $run && return 0
+  sleep 20
+  [ -e $run.exit ] && return 0
+  ctl_alive $run && return 0
+  case " $REATT " in *" $b "*) return 1 ;; esac
+  REATT="$REATT $b"
+  log "controller of $b is not running and $b.exit is missing; re-attaching once under setsid"
+  (cd $W && setsid bash scripts/batch.sh attach $run >> $run.ctl.log 2>&1 < /dev/null &)
+  return 0
+}
+wait_all() { # run dirs: returns once every one has ended; bad ones go to BAD
+  local pending="$*" next run c
+  while [ -n "$pending" ]; do
+    next=""
+    for run in $pending; do
+      batch_ok $run; c=$?
+      case $c in
+        0) log "batch $(basename $run) ended" ;;
+        3) log "batch $(basename $run) ended with a cap stop"; BAD="$BAD $(basename $run)(cap-stop)" ;;
+        2) log "batch $(basename $run) ended badly; see $run.ctl.log"; BAD="$BAD $(basename $run)" ;;
+        *) if watch $run; then next="$next $run"; else log "controller of $(basename $run) lost twice"; BAD="$BAD $(basename $run)(controller-lost)"; fi ;;
+      esac
+    done
+    pending=$next
+    [ -n "$pending" ] && sleep 120
+  done
+  return 0
+}
+running() { local c run; for c in $R/r2x-*.ctl.log $R/r3-*.ctl.log; do [ -e "$c" ] || continue; run=${c%.ctl.log}; batch_ok $run; [ $? = 1 ] && echo $run; done; }
+stop() { # launches nothing more, and never exits while a batch runs
+  echo "$(date -u +%FT%TZ) $*" > $W/BLOCKED; log "BLOCKED $*"
+  local live; live=$(running)
+  if [ -n "$live" ]; then
+    log "stopped launching; waiting for: $live"
+    wait_all $live
+    echo "$(date -u +%FT%TZ) $* (every batch has ended${BAD:+; ended badly:$BAD})" > $W/BLOCKED
+    log "every running batch has ended${BAD:+; ended badly:$BAD}"
+  fi
+  exit 1
+}
+prep() { # run job models arms
+  (cd $W/runner/quick/laneb && TASKS=$TASKS38 ORACLE=1 bun runner/prepare-run.ts $1 $2 $3 $4 $W/arms 1 12) >> $W/grid-master.log 2>&1 || stop "prepare failed for $2"
+}
+launch() { # run prefix cap
+  log "launch $(basename $1) prefix $2 batch cap $3 (setsid)"
+  (cd $W && setsid bash scripts/batch.sh start $1 $2 $3 > $1.ctl.log 2>&1 < /dev/null &)
+}
+ledger_up() {
+  if ss -ltnH 'sport = :9911' | grep -q '127.0.0.1:9911'; then
+    pgrep -f "$SERVE_PAT" >/dev/null || stop "port 9911 is taken by something other than the grid ledger service"
+    log "ledger service already serves 9911"
+  else
+    rm -f $W/ledger.stop
+    (setsid bash $W/scripts/ledger-sup.sh >> $W/ledger-service.log 2>&1 < /dev/null &)
+  fi
+  for i in $(seq 1 30); do curl -fsS -m 5 127.0.0.1:9911/status >/dev/null 2>&1 && break; sleep 2; done
+  curl -fsS -m 5 127.0.0.1:9911/status >/dev/null 2>&1 || stop "the ledger service did not answer on 9911"
+  [ "$(pgrep -fc "$SERVE_PAT")" = 1 ] || stop "expected exactly one ledger service on the grid file, found $(pgrep -fc "$SERVE_PAT")"
+  log "ledger service up: $(curl -fsS -m 5 127.0.0.1:9911/status | head -c 200)"
+}
+replicate() { # r2x | r3 ; remaining trials per cell before it starts
+  local rep=$1 rem=$2 p out room_now
+  for p in ${rep}o- ${rep}h- ${rep}p-; do
+    grep -q "\"id\":\"$p" $L/stacks-r1-tb2-grid.jsonl && stop "ledger prefix $p is already used in the grid file"
+  done
+  for b in opus haiku particle; do [ -e $R/$rep-$b ] && stop "run dir $R/$rep-$b exists; launches use fresh run dirs"; done
+  [ -n "$(running)" ] && stop "a batch still runs at the start of $rep"
+  state "$rep: start rule with nothing in flight"
+  out=$(rule $rep $PILOT 0 --remaining "{\"claude-opus-5-5\":$rem,\"claude-haiku-5-5\":$rem,\"particle-1\":$rem}")
+  if [ "$(echo "$out" | jq -r .fits 2>/dev/null)" != true ]; then
+    echo "$out" | jq -c 'del(.cells)' >> $W/start-rule-checks.log 2>/dev/null
+    stop "START RULE FAILS before $rep, nothing launched: $(echo "$out" | jq -c 'del(.cells)' 2>/dev/null)"
+  fi
+  record_rule $rep "$out"
+  echo "$out" | jq -c 'del(.cells)' >> $W/grid-master.log
+  state "$rep: preparing three run dirs"
+  prep $R/$rep-opus stacks-tb2-$rep-opus claude-opus-5-5:none+gstack+pstack none,gstack,pstack
+  prep $R/$rep-haiku stacks-tb2-$rep-haiku claude-haiku-5-5 none,gstack,placebo,pstack,pstack-placebo
+  prep $R/$rep-particle stacks-tb2-$rep-particle particle-1 none,gstack,placebo,pstack,pstack-placebo
+  room_now=$(room)
+  launch $R/$rep-opus ${rep}o- $room_now; launch $R/$rep-haiku ${rep}h- $room_now; launch $R/$rep-particle ${rep}p- $room_now
+  state "$rep: running"
+  sleep 60
+  wait_all $R/$rep-opus $R/$rep-haiku $R/$rep-particle
+  [ -n "$BAD" ] && stop "$rep batches ended badly:$BAD"
+  state "$rep: every batch ended"
+}
+[ "$(echo "$TASKS38" | tr ',' '\n' | wc -l)" = 38 ] || stop "the task list is not 38 tasks"
+rm -f $W/BLOCKED $W/DONE
+log "master grid3.sh started (GEVA-93, GST-763): replicates $*"
+ledger_up
+for rep in "$@"; do
+  case $rep in
+    r2x) replicate r2x 76 ;;
+    r3) replicate r3 38 ;;
+    *) stop "unknown replicate $rep" ;;
+  esac
+done
+state "replicates ended: $*"
+date -u +%FT%TZ > $W/DONE
+touch $W/ledger.stop; pkill -f "$SERVE_PAT"; log "ledger service stopped"

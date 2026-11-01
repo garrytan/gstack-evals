@@ -1,0 +1,15 @@
+import json, os, glob, collections, sys
+P=os.path.expanduser('~/.capy/work/geva93/post/filtered')
+cost={}
+for f in glob.glob(P+'/*/pulled/out/proxy-sessions.jsonl'):
+    for l in open(f):
+        s=json.loads(l); t=s['trial'].removesuffix('__env'); cost[t]=cost.get(t,0)+s['spent_micros']/1e6
+c=collections.defaultdict(collections.Counter)
+for p in glob.glob(P+'/*/pulled/jobs/*/*/config.json'):
+    d=os.path.dirname(p); kw=json.load(open(p))['agent']['kwargs']
+    rp=d+'/result.json'; res=json.load(open(rp)) if os.path.exists(rp) else {}
+    r=((res.get('verifier_result') or {}).get('rewards') or {}).get('reward')
+    k=(kw['upstream_model'],kw['arm']); c[k]['n']+=1; c[k]['pass']+=(1 if (r is not None and r>=1) else 0); c[k]['cost']+=cost.get(os.path.basename(d),0)
+print('model arm n pass pass_pct spend_usd usd_per_trial usd_per_success')
+for k in sorted(c):
+    v=c[k]; print(*k, v['n'], v['pass'], round(100*v['pass']/v['n'],1), round(v['cost'],2), round(v['cost']/v['n'],3), round(v['cost']/max(v['pass'],1),3))
