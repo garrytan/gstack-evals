@@ -57,7 +57,7 @@ import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
 import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
-import { planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
+import { planNoPrefixProblem, planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
 import type { UnitRef } from "./unit.ts";
 
@@ -281,6 +281,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   for (const arm of plan ? o.arms : []) {
     const refused = arm.toldPrefix === undefined ? null : planPrefixProblem(arm.told as PlanArm, plan!.lens, arm.toldPrefix);
     if (refused) throw new Error("E_USAGE: arm " + arm.name + ": --told-prefix: " + refused);
+    const lone = planNoPrefixProblem(arm.name, arm.told as PlanArm, arm.toldPrefix);
+    if (lone) throw new Error("E_USAGE: " + lone);
+  }
+  for (const arm of plan ? o.arms : []) {
     const install = rig.arms[arm.name]!;
     if (arm.told !== "gstack" && arm.told !== "gstack-auto") continue;
     const dir = gstackDir(install);
