@@ -123,6 +123,18 @@ def main():
                 raise AssertionError("a probe of a closed allowed endpoint passed")
 
         case("a hostname is refused, and a probe whose allowed endpoint is closed fails", refuses)
+
+        def shared_address():
+            sock2, port2 = listen()
+            try:
+                both = [(gateway, port), (gateway, port2)]
+                egress.apply(cid, both)
+                probe = egress.probe(exec_fn, cid, both, "/opt/bun")
+                assert probe["result"][f"{gateway}:{port}"] == "open" and probe["result"][f"{gateway}:{port2}"] == "open", probe
+            finally:
+                sock2.close()
+
+        case("two allowed ports on one address both open, and the probe prints its result", shared_address)
     finally:
         docker("rm", "-f", cid, check=False)
         docker("network", "rm", net, check=False)

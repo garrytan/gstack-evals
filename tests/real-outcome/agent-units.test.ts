@@ -16,7 +16,7 @@ const run = (file: string, env: Record<string, string> = {}, timeout = 120_000) 
 test("ship persona, /ship step log, egress rules and turn texts", () => {
   const r = run("unit_test.py");
   expect(r.out).not.toContain("FAIL");
-  expect(r.out.match(/^PASS /gm)?.length).toBe(9);
+  expect(r.out.match(/^PASS /gm)?.length).toBe(10);
   expect(r.status).toBe(0);
 });
 
@@ -24,7 +24,7 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("the egress rules on re
   test("only the allowed address and port open; no DNS, no UDP, and no way to remove the rules from inside", () => {
     const r = run("egress_test.py", { REAL_BUN: process.execPath }, 600_000);
     expect(r.out).not.toContain("FAIL");
-    expect(r.out.match(/^PASS /gm)?.length).toBe(5);
+    expect(r.out.match(/^PASS /gm)?.length).toBe(6);
     expect(r.status).toBe(0);
   }, 660_000);
 });

@@ -91,7 +91,8 @@ const targets = JSON.parse(process.argv[1]);
 let left = targets.length; const out = {};
 for (const [host, port] of targets) {
   const s = net.connect({ host, port, timeout: 4000 });
-  const done = (ok, why) => { if (out[host + ":" + port]) return; out[host + ":" + port] = ok ? "open" : why; s.destroy(); if (--left === 0) console.log(JSON.stringify(out)); };
+  let settled = false;
+  const done = (ok, why) => { if (settled) return; settled = true; out[host + ":" + port] = ok ? "open" : why; s.destroy(); if (--left === 0) console.log(JSON.stringify(out)); };
   s.on("connect", () => done(true));
   s.on("timeout", () => done(false, "timeout"));
   s.on("error", (e) => done(false, e.code || "error"));
@@ -100,9 +101,13 @@ for (const [host, port] of targets) {
 
 
 def probe_targets(allow: list) -> tuple[list, list]:
-    allowed = [(ip, int(port)) for ip, port in allow]
-    denied = list(DENIED_PROBES) + [(ip, 1 if int(port) != 1 else 2) for ip, port in allow]
-    return allowed, denied
+    """Each target once: the allowed endpoints, the fixed denied ones, and per allowed address a port it does not allow."""
+    allowed = list(dict.fromkeys((ip, int(port)) for ip, port in allow))
+    ports = {}
+    for ip, port in allowed:
+        ports.setdefault(ip, set()).add(port)
+    denied = [(ip, next(p for p in range(1, 65536) if p not in used)) for ip, used in ports.items()]
+    return allowed, list(dict.fromkeys(list(DENIED_PROBES) + denied))
 
 
 def judge_probe(result: dict, allow: list) -> list:

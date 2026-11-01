@@ -140,6 +140,15 @@ def test_egress_probe_judge():
     assert egress.judge_probe(missing, allow) == ["127.0.0.11:53 has no probe result"]
 
 
+def test_egress_probe_targets_are_unique_when_endpoints_share_an_address():
+    for allow in ([("10.0.0.2", 8787), ("10.0.0.2", 8791)], [("10.0.0.2", 1), ("10.0.0.2", 2), ("10.0.0.2", 2)]):
+        allowed, denied = egress.probe_targets(allow)
+        targets = allowed + denied
+        assert len(targets) == len(set(targets)), targets
+        assert set(allowed) == {(ip, int(port)) for ip, port in allow}, allowed
+        assert [t for t in denied if t[0] == "10.0.0.2"] and not set(denied) & set(allowed), (allowed, denied)
+
+
 def test_turn_texts():
     build, ship = ra.phase_texts({"kind": "K2"}, ARMS, "none", "Fix the bug.\n")
     assert build == ("build", "Fix the bug.\n\nWork in this repository. Implement this, and make sure it works. Don't stop to ask; I'll tell you when to ship.")
