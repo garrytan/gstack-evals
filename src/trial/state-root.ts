@@ -5,7 +5,7 @@
 // and codex reviews off, the CLAUDE.md routing offer declined (routing_declined, so no base arm's preamble asks to add
 // routing rules or injects its routing instruction block), and proactive mode at the run's preregistered value. Both variables point at it through the env
 // allowlist; the agent's changes under it come across in the graded delta, since the import includes git-excluded files.
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const STATE_ROOT_DIR = ".gstack-home";
@@ -26,11 +26,13 @@ export function seedConfig(proactive: Proactive): Record<string, string> {
  * Seeds <work>/.gstack-home and returns the two variables for the env allowlist, pointing at it under the work dir's
  * path in the child (workPath). extra overrides seed keys, such as a stack cell's gstack config (src/arms/cells.ts). Existing files are kept; the harness's config keys are appended after any the fixture
  * wrote, and gstack reads the last value of a key. files are written at the root's top level over any file or symlink the
- * fixture put there, such as a plan run's global question preferences, so the seeded state is what the run records. A
+ * fixture put there, such as a plan run's global question preferences, so the seeded state is what the run records.
+ * projectFiles are written over the same name in each projects/<slug>/ the fixture ships, such as the never-ask
+ * preferences, so a project entry cannot win over them; a symlinked projects dir or slug dir is removed, never followed. A
  * state root or config.yaml the fixture made a symlink is replaced, and markers are checked without following symlinks,
  * so seeding never reads, writes or deletes anything outside the work dir.
  */
-export function seedStateRoot(work: string, workPath: string, proactive: Proactive = "core", extra: Record<string, string> = {}, files: Record<string, string> = {}): { GSTACK_STATE_ROOT: string; GSTACK_HOME: string } {
+export function seedStateRoot(work: string, workPath: string, proactive: Proactive = "core", extra: Record<string, string> = {}, files: Record<string, string> = {}, projectFiles: Record<string, string> = {}): { GSTACK_STATE_ROOT: string; GSTACK_HOME: string } {
   const entry = (path: string) => lstatSync(path, { throwIfNoEntry: false });
   const root = join(work, STATE_ROOT_DIR);
   if (entry(root)?.isSymbolicLink()) rmSync(root);
@@ -39,6 +41,20 @@ export function seedStateRoot(work: string, workPath: string, proactive: Proacti
   for (const [name, text] of Object.entries(files)) {
     rmSync(join(root, name), { recursive: true, force: true });
     writeFileSync(join(root, name), text);
+  }
+  const projects = join(root, "projects");
+  if (Object.keys(projectFiles).length && entry(projects)?.isSymbolicLink()) rmSync(projects);
+  if (Object.keys(projectFiles).length && entry(projects)?.isDirectory()) {
+    for (const slug of readdirSync(projects)) {
+      const dir = join(projects, slug);
+      if (entry(dir)?.isSymbolicLink()) rmSync(dir);
+      if (!entry(dir)?.isDirectory()) continue;
+      for (const [name, text] of Object.entries(projectFiles)) {
+        if (!entry(join(dir, name))) continue;
+        rmSync(join(dir, name), { recursive: true, force: true });
+        writeFileSync(join(dir, name), text);
+      }
+    }
   }
   const config = join(root, "config.yaml");
   if (entry(config)?.isSymbolicLink()) rmSync(config);

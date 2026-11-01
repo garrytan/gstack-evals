@@ -20,7 +20,7 @@ import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { seedStateRoot } from "../../../src/trial/state-root.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
-import { GLOBAL_PREFERENCES, neverAskPreferences, PLAN_SEVERITY_MAP } from "../../../src/trial/review/plan.ts";
+import { GLOBAL_PREFERENCES, PROJECT_PREFERENCES, neverAskPreferences, PLAN_SEVERITY_MAP } from "../../../src/trial/review/plan.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewEntry, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
 import type { Termination } from "../../../src/types.ts";
@@ -415,6 +415,8 @@ describe("the seeded question preferences (keyless)", () => {
     cpSync(fx.prepared.tree, tree, { recursive: true, verbatimSymlinks: true });
     mkdirSync(join(tree, ".gstack-home"), { recursive: true });
     writeFileSync(join(tree, ".gstack-home", GLOBAL_PREFERENCES), JSON.stringify({ "plan-ceo-review-mode": "always-ask" }) + "\n");
+    mkdirSync(join(tree, ".gstack-home", "projects", "demo"), { recursive: true });
+    writeFileSync(join(tree, ".gstack-home", "projects", "demo", PROJECT_PREFERENCES), JSON.stringify({ "plan-ceo-review-mode": "always-ask" }) + "\n");
     const prepared = { ...fx.prepared, tree, tree_sha256: dirTreeSha256(tree) };
     const home = scratch("plan-scoring-gstack-");
     const gdir = join(home, ".claude", "skills", "gstack");
@@ -424,7 +426,7 @@ describe("the seeded question preferences (keyless)", () => {
     const expected = neverAskPreferences(gdir)!;
     const h = harness(() => [text("ok") as never]);
     roots.push(h.dir);
-    const seen: { prefs?: string } = {};
+    const seen: { prefs?: string; project?: string } = {};
     const rig: HostRig = {
       baseUrl: h.baseUrl, network: null, imageDigest: null,
       bind: async (request) => h.proxy.bind(request),
@@ -439,6 +441,7 @@ describe("the seeded question preferences (keyless)", () => {
       driver: () => ({
         async run(session): Promise<AgentOutcome> {
           seen.prefs = session.exec('cat "$GSTACK_STATE_ROOT/' + GLOBAL_PREFERENCES + '"', 10_000).stdout;
+          seen.project = session.exec('cat "$GSTACK_STATE_ROOT/projects/demo/' + PROJECT_PREFERENCES + '"', 10_000).stdout;
           return { turns: [block([])], termination: { kind: "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: 1, loaded_bytes: null };
         },
       }),
@@ -451,10 +454,25 @@ describe("the seeded question preferences (keyless)", () => {
     }
     expect(JSON.parse(seen.prefs!)).toEqual({ "plan-ceo-review-mode": "never-ask" });
     expect(seen.prefs).toBe(expected);
+    expect(seen.project).toBe(expected);
     const arm = JSON.parse(readFileSync(join(out, "arms", "gstack-opus", "arm.json"), "utf8"));
-    expect(arm.question_preferences).toBe("every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships");
+    expect(arm.question_preferences).toBe("every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships");
     expect(arm.question_preferences_sha256).toBe(sha256(seen.prefs!));
   }, 60_000);
+
+  // Value: protects=R3 (#106 /ship): never-ask also wins at the project level: each projects/<slug>/question-preferences.json a fixture ships is written over, and a symlinked slug dir is removed, never written through; fails_when=a unit's project-level always-ask survives seeding, or seeding writes outside the work dir; why_new=#106 /ship pass 2 red team R3; seam=seedStateRoot; no_claim=gstack's own lookup order
+  test("seedStateRoot writes project-level files over each slug's copy and removes a symlinked slug dir", () => {
+    const work = scratch("plan-scoring-projects-");
+    const outside = scratch("plan-scoring-projects-outside-");
+    writeFileSync(join(outside, PROJECT_PREFERENCES), "outside\n");
+    const projects = join(work, ".gstack-home", "projects");
+    mkdirSync(join(projects, "a"), { recursive: true });
+    mkdirSync(join(projects, "c"), { recursive: true });
+    writeFileSync(join(projects, "a", PROJECT_PREFERENCES), "always-ask\n");
+    symlinkSync(outside, join(projects, "b"));
+    seedStateRoot(work, "/work", "core", {}, {}, { [PROJECT_PREFERENCES]: "never-ask\n" });
+    expect([readFileSync(join(projects, "a", PROJECT_PREFERENCES), "utf8"), existsSync(join(projects, "c", PROJECT_PREFERENCES)), lstatSync(join(projects, "b"), { throwIfNoEntry: false }), readFileSync(join(outside, PROJECT_PREFERENCES), "utf8")]).toEqual(["never-ask\n", false, undefined, "outside\n"]);
+  });
 
   // Value: protects=seeding writes a regular file in the state root, replacing a fixture's file, directory or symlink without writing through the symlink; fails_when=the fixture's file is kept or its symlink's target is overwritten; why_new=GST-737; seam=seedStateRoot; no_claim=none beyond protects
   test("seedStateRoot replaces a fixture's file or symlink at a seeded name", () => {
