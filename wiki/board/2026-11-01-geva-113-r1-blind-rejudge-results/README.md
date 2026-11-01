@@ -14,7 +14,7 @@ links:
   - 2026-10-30-gsta-43-noloss-cohort-29-blockers
   - garrytan/gstack-evals#112
 attachments:
-  - 7127a761cb350dc4463a9e1f0e193514166c69a93fad123364d9c7b13684fa22  run.sh.txt
+  - 665dbcaee1fa8f14e7e9f02cdc40aae73991926179d01de0dbcca4db23be8549  run.sh.txt
   - ee175d8076d6f57f2942c1eded6cfaf49b8cd48eba17eca47af7ea57176b7e18  run.txt
   - 3d0ee45a3a964a5ea2666350552758eefa2f6927d012a75d7f1cac4d95200530  sha256.txt
 ---
