@@ -119,12 +119,13 @@ describe("review-units R2 settings (keyless)", () => {
       const code = await main(argv, io, {});
       return { code, ...io.text() };
     };
-    const dry = await run([...base(out), "--arms", PINNED, "--reader-map", MAP, "--max-turns", "200", "--allowance", "40", "--dry-run"]);
+    const dry = await run([...base(out), "--arms", PINNED, "--reader-map", MAP, "--max-turns", "200", "--allowance", "40", "--cap-stops", "--dry-run"]);
     expect(dry.code).toBe(0);
     expect(dry.out).toContain("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
     expect(dry.out).toContain("reader map " + MAP + " (sha256 ");
     expect(dry.out).toContain("worst case at the allowance: $80.00");
     expect((await run([...base(out), "--arms", PINNED, "--dry-run"])).out).not.toContain("cap stops");
+    expect((await run([...base(out), "--arms", PINNED, "--max-turns", "200", "--allowance", "40", "--dry-run"])).out).not.toContain("cap stops");
     expect((await run([...base(out), "--arms", GSTACK, "--reader-map", MAP, "--dry-run"])).err).toMatch(/^E_USAGE .*is pinned to garrytan\/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12, and arm gstack runs garrytan\/gstack@53522b1bbc60b3dc820842371f80ebc9db7911ec/);
     expect((await run([...base(out), "--arms", "none", "--reader-map", out + "-missing.json", "--dry-run"])).err).toMatch(/^E_USAGE .*--reader-map .*-missing\.json: /);
     mkdirSync(out, { recursive: true });

@@ -40,7 +40,7 @@ export const REVIEW_UNITS_HELP = [
   "    [--resume] [--repair <note>] [--dry-run]",
   "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
-  "    [--max-turns <n>] [--session-kind unattended] [--reader-map <file>]",
+  "    [--max-turns <n>] [--session-kind unattended] [--cap-stops] [--reader-map <file>]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha> and gstack-auto=<repo>@<sha>, each with",
   "its plan line and the frozen plan output block, the rec user, no second model, and no install or test step. --arm-models",
@@ -52,9 +52,10 @@ export const REVIEW_UNITS_HELP = [
   "caps each session's model turns (default " + MAX_TURNS + "). --session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's",
   "agent env, none included; left out, no arm gets one.",
   "",
-  "--allowance caps each session's spend in dollars (default: 1.6M input and 32k output tokens at the model's price). A run whose",
-  "--max-turns or --allowance is off its default records a code session that either cap ends as turn_cap or allowance_stop,",
-  "scored on the findings it wrote before the stop. --reader-map writes each code session's readers (the subagents it",
+  "--allowance caps each session's spend in dollars (default: 1.6M input and 32k output tokens at the model's price).",
+  "--cap-stops, code units only, records a code session that the turn cap or the allowance ends as turn_cap or",
+  "allowance_stop, scored on the findings it wrote before the stop; left out, both caps keep today's records.",
+  "--reader-map writes each code session's readers (the subagents it",
   "launched, named through a map pinned to one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json)",
   "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit. run.json records the allowance and the map",
   "when they are set.",
@@ -62,7 +63,7 @@ export const REVIEW_UNITS_HELP = [
 
 const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map"]);
 const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render"]);
-const BOOL = new Set(["--resume", "--dry-run"]);
+const BOOL = new Set(["--resume", "--dry-run", "--cap-stops"]);
 
 class Usage extends Error {}
 
@@ -214,6 +215,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const readerMap = mapFile === null ? null : loadReaderMap(mapFile);
   if (readerMap && "problem" in readerMap) throw new Usage("--reader-map " + mapFile + ": " + readerMap.problem);
   if (readerMap && lens) throw new Usage("--reader-map runs on code units, not with --plan");
+  const capStops = flags.has("--cap-stops");
+  if (capStops && lens) throw new Usage("--cap-stops runs on code units, not with --plan");
   if (readerMap && "map" in readerMap) for (const a of specs) {
     if (a.kind !== "stack" || toldArmOf(a) !== "gstack") continue;
     const pin = readerMap.map.gstack;
@@ -302,7 +305,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planArmLine(a.told as Parameters<typeof planArmLine>[0], lens)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
-    if (maxTurns !== MAX_TURNS || allowance !== null) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
+    if (capStops) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
     if (mapPin) io.out("reader map " + mapPin.file + " (sha256 " + mapPin.sha256 + ", gstack " + mapPin.gstack.repo + "@" + mapPin.gstack.sha + ")");
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));
@@ -362,7 +365,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");

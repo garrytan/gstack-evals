@@ -92,6 +92,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--allowance <usd>`: each session's spend cap on its proxy slot. Left out, a session gets SESSION_ALLOWANCE (1.6M input
   and 32k output tokens) at its model's price, $7.04 on Opus 5.5. The proxy refuses a call whose worst case the slot's
   allowance cannot hold (E_ALLOWANCE).
+- `--cap-stops`, code units only: cap stops (below). Off by default.
 - `--reader-map <file>`, code units only: reader rows (below). Every gstack stack arm must run the map's gstack commit.
 
 run.json records max_turns and session_kind, and allowance_usd and reader_map (its sha256 and gstack commit) when they
@@ -103,15 +104,19 @@ reused.
 
 R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
 
-- **Cap stops.** A run whose turn cap or allowance is off its default records a code session that either cap ends as its
-  own termination: turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
+- **Cap stops.** A run with `--cap-stops` records a code session that either cap ends as its own termination:
+  turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
   names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
   against its own arm, the same in every arm: its findings are those of the latest main-agent text turn whose last json
   block parses as findings, and with no such turn it is a missing pass, scored as finding nothing. arm.json counts them
   in `cap_stops: {turn_cap, allowance_stop, units, parser_sha256}`, where units names each unit a cap stop hit and
-  parser_sha256 is capped.ts's (the read rule), and diagnostics names each session. In such a run the session key's
-  verifier is the findings parser's sha256 and capped.ts's, so a change to either refuses its cached cells. A run at the defaults, and every plan unit, keeps today's records: the turn cap ends a session as
-  completed, and the allowance as a missing cell (E_ALLOWANCE).
+  parser_sha256 is capped.ts's (the read rule), and diagnostics names each session with its settled metered spend. In
+  such a run the session key's verifier is the findings parser's sha256 and capped.ts's, so a change to either refuses
+  its cached cells, and the allowance joins the key. A run without `--cap-stops`, whatever its `--max-turns` and
+  `--allowance`, and every plan unit, keeps today's records and keys: the turn cap ends a session as completed, and the
+  allowance as a missing cell (E_ALLOWANCE).
+- The allowance binds worst-case committed spend, including the reservations of calls still in flight, so a session that
+  runs calls in parallel can stop below its allowance.
 - **Reader rows.** With `--reader-map`, each code session's readers go to the journal and to cost.tsv as
   `reader:<name>` rows after the unit-pass's all and voice rows, sorted by name. A reader is a subagent the main agent
   launched through the Agent tool (Task in older CLIs) and the CLI started (task_started, or a message from the

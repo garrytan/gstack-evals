@@ -135,7 +135,7 @@ describe("R2 build: a stub run through the run loop with the real driver and the
   test("cap stops are their own terminations, scored against their own arm, and reader rows land in cost.tsv", async () => {
     const { prepared, suite } = twoUnits();
     const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
-    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "readers", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "spent" } }, settings: { maxTurns: 200, allowanceMicros: 40_000_000, readers: { map: loaded.map, sha256: loaded.sha256 } } });
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "readers", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "spent" } }, settings: { maxTurns: 200, allowanceMicros: 40_000_000, capStops: true, readers: { map: loaded.map, sha256: loaded.sha256 } } });
     try {
       const first = await runReviewUnits(run.input, run.rig);
       const journal = readReviewJournal(run.out);
@@ -148,8 +148,8 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }, { turn_cap: 0, allowance_stop: 1, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }]);
       expect(new Set([...journal.values()].map((e) => e.key.parts.verifier))).toEqual(new Set([keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256)]));
       expect([full.coverage_gaps, none.coverage_gaps]).toEqual([undefined, undefined]);
-      expect(full.diagnostics).toEqual([b + " pass 1: missing; ended turn_cap, scored as finding nothing"]);
-      expect(none.diagnostics).toEqual([b + " pass 1: missing; ended allowance_stop, scored as finding nothing"]);
+      expect(full.diagnostics).toEqual([b + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing"]);
+      expect(none.diagnostics).toEqual([b + " pass 1: missing; ended allowance_stop, settled spend $0.000000, scored as finding nothing"]);
       expect([full.parse_outcomes, none.parse_outcomes].map((c) => [c.findings, c.missing, c.incomplete])).toEqual([[1, 1, 0], [1, 1, 0]]);
       for (const id of ["gstack-full-opus", "none-r2-opus"]) expect(readFileSync(join(run.out, "arms", id, "findings", b.replaceAll("/", "__") + ".jsonl"), "utf8")).toBe("");
       expect([full.reader_map_sha256, none.reader_map_sha256]).toEqual([loaded.sha256, loaded.sha256]);
@@ -185,13 +185,13 @@ describe("R2 build: a stub run through the run loop with the real driver and the
   test("a capped session is scored on the findings it wrote before the stop", async () => {
     const { prepared, suite } = twoUnits();
     const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
-    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "turnsReview", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { maxTurns: 5 } });
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "turnsReview", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { maxTurns: 5, capStops: true } });
     try {
       const first = await runReviewUnits(run.input, run.rig);
       expect(first.stops).toEqual([]);
       const full = arm(run.out, "gstack-full-opus");
       expect([full.status, full.cap_stops, full.coverage_gaps]).toEqual(["complete", { turn_cap: 2, allowance_stop: 0, units: [a, b], parser_sha256: CAPPED_PARSER_SHA256 }, undefined]);
-      expect(full.diagnostics).toEqual([a + " pass 1: findings; ended turn_cap, scored on the findings it wrote before the stop", b + " pass 1: missing; ended turn_cap, scored as finding nothing"]);
+      expect(full.diagnostics).toEqual([a + " pass 1: findings; ended turn_cap, settled spend $0.000000, scored on the findings it wrote before the stop", b + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing"]);
       const lines = readFileSync(join(run.out, "arms", "gstack-full-opus", "findings", a.replaceAll("/", "__") + ".jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
       expect(lines.map((f) => [f.severity, f.path, f.summary])).toEqual([["CRITICAL", "src/a.ts", "The cache key drops the allowance."]]);
       expect(arm(run.out, "none-r2-opus").cap_stops).toEqual({ turn_cap: 0, allowance_stop: 0, units: [], parser_sha256: CAPPED_PARSER_SHA256 });
@@ -229,6 +229,29 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       run.h.proxy.stop();
     }
   }, 120_000);
+
+  // Value: protects=GSTA-2's A1 ruling on #124: only --cap-stops turns cap stops on, so a run that sets just an allowance (stacks round 1's frozen --allowance 15 shape) keeps today's records byte for byte: the turn cap as completed, the allowance refusal as a missing E_ALLOWANCE cell, no cap_stops, the same cost.tsv (but wall_seconds) and the same session keys as the run without the allowance; fails_when=an allowance alone turns cap stops on or joins the session key; why_new=GEVA-129's /ship pass 1 found an allowance-only run scored refusals as allowance_stop.
+  test("an allowance-only run keeps today's records and keys", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const plan = { "gstack-full": { [a]: "readers", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "spent" } } as const;
+    const record = async (settings: Partial<ReviewRunInput>) => {
+      const run = stubRun({ prepared, plan, settings });
+      try {
+        await runReviewUnits(run.input, run.rig);
+        const journal = [...readReviewJournal(run.out).values()].sort((x, y) => (x.cell.arm + x.cell.unit).localeCompare(y.cell.arm + y.cell.unit));
+        const ids = ["gstack-full-opus", "none-r2-opus"];
+        return { ended: journal.map((e) => [e.cell.arm, e.cell.unit, e.record.termination]), keys: journal.map((e) => e.key), arms: ids.map((id) => readFileSync(join(run.out, "arms", id, "arm.json"), "utf8")), cost: ids.map((id) => readFileSync(join(run.out, "arms", id, "cost.tsv"), "utf8").split("\n").map((l) => l.split("\t").map((c, i) => (i === 10 ? "" : c)).join("\t"))) };
+      } finally {
+        run.h.proxy.stop();
+      }
+    };
+    const today = await record({});
+    const allowance = await record({ allowanceMicros: 15_000_000 });
+    expect(allowance.ended).toEqual([["gstack-full", a, { kind: "completed" }], ["gstack-full", b, { kind: "completed" }], ["none-r2", a, { kind: "completed" }], ["none-r2", b, { kind: "missing", code: "E_ALLOWANCE" }]] as never);
+    expect(allowance.arms.some((t) => t.includes("cap_stops"))).toBe(false);
+    expect(allowance).toEqual(today);
+  }, 240_000);
 
   // Value: protects=section 3.6's gate test: the frozen procedure gate (r1-exposure.py, attached to the merged prereg) passes on reader rows the driver recorded from sessions that ran three specialists and the adversarial pass, and fails on rows from sessions that launched no reader; fails_when=the rows' pr or pass don't resolve to the suite's PR-passes, or the scope isn't reader:<name>; why_new=section 3.6 item 3 and the B1 note; seam=cost.tsv reader rows, r1-exposure.py
   test("the frozen procedure gate passes on the specialists' rows and fails with no readers", async () => {
