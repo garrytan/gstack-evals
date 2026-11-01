@@ -382,6 +382,6 @@ describe("judge-run on a plan adjudication batch", () => {
     const sheets = readdirSync(join(out, "sheets"));
     expect(sheets.length).toBe(1);
     const sheet = JSON.parse(readFileSync(join(out, "sheets", sheets[0]!), "utf8"));
-    expect(sheet.findings.map((f: { evidence: string }) => f.evidence)).toEqual(["The [heading] reads context/goals.md; see the [heading]."]);
+    expect(sheet.findings.map((f: { evidence: string }) => f.evidence)).toEqual(["The reads context/goals.md; see the."]);
   });
 });

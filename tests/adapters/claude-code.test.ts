@@ -164,7 +164,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("Claude Code adapter on the Agent SDK, against 
       expect(u.headers.get("authorization")).toBe("Bearer " + KEYS.OPENROUTER_API_KEY);
       expect(u.headers.get("x-api-key")).toBeNull();
       expect(u.body.model).toBe("particle-ai/particle-1");
-      expect(u.body.provider).toEqual({ max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
+      expect(u.body.provider).toEqual({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     }
     // 100 fresh input, 2000 cache read and 500 cache write tokens, 50 output, per call, at particle-1's row (cache reads at its cache-read rate; it has no write rate, so writes pay input).
     expect(r.meter.micros).toBe(r.meter.requests * Math.ceil(100 * 0.1 + 2000 * 0.003 + 500 * 0.1 + 50 * 1));

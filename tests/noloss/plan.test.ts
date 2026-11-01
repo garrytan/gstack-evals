@@ -113,6 +113,23 @@ describe("the sealed root and the stub (open item 1)", () => {
     expect(() => loadSuite(counted, { sealedRoot: panel.sealedRoot })).toThrow(/counts .*, not the stub's/);
   });
 
+  test("a stub's counts match the sealed suite by value, whatever their key order", () => {
+    const stub = json(panel.stubPath);
+    const reverse = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).reverse());
+    const reordered = join(tmp("noloss-stub-order-"), "planpanel-test.json");
+    writeFileSync(reordered, JSON.stringify({ ...stub, counts: reverse({ ...stub.counts, groups: reverse(stub.counts.groups) }) }, null, 2) + "\n");
+    expect(Object.keys(json(reordered).counts)).toEqual(Object.keys(stub.counts).reverse());
+    expect(loadSuite(reordered, { sealedRoot: panel.sealedRoot }).suite.id).toBe("planpanel-test");
+  });
+
+  test("a public suite read from outside the repo finds its catalogs under --sealed-root, and refuses with a code without it", async () => {
+    const p = planPanel(tmp("noloss-plan-public-"), { seeded: 2, decoy: 1 }, { id: "planpanel-public", visibility: "public" });
+    const bare = await run(["suite", "--check", "--suite", p.suitePath]);
+    expect([bare.code, bare.err]).toEqual([2, expect.stringMatching(/^E_NOLOSS_SUITE suite planpanel-public names catalog catalog\/plans, which is not under .*; a suite read from outside the repo finds its catalogs under --sealed-root <dir>/)]);
+    const held = await run(["suite", "--check", "--suite", p.suitePath, "--sealed-root", p.sealedRoot]);
+    expect([held.code, held.err]).toEqual([0, ""]);
+  });
+
   test("a sealed case or a whole sealed suite inside the repo tree is refused", async () => {
     const dir = join(REPO_ROOT, ".noloss-plan-test-" + process.pid);
     inRepo.push(dir);
@@ -218,7 +235,8 @@ describe("plan judge packets (B6, open item 11)", () => {
     expect(one.blockers).toEqual([{ id: "B1", section: "Problem", line: 3, cause: expect.stringContaining("losing links") }, { id: "B2", section: "Scope", line: 9, cause: expect.stringContaining("three apps") }]);
     const text = files.map((f) => readFileSync(join(dir, "p1", "packets", f), "utf8")).join("\n");
     for (const leak of ["Premise Challenge", "Nuclear Scope Challenge", "GSTACK REVIEW REPORT", "CRITICAL", "HIGH", "flagall", "High"]) expect(text).not.toContain(leak);
-    expect(one.findings[0].claim).toMatch(/^\[severity\]: the \[heading\] finds unit 1 solves the wrong problem\.$/);
+    expect(one.findings[0].claim).toMatch(/^\[severity\]: the finds unit 1 solves the wrong problem\.$/);
+    expect(text).not.toContain("[heading]");
     expect(one.material.plan_sha256).toBe(json(join(catalog, "planpanel-1-1.json")).plan.digest);
     expect(one.material.files.map((f: { path: string }) => f.path)).toEqual(["context/goals.md", "plan.md"]);
     expect(one.material.files[1].text).toBe(planText(1));
@@ -238,8 +256,22 @@ describe("plan judge packets (B6, open item 11)", () => {
   });
 
   test("the heading word list is frozen by its digest", () => {
-    expect(PLAN_HEADING_WORDS.length).toBe(56);
-    expect(PLAN_HEADING_WORDS_SHA256).toBe("2343723ec0b94ed9bf16e59b253c44d96b3cac68f214a594d9334c87d144bb3f");
+    expect(PLAN_HEADING_WORDS.length).toBe(63);
+    expect(PLAN_HEADING_WORDS_SHA256).toBe("ecb56e71518091b9e7b41bc5c3507ca3c29de228304e48c8f51398d50d03f853");
+  });
+
+  test("a plan finding with no section is refused from packets", async () => {
+    const d = tmp("noloss-plan-nosection-");
+    const src = writePlanArm(join(d, "src"), panel.suite, { id: "nosection", passes: 1, raw: true, outcome: () => "F", text: () => ({ section: "", claim: "A finding.", evidence: "context/goals.md", fix: "Fix it." }) });
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", join(d, "arms"), ...S])).code).toBe(0);
+    const r = await run(["judge-packet", "--suite", panel.stubPath, "--arm", join(d, "arms", "planpanel-test", "nosection"), "--seed", "7", "--out", join(d, "p"), "--key", join(d, "k.json"), "--source", "example/plan-panel=" + panel.clone, ...S]);
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("it has no section, and a plan finding names the plan.md heading it is about")]);
+  });
+
+  test("sealedLeaks names 7-character commits and the unit repo, and a stub refuses a title that names one", () => {
+    const u = panel.suite.units[0]!;
+    expect(sealedLeaks(panel.suite, "see " + u.head.slice(0, 7) + " in " + u.repo)).toEqual([u.head.slice(0, 7), u.repo].sort());
+    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's id, title, purpose, custody or group names: " + u.base.slice(0, 7));
   });
 
   test("planMaterial refuses a head the clone lacks, a head with no plan.md, a tree over the cap and an object it cannot read", () => {
@@ -259,11 +291,21 @@ describe("plan judge packets (B6, open item 11)", () => {
     expect(() => planMaterial(big, u.head)).toThrow("cannot read context/goals.md at head " + u.head);
   });
 
-  test("sealedLeaks names 7-character commits and the unit repo, and a stub refuses a title that names one", () => {
-    const u = panel.suite.units[0]!;
-    expect(sealedLeaks(panel.suite, "see " + u.head.slice(0, 7) + " in " + u.repo)).toEqual([u.head.slice(0, 7), u.repo].sort());
-    expect(() => suiteStub({ ...panel.suite, title: "rerun of " + u.base.slice(0, 7) }, readFileSync(panel.suitePath, "utf8"), panel.sealedRoot, CUSTODY)).toThrow("the stub would publish what the seal hides in the suite's id, title, purpose, custody or group names: " + u.base.slice(0, 7));
+  test("planMaterial refuses a tree over the cap before it reads a blob", () => {
+    const big = join(tmp("noloss-plan-cap-"), "clone");
+    cpSync(panel.clone, big, { recursive: true });
+    const git = (...a: string[]) => spawnSync("git", ["-C", big, ...a], { encoding: "utf8" }).stdout.trim();
+    git("checkout", "-q", "-b", "big", panel.suite.units[0]!.head);
+    writeFileSync(join(big, "a-big.md"), "x".repeat(PLAN_MATERIAL_CAP * 2));
+    writeFileSync(join(big, "z.md"), "late file\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "big");
+    const head = git("rev-parse", "HEAD");
+    const blob = git("rev-parse", "HEAD:z.md");
+    rmSync(join(big, ".git", "objects", blob.slice(0, 2), blob.slice(2)));
+    expect(() => planMaterial(big, head)).toThrow(new RegExp("^the unit tree at " + head + " is \\d+ bytes, over the plan packet's " + PLAN_MATERIAL_CAP + "$"));
   });
+
 });
 
 describe("the decoy-only false-alarm gate and the volume-matched reading (open item 7)", () => {
@@ -372,6 +414,9 @@ describe("the decoy-only false-alarm gate and the volume-matched reading (open i
     const r = await score("none", "flagall", ["--json"], join(out, "planpanel-k1.json"), join(out, "arms"), join(out, "comparisons.planpanel-k1.json"));
     const rec = JSON.parse(r.out);
     expect([rec.result.verdict === "LOSS", rec.false_alarm_gate.per_decoy, rec.false_alarm_gate.result]).toEqual([false, { variant: 0, reference: 1 }, "PASS"]);
+    const inRepo = join(REPO_ROOT, ".plan-derive-test-" + process.pid);
+    const refused = await run(["derive", "--suite", panel.stubPath, "--comparisons", prereg, "--root", root, "--id", "planpanel-inrepo", "--out", inRepo, "--first-k", "1", ...S]);
+    expect([refused.code, refused.err, existsSync(inRepo)]).toEqual([2, expect.stringContaining("suite planpanel-test is sealed, and --out " + inRepo + " is inside the repo; derive sealed readings outside it"), false]);
     const both = await run(["derive", "--suite", panel.stubPath, "--comparisons", prereg, "--root", root, "--id", "planpanel-k2", "--out", join(dir, "k2"), "--first-k", "1", "--severity-map", prereg, ...S]);
     expect([both.code, both.err]).toEqual([2, expect.stringContaining("give one of --severity-map, --impact and --first-k")]);
   });

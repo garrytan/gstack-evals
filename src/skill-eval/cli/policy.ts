@@ -3,11 +3,12 @@
 // cross-family adjudication of disputes) and usersim (the user simulator's free-form answers). policy/models.json is the
 // default and carries the gstack-evals crews' rules; other projects bring their own with --policy (policy/examples/).
 //
-//   {schema_version: 1, name, source, models: {<id>: {provider, roles, smoke_only?, refused_because?}},
+//   {schema_version: 1, name, source, models: {<id>: {provider, roles, smoke_only?, rungs?, refused_because?}},
 //    defaults: {judge: {anthropic, openai}, adjudicator: {anthropic, openai}, usersim}}
 //
 // A model the policy does not list is refused, so a policy allows only what it names (the newest generation of each
-// family, in the default). A row with refused_because prints that reason. A smoke_only model runs only with --smoke.
+// family, in the default). A row with refused_because prints that reason. A smoke_only model runs only with --smoke, or as a
+// subject in a capped run whose ledger item its rungs list (a prereg that names the model as a rung adds its item).
 // Every model must also be routable by the metering proxy (a route for its provider and a price row), or its spend could
 // not be held against a cap; a policy may list a model before the proxy can route it.
 //
@@ -32,6 +33,8 @@ export interface PolicyModel {
   provider: PolicyProvider;
   roles: Role[];
   smoke_only?: boolean;
+  /** Ledger items whose runs may use a smoke_only model as a subject: the capped rungs a prereg names. */
+  rungs?: string[];
   refused_because?: string;
 }
 
@@ -65,10 +68,11 @@ export function policyProblems(v: unknown): string[] {
       problems.push(id + ": must be an object {provider, roles}");
       continue;
     }
-    problems.push(...Object.keys(m).filter((k) => !["provider", "roles", "smoke_only", "refused_because"].includes(k)).map((k) => id + ": unknown key " + k));
+    problems.push(...Object.keys(m).filter((k) => !["provider", "roles", "smoke_only", "rungs", "refused_because"].includes(k)).map((k) => id + ": unknown key " + k));
     if (!PROVIDERS.includes(m.provider as PolicyProvider)) problems.push(id + ": provider must be one of " + PROVIDERS.join(", "));
     if (!Array.isArray(m.roles) || !m.roles.every((r) => ROLES.includes(r as Role)) || new Set(m.roles).size !== m.roles.length) problems.push(id + ": roles must be a list of distinct roles from " + ROLES.join(", "));
     if ("smoke_only" in m && typeof m.smoke_only !== "boolean") problems.push(id + ": smoke_only must be a boolean");
+    if ("rungs" in m && (m.smoke_only !== true || !Array.isArray(m.rungs) || !m.rungs.every((r) => text(r)) || new Set(m.rungs).size !== m.rungs.length)) problems.push(id + ": rungs must be a list of distinct ledger items, on a smoke_only model");
     if ("refused_because" in m && !text(m.refused_because)) problems.push(id + ": refused_because must be a non-empty string");
   }
   const d = v.defaults;
@@ -101,7 +105,7 @@ export function loadPolicy(path: string): LoadedPolicy | { problem: string } {
 }
 
 /** Why a model may not take a role under a policy, or null when it may. */
-export function modelProblem(loaded: LoadedPolicy, model: string, role: Role, options: { smoke: boolean }): string | null {
+export function modelProblem(loaded: LoadedPolicy, model: string, role: Role, options: { smoke: boolean; item?: string | null }): string | null {
   const where = model + " as " + (role === "subject" ? "a model under test" : role === "usersim" ? "the user simulator" : "the " + role);
   const row = loaded.policy.models[model];
   if (!row) {
@@ -110,7 +114,7 @@ export function modelProblem(loaded: LoadedPolicy, model: string, role: Role, op
   }
   if (row.refused_because) return where + ": refused by the policy " + loaded.policy.name + ": " + row.refused_because;
   if (!row.roles.includes(role)) return where + ": the policy " + loaded.policy.name + " allows it only as " + (row.roles.join(", ") || "nothing");
-  if (row.smoke_only && !options.smoke) return where + ": the policy allows it only in smoke runs (--smoke)";
+  if (row.smoke_only && !options.smoke && !(role === "subject" && options.item && row.rungs?.includes(options.item))) return where + ": the policy allows it only in smoke runs (--smoke)" + (row.rungs?.length ? " or as a capped rung of ledger item " + row.rungs.join(", ") : "") + (options.item ? "; ledger item " + options.item + " is not named, so its prereg does not name this rung" : "");
   if (!routable(row.provider, model)) return where + ": the metering proxy has no route or no price row for " + row.provider + ":" + model + ", so its spend could not be held against a cap";
   return null;
 }

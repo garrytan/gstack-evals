@@ -16,6 +16,8 @@
 //   judgments.tsv, so it is raw and judge-packet can read it. <out>/units.json, parses.tsv and refusals.tsv sit beside.
 // - Receipts never sit on a volatile path (E_RECEIPTS_VOLATILE); with GSTACK_EVALS_EPHEMERAL=1 they are copied to
 //   GSTACK_EVALS_RECEIPTS before the run returns.
+// - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
+//   that keeps a voice, since a plan arm runs no second model.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
@@ -31,7 +33,8 @@ import { copyToSink, receiptsSink, sinkOverlapProblem, volatilePathProblem } fro
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
-import { outcomeLabel, PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
+import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
+import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, planArmLine, parsePlanSession, planPrompt, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
 import type { UnitRef } from "./unit.ts";
 
@@ -54,7 +57,8 @@ export interface PreparedUnit {
 
 export interface ReviewArm {
   name: string;
-  told: ToldArm;
+  /** A told arm for code units, a plan arm for plan units. */
+  told: ToldArm | PlanArm;
 }
 
 export interface ReviewRunInput {
@@ -85,6 +89,13 @@ export interface ReviewRunInput {
   repair?: boolean;
   /** The preregistration's severity map per arm name, written to arm.json. */
   severityMap?: Readonly<Record<string, unknown>>;
+  /**
+   * Plan units (planning lane B2 to B4): the plan prompt and parser, the rec user, no second model, gstack's questions
+   * set to auto-decide, and a failed pass scored as finding nothing with a diagnostic note instead of stopping the arm.
+   */
+  plan?: { lens: PlanLens };
+  /** The models each named arm runs on; an arm not named runs on every model. */
+  armModels?: Readonly<Record<string, readonly string[]>>;
   env?: Env;
 }
 
@@ -100,8 +111,10 @@ export interface ReviewEntry {
   key: SessionKey;
   meter_id: string;
   record: TrialRecord;
-  parse: ParseOutcome;
+  parse: ParseOutcome | PlanParse;
   cost: MeterCost | null;
+  /** Plan units: the review mode the session's gstack mode handoff named, or null. */
+  ceo_mode?: CeoMode | null;
 }
 
 export interface ReviewRun {
@@ -182,8 +195,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   }
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
+  const plan = o.plan ?? null;
+  const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();
-  for (const arm of o.arms) for (const model of o.models) {
+  for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
     const id = armId(arm.name, model);
     if (!ARM_ID.test(id)) throw new Error("E_USAGE: arm id " + JSON.stringify(id) + " (arm " + arm.name + ", model " + model + ") does not match " + ARM_ID + "; use a shorter arm name");
     if (ids.has(id)) throw new Error("E_USAGE: arm id " + JSON.stringify(id) + " names two arm and model pairs (arm " + arm.name + ", model " + model + "); rename an arm or drop one of the models");
@@ -194,12 +209,33 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (micros === null) throw new Error("E_MODEL_POLICY: " + model + " has no price row, so its session allowance is unknown");
     return micros;
   };
-  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: toldPrompt(arm.told, unit.base_branch) });
+  const prefs = new Map<string, string | null>();
+  if (plan) for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
+    const voice = rig.cells?.[arm.name]?.[model]?.codex?.model;
+    if (voice) throw new Error("E_USAGE: plan units run no second model, but arm " + arm.name + "'s cell on " + model + " keeps the voice " + voice + "; build the rig's cells without voices");
+  }
+  for (const arm of plan ? o.arms : []) {
+    const install = rig.arms[arm.name]!;
+    if (arm.told !== "gstack" && arm.told !== "gstack-auto") continue;
+    const dir = gstackDir(install);
+    if (arm.told === "gstack-auto") {
+      const problem = gstackAutoProblem(gstackVersion(dir));
+      if (problem) throw new Error("E_USAGE: arm " + arm.name + ": " + problem);
+    }
+    const text = neverAskPreferences(dir);
+    if (text === null) throw new Error("E_USAGE: arm " + arm.name + "'s gstack tree has no question registry (scripts/question-registry.ts), so its questions cannot be set to auto-decide");
+    prefs.set(arm.name, text);
+  }
+  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planPrompt(arm.told as PlanArm, plan.lens) : toldPrompt(arm.told as ToldArm, unit.base_branch) });
+  const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
-  for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) groups.push(o.arms.map((arm) => ({ cell: { model, arm: arm.name, unit: unit.unit.id, pass }, arm, unit })));
+  for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
+    const arms = o.arms.filter((arm) => modelsOf(arm.name).includes(model));
+    if (arms.length) groups.push(arms.map((arm) => ({ cell: { model, arm: arm.name, unit: unit.unit.id, pass }, arm, unit })));
+  }
   const planned = new Map(groups.flat().map((p) => [reviewCellId(p.cell), p]));
   const entries = new Map<string, ReviewEntry>();
   for (const [id, e] of o.reuse ?? []) {
@@ -236,16 +272,17 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const home = sandbox.homePath(dir);
     const install = rig.arms[arm.name]!;
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
-    const name = toldSkill(arm.told);
+    const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm);
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: false, skill, out: join(dir, "host"), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
-    const stateConfig = settings && Object.keys(settings.gstack_config).length ? { stateConfig: settings.gstack_config } : {};
-    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...stateConfig });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
+    const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
+    const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
+    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
     trial.record.cost_micros = meter.micros;
-    const parse = parseFindings(trial.record);
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null };
+    const parse = plan ? parsePlanSession(trial.record) : parseFindings(trial.record);
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}) };
     entries.set(reviewCellId(cell), entry);
     const kind = trial.record.termination.kind;
     wall += trial.record.wall_ms ?? 0;
@@ -274,15 +311,19 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   for (const s of stops) log(s.code + " " + s.message);
 
   const parseRows = [["arm_id", "arm", "model", "unit", "pass", "outcome", "findings", "reason"].join("\t")];
+  const modeRows = [["arm_id", "arm", "model", "unit", "pass", "mode"].join("\t")];
+  const label = (p: ParseOutcome | PlanParse) => (p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind);
   const refusals: CellRefusals[] = [];
   const armDirs: string[] = [];
   rmSync(join(o.out, "arms"), { recursive: true, force: true });
-  for (const arm of o.arms) for (const model of o.models) {
+  for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
     const id = armId(arm.name, model);
     const dir = join(o.out, "arms", id);
     mkdirSync(join(dir, "findings"), { recursive: true });
     const counts: Record<string, number> = { findings: 0, empty: 0, missing: 0, malformed: 0, incomplete: 0, not_run: 0 };
     const gaps: string[] = [];
+    const diagnostics: string[] = [];
+    const modes: Record<string, number> = {};
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
     for (const unit of o.units) {
@@ -293,11 +334,17 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
           counts.not_run!++;
           continue;
         }
-        const label = outcomeLabel(e.parse);
-        counts[label]!++;
-        if (label === "malformed" || label === "incomplete") gaps.push(unit.unit.id + " pass " + pass + ": " + label + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : ""));
-        parseRows.push([id, arm.name, model, unit.unit.id, String(pass), label, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
-        if (e.parse.kind === "findings") for (const f of renderFindings(e.parse.findings, pass, "/work/" + unit.task)) lines.push(JSON.stringify(f));
+        const outcome = label(e.parse);
+        counts[outcome]!++;
+        const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
+        if (plan && (outcome === "malformed" || outcome === "missing" || (outcome === "incomplete" && (e.record.termination.kind === "timeout" || (e.record.termination.kind === "arm_failure" && e.record.turns.length > 0))))) diagnostics.push(note + "; scored as finding nothing");
+        else if (outcome === "malformed" || outcome === "incomplete") gaps.push(note);
+        parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
+        if (plan) {
+          modes[e.ceo_mode ?? "unstated"] = (modes[e.ceo_mode ?? "unstated"] ?? 0) + 1;
+          modeRows.push([id, arm.name, model, unit.unit.id, String(pass), e.ceo_mode ?? "unstated"].join("\t"));
+        }
+        if (e.parse.kind === "findings") for (const f of plan ? renderPlanFindings((e.parse as Extract<PlanParse, { kind: "findings" }>).findings, pass) : renderFindings((e.parse as Extract<ParseOutcome, { kind: "findings" }>).findings, pass, "/work/" + unit.task)) lines.push(JSON.stringify(f));
         sessions.push({ pr: unit.unit.id, pass, wall_ms: e.record.wall_ms, cost: e.cost });
         refused.sessions++;
         refused.requests += e.cost?.all.requests ?? 0;
@@ -314,21 +361,23 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const source = provenance && typeof provenance.repo === "string" && typeof provenance.sha === "string" ? { repo: provenance.repo, sha: provenance.sha } : null;
     const armJson = {
       contract_version: 1, id, label: arm.name + " on " + model, suite: o.suite.id, ...(o.suite.sha256 ? { suite_sha256: o.suite.sha256 } : {}), date: o.date, passes: o.passes, provenance: "live",
-      status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(source ? { source } : {}),
+      status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(diagnostics.length ? { diagnostics } : {}), ...(source ? { source } : {}),
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
-      told: { arm: arm.told, prefix: TOLD_PREFIX[arm.told], template_sha256: TOLD_SHA256 }, parser_sha256: PARSER_SHA256,
+      told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: TOLD_PREFIX[arm.told as ToldArm], template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
+      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES } : {}), ...(plan ? { ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: provenance, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);
   }
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
+  if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
-  writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: TOLD_SHA256, parser_sha256: PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
+  writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
 
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const receipts = [journal, join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
+  const receipts = [journal, join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
   const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
   return result(armDirs, copied);
 }

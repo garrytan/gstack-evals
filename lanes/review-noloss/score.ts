@@ -347,7 +347,7 @@ function falseBlockers(suite: Suite, v: Arm, r: Arm, drop: number | null, noVerd
 /** The decoy-only false-alarm gate on the arm a LOSS calls better, the reference. */
 export interface FalseAlarmGate {
   margin_per_decoy: number;
-  /** Decoy units: every blocker is a bait (over-blocking). The denominator. */
+  /** Decoy units, the denominator: in a plan suite the units of group decoy, else units whose every blocker is a bait. */
   decoys: number;
   /** Must-fix false alarms per pass per decoy. */
   per_decoy: { variant: number; reference: number };
@@ -361,9 +361,9 @@ export interface FalseAlarmGate {
 
 /** Must-fix false alarms on decoys only, paired by decoy, with the decoy-clustered interval of the reference's excess. */
 function falseAlarmGate(suite: Suite, v: Arm, r: Arm, margin: number, noVerdict: string | null, opts: { seed: number; draws: number }): FalseAlarmGate {
-  const decoys = suite.units.filter((u) => u.blockers.every((b) => b.counts === "over-blocking"));
+  const decoys = suite.units.filter((u) => (suite.kind === "plan" ? u.group === "decoy" : u.blockers.every((b) => b.counts === "over-blocking")));
   const reasons: string[] = noVerdict ? [noVerdict] : [];
-  if (!decoys.length) reasons.push("suite " + suite.id + " has no decoy units (units whose every blocker is a bait), so the gate has no denominator");
+  if (!decoys.length) reasons.push("suite " + suite.id + " has no decoy units (group decoy in a plan suite, else units whose every blocker is a bait), so the gate has no denominator");
   const tv = tallyFalseBlockers(suite, v);
   const tr = tallyFalseBlockers(suite, r);
   for (const t of [tv, tr]) if ("reason" in t) reasons.push(t.reason);

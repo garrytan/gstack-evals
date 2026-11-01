@@ -28,7 +28,7 @@ import { DEFAULT_POLICY, loadPolicy, modelProblem, providerOf } from "../../src/
 import type { NolossIo } from "./cli.ts";
 import type { Ruling } from "./contract.ts";
 import { readArmDir } from "./ingest.ts";
-import { findingSha256, judgeSets, leakRules, loadKey, packetAnswers, packetMask, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
+import { fieldText, findingSha256, judgeSets, leakRules, loadKey, packetAnswers, packetMask, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
 import { ScoreError } from "./score.ts";
 import { insideRepo, loadSuite, sha256, unitRef } from "./suite.ts";
 
@@ -181,8 +181,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
         .filter((e) => e.packet === p.file)
         .map((e) => {
           const f = findingOf(e, unit.id);
-          const raw = f.fields.evidence;
-          const evidence = mask(raw === undefined || raw === null ? "" : typeof raw === "string" ? raw : JSON.stringify(raw));
+          const evidence = mask(fieldText(f.fields.evidence));
           for (const { rule, re } of leaks) if (re.test(evidence)) problems.push(unitRef(suite, unit) + ", arm " + e.arm + ", finding " + JSON.stringify(f.id) + ": its evidence names " + rule);
           return { id: e.opaque, evidence, ...codeAt(clone, unit.head, f.path, f.line) };
         });

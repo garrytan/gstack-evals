@@ -12,7 +12,9 @@
 // A unit tree is the repository plus its dependencies: the install command (bun install --frozen-lockfile by default)
 // runs in a builder container on the trial image with egress, at the path the agent sees (/work/<task id>), then the
 // unit's own test command runs offline (--network none) on a throwaway copy as the unit-image check. The tree is kept by
-// digest (retainTree) and its dirTreeSha256 is the session key's fixture tree.
+// digest (retainTree) and its dirTreeSha256 is the session key's fixture tree. A plan unit (planning lane plan
+// 2026-10-31-geva-79-planning-lane-plan, B1) has nothing to install or test: install and test are null, so its tree is
+// the repository alone, with the same history check.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync } from "node:fs";
@@ -178,8 +180,10 @@ export interface UnitTree {
   dir: string;
   tree_sha256: string;
   retained: Retained | null;
-  install: { command: string; exit: number | null };
-  test: { command: string; exit: number | null; passed: boolean };
+  /** null for a plan unit, which installs nothing. */
+  install: { command: string; exit: number | null } | null;
+  /** null for a plan unit, which has no tests. */
+  test: { command: string; exit: number | null; passed: boolean } | null;
   /** Why the tree fails the unit-image check; empty when it passes. */
   problems: string[];
 }
@@ -192,31 +196,32 @@ const HARDENING = ["--cap-drop", "ALL", "--security-opt", "no-new-privileges"];
  * trial image at /work/<task id>, then its test command run offline on a throwaway copy under scratch. The tree is kept
  * under retain by digest when retain is set. A failed step is a problem, never a throw, so a run can drop the unit.
  */
-export function buildUnitTree(o: { repo: UnitRepo; task: string; dest: string; image: string; test: string; install?: string; scratch: string; retain?: string | null; docker?: string; run?: Runner }): UnitTree {
+export function buildUnitTree(o: { repo: UnitRepo; task: string; dest: string; image: string; test: string | null; install?: string | null; scratch: string; retain?: string | null; docker?: string; run?: Runner }): UnitTree {
   const run = o.run ?? dockerRun;
   const docker = o.docker ?? "docker";
-  const install = o.install ?? DEFAULT_INSTALL;
+  const install = o.install === undefined ? DEFAULT_INSTALL : o.install;
   const path = "/work/" + o.task;
   const problems: string[] = [];
   if (existsSync(o.dest)) throw new UnitError("E_UNIT_IMAGE", [o.repo.unit + ": " + o.dest + " already exists"]);
   cpSync(o.repo.dir, o.dest, { recursive: true, verbatimSymlinks: true });
   const step = (dir: string, network: string[], command: string, timeoutMs: number) =>
     run(docker, ["run", "--rm", ...network, "--user", uid(), ...HARDENING, "-e", "HOME=/tmp/home", "-v", dir + ":" + path, "-w", path, "--entrypoint", "sh", o.image, "-c", 'mkdir -p "$HOME" && ' + command], { timeoutMs });
-  const installed = step(o.dest, [], install, INSTALL_TIMEOUT_MS);
-  if (installed.status !== 0) problems.push("install " + JSON.stringify(install) + " exited " + installed.status + ": " + lastLine(installed.stderr || installed.stdout));
-  problems.push(...historyProblems(o.dest, o.repo).map((p) => "after install: " + p));
+  const installed = install === null ? null : step(o.dest, [], install, INSTALL_TIMEOUT_MS);
+  if (installed && installed.status !== 0) problems.push("install " + JSON.stringify(install) + " exited " + installed.status + ": " + lastLine(installed.stderr || installed.stdout));
+  problems.push(...historyProblems(o.dest, o.repo).map((p) => (installed ? "after install: " : "") + p));
   const tree_sha256 = dirTreeSha256(o.dest);
   const retained = o.retain ? retainTree(o.dest, o.retain) : null;
+  if (o.test === null) return { dir: o.dest, tree_sha256, retained, install: null, test: null, problems };
   const copy = join(o.scratch, o.task + "-test-" + process.pid);
   removeTree(copy);
   mkdirSync(o.scratch, { recursive: true });
   cpSync(o.dest, copy, { recursive: true, verbatimSymlinks: true });
   let tested: ReturnType<Runner>;
   try {
-    tested = step(copy, ["--network", "none"], o.test, TEST_TIMEOUT_MS);
+    tested = step(copy, ["--network", "none"], o.test!, TEST_TIMEOUT_MS);
   } finally {
     removeTree(copy);
   }
   if (tested.status !== 0) problems.push("test " + JSON.stringify(o.test) + " exited " + tested.status + " offline: " + lastLine(tested.stderr || tested.stdout));
-  return { dir: o.dest, tree_sha256, retained, install: { command: install, exit: installed.status }, test: { command: o.test, exit: tested.status, passed: tested.status === 0 }, problems };
+  return { dir: o.dest, tree_sha256, retained, install: install === null ? null : { command: install, exit: installed!.status }, test: { command: o.test!, exit: tested.status, passed: tested.status === 0 }, problems };
 }

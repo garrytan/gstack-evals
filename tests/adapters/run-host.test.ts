@@ -6,7 +6,7 @@ import { NO_SKILL, sentinelFor, withSentinel } from "../../src/adapters/calibrat
 import { JUDGE_REASONING_EFFORT, judgeDriver } from "../../src/adapters/judge.ts";
 import { SKILL_DIRS } from "../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
-import { armCells, armImages, armNamespaces, armTree, dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
+import { armCells, armImages, armNamespaces, armTree, codexOption, dockerRig, hostReadiness, readJournal, runOnHost, sentinels, type HostRig, type HostRunInput } from "../../src/skill-eval/cli/run-host.ts";
 import { resolveCall, type Call } from "../../src/skill-eval/cli/call.ts";
 import { parseFlags, SKILL_EVAL_FLAGS } from "../../src/skill-eval/cli/flags.ts";
 import { preflight } from "../../src/skill-eval/cli/preflight.ts";
@@ -550,12 +550,20 @@ describe("stack cells in the run loop (keyless)", () => {
   });
 
   // Value: protects=a cell whose voice the policy cannot route for the Codex CLI refuses before any image or spend; fails_when=an Opus cell runs without its voice because the policy lacks gpt-6.1-sol; why_new=#88 /ship Step 11 (wiring cells through runOnHost); seam=armCells, codexOption; no_claim=none
+  // A plan run (voice false) builds every cell without its voice, so a policy that cannot route one does not refuse it.
   test("a cell voice the policy cannot route refuses", () => {
     const stack = stackArms("claude");
     const { ["gpt-6.1-sol"]: _sol, ...models } = policy.policy.models;
     const without = { ...policy, policy: { ...policy.policy, models } } as LoadedPolicy;
     expect(() => armCells(stack.installs, [OPUS], without, temp("cells"))).toThrow(/^E_MODEL_POLICY: /);
     expect(() => armCells(stack.installs, [CHEAP], without, temp("cells"))).not.toThrow();
+    const plan = armCells(stack.installs, [OPUS], without, temp("cells"), { voice: false });
+    const voiced = armCells(stack.installs, [OPUS], policy, temp("cells"));
+    for (const [arm, byModel] of Object.entries(plan)) {
+      expect([byModel[OPUS]!.cell.voice, byModel[OPUS]!.codex, codexOption(without, byModel[OPUS]!)]).toEqual([null, null, null]);
+      if (byModel[OPUS]!.gstack_config.codex_reviews) expect(byModel[OPUS]!.gstack_config.codex_reviews).toBe("disabled");
+      expect(byModel[OPUS]!.tree_sha256).not.toBe(voiced[arm]![OPUS]!.tree_sha256);
+    }
   });
 });
 

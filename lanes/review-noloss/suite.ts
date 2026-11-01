@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isPlanCase, loadCatalog, type CatalogCase, type PlanStratum } from "../review-replay/catalog/catalog.ts";
+import { canonical } from "../../src/trial/cache.ts";
 
 export const LANE_DIR = import.meta.dir;
 export const REPO_ROOT = resolve(LANE_DIR, "..", "..");
@@ -292,8 +293,8 @@ export function suiteStub(suite: Suite, text: string, root: string, custody: str
 /**
  * Reads a suite by id (lanes/review-noloss/suites/<id>.json) or by path. A stub needs a sealed root: the suite is read
  * from <sealed root>/suites/<id>.json and must match the stub's digests and counts. A sealed suite is never read whole
- * from inside the repo. A sealed suite read by path from outside the repo resolves its catalogs against the sealed root
- * when one is given, else against the repo.
+ * from inside the repo. A suite read by path from outside the repo resolves its catalogs against the sealed root when
+ * one is given, else against the repo, where a missing catalog refuses with E_NOLOSS_SUITE.
  */
 export function loadSuite(idOrPath: string, o: { sealedRoot?: string | null } = {}): { suite: Suite; path: string; sha256: string; stub: { path: string; sha256: string; custody: string } | null } {
   const sealedRoot = o.sealedRoot === undefined ? defaultSealedRoot : o.sealedRoot === null ? null : checkSealedRoot(o.sealedRoot);
@@ -316,7 +317,7 @@ export function loadSuite(idOrPath: string, o: { sealedRoot?: string | null } = 
     const s = value as Suite;
     if (s.id !== want.id || s.kind !== want.kind || s.sealed !== true) throw new SuiteError("sealed suite " + full + " is " + s.id + " (" + s.kind + ", sealed " + s.sealed + "), not the stub's " + want.id + " (" + want.kind + ", sealed)");
     const counts = stubCounts(s);
-    if (JSON.stringify(counts) !== JSON.stringify(want.counts)) throw new SuiteError("sealed suite " + full + " counts " + JSON.stringify(counts) + ", not the stub's " + JSON.stringify(want.counts));
+    if (canonical(counts) !== canonical(want.counts)) throw new SuiteError("sealed suite " + full + " counts " + JSON.stringify(counts) + ", not the stub's " + JSON.stringify(want.counts));
     const cat = catalogsDigest(s, sealedRoot);
     if (cat !== want.catalogs_sha256) throw new SuiteError("the catalogs of sealed suite " + s.id + " under " + sealedRoot + " hash to " + cat + ", not the stub's " + want.catalogs_sha256 + "; an answer key changed after the stub was committed");
   } else {
@@ -325,7 +326,7 @@ export function loadSuite(idOrPath: string, o: { sealedRoot?: string | null } = 
     if ((value as Suite).sealed && insideRepo(path)) throw new SuiteError("suite " + (value as Suite).id + " is sealed, and " + path + " holds it whole inside the repo; move it under a sealed root outside the repo and commit only its stub (noloss suite --stub)");
   }
   const suite = value as Suite;
-  if (suite.sealed && sealedRoot !== null) catalogRoots.set(suite, sealedRoot);
+  if (sealedRoot !== null && (suite.sealed || !insideRepo(full))) catalogRoots.set(suite, sealedRoot);
   return { suite, path: full, sha256: sha256(text), stub };
 }
 
@@ -334,6 +335,7 @@ export function suiteCases(suite: Suite, root = catalogRoot(suite)): { cases: Ma
   const cases = new Map<string, CatalogCase>();
   const problems: string[] = [];
   for (const dir of suite.catalogs) {
+    if (!existsSync(join(root, dir))) throw new SuiteError("suite " + suite.id + " names catalog " + dir + ", which is not under " + root + "; a suite read from outside the repo finds its catalogs under --sealed-root <dir>");
     const loaded = loadCatalog(join(root, dir));
     for (const c of [...loaded.cases, ...loaded.plans]) cases.set(c.id, c);
     for (const q of loaded.problems) problems.push(dir + "/" + q.file + ": " + q.message);
