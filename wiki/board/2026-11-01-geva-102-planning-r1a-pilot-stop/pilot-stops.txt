@@ -1,0 +1,10 @@
+(b) user simulator: 0 ask and prose events in 32 journaled session logs, 0 fallback, share 0.000 (stop above 0.10): does not fire
+(c) the pilot's cells.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 5 scored miss by the pinned planScore, share 0.417 (stop above 0.20): fires
+(e) none-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+(e) gstack-opus: 1 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.250 per plan per pass
+(e) lens-opus: 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.000 per plan per pass
+(e) none-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
+(e) gstack-particle-1: 5 must-fix findings ruled not-defect over 4 plans x 1 pass = 1.250 per plan per pass
+(e) placebo-particle-1: 2 must-fix findings ruled not-defect over 4 plans x 1 pass = 0.500 per plan per pass
+(e) highest rate 1.250 (stop above 0.25 in any cell): fires
+stops fired: c, e
