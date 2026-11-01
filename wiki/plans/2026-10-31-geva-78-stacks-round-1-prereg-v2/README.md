@@ -140,7 +140,7 @@ They bias the result one way. A contaminated gstack pass that the scanner misses
 | Item | Invocation | Cap |
 |---|---|---|
 | `stacks-r1-review-judge-match` | judge-run on the matching batch | $90 |
-| `stacks-r1-review-judge-adjudicate` | judge-run on the adjudication batch | $200 minus the match item's settled spend, admitted after the match run settles |
+| `stacks-r1-review-judge-adjudicate` | judge-run on the adjudication batch | $200 minus the settled spend of every earlier judge item (the match item and its rerun, if any), admitted after those runs settle |
 
 Together they never pass $200, which is raised only inside the stop.
 
@@ -214,7 +214,7 @@ The amendment also fixes which units run, by a seeded draw from the suite before
 - Recall at any severity, the new-blocker test and the review idea cards come from `noloss secondary`, with GST-479 and GST-480 fixed at the pin. The verifiable sensitivity comes from judge-run (section 3).
 - Both packet batches use seed 20261031 (section 3).
 - The contamination scanner's rules are frozen as #97 left them, with their known limits and a disclosure rule for ls option values (section 4).
-- The judging envelope rises from $110 to $200 inside the $2,050 review stop: a $90 match item and an adjudicate item of $200 minus the match item's settled spend. The retry budget is frozen at 3 attempts within 900 s, and one fresh rerun is allowed for an infrastructure stop (section 5).
+- The judging envelope rises from $110 to $200 inside the $2,050 review stop: a $90 match item and an adjudicate item of $200 minus the settled spend of every earlier judge item (the match item and its rerun, if any). The retry budget is frozen at 3 attempts within 900 s, and one fresh rerun is allowed for an infrastructure stop (section 5).
 - An exploratory Fable 5.1 rung is planned for a later amendment, not activated here (section 7).
 
 ## Attachments
