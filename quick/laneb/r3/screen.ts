@@ -9,7 +9,8 @@
 // The item serves one run: prepare refuses a ledger that already holds a reserve or settle, and run binds the item before
 // its first spend by creating <LEDGER>.bound, so any later run is refused. A cap refusal (a VM block, a session reserve
 // or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing. So does a part whose
-// trials are not one per planned task: a planned task with no trial, a second trial for a task, or a stray trial.
+// trials are not one per planned task: a planned task with no trial, a second trial for a task, or a stray trial. So does
+// a part with more than 10% infra trials, or a pulled proxy file that is empty or unparseable (GSTA-2 rulings).
 // Exit codes, as r3-dry.ts: 0 admission passed (R3b waits for Garry's caps), 4 incomplete, 5 saturation, 6 pilot
 // FIX-METHOD; 2 usage, 1 any other error.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -154,14 +155,31 @@ function run(work: string) {
   }
 }
 
-// Why a part is incomplete, or null. A cap refusal anywhere, a launch that didn't exit 0, a part with no pulled results,
-// or trials that are not one per planned task.
+const PROXY_FILES = ["cap-stop.json", "proxy-status-end.json", "proxy-sessions.jsonl"];
+
+function unreadable(path: string): boolean {
+  try {
+    const text = readFileSync(path, "utf8");
+    if (!text.trim()) return true;
+    if (path.endsWith(".jsonl")) text.split("\n").filter((l) => l.trim()).forEach((l) => JSON.parse(l));
+    else JSON.parse(text);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+// Why a part is incomplete, or null. A cap refusal anywhere, a pulled proxy file that is empty or unparseable (a cap stop
+// can't be ruled out), a launch that didn't exit 0, a part with no pulled results, trials that are not one per planned
+// task, or more than 10% of the part's trials infra (GSTA-2 rulings).
 function stopReason(work: string, part: (typeof PARTS)[number], trials: R3Trial[], tasks: string[]): string | null {
   const dir = join(work, part.name);
   const exitFile = join(work, `${part.name}.launch-exit`);
   const rc = existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null;
   if (rc === 9) return `${ITEM} refused ${part.name}'s VM reserve`;
   if (existsSync(join(dir, "vm-cap-stop"))) return `${part.name}: ${readFileSync(join(dir, "vm-cap-stop"), "utf8").trim()}`;
+  const bad = PROXY_FILES.find((f) => existsSync(join(dir, "pulled/out", f)) && unreadable(join(dir, "pulled/out", f)));
+  if (bad) return `${part.name}: pulled/out/${bad} is empty or unparseable`;
   const status = [join(dir, "pulled/out/cap-stop.json"), join(dir, "pulled/out/proxy-status-end.json")].map((p) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null)).find((s) => s?.cap_stop);
   if (status) return `${part.name}: ${status.cap_stop}`;
   const capped = trials.find((t) => t.cap_stop);
@@ -170,7 +188,9 @@ function stopReason(work: string, part: (typeof PARTS)[number], trials: R3Trial[
   if (rc !== 0) return `${part.name}'s launch exited ${rc}`;
   if (!existsSync(join(dir, "pulled/jobs"))) return `${part.name} has no pulled results`;
   const gap = coverage(trials, tasks, part.arm.split(":")[0]!);
-  return gap ? `${part.name}: ${gap}` : null;
+  if (gap) return `${part.name}: ${gap}`;
+  const infra = trials.filter((t) => t.outcome === "infra").length;
+  return infra * 10 > trials.length ? `${part.name}: ${infra} of ${trials.length} trials are infra, over 10%` : null;
 }
 
 function analyze(work: string): number {
@@ -183,7 +203,7 @@ function analyze(work: string): number {
   const parts = PARTS.map((part) => {
     const dir = join(work, part.name);
     const sessions = join(dir, "pulled/out/proxy-sessions.jsonl");
-    const trials = existsSync(join(dir, "pulled/jobs")) ? loadR3Jobs(join(dir, "pulled/jobs"), existsSync(sessions) ? readSessionRows([sessions]) : [], JSON.parse(readFileSync(join(dir, "proxy.json"), "utf8"))) : [];
+    const trials = existsSync(join(dir, "pulled/jobs")) ? loadR3Jobs(join(dir, "pulled/jobs"), existsSync(sessions) && !unreadable(sessions) ? readSessionRows([sessions]) : [], JSON.parse(readFileSync(join(dir, "proxy.json"), "utf8"))) : [];
     return { part, trials, stop: stopReason(work, part, trials, planned[part.name]!) };
   });
   const [screen, pilot] = parts.map((p) => p.trials) as [R3Trial[], R3Trial[]];

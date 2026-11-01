@@ -282,7 +282,7 @@ describe("R3 screen and admission", () => {
   });
 
   // A prepared and pulled R3a work dir: one none trial per band task (the first 35 fail) and one told trial per pilot task.
-  function work(opts: { capStop?: "status" | "trial" | "vm" | "vm-block"; edit?: (parts: Record<string, T[]>) => void } = {}) {
+  function work(opts: { capStop?: "status" | "trial" | "vm" | "vm-block"; edit?: (parts: Record<string, T[]>) => void; after?: (w: string) => void } = {}) {
     const w = tmp("r3-work-");
     const ledger = join(w, "r3a-screen.jsonl");
     approve(ledger);
@@ -305,6 +305,7 @@ describe("R3 screen and admission", () => {
     }
     if (opts.capStop === "status") writeFileSync(join(w, "screen/pulled/out/cap-stop.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for t__1 at x" }));
     if (opts.capStop === "vm-block") writeFileSync(join(w, "screen/vm-cap-stop"), "the ledger refused VM block 3 (r3a-screen/vm-3, $4.000000) for r3a-screen\n");
+    opts.after?.(w);
     const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "analyze", w], { env: { ...process.env, LEDGER: ledger } });
     return { w, code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
   }
@@ -344,6 +345,55 @@ describe("R3 screen and admission", () => {
       expect(r.code).toBe(4);
       expect(r.out).toContain(`R3 outcome: none (incomplete: ${reason}`);
       expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+    });
+  }
+
+  // GSTA-2 ruling A1: more than 10% infra trials in a part (10 or more of 93 screen trials, 2 or more of 10 pilot trials)
+  // makes R3a incomplete before admission, so broken infrastructure can't end R3 as saturation or FIX-METHOD.
+  const infra = (t: T): T => ({ ...t, reward: null, ok: 0 });
+  const lastScreen = (n: number) => (p: Record<string, T[]>) => { for (let i = 93 - n; i < 93; i++) p.screen![i] = infra(p.screen![i]!); };
+  const overInfra: [string, (p: Record<string, T[]>) => void, string][] = [
+    ["an all-infra screen", lastScreen(93), "screen: 93 of 93 trials are infra, over 10%"],
+    ["10 infra screen trials of 93", lastScreen(10), "screen: 10 of 93 trials are infra, over 10%"],
+    ["2 infra pilot trials of 10", (p) => { p.pilot![0] = infra(p.pilot![0]!); p.pilot![1] = infra(p.pilot![1]!); }, "pilot: 2 of 10 trials are infra, over 10%"],
+  ];
+  for (const [what, edit, reason] of overInfra) {
+    test(`${what} makes R3a incomplete and admits nothing`, () => {
+      const r = work({ edit });
+      expect(r.code).toBe(4);
+      expect(r.out).toContain(`R3 outcome: none (incomplete: ${reason}`);
+      expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+      expect(JSON.parse(readFileSync(join(r.w, "record.json"), "utf8")).outcome).toBe("incomplete");
+    });
+  }
+
+  test("9 infra screen trials of 93 and 1 infra pilot trial of 10 go on to admission", () => {
+    const r = work({ edit: (p) => { lastScreen(9)(p); p.pilot![0] = infra(p.pilot![0]!); } });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("admission: 35 of 84 graded in-band tasks unsolved by Opus 5.5 none (9 infra); pilot exposure 9 of 9 graded told trials");
+  });
+
+  // GSTA-2 ruling B1: a pulled proxy file that is empty or can't be parsed means the proxy failed at the end, so a cap stop
+  // can't be ruled out; the part is incomplete and the reason names the file.
+  const unreadable: [string, string, string | null][] = [
+    ["screen", "cap-stop.json", ""],
+    ["screen", "proxy-status-end.json", ""],
+    ["pilot", "proxy-status-end.json", '{"cap_stop":'],
+    ["screen", "proxy-sessions.jsonl", null],
+    ["pilot", "proxy-sessions.jsonl", ""],
+  ];
+  for (const [part, file, content] of unreadable) {
+    test(`${content === null ? "a truncated last line in" : content ? "an unparseable" : "an empty"} ${part} ${file} makes R3a incomplete and admits nothing`, () => {
+      const r = work({ after: (w) => {
+        const p = join(w, part, "pulled/out", file);
+        if (content === null) appendFileSync(p, '{"id":"s99","trial":');
+        else writeFileSync(p, content);
+      } });
+      expect(r.err).toBe("");
+      expect(r.code).toBe(4);
+      expect(r.out).toContain(`R3 outcome: none (incomplete: ${part}: pulled/out/${file} is empty or unparseable`);
+      expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+      expect(JSON.parse(readFileSync(join(r.w, "record.json"), "utf8")).outcome).toBe("incomplete");
     });
   }
 
