@@ -1,4 +1,4 @@
-# R1a keyless dry run, 2026-11-01T12:55:18.703Z
+# R1a keyless dry run, 2026-11-01T14:04:57.748Z
 scorer HEAD e305ed087b3f17bd211287b0e2d5e3f3960b5a4f
 stub sha256 f8262d93b69048fdabbe8e15b38cdcec266e2e09f56275e31f267530d8e6c533
 post any-severity.json sha256 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367
@@ -9,7 +9,7 @@ post comparisons.secondary-opus.json sha256 25d7f666ac52dfaedec7aec125804e4dd3aa
 post comparisons.secondary.json sha256 c5b4b260c8d21f1bbc0552d7858a20a1076a847f0dd512451d11e2ce6f3d3ce8
 post fable-subset.tsv sha256 36a7008358b9a1f1ec8bff454c5ca4221cd04a92e4b07220e902d0557178bda5
 post judge-brief.md sha256 64e35c81c8bfdb038a7c21652ffaeaed8e3683d4e67ecc87638703a00d73fc06
-post policy.json sha256 e3bfc99132b2eca114d42663d99dfa3ca4f46384865e5c9bc16d7d7ae19bb001
+post policy.json sha256 54ed66da9c4c308285cd862acaac89b1ead0096c981d5ce4682a260d5e88a4cc
 
 ## 1. Suites, stub and sealed root
 $ noloss suite --check --suite planrev-ceo-r1a --sealed-root $SEALED
@@ -33,69 +33,155 @@ $ noloss suite --check --suite $SEALED/suites/planrev-ceo-r1a-fable.json --seale
     suite planrev-ceo-r1a-fable ok: 18 units, 30 blockers, sha256 d3337d23af13a6834835c4ac9fcb1025ba0860efda675b732f2bc8d3090b637c
 PASS Fable subset suite checks
 
-## 2. The frozen run commands (review-units --dry-run)
-$ review-units --suite planrev-ceo-r1a --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
-  exit 0  (headline: 6 cells, 3 passes)
-    review-units dry run: nothing is built, written or spent
-    suite planrev-ceo-r1a (sha256 954f8f6e72f2f196d8de5757d231d39753b18d6a55dbd806770c2f2acb6bfdba)
-    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
-    units (36):
-    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
-    models: claude-opus-5-5, particle-ai/particle-1; passes 3; sessions 648
-    worst case at the allowance: $2343.17; spend cap none
-    out $OUT/ru
-PASS headline run plans 648 sessions
-$ review-units --suite $SEALED/suites/planrev-ceo-r1a-real.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
-  exit 0  (real-neutral: 6 cells, 3 passes)
-    review-units dry run: nothing is built, written or spent
-    suite planrev-ceo-r1a-real (sha256 e07c0a1528d2d54987d9fe7f9527adfc85e3b4cd3aec823fbfcc71dcfab6c9d0)
-    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
-    units (2):
-    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
-    models: claude-opus-5-5, particle-ai/particle-1; passes 3; sessions 36
-    worst case at the allowance: $130.18; spend cap none
-    out $OUT/ru
-PASS real-neutral run plans 36 sessions
-$ review-units --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 claude-fable-5-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
-  exit 0  (pilot: 8 cells, 1 pass)
+## 2. The frozen run commands (review-units --dry-run): each run under its own line item, spend cap and out dir
+PASS section 9's table gives a projection and an item cap for each of the four runs, in the frozen order pilot, headline, real-neutral, Fable
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 claude-fable-5-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-pilot --spend-cap 184 --out ~/.capy/work/planning-r1a/pilot
+  exit 0  (pilot: 3 models, 1 pass, line item planning-r1a-pilot)
     review-units dry run: nothing is built, written or spent
     suite planrev-ceo-r1a-pilot (sha256 40e0b954a419514e9e5faf7a11c0dedc6a5b17bef308481dfe1dc26bd527ab14)
     plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
     units (4):
     arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1, claude-fable-5-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1, claude-fable-5-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
     models: claude-opus-5-5, particle-ai/particle-1, claude-fable-5-1; passes 1; sessions 32
-    worst case at the allowance: $227.58; spend cap none
-    out $OUT/ru
-PASS pilot run plans 32 sessions
-$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
-  exit 0  (Fable subset: 2 cells, 1 pass)
+    worst case at the allowance: $227.58; spend cap $184.00
+    out ~/.capy/work/planning-r1a/pilot
+PASS pilot run plans 32 sessions under planning-r1a-pilot, spend cap $184, out ~/.capy/work/planning-r1a/pilot
+$ review-units --suite planrev-ceo-r1a --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-headline --spend-cap 1905 --out ~/.capy/work/planning-r1a/headline
+  exit 0  (headline: 2 models, 3 passes, line item planning-r1a-headline)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-r1a (sha256 954f8f6e72f2f196d8de5757d231d39753b18d6a55dbd806770c2f2acb6bfdba)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (36):
+    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
+    models: claude-opus-5-5, particle-ai/particle-1; passes 3; sessions 648
+    worst case at the allowance: $2343.17; spend cap $1905.00
+    out ~/.capy/work/planning-r1a/headline
+PASS headline run plans 648 sessions under planning-r1a-headline, spend cap $1905, out ~/.capy/work/planning-r1a/headline
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-real.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-real --spend-cap 106 --out ~/.capy/work/planning-r1a/real-neutral
+  exit 0  (real-neutral: 2 models, 3 passes, line item planning-r1a-real)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-r1a-real (sha256 e07c0a1528d2d54987d9fe7f9527adfc85e3b4cd3aec823fbfcc71dcfab6c9d0)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (2):
+    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
+    models: claude-opus-5-5, particle-ai/particle-1; passes 3; sessions 36
+    worst case at the allowance: $130.18; spend cap $106.00
+    out ~/.capy/work/planning-r1a/real-neutral
+PASS real-neutral run plans 36 sessions under planning-r1a-real, spend cap $106, out ~/.capy/work/planning-r1a/real-neutral
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-fable --spend-cap 510 --out ~/.capy/work/planning-r1a/fable
+  exit 0  (Fable subset: 1 model, 1 pass, line item planning-r1a-fable)
     review-units dry run: nothing is built, written or spent
     suite planrev-ceo-r1a-fable (sha256 d3337d23af13a6834835c4ac9fcb1025ba0860efda675b732f2bc8d3090b637c)
     plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
     units (18):
     arms: none ("Review this plan for problems." on claude-fable-5-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-fable-5-1)
     models: claude-fable-5-1; passes 1; sessions 36
-    worst case at the allowance: $633.60; spend cap none
-    out $OUT/ru
-PASS Fable run plans 36 sessions
-$ review-units --suite planrev-ceo-r1a --arms none gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-opus-5-5 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
+    worst case at the allowance: $633.60; spend cap $510.00
+    out ~/.capy/work/planning-r1a/fable
+PASS Fable subset run plans 36 sessions under planning-r1a-fable, spend cap $510, out ~/.capy/work/planning-r1a/fable
+$ review-units --suite planrev-ceo-r1a --arms none gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-opus-5-5 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-headline --out ~/.capy/work/planning-r1a/headline
   exit 2  (gstack-auto placeholder)
     E_USAGE review-units: arm gstack-auto: gstack-auto (GST-537) is not released; its told command "/autoplan --ceo-only" is a placeholder until a gstack release sets GSTACK_AUTO in src/trial/review/plan.ts
 PASS gstack-auto is refused until GST-537 sets its release
-$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --item planning-r1a --out $OUT/ru
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --item planning-r1a-fable --spend-cap 510 --out ~/.capy/work/planning-r1a/fable
   exit 2  (Fable under the default policy)
-    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke); ledger item planning-r1a is not named, so its prereg does not name this rung
+    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke); ledger item planning-r1a-fable is not named, so its prereg does not name this rung
 PASS the default policy refuses Fable as a subject (smoke_only, no rungs)
-$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item some-other-item --out $OUT/ru
-  exit 2  (Fable under R1a's policy, another ledger item)
-    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke) or as a capped rung of ledger item planning-r1a; ledger item some-other-item is not named, so its prereg does not name this rung
-PASS R1a's policy refuses Fable under any ledger item but planning-r1a
-$ review-units --suite planrev-ceo-r1a --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-opus-5-5 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $SCORER/runs/r1a-dry
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-headline --spend-cap 510 --out ~/.capy/work/planning-r1a/fable
+  exit 2  (Fable under R1a's policy and line item planning-r1a-headline)
+    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke) or as a capped rung of ledger item planning-r1a-pilot, planning-r1a-fable; ledger item planning-r1a-headline is not named, so its prereg does not name this rung
+PASS R1a's policy refuses Fable under planning-r1a-headline: only the pilot and Fable items name its rung
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-real --spend-cap 510 --out ~/.capy/work/planning-r1a/fable
+  exit 2  (Fable under R1a's policy and line item planning-r1a-real)
+    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke) or as a capped rung of ledger item planning-r1a-pilot, planning-r1a-fable; ledger item planning-r1a-real is not named, so its prereg does not name this rung
+PASS R1a's policy refuses Fable under planning-r1a-real: only the pilot and Fable items name its rung
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --spend-cap 510 --out ~/.capy/work/planning-r1a/fable
+  exit 2  (Fable under R1a's policy and line item planning-r1a)
+    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke) or as a capped rung of ledger item planning-r1a-pilot, planning-r1a-fable; ledger item planning-r1a is not named, so its prereg does not name this rung
+PASS R1a's policy refuses Fable under planning-r1a: only the pilot and Fable items name its rung
+policy.json: claude-fable-5-1 rungs ["planning-r1a-pilot","planning-r1a-fable"]
+PASS policy.json is the pinned default policy with only its name, its source and Fable's rungs changed, and the rungs are the pilot and Fable items
+$ review-units --suite planrev-ceo-r1a --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-opus-5-5 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a-headline --out $SCORER/runs/r1a-dry
   exit 2  (a sealed run with --out inside the repo)
     E_USAGE review-units: suite planrev-ceo-r1a is sealed, and --out $SCORER/runs/r1a-dry is inside the repo; write sealed runs outside it
 PASS review-units refuses a sealed run whose --out is inside the repo
 
-## 3. Headline: synthetic arms through blind judging and adjudication
+## 3. Line items: the $2,705 split, each run's start rule, and the spend chain on a temporary ledger
+PASS the pinned allowances are $7.04 per Opus session, $0.192 per particle-1 session and $17.60 per Fable session (section 9)
+pilot (planning-r1a-pilot): 12 Opus, 12 particle-1, 8 Fable sessions; projection $162.30; share of $2,705 183.85; item cap $184
+headline (planning-r1a-headline): 324 Opus, 324 particle-1 sessions; projection $1,682.21; share of $2,705 1905.54; item cap $1905
+real-neutral (planning-r1a-real): 18 Opus, 18 particle-1 sessions; projection $93.46; share of $2,705 105.86; item cap $106
+Fable subset (planning-r1a-fable): 36 Fable sessions; projection $450.00; share of $2,705 509.74; item cap $510
+PASS each run's projection in section 9's table is its sessions at the section 9 rates ($5 Opus, $0.192 particle-1, $12.50 Fable)
+PASS the item caps split $2,705 in proportion to the projections, rounded to whole dollars by largest remainder so they sum to exactly $2,705, as section 9's table prints them
+start rule, pilot: projection $162.30 plus its costliest round's excess $10.20 (a round is 1 unit of every arm on one model at --parallel 4, admitted at the allowance, run.ts:345-348) = $172.50 against its item cap $184: fits
+start rule, headline: projection $1,682.21 plus its costliest round's excess $6.12 (a round is 1 unit of every arm on one model at --parallel 4, admitted at the allowance, run.ts:345-348) = $1,688.33 against its item cap $1905: fits
+start rule, real-neutral: projection $93.46 plus its costliest round's excess $6.12 (a round is 1 unit of every arm on one model at --parallel 4, admitted at the allowance, run.ts:345-348) = $99.58 against its item cap $106: fits
+start rule, Fable subset: projection $450.00 plus its costliest round's excess $20.40 (a round is 2 units of every arm on one model at --parallel 4, admitted at the allowance, run.ts:345-348) = $470.40 against its item cap $510: fits
+PASS at section 9's rates every run's projection plus its costliest round's excess fits under its own item
+A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. The items use --admission warn: rig admission needs a green rig CI run and probes on the machine that spends, which a keyless dry run cannot give, so each lease warns RIG_UNPROVEN and admission itself is not exercised here.
+$ ledger init --item planning-r1a-pilot --cap 184 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
+  exit 0  (record planning-r1a-pilot)
+    APPROVED: item=planning-r1a-pilot cap=$184.00 admission=warn approval=1 record=$OUT/ledger/record
+PASS line item planning-r1a-pilot records its cap of $184
+$ ledger init --item planning-r1a-headline --cap 1905 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
+  exit 0  (record planning-r1a-headline)
+    APPROVED: item=planning-r1a-headline cap=$1905.00 admission=warn approval=1 record=$OUT/ledger/record
+PASS line item planning-r1a-headline records its cap of $1905
+$ ledger init --item planning-r1a-real --cap 106 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
+  exit 0  (record planning-r1a-real)
+    APPROVED: item=planning-r1a-real cap=$106.00 admission=warn approval=1 record=$OUT/ledger/record
+PASS line item planning-r1a-real records its cap of $106
+$ ledger init --item planning-r1a-fable --cap 510 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
+  exit 0  (record planning-r1a-fable)
+    APPROVED: item=planning-r1a-fable cap=$510.00 admission=warn approval=1 record=$OUT/ledger/record
+PASS line item planning-r1a-fable records its cap of $510
+pilot: run id review-units-20261101T140502Z-222c, minted as review-units mints it (cli.ts:280), leases planning-r1a-pilot for $184.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+headline: run id review-units-20261101T140502Z-e1da, minted as review-units mints it (cli.ts:280), leases planning-r1a-headline for $1,905.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+real-neutral: run id review-units-20261101T140502Z-a0c0, minted as review-units mints it (cli.ts:280), leases planning-r1a-real for $106.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $5.00; settled at $5.00 spent
+Fable subset: run id review-units-20261101T140502Z-6c9d, minted as review-units mints it (cli.ts:280), leases planning-r1a-fable for $510.00, its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters $12.50; left open, as a killed controller leaves it
+PASS each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone
+PASS each lease on a warn item without an admission record warns RIG_UNPROVEN and is not refused
+a second review-units run on planning-r1a-pilot: E_ITEM_BOUND
+PASS an item refuses a second run id with E_ITEM_BOUND, which is why each run has its own item
+the headline's one resume: same run id (review-units keeps it in run.json, cli.ts:280), lease for $1,900.00
+PASS a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend
+the Fable run's resume while the killed controller's lease is open: E_LEASE_UNSETTLED
+PASS after a killed controller its lease stays open, and the resume's lease is refused with E_LEASE_UNSETTLED
+$ ledger settle --lease planning-r1a-fable.0001.ba8286
+  exit 0  (settle the killed controller's lease on its own machine, before the resume)
+    SETTLED: planning-r1a-fable.0001.ba8286 spent=$12.50 unknown=$0.00 (0 calls) record=$OUT/ledger/record
+PASS once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id
+$ ledger init --item planning-r1a-judge-pilot-match --cap 95 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
+  exit 0  (record planning-r1a-judge-pilot-match at $95 less the settled spend of every earlier R1a judge item)
+    APPROVED: item=planning-r1a-judge-pilot-match cap=$95.00 admission=warn approval=1 record=$OUT/ledger/record
+planning-r1a-judge-pilot-match: judge-run's run id judge-f397bda1bd5b (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $3.25; settled at $3.25
+PASS planning-r1a-judge-pilot-match refuses a second judge-run call with E_ITEM_BOUND, so each judge-run call takes its own judge item
+$ ledger init --item planning-r1a-judge-pilot-adjudicate --cap 91.75 --admission warn --words "dry run only" --by dryrun.ts --source "R1a keyless dry run"
+  exit 0  (record planning-r1a-judge-pilot-adjudicate at $95 less the settled spend of every earlier R1a judge item)
+    APPROVED: item=planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn approval=1 record=$OUT/ledger/record
+planning-r1a-judge-pilot-adjudicate: judge-run's run id judge-6b57f2a12410 (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters $1.10; settled at $1.10
+PASS planning-r1a-judge-pilot-adjudicate refuses a second judge-run call with E_ITEM_BOUND, so each judge-run call takes its own judge item
+PASS judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope ($95.00, then $91.75; $4.35 spent)
+$ ledger status
+  exit 0  (every line item on the temporary record)
+    RECORD: $OUT/ledger/record (GSTACK_EVALS_LEDGER_RECORD)
+    LEDGER: $OUT/ledger/local.sqlite (GSTACK_EVALS_LEDGER)
+    ITEM: planning-r1a-fable cap=$510.00 admission=warn committed=$12.50 left=$497.50 run=review-units-20261101T140502Z-6c9d leases=2 open=-
+      words: "dry run only" by dryrun.ts (R1a keyless dry run)
+    ITEM: planning-r1a-headline cap=$1905.00 admission=warn committed=$5.00 left=$1900.00 run=review-units-20261101T140502Z-e1da leases=2 open=-
+      words: "dry run only" by dryrun.ts (R1a keyless dry run)
+    ITEM: planning-r1a-judge-pilot-adjudicate cap=$91.75 admission=warn committed=$1.10 left=$90.65 run=judge-6b57f2a12410 leases=1 open=-
+      words: "dry run only" by dryrun.ts (R1a keyless dry run)
+    ITEM: planning-r1a-judge-pilot-match cap=$95.00 admission=warn committed=$3.25 left=$91.75 run=judge-f397bda1bd5b leases=1 open=-
+      words: "dry run only" by dryrun.ts (R1a keyless dry run)
+    ITEM: planning-r1a-pilot cap=$184.00 admission=warn committed=$5.00 left=$179.00 run=review-units-20261101T140502Z-222c leases=1 open=-
+      words: "dry run only" by dryrun.ts (R1a keyless dry run)
+    ITEM: planning-r1a-real cap=$106.00 admission=warn committed=$5.00 left=$101.00 run=review-units-20261101T140502Z-a0c0 leases=1 open=-
+      words: "dry run only" by dryrun.ts (R1a keyless dry run)
+PASS the four run items hold $2,705 and the judge envelope $95: $2,800, the cap
+
+## 4. Headline: synthetic arms through blind judging and adjudication
 PASS headline: raw arm none-opus ingests
 PASS headline: raw arm gstack-opus ingests
 PASS headline: raw arm lens-opus ingests
@@ -131,7 +217,7 @@ PASS headline: judged arm placebo-particle-1 ingests
 PASS headline: judged arm flagall-opus ingests
 PASS headline: judged arm flagbait-opus ingests
 
-## 4. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys
+## 5. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys
 $ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.primary.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
   exit 1  (primary: gstack better)
     none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 20.8% vs 64.6%, delta -43.8 points [95% CI -53.5, -34.0]; 40 losses, 3 gains on 48 blockers in 24 PRs (21 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0 (Holm 0.0000010, step 1 of 2 in the declared LOSS family) (minimum reachable 4.8e-7).
@@ -153,7 +239,7 @@ PASS primary: gstack worse (mirror): --expect NOT_DISTINGUISHED,NOLOSS_UNDERPOWE
 ceiling rule: none-opus must-fix recall 0.208 (ceiling above 0.85: not met)
 PASS the ceiling rule reads none-opus recall
 
-## 5. Secondary family: Holm over 3
+## 6. Secondary family: Holm over 3
 $ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.secondary.json --variant none-particle-1 --reference gstack-particle-1 --sealed-root $SEALED
   exit 1  (secondary: particle-1 gstack)
     none-particle-1 vs gstack-particle-1 at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 13.2% vs 37.5%, delta -24.3 points [95% CI -35.4, -13.2]; 28 losses, 7 gains on 48 blockers in 24 PRs (17 discordant). p non-inferior 0.988 (Holm 1.000 over 3), p loss 0.00051 (Holm 0.0015, step 1 of 3 in the declared LOSS family) (minimum reachable 0.0000076).
@@ -180,7 +266,7 @@ $ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/
 PASS secondary: particle-1 placebo: --expect NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
 PASS secondary prints its Holm step of 3
 
-## 6. Frozen particle-1 rung drop (pilot stop c)
+## 7. Frozen particle-1 rung drop (pilot stop c)
 $ noloss score --suite planrev-ceo-r1a --root $OUT/arms-opus --prereg $POST/comparisons.secondary.json --variant none-opus --reference lens-opus --sealed-root $SEALED
   exit 2  (full secondary file without particle-1 arms)
     E_NOLOSS_ARM arm none-particle-1 is not ingested for suite planrev-ceo-r1a
@@ -195,7 +281,7 @@ $ noloss score --suite planrev-ceo-r1a --root $OUT/arms-opus --prereg $POST/comp
 PASS Opus-only secondary file: --expect NOT_DISTINGUISHED,LOSS
 PASS Opus-only file is a family of 1
 
-## 7. False-alarm gate at the frozen margin: a flag-everything arm and a flag-every-bait arm
+## 8. False-alarm gate at the frozen margin: a flag-everything arm and a flag-every-bait arm
 PASS every primary, secondary and Fable comparison carries false_alarm_gate margin_per_decoy 0.5 (8 comparisons)
 headline: 12 decoys in 12 clusters; Fable subset: 6 decoys in 6 clusters
 PASS each decoy is its own cluster, as gate-size.ts.txt assumes (headline 12 in 12, Fable 6 in 6)
@@ -227,7 +313,7 @@ $ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $OUT/g
 PASS the same flag-every-bait arm at the old margin 1 (the hole #110's Step 11 found): --expect LOSS
 PASS at margin 1 the flag-every-bait arm passes the gate, which margin 0.5 closes
 
-## 8. Volume-matched reading (first 2 must-fix findings per unit-pass)
+## 9. Volume-matched reading (first 2 must-fix findings per unit-pass)
 $ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-k2 --out $OUT/derived/planrev-ceo-r1a-k2 --first-k 2 --sealed-root $SEALED
   exit 0  (first-k 2)
     derive planrev-ceo-r1a-k2: keep each unit-pass's first 2 must-fix findings as must-fix and relabel the rest VOLUME-CUT (volume-matched)
@@ -244,7 +330,7 @@ $ noloss score --suite $OUT/derived/planrev-ceo-r1a-k2/planrev-ceo-r1a-k2.json -
     verdict: LOSS
 PASS first-k 2: same sign as the primary: --expect LOSS
 
-## 9. Any-severity recall (secondary) and the any-severity fallback
+## 10. Any-severity recall (secondary) and the any-severity fallback
 $ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-any --out $OUT/derived/planrev-ceo-r1a-any --severity-map $POST/any-severity.json --sealed-root $SEALED
   exit 0  (any severity)
     derive planrev-ceo-r1a-any: re-map severity with any-severity.json (sha256 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367)
@@ -269,7 +355,7 @@ $ noloss secondary --suite planrev-ceo-r1a --variant none-opus --reference gstac
     idea-card wins: 0 of 48 blocking blockers (found by none-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 2.0018, 95th percentile 4; above the null: no
 PASS secondary readings (any severity, new defects)
 
-## 10. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names
+## 11. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names
 $ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-mc --out $OUT/derived/planrev-ceo-r1a-mc --drop-file $OUT/missing-cells.drop.tsv --sealed-root $SEALED
   exit 0  (missing cells)
     derive planrev-ceo-r1a-mc: drop every unit listed in missing-cells.drop.tsv (sha256 6a1e901690a28d418a7057a400936c7c0fae54b67cd0d3e9877e8a0f65476183)
@@ -286,7 +372,7 @@ $ noloss score --suite $OUT/derived/planrev-ceo-r1a-mc/planrev-ceo-r1a-mc.json -
     verdict: LOSS
 PASS missing-cell sensitivity: --expect LOSS
 
-## 11. Stopped arm: no verdict, the family keeps its size
+## 12. Stopped arm: no verdict, the family keeps its size
 PASS stopped arm ingests
 $ noloss score --suite planrev-ceo-r1a --root $OUT/arms-stopped --prereg $POST/comparisons.secondary.json --variant none-opus --reference lens-opus --sealed-root $SEALED
   exit 2  (stopped lens arm)
@@ -298,7 +384,7 @@ $ noloss score --suite planrev-ceo-r1a --root $OUT/arms-stopped --prereg $POST/c
 PASS stopped lens arm: --expect NO_VERDICT
 PASS stopped arm keeps step of 3
 
-## 12. Recall by source (T1, T2) and by mode, descriptive
+## 13. Recall by source (T1, T2) and by mode, descriptive
 $ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-t1 --out $OUT/derived/planrev-ceo-r1a-t1 --detection-only "<each of the 24 lines of $SEALED/readings/source-T1.detection-only.txt>" --sealed-root $SEALED
   exit 0  (source T1)
     suite $OUT/derived/planrev-ceo-r1a-t1/planrev-ceo-r1a-t1.json sha256 4bce481688bf4eef9b7a7102608a5d207617e7a742ab16686b775e5eb5018c5d: 36 units, 24 blocking blockers on 24 PRs; 0 units dropped
@@ -380,7 +466,7 @@ $ noloss score --suite $OUT/derived/planrev-ceo-r1a-fix/planrev-ceo-r1a-fix.json
 PASS mode fix: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
 PASS mode fix reads 16 flaws in 8 plans
 
-## 13. Real-neutral stratum, alone
+## 14. Real-neutral stratum, alone
 PASS real-neutral: raw arm none-opus ingests
 PASS real-neutral: raw arm gstack-opus ingests
 PASS real-neutral: raw arm lens-opus ingests
@@ -409,7 +495,7 @@ $ noloss score --suite $SEALED/suites/planrev-ceo-r1a-real.json --root $OUT/real
     verdict: NOT_DISTINGUISHED
 PASS real-neutral, descriptive: --expect NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED,LOSS
 
-## 14. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone
+## 15. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone
 PASS pilot: raw arm none-opus ingests
 PASS pilot: raw arm gstack-opus ingests
 PASS pilot: raw arm lens-opus ingests
@@ -463,7 +549,7 @@ pilot none-opus must-fix recall 0/8 = 0; stop (a) fires outside 0.10 to 0.85: fi
 PASS pilot recall reads on the pilot's 8 flaws, from noloss secondary
 PASS the pilot reading carries no verdict and no claim
 
-## 15. Fable 5.1 subset, exploratory
+## 16. Fable 5.1 subset, exploratory
 PASS fable: raw arm none-fable ingests
 PASS fable: raw arm gstack-fable ingests
 $ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arm $OUT/fable/raw-root/planrev-ceo-r1a-fable/none-fable --arm $OUT/fable/raw-root/planrev-ceo-r1a-fable/gstack-fable --seed 20261031 --out $OUT/fable/packets --key $OUT/fable/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
@@ -493,14 +579,14 @@ PASS Fable none vs gstack: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
 PASS Fable subset reads 24 flaws in 12 plans and 6 decoys
 The Fable subset makes no claim, whatever its scorer prints (section 4): the lines above are a reading.
 
-## 16. Power at the panel's shape
+## 17. Power at the panel's shape
 $ noloss power --suite planrev-ceo-r1a --passes 3 --recall 0.35 --margin 10 --loss 20 --alpha 0.025 --dependence 0.3 --sims 2000 --sealed-root $SEALED
   exit 0  (power on the headline suite)
     | planrev-ceo-r1a | 24 | 48 | 3 | 52.4% | 2.3% | 97.5% |
 PASS power counts 24 clusters and 48 flaws
 
-## 17. OpenRouter routes: the pinned route, its data policy and price headroom
-read keyless at 2026-11-01T12:55:33.585Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
+## 18. OpenRouter routes: the pinned route, its data policy and price headroom
+read keyless at 2026-11-01T14:05:13.133Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
 particle-ai/particle-1 route {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 22cb6215a4019fba2cf7949d892df384d96d0a57e12375a40fa3abe7531570d2
   endpoint Particle AI (particle-ai, unknown): $0.05 / $0.5 per Mtok, max_price $0.1 / $1 (headroom x2.00 input, x2.00 output); data policy: training false, retains prompts false, kept by data_collection deny
 PASS particle-ai/particle-1: the route pins its providers with no fallbacks and sends data_collection deny
@@ -511,13 +597,18 @@ outside R1a: deepseek/deepseek-v4.1-flash-1017 route {"only":["inference-net"],"
   deepseek/deepseek-v4.1-flash-1017 is not an R1a model; reported for GST-637, not checked
 route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 935feb940de8bb1ac9d84d700af39943af8fc6c2ff1d649ccae87fa1c60839de
 
-## 18. Receipts and run paths
-PASS R1a's frozen --out root and receipts sink (~/.capy/work/planning-r1a) sit outside the repo
+## 19. Custody: the run root, the receipts sink and the retained trees
+run root ~/.capy/work/planning-r1a; frozen --out dirs ~/.capy/work/planning-r1a/pilot, ~/.capy/work/planning-r1a/headline, ~/.capy/work/planning-r1a/real-neutral, ~/.capy/work/planning-r1a/fable; receipts sink, if one is set, ~/.capy/work/planning-r1a/receipts
+PASS every frozen --out and the receipts sink sit under the run root, which sits outside the repo
+PASS the frozen sink is apart from every out dir and its arms/, by the pinned sinkOverlapProblem
+PASS with GSTACK_EVALS_EPHEMERAL=1 the pinned receiptsSink copies receipts to the frozen sink, inside the run root
+PASS without GSTACK_EVALS_EPHEMERAL=1 the pinned run copies receipts nowhere, whatever GSTACK_EVALS_RECEIPTS says
+PASS the run's sink rule admits an unset GSTACK_EVALS_RECEIPTS or one under the run root, and stops one outside it
 review-units keeps unit trees under <stateRoot>/retained/trees: on this machine, with XDG_STATE_HOME unset, ~/.capy/work/gstack-evals/retained
 PASS <stateRoot> is ~/.capy/work/gstack-evals on Capy, $XDG_STATE_HOME/gstack-evals when set, as the cleanup rule says
-PASS <stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it apart from the run dir
+PASS <stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it beside the run root
 
-## 19. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink
+## 20. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink
 $ bun test tests/trial/review/plan-scoring.test.ts tests/adapters/claude-code.test.ts tests/trial/review/run.test.ts (keys unset)
   exit 0
     (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > an interactive session: scripted answers by category, a prose reply, and user-visible turns only
@@ -617,26 +708,76 @@ PASS case: a symlinked directory in the sink is refused
 PASS case: a dangling symlink above the sink is refused
 PASS case: --resume reuses every journaled session, a gap included, and spends nothing (section 10's resume rule)
 
-## 20. Resume procedure: refill-gaps.ts on a synthetic gap (section 10)
+## 21. Resume procedure: refill-gaps.ts after a killed controller, at the pin, crash-safe (section 10)
 PASS the synthetic sessions score findings, miss and gap by the pinned planScore
-$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/gap
-  exit 0  (a findings session, a miss and a gap; arm.json names the gap)
-    cells.ndjson sha256 47865742475adc78f71a31d3623f7ec53169fc9271e337f5c6fefb04caa54a22 before, 00a04e70d33a8575e104ae6fc089d47c5493fa0e2d6a4f757b52ff1101161f22 after; refilled-gaps.ndjson sha256 90e5257d0dad394bcfcc2204e32006858eee307457bc272d2d09a55b30a7fa4c
-    refilled gstack-opus 1, their metered spend $0.00
-    moved 1 of 3 journal lines; now run the same review-units command once with --resume, at the same scorer sha
-PASS refill-gaps exits 0 and counts 1 refilled session for the arm
-PASS the gap's raw run directory is copied to refilled-gaps/ before the resume deletes it, and no other session's is
+each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, and no units.json, arms/ or arm.json
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/killed
+  exit 0  (a killed controller's out dir)
+    scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
+    cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
+    refilled gstack-opus 1, their metered spend $3.00
+    copied 1 run directory that no journal line names (sessions in flight when the controller stopped)
+    moved 1 of 3 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+PASS refill-gaps exits 0 on an out dir with no units.json and no arm.json, and counts 1 refilled session for the arm
+PASS the gap's run directory and the in-flight session's are copied to refilled-gaps/, and no other
 PASS refilled-gaps.ndjson holds the gap's line alone, byte for byte
 PASS cells.ndjson keeps the findings and miss lines, byte for byte, and nothing else
-PASS the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap alone
-$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/gap
+PASS refill-gaps.backup.ndjson holds the journal before the move, byte for byte, and refill-gaps.done is written last
+PASS the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap and the never-journaled cell
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/killed
   exit 2  (a second use on the same out dir)
-    E_USAGE refilled-gaps.ndjson or refilled-gaps/ exists: a run takes one resume, and its gaps were moved already
-PASS a second use refuses (one resume per run) and changes nothing
-$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/miss
-  exit 2  (arm.json names a miss as a gap)
-    E_USAGE arm gstack-opus: a session its coverage_gaps name scores miss by the pinned planScore, and a resume never reruns a miss
-PASS a named session that is a miss is refused, and nothing moves
+    E_USAGE refill-gaps.done exists: a run takes one resume, and its gaps were moved already
+PASS a second use refuses on refill-gaps.done (one resume per run) and changes nothing
+$ R1A_REFILL_CRASH=after-copy bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-after-copy
+  exit SIGKILL  (the script killed at after-copy)
+PASS killed at after-copy, before the done marker
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-after-copy
+  exit 0  (the rerun after the crash at after-copy)
+    recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e)
+    scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
+    cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
+    refilled gstack-opus 1, their metered spend $3.00
+    copied 1 run directory that no journal line names (sessions in flight when the controller stopped)
+    moved 1 of 3 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+PASS after a crash at after-copy the rerun recovers from the backup and ends in the same bytes as an uninterrupted run
+$ R1A_REFILL_CRASH=between-renames bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-between-renames
+  exit SIGKILL  (the script killed at between-renames)
+PASS killed between the renames: refilled-gaps.ndjson is in place, cells.ndjson still holds every line, the new journal waits as cells.ndjson.tmp, and there is no done marker
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-between-renames
+  exit 0  (the rerun after the crash at between-renames)
+    recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e)
+    scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
+    cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
+    refilled gstack-opus 1, their metered spend $3.00
+    copied 1 run directory that no journal line names (sessions in flight when the controller stopped)
+    moved 1 of 3 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+PASS after a crash at between-renames the rerun recovers from the backup and ends in the same bytes as an uninterrupted run
+$ R1A_REFILL_CRASH=before-done bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-before-done
+  exit SIGKILL  (the script killed at before-done)
+PASS killed at before-done, before the done marker
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/crash-before-done
+  exit 0  (the rerun after the crash at before-done)
+    recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e)
+    scorer at e305ed087b3f17bd211287b0e2d5e3f3960b5a4f with no tracked change
+    cells.ndjson sha256 ce74d225a3d6e1a5cf0bf786972943422bb70607f4928ae10aa4a2657a973b5e before, 7ac751776e9fb700ad097cefec2b3146c6cf6c9a113e4a6ded3a7a27f0fe18ba after; refilled-gaps.ndjson sha256 69bb2094ff4ba6098aa10d769f9c9985d901392da9b1b2a6bbda5fe0dbae80da
+    refilled gstack-opus 1, their metered spend $3.00
+    copied 1 run directory that no journal line names (sessions in flight when the controller stopped)
+    moved 1 of 3 journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha
+PASS after a crash at before-done the rerun recovers from the backup and ends in the same bytes as an uninterrupted run
+$ R1A_REFILL_CRASH=between-renames bun $OUT/refill-gaps.ts $SCORER $OUT/resume/edited
+  exit SIGKILL  (the script killed between the renames)
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/edited
+  exit 2  (a rerun after cells.ndjson changed (a resume ran before the refill finished))
+    E_USAGE cells.ndjson changed after the interrupted refill (it is neither the backup nor the backup less its gaps), so recovery would drop those changes
+PASS a rerun refuses when cells.ndjson changed after the interrupted attempt, and changes nothing
+$ bun $OUT/refill-gaps.ts $SCORER $OUT/resume/missing
+  exit 2  (a gap whose run directory is missing)
+    E_USAGE a gap's run directory is missing, so its evidence cannot be kept
+PASS a gap with no run directory is refused before anything changes (no backup, no output)
+$ bun $OUT/refill-gaps.ts <a clean checkout of e305ed0's first parent> $OUT/resume/pin
+  exit 2  (a scorer checkout at e305ed0's first parent)
+    E_USAGE the scorer checkout is at ecf485e002d9fea1ea1acc3f67bad69b8187435a, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f; the resume and this script run at the pinned scorer only
+PASS a scorer checkout not at e305ed0 is refused before anything changes
 
 ## Leak check
 PASS no unit head or base prefix (7+ hex) appears in this transcript

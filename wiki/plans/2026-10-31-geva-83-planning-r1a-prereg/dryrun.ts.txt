@@ -199,12 +199,12 @@ const { loadPolicy } = await import(join(scorer, "src/skill-eval/cli/policy.ts")
 const { allowanceMicros, SESSION_ALLOWANCE } = await import(join(scorer, "src/skill-eval/cli/dry-run.ts"));
 const loadedPolicy = loadPolicy(POLICY);
 const allow = (m: string): number => allowanceMicros({ policy: loadedPolicy }, m, SESSION_ALLOWANCE);
-const RATE: Record<string, number> = { [OPUS]: 5_000_000, [P1]: 192_000, [FABLE]: 12_500_000 };
+const PRICE: Record<string, number> = { [OPUS]: 5_000_000, [P1]: 192_000, [FABLE]: 12_500_000 };
 const dollars = (micros: number) => "$" + (micros / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 check("the pinned allowances are $7.04 per Opus session, $0.192 per particle-1 session and $17.60 per Fable session (section 9)", allow(OPUS) === 7_040_000 && allow(P1) === 192_000 && allow(FABLE) === 17_600_000);
 const cellsOn = (r: (typeof RUNS)[number], m: string) => r.arms.filter((a) => (a === "lens" ? [OPUS] : a === "placebo" ? [P1] : r.models).includes(m)).length;
 const SESSIONS_CAP = 2705, JUDGE_ENVELOPE = 95;
-const proj = RUNS.map((r) => r.models.reduce((s, m) => s + r.units * r.passes * cellsOn(r, m) * RATE[m]!, 0));
+const proj = RUNS.map((r) => r.models.reduce((s, m) => s + r.units * r.passes * cellsOn(r, m) * PRICE[m]!, 0));
 const projTotal = proj.reduce((a, b) => a + b, 0);
 const floorShare = proj.map((p) => Math.floor((SESSIONS_CAP * p) / projTotal));
 const remainder = proj.map((p, i) => SESSIONS_CAP * p - floorShare[i]! * projTotal);
@@ -217,7 +217,7 @@ check("the item caps split $2,705 in proportion to the projections, rounded to w
 const PARALLEL = 4;
 const fits = RUNS.map((r, i) => {
   const per = Math.min(r.units, Math.max(1, Math.floor(PARALLEL / r.arms.length)));
-  const excess = Math.max(...r.models.map((m) => per * cellsOn(r, m) * (allow(m) - RATE[m]!)));
+  const excess = Math.max(...r.models.map((m) => per * cellsOn(r, m) * (allow(m) - PRICE[m]!)));
   const need = proj[i]! + excess;
   say("start rule, " + r.run + ": projection " + dollars(proj[i]!) + " plus its costliest round's excess " + dollars(excess) + " (a round is " + per + " unit" + (per > 1 ? "s" : "") + " of every arm on one model at --parallel " + PARALLEL + ", admitted at the allowance, run.ts:345-348) = " + dollars(need) + " against its item cap $" + capOf(r.item) + ": " + (need <= capOf(r.item) * 1e6 ? "fits" : "does not fit, so the run goes back to the Captain"));
   return need <= capOf(r.item) * 1e6;
@@ -246,7 +246,7 @@ const ledger = async (label: string, argv: string[]) => {
 const APPROVE = ["--admission", "warn", "--words", "dry run only", "--by", "dryrun.ts", "--source", "R1a keyless dry run"];
 for (const r of RUNS) check("line item " + r.item + " records its cap of $" + capOf(r.item), (await ledger("record " + r.item, ["init", "--item", r.item, "--cap", String(capOf(r.item)), ...APPROVE])).code === 0);
 const local = openLocalLedger(ledgerPath(undefined, lenv));
-const st = (item: string) => ledgerStatus(REC, item)[0];
+const itemState = (item: string) => ledgerStatus(REC, item)[0];
 const warned: string[] = [];
 let calls = 0;
 const spend = async (lease: { lease_id: string; run_id: string }, model: string, micros: number) => {
@@ -267,39 +267,39 @@ const codeOf = (f: () => unknown) => {
 };
 const runIds: Record<string, string> = {}, firstLease: Record<string, { lease_id: string; run_id: string }> = {};
 for (const r of RUNS) {
-  const s = st(r.item);
+  const s = itemState(r.item);
   const spendCap = s.cap_micros - s.committed_micros;
   runIds[r.item] = newRunId("review-units");
   const lease = leaseFor(r.item, runIds[r.item]!, "trial", spendCap);
   firstLease[r.item] = lease;
-  await spend(lease, r.models[0]!, RATE[r.models[0]!]!);
+  await spend(lease, r.models[0]!, PRICE[r.models[0]!]!);
   const killed = r.item === FAB.item;
   const close = killed ? null : settleLease(REC, local, lease.lease_id);
-  say(r.run + ": run id " + runIds[r.item] + ", minted as review-units mints it (cli.ts:280), leases " + r.item + " for " + dollars(spendCap) + ", its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters " + dollars(RATE[r.models[0]!]!) + "; " + (close ? "settled at " + dollars(close.spent_micros) + " spent" : "left open, as a killed controller leaves it"));
+  say(r.run + ": run id " + runIds[r.item] + ", minted as review-units mints it (cli.ts:280), leases " + r.item + " for " + dollars(spendCap) + ", its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters " + dollars(PRICE[r.models[0]!]!) + "; " + (close ? "settled at " + dollars(close.spent_micros) + " spent" : "left open, as a killed controller leaves it"));
 }
-check("each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone", RUNS.every((r) => st(r.item).run_id === runIds[r.item]) && [PILOT, HEAD, REAL].every((r) => st(r.item).committed_micros === RATE[r.models[0]!] && !st(r.item).open_lease));
+check("each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone", RUNS.every((r) => itemState(r.item).run_id === runIds[r.item]) && [PILOT, HEAD, REAL].every((r) => itemState(r.item).committed_micros === PRICE[r.models[0]!] && !itemState(r.item).open_lease));
 check("each lease on a warn item without an admission record warns RIG_UNPROVEN and is not refused", warned.length === 4 && warned.every((c) => c === "RIG_UNPROVEN"));
 const second = codeOf(() => leaseFor(PILOT.item, newRunId("review-units"), "trial"));
 say("a second review-units run on " + PILOT.item + ": " + second);
 check("an item refuses a second run id with E_ITEM_BOUND, which is why each run has its own item", second === "E_ITEM_BOUND");
-const hs = st(HEAD.item);
+const hs = itemState(HEAD.item);
 const resumeCap = hs.cap_micros - hs.committed_micros;
 const resumed = leaseFor(HEAD.item, runIds[HEAD.item]!, "trial", resumeCap);
 settleLease(REC, local, resumed.lease_id);
 say("the headline's one resume: same run id (review-units keeps it in run.json, cli.ts:280), lease for " + dollars(resumeCap));
-check("a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend", resumeCap === capOf(HEAD.item) * 1e6 - RATE[OPUS]! && st(HEAD.item).leases === 2 && !st(HEAD.item).open_lease);
+check("a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend", resumeCap === capOf(HEAD.item) * 1e6 - PRICE[OPUS]! && itemState(HEAD.item).leases === 2 && !itemState(HEAD.item).open_lease);
 const blocked = codeOf(() => leaseFor(FAB.item, runIds[FAB.item]!, "trial"));
 say("the Fable run's resume while the killed controller's lease is open: " + blocked);
 check("after a killed controller its lease stays open, and the resume's lease is refused with E_LEASE_UNSETTLED", blocked === "E_LEASE_UNSETTLED");
 const settled = await ledger("settle the killed controller's lease on its own machine, before the resume", ["settle", "--lease", firstLease[FAB.item]!.lease_id]);
-const fs = st(FAB.item);
+const fs = itemState(FAB.item);
 const fableResume = leaseFor(FAB.item, runIds[FAB.item]!, "trial", fs.cap_micros - fs.committed_micros);
 settleLease(REC, local, fableResume.lease_id);
-check("once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id", settled.code === 0 && fs.committed_micros === RATE[FABLE] && st(FAB.item).leases === 2 && !st(FAB.item).open_lease);
-let judged = 0;
+check("once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id", settled.code === 0 && fs.committed_micros === PRICE[FABLE] && itemState(FAB.item).leases === 2 && !itemState(FAB.item).open_lease);
+let judgeSpent = 0;
 const judgeCaps: number[] = [];
 for (const [item, cost] of [["planning-r1a-judge-pilot-match", 3_250_000], ["planning-r1a-judge-pilot-adjudicate", 1_100_000]] as const) {
-  const cap = JUDGE_ENVELOPE * 1_000_000 - judged;
+  const cap = JUDGE_ENVELOPE * 1_000_000 - judgeSpent;
   judgeCaps.push(cap);
   await ledger("record " + item + " at $95 less the settled spend of every earlier R1a judge item", ["init", "--item", item, "--cap", String(cap / 1e6), ...APPROVE]);
   const jid = "judge-" + randomBytes(6).toString("hex");
@@ -309,9 +309,9 @@ for (const [item, cost] of [["planning-r1a-judge-pilot-match", 3_250_000], ["pla
   say(item + ": judge-run's run id " + jid + " (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters " + dollars(cost) + "; settled at " + dollars(jc.spent_micros));
   const again = codeOf(() => leaseFor(item, "judge-" + randomBytes(6).toString("hex"), "direct"));
   check(item + " refuses a second judge-run call with " + again + ", so each judge-run call takes its own judge item", again === "E_ITEM_BOUND");
-  judged += st(item).committed_micros;
+  judgeSpent += itemState(item).committed_micros;
 }
-check("judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope (" + judgeCaps.map(dollars).join(", then ") + "; " + dollars(judged) + " spent)", judgeCaps[1] === JUDGE_ENVELOPE * 1e6 - 3_250_000 && judged <= JUDGE_ENVELOPE * 1e6);
+check("judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope (" + judgeCaps.map(dollars).join(", then ") + "; " + dollars(judgeSpent) + " spent)", judgeCaps[1] === JUDGE_ENVELOPE * 1e6 - 3_250_000 && judgeSpent <= JUDGE_ENVELOPE * 1e6);
 await ledger("every line item on the temporary record", ["status"]);
 local.close();
 check("the four run items hold $2,705 and the judge envelope $95: $2,800, the cap", RUNS.reduce((s, r) => s + capOf(r.item), 0) === SESSIONS_CAP && SESSIONS_CAP + JUDGE_ENVELOPE === 2800);
@@ -606,9 +606,9 @@ check("a gap with no run directory is refused before anything changes (no backup
 const parent = join(OUT, "scorer-parent");
 const wt = spawnSync("git", ["-C", scorer, "worktree", "add", "--detach", parent, "e305ed087b3f17bd211287b0e2d5e3f3960b5a4f~1"], { encoding: "utf8" });
 const pd = killedRun("pin");
-const pr = refill(pd, "a scorer checkout at e305ed0's first parent", { scorer: parent });
+const pinRun = refill(pd, "a scorer checkout at e305ed0's first parent", { scorer: parent });
 spawnSync("git", ["-C", scorer, "worktree", "remove", "--force", parent]);
-check("a scorer checkout not at e305ed0 is refused before anything changes", wt.status === 0 && pr.status === 2 && /, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f;/.test(pr.stderr) && untouched(pd));
+check("a scorer checkout not at e305ed0 is refused before anything changes", wt.status === 0 && pinRun.status === 2 && /, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f;/.test(pinRun.stderr) && untouched(pd));
 
 say("\n## Leak check");
 const text = lines.join("\n");
