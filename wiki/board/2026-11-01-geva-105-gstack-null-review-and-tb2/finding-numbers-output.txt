@@ -1,0 +1,59 @@
+== TB2 (stacks round 1, 37 graded tasks, 3 replicates)
+trials 1443
+| model | arm | pass | rate | spend USD | USD/trial | USD/success | body loaded | DEBUG REPORT | gstack helper run | Skill, Agent or AskUserQuestion calls | first-request prompt tokens (median) |
+| claude-opus-5-5 | none | 90/111 | 81.1% | 16.12 | 0.145 | 0.179 | 0/111 | 0/111 | 0/111 | 0 | 20557 |
+| claude-opus-5-5 | gstack | 93/111 | 83.8% | 30.50 | 0.275 | 0.328 | 111/111 | 0/111 | 6/111 | 0 | 34243 |
+  claude-opus-5-5: gstack/none spend ratio 1.89
+| claude-haiku-5-5 | none | 84/111 | 75.7% | 0.98 | 0.009 | 0.012 | 0/111 | 0/111 | 0/111 | 0 | 20560 |
+| claude-haiku-5-5 | gstack | 85/111 | 76.6% | 1.50 | 0.014 | 0.018 | 111/111 | 0/111 | 0/111 | 0 | 34246 |
+| claude-haiku-5-5 | placebo | 79/111 | 71.2% | 1.49 | 0.013 | 0.019 | 111/111 | 0/111 | 0/111 | 0 | 34504 |
+  claude-haiku-5-5: gstack/none spend ratio 1.53
+| particle-1 | none | 92/111 | 82.9% | 8.04 | 0.072 | 0.087 | 0/111 | 0/111 | 0/111 | 0 | 57905 |
+| particle-1 | gstack | 86/111 | 77.5% | 9.01 | 0.081 | 0.105 | 111/111 | 17/111 | 47/111 | 0 | 93459 |
+| particle-1 | placebo | 81/111 | 73.0% | 9.76 | 0.088 | 0.121 | 111/111 | 0/111 | 0/111 | 0 | 105464 |
+  particle-1: gstack/none spend ratio 1.12
+  claude-opus-5-5 gstack - none: 37 tasks, +2.7 pp, paired task-level SE 3.3, MDD at 80% power (2.8 SE) 9.1 pp; none at 3/3 on 28 tasks and 0/3 on 5; none fails 21 of 111, 9 of them on tasks some arm of this model solved (8.1 pp of attainable headroom)
+  claude-haiku-5-5 gstack - none: 37 tasks, +0.9 pp, paired task-level SE 4.2, MDD at 80% power (2.8 SE) 11.7 pp; none at 3/3 on 25 tasks and 0/3 on 6; none fails 27 of 111, 21 of them on tasks some arm of this model solved (18.9 pp of attainable headroom)
+  claude-haiku-5-5 gstack - placebo: 37 tasks, +5.4 pp, paired task-level SE 4.0, MDD at 80% power (2.8 SE) 11.2 pp
+  claude-haiku-5-5 placebo - none: 37 tasks, -4.5 pp, paired task-level SE 4.1, MDD at 80% power (2.8 SE) 11.5 pp
+  particle-1 gstack - none: 37 tasks, -5.4 pp, paired task-level SE 3.8, MDD at 80% power (2.8 SE) 10.6 pp; none at 3/3 on 27 tasks and 0/3 on 3; none fails 19 of 111, 16 of them on tasks some arm of this model solved (14.4 pp of attainable headroom)
+  particle-1 gstack - placebo: 37 tasks, +4.5 pp, paired task-level SE 3.9, MDD at 80% power (2.8 SE) 10.9 pp
+  particle-1 placebo - none: 37 tasks, -9.9 pp, paired task-level SE 4.3, MDD at 80% power (2.8 SE) 11.9 pp
+per replicate pass rates (replicate 1, 2, 3):
+  claude-opus-5-5 none: r1 78.4%, r2x 81.1%, r3 83.8%
+  claude-opus-5-5 gstack: r1 81.1%, r2x 86.5%, r3 83.8%
+  claude-haiku-5-5 none: r1 75.7%, r2x 75.7%, r3 75.7%
+  claude-haiku-5-5 gstack: r1 78.4%, r2x 75.7%, r3 75.7%
+  particle-1 none: r1 83.8%, r2x 86.5%, r3 78.4%
+  particle-1 gstack: r1 70.3%, r2x 89.2%, r3 73.0%
+Opus per-trial mean usage at the proxy's prices {"input": 4, "output": 20, "cache_write_5m": 5, "cache_write_1h": 8, "cache_read": 0.2} (USD per million tokens):
+  none: input_tokens 12, output_tokens 3389, cache_creation_input_tokens 9576, cache_creation_1h_input_tokens 0, cache_read_input_tokens 147465; priced USD 0.145 a trial
+  gstack: input_tokens 15, output_tokens 4563, cache_creation_input_tokens 25555, cache_creation_1h_input_tokens 0, cache_read_input_tokens 278531; priced USD 0.275 a trial
+  gstack's extra cost a trial USD 0.130: input_tokens 0%, output_tokens 18%, cache_creation_input_tokens 62%, cache_read_input_tokens 20%
+fit tasks (debugging or fix-a-broken-thing): custom-memory-heap-crash, overfull-hbox, fix-code-vulnerability, fix-git, db-wal-recovery
+  claude-opus-5-5: none 15/15; gstack 14/15
+  claude-haiku-5-5: none 14/15; gstack 12/15
+  particle-1: none 14/15; gstack 15/15
+  proxy total r1-haiku: USD 2.68
+  proxy total r1-opus: USD 26.13
+  proxy total r1-particle-b: USD 15.40
+  proxy total r2-haiku-b: USD 0.00
+  proxy total r2-opus: USD 19.95
+  proxy total r2-particle: USD 4.71
+  proxy total r2x-haiku: USD 2.12
+  proxy total r2x-opus-b: USD 24.24
+  proxy total r2x-particle: USD 18.16
+  proxy total r3-haiku: USD 2.20
+  proxy total r3-opus: USD 24.98
+  proxy total r3-particle: USD 15.73
+  analysed batches USD 131.63; lost replicate 2 USD 24.66; pilot ledger settled USD 9.07; total USD 165.36
+
+== Review (stacks round 1, Opus 5.5, 33 units, two passes)
+  blocking recall: 26 PR clusters, 84 blocker-passes; gstack 8/84 (9.5%), none 6/84 (7.1%); delta +2.4 pp; cluster-robust SE 4.5; MDD at 80% power 12.6 pp
+  any-severity recall: 26 PR clusters, 84 blocker-passes; gstack 24/84 (28.6%), none 20/84 (23.8%); delta +4.8 pp; cluster-robust SE 5.8; MDD at 80% power 16.2 pp
+  gstack-opus per blocking blocker-pass: found and labeled blocking 8, found and labeled non-blocking 16, missed 60
+  none-opus per blocking blocker-pass: found and labeled blocking 6, found and labeled non-blocking 14, missed 64
+  gstack-opus: USD 66.99 over 66 unit-passes, 1.76M tokens a unit-pass
+  none-opus: USD 45.51 over 66 unit-passes, 1.05M tokens a unit-pass
+  gstack: 66 sessions; first-request context median 60027 (min 59902, max 67517); sessions with an Agent call 0/66; sessions that ran a gstack helper 0/66
+  none: 66 sessions; first-request context median 34415 (min 34290, max 41905); sessions with an Agent call 0/66; sessions that ran a gstack helper 1/66

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="360" viewBox="0 0 900 360" font-family="Helvetica, Arial, sans-serif" font-size="14">
+<rect width="100%" height="100%" fill="white"/>
+<text x="20" y="28" font-size="17" font-weight="bold">gstack minus no gstack, points, with 95% intervals</text>
+<text x="20" y="50" fill="#555">Dot: estimate. Bar: 95% interval. Tick: smallest gain the test could see (80% power).</text>
+<text x="740" y="62" fill="#555">none / cost</text>
+<line x1="300.0" y1="70" x2="300.0" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="300.0" y="310" text-anchor="middle" fill="#555">-20</text>
+<line x1="353.8" y1="70" x2="353.8" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="353.8" y="310" text-anchor="middle" fill="#555">-15</text>
+<line x1="407.5" y1="70" x2="407.5" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="407.5" y="310" text-anchor="middle" fill="#555">-10</text>
+<line x1="461.2" y1="70" x2="461.2" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="461.2" y="310" text-anchor="middle" fill="#555">-5</text>
+<line x1="515.0" y1="70" x2="515.0" y2="290" stroke="#222" stroke-width="1.5"/>
+<text x="515.0" y="310" text-anchor="middle" fill="#555">0</text>
+<line x1="568.8" y1="70" x2="568.8" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="568.8" y="310" text-anchor="middle" fill="#555">+5</text>
+<line x1="622.5" y1="70" x2="622.5" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="622.5" y="310" text-anchor="middle" fill="#555">+10</text>
+<line x1="676.2" y1="70" x2="676.2" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="676.2" y="310" text-anchor="middle" fill="#555">+15</text>
+<line x1="730.0" y1="70" x2="730.0" y2="290" stroke="#ddd" stroke-width="1"/>
+<text x="730.0" y="310" text-anchor="middle" fill="#555">+20</text>
+<text x="20" y="102.5">TB2, Opus 5.5</text>
+<line x1="482.8" y1="97.5" x2="611.8" y2="97.5" stroke="#1f4e79" stroke-width="3"/>
+<circle cx="547.2" cy="97.5" r="6" fill="#1f4e79"/>
+<line x1="612.8" y1="85.5" x2="612.8" y2="109.5" stroke="#c0504d" stroke-width="2" stroke-dasharray="3,2"/>
+<text x="740" y="102.5">81.1% / 1.89x</text>
+<text x="20" y="157.5">TB2, Haiku 5.5</text>
+<line x1="439.8" y1="152.5" x2="611.8" y2="152.5" stroke="#1f4e79" stroke-width="3"/>
+<circle cx="525.8" cy="152.5" r="6" fill="#1f4e79"/>
+<line x1="640.8" y1="140.5" x2="640.8" y2="164.5" stroke="#c0504d" stroke-width="2" stroke-dasharray="3,2"/>
+<text x="740" y="157.5">75.7% / 1.53x</text>
+<text x="20" y="212.5">TB2, particle-1</text>
+<line x1="364.5" y1="207.5" x2="525.8" y2="207.5" stroke="#1f4e79" stroke-width="3"/>
+<circle cx="461.2" cy="207.5" r="6" fill="#1f4e79"/>
+<line x1="629.0" y1="195.5" x2="629.0" y2="219.5" stroke="#c0504d" stroke-width="2" stroke-dasharray="3,2"/>
+<text x="740" y="212.5">82.9% / 1.12x</text>
+<text x="20" y="267.5">Review, Opus 5.5 (blocking recall)</text>
+<line x1="446.2" y1="262.5" x2="634.3" y2="262.5" stroke="#1f4e79" stroke-width="3"/>
+<circle cx="540.8" cy="262.5" r="6" fill="#1f4e79"/>
+<line x1="650.5" y1="250.5" x2="650.5" y2="274.5" stroke="#c0504d" stroke-width="2" stroke-dasharray="3,2"/>
+<text x="740" y="267.5">7.1% / 1.47x</text>
+<text x="20" y="348" fill="#555">Exploratory, stacks round 1 (gstack-evals #108, #109). none: the no-gstack pass rate or recall. cost: gstack spend over none spend.</text>
+</svg>
