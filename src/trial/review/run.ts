@@ -337,7 +337,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const outcome = label(e.parse);
         counts[outcome]!++;
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
-        if (plan && (outcome === "malformed" || outcome === "missing" || (outcome === "incomplete" && (e.record.termination.kind === "timeout" || e.record.termination.kind === "arm_failure")))) diagnostics.push(note + "; scored as finding nothing");
+        if (plan && (outcome === "malformed" || outcome === "missing" || (outcome === "incomplete" && (e.record.termination.kind === "timeout" || (e.record.termination.kind === "arm_failure" && e.record.turns.length > 0))))) diagnostics.push(note + "; scored as finding nothing");
         else if (outcome === "malformed" || outcome === "incomplete") gaps.push(note);
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (plan) {

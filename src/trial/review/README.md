@@ -88,7 +88,7 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
   cell tree records it), the run refuses a cell that keeps one, the slot admits only the driver model and arm.json lists
   the driver alone.
 - The parser reads the last `plan-findings` block in any assistant turn. A malformed, missing or incomplete (timed out, or
-  ended by the arm's own failure) pass is scored as finding nothing and listed in arm.json `diagnostics`. A session that ended any other way (a provider
-  failure, rejected credentials, an infra incident, an unknown send, or no assistant turn) is a coverage gap that stops
+  ended by the arm's own failure after model output) pass is scored as finding nothing and listed in arm.json `diagnostics`. A session that ended any other way (a provider
+  failure, a crash before any model output, rejected credentials, an infra incident, an unknown send, or no assistant turn) is a coverage gap that stops
   the arm, as are a cell not run and a cap stop.
 - Each session's CEO review mode, from gstack's mode handoff line, goes to modes.tsv and arm.json `ceo_modes`.
