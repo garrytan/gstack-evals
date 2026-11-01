@@ -25,9 +25,10 @@ git -C "$OUT/gstack-render-src" fetch -q --depth 1 "$GSTACK_REPO" "$GSTACK_SHA"
 git -C "$OUT/gstack-render-src" checkout -q FETCH_HEAD
 test "$(git -C "$OUT/gstack-render-src" rev-parse HEAD)" = "$GSTACK_SHA"
 # A fetched pack's bytes drift with the server (stacks-2's pack did not rebuild byte for byte), so the arm keeps .git
-# but repacks it single-threaded, which is byte-stable for the same objects and git version, and drops FETCH_HEAD,
-# which names the fetch URL. The Dockerfile already drops the reflog and rebuilds the index without stat data.
-git -C "$OUT/gstack-render-src" -c pack.threads=1 repack -a -d -f -q
+# but repacks it single-threaded with no object or delta reuse (-F), which gives the same pack from any fetched pack of
+# the same objects with the same git version, writes no server info (-n), and drops FETCH_HEAD, which names the fetch
+# URL. The Dockerfile already drops the reflog and rebuilds the index without stat data.
+git -C "$OUT/gstack-render-src" -c pack.threads=1 repack -a -d -F -n -q
 rm -f "$OUT/gstack-render-src/.git/FETCH_HEAD"
 PACK_GIT=$(git --version | cut -d' ' -f3)
 
