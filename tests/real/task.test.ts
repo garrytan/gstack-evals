@@ -7,7 +7,8 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, sy
 import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
-import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
+import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, regressionDigest, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
+import { requiredTests, RUN_STARTED, runInfra } from "../../lanes/real-outcome/task/verify.ts";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { isProtectedPath } from "../../lanes/real-outcome/mine/paths.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
@@ -249,6 +250,48 @@ describe("prepare.sh on a host tree", () => {
     expect(existsSync(join(out, ".venv/lib/x.pth"))).toBe(true);
     expect(readFileSync(join(out, ".real-verifier-config.toml"), "utf8")).toBe("[tool.pytest.ini_options]\n");
     expect(readFileSync(join(root, "status/deleted.txt"), "utf8").split("\n").filter(Boolean).sort()).toEqual(["calc/test_extra.py", "conftest.py", "sitecustomize.py", "tests/conftest.py", "tests/sub2"]);
+  });
+});
+
+describe("what a grader grades", () => {
+  test("verify refuses a regression list check did not freeze, or one changed since, before any Docker call", async () => {
+    const dir = join(tmp.dir, "out/unfrozen");
+    cpSync(join(tmp.dir, "out/k1"), dir, { recursive: true });
+    const t = readTask(dir);
+    expect(t.tests.regression_scope).toEqual(["tests/test_ops.py"]);
+    expect(code(() => requiredTests(t))).toBe("E_REAL_TASK_FORMAT");
+    writeFileSync(join(tmp.dir, "any.patch"), "");
+    const err: string[] = [];
+    const error = console.error;
+    console.error = (s: string) => void err.push(String(s));
+    try {
+      expect(await real(["task", "verify", dir, "--patch", join(tmp.dir, "any.patch")])).toBe(2);
+    } finally {
+      console.error = error;
+    }
+    expect(err.join("\n")).toMatch(/^E_REAL_TASK_FORMAT fx-calc-k1: tests\.regression is not frozen/m);
+    const regression = ["tests/test_ops.py::test_add", "tests/test_ops.py::test_sub"];
+    const core = [...t.tests.functional, ...t.tests.escaped_defect];
+    t.tests.regression = regression;
+    t.tests.regression_frozen = regressionDigest(t);
+    saveTask(dir, t);
+    expect(requiredTests(readTask(dir))).toEqual([...core, ...regression]);
+    expect(code(() => requiredTests({ ...t, tests: { ...t.tests, regression_scope: ["tests/test_ops.py", "tests/test_percent.py"] } }))).toBe("E_REAL_TASK_FORMAT");
+    expect(requiredTests({ ...t, tests: { ...t.tests, regression_scope: [], regression_frozen: null } })).toEqual([...core, ...regression]);
+    const edited = readTask(dir);
+    edited.tests.regression = regression.slice(1);
+    saveTask(dir, edited);
+    expect(code(() => requiredTests(readTask(dir)))).toBe("E_REAL_TASK_FORMAT");
+  });
+
+  test("a run the verifier never started has no verdict; once it started, every outcome is the tree's", () => {
+    expect(runInfra({ status: 125, stdout: "", timed_out: false })).toBe("the verifier never started (docker exited 125)");
+    expect(runInfra({ status: 127, stdout: "", timed_out: false })).toBe("the verifier never started (docker exited 127)");
+    expect(runInfra({ status: 1, stdout: "", timed_out: false })).toBe("the verifier never started (docker exited 1)");
+    expect(runInfra({ status: 126, stdout: RUN_STARTED + "\n", timed_out: false })).toBeNull();
+    expect(runInfra({ status: 1, stdout: "a plugin banner\n" + RUN_STARTED + "\n1 failed\n", timed_out: false })).toBeNull();
+    expect(runInfra({ status: 137, stdout: "", timed_out: true })).toBeNull();
+    expect(readFileSync(join(VERIFIER_DIR, "vrun.py"), "utf8")).toContain('    print("' + RUN_STARTED + '", flush=True)\n');
   });
 });
 

@@ -9,10 +9,14 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docker } from "./docker.ts";
-import { TaskError, targetOf, type TaskJson } from "./format.ts";
+import { regressionFrozen, TaskError, targetOf, type TaskJson } from "./format.ts";
 import { parseGoTest, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
 
 export const RUN_UID = "10001:10001";
+
+/** The line each run prints on stdout before any code from the tree can run: vrun.py at its runner event, the Go
+ * command before go test. Code from the tree can only add to stdout after it, never take it back. */
+export const RUN_STARTED = "real-verifier: started";
 
 export interface RunRecord {
   seed: number;
@@ -42,6 +46,23 @@ export interface VerifyOptions {
   work: string;
   releaseEdits?: boolean;
   cpus?: number;
+}
+
+/** Why a run has no verdict for the tree, or null when it has one. A run that never printed RUN_STARTED was never
+ * graded: Docker could not start the container (exit 125 to 127), or vrun.py stopped before its runner event. After
+ * RUN_STARTED, code from the tree runs as the same user and can write /out and pick its own exit status, so every exit
+ * status, crash, missing record or missing /out/exit is the tree's outcome, and so is a timeout. */
+export function runInfra(res: { status: number; stdout: string; timed_out: boolean }): string | null {
+  if (res.timed_out || res.stdout.split("\n").includes(RUN_STARTED)) return null;
+  return "the verifier never started (docker exited " + res.status + ")";
+}
+
+/** The ids a tree must pass: functional, escaped_defect and the frozen regression list. Refuses a task whose
+ * regression list check --freeze-regression did not derive from regression_scope, or that changed since, so a grader
+ * never drops the regression tests. */
+export function requiredTests(t: TaskJson): string[] {
+  if (!regressionFrozen(t)) throw new TaskError("E_REAL_TASK_FORMAT", t.id + ": tests.regression is not frozen from regression_scope, or changed since; run gstack-evals real task check --freeze-regression before grading");
+  return [...t.tests.functional, ...t.tests.escaped_defect, ...t.tests.regression];
 }
 
 /** Where prepare.sh puts gold's pytest config in the tree, keeping the suffix pytest reads its format from. */
@@ -102,9 +123,11 @@ export function verifyTree(o: VerifyOptions): TreeResult {
       const cmd =
         r.kind === "pytest"
           ? [...base, "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "PYTHONPYCACHEPREFIX=/tmp/pycache", "--entrypoint", r.python, o.image, "-s", "/verifier/vrun.py", "/out/record.jsonl", "/testbed/" + configName(r.config), "/out/targets.txt", String(seed)]
-          : [...base, "-e", "GOFLAGS=-mod=readonly", "-e", "GOPROXY=off", "-e", "GOTOOLCHAIN=local", "-e", "GOCACHE=/tmp/gocache", "-e", "GOTMPDIR=/tmp", "--entrypoint", "sh", o.image, "-c", 'go test -json -count=1 -shuffle=' + seed + ' $(sed "s|^|./|" /out/targets.txt) > /out/record.jsonl 2> /out/stderr.txt; echo $? > /out/exit'];
+          : [...base, "-e", "GOFLAGS=-mod=readonly", "-e", "GOPROXY=off", "-e", "GOTOOLCHAIN=local", "-e", "GOCACHE=/tmp/gocache", "-e", "GOTMPDIR=/tmp", "--entrypoint", "sh", o.image, "-c", 'echo "' + RUN_STARTED + '"; go test -json -count=1 -shuffle=' + seed + ' $(sed "s|^|./|" /out/targets.txt) > /out/record.jsonl 2> /out/stderr.txt; echo $? > /out/exit'];
       const res = docker(cmd, { timeoutMs: limits.verifier_sec * 1000 });
       if (res.timed_out) docker(["kill", name]);
+      const infra = runInfra(res);
+      if (infra) throw new TaskError("E_REAL_TASK_DOCKER", o.label + ": run " + (i + 1) + " of " + o.runs + " has no verdict: " + infra + ": " + res.stderr.trim().slice(0, 400));
       const record = existsSync(join(out, "record.jsonl")) ? readFileSync(join(out, "record.jsonl"), "utf8") : "";
       const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, existsSync(join(out, "stderr.txt")) ? readFileSync(join(out, "stderr.txt"), "utf8") : "", r.module);
       runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, exit: r.kind === "pytest" ? res.status : Number(readLines(join(out, "exit"))[0] ?? res.status), parsed });

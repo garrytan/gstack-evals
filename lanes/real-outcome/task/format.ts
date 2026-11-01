@@ -60,6 +60,8 @@ export interface TaskJson {
     /** Test files (pytest) or package dirs (go) whose tests passing at base and gold become regression tests. */
     regression_scope: string[];
     quarantine: string[];
+    /** sha256 over regression_scope, regression and quarantine, written by check --freeze-regression. */
+    regression_frozen?: string | null;
   };
   /** Restored test files that are new at gold: absent from the agent image. */
   new_test_files: string[];
@@ -223,6 +225,13 @@ export const targetOf = (id: string): string => id.split("::")[0];
 
 /** A test id the task may list: <file>.py::<name> for pytest, <package dir>::<TopLevelTest> for Go (no subtests). */
 export const validTestId = (runner: "pytest" | "go", id: string): boolean => (runner === "go" ? /^[^:]+::Test[A-Za-z0-9_]*$/ : /^[^:]+\.py::\S+$/).test(id);
+
+/** sha256 over the regression scope and the regression and quarantine lists check derived from it. */
+export const regressionDigest = (t: TaskJson): string => sha256(JSON.stringify([t.tests.regression_scope, t.tests.regression, t.tests.quarantine]));
+
+/** Whether tests.regression is the list check --freeze-regression derived from regression_scope, unchanged since. A task
+ * with no regression_scope has nothing to derive. */
+export const regressionFrozen = (t: TaskJson): boolean => t.tests.regression_scope.length === 0 || t.tests.regression_frozen === regressionDigest(t);
 
 /** Static checks, no Docker: structure, digests, generated files, verifier scripts, ids, statement, licence, install. */
 export function readTask(dir: string): TaskJson {

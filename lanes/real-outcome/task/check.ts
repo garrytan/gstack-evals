@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { docker } from "./docker.ts";
-import { detectLicence, installProblem, keysInEnv, readTask, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
+import { detectLicence, installProblem, keysInEnv, readTask, regressionFrozen, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
 import { resultFor, type TestResult } from "./record.ts";
 import { allPass, idResults, verifyTree, type TreeResult } from "./verify.ts";
 
@@ -23,6 +23,8 @@ export interface CheckResult {
   verdict: "valid" | "invalid";
   rules: Rule[];
   derived: { regression: string[]; quarantine: string[] };
+  /** Whether task.json already holds the frozen regression list; verify refuses the task until it does. */
+  regression_frozen: boolean;
   trees: { label: string; prepare: TreeResult["prepare"]; runs: { seed: number; wall_ms: number; timed_out: boolean; exit: number; results: Record<string, TestResult> }[] }[];
 }
 
@@ -137,7 +139,7 @@ export function checkTask(o: CheckOptions): CheckResult {
   const core = [...functional, ...escaped];
   let regression = t.tests.regression;
   let quarantine = t.tests.quarantine;
-  if (regression.length === 0 && t.tests.regression_scope.length > 0) {
+  if (!regressionFrozen(t)) {
     const ids = new Set([...start.runs, ...gold.runs].flatMap((r) => Object.keys(r.parsed.results)).filter((id) => !id.startsWith("collect:") && !core.includes(id) && validTestId(t.runner.kind, id)));
     const passStart = (id: string) => idResults(start, id).every((r) => r.status === "pass");
     const goldPasses = (id: string) => idResults(gold, id).filter((r) => r.status === "pass").length;
@@ -207,6 +209,7 @@ export function checkTask(o: CheckOptions): CheckResult {
     verdict: rules.every((r) => r.pass) ? "valid" : "invalid",
     rules,
     derived: { regression, quarantine },
+    regression_frozen: regressionFrozen(t),
     trees: trees.map((tr) => ({ label: tr.label, prepare: tr.prepare, runs: tr.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, exit: r.exit, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) })),
   };
 }

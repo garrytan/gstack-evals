@@ -3,15 +3,17 @@
 // on Go 1.23 and 1.25), a task that breaks V2, a planted leak, and the verifier's negative fixtures: skip markers,
 // conftest hooks, symlinked tests, a swapped runner, a plugin in the tree, an exit at import or inside a test,
 // agent-side config, an early TestMain, a weakened helper, a go.mod edit and a patch that does not apply, none of
-// which passes a hidden test it should fail, beside honest fixes that pass. Keyless: no model call; the images install pinned, hashed packages at build time.
+// which passes a hidden test it should fail, beside honest fixes that pass. Also: the regression list grades only once
+// frozen, and a run the verifier never started has no verdict. Keyless: no model call; the images install pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { appendFileSync, cpSync } from "node:fs";
 import { join } from "node:path";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { buildImage, checkTask, type CheckResult } from "../../lanes/real-outcome/task/check.ts";
+import { main as task } from "../../lanes/real-outcome/task/cli.ts";
 import { readTask, type TaskJson } from "../../lanes/real-outcome/task/format.ts";
 import { resultFor } from "../../lanes/real-outcome/task/record.ts";
-import { allPass, verifyTree } from "../../lanes/real-outcome/task/verify.ts";
+import { allPass, requiredTests, verifyTree } from "../../lanes/real-outcome/task/verify.ts";
 import { buildRepo, calcCommits, calcSpecs, CLAMP_2, clampyRepo, FMT_4, GO_IMAGE, GO_IMAGE_125, OPS_4, patchFrom, tempDir, TEST_OPS_4 } from "./fixture.ts";
 
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";
@@ -100,6 +102,40 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(tree.prepare.error).toContain("patch failed");
     expect(tree.runs).toEqual([]);
     expect(allPass(tree, [...k1.tests.functional, ...k1.tests.escaped_defect])).toBe(false);
+  }, LONG);
+
+  test("the regression list grades only once frozen: a fix that breaks a base-passing test then fails", async () => {
+    expect(() => requiredTests(k1)).toThrow("tests.regression is not frozen");
+    const dir = join(tmp.dir, "out/k1-frozen");
+    cpSync(k1Dir, dir, { recursive: true });
+    const out: string[] = [];
+    const log = console.log;
+    console.log = (s: string) => void out.push(String(s));
+    try {
+      expect(await task(["check", dir, "--runs", "2", "--mechanical", "--work", join(tmp.dir, "work-freeze")])).toBe(1);
+      expect(await task(["check", dir, "--runs", "2", "--mechanical", "--freeze-regression", "--work", join(tmp.dir, "work-freeze")])).toBe(0);
+    } finally {
+      console.log = log;
+    }
+    expect(out.join("\n")).toMatch(/^verdict: valid, regression not frozen /m);
+    const frozen = readTask(dir);
+    expect(frozen.tests.regression).toEqual(["tests/test_ops.py::test_add", "tests/test_ops.py::test_div", "tests/test_ops.py::test_mul", "tests/test_ops.py::test_sub"]);
+    const files = { ...intro, "calc/fmt.py": fixed, "calc/ops.py": OPS_4.replace("return a + b", "return a + b + 1") };
+    const tree = verifyTree({ taskDir: dir, task: frozen, image, label: "breaks-add", patch: patchFrom(calc(), sha.c3, files), runs: 1, seed: 7, work: join(tmp.dir, "work-neg") });
+    expect(allPass(tree, [...frozen.tests.functional, ...frozen.tests.escaped_defect])).toBe(true);
+    expect(resultFor(tree.runs[0].parsed, "tests/test_ops.py::test_add")).toMatchObject({ status: "fail", cls: "assert" });
+    expect(allPass(tree, requiredTests(frozen))).toBe(false);
+  }, LONG);
+
+  test("a run the verifier never started has no verdict, and an exit status from the tree stays the tree's", () => {
+    const honest = patchFrom(calc(), sha.c3, { ...intro, "calc/fmt.py": fixed });
+    const run = (label: string, python: string) => () => verifyTree({ taskDir: k1Dir, task: { ...k1, runner: { ...k1.runner, python } as TaskJson["runner"] }, image, label, patch: honest, runs: 1, seed: 7, work: join(tmp.dir, "work-infra") });
+    expect(run("no-entrypoint", "/nonexistent/python")).toThrow(/no-entrypoint: run 1 of 1 has no verdict: the verifier never started \(docker exited 12[5-7]\)/);
+    expect(run("runner-crash", "/bin/false")).toThrow(/runner-crash: run 1 of 1 has no verdict: the verifier never started \(docker exited 1\)/);
+    const forged = grade("exit-126", { ...intro, "calc/fmt.py": "import os\nos._exit(126)\n" + FMT_4 });
+    expect(forged.tree.runs[0].exit).toBe(126);
+    expect(forged.pass).toBe(false);
+    expect(forged.half.status).toBe("missing");
   }, LONG);
 
   test("K4 replay and decoy tasks are valid", () => {

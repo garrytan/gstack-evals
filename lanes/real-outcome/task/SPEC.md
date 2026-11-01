@@ -51,7 +51,7 @@ repo. Only fixture tasks, built from fixture repositories in tests/real/, appear
 | `image` | `from` (`<name>@sha256:<digest>`; readTask refuses any other form) and `apt` packages. The image must be Debian-based and have git |
 | `install` | `lockfile`, `command` and `exclude` (install artifacts to add to .git/info/exclude) |
 | `runner` | `{kind: "pytest", python, config}` or `{kind: "go", module}` |
-| `tests` | `functional`, `escaped_defect`, `regression`, `regression_scope`, `quarantine` (below) |
+| `tests` | `functional`, `escaped_defect`, `regression`, `regression_scope`, `quarantine`, `regression_frozen` (below) |
 | `new_test_files` | Restored test files that don't exist in the starting tree |
 | `limits` | `agent_sec`, `verifier_sec`, `cpus` and `memory` for each verifier run |
 | `audit` | `v4` and `v5`: `{pass, by, at, note}` from the Opus auditor, or null until audited |
@@ -63,7 +63,10 @@ Test ids. pytest: `<file>.py::<name>`, as pytest prints node ids from the reposi
 `<package dir>::<TopLevelTest>`, with `.` for the root package. `functional` are the change's own tests,
 `escaped_defect` the later fix's tests (K1 and K4 replays), and `regression` the tests that pass at base and in every
 gold run. Leave `regression` empty and name `regression_scope` (test files or package dirs); `check
---freeze-regression` derives the list and records gold-flaky tests in `quarantine`.
+--freeze-regression` derives the list, records gold-flaky tests in `quarantine` and writes `regression_frozen`, a
+sha256 over the scope and both lists. Until then, or once any of the three changes, `check` prints `verdict: valid,
+regression not frozen` and exits 1, and `verify` refuses the task with E_REAL_TASK_FORMAT. A grader takes its required
+ids from `requiredTests` in verify.ts, which refuses the same way, so no grade silently drops the regression tests.
 
 ## Trees and gold
 
@@ -108,6 +111,12 @@ shell.
    errors are read from stderr (Go 1.23 and older) or from build-output events (Go 1.24 and newer).
 4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
    only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it.
+5. Each run prints `real-verifier: started` on stdout before any code from the tree can run: vrun.py at its runner
+   event, the Go command before `go test`. A run that never printed it has no verdict, and `verify` and `check` stop
+   with E_REAL_TASK_DOCKER: Docker could not start the container (exit 125 to 127), or vrun.py stopped before its
+   runner event, a swapped runner included. Once the line is out, code from the tree runs as the same user, can write
+   `/out` and can pick its own exit status, so every exit status, crash, missing record or missing `/out/exit` after it
+   is the tree's outcome, as is a timeout. Nothing the tree can touch turns a failure into no verdict.
 
 Failure classes: `assert` (the test body ran and failed), `missing_name` (an attribute, import or symbol that
 doesn't exist) and `load` (collection, import, setup or build failed otherwise).
@@ -119,7 +128,11 @@ diff and transcript.
 Open for B3 and B6: test helpers outside the protected patterns (a Go `internal/testutil` package, a Python
 `testing.py`, modules named by `pytest_plugins` or `-p`) come from the tree, not gold. A gold config that runs xdist
 (`-n`) records no phases, so gold fails V1 and the task drops. The checked image and the graded image are both built
-from the task directory, but their ids are not compared yet.
+from the task directory, but their ids are not compared yet. B3 screening drops repositories that ship their own
+pytest11 plugin and install themselves editable: vrun.py loads entry points while only the image's paths are on
+`sys.path`, so such a plugin fails to load, vrun.py stops before its runner event and the task has no verdict, and
+loading the plugin from the tree would let the tree rewrite reports. A Docker failure after the verifier started
+(the daemon dying mid-run) grades as the tree's, because the host can't tell it from the tree's own doing.
 
 ## Validity rules (`real task check`)
 

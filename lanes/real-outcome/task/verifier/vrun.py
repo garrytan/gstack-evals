@@ -47,6 +47,7 @@ def main():
     plugins = [ep.load() for ep in eps]
     os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     emit(event="runner", pytest=pytest.__version__, path=os.path.realpath(pytest.__file__), plugins=sorted(ep.name for ep in eps))
+    print("real-verifier: started", flush=True)
     sys.path[:] = [REPO] + [p for p in saved if p and os.path.realpath(p) != REPO]
 
     class Recorder:

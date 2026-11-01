@@ -9,9 +9,9 @@ import { parseArgs } from "node:util";
 import { CODES, docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { buildTask, saveTask } from "./build.ts";
 import { buildImage, checkTask } from "./check.ts";
-import { readTask, TaskError } from "./format.ts";
+import { readTask, regressionDigest, TaskError } from "./format.ts";
 import { resultFor } from "./record.ts";
-import { allPass, verifyTree } from "./verify.ts";
+import { allPass, requiredTests, verifyTree } from "./verify.ts";
 
 export const HELP = `Usage: gstack-evals real task <command> [options]
 
@@ -20,12 +20,14 @@ export const HELP = `Usage: gstack-evals real task <command> [options]
       only; refuses an upstream task on a host whose environment holds a credential.
   check <task dir> [--runs <n>] [--seed <n>] [--cpus <n>] [--work <dir>] [--mechanical] [--freeze-regression]
         [--out <check.json>]
-      Build the agent image and run the leak checks and V1 to V9. Exit 0 when the task is valid, 1 when a rule fails
-      (the verdict and each rule print on stdout). --runs sets V1's gold runs (default 10). --mechanical skips V4 and V5's
-      audit records. --freeze-regression writes the derived regression and quarantine lists into task.json.
+      Build the agent image and run the leak checks and V1 to V9. Exit 0 when the task is valid and its regression list
+      is frozen, 1 when a rule fails or the list is not frozen (the verdict and each rule print on stdout). --runs sets
+      V1's gold runs (default 10). --mechanical skips V4 and V5's audit records. --freeze-regression writes the derived
+      regression and quarantine lists and their digest into task.json.
   verify <task dir> --patch <file> [--runs <n>] [--seed <n>] [--work <dir>] [--out <file>]
       Grade one tree under test (a patch against the task's starting tree) with the hidden tests, as the scorer
-      does. Prints each required test's result and whether all passed.
+      does. Prints each required test's result and whether all passed. Refuses a task whose regression list check
+      --freeze-regression did not freeze (E_REAL_TASK_FORMAT), and a run the verifier never started (E_REAL_TASK_DOCKER).
 `;
 
 function fail(code: ReasonCode, message: string): number {
@@ -85,23 +87,25 @@ export async function main(argv: string[]): Promise<number> {
       const result = checkTask({ taskDir: dir, work, runs: num("runs", 10), seed: num("seed", 1), cpus: s("cpus") ? Number(s("cpus")) : undefined, mechanical: v.mechanical === true });
       if (s("out")) writeFileSync(resolve(s("out")!), JSON.stringify(result, null, 2) + "\n");
       for (const r of result.rules) console.log((r.pass ? "PASS " : "FAIL ") + r.rule + ": " + r.detail);
-      console.log("verdict: " + result.verdict + " (" + result.task + ", image " + result.image.tag + ")");
+      const frozen = result.regression_frozen || v["freeze-regression"] === true;
+      console.log("verdict: " + result.verdict + (result.verdict === "valid" && !frozen ? ", regression not frozen (verify refuses the task until check --freeze-regression writes the list)" : "") + " (" + result.task + ", image " + result.image.tag + ")");
       if (result.verdict !== "valid") return 1;
       if (v["freeze-regression"]) {
         const t = readTask(dir);
         t.tests.regression = result.derived.regression;
         t.tests.quarantine = result.derived.quarantine;
+        t.tests.regression_frozen = regressionDigest(t);
         saveTask(dir, t);
         console.log("froze " + result.derived.regression.length + " regression tests and " + result.derived.quarantine.length + " quarantined ones into task.json");
       }
-      return 0;
+      return frozen ? 0 : 1;
     }
     if (cmd === "verify") {
       if (!s("patch")) return fail("E_USAGE", "verify needs --patch");
       const t = readTask(dir);
+      const required = requiredTests(t);
       const image = buildImage(dir, t);
       const tree = verifyTree({ taskDir: dir, task: t, image: image.tag, label: "verify", patch: readFileSync(resolve(s("patch")!), "utf8"), runs: num("runs", 1), seed: num("seed", 1), work });
-      const required = [...t.tests.functional, ...t.tests.escaped_defect, ...t.tests.regression];
       const out = { task: t.id, image: image.tag, prepare: tree.prepare, all_pass: allPass(tree, required), runs: tree.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) };
       if (s("out")) writeFileSync(resolve(s("out")!), JSON.stringify(out, null, 2) + "\n");
       for (const id of required) console.log(id + " " + tree.runs.map((r) => resultFor(r.parsed, id).status).join(","));
