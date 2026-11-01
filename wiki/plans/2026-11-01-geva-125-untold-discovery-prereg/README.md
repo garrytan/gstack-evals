@@ -295,8 +295,8 @@ The 20-point margin stays: it is the smallest lift on one model the plan treats 
 ## 12. What each outcome means for gstack
 
 - **Pooled D2 raised.** Saying when to use a skill gets it opened: gstack should rewrite its skill descriptions that way. The exploratory per-model rows say on which models to look first.
-- **Pooled D2 not raised, D1 near 0 under both descriptions.** Descriptions are not the route for untold skills on these models; untold use needs another route, such as hooks (agenda item 1).
-- **Pooled D3 raised.** Claude Code's own system prompt makes skills more discoverable; later untold runs should use it, and earlier stub-prompt readings understate discovery. **D3 flat:** the stub prompt was not why earlier untold runs saw no opens.
+- **Pooled D2 not raised, D1 near 0 under both descriptions.** No evidence that saying when to use a skill gets untold skills opened on these models. The test cannot rule out a lift smaller than its MDD (4.5 to 7.9 points), so the results post reports the interval and does not claim the effect is absent. Untold use may need another route, such as hooks (agenda item 1).
+- **Pooled D3 raised.** Claude Code's own system prompt makes skills more discoverable; later untold runs should use it, and earlier stub-prompt readings understate discovery. **D3 flat:** no evidence that the stub prompt was why earlier untold runs saw no opens. The test cannot rule out a prompt effect smaller than its MDD (10.7 to 15.3 points), so the results post reports the interval and does not claim the effect is absent.
 - Compliance and benefit after an open are reported but cannot carry a verdict at these counts.
 
 Every null gets one Why-null cycle in the results post (org R48): exposure, task fit, power and floor or ceiling, and what today's frontier model does without the skill, ending in KEEP, FIX-METHOD or CUT-CANDIDATE.
