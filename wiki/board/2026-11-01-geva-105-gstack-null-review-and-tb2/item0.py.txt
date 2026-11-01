@@ -53,76 +53,72 @@ for m in models:
         v = [r for r in rows if r["model"] == m and r["arm"] == a]
         print(f"  {m} {a}: {sum(r['passed'] for r in v)}/{len(v)} passed, {sum(r['timeout'] for r in v)} agent timeouts")
 
-def cell(m, a):
+REPS = ["r1", "r2", "r3"]
+
+def vectors(m, a):
     out = {}
     for r in rows:
-        if r["model"] == m and r["arm"] == a: out[(r["task"], r["rep"])] = r["passed"]
-    return out
+        if r["model"] == m and r["arm"] == a: out.setdefault(r["task"], {})[r["rep"]] = r["passed"]
+    return {t: [v.get(x) for x in REPS] for t, v in out.items()}
 
-def signflip(sums, counts):
-    obs = sum(sums) / sum(counts)
-    nz = [s for s in sums if s != 0]
-    if not nz: return 1.0
-    tot = sum(counts)
-    if len(nz) <= 22:
-        hits = n = 0
-        for signs in itertools.product((1, -1), repeat=len(nz)):
-            n += 1
-            if abs(sum(s * g for s, g in zip(nz, signs))) / tot >= abs(obs) - 1e-12: hits += 1
-        return hits / n
-    rng = random.Random(SEED); hits = 0; N = 100000
-    for _ in range(N):
-        if abs(sum(s if rng.random() < 0.5 else -s for s in nz)) / tot >= abs(obs) - 1e-12: hits += 1
-    return hits / N
+def stat(nv, gv, keep, tasks):
+    """Sum and count of (gstack - none) over included (task, replicate) pairs; keep(t, i, n_vec) decides inclusion."""
+    per = {}
+    for t in tasks:
+        d = [gv[t][i] - nv[t][i] for i in range(3) if nv[t][i] is not None and gv[t][i] is not None and keep(t, i, nv[t])]
+        per[t] = (sum(d), len(d), sum(nv[t][i] for i in range(3) if keep(t, i, nv[t])), sum(gv[t][i] for i in range(3) if keep(t, i, nv[t])))
+    return per
 
-def contrast(label, m, contrib):
-    """contrib: task -> list of (gstack_pass - none_pass) per included (task, replicate), plus the none and gstack passes."""
-    T = sorted(t for t in contrib if contrib[t]["d"])
+def swap_test(nv, gv, keep, tasks, obs):
+    """Permutation test: swap whole-task arm labels and recompute the stratum each time, so selection that uses the none arm is redrawn too."""
+    cand = [t for t in tasks if nv[t] != gv[t]]
+    def value(swapped):
+        a = {t: (gv[t] if t in swapped else nv[t]) for t in tasks}; b = {t: (nv[t] if t in swapped else gv[t]) for t in tasks}
+        per = stat(a, b, keep, tasks); c = sum(v[1] for v in per.values())
+        return sum(v[0] for v in per.values()) / c if c else 0.0
+    if len(cand) <= 16:
+        draws = [value({t for t, bit in zip(cand, bits) if bit}) for bits in itertools.product((0, 1), repeat=len(cand))]
+        kind = f"exact over {len(draws)} assignments"
+    else:
+        rng = random.Random(SEED)
+        draws = [value({t for t in cand if rng.random() < 0.5}) for _ in range(20000)]
+        kind = "20,000 random assignments"
+    return sum(1 for v in draws if abs(v) >= abs(obs) - 1e-12) / len(draws), kind
+
+def contrast(label, nv, gv, keep, tasks):
+    per = stat(nv, gv, keep, tasks)
+    T = [t for t in tasks if per[t][1]]
     if not T:
         print(f"  {label}: no tasks"); return
-    sums = [sum(contrib[t]["d"]) for t in T]; counts = [len(contrib[t]["d"]) for t in T]
-    n_none = sum(sum(contrib[t]["n"]) for t in T); n_g = sum(sum(contrib[t]["g"]) for t in T); N = sum(counts)
-    est = sum(sums) / N
+    sums = [per[t][0] for t in T]; counts = [per[t][1] for t in T]
+    N = sum(counts); est = sum(sums) / N
+    n_none = sum(per[t][2] for t in T); n_g = sum(per[t][3] for t in T)
     rng = random.Random(SEED); boots = []
     for _ in range(B):
         idx = [rng.randrange(len(T)) for _ in T]
-        c = sum(counts[i] for i in idx)
-        boots.append(sum(sums[i] for i in idx) / c)
+        boots.append(sum(sums[i] for i in idx) / sum(counts[i] for i in idx))
     boots.sort(); lo, hi = boots[int(0.025 * B)], boots[int(0.975 * B) - 1]
-    dt = [s / c for s, c in zip(sums, counts)]
-    se = (st.stdev(dt) / math.sqrt(len(dt))) if len(dt) > 1 else float("nan")
-    p = signflip(sums, counts)
+    k = len(T)
+    se = math.sqrt(k / (k - 1) * sum((s - est * c) ** 2 for s, c in zip(sums, counts))) / N if k > 1 else float("nan")
+    p, kind = swap_test(nv, gv, keep, tasks, est)
     nz = sum(1 for x in sums if x != 0)
-    pmin = 2 / 2 ** nz if nz else 1.0
-    print(f"  {label}: {len(T)} tasks, {N} paired trials; none {100*n_none/N:.1f}%, gstack {100*n_g/N:.1f}%; gstack - none {100*est:+.1f} pp [95% CI {100*lo:+.1f}, {100*hi:+.1f}]; {nz} tasks differ; sign-flip p {p:.3f} (smallest reachable {min(pmin, 1.0):.3f}); MDD80 {280*se:.1f} pp")
+    print(f"  {label}: {k} tasks, {N} paired trials; none {100*n_none/N:.1f}%, gstack {100*n_g/N:.1f}%; gstack - none {100*est:+.1f} pp [95% CI {100*lo:+.1f}, {100*hi:+.1f}]; {nz} tasks differ; swap-test p {p:.3f} ({kind}); MDD80 {280*se:.1f} pp (normal approximation, cluster-robust SE)")
 
 for m in models:
-    n, g = cell(m, "none"), cell(m, "gstack")
-    tasks = sorted({t for t, _ in n})
-    reps = ["r1", "r2", "r3"]
+    nv, gv = vectors(m, "none"), vectors(m, "gstack")
+    tasks = sorted(set(nv) & set(gv))
     print(f"\n== {m}: gstack - none by difficulty stratum (paired by task and replicate)")
-    def build(pred):
-        out = {}
-        for t in tasks:
-            out[t] = {"d": [], "n": [], "g": []}
-            for r in reps:
-                if (t, r) in n and (t, r) in g and pred(t, r):
-                    out[t]["d"].append(g[(t, r)] - n[(t, r)]); out[t]["n"].append(n[(t, r)]); out[t]["g"].append(g[(t, r)])
-        return out
-    npass = {t: sum(n[(t, r)] for r in reps if (t, r) in n) for t in tasks}
-    contrast("all tasks", m, build(lambda t, r: True))
-    contrast("A. cross-fit hard (none passed fewer than 2 of the other 2 replicates)", m,
-             build(lambda t, r: sum(n[(t, x)] for x in reps if x != r and (t, x) in n) < 2))
-    contrast("A. cross-fit easy (none passed both other replicates)", m,
-             build(lambda t, r: sum(n[(t, x)] for x in reps if x != r and (t, x) in n) == 2))
-    contrast("B. in-sample hard (none 0 to 2 of 3; biased upward, shown for comparison)", m, build(lambda t, r: npass[t] < 3))
-    contrast("B. in-sample in-band (none 1 or 2 of 3; biased, shown for comparison)", m, build(lambda t, r: 0 < npass[t] < 3))
-    fr = sorted(meta[t]["frontier"] for t in tasks)
-    med = st.median(fr)
-    contrast(f"C. leaderboard hard (published frontier_rate below the median {med:.3f})", m, build(lambda t, r: meta[t]["frontier"] < med))
-    contrast(f"C. leaderboard easy (frontier_rate at or above {med:.3f})", m, build(lambda t, r: meta[t]["frontier"] >= med))
-    contrast("D. TB2 label hard", m, build(lambda t, r: meta[t]["difficulty"] == "hard"))
-    contrast("D. TB2 label easy or medium", m, build(lambda t, r: meta[t]["difficulty"] != "hard"))
+    others = lambda nvec, i: sum(nvec[x] for x in range(3) if x != i and nvec[x] is not None)
+    contrast("all tasks", nv, gv, lambda t, i, v: True, tasks)
+    contrast("A. cross-fit hard (none passed fewer than 2 of the other 2 replicates)", nv, gv, lambda t, i, v: others(v, i) < 2, tasks)
+    contrast("A. cross-fit easy (none passed both other replicates)", nv, gv, lambda t, i, v: others(v, i) == 2, tasks)
+    contrast("B. in-sample hard (none 0 to 2 of 3; biased upward, descriptive)", nv, gv, lambda t, i, v: sum(v) < 3, tasks)
+    contrast("B. in-sample in-band (none 1 or 2 of 3; biased, descriptive)", nv, gv, lambda t, i, v: 0 < sum(v) < 3, tasks)
+    med = st.median(meta[t]["frontier"] for t in tasks)
+    contrast(f"C. leaderboard hard (published frontier_rate below the median {med:.3f})", nv, gv, lambda t, i, v: meta[t]["frontier"] < med, tasks)
+    contrast(f"C. leaderboard easy (frontier_rate at or above {med:.3f})", nv, gv, lambda t, i, v: meta[t]["frontier"] >= med, tasks)
+    contrast("D. TB2 label hard", nv, gv, lambda t, i, v: meta[t]["difficulty"] == "hard", tasks)
+    contrast("D. TB2 label easy or medium", nv, gv, lambda t, i, v: meta[t]["difficulty"] != "hard", tasks)
 
 print("\n== Opus gstack agent timeouts (each task's own agent limit from tasks.json), with the same task's other trials")
 m = "claude-opus-5-5"

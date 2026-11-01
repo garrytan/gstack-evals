@@ -49,7 +49,7 @@ Sections, in order:
 3. A record table (below).
 4. What we found: two or three sentences a non-specialist can follow. For a null: the control rate and the smallest effect the test could have seen.
 5. How it works: what we think is going on, labelled as an explanation, not a result.
-6. Setup: question and estimand; arms (always a no-skill arm, and a length-matched placebo when added text is the treatment); exact model ids and provider routes; harness and version; tasks with count, source, digest and licence; trials per cell; pairing unit; judges with calibration; seeds; dates.
+6. Setup: question and estimand; arms (always a no-skill arm, and a length-matched placebo when added text is the treatment); exact model ids, snapshot dates and provider routes; generation settings; harness and version; tasks with count, source, digest and licence; trials per cell; pairing unit; judges with prompt digests and calibration; seeds; dates. A field the run did not record is named as not recorded.
 7. Result: one chart (arms with 95% intervals, cost beside them) and one table. The preregistered primary comes first, verbatim from the scorer; secondaries and sensitivity readings after, labelled.
 8. Cost: dollars and tokens per arm, per trial and per success, from the metering proxy, with the price table, its date and how cache tokens were counted.
 9. Why null? (R48): required when the primary is null or negative (section 4 below).
@@ -116,6 +116,13 @@ The findings index (org drive research/INDEX.md) lists every finding across the 
 
 Garry posts on X, from finding files the Captains hand him: at most one finding a week once the first repo is public, plus a monthly thread linking the month's files and the registry's new nulls.
 
-### 9. Review depth
+### 9. Gates by PR class
 
-Org R51 (2026-11-01) already sets the lighter gate E1 asked for: docs, tests and eval or research write-ups get one reviewer and one round at /ship, the full panel runs only on code that touches security, user data, money or the merge checks, and no change gets more than two review rounds. Code that moves a scored outcome keeps the full gate.
+E1 took the plan's lighter checked gates for docs and results, tried on three PRs first (section 2.3, C3):
+
+- Results posts and docs: a script recomputes every number from the attachments, plus a light review, cap 15M tokens.
+- Preregistrations: standard depth, one outside voice, and an adversarial read of the frozen numbers before the sealed dry run, cap 35M tokens.
+- Code that moves a scored outcome keeps the full gate, with no pass-count cut line.
+- The pilot runs on the next three docs or results PRs, and post-merge corrections are counted as its guardrail.
+
+Org R51 (2026-11-01) sets review depth meanwhile: docs, tests and eval or research write-ups get one reviewer and one round at /ship, the full panel runs only on code that touches security, user data, money or the merge checks, and no change gets more than two review rounds.
