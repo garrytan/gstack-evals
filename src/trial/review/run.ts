@@ -25,9 +25,12 @@
 //   turns only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the arm, as
 //   is an infra failure (E_INFRA_FAILURE) or any other incomplete session at any point, so the arm gets no verdict.
 //   progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as failed, a gap as
-//   missing.
+//   missing. A record with no model_output flag is a gap whose note says so; plan units run on host claude only, whose
+//   driver records the flag.
+// - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
-//   (E_USAGE), as review-units refuses an in-repo --out.
+//   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
+//   path is refused too. Both checks run before any session.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
@@ -40,7 +43,7 @@ import { armNamespaces, armTree, codexOption, slotModels, type HostRig } from ".
 import type { ContractTask } from "../../skill-eval/contract/tasks.ts";
 import type { Host, TrialRecord } from "../../types.ts";
 import { cacheStale, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../cache.ts";
-import { copyToSink, receiptsSink, sinkOverlapProblem, volatilePathProblem } from "../durable.ts";
+import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatilePathProblem } from "../durable.ts";
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
@@ -174,6 +177,13 @@ export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" 
 
 const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
 
+/** Why a suite's receipts sink would copy held-out material into the repo, or null: a sealed suite, or one whose catalogs resolve under the sealed root, never copies receipts inside it. */
+export function sealedSinkProblem(suite: Pick<ReviewRunInput["suite"], "id" | "sealed" | "sealedCatalogs">, env: Env): string | null {
+  const sink = receiptsSink(env);
+  if (!(suite.sealed || suite.sealedCatalogs) || !("sink" in sink) || !sink.sink || !insideRepo(sink.sink)) return null;
+  return "suite " + suite.id + (suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and the receipts sink " + sink.sink + " (GSTACK_EVALS_RECEIPTS) is inside the repo; copy sealed receipts outside it";
+}
+
 /** The journal of finished review sessions in an out directory, by cell. */
 export function readReviewJournal(out: string): Map<string, ReviewEntry> {
   const file = join(out, "cells.ndjson");
@@ -224,8 +234,14 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   }
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
-  if ((o.suite.sealed || o.suite.sealedCatalogs) && "sink" in sink && sink.sink && insideRepo(sink.sink)) throw new Error("E_USAGE: suite " + o.suite.id + (o.suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and the receipts sink " + sink.sink + " (GSTACK_EVALS_RECEIPTS) is inside the repo; copy sealed receipts outside it");
+  const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
+  const receipts = [join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
+  const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
+  if (linked) throw new Error("E_USAGE: " + linked);
+  const sealedSink = sealedSinkProblem(o.suite, env);
+  if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const plan = o.plan ?? null;
+  if (plan && o.host !== "claude") throw new Error("E_USAGE: plan units score from the Claude Code driver's model_output, which host " + o.host + " does not record; run plan units with host claude");
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();
   for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
@@ -345,6 +361,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const label = (p: ParseOutcome | PlanParse) => (p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind);
   const refusals: CellRefusals[] = [];
   const armDirs: string[] = [];
+  const armStops: ReviewRun["stops"] = [];
   rmSync(join(o.out, "arms"), { recursive: true, force: true });
   for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
     const id = armId(arm.name, model);
@@ -372,7 +389,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const ended = e.record.termination.kind;
         if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
         if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
-        else if (score === "gap") gaps.push(note + (!plan ? "" : ended === "arm_failure" || ended === "timeout" ? " before any model output" : ended === "completed" ? " and no model output" : ""));
+        else if (score === "gap") gaps.push(note + (!plan || (ended !== "arm_failure" && ended !== "timeout" && ended !== "completed") ? "" : e.record.model_output !== false ? " with no model_output recorded" : ended === "completed" ? " and no model output" : " before any model output"));
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (plan) {
           modes[e.ceo_mode ?? "unstated"] = (modes[e.ceo_mode ?? "unstated"] ?? 0) + 1;
@@ -404,14 +421,17 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);
+    if (gaps.length) armStops.push({ code: "E_COVERAGE_GAP", message: "arm " + id + " stopped with " + gaps.length + " coverage gap" + (gaps.length === 1 ? "" : "s") + ", so it gets no verdict: " + gaps.join("; ") });
+  }
+  for (const s of armStops) {
+    stops.push(s);
+    log(s.code + " " + s.message);
   }
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
   if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
   writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
 
-  const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const receipts = [journal, join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
   const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
   return result(armDirs, copied);
 }

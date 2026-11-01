@@ -19,7 +19,7 @@ import { dirTreeSha256 } from "../cache.ts";
 import { volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
-import { ARM_ID, armId, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewArm } from "./run.ts";
+import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, type PreparedUnit, type ReviewArm } from "./run.ts";
 import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planArmLine, planArmOf, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanLens } from "./plan.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
@@ -214,6 +214,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const out = resolve(one("--out")!);
   const sealedCatalogs = !suite.sealed && readsSealedRoot(suite);
   if ((suite.sealed || sealedCatalogs) && insideRepo(out)) throw new Usage("suite " + suite.id + (suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and --out " + out + " is inside the repo; write sealed runs outside it");
+  const sealedSink = sealedSinkProblem({ id: suite.id, sealed: suite.sealed, sealedCatalogs }, env);
+  if (sealedSink) throw new Usage(sealedSink);
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
   const sessions = units.length * passes * arms.reduce((s, a) => s + modelsOf(a.name).length, 0);
   if (dry) {

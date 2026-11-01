@@ -3,7 +3,7 @@
 // /tmp, /var/tmp or /dev/shm, or on a tmpfs or ramfs mount, since those vanish with a reboot, a Capy wake or a deleted VM.
 // On a VM the runner deletes afterwards (a Ubicloud smoke run), GSTACK_EVALS_EPHEMERAL=1 says so, and the run then needs
 // GSTACK_EVALS_RECEIPTS naming where it copies its receipts and journal before it exits (docs/adapters.md, Lane A).
-import { cpSync, existsSync, mkdirSync, realpathSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { readMounts, type Mount } from "../runner/ledger/paths.ts";
@@ -53,16 +53,35 @@ export function sinkOverlapProblem(out: string, sink: string): string | null {
   return "the receipts sink " + s + " is the run's out dir " + o + " or sits under its arms/, which every run deletes and rebuilds, so the receipts copied there would be lost; set GSTACK_EVALS_RECEIPTS outside " + join(o, "arms") + " and apart from the out dir";
 }
 
+/** Whether a path, or anything under it, is a symlink. */
+const holdsLink = (path: string): boolean => {
+  const st = lstatSync(path, { throwIfNoEntry: false });
+  return !!st && (st.isSymbolicLink() || (st.isDirectory() && readdirSync(path).some((name) => holdsLink(join(path, name)))));
+};
+
+/**
+ * Why copying these receipts to the sink could land outside it, or null: a symlink in the sink on the way to a target, at
+ * it or under it would carry the copy anywhere, the repo included. Compares real paths.
+ */
+export function sinkLinkProblem(out: string, files: readonly string[], sink: string): string | null {
+  const root = real(sink);
+  const linked = files.map((file) => join(sink, relative(resolve(out), resolve(file)))).filter((target) => !under(real(target), root) || holdsLink(target));
+  return linked.length ? "the receipts sink " + root + " holds a symlink on the way to, at or under " + linked.join(", ") + ", so a copy there could land outside it; remove the link or name another GSTACK_EVALS_RECEIPTS" : null;
+}
+
 /**
  * Copies the run's receipts and journal to the sink, keeping their paths under the run's out dir. A file outside out has
- * no place under the sink, so the copy refuses before it writes anything; the run keeps its journal under out.
+ * no place under the sink, and a symlink in the sink could carry a copy out of it (sinkLinkProblem), so the copy refuses
+ * before it writes anything; the run keeps its journal under out.
  */
 export function copyToSink(out: string, files: readonly string[], sink: string): string[] {
   const outside = files.filter((file) => !under(resolve(file), resolve(out)));
   if (outside.length) throw new Error("these files are outside the run's out dir " + resolve(out) + ", so they have no place under the receipts sink: " + outside.join(", "));
+  const present = files.filter((file) => existsSync(file));
+  const linked = sinkLinkProblem(out, present, sink);
+  if (linked) throw new Error(linked);
   const copied: string[] = [];
-  for (const file of files) {
-    if (!existsSync(file)) continue;
+  for (const file of present) {
     const target = join(sink, relative(resolve(out), resolve(file)));
     mkdirSync(dirname(target), { recursive: true });
     cpSync(file, target, { recursive: true, force: true });

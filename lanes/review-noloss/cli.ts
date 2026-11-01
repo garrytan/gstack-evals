@@ -20,7 +20,7 @@ import { ideaWins, labelledJudging, newBlockers } from "./secondary.ts";
 import { armMetrics, DEFAULT_DRAWS, DEFAULT_SEED, falseBlockerTable, renderRecord, scoreComparisons, ScoreError, type Comparison, type LossFamily } from "./score.ts";
 import { OUTCOMES, readScoreRun, verdictLine } from "./verdict.ts";
 import type { PlanStratum } from "../review-replay/catalog/catalog.ts";
-import { blockerCount, checkSealedRoot, checkSuite, insideRepo, loadSuite, sealedLeaks, setSealedRoot, SuiteError, suiteFromCatalog, suiteStub } from "./suite.ts";
+import { blockerCount, checkSealedRoot, checkSuite, holdsSealed, insideRepo, loadSuite, sealedAs, sealedLeaks, setSealedRoot, SuiteError, suiteFromCatalog, suiteStub } from "./suite.ts";
 
 export const HELP = `Usage: gstack-evals noloss <command> [options]
 
@@ -219,7 +219,7 @@ function suiteCmd(argv: string[], io: NolossIo, sealedRoot: string | null): numb
     const suite = suiteFromCatalog({ id, catalogs: flags.get("--from-catalog")!, released, base: base ? loadSuite(base).suite : undefined, ...(sealedRoot && !base ? { root: sealedRoot } : {}), ...(strata ? { strata } : {}) });
     const text = JSON.stringify(suite, null, 2) + "\n";
     const out = flags.get("--out")?.[0];
-    if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + id + " is sealed, and --out " + out + " is inside the repo; write it under the sealed root and commit its stub (suite --stub)");
+    if (out && holdsSealed(suite) && insideRepo(resolve(out))) throw new Usage("suite " + id + " " + sealedAs(suite) + ", and --out " + out + " is inside the repo; write it under the sealed root and commit its stub (suite --stub)");
     if (out) writeFileSync(out, text);
     else io.out(text.trimEnd());
     io.err("suite " + id + ": " + suite.units.length + " units, " + new Set(suite.units.map((u) => u.cluster)).size + " clusters, " + blockerCount(suite, "blocking") + " blocking, " + blockerCount(suite, "over-blocking") + " over-blocking, " + blockerCount(suite, "detection") + " detection-only, " + suite.ineligible.length + " ineligible");
@@ -307,7 +307,7 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   seed = num(flags, "--seed", seed, int, "a non-negative integer");
   draws = num(flags, "--draws", draws, (n) => int(n) && n >= 1000, "an integer of at least 1000");
   const out = flags.get("--out")?.[0];
-  if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write sealed records outside it");
+  if (out && holdsSealed(suite) && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " " + sealedAs(suite) + ", and --out " + out + " is inside the repo; write sealed records outside it");
   const arms = loadArms(resolve(flags.get("--root")?.[0] ?? ARMS_ROOT), suite, sha256);
   const rec = scoreComparisons(suite, sha256, arms, family.length ? family.map((x) => (x.id === c.id ? c : x)) : [c], { seed, draws, lossFamily }).find((x) => x.id === c.id)!;
   const json = JSON.stringify(rec, null, 2);
@@ -325,9 +325,10 @@ function exportCmd(argv: string[], io: NolossIo): number {
   const comparisons = resolve(flags.get("--comparisons")?.[0] ?? join(COMPARISONS_DIR, "gsta167-14pr.json"));
   const t = buildExport({ comparisons, root: resolve(flags.get("--root")?.[0] ?? ARMS_ROOT) });
   const text = tableText(t);
-  if (t.suite.sealed && insideRepo(table)) {
-    if (!flags.has("--publish-sealed-table")) throw new ScoreError("E_NOLOSS_SUITE", "suite " + t.suite.id + " is sealed, and --table " + table + " is inside the repo; write sealed tables outside it, or pass --publish-sealed-table to publish one that names no sealed unit, cluster, commit or case");
-    const leaks = sealedLeaks(loadSuite(loadComparisons(comparisons).file.suite).suite, text);
+  const suite = loadSuite(loadComparisons(comparisons).file.suite).suite;
+  if (holdsSealed(suite) && insideRepo(table)) {
+    if (!flags.has("--publish-sealed-table")) throw new ScoreError("E_NOLOSS_SUITE", "suite " + t.suite.id + " " + sealedAs(suite) + ", and --table " + table + " is inside the repo; write sealed tables outside it, or pass --publish-sealed-table to publish one that names no sealed unit, cluster, commit or case");
+    const leaks = sealedLeaks(suite, text);
     if (leaks.length) throw new ScoreError("E_NOLOSS_SUITE", "the table of sealed suite " + t.suite.id + " names what the seal hides, so it is not published: " + leaks.slice(0, 5).join(", ") + (leaks.length > 5 ? " and " + (leaks.length - 5) + " more" : ""));
   }
   if (flags.has("--check")) {
@@ -422,7 +423,7 @@ function flagScanCmd(argv: string[], io: NolossIo): number {
   for (const f of ["--suite", "--run", "--audit"]) if (!flags.has(f)) throw new Usage("noloss flag-scan needs " + f);
   const { suite } = loadSuite(flags.get("--suite")![0]!);
   const out = flags.get("--out")?.[0];
-  if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write its flags outside it");
+  if (out && holdsSealed(suite) && insideRepo(resolve(out))) throw new Usage("suite " + suite.id + " " + sealedAs(suite) + ", and --out " + out + " is inside the repo; write its flags outside it");
   const all = flags.get("--run")!.map((run) => flagScan({ suite, run: resolve(run), audit: flags.get("--audit")![0]!, home: flags.get("--home")?.[0] }));
   const text = flagsTsv(all.flatMap((r) => r.flags));
   if (out) writeFileSync(out, text);

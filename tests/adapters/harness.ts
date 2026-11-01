@@ -40,7 +40,7 @@ export class MemoryLedger implements ReservationLedger {
   }
 }
 
-export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> };
+export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> } | { type: "thinking"; thinking: string } | { type: "redacted_thinking"; data: string };
 
 export interface Turn {
   /** Tool results so far, by tool_use id. */
@@ -117,8 +117,8 @@ function parseResponses(body: Record<string, any>): ResponsesTurn {
 const USAGE = { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 2000, cache_creation_input_tokens: 500 };
 
 /** One Anthropic Messages answer, streamed or not, with usage the proxy settles from. */
-export function messagesResponse(body: Record<string, any>, blocks: Block[]): Response {
-  const stop = blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn";
+export function messagesResponse(body: Record<string, any>, blocks: Block[], stopReason?: string): Response {
+  const stop = stopReason ?? (blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn");
   const msg = { id: "msg_fake_" + Math.random().toString(36).slice(2), type: "message", role: "assistant", model: body.model, content: [] as unknown[], stop_reason: null as string | null, stop_sequence: null, usage: USAGE };
   if (!body.stream) return Response.json({ ...msg, content: blocks, stop_reason: stop, usage: { ...USAGE, output_tokens: 50 } });
   const events: [string, unknown][] = [["message_start", { type: "message_start", message: msg }]];
@@ -126,6 +126,12 @@ export function messagesResponse(body: Record<string, any>, blocks: Block[]): Re
     if (b.type === "text") {
       events.push(["content_block_start", { type: "content_block_start", index, content_block: { type: "text", text: "" } }]);
       events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "text_delta", text: b.text } }]);
+    } else if (b.type === "thinking") {
+      events.push(["content_block_start", { type: "content_block_start", index, content_block: { type: "thinking", thinking: "", signature: "" } }]);
+      if (b.thinking) events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: b.thinking } }]);
+      events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "signature_delta", signature: "sig" } }]);
+    } else if (b.type === "redacted_thinking") {
+      events.push(["content_block_start", { type: "content_block_start", index, content_block: b }]);
     } else {
       events.push(["content_block_start", { type: "content_block_start", index, content_block: { type: "tool_use", id: b.id, name: b.name, input: {} } }]);
       events.push(["content_block_delta", { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(b.input) } }]);
@@ -181,7 +187,7 @@ export function localSandbox(install: (home: string) => void): Sandbox {
  * The main agent's requests carry Claude Code's tools; side requests (titles, summaries) carry none and get a plain text
  * answer, so the script only sees the session's own turns.
  */
-export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript } = {}): Harness {
+export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript; stop?: (turn: Turn) => string | undefined } = {}): Harness {
   const dir = mkdtempSync(join(tmpdir(), "gse-adapter-"));
   const children: ChildProcess[] = [];
   const ledger = new MemoryLedger(opts.capMicros);
@@ -195,8 +201,8 @@ export function harness(script: Script, opts: { capMicros?: number; env?: Record
       if (new URL(url).pathname.endsWith("/v1/responses")) return responsesResponse(body, opts.responses ? opts.responses(parseResponses(body)) : [{ type: "message", text: "ok" }]);
       if (!new URL(url).pathname.endsWith("/v1/messages")) return Response.json({ data: [] });
       const tools = new Set((body.tools ?? []).map((t: { name: string }) => t.name));
-      const blocks = tools.has("Bash") ? script({ ...parse(body.messages ?? []), body }) : [{ type: "text" as const, text: "ok" }];
-      return messagesResponse(body, blocks);
+      const turn = { ...parse(body.messages ?? []), body };
+      return tools.has("Bash") ? messagesResponse(body, script(turn), opts.stop?.(turn)) : messagesResponse(body, [{ type: "text", text: "ok" }]);
     },
   });
   proxy.start();

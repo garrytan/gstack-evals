@@ -227,6 +227,10 @@ const catalogRoots = new WeakMap<Suite, string>();
 export const catalogRoot = (suite: Suite): string => catalogRoots.get(suite) ?? REPO_ROOT;
 /** Whether a loaded suite's catalogs resolve under the sealed root, so its runs hold held-out cases even when it is not sealed. */
 export const readsSealedRoot = (suite: Suite): boolean => catalogRoots.has(suite);
+/** Whether a loaded suite holds held-out material: it is sealed, or its catalogs resolve under the sealed root. Its runs, packets and records stay outside the repo. */
+export const holdsSealed = (suite: Suite): boolean => suite.sealed || readsSealedRoot(suite);
+/** How a refusal names why a suite holds held-out material. */
+export const sealedAs = (suite: Suite): string => (suite.sealed ? "is sealed" : "reads catalogs under the sealed root");
 
 function readJson(path: string, what: string): { text: string; value: unknown } {
   let text: string;
@@ -436,6 +440,12 @@ export function insideRepo(dir: string, repoRoot = REPO_ROOT): boolean {
  */
 export function suiteFromCatalog(options: { id: string; catalogs: string[]; released: string | null; base?: Suite; root?: string; strata?: PlanStratum[] }): Suite {
   const root = options.root ?? (options.base ? catalogRoot(options.base) : REPO_ROOT);
+  const suite = catalogSuite(options, root);
+  if (root !== REPO_ROOT) catalogRoots.set(suite, root);
+  return suite;
+}
+
+function catalogSuite(options: Parameters<typeof suiteFromCatalog>[0], root: string): Suite {
   if (!ID.test(options.id)) throw new SuiteError("suite id must match " + ID);
   if (options.released !== null && !DATE.test(options.released)) throw new SuiteError("--released is a date, YYYY-MM-DD");
   const strata = new Set<PlanStratum>(options.strata ?? ["seeded", "real-neutral", "home-field", "decoy"]);

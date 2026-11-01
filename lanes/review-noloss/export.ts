@@ -8,7 +8,7 @@ import { join, relative, resolve } from "node:path";
 import { readIngested } from "./ingest.ts";
 import { powerTable, renderPowerTable, spreadValue, suiteClusters, type PowerDesign, type PowerRow } from "./power.ts";
 import { armMetrics, mtok, renderRecord, scoreComparisons, ScoreError, type ArmMetrics, type Comparison, type LossFamily, type ScoredArm, type ScoreRecord } from "./score.ts";
-import { insideRepo, LANE_DIR, loadSuite, REPO_ROOT, sha256, suiteFromCatalog, type Suite } from "./suite.ts";
+import { holdsSealed, insideRepo, LANE_DIR, loadSuite, REPO_ROOT, sealedAs, sha256, suiteFromCatalog, type Suite } from "./suite.ts";
 
 export const TABLE_PATH = join(REPO_ROOT, "tables", "review-noloss.json");
 export const COMPARISONS_DIR = join(LANE_DIR, "comparisons");
@@ -119,7 +119,7 @@ export interface ExportTable {
 export function buildExport(o: { comparisons: string; root: string }): ExportTable {
   const { file, sha256: fileSha } = loadComparisons(o.comparisons);
   const { suite, sha256: suiteSha } = loadSuite(file.suite);
-  if (suite.sealed && insideRepo(o.root)) throw new ScoreError("E_NOLOSS_SUITE", "suite " + suite.id + " is sealed, and the arms root " + o.root + " is inside the repo; keep sealed arms outside it");
+  if (holdsSealed(suite) && insideRepo(o.root)) throw new ScoreError("E_NOLOSS_SUITE", "suite " + suite.id + " " + sealedAs(suite) + ", and the arms root " + o.root + " is inside the repo; keep sealed arms outside it");
   const arms = loadArms(o.root, suite, suiteSha);
   const opts = { seed: file.seed, draws: file.draws };
   const power = file.power ? (({ designs: _, ...rest }) => rest)(file.power) : null;

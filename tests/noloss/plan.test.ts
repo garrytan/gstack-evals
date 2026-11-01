@@ -255,6 +255,21 @@ describe("plan judge packets (B6, open item 11)", () => {
     expect([r.code, r.err]).toEqual([2, expect.stringMatching(/^E_NOLOSS_BLIND .*plan\.md at head [0-9a-f]{12} hashes to [0-9a-f]{64}, not case planpanel-1-1's plan digest 0{64}/)]);
   });
 
+  // Value: protects=adversarial 1 (#106 /ship): an unsealed suite whose catalogs resolve under the sealed root carries held-out plans into its packets and key, so judge-packet refuses --out or --key inside the repo for it as for a sealed suite, before it writes anything; fails_when=only suite.sealed is checked and the packets land in the public repo; why_new=#106 /ship Step 11 adversarial 1; seam=judgePacket's holdsSealed guard; no_claim=judge-join, score and export, which share the guard
+  test("a public suite reading the sealed root refuses packets or a key inside the repo", async () => {
+    const d = tmp("noloss-plan-pub-");
+    const pub = planPanel(join(d, "panel"), { seeded: 1 }, { visibility: "public" });
+    const P = ["--sealed-root", pub.sealedRoot];
+    const src = writePlanArm(join(d, "src"), pub.suite, { ...arms("none"), passes: 1 });
+    expect((await run(["ingest", src, "--suite", pub.suitePath, "--root", join(d, "arms"), ...P])).code).toBe(0);
+    const inRepo = join(REPO_ROOT, ".noloss-plan-pub-packets");
+    for (const [out, key] of [[inRepo, join(d, "k1.json")], [join(d, "p"), join(REPO_ROOT, ".noloss-plan-pub-key.json")]]) {
+      const r = await run(["judge-packet", "--suite", pub.suitePath, "--arm", join(d, "arms", pub.suite.id, "none"), "--seed", "7", "--out", out!, "--key", key!, "--source", "example/plan-panel=" + pub.clone, ...P]);
+      expect([r.code, r.err]).toEqual([2, expect.stringMatching(/^E_NOLOSS_BLIND .*suite \S+ reads catalogs under the sealed root, so its packets and key must be written outside the repo/)]);
+    }
+    expect([existsSync(inRepo), existsSync(join(REPO_ROOT, ".noloss-plan-pub-key.json")), existsSync(join(d, "p"))]).toEqual([false, false, false]);
+  });
+
   test("the heading word list is frozen by its digest", () => {
     expect(PLAN_HEADING_WORDS.length).toBe(63);
     expect(PLAN_HEADING_WORDS_SHA256).toBe("ecb56e71518091b9e7b41bc5c3507ca3c29de228304e48c8f51398d50d03f853");

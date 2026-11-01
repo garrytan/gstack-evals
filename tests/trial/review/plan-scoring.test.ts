@@ -5,10 +5,10 @@
 // the machine) is a gap at any point, never a miss; a stopped arm gets no verdict and its arm.json says why. Every session runs the real Claude Code driver on a stand-in for the Agent SDK's
 // query, which spawns a stand-in CLI process through the driver the way the SDK does.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeCodeDriver } from "../../../src/adapters/claude-code/driver.ts";
@@ -17,6 +17,7 @@ import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skil
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
+import { copyToSink } from "../../../src/trial/durable.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { seedStateRoot } from "../../../src/trial/state-root.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
@@ -105,7 +106,7 @@ const personaDown = async (): Promise<never> => {
 };
 
 /** One arm per case, each running one session on the stand-in. */
-const CASES: Record<string, { script: (out: string) => Script; persona?: "down"; spawn?: "fails"; machine?: "gone"; cli?: string; eager?: true }> = {
+const CASES: Record<string, { script: (out: string) => Script; persona?: "down"; spawn?: "fails"; machine?: "gone"; cli?: string; eager?: true; outcome?: AgentOutcome }> = {
   ok: { script: () => async function* () { yield init; yield assistant(text("Mode: HOLD SCOPE.\n\n" + block([{ severity: "Critical", section: "Problem", line: 3, claim: "Wrong problem.", evidence: "context/goals.md", fix: "Plan offline reading." }]))); yield result; } },
   toolcrash: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; await crash(cli); } },
   tooltimeout: { script: () => async function* (sdk) { yield init; yield toolsOnly; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); } },
@@ -157,20 +158,21 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
     yield init;
     yield assistant(text("Reading the plan."));
     const exited = once(cli, "exit");
-    cli.stdin!.end("\n");
+    cli.stdin!.write("\n");
     await exited;
     throw new Error("Claude Code process exited with code 137");
   } },
   nospawnnow: { spawn: "fails", eager: true, script: () => async function* () { yield init; } },
   empty: { script: () => async function* () { yield init; yield assistant(); yield result; } },
-  linkeof: { cli: "cat > /dev/null", script: () => async function* (_sdk, cli) {
+  linkeof: { cli: "read _; exit 0", script: () => async function* (_sdk, cli) {
     yield init;
     yield assistant(text("Reading the plan."));
     const exited = once(cli, "exit");
-    cli.stdin!.end();
+    cli.stdin!.write("\n");
     await exited;
     throw Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET", errno: -104, syscall: "read" });
   } },
+  unrecorded: { script: () => async function* () { yield init; }, outcome: { turns: [], termination: { kind: "timeout" }, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null } },
 };
 
 describe("the planning lane's failure rule, end to end through the Claude Code driver (keyless)", () => {
@@ -199,12 +201,12 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
         ...base,
         agent: (task, o) => ({
           ...base.agent(task, o),
-          spawn: () => {
+          spawn: (argv: string[]) => {
+            if (argv[0] === "true") return spawn("sh", ["-c", CASES[arm]!.machine === "gone" ? "exit 1" : "true"], { stdio: ["pipe", "pipe", "pipe"] });
             if (CASES[arm]!.spawn === "fails") throw new Error("spawn docker ENOENT");
             const cli = CASES[arm]!.cli;
             return cli ? spawn("sh", ["-c", cli], { stdio: ["pipe", "pipe", "pipe"] }) : spawn("sleep", ["30"], { stdio: ["pipe", "pipe", "pipe"] });
           },
-          ...(CASES[arm]!.machine === "gone" ? { exec: () => ({ exitCode: 1, timedOut: false, stdout: "", stderr: "Error response from daemon: No such container" }) } : {}),
         }),
       };
     };
@@ -224,6 +226,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
       recovery: null,
       driver: (o) => {
         const c = CASES[slots.get(o.proxy.slot)!]!;
+        if (c.outcome) return { env: {}, run: async () => c.outcome! };
         return claudeCodeDriver({ model: o.model, provider: "anthropic", proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(c.persona === "down" ? { freeform: personaDown } : o.freeform ? { freeform: o.freeform } : {}), query: standIn(c.script(o.out), c.eager) as never });
       },
     };
@@ -239,7 +242,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
 
   // Value: protects=a complete session still scores its findings and its arm completes; fails_when=the failure rule leaks into a clean session; why_new=GST-737 control case; seam=claudeCodeDriver, runReviewUnits; no_claim=a real model or CLI
   test("control: a clean session scores its findings, records model output and completes its arm", () => {
-    expect(stops).toEqual([]);
+    expect(stops.filter((s) => s.message.startsWith("arm ok-opus "))).toEqual([]);
     expect(record("ok")).toEqual({ termination: { kind: "completed" }, model_output: true, turns: 1 });
     expect([armJson("ok").status, armJson("ok").coverage_gaps, armJson("ok").diagnostics]).toEqual(["complete", undefined, undefined]);
   });
@@ -363,10 +366,24 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect(record("exit137").termination).toEqual({ kind: "arm_failure", failure: "harness_crash" });
   });
 
+  // Value: protects=rule 2 (model output is read only from the record): a timeout whose record carries no model_output flag is a gap that stops the arm, and the gap names the missing flag instead of claiming no output; fails_when=a missing flag scores as a miss, or the note says "before any model output"; why_new=GST-748; seam=planScore, the gap note in runReviewUnits; no_claim=none beyond protects
+  test("rule 2: a record with no model_output flag is a gap that says so", () => {
+    expect(record("unrecorded")).toEqual({ termination: { kind: "timeout" }, model_output: undefined, turns: 0 });
+    expect([armJson("unrecorded").status, armJson("unrecorded").coverage_gaps]).toEqual(["stopped", [note("incomplete, the session ended timeout with no model_output recorded")]]);
+  });
+
+  // Value: protects=rule 7 (OV6, #106 /ship): every arm stopped by a coverage gap lands in the run's stops as E_COVERAGE_GAP, so review-units exits 2 even when the gap came from a one-cell E_INFRA_FAILURE, and no complete arm does; fails_when=a stopped arm leaves stops empty and the CLI exits 0; why_new=#106 /ship outside voice OV6; seam=runReviewUnits's stops; no_claim=the CLI's exit mapping (review-units returns 2 on any stop, src/trial/review/cli.ts)
+  test("rule 7: every stopped arm, and only those, is an E_COVERAGE_GAP stop", () => {
+    const stopped = arms.filter((a) => armJson(a).status === "stopped").map((a) => a + "-opus").sort();
+    expect(stopped.length).toBeGreaterThan(10);
+    expect(stops.filter((s) => s.code === "E_COVERAGE_GAP").map((s) => s.message.split(" ")[1]).sort()).toEqual(stopped);
+    expect(stops.find((s) => s.message.startsWith("arm linkeof-opus "))!.message).toBe("arm linkeof-opus stopped with 1 coverage gap, so it gets no verdict: " + note("incomplete, the session ended missing (E_INFRA_FAILURE)"));
+  });
+
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 14]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 15]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);
@@ -393,7 +410,8 @@ describe("the receipts sink of a sealed suite (keyless)", () => {
     }
     expect(bound).toEqual([]);
     await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: join(REPO_ROOT, "receipts") } }, rig)).rejects.toThrow("no session may start");
-    expect(readFileSync(join(REPO_ROOT, ".gitignore"), "utf8").split("\n")).toContain("receipts/");
+    expect(readFileSync(join(REPO_ROOT, ".gitignore"), "utf8").split("\n")).toContain("/receipts/");
+    expect([spawnSync("git", ["-C", REPO_ROOT, "check-ignore", "-q", "receipts/cells.ndjson"]).status, spawnSync("git", ["-C", REPO_ROOT, "check-ignore", "-q", "src/x/receipts/a.ts"]).status]).toEqual([0, 1]);
   });
 
   // Value: protects=S1 (#106 /ship): an unsealed suite that reads catalogs under the sealed root holds held-out cases too, so it refuses an in-repo receipts sink like a sealed suite; fails_when=only suite.sealed is checked; why_new=#106 /ship pass 2 specialist S1; seam=runReviewUnits's sink check (review-units sets sealedCatalogs from readsSealedRoot, tests/trial/review/plan.test.ts); no_claim=none beyond protects
@@ -403,6 +421,46 @@ describe("the receipts sink of a sealed suite (keyless)", () => {
     const rig = { bind: async () => { bound.push("bound"); throw new Error("no session may start"); }, arms: { none: bare("none") }, cells: {} } as unknown as HostRig;
     const input = baseInput(fx.prepared, fx.panel.suite.id, ["none"], durable(), null);
     await expect(runReviewUnits({ ...input, suite: { ...input.suite, sealedCatalogs: true }, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: join(REPO_ROOT, "receipts") } }, rig)).rejects.toThrow("E_USAGE: suite " + fx.panel.suite.id + " reads catalogs under the sealed root, and the receipts sink ");
+    expect(bound).toEqual([]);
+  });
+});
+
+describe("a symlink in the receipts sink (keyless)", () => {
+  const receipts = () => {
+    const out = durable();
+    mkdirSync(join(out, "arms", "none-opus"), { recursive: true });
+    writeFileSync(join(out, "cells.ndjson"), "{}\n");
+    writeFileSync(join(out, "arms", "none-opus", "arm.json"), "{}\n");
+    return { out, files: [join(out, "cells.ndjson"), join(out, "arms")] };
+  };
+
+  // Value: protects=outside voice 3 (#106 /ship): a sink whose subdirectory is a symlink would carry the copy wherever the link points, the repo included, so copyToSink refuses before it writes anything, and a sink with no link still copies; fails_when=cpSync follows a symlinked parent out of the sink; why_new=#106 /ship outside voice OV3; seam=copyToSink, sinkLinkProblem; no_claim=a link created after the check, during the copy
+  test("OV3: a symlinked directory in the sink refuses the copy before it writes; a plain sink copies", () => {
+    const { out, files } = receipts();
+    const away = scratch("plan-scoring-away-");
+    const sink = scratch("plan-scoring-linked-sink-");
+    symlinkSync(away, join(sink, "arms"));
+    expect(() => copyToSink(out, files, sink)).toThrow("holds a symlink on the way to, at or under " + join(sink, "arms"));
+    expect([readdirSync(away), readdirSync(sink)]).toEqual([[], ["arms"]]);
+    const linkedFile = scratch("plan-scoring-linked-file-");
+    mkdirSync(join(linkedFile, "arms", "none-opus"), { recursive: true });
+    symlinkSync(join(away, "arm.json"), join(linkedFile, "arms", "none-opus", "arm.json"));
+    expect(() => copyToSink(out, files, linkedFile)).toThrow("holds a symlink");
+    expect(readdirSync(away)).toEqual([]);
+    const plain = scratch("plan-scoring-plain-sink-");
+    expect(copyToSink(out, files, plain).length).toBe(2);
+    expect(readFileSync(join(plain, "arms", "none-opus", "arm.json"), "utf8")).toBe("{}\n");
+  });
+
+  // Value: protects=outside voice 3 and the late sink check (#106 /ship): runReviewUnits refuses a sink holding a symlink on a receipt's path before any session starts, so a run never spends and then fails to keep its receipts; fails_when=the link is found only at the copy, after every session; why_new=#106 /ship outside voice OV3; seam=runReviewUnits's early sink checks; no_claim=none beyond protects
+  test("a sink holding a symlink on a receipt's path is refused before any session", async () => {
+    const fx = unitFixture();
+    const bound: string[] = [];
+    const rig = { bind: async () => { bound.push("bound"); throw new Error("no session may start"); }, arms: { none: bare("none") }, cells: {} } as unknown as HostRig;
+    const sink = scratch("plan-scoring-run-linked-sink-");
+    symlinkSync(scratch("plan-scoring-run-away-"), join(sink, "arms"));
+    const input = baseInput(fx.prepared, fx.panel.suite.id, ["none"], durable(), null);
+    await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig)).rejects.toThrow("E_USAGE: the receipts sink ");
     expect(bound).toEqual([]);
   });
 });
