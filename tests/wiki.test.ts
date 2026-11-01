@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { checkWiki, gitBaseFiles, loadWiki, parseFrontMatter, renderIndex, resolveBase } from "../scripts/wiki.ts";
@@ -27,7 +27,7 @@ function fields(id: string, kind: string, extra: Fields = {}): Fields {
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-function write(root: string, path: string, text: string) {
+function write(root: string, path: string, text: string | Buffer) {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), text);
 }
@@ -69,6 +69,51 @@ describe("the committed wiki", () => {
     spawnSync("git", ["add", "wiki"], { cwd: root });
     const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
     expect([...gitBaseFiles(root, tree).keys()]).toEqual([DECISION]);
+  });
+
+  test("reading posts at a commit returns every file byte for byte", () => {
+    const files: Record<string, Buffer> = {
+      "wiki/board/also-empty.md": Buffer.alloc(0),
+      "wiki/board/empty.md": Buffer.alloc(0),
+      "wiki/board/no-newline.md": Buffer.from("no trailing newline"),
+      "wiki/research/bundle/header.txt": Buffer.from("0000000000000000000000000000000000000000 blob 3\nabc\n"),
+      "wiki/research/bundle/latin1.txt": Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a, 0x00, 0xff, 0x80]),
+    };
+    const root = makeWiki({ "wiki/INDEX.md": "# index\n" }, { index: false });
+    for (const [path, bytes] of Object.entries(files)) write(root, path, bytes);
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    spawnSync("git", ["update-index", "--add", "--cacheinfo", "160000," + "1".repeat(40) + ",wiki/board/a-gitlink"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    const hex = (m: Iterable<[string, Buffer]>) => [...m].map(([path, bytes]) => [path, bytes.toString("hex")]);
+    expect(hex(gitBaseFiles(root, tree))).toEqual([["wiki/board/a-gitlink", ""], ...hex(Object.entries(files))]);
+  });
+
+  test("reading posts at a commit fails when git cat-file --batch output is cut short", () => {
+    const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    const path = process.env.PATH;
+    write(root, "bin/git", "#!/bin/sh\nPATH='" + path + "'\nif [ \"$1\" = cat-file ]; then git \"$@\" | head -c 60; exit 0; fi\nexec git \"$@\"\n");
+    chmodSync(join(root, "bin/git"), 0o755);
+    process.env.PATH = join(root, "bin") + ":" + path;
+    try {
+      expect(() => gitBaseFiles(root, tree)).toThrow("could not read " + DECISION);
+    } finally {
+      process.env.PATH = path;
+    }
+  });
+
+  test("reading posts at a commit fails when the tree or a blob is missing", () => {
+    const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    expect(() => gitBaseFiles(root, "3".repeat(40))).toThrow("git ls-tree failed listing wiki/");
+    const oid = spawnSync("git", ["rev-parse", tree + ":" + DECISION], { cwd: root }).stdout.toString().trim();
+    unlinkSync(join(root, ".git", "objects", oid.slice(0, 2), oid.slice(2)));
+    expect(() => gitBaseFiles(root, tree)).toThrow("could not read " + DECISION + " at " + tree);
   });
 });
 

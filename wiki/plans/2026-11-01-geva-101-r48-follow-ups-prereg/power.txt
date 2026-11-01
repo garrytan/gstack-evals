@@ -1,0 +1,23 @@
+R1: standard error of C minus none 6.9 points at a 30-point lead; MDD 19.3 points
+R1: true lead  0 points: R2 runs (estimate at least 10 points) in 1.9% of runs
+R1: true lead  5 points: R2 runs (estimate at least 10 points) in 19.3% of runs
+R1: true lead 10 points: R2 runs (estimate at least 10 points) in 52.5% of runs
+R1: true lead 20 points: R2 runs (estimate at least 10 points) in 95.1% of runs
+R1: true lead 30 points: R2 runs (estimate at least 10 points) in 100.0% of runs
+R1: true lead 55 points: R2 runs (estimate at least 10 points) in 100.0% of runs
+R2: true lift  0 points: CUT-CANDIDATE (full <= none) in 75.9% of runs; KEEP (bootstrap lower bound above 0) in 0.0%
+R2: true lift 10 points: CUT-CANDIDATE (full <= none) in 28.6% of runs; KEEP (bootstrap lower bound above 0) in 5.6%
+R2: true lift 20 points: CUT-CANDIDATE (full <= none) in 9.2% of runs; KEEP (bootstrap lower bound above 0) in 26.0%
+R2: true lift 30 points: CUT-CANDIDATE (full <= none) in 2.1% of runs; KEEP (bootstrap lower bound above 0) in 53.0%
+R2: true lift 45 points: CUT-CANDIDATE (full <= none) in 0.1% of runs; KEEP (bootstrap lower bound above 0) in 83.0%
+R2: MDD (80% power for KEEP, the bootstrap rule on 13 blockers) about 43 points
+R2: smallest KEEP: 4 gains and no losses (7 gains with one loss)
+R3: 70 tasks: frozen MDD formula 10.9 points; simulated 11.1 points
+R3: 50 tasks: frozen MDD formula 12.9 points; simulated 12.9 points
+R3: 30 tasks: frozen MDD formula 16.7 points; simulated 17.0 points
+R3: 70 tasks, true lift  0.0 points: KEEP (lower bound above 0) 3.5%, CUT-CANDIDATE (estimate at or below 0) 48.6%
+R3: 70 tasks, true lift  5.5 points: KEEP (lower bound above 0) 27.4%, CUT-CANDIDATE (estimate at or below 0) 8.9%
+R3: 70 tasks, true lift 10.9 points: KEEP (lower bound above 0) 74.2%, CUT-CANDIDATE (estimate at or below 0) 0.5%
+R3: 30 tasks, true lift  0.0 points: KEEP (lower bound above 0) 3.1%, CUT-CANDIDATE (estimate at or below 0) 50.1%
+R3: 30 tasks, true lift  8.3 points: KEEP (lower bound above 0) 26.7%, CUT-CANDIDATE (estimate at or below 0) 8.1%
+R3: 30 tasks, true lift 16.7 points: KEEP (lower bound above 0) 73.2%, CUT-CANDIDATE (estimate at or below 0) 0.5%

@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+# R1 source arms (GEVA-101 prereg): builds the three arms R1 judges blind, on gsta167-14pr at the rig pin.
+#  - C: GSTA-167's arm C, both passes (round 3 and its byte-identical rerun C2), from the org drive, with its labelled
+#    judgments.tsv left out. Each finding line must hash to the digest the repo's pooled copy (C12) pins for that id.
+#  - none-opus, gstack-opus: #108's raw arms (GEVA-89 archive, judge/raw/stacks-r1), cut to the 14 cohort units and
+#    re-pointed at gsta167-14pr, whose 14 units are byte-identical to stacks-r1's groups a and b.
+# Usage: python3 r1-arms.py <org arm-C dir> <GEVA-89 judge/raw/stacks-r1> <rig checkout> <out dir>
+import hashlib, json, os, shutil, sys
+
+armc, raw, rig, out = sys.argv[1:5]
+suite_path = os.path.join(rig, "lanes/review-noloss/suites/gsta167-14pr.json")
+suite_sha = hashlib.sha256(open(suite_path, "rb").read()).hexdigest()
+suite = json.load(open(suite_path))
+stacks = json.load(open(os.path.join(rig, "wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json")))
+units = [u["id"] for u in suite["units"]]
+by_id = {u["id"]: u for u in stacks["units"]}
+for u in suite["units"]:
+    if json.dumps(u, sort_keys=True) != json.dumps(by_id[u["id"]], sort_keys=True):
+        sys.exit("E_R1_SUITE unit " + u["id"] + " differs between gsta167-14pr and stacks-r1")
+c12 = os.path.join(rig, "lanes/review-noloss/arms/gsta167-14pr/C12/findings")
+if os.path.exists(out):
+    sys.exit("E_R1_OUT " + out + " exists")
+os.makedirs(out)
+
+# Arm C.
+dst = os.path.join(out, "C")
+os.makedirs(os.path.join(dst, "findings"))
+arm = json.load(open(os.path.join(armc, "arm.json")))
+if arm["suite"] != suite["id"] or arm.get("suite_sha256") != suite_sha:
+    sys.exit("E_R1_ARM arm C names suite " + arm["suite"] + " " + str(arm.get("suite_sha256")))
+shutil.copy(os.path.join(armc, "arm.json"), dst)
+shutil.copy(os.path.join(armc, "cost.tsv"), dst)
+checked = 0
+for name in sorted(os.listdir(os.path.join(armc, "findings"))):
+    pinned = {}
+    for line in open(os.path.join(c12, name)):
+        o = json.loads(line)
+        pinned[o["id"]] = o.get("digest_only")
+    lines = open(os.path.join(armc, "findings", name)).read().splitlines()
+    for line in lines:
+        fid = json.loads(line)["id"]
+        if pinned.get(fid) != "sha256:" + hashlib.sha256(line.encode()).hexdigest():
+            sys.exit("E_R1_DIGEST " + name + " finding " + fid + " does not hash to the C12 digest")
+        checked += 1
+    if len(pinned) != len(lines):
+        sys.exit("E_R1_DIGEST " + name + ": C12 pins " + str(len(pinned)) + " findings, the source has " + str(len(lines)))
+    shutil.copy(os.path.join(armc, "findings", name), os.path.join(dst, "findings", name))
+print("arm C: %d findings on %d units, every line matches its C12 digest; labelled judgments.tsv left out" % (checked, len(os.listdir(os.path.join(dst, "findings")))))
+
+# none-opus and gstack-opus.
+for a in ["none-opus", "gstack-opus"]:
+    src = os.path.join(raw, a)
+    dst = os.path.join(out, a)
+    os.makedirs(os.path.join(dst, "findings"))
+    arm = json.load(open(os.path.join(src, "arm.json")))
+    arm["suite"] = suite["id"]
+    arm["suite_sha256"] = suite_sha
+    arm.pop("parse_outcomes", None)
+    arm["notes"] = "R1 (GEVA-101): #108's raw arm cut to the 14 gsta167-14pr units, which are byte-identical to stacks-r1's groups a and b."
+    json.dump(arm, open(os.path.join(dst, "arm.json"), "w"), indent=2)
+    n = 0
+    for u in units:
+        name = u.replace("/", "__") + ".jsonl"
+        shutil.copy(os.path.join(src, "findings", name), os.path.join(dst, "findings", name))
+        n += sum(1 for _ in open(os.path.join(src, "findings", name)))
+    rows = open(os.path.join(src, "cost.tsv")).read().splitlines()
+    head = rows[0].split("\t")
+    col = head.index("pr")
+    keep = [rows[0]] + [r for r in rows[1:] if r.split("\t")[col] in units or r.split("\t")[col].replace("__", "/") in units]
+    open(os.path.join(dst, "cost.tsv"), "w").write("\n".join(keep) + "\n")
+    print("arm %s: %d findings on %d units, %d cost rows" % (a, n, len(units), len(keep) - 1))
+print("suite gsta167-14pr sha256 " + suite_sha)

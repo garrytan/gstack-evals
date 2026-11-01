@@ -353,8 +353,8 @@ export function checkWiki(root: string, opts: { baseFiles?: Map<string, Buffer> 
   return { entries, problems };
 }
 
-function git(root: string, args: string[]) {
-  const r = spawnSync("git", args, { cwd: root, maxBuffer: 256 * 1024 * 1024 });
+function git(root: string, args: string[], input?: string) {
+  const r = spawnSync("git", args, { cwd: root, input, maxBuffer: Infinity });
   return { ok: r.status === 0, out: r.stdout ?? Buffer.alloc(0) };
 }
 
@@ -371,9 +371,29 @@ export function resolveBase(root: string, requested?: string): { ref: string | n
 
 export function gitBaseFiles(root: string, ref: string): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
-  for (const path of git(root, ["ls-tree", "-r", "-z", "--name-only", ref, "--", "wiki/"]).out.toString().split("\0")) {
-    if (!path || path === "wiki/README.md" || path === "wiki/INDEX.md") continue;
-    files.set(path, git(root, ["cat-file", "blob", ref + ":" + path]).out);
+  const blobs: [string, string][] = [];
+  const listing = git(root, ["ls-tree", "-r", "-z", ref, "--", "wiki/"]);
+  if (!listing.ok) throw new Error("wiki: git ls-tree failed listing wiki/ at " + ref);
+  for (const record of listing.out.toString().split("\0")) {
+    const tab = record.indexOf("\t");
+    const path = record.slice(tab + 1);
+    if (tab < 0 || path === "wiki/README.md" || path === "wiki/INDEX.md") continue;
+    const [, type, oid] = record.slice(0, tab).split(" ");
+    files.set(path, Buffer.alloc(0));
+    if (type === "blob") blobs.push([path, oid]);
+  }
+  if (!blobs.length) return files;
+  const read = git(root, ["cat-file", "--batch"], blobs.map(([, oid]) => oid + "\n").join(""));
+  if (!read.ok) throw new Error("wiki: git cat-file --batch failed reading wiki/ at " + ref);
+  const out = read.out;
+  let at = 0;
+  for (const [path, oid] of blobs) {
+    const nl = out.indexOf(10, at);
+    const [name, type, size] = out.subarray(at, Math.max(at, nl)).toString().split(" ");
+    const end = nl + 1 + Number(size);
+    if (name !== oid || type !== "blob" || !(end < out.length) || out[end] !== 10) throw new Error("wiki: git cat-file --batch could not read " + path + " at " + ref);
+    files.set(path, out.subarray(nl + 1, end));
+    at = end + 1;
   }
   return files;
 }
@@ -397,7 +417,14 @@ if (import.meta.main) {
       console.error("wiki: " + base.error);
       process.exit(1);
     }
-    const { entries, problems } = checkWiki(root, { baseFiles: base.ref ? gitBaseFiles(root, base.ref) : null });
+    let baseFiles: Map<string, Buffer> | null = null;
+    try {
+      baseFiles = base.ref ? gitBaseFiles(root, base.ref) : null;
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    const { entries, problems } = checkWiki(root, { baseFiles });
     report(problems);
     console.log((problems.length ? "wiki: " + problems.length + " problem(s)" : "wiki: ok") + ", " + entries.length + " posts; " + base.note);
     process.exit(problems.length ? 1 : 0);

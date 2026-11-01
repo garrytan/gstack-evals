@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+# Power and operating characteristics for R1, R2 and R3 (GEVA-101 prereg, section 6). Keyless, seeded, no data read.
+# MDD is the smallest true difference a two-sided 0.05 test finds with 80% power, 2.8 standard errors, with the standard
+# error simulated on each experiment's own cluster structure. Each decision rule's chance of firing is simulated too.
+import math, random
+
+rng = random.Random(20261101)
+def beta(mean, conc):
+    return rng.betavariate(max(mean * conc, 1e-6), max((1 - mean) * conc, 1e-6))
+def sd(xs):
+    m = sum(xs) / len(xs)
+    return math.sqrt(sum((x - m) ** 2 for x in xs) / (len(xs) - 1))
+SIMS = 4000
+
+# R1: GSTA-167's cohort on gsta167-14pr, 29 blocking blockers in 14 PR clusters, 2 passes per arm. none-opus's blind
+# rate on the cohort in #108 was 6 of 58 blocker-passes (10.3%). Spread "wide" (beta concentration 2), the scorer's.
+R1 = [2, 2, 2, 1, 4, 4, 4, 1, 1, 1, 3, 1, 1, 2]
+def r1_delta(d):
+    vals = []
+    for size in R1:
+        for _ in range(size):
+            p = beta(0.103, 2)
+            q = min(1.0, max(0.0, p + d))
+            vals.append(sum(rng.random() < q for _ in range(2)) / 2 - sum(rng.random() < p for _ in range(2)) / 2)
+    return sum(vals) / len(vals)
+se1 = sd([r1_delta(0.3) for _ in range(SIMS)])
+print("R1: standard error of C minus none %.1f points at a 30-point lead; MDD %.1f points" % (100 * se1, 280 * se1))
+for d in (0.0, 0.05, 0.10, 0.20, 0.30, 0.55):
+    print("R1: true lead %2d points: R2 runs (estimate at least 10 points) in %.1f%% of runs" % (100 * d, 100 * sum(r1_delta(d) >= 0.10 for _ in range(SIMS)) / SIMS))
+
+# R2: 13 blocking blockers on 13 PRs, one pass per arm. none-opus found 0 of 26 blocker-passes on them in #108; the
+# simulation uses 5%. Kill rule: gstack-full finds no more blocking blockers than none-r2. KEEP: the scorer's 95%
+# PR-clustered percentile bootstrap interval is above zero. With one blocker per PR, a bootstrap draw's difference is
+# (G - L) / 13, where (G, L, rest) is multinomial over the observed gains g, losses l and ties, so the lower bound is
+# above zero when P(G - L <= 0) < 0.025; that probability is computed exactly here (the scorer's 10000 draws estimate it).
+from functools import lru_cache
+@lru_cache(maxsize=None)
+def keep(g, l, n=13):
+    if g <= l:
+        return False
+    pg, pl = g / n, l / n
+    pz = 1 - pg - pl
+    tail = 0.0
+    for G in range(n + 1):
+        for L in range(n - G + 1):
+            if G - L <= 0:
+                Z = n - G - L
+                tail += math.factorial(n) / (math.factorial(G) * math.factorial(L) * math.factorial(Z)) * pg ** G * pl ** L * pz ** Z
+    return tail < 0.025
+def r2(d):
+    f = n = gains = losses = 0
+    for _ in range(13):
+        p = beta(0.05, 2)
+        a, b = rng.random() < min(1.0, p + d), rng.random() < p
+        f += a; n += b; gains += a and not b; losses += b and not a
+    return f, n, keep(gains, losses)
+for d in (0.0, 0.10, 0.20, 0.30, 0.45):
+    rs = [r2(d) for _ in range(SIMS)]
+    print("R2: true lift %2d points: CUT-CANDIDATE (full <= none) in %.1f%% of runs; KEEP (bootstrap lower bound above 0) in %.1f%%" % (100 * d, 100 * sum(f <= n for f, n, _ in rs) / SIMS, 100 * sum(k for _, _, k in rs) / SIMS))
+lo, hi = 0.0, 1.0
+for _ in range(14):
+    mid = (lo + hi) / 2
+    pw = sum(r2(mid)[2] for _ in range(2000)) / 2000
+    lo, hi = (lo, mid) if pw >= 0.8 else (mid, hi)
+print("R2: MDD (80%% power for KEEP, the bootstrap rule on 13 blockers) about %.0f points" % (100 * hi))
+print("R2: smallest KEEP: %d gains and no losses (%d gains with one loss)" % (min(g for g in range(14) if keep(g, 0)), min(g for g in range(13) if keep(g, 1))))
+
+# R3: in-band tasks, per-task pass chance with mean 0.5 and spread 0.3 (GEVA-100), 3 replicates per arm, paired by task.
+def r3_formula(n, reps=3, epq=0.16):
+    return 2.8 * math.sqrt(2 * epq / reps / n)
+def r3_est(n, d):
+    diffs = []
+    for _ in range(n):
+        p = beta(0.5, 1.78)
+        q = min(1.0, max(0.0, p + d))
+        diffs.append(sum(rng.random() < q for _ in range(3)) / 3 - sum(rng.random() < p for _ in range(3)) / 3)
+    m = sum(diffs) / n
+    return m, sd(diffs) / math.sqrt(n)
+for n in (70, 50, 30):
+    ests = [r3_est(n, 0.0) for _ in range(1500)]
+    print("R3: %d tasks: frozen MDD formula %.1f points; simulated %.1f points" % (n, 100 * r3_formula(n), 280 * sd([e for e, _ in ests])))
+for n in (70, 30):
+    m = r3_formula(n)
+    for d in (0.0, m / 2, m):
+        rs = [r3_est(n, d) for _ in range(1500)]
+        print("R3: %d tasks, true lift %4.1f points: KEEP (lower bound above 0) %.1f%%, CUT-CANDIDATE (estimate at or below 0) %.1f%%" % (n, 100 * d, 100 * sum(e - 1.96 * s > 0 for e, s in rs) / 1500, 100 * sum(e <= 0 for e, _ in rs) / 1500))
