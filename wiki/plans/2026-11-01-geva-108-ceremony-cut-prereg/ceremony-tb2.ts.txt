@@ -1,0 +1,166 @@
+// Ceremony-cut TB2 readings (wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg, sections 4 to 6).
+// Per model: variant minus control (primary), control minus none and variant minus none, paired by task over per-task
+// mean rewards, task-clustered bootstrap, 10,000 resamples, seed 20261101. Outcome rules are analyze.ts's (quick look 3):
+// a graded trial counts its reward, a no-reward trial after a model response scores 0 (the drop reading is printed
+// beside it), and a trial no model response reached leaves the denominators. No-loss for variant against control: the
+// lower end of the two-sided 90% interval (one-sided 0.05) lies above minus the model's margin, and the size rule holds:
+// with the pooled per-task pass rates of the two arms and the trial counts of this run, a variant exactly as good as
+// control reaches NO_LOSS with probability 0.8 or more (normal approximation). The LOSS p is the share of resamples where
+// variant minus control is at or above zero (one-sided). Cost: per-task mean spend over trials a model response reached,
+// variant over control summed across paired tasks, with the same bootstrap; per success, spend over passes. The derived
+// mechanical saving is the change in first-request prompt tokens times the cache write price plus the cache read price
+// for every later request of control's mean session.
+// Usage: bun quick/laneb/analysis/ceremony-tb2.ts <config.json> [--json <out>]
+// Config: models, primary, jobs, sessions, margins {model: points}, prices {model: {input, output, cache_read, cache_write}}
+// in dollars per million tokens, and optional arms {control, variant, none} (the dry run maps them onto older arms).
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadTrial, perTask, readSessionRows, rng, sessionsByTrial, type Trial } from "./analyze.ts";
+
+export const SEED = 20261101;
+export const RESAMPLES = 10_000;
+const Z95 = 1.6448536269514722;
+
+type Price = { input: number; output: number; cache_read: number; cache_write?: number };
+type Config = { models: string[]; primary: string; jobs: string[]; sessions: string[]; margins: Record<string, number>; prices: Record<string, Price>; arms?: { control: string; variant: string; none: string } };
+type Row = Trial & { first: number | null; usage: Record<string, number> | null };
+
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+const median = (xs: number[]) => { if (!xs.length) return NaN; const s = [...xs].sort((a, b) => a - b), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+const q = (s: number[], p: number) => { if (!s.length) return NaN; const x = (s.length - 1) * p, lo = Math.floor(x), hi = Math.ceil(x); return s[lo] + (s[hi] - s[lo]) * (x - lo); };
+const phi = (z: number) => 0.5 * (1 + erf(z / Math.SQRT2));
+function erf(x: number) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
+
+export function load(jobs: string[], sessions: string[]): Row[] {
+  const rows = sessionsByTrial(readSessionRows(sessions));
+  const out: Row[] = [];
+  for (const job of jobs) for (const name of readdirSync(job).sort()) {
+    const d = join(job, name);
+    if (!statSync(d).isDirectory()) continue;
+    const t = loadTrial(d, rows);
+    if (!t) continue;
+    const f = [join(d, "evaluator", "laneb-summary.json"), join(d, "agent", "laneb-summary.json")].find(existsSync);
+    const s = f ? JSON.parse(readFileSync(f, "utf8")).session ?? null : null;
+    out.push({ ...t, first: s?.first_req_prompt_tokens ?? null, usage: s?.usage ?? null });
+  }
+  return out;
+}
+
+export function boot(tasks: string[], stat: (s: string[]) => number, seed = SEED, b = RESAMPLES) {
+  const r = rng(seed), reps: number[] = [];
+  for (let i = 0; i < b; i++) { const v = stat(Array.from({ length: tasks.length }, () => tasks[Math.floor(r() * tasks.length)])); if (Number.isFinite(v)) reps.push(v); }
+  reps.sort((x, y) => x - y);
+  return { point: stat(tasks), lo95: q(reps, 0.025), lo90: q(reps, 0.05), hi90: q(reps, 0.95), hi95: q(reps, 0.975), pAtOrAbove0: reps.filter((v) => v >= 0).length / reps.length };
+}
+
+const graded = (rows: Row[], model: string, arm: string) => rows.filter((t) => t.model === model && t.arm === arm && t.outcome !== "infra");
+
+export function contrast(rows: Row[], model: string, a: string, b: string, margin: number | null) {
+  const A = perTask(rows, model, a), B = perTask(rows, model, b);
+  const tasks = [...A.keys()].filter((k) => B.has(k)).sort();
+  const ci = boot(tasks, (s) => mean(s.map((k) => A.get(k)!)) - mean(s.map((k) => B.get(k)!)));
+  let size: number | null = null, verdict: string | null = null;
+  if (margin !== null && tasks.length) {
+    const ga = graded(rows, model, a), gb = graded(rows, model, b);
+    let v = 0;
+    for (const k of tasks) {
+      const xa = ga.filter((t) => t.task === k), xb = gb.filter((t) => t.task === k);
+      const n = xa.length + xb.length, p = (xa.filter((t) => t.outcome === "pass").length + xb.filter((t) => t.outcome === "pass").length) / n;
+      v += (n > 1 ? (p * (1 - p) * n) / (n - 1) : 0) * (1 / xa.length + 1 / xb.length);
+    }
+    const se0 = Math.sqrt(v) / tasks.length;
+    size = se0 > 0 ? phi(margin / 100 / se0 - Z95) : 1;
+    verdict = ci.lo90 > -margin / 100 ? (size >= 0.8 ? "NO_LOSS" : "NOLOSS_UNDERPOWERED") : "NOT_SHOWN";
+  }
+  return { model, contrast: a + " - " + b, tasks: tasks.length, a: mean(tasks.map((k) => A.get(k)!)), b: mean(tasks.map((k) => B.get(k)!)), ...ci, margin, size, verdict };
+}
+
+export function cell(rows: Row[], model: string, arm: string, price: Price | undefined) {
+  const all = rows.filter((t) => t.model === model && t.arm === arm);
+  const g = all.filter((t) => t.outcome !== "infra");
+  const paid = all.filter((t) => t.modelResponded);
+  const spend = all.reduce((s, t) => s + (t.costUsd ?? 0), 0);
+  const passes = g.filter((t) => t.outcome === "pass").length;
+  const u: Record<string, number> = {};
+  for (const t of paid) for (const [k, x] of Object.entries(t.usage ?? {})) u[k] = (u[k] ?? 0) + (Number(x) || 0);
+  const firsts = paid.map((t) => t.first).filter((x): x is number => x !== null);
+  return {
+    model, arm, trials: all.length, graded: g.length, passes, pass: g.length ? passes / g.length : NaN,
+    infra: all.length - g.length, noReward: g.filter((t) => t.noReward).length, agentTimeouts: all.filter((t) => t.agentTimeout).length,
+    budgetStops: all.filter((t) => t.budgetStop).length, missingCost: paid.filter((t) => t.costUsd === null).length,
+    spend, perTrial: paid.length ? spend / paid.length : NaN, perSuccess: passes ? spend / passes : NaN,
+    tokensPerTrial: Object.fromEntries(Object.entries(u).map(([k, x]) => [k, paid.length ? x / paid.length : NaN])),
+    requests: mean(paid.map((t) => t.requests)), firstMedian: median(firsts), firstMin: firsts.length ? Math.min(...firsts) : NaN, firstMax: firsts.length ? Math.max(...firsts) : NaN,
+    priced: price ?? null,
+  };
+}
+
+export function costRatio(rows: Row[], model: string, v: string, c: string) {
+  const per = (arm: string) => {
+    const m = new Map<string, { spend: number; n: number; passes: number }>();
+    for (const t of rows) if (t.model === model && t.arm === arm && t.modelResponded) {
+      const x = m.get(t.task) ?? { spend: 0, n: 0, passes: 0 };
+      x.spend += t.costUsd ?? 0; x.n += 1; x.passes += t.outcome === "pass" ? 1 : 0; m.set(t.task, x);
+    }
+    return m;
+  };
+  const V = per(v), C = per(c);
+  const tasks = [...V.keys()].filter((k) => C.has(k)).sort();
+  const sum = (M: typeof V, s: string[], f: (x: { spend: number; n: number; passes: number }) => number) => s.reduce((a, k) => a + f(M.get(k)!), 0);
+  const perTrial = boot(tasks, (s) => sum(V, s, (x) => x.spend / x.n) / sum(C, s, (x) => x.spend / x.n));
+  const perSuccess = boot(tasks, (s) => (sum(V, s, (x) => x.spend) / sum(V, s, (x) => x.passes)) / (sum(C, s, (x) => x.spend) / sum(C, s, (x) => x.passes)));
+  return { model, ratio: v + " / " + c, tasks: tasks.length, perTrial, perSuccess };
+}
+
+export function report(cfg: Config) {
+  const arms = cfg.arms ?? { control: "control", variant: "variant", none: "none" };
+  const name = (a: string) => (a === arms.control ? "control" : a === arms.variant ? "variant" : a === arms.none ? "none" : a);
+  const rows = load(cfg.jobs, cfg.sessions).filter((t) => cfg.models.includes(t.model) && [arms.control, arms.variant, arms.none].includes(t.arm));
+  const out: Record<string, unknown> = { seed: SEED, resamples: RESAMPLES, arms };
+  for (const noReward of ["zero", "drop"] as const) {
+    const r = noReward === "drop" ? rows.filter((t) => !t.noReward) : rows;
+    out[noReward] = {
+      cells: cfg.models.flatMap((m) => [arms.control, arms.variant, arms.none].map((a) => ({ ...cell(r, m, a, cfg.prices[m]), arm: name(a) }))),
+      contrasts: cfg.models.flatMap((m) => [
+        { ...contrast(r, m, arms.variant, arms.control, cfg.margins[m] ?? null), contrast: "variant - control" },
+        { ...contrast(r, m, arms.control, arms.none, null), contrast: "control - none" },
+        { ...contrast(r, m, arms.variant, arms.none, null), contrast: "variant - none" },
+      ]),
+      cost: cfg.models.flatMap((m) => [
+        { ...costRatio(r, m, arms.variant, arms.control), ratio: "variant / control" },
+        { ...costRatio(r, m, arms.control, arms.none), ratio: "control / none" },
+        { ...costRatio(r, m, arms.variant, arms.none), ratio: "variant / none" },
+      ]),
+    };
+  }
+  const zero = out.zero as { cells: ReturnType<typeof cell>[] };
+  out.mechanical = cfg.models.map((m) => {
+    const c = zero.cells.find((x) => x.model === m && x.arm === "control")!, v = zero.cells.find((x) => x.model === m && x.arm === "variant")!;
+    const p = cfg.prices[m], d = v.firstMedian - c.firstMedian;
+    return { model: m, firstTokensChange: d, perTrialUsd: p ? (d * ((p.cache_write ?? p.input) + p.cache_read * Math.max(c.requests - 1, 0))) / 1e6 : null };
+  });
+  return out;
+}
+
+const pct = (x: number) => (Number.isFinite(x) ? (x >= 0 ? "+" : "") + (100 * x).toFixed(1) : "n/a");
+const usd = (x: number) => (Number.isFinite(x) ? "$" + x.toFixed(4) : "n/a");
+
+if (import.meta.main) {
+  const cfg = JSON.parse(readFileSync(Bun.argv[2], "utf8")) as Config;
+  const rep = report(cfg);
+  for (const k of ["zero", "drop"] as const) {
+    const r = rep[k] as any;
+    console.log("## No-reward trials " + (k === "zero" ? "scored 0 (primary)" : "dropped (sensitivity)"));
+    console.log("| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+    for (const c of r.cells) console.log(`| ${c.model} | ${c.arm} | ${c.trials} | ${c.graded} | ${(100 * c.pass).toFixed(1)}% (${c.passes}) | ${c.infra} | ${c.noReward} | ${c.agentTimeouts} | ${c.budgetStops} | ${usd(c.spend)} | ${usd(c.perTrial)} | ${usd(c.perSuccess)} | ${c.requests.toFixed(2)} | ${c.firstMedian}, ${c.firstMin}, ${c.firstMax} |`);
+    console.log("\n| Model | Contrast | Tasks | Difference, pp | 90% CI | 95% CI | LOSS p (one-sided) | Margin | Size | No-loss |\n|---|---|---|---|---|---|---|---|---|---|");
+    for (const c of r.contrasts) console.log(`| ${c.model} | ${c.contrast} | ${c.tasks} | ${pct(c.point)} | [${pct(c.lo90)}, ${pct(c.hi90)}] | [${pct(c.lo95)}, ${pct(c.hi95)}] | ${c.contrast === "variant - control" ? c.pAtOrAbove0.toFixed(4) : "-"} | ${c.margin ?? "-"} | ${c.size === null ? "-" : c.size.toFixed(3)} | ${c.verdict ?? "-"} |`);
+    console.log("\n| Model | Ratio | Tasks | Per trial [95% CI] | Per success [95% CI] |\n|---|---|---|---|---|");
+    for (const c of r.cost) console.log(`| ${c.model} | ${c.ratio} | ${c.tasks} | ${c.perTrial.point.toFixed(3)} [${c.perTrial.lo95.toFixed(3)}, ${c.perTrial.hi95.toFixed(3)}] | ${c.perSuccess.point.toFixed(3)} [${c.perSuccess.lo95.toFixed(3)}, ${c.perSuccess.hi95.toFixed(3)}] |`);
+    console.log("");
+  }
+  console.log("## Mechanical saving (derived)\n| Model | First-request tokens, variant minus control (medians) | Dollars per trial |\n|---|---|---|");
+  for (const m of rep.mechanical as any[]) console.log(`| ${m.model} | ${m.firstTokensChange} | ${m.perTrialUsd === null ? "n/a" : usd(m.perTrialUsd)} |`);
+  const i = Bun.argv.indexOf("--json");
+  if (i > 0) writeFileSync(Bun.argv[i + 1], JSON.stringify(rep, null, 1) + "\n");
+}
