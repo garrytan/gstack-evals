@@ -291,38 +291,38 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         }
         return { behavior: "allow", updatedInput: { ...input, answers: r.answers } };
       };
-      const q = query({
-        prompt: inbox.stream(),
-        options: {
-          model: o.model,
-          maxTurns: o.maxTurns ?? MAX_TURNS,
-          permissionMode: "default",
-          settingSources: ["user", "project", "local"],
-          disallowedTools: DISALLOWED_TOOLS,
-          ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
-          abortController: abort,
-          canUseTool,
-          hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
-          stderr: (d: string) => appendFileSync(join(o.out, "cli-stderr.log"), d),
-          spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
-            try {
-              cli = session.spawn([CLAUDE_BIN, ...s.args], Object.fromEntries(SDK_ENV.flatMap((k) => (s.env[k] ? [[k, s.env[k]!]] : []))));
-            } catch (error) {
-              infra(error);
-              throw error;
-            }
-            cli.on("error", infra);
-            cli.on("exit", (code, signal) => {
-              if (abort.signal.aborted) return;
-              exitCode = code;
-              exitSignal = signal;
-            });
-            return cli;
-          },
-        },
-      });
       let turnText = "";
       try {
+        const q = query({
+          prompt: inbox.stream(),
+          options: {
+            model: o.model,
+            maxTurns: o.maxTurns ?? MAX_TURNS,
+            permissionMode: "default",
+            settingSources: ["user", "project", "local"],
+            disallowedTools: DISALLOWED_TOOLS,
+            ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
+            abortController: abort,
+            canUseTool,
+            hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
+            stderr: (d: string) => appendFileSync(join(o.out, "cli-stderr.log"), d),
+            spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
+              try {
+                cli = session.spawn([CLAUDE_BIN, ...s.args], Object.fromEntries(SDK_ENV.flatMap((k) => (s.env[k] ? [[k, s.env[k]!]] : []))));
+              } catch (error) {
+                infra(error);
+                throw error;
+              }
+              cli.on("error", infra);
+              cli.on("exit", (code, signal) => {
+                if (abort.signal.aborted) return;
+                exitCode = code;
+                exitSignal = signal;
+              });
+              return cli;
+            },
+          },
+        });
         for await (const m of q) {
           try {
             messages.push(m);

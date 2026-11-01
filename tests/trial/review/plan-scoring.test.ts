@@ -62,26 +62,29 @@ const baseInput = (prepared: PreparedUnit, suite: string, arms: string[], out: s
 });
 
 // The Agent SDK's side of a session, standing in for query(): it spawns the CLI through the driver's
-// spawnClaudeCodeProcess first, kills it on abort, and throws once the driver has aborted, as the SDK does.
+// spawnClaudeCodeProcess first (eager: when the query is built, as the real SDK does), kills it on abort, and throws once the driver has aborted, as the SDK does.
 type Sdk = { abortController: AbortController; canUseTool: (name: string, input: Record<string, unknown>, o: { toolUseID: string }) => Promise<unknown>; spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => ChildProcess };
 type Msg = Record<string, unknown>;
 type Script = (sdk: Sdk, cli: ChildProcess) => AsyncGenerator<Msg>;
-const standIn = (script: Script) => ({ options }: { prompt: AsyncIterable<Msg>; options: Record<string, unknown> }) => (async function* () {
+const standIn = (script: Script, eager = false) => ({ options }: { prompt: AsyncIterable<Msg>; options: Record<string, unknown> }) => {
   const sdk = options as unknown as Sdk;
-  const cli = sdk.spawnClaudeCodeProcess({ args: [], env: {} });
-  const kill = () => cli.kill("SIGKILL");
-  sdk.abortController.signal.addEventListener("abort", kill);
-  try {
-    for await (const m of script(sdk, cli)) {
+  const spawned = eager ? sdk.spawnClaudeCodeProcess({ args: [], env: {} }) : null;
+  return (async function* () {
+    const cli = spawned ?? sdk.spawnClaudeCodeProcess({ args: [], env: {} });
+    const kill = () => cli.kill("SIGKILL");
+    sdk.abortController.signal.addEventListener("abort", kill);
+    try {
+      for await (const m of script(sdk, cli)) {
+        if (sdk.abortController.signal.aborted) throw new Error("Claude Code process aborted by user");
+        yield m;
+      }
       if (sdk.abortController.signal.aborted) throw new Error("Claude Code process aborted by user");
-      yield m;
+    } finally {
+      sdk.abortController.signal.removeEventListener("abort", kill);
+      if (cli.exitCode === null && cli.signalCode === null) cli.kill("SIGKILL");
     }
-    if (sdk.abortController.signal.aborted) throw new Error("Claude Code process aborted by user");
-  } finally {
-    sdk.abortController.signal.removeEventListener("abort", kill);
-    if (cli.exitCode === null && cli.signalCode === null) cli.kill("SIGKILL");
-  }
-})();
+  })();
+};
 
 const init: Msg = { type: "system", subtype: "init", model: OPUS, tools: ["Skill", "Read", "AskUserQuestion"], skills: [], cwd: "/work" };
 const assistant = (...content: Msg[]): Msg => ({ type: "assistant", message: { role: "assistant", content }, parent_tool_use_id: null, session_id: "s" });
@@ -102,7 +105,7 @@ const personaDown = async (): Promise<never> => {
 };
 
 /** One arm per case, each running one session on the stand-in. */
-const CASES: Record<string, { script: (out: string) => Script; persona?: "down"; spawn?: "fails"; machine?: "gone"; cli?: "exit137" }> = {
+const CASES: Record<string, { script: (out: string) => Script; persona?: "down"; spawn?: "fails"; machine?: "gone"; cli?: "exit137"; eager?: true }> = {
   ok: { script: () => async function* () { yield init; yield assistant(text("Mode: HOLD SCOPE.\n\n" + block([{ severity: "Critical", section: "Problem", line: 3, claim: "Wrong problem.", evidence: "context/goals.md", fix: "Plan offline reading." }]))); yield result; } },
   toolcrash: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; await crash(cli); } },
   tooltimeout: { script: () => async function* (sdk) { yield init; yield toolsOnly; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); } },
@@ -158,6 +161,7 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
     await exited;
     throw new Error("Claude Code process exited with code 137");
   } },
+  nospawnnow: { spawn: "fails", eager: true, script: () => async function* () { yield init; } },
 };
 
 describe("the planning lane's failure rule, end to end through the Claude Code driver (keyless)", () => {
@@ -210,7 +214,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
       recovery: null,
       driver: (o) => {
         const c = CASES[slots.get(o.proxy.slot)!]!;
-        return claudeCodeDriver({ model: o.model, provider: "anthropic", proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(c.persona === "down" ? { freeform: personaDown } : o.freeform ? { freeform: o.freeform } : {}), query: standIn(c.script(o.out)) as never });
+        return claudeCodeDriver({ model: o.model, provider: "anthropic", proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(c.persona === "down" ? { freeform: personaDown } : o.freeform ? { freeform: o.freeform } : {}), query: standIn(c.script(o.out), c.eager) as never });
       },
     };
     const input = baseInput(fx.prepared, fx.panel.suite.id, arms, out, null);
@@ -329,10 +333,16 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect(record("exit137")).toEqual({ termination: { kind: "arm_failure", failure: "harness_crash" }, model_output: true, turns: 1 });
   });
 
+  // Value: protects=OV2 (#106 /ship): a spawn that fails inside query(), where the real SDK spawns, returns E_INFRA_FAILURE, a gap that stops the arm, and the batch runs on; fails_when=driver.run rejects and the batch aborts; why_new=#106 /ship outside voice OV2; seam=the driver's protected query lifecycle; no_claim=the real SDK
+  test("OV2: a spawn that fails when the query is built is infra, and the batch runs on", () => {
+    expect(record("nospawnnow")).toEqual({ termination: INFRA, model_output: false, turns: 0 });
+    expect([armJson("nospawnnow").status, armJson("nospawnnow").coverage_gaps]).toEqual(["stopped", [note("incomplete, the session ended missing (E_INFRA_FAILURE)")]]);
+  });
+
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 11]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 7, 0, 12]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);
