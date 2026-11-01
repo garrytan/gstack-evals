@@ -22,7 +22,7 @@ import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
 import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, type PreparedUnit, type ReviewArm } from "./run.ts";
 import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_ASK, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
-import { planArmFor, planPrefixProblem, planToldLine } from "./plan-told.ts";
+import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine } from "./plan-told.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -43,9 +43,9 @@ export const REVIEW_UNITS_HELP = [
   "    [--max-turns <n>] [--session-kind unattended]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
-  "gstack arm) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output block, the rec user, no second",
-  "model, and no install or test step. --arm-models limits an arm to some of --models. --sealed-root names the directory",
-  "outside the repo that holds a sealed suite.",
+  "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
+  "block, the rec user, no second model, and no install or test step. --arm-models limits an arm to some of --models.",
+  "--sealed-root names the directory outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
   "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command) in place",
@@ -195,6 +195,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
       const prefix = prefixes.get(a.name);
       const refused = prefix === undefined ? null : planPrefixProblem(plan, lens, prefix);
       if (refused) throw new Usage("--told-prefix " + a.name + ": " + refused);
+      const lone = planNoPrefixProblem(a.name, plan, prefix);
+      if (lone) throw new Usage(lone);
       if (plan === "gstack-auto" && GSTACK_AUTO.min_version === null) throw new Usage("arm gstack-auto: " + gstackAutoProblem(null));
       return { name: a.name, told: plan, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
     }
