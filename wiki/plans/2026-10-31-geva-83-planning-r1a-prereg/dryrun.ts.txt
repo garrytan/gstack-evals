@@ -1,0 +1,858 @@
+// R1a keyless dry run (GEVA-83, planning lane B8, plan 2026-10-31-geva-79-planning-lane-plan). Runs every frozen rule of
+// the R1a preregistration through the pinned scorer on the sealed panel's real suites with synthetic arms, keyless:
+//   bun dryrun.ts <scorer checkout> <sealed root> <source clone> <post dir> <scratch dir>
+// The stub must sit in the scorer checkout at lanes/review-noloss/suites/planrev-ceo-r1a.json. Every finding, judgment
+// and ruling here is synthetic. The transcript keeps each step's command (paths shortened), exit code and the scorer's
+// summary lines, drops every line that names a unit, and ends with a leak check over every unit's head and base. The
+// ledger checks run on a temporary approval record and local ledger under the scratch dir, with the approval mirror stubbed.
+import { createHash, randomBytes } from "node:crypto";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+
+const [scorer, SR, SRC, POST, OUT] = process.argv.slice(2).map((p) => resolve(p));
+const HOME = process.env.HOME ?? "";
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k)));
+const { nolossCli } = await import(join(scorer, "lanes/review-noloss/cli.ts"));
+const { loadSuite } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const { writePlanArm } = await import(join(scorer, "tests/noloss/plan-panel.ts"));
+const { armId } = await import(join(scorer, "src/trial/review/run.ts"));
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+
+const S = ["--sealed-root", SR];
+const OPUS = "claude-opus-5-5", P1 = "particle-ai/particle-1", FABLE = "claude-fable-5-1";
+const id = (arm: string, model: string) => armId(arm, model);
+const headline = loadSuite("planrev-ceo-r1a", { sealedRoot: SR });
+const pilotPath = join(SR, "suites/planrev-ceo-r1a-pilot.json"), realPath = join(SR, "suites/planrev-ceo-r1a-real.json");
+const fablePath = join(SR, "suites/planrev-ceo-r1a-fable.json");
+const fableFile = join(POST, "comparisons.fable.json");
+const suites = [headline.suite, loadSuite(pilotPath, { sealedRoot: SR }).suite, loadSuite(realPath, { sealedRoot: SR }).suite, loadSuite(fablePath, { sealedRoot: SR }).suite];
+const shas = new Set(suites.flatMap((s: any) => s.units.flatMap((u: any) => [u.head, u.base])));
+
+const lines: string[] = [];
+let failures = 0;
+const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER").replaceAll(HOME || "\0", "~");
+const UNIT = /panel\/plans#\d+|plans-\d+-[0-9a-f]{8}|\br1a-\d+-\d+\b|@[0-9a-f]{12}\b|\bpr-\d+\b/;
+const say = (t: string) => lines.push(scrub(t));
+const check = (label: string, ok: boolean) => {
+  if (!ok) failures++;
+  say((ok ? "PASS " : "FAIL ") + label);
+};
+const show = (text: string, max = 40) => {
+  const kept = text.split("\n").filter((l) => l.trim() && !UNIT.test(l) && !/^\|\s*\S+\s*\|/.test(l.trim()) || /\| planrev/.test(l));
+  for (const l of kept.slice(0, max)) say("    " + l);
+};
+async function cli(label: string, argv: string[], o: { show?: number; display?: string[] } = {}) {
+  const out: string[] = [], err: string[] = [];
+  const code = await nolossCli(argv, { out: (t: string) => out.push(t), err: (t: string) => err.push(t) });
+  say("$ noloss " + (o.display ?? argv).map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+  say("  exit " + code + (label ? "  (" + label + ")" : ""));
+  if (o.show !== 0) show(out.join("\n") + "\n" + err.join("\n").split("\n").filter((l) => /^E_[A-Z_]+ /.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), o.show ?? 40);
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+function units(argv: string[], label: string, show_ = 30) {
+  const r = spawnSync(join(scorer, "bin/gstack-evals"), ["review-units", ...argv], { encoding: "utf8", cwd: scorer, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
+  say("$ review-units " + argv.join(" "));
+  say("  exit " + r.status + "  (" + label + ")");
+  show((r.stdout ?? "") + "\n" + (r.stderr ?? "").split("\n").filter((l) => /^E_[A-Z_]+ |^Usage/.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), show_);
+  return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
+const draw = (...parts: unknown[]) => parseInt(createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 8), 16) / 0x100000000;
+const RATE: Record<string, [number, number]> = { [id("none", OPUS)]: [0.3, 0.1], [id("gstack", OPUS)]: [0.65, 0.15], [id("lens", OPUS)]: [0.35, 0.1], [id("none", P1)]: [0.15, 0.05], [id("gstack", P1)]: [0.4, 0.1], [id("placebo", P1)]: [0.15, 0.05], [id("none", FABLE)]: [0.35, 0.1], [id("gstack", FABLE)]: [0.6, 0.15], [id("flagall", OPUS)]: [1, 1], [id("flagbait", OPUS)]: [1, 1] };
+const isDecoy = (u: any) => u.blockers.every((b: any) => b.counts === "over-blocking");
+const save = (name: string, value: unknown) => {
+  const p = join(OUT, name);
+  writeFileSync(p, typeof value === "string" ? value : JSON.stringify(value, null, 2) + "\n");
+  return p;
+};
+
+async function judged(name: string, suite: any, suiteArg: string, cells: string[], passes: number, adjudicate: boolean, diag: Record<string, string[]> = {}, extra: Record<string, number> = {}) {
+  const raw = join(OUT, name, "raw"), rawRoot = join(OUT, name, "raw-root"), judgedDir = join(OUT, name, "judged"), adjDir = join(OUT, name, "adjudicated"), root = join(OUT, name, "arms");
+  for (const c of cells) {
+    const [hit, bait] = RATE[c]!;
+    writePlanArm(join(raw, c), suite, { id: c, passes, raw: true, noise: c.startsWith("flagall") ? 3 : 0, outcome: (u: any, b: any, pass: number) => (draw(c, u.pr, pass, b.id) < (isDecoy(u) ? bait : hit) ? "F" : draw(c, u.pr, pass, b.id, "d") < 0.25 ? "D" : "M") });
+    for (const u of suite.units.slice(0, extra[c] ?? 0)) {
+      const line = [1, 2, 4, 5].find((n) => !u.blockers.some((b: any) => b.line === n));
+      appendFileSync(join(raw, c, "findings", u.pr + ".jsonl"), JSON.stringify({ id: "p1-x1", severity: "Critical", path: "plan.md", line, summary: "Synthetic finding that names no flaw.", section: "Users", claim: "Synthetic finding that names no flaw.", evidence: "plan.md and context/goals.md", fix: "Synthetic.", pass: 1 }) + "\n");
+    }
+    if (diag[c]) {
+      const a = JSON.parse(readFileSync(join(raw, c, "arm.json"), "utf8"));
+      writeFileSync(join(raw, c, "arm.json"), JSON.stringify({ ...a, diagnostics: diag[c] }, null, 2) + "\n");
+    }
+    const r = await nolossCli(["ingest", join(raw, c), "--suite", suiteArg, "--root", rawRoot, ...S], { out: () => {}, err: () => {} });
+    check(name + ": raw arm " + c + " ingests", r === 0);
+  }
+  const armDir = (r: string, c: string) => join(r, suite.id, c);
+  const join_ = async (keyPath: string, packets: string, arms: string[], outDir: string, item: "blockers" | "findings") => {
+    const key = JSON.parse(readFileSync(keyPath, "utf8"));
+    const all = key.packets.map((p: any) => {
+      const pk = JSON.parse(readFileSync(join(packets, p.file), "utf8"));
+      const items = item === "blockers" ? pk.blockers.map((b: any) => ({ id: b.id, matches: pk.findings.filter((f: any) => f.line === b.line).map((f: any) => f.id) })) : pk.findings.map((f: any) => ({ id: f.id, ruling: "not-defect" }));
+      return { p, items };
+    });
+    const body = (judge: string, only?: Set<string>) => ({ batch: key.batch, judge, packets: all.map(({ p, items }: any) => ({ file: p.file, sha256: p.sha256, [item]: items.filter((x: any) => !only || only.has(p.file + " " + x.id)) })).filter((p: any) => p[item].length) });
+    const named = (text: string) => new Set([...text.matchAll(/(packets\/\S+\.json) ([BF]\d+)/g)].map((m) => m[1] + " " + m[2]));
+    const args = ["judge-join", "--suite", suiteArg, "--key", keyPath, "--out", outDir, ...arms.flatMap((a) => ["--arm", a]), ...S];
+    const replies = ["--reply", save(name + "-" + item + "-primary.json", body("judge one"))];
+    const attempt = async () => {
+      const o: string[] = [], e: string[] = [];
+      const code = await nolossCli([...args, ...replies], { out: (t: string) => o.push(t), err: (t: string) => e.push(t) });
+      return { code, out: o.join("\n"), err: e.join("\n") };
+    };
+    let r = await attempt();
+    for (const [flag, judge] of [["--second", "judge two"], ["--third", "judge three"]] as const) {
+      if (r.code === 0) break;
+      say("  judge-join waits: " + (r.err.split("\n")[0] ?? "").replace(/:.*$/, ""));
+      replies.push(flag, save(name + "-" + item + flag + ".json", body(judge, named(r.err))));
+      r = await attempt();
+    }
+    say("$ noloss " + [...args, ...replies].join(" "));
+    say("  exit " + r.code + "  (" + name + ": judge-join " + item + " for every arm at once)");
+    show(r.out + "\n" + r.err.split("\n").filter((l) => /^E_[A-Z_]+ /.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), 3);
+    return r;
+  };
+  const packets = join(OUT, name, "packets"), keyPath = join(OUT, name, "key.json");
+  const p = await cli(name + ": blind packets over every arm, plan trees from the source clone", ["judge-packet", "--suite", suiteArg, ...cells.flatMap((c) => ["--arm", armDir(rawRoot, c)]), "--seed", "20261031", "--out", packets, "--key", keyPath, "--source", "panel/plans=" + SRC, ...S], { show: 3 });
+  check(name + ": judge-packet exit 0", p.code === 0);
+  const j = await join_(keyPath, packets, cells.map((c) => armDir(rawRoot, c)), judgedDir, "blockers");
+  check(name + ": judge-join exit 0", j.code === 0);
+  let from = judgedDir;
+  if (adjudicate) {
+    const adjPackets = join(OUT, name, "adj-packets"), adjKey = join(OUT, name, "adj-key.json");
+    const a = await cli(name + ": blind adjudication packets", ["judge-packet", "--suite", suiteArg, ...cells.flatMap((c) => ["--arm", join(judgedDir, c)]), "--seed", "20261101", "--out", adjPackets, "--key", adjKey, "--adjudicate", "--source", "panel/plans=" + SRC, ...S], { show: 3 });
+    check(name + ": adjudication packets build, or there is nothing to adjudicate", a.code === 0 || /nothing to adjudicate/.test(a.err));
+    if (existsSync(adjKey)) {
+      const k = await join_(adjKey, adjPackets, cells.map((c) => join(judgedDir, c)), adjDir, "findings");
+      check(name + ": adjudication join exit 0", k.code === 0);
+      from = adjDir;
+    } else say("  no must-fix finding is left unmatched, so there is no adjudication batch");
+  }
+  for (const c of cells) check(name + ": judged arm " + c + " ingests", (await nolossCli(["ingest", join(from, c), "--suite", suiteArg, "--root", root, ...S], { out: () => {}, err: () => {} })) === 0);
+  return { root, from, armDir: (c: string) => armDir(root, c) };
+}
+
+const outcome = (r: { out: string; err: string; code: number }) => (r.out.match(/verdict: (\S+)( NOLOSS_UNDERPOWERED)?/) ?? [])[0] ?? (r.err.match(/^E_[A-Z_]+/m) ?? ["?"])[0];
+async function score(label: string, file: string, v: string, r: string, expect: string, o: { suite?: string; root: string; extra?: string[] }) {
+  const argv = ["score", "--suite", o.suite ?? "planrev-ceo-r1a", "--root", o.root, "--prereg", file, "--variant", v, "--reference", r, ...S, ...(o.extra ?? [])];
+  const s = await cli(label, argv, { show: 0 });
+  show(s.out.split("\n").filter((l) => /verdict:|Holm|claim|false alarm|recall|on \d+ blockers|NOLOSS|delta|FALSE_ALARM/i.test(l)).join("\n") + "\n" + s.err.split("\n").filter((l) => /^E_[A-Z_]+ /.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), 14);
+  const e = await nolossCli([...argv, "--expect", expect], { out: () => {}, err: () => {} });
+  check(label + ": --expect " + expect, e === 0);
+  return s;
+}
+async function derive(label: string, name: string, file: string, root: string, extra: string[], shown?: string[]) {
+  const out = join(OUT, "derived", name);
+  const head = ["derive", "--suite", "planrev-ceo-r1a", "--comparisons", file, "--root", root, "--id", name, "--out", out];
+  const d = await cli(label, [...head, ...extra, ...S], { show: 4, display: [...head, ...(shown ?? extra), ...S] });
+  check(label + ": derive exit 0", d.code === 0);
+  return { suite: join(out, name + ".json"), root: join(out, "arms"), file: join(out, "comparisons." + name + ".json") };
+}
+
+say("# R1a keyless dry run, " + new Date().toISOString());
+say("scorer HEAD " + spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim());
+for (const f of ["lanes/review-noloss/suites/planrev-ceo-r1a.json"]) say("stub sha256 " + createHash("sha256").update(readFileSync(join(scorer, f))).digest("hex"));
+for (const f of readdirSync(POST).filter((x) => /\.(json|tsv|md)$/.test(x) && x !== "README.md").sort()) say("post " + f + " sha256 " + createHash("sha256").update(readFileSync(join(POST, f))).digest("hex"));
+
+say("\n## 1. Suites, stub and sealed root");
+check("stub loads with the sealed root", (await cli("headline suite", ["suite", "--check", "--suite", "planrev-ceo-r1a", ...S])).code === 0);
+check("stub refuses without the sealed root", (await cli("no sealed root", ["suite", "--check", "--suite", "planrev-ceo-r1a"])).code === 2);
+check("pilot suite checks", (await cli("pilot suite", ["suite", "--check", "--suite", pilotPath, ...S])).code === 0);
+check("real-neutral suite checks", (await cli("real-neutral suite", ["suite", "--check", "--suite", realPath, ...S])).code === 0);
+check("Fable subset suite checks", (await cli("Fable subset suite", ["suite", "--check", "--suite", fablePath, ...S])).code === 0);
+
+say("\n## 2. The frozen run commands (review-units --dry-run): each run under its own line item, spend cap and out dir");
+const POLICY = join(POST, "policy.json");
+const RUNROOT = join(HOME, ".capy", "work", "planning-r1a");
+const GS = "gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f";
+const ARMS4 = { arms: ["none", GS, "lens", "placebo"], armModels: ["lens=" + OPUS, "placebo=" + P1] };
+const RUNS = [
+  { run: "pilot", item: "planning-r1a-pilot", out: "pilot", suite: pilotPath, units: suites[1].units.length, ...ARMS4, models: [OPUS, P1, FABLE], passes: 1, sessions: 32 },
+  { run: "headline", item: "planning-r1a-headline", out: "headline", suite: "planrev-ceo-r1a", units: suites[0].units.length, ...ARMS4, models: [OPUS, P1], passes: 3, sessions: 648 },
+  { run: "real-neutral", item: "planning-r1a-real", out: "real-neutral", suite: realPath, units: suites[2].units.length, ...ARMS4, models: [OPUS, P1], passes: 3, sessions: 36 },
+  { run: "Fable subset", item: "planning-r1a-fable", out: "fable", suite: fablePath, units: suites[3].units.length, arms: ["none", GS], armModels: [] as string[], models: [FABLE], passes: 1, sessions: 36 },
+];
+const [PILOT, HEAD, REAL, FAB] = RUNS as [(typeof RUNS)[number], (typeof RUNS)[number], (typeof RUNS)[number], (typeof RUNS)[number]];
+const TABLE = new Map([...readFileSync(join(POST, "README.md"), "utf8").matchAll(/^\| [^|\n]*\((planning-r1a-[a-z]+)\)[^|\n]*\|[^|\n]*\| \$([\d,.]+) \| \$([\d,]+) \|$/gm)].map((m) => [m[1]!, { projection: m[2]!, cap: Number(m[3]!.replaceAll(",", "")) }]));
+check("section 9's table gives a projection and an item cap for each of the four runs, in the frozen order pilot, headline, real-neutral, Fable", [...TABLE.keys()].join(",") === RUNS.map((r) => r.item).join(","));
+const capOf = (item: string) => TABLE.get(item)?.cap ?? 0;
+const common = ["--sealed-root", SR, "--plan", "ceo", "--units", "all", "--source", "panel/plans=" + SRC, "--base-branch", "panel/plans=main", "--dry-run"];
+const command = (r: (typeof RUNS)[number], item = r.item, policy = ["--policy", POLICY]) => ["--suite", r.suite, "--arms", ...r.arms, "--models", ...r.models, ...(r.armModels.length ? ["--arm-models", ...r.armModels] : []), "--passes", String(r.passes), ...common, ...policy, "--item", item, "--spend-cap", String(capOf(r.item)), "--out", join(RUNROOT, r.out)];
+let u: ReturnType<typeof units>;
+for (const r of RUNS) {
+  u = units(command(r), r.run + ": " + r.models.length + " model" + (r.models.length > 1 ? "s" : "") + ", " + r.passes + " pass" + (r.passes > 1 ? "es" : "") + ", line item " + r.item);
+  check(r.run + " run plans " + r.sessions + " sessions under " + r.item + ", spend cap $" + capOf(r.item) + ", out " + join(RUNROOT, r.out).replace(HOME, "~"), u.code === 0 && new RegExp("sessions " + r.sessions + "\\b").test(u.out) && /spend cap \$/.test(u.out) && u.out.includes("out " + join(RUNROOT, r.out)));
+}
+u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", "gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f", "--models", OPUS, "--passes", "3", ...common, "--policy", POLICY, "--item", HEAD.item, "--out", join(RUNROOT, HEAD.out)], "gstack-auto placeholder");
+check("gstack-auto is refused until GST-537 sets its release", u.code !== 0 && /GST-537/.test(u.err));
+u = units(command(FAB, FAB.item, []), "Fable under the default policy");
+check("the default policy refuses Fable as a subject (smoke_only, no rungs)", u.code !== 0 && /smoke/.test(u.err));
+for (const item of [HEAD.item, REAL.item, "planning-r1a"]) {
+  u = units(command(FAB, item), "Fable under R1a's policy and line item " + item);
+  check("R1a's policy refuses Fable under " + item + ": only the pilot and Fable items name its rung", u.code !== 0 && /smoke/.test(u.err));
+}
+const defaultPolicy = JSON.parse(readFileSync(join(scorer, "policy", "models.json"), "utf8")), r1aPolicy = JSON.parse(readFileSync(POLICY, "utf8"));
+const bare = (p: any) => ({ ...p, name: null, source: null, models: { ...p.models, [FABLE]: { ...p.models[FABLE], rungs: null } } });
+say("policy.json: " + FABLE + " rungs " + JSON.stringify(r1aPolicy.models[FABLE].rungs));
+check("policy.json is the pinned default policy with only its name, its source and Fable's rungs changed, and the rungs are the pilot and Fable items", JSON.stringify(bare(defaultPolicy)) === JSON.stringify(bare(r1aPolicy)) && JSON.stringify(r1aPolicy.models[FABLE].rungs) === JSON.stringify([PILOT.item, FAB.item]));
+u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "--models", OPUS, "--passes", "3", ...common, "--policy", POLICY, "--item", HEAD.item, "--out", join(scorer, "runs", "r1a-dry")], "a sealed run with --out inside the repo");
+check("review-units refuses a sealed run whose --out is inside the repo", u.code !== 0 && /inside the repo/.test(u.err));
+
+say("\n## 3. Line items: the $2,705 split, each run's start rule, and the spend chain on a temporary ledger");
+const { loadPolicy } = await import(join(scorer, "src/skill-eval/cli/policy.ts"));
+const { allowanceMicros, SESSION_ALLOWANCE } = await import(join(scorer, "src/skill-eval/cli/dry-run.ts"));
+const loadedPolicy = loadPolicy(POLICY);
+const allow = (m: string): number => allowanceMicros({ policy: loadedPolicy }, m, SESSION_ALLOWANCE);
+const PRICE: Record<string, number> = { [OPUS]: 5_000_000, [P1]: 192_000, [FABLE]: 12_500_000 };
+const dollars = (micros: number) => "$" + (micros / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+check("the pinned allowances are $7.04 per Opus session, $0.192 per particle-1 session and $17.60 per Fable session (section 9)", allow(OPUS) === 7_040_000 && allow(P1) === 192_000 && allow(FABLE) === 17_600_000);
+const cellsOn = (r: (typeof RUNS)[number], m: string) => r.arms.filter((a) => (a === "lens" ? [OPUS] : a === "placebo" ? [P1] : r.models).includes(m)).length;
+const SESSIONS_CAP = 2705, JUDGE_ENVELOPE = 95;
+const proj = RUNS.map((r) => r.models.reduce((s, m) => s + r.units * r.passes * cellsOn(r, m) * PRICE[m]!, 0));
+const projTotal = proj.reduce((a, b) => a + b, 0);
+const floorShare = proj.map((p) => Math.floor((SESSIONS_CAP * p) / projTotal));
+const remainder = proj.map((p, i) => SESSIONS_CAP * p - floorShare[i]! * projTotal);
+const byRemainder = RUNS.map((_, i) => i).sort((a, b) => remainder[b]! - remainder[a]! || a - b);
+const short = SESSIONS_CAP - floorShare.reduce((a, b) => a + b, 0);
+const split = floorShare.map((f, i) => f + (byRemainder.indexOf(i) < short ? 1 : 0));
+RUNS.forEach((r, i) => say(r.run + " (" + r.item + "): " + r.models.map((m) => r.units * r.passes * cellsOn(r, m) + " " + (m === OPUS ? "Opus" : m === P1 ? "particle-1" : "Fable")).join(", ") + " sessions; projection " + dollars(proj[i]!) + "; share of $2,705 " + ((SESSIONS_CAP * proj[i]!) / projTotal).toFixed(2) + "; item cap $" + split[i]));
+check("each run's projection in section 9's table is its sessions at the section 9 rates ($5 Opus, $0.192 particle-1, $12.50 Fable)", RUNS.every((r, i) => TABLE.get(r.item)!.projection === (proj[i]! / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) && RUNS.every((r) => r.models.reduce((s, m) => s + r.units * r.passes * cellsOn(r, m), 0) === r.sessions));
+check("the item caps split $2,705 in proportion to the projections, rounded to whole dollars by largest remainder so they sum to exactly $2,705, as section 9's table prints them", RUNS.every((r, i) => capOf(r.item) === split[i]) && split.reduce((a, b) => a + b, 0) === SESSIONS_CAP);
+const PARALLEL = 4;
+const fits = RUNS.map((r, i) => {
+  const per = Math.min(r.units, Math.max(1, Math.floor(PARALLEL / r.arms.length)));
+  const excess = Math.max(...r.models.map((m) => per * cellsOn(r, m) * (allow(m) - PRICE[m]!)));
+  const need = proj[i]! + excess;
+  say("start rule, " + r.run + ": projection " + dollars(proj[i]!) + " plus its costliest round's excess " + dollars(excess) + " (a round is " + per + " unit" + (per > 1 ? "s" : "") + " of every arm on one model at --parallel " + PARALLEL + ", admitted at the allowance, run.ts:345-348) = " + dollars(need) + " against its item cap $" + capOf(r.item) + ": " + (need <= capOf(r.item) * 1e6 ? "fits" : "does not fit, so the run goes back to the Captain"));
+  return need <= capOf(r.item) * 1e6;
+});
+check("at section 9's rates every run's projection plus its costliest round's excess fits under its own item", fits.every(Boolean));
+
+const { ledgerCli } = await import(join(scorer, "src/runner/ledger/cli.ts"));
+const { openLease, settleLease, ledgerStatus } = await import(join(scorer, "src/runner/ledger/ledger.ts"));
+const { openLocalLedger } = await import(join(scorer, "src/runner/ledger/local.ts"));
+const { ledgerPath } = await import(join(scorer, "src/runner/ledger/paths.ts"));
+const { rigAdmission } = await import(join(scorer, "src/rig/admission.ts"));
+const { newRunId } = await import(join(scorer, "src/skill-eval/cli/call.ts"));
+const LDIR = join(OUT, "ledger"), REC = join(LDIR, "record");
+mkdirSync(LDIR, { recursive: true });
+writeFileSync(join(LDIR, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+const lenv = { ...KEYLESS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LDIR, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LDIR, "approvals-stub") };
+say("A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. Every item uses --admission warn, as section 9 records them: admission binds the working tree with untracked files included, and R1a runs e305ed0 with the sealed stub copied in, so each lease warns RIG_UNPROVEN and opens. The pin check (section 19) stands in for admission.");
+const ledger = async (label: string, argv: string[]) => {
+  const o: string[] = [], e: string[] = [];
+  const code = await ledgerCli(argv, { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, lenv);
+  say("$ ledger " + argv.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+  say("  exit " + code + "  (" + label + ")");
+  for (const l of [...o, ...e].join("\n").split("\n").filter((l) => l.trim() && !/^E_[A-Z_]+ (fix|docs):/.test(l))) say("    " + l);
+  return { code, out: o.join("\n"), err: e.join("\n") };
+};
+const runHostSrc = readFileSync(join(scorer, "src/skill-eval/cli/run-host.ts"), "utf8"), judgeRunSrc = readFileSync(join(scorer, "lanes/review-noloss/judge-run.ts"), "utf8"), unitsSrc = readFileSync(join(scorer, "src/trial/review/cli.ts"), "utf8");
+check("the leases here are the pinned entry points' own lease calls: review-units hands --spend-cap to the rig as cap (cli.ts:284), which leases with openLease(..., { item, run_id, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: \"trial\" }) }) (run-host.ts:533); judge-run leases with openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: \"direct\" }) }) (judge-run.ts:241), its runId \"judge-\" and 6 random bytes (:229)", runHostSrc.includes('openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) })') && judgeRunSrc.includes('openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: "direct" }) })') && judgeRunSrc.includes('const runId = "judge-" + randomBytes(6).toString("hex");') && unitsSrc.includes('const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap,'));
+const APPROVE = ["--admission", "warn", "--words", "dry run only", "--by", "dryrun.ts", "--source", "R1a keyless dry run"];
+for (const r of RUNS) check("line item " + r.item + " records its cap of $" + capOf(r.item), (await ledger("record " + r.item, ["init", "--item", r.item, "--cap", String(capOf(r.item)), ...APPROVE])).code === 0);
+const local = openLocalLedger(ledgerPath(undefined, lenv));
+const itemState = (item: string) => ledgerStatus(REC, item)[0];
+const warned: string[] = [];
+let calls = 0;
+const spend = async (lease: { lease_id: string; run_id: string }, model: string, micros: number) => {
+  calls++;
+  const r = await local.reserve({ idempotency_key: "dry-" + calls, lease_id: lease.lease_id, cell: { run_id: lease.run_id, arm: "none", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + calls }, max_micros: micros });
+  if (!r.ok) throw new Error(r.code + " " + r.message);
+  const s = await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+  if (!s.ok) throw new Error(s.code + " " + s.message);
+};
+const leaseFor = (item: string, run_id: string, proof: "trial" | "direct", amount?: number) => openLease(REC, local, { item, run_id, ...(amount === undefined ? {} : { amount_micros: amount }), requireAdmission: rigAdmission({ proof }), warn: (code: string) => warned.push(code) });
+const codeOf = (f: () => unknown) => {
+  try {
+    f();
+    return "leased";
+  } catch (e) {
+    return (e as { code?: string }).code ?? String(e);
+  }
+};
+const runIds: Record<string, string> = {}, firstLease: Record<string, { lease_id: string; run_id: string }> = {};
+for (const r of RUNS) {
+  const s = itemState(r.item);
+  const spendCap = s.cap_micros - s.committed_micros;
+  runIds[r.item] = newRunId("review-units");
+  const lease = leaseFor(r.item, runIds[r.item]!, "trial", spendCap);
+  firstLease[r.item] = lease;
+  await spend(lease, r.models[0]!, PRICE[r.models[0]!]!);
+  const killed = r.item === FAB.item;
+  const close = killed ? null : settleLease(REC, local, lease.lease_id);
+  say(r.run + ": run id " + runIds[r.item] + ", minted as review-units mints it (cli.ts:280), leases " + r.item + " for " + dollars(spendCap) + ", its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters " + dollars(PRICE[r.models[0]!]!) + "; " + (close ? "settled at " + dollars(close.spent_micros) + " spent" : "left open, as a killed controller leaves it"));
+}
+check("each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone", RUNS.every((r) => itemState(r.item).run_id === runIds[r.item]) && [PILOT, HEAD, REAL].every((r) => itemState(r.item).committed_micros === PRICE[r.models[0]!] && !itemState(r.item).open_lease));
+check("each lease on a warn item without an admission record warns RIG_UNPROVEN and is not refused", warned.length === 4 && warned.every((c) => c === "RIG_UNPROVEN"));
+const second = codeOf(() => leaseFor(PILOT.item, newRunId("review-units"), "trial"));
+say("a second review-units run on " + PILOT.item + ": " + second);
+check("an item refuses a second run id with E_ITEM_BOUND, which is why each run has its own item", second === "E_ITEM_BOUND");
+const hs = itemState(HEAD.item);
+const resumeCap = hs.cap_micros - hs.committed_micros;
+const resumed = leaseFor(HEAD.item, runIds[HEAD.item]!, "trial", resumeCap);
+settleLease(REC, local, resumed.lease_id);
+say("the headline's one resume: same run id (review-units keeps it in run.json, cli.ts:280), lease for " + dollars(resumeCap));
+check("a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend", resumeCap === capOf(HEAD.item) * 1e6 - PRICE[OPUS]! && itemState(HEAD.item).leases === 2 && !itemState(HEAD.item).open_lease);
+const blocked = codeOf(() => leaseFor(FAB.item, runIds[FAB.item]!, "trial"));
+say("the Fable run's resume while the killed controller's lease is open: " + blocked);
+check("after a killed controller its lease stays open, and the resume's lease is refused with E_LEASE_UNSETTLED", blocked === "E_LEASE_UNSETTLED");
+const settled = await ledger("settle the killed controller's lease on its own machine, before the resume", ["settle", "--lease", firstLease[FAB.item]!.lease_id]);
+const fs = itemState(FAB.item);
+const fableResume = leaseFor(FAB.item, runIds[FAB.item]!, "trial", fs.cap_micros - fs.committed_micros);
+settleLease(REC, local, fableResume.lease_id);
+check("once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id", settled.code === 0 && fs.committed_micros === PRICE[FABLE] && itemState(FAB.item).leases === 2 && !itemState(FAB.item).open_lease);
+let judgeSpent = 0;
+const judgeCaps: number[] = [];
+for (const [item, cost] of [["planning-r1a-judge-pilot-match", 3_250_000], ["planning-r1a-judge-pilot-adjudicate", 1_100_000]] as const) {
+  const cap = JUDGE_ENVELOPE * 1_000_000 - judgeSpent;
+  judgeCaps.push(cap);
+  await ledger("record " + item + " at $95 less the settled spend of every earlier R1a judge item", ["init", "--item", item, "--cap", String(cap / 1e6), ...APPROVE]);
+  const jid = "judge-" + randomBytes(6).toString("hex");
+  const warnedBefore = warned.length;
+  const jl = leaseFor(item, jid, "direct");
+  const jw = warned.slice(warnedBefore);
+  await spend(jl, "gpt-6.1-sol", cost);
+  const jc = settleLease(REC, local, jl.lease_id);
+  say(item + ": judge-run's run id " + jid + " (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters " + dollars(cost) + "; settled at " + dollars(jc.spent_micros));
+  const again = codeOf(() => leaseFor(item, "judge-" + randomBytes(6).toString("hex"), "direct"));
+  check(item + " refuses a second judge-run call with " + again + ", so each judge-run call takes its own judge item", again === "E_ITEM_BOUND");
+  check(item + ": judge-run's warn-mode lease warned RIG_UNPROVEN and opened", jw.length === 1 && jw[0] === "RIG_UNPROVEN");
+  judgeSpent += itemState(item).committed_micros;
+}
+check("judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope (" + judgeCaps.map(dollars).join(", then ") + "; " + dollars(judgeSpent) + " spent)", judgeCaps[1] === JUDGE_ENVELOPE * 1e6 - 3_250_000 && judgeSpent <= JUDGE_ENVELOPE * 1e6);
+await ledger("every line item on the temporary record", ["status"]);
+local.close();
+check("the four run items hold $2,705 and the judge envelope $95: $2,800, the cap", RUNS.reduce((s, r) => s + capOf(r.item), 0) === SESSIONS_CAP && SESSIONS_CAP + JUDGE_ENVELOPE === 2800);
+
+say("\n## 4. Headline: synthetic arms through blind judging and adjudication");
+const cells = [id("none", OPUS), id("gstack", OPUS), id("lens", OPUS), id("none", P1), id("gstack", P1), id("placebo", P1), id("flagall", OPUS), id("flagbait", OPUS)];
+const firstSeeded = headline.suite.units.filter((x: any) => !isDecoy(x)).slice(0, 3).map((x: any) => x.id);
+const diag = { [id("gstack", OPUS)]: [firstSeeded[0] + " pass 2: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing", firstSeeded[1] + " pass 3: incomplete, the session ended timeout; scored as finding nothing"], [id("lens", OPUS)]: [firstSeeded[2] + " pass 1: missing; scored as finding nothing"] };
+const H = await judged("headline", headline.suite, "planrev-ceo-r1a", cells, 3, true, diag);
+const PRIMARY = join(POST, "comparisons.primary.json"), SECONDARY = join(POST, "comparisons.secondary.json"), SECOPUS = join(POST, "comparisons.secondary-opus.json");
+
+say("\n## 5. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys");
+const prim = await score("primary: gstack better", PRIMARY, id("none", OPUS), id("gstack", OPUS), "LOSS", { root: H.root });
+check("primary prints its Holm step of 2", /of 2 in the declared LOSS family/.test(prim.out));
+check("primary gate reads 12 decoys", /on 12 decoys/.test(prim.out));
+await score("primary: gstack worse (mirror)", PRIMARY, id("gstack", OPUS), id("none", OPUS), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { root: H.root });
+const j = JSON.parse((await nolossCli(["score", "--suite", "planrev-ceo-r1a", "--root", H.root, "--prereg", PRIMARY, "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--json", ...S], { out: (t: string) => save("primary.json", t), err: () => {} }), readFileSync(join(OUT, "primary.json"), "utf8"))).result;
+say("ceiling rule: none-opus must-fix recall " + j.recall.variant.toFixed(3) + " (ceiling above 0.85: " + (j.recall.variant > 0.85 ? "met, no claim" : "not met") + ")");
+check("the ceiling rule reads none-opus recall", typeof j.recall.variant === "number");
+
+say("\n## 6. Secondary family: Holm over 3");
+await score("secondary: particle-1 gstack", SECONDARY, id("none", P1), id("gstack", P1), "LOSS", { root: H.root });
+await score("secondary: Opus lens", SECONDARY, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: H.root });
+const plac = await score("secondary: particle-1 placebo", SECONDARY, id("none", P1), id("placebo", P1), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { root: H.root });
+check("secondary prints its Holm step of 3", /of 3 in the declared LOSS family/.test(plac.out));
+
+say("\n## 7. Frozen particle-1 rung drop (pilot stop c)");
+const opusRoot = join(OUT, "arms-opus");
+for (const c of cells.filter((c) => c.endsWith("-opus"))) cpSync(H.armDir(c), join(opusRoot, "planrev-ceo-r1a", c), { recursive: true });
+await score("full secondary file without particle-1 arms", SECONDARY, id("none", OPUS), id("lens", OPUS), "E_NOLOSS_ARM", { root: opusRoot });
+const so = await score("Opus-only secondary file", SECOPUS, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: opusRoot });
+check("Opus-only file is a family of 1", /of 1 in the declared LOSS family/.test(so.out));
+
+say("\n## 8. False-alarm gate at the frozen margin: a flag-everything arm and a flag-every-bait arm");
+const gated = ["comparisons.primary.json", "comparisons.secondary.json", "comparisons.secondary-opus.json", "comparisons.fable.json"].flatMap((f) => JSON.parse(readFileSync(join(POST, f), "utf8")).comparisons);
+check("every primary, secondary and Fable comparison carries false_alarm_gate margin_per_decoy 0.5 (" + gated.length + " comparisons)", gated.length === 8 && gated.every((c: any) => JSON.stringify(c.false_alarm_gate) === JSON.stringify({ margin_per_decoy: 0.5 })));
+const FROZEN_GATE = JSON.parse(readFileSync(PRIMARY, "utf8")).comparisons[0].false_alarm_gate;
+const decoyClusters = (s: any) => { const d = s.units.filter(isDecoy); return d.length + " decoys in " + new Set(d.map((u: any) => u.cluster)).size + " clusters"; };
+say("headline: " + decoyClusters(headline.suite) + "; Fable subset: " + decoyClusters(suites[3]));
+check("each decoy is its own cluster, as gate-size.ts.txt assumes (headline 12 in 12, Fable 6 in 6)", decoyClusters(headline.suite) === "12 decoys in 12 clusters" && decoyClusters(suites[3]) === "6 decoys in 6 clusters");
+const gateFile = (name: string, ref: string, gate: unknown) => save(name, { ...JSON.parse(readFileSync(PRIMARY, "utf8")), comparisons: [{ id: "none-opus-vs-" + ref, variant: id("none", OPUS), reference: ref, margin_points: 10, margin_reason: "dry run", post_hoc: false, frozen_bar: null, false_alarm_gate: gate }], loss_family: { order: ["none-opus-vs-" + ref], null: "zero", reason: "dry run only" } });
+const g = await score("flag-everything arm (every bait, every flaw, 3 more must-fix findings per decoy per pass)", gateFile("gate-flagall.json", id("flagall", OPUS), FROZEN_GATE), id("none", OPUS), id("flagall", OPUS), "FALSE_ALARM_GATE_FAIL", { root: H.root });
+check("flag-everything: the gate fails on 12 decoys at margin 0.5", /margin 0\.5 per decoy/.test(g.out) && /: FAIL\./.test(g.out) && /on 12 decoys/.test(g.out));
+const fb = await score("flag-every-bait arm (every bait and every flaw must-fix, no other false alarm)", gateFile("gate-flagbait.json", id("flagbait", OPUS), FROZEN_GATE), id("none", OPUS), id("flagbait", OPUS), "FALSE_ALARM_GATE_FAIL", { root: H.root });
+check("flag-every-bait: the gate fails on 12 decoys at margin 0.5", /margin 0\.5 per decoy/.test(fb.out) && /: FAIL\./.test(fb.out) && /on 12 decoys/.test(fb.out));
+const fb1 = await score("the same flag-every-bait arm at the old margin 1 (the hole #110's Step 11 found)", gateFile("gate-flagbait-margin-1.json", id("flagbait", OPUS), { margin_per_decoy: 1 }), id("none", OPUS), id("flagbait", OPUS), "LOSS", { root: H.root });
+check("at margin 1 the flag-every-bait arm passes the gate, which margin 0.5 closes", /margin 1 per decoy/.test(fb1.out) && /: PASS\./.test(fb1.out));
+
+say("\n## 9. Volume-matched reading (first 2 must-fix findings per unit-pass)");
+const k2 = await derive("first-k 2", "planrev-ceo-r1a-k2", PRIMARY, H.root, ["--first-k", "2"]);
+await score("first-k 2: same sign as the primary", k2.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: k2.suite, root: k2.root });
+
+say("\n## 10. Any-severity recall (secondary) and the any-severity fallback");
+const anyS = await derive("any severity", "planrev-ceo-r1a-any", PRIMARY, H.root, ["--severity-map", join(POST, "any-severity.json")]);
+await score("any severity", anyS.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: anyS.suite, root: anyS.root });
+check("secondary readings (any severity, new defects)", (await cli("secondary", ["secondary", "--suite", "planrev-ceo-r1a", "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--seed", "20261031", "--root", H.root, ...S], { show: 12 })).code === 0);
+
+say("\n## 11. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names");
+const named = [...new Set(cells.flatMap((c) => (JSON.parse(readFileSync(join(OUT, "headline/raw", c, "arm.json"), "utf8")).diagnostics ?? []).map((d: string) => d.split(" pass ")[0])))];
+const dropFile = save("missing-cells.drop.tsv", "unit\n" + named.map((x) => x + "\n").join(""));
+const mc = await derive("missing cells", "planrev-ceo-r1a-mc", PRIMARY, H.root, ["--drop-file", dropFile]);
+await score("missing-cell sensitivity", mc.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: mc.suite, root: mc.root });
+
+say("\n## 12. Stopped arm: no verdict, the family keeps its size");
+const r5 = join(OUT, "arms-stopped");
+for (const c of cells.filter((c) => c !== id("lens", OPUS))) cpSync(H.armDir(c), join(r5, "planrev-ceo-r1a", c), { recursive: true });
+const lens = join(OUT, "lens-stopped");
+cpSync(join(H.from, id("lens", OPUS)), lens, { recursive: true });
+writeFileSync(join(lens, "arm.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(lens, "arm.json"), "utf8")), status: "stopped", coverage_gaps: [firstSeeded[2] + " pass 3: not run (cap stop)"] }, null, 2) + "\n");
+check("stopped arm ingests", (await nolossCli(["ingest", lens, "--suite", "planrev-ceo-r1a", "--root", r5, ...S], { out: () => {}, err: () => {} })) === 0);
+const st = await score("stopped lens arm", SECONDARY, id("none", OPUS), id("lens", OPUS), "NO_VERDICT", { root: r5 });
+check("stopped arm keeps step of 3", /of 3 in the declared LOSS family/.test(st.out));
+
+say("\n## 13. Recall by source (T1, T2) and by mode, descriptive");
+for (const s of ["T1", "T2"]) {
+  const specs = readFileSync(join(SR, "readings/source-" + s + ".detection-only.txt"), "utf8").split("\n").filter(Boolean).flatMap((x) => ["--detection-only", x]);
+  const d = await derive("source " + s, "planrev-ceo-r1a-" + s.toLowerCase(), PRIMARY, H.root, specs, ["--detection-only", "<each of the " + specs.length / 2 + " lines of $SEALED/readings/source-" + s + ".detection-only.txt>"]);
+  const r = await score("source " + s, d.file, id("none", OPUS), id("gstack", OPUS), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: d.suite, root: d.root });
+  check("source " + s + " reads 24 flaws", /on 24 blockers in 24 PRs/.test(r.out));
+}
+for (const m of ["greenfield", "added-capability", "fix"]) {
+  const d = await derive("mode " + m, "planrev-ceo-r1a-" + m, PRIMARY, H.root, ["--drop-file", join(SR, "readings/mode-" + m + ".drop.tsv")]);
+  const r = await score("mode " + m, d.file, id("none", OPUS), id("gstack", OPUS), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: d.suite, root: d.root });
+  check("mode " + m + " reads 16 flaws in 8 plans", /on 16 blockers in 8 PRs/.test(r.out));
+}
+
+say("\n## 14. Real-neutral stratum, alone");
+const realCells = cells.filter((c) => !c.startsWith("flag"));
+const R = await judged("real-neutral", suites[2], realPath, realCells, 3, false);
+await score("real-neutral, descriptive", join(POST, "comparisons.real-neutral.json"), id("none", OPUS), id("gstack", OPUS), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED,LOSS", { suite: realPath, root: R.root });
+
+say("\n## 15. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone");
+const pilotCells = [...realCells, id("none", FABLE), id("gstack", FABLE)];
+const PL = await judged("pilot", suites[1], pilotPath, pilotCells, 1, true, {}, { [id("none", OPUS)]: 1, [id("gstack", P1)]: 2 });
+say("the synthetic pilot gives none-opus one must-fix finding that names no flaw, on one plan, and gstack-particle-1 one on each of two plans, so blind adjudication has findings to rule on");
+const pilotIds = new Set(suites[1].units.map((u: any) => u.id)), pilotHeads = new Set(suites[1].units.map((u: any) => u.head));
+check("no pilot unit, by id or head, sits in the headline, real-neutral or Fable suite", [suites[0], suites[2], suites[3]].every((s: any) => s.units.every((u: any) => !pilotIds.has(u.id) && !pilotHeads.has(u.head))));
+const frozen = readdirSync(POST).filter((f) => /^comparisons\..+\.json$/.test(f)).sort();
+check("no frozen comparisons file names the pilot suite (" + frozen.length + " files)", frozen.length === 5 && frozen.every((f) => JSON.parse(readFileSync(join(POST, f), "utf8")).suite !== suites[1].id));
+for (const f of frozen) {
+  const r = await cli("score on the pilot suite under " + f, ["score", "--suite", pilotPath, "--root", PL.root, "--prereg", join(POST, f), "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), ...S], { show: 0 });
+  const why = (r.err + "\n" + r.out).split("\n").find((l) => /--prereg is for suite/.test(l)) ?? "";
+  say("    " + why.trim());
+  check("score refuses the pilot suite under " + f, r.code !== 0 && why !== "");
+}
+const ps = await cli("pilot stop (a): recall with its interval, no verdict", ["secondary", "--suite", pilotPath, "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--seed", "20261031", "--root", PL.root, "--json", ...S], { show: 0 });
+const pj = JSON.parse(ps.out);
+const pr = pj.recall.find((x: any) => x.arm === id("none", OPUS)).blocking;
+say("pilot none-opus must-fix recall " + pr.found + "/" + pr.n + " = " + pr.recall + "; stop (a) fires outside 0.10 to 0.85: " + (pr.recall > 0.85 || pr.recall < 0.1 ? "fires" : "does not fire"));
+check("pilot recall reads on the pilot's 8 flaws, from noloss secondary", ps.code === 0 && pr.n === 8 && typeof pr.recall === "number");
+check("the pilot reading carries no verdict and no claim", !/claim|LOSS|NOT_DISTINGUISHED|NO_LOSS|verdict/i.test(ps.out));
+say("pilot stops (b), (c) and (e) through pilot-stops.ts.txt: (e) on the adjudicated synthetic pilot arms above, (b) and (c) on synthetic pilot out dirs whose cells.ndjson and parses.tsv agree, as the pinned runner writes them");
+const PSS = join(OUT, "pilot-stops.ts");
+cpSync(join(POST, "pilot-stops.ts.txt"), PSS);
+const SESS: Record<string, { termination: Record<string, string>; output: boolean; parse: Record<string, unknown> }> = {
+  findings: { termination: { kind: "completed" }, output: true, parse: { kind: "findings", findings: [] } },
+  missing: { termination: { kind: "completed" }, output: true, parse: { kind: "missing", reason: "no plan-findings block" } },
+  malformed: { termination: { kind: "completed" }, output: true, parse: { kind: "malformed", reason: "item 0: severity is not Critical, High, Medium or Low" } },
+  "late timeout": { termination: { kind: "timeout" }, output: true, parse: { kind: "incomplete", reason: "the session ended timeout" } },
+  "infra failure": { termination: { kind: "missing", code: "E_INFRA_FAILURE" }, output: true, parse: { kind: "incomplete", reason: "the session ended missing" } },
+  "early timeout": { termination: { kind: "timeout" }, output: false, parse: { kind: "incomplete", reason: "the session ended timeout" } },
+  "early crash": { termination: { kind: "arm_failure" }, output: false, parse: { kind: "incomplete", reason: "the session ended arm_failure" } },
+};
+const P1ARMS = ["none", "gstack", "placebo"];
+const session = (model: string, arm: string, n: number, s: string) => ({ cell: { model, arm, unit: "synthetic/unit-" + n, pass: 1 }, key: {}, meter_id: "pilot-" + arm + "-" + n, record: { task: "task-" + n, termination: SESS[s]!.termination, model_output: SESS[s]!.output, wall_ms: 1000, cost_micros: 0 }, parse: SESS[s]!.parse, cost: null });
+const sessionDir = (e: any) => join("runs", e.cell.model.replaceAll("/", "_"), e.cell.arm, e.record.task, "p" + e.cell.pass);
+const parseLabel = (p: any) => (p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind);
+const writeJournal = (d: string, sessions: any[]) => {
+  writeFileSync(join(d, "cells.ndjson"), sessions.map((e) => JSON.stringify(e) + "\n").join(""));
+  writeFileSync(join(d, "parses.tsv"), ["arm_id\tarm\tmodel\tunit\tpass\toutcome\tfindings\treason", ...sessions.map((e) => [id(e.cell.arm, e.cell.model), e.cell.arm, e.cell.model, e.cell.unit, String(e.cell.pass), parseLabel(e.parse), e.parse.kind === "findings" ? String(e.parse.findings.length) : "", e.parse.reason ?? ""].join("\t"))].join("\n") + "\n");
+};
+const pilotOut = (name: string, fallbacks: number, p1: string[], o: { opus?: string; opusCells?: number; stale?: boolean } = {}) => {
+  const d = join(OUT, "pilot-out", name);
+  const sessions = [...p1.map((s, i) => session(P1, P1ARMS[i % 3]!, Math.floor(i / 3), s)), ...Array.from({ length: o.opusCells ?? 12 }, (_, i) => session(OPUS, ["none", "gstack", "lens"][i % 3]!, Math.floor(i / 3), i ? "findings" : (o.opus ?? "missing"))), ...Array.from({ length: 8 }, (_, i) => session(FABLE, ["none", "gstack"][i % 2]!, Math.floor(i / 2), "findings"))];
+  if (o.stale) {
+    mkdirSync(join(d, "runs", OPUS, "gstack", "task-stale", "p1", "host"), { recursive: true });
+    writeFileSync(join(d, "runs", OPUS, "gstack", "task-stale", "p1", "host", "usersim.ndjson"), [{ kind: "ask", source: "fallback" }, { kind: "prose", source: "fallback" }].map((x) => JSON.stringify(x) + "\n").join(""));
+  }
+  sessions.forEach((e, s) => {
+    mkdirSync(join(d, sessionDir(e), "host"), { recursive: true });
+    writeFileSync(join(d, sessionDir(e), "record.json"), "synthetic pilot session\n");
+    if (s < 10) writeFileSync(join(d, sessionDir(e), "host", "usersim.ndjson"), [{ kind: "start" }, { kind: "ask", source: s < fallbacks ? "fallback" : "scripted" }, { kind: "prose", source: "freeform" }].map((x) => JSON.stringify(x) + "\n").join(""));
+  });
+  writeJournal(d, sessions);
+  return d;
+};
+const p1Mix = (counts: Record<string, number>) => Object.entries(counts).flatMap(([s, n]) => Array.from({ length: n }, () => s));
+const pilotStops = (d: string, label: string, arms: string = PL.from) => {
+  const r = spawnSync("bun", [PSS, scorer, d, arms], { encoding: "utf8", env: KEYLESS });
+  say("$ bun $OUT/pilot-stops.ts $SCORER " + d + " " + arms);
+  say("  exit " + r.status + "  (" + label + ")");
+  for (const l of ((r.stdout ?? "") + "\n" + (r.stderr ?? "")).split("\n").filter((l) => l.trim() && !UNIT.test(l))) say("    " + l);
+  return r;
+};
+const eCells = pilotCells.filter((c) => c.endsWith("-opus") || c.endsWith("-particle-1"));
+const notDefect = (c: string) => (existsSync(join(PL.from, c, "adjudication.tsv")) ? readFileSync(join(PL.from, c, "adjudication.tsv"), "utf8").split("\n").filter((l) => l.split("\t")[3] === "not-defect").length : 0);
+check("the synthetic pilot went through blind adjudication, so stop (e) has rulings to read", PL.from.endsWith("adjudicated") && eCells.some((c) => notDefect(c) > 0));
+say("each synthetic pilot out dir holds the pilot's 32 sessions (12 Opus, 12 particle-1, 8 Fable) in cells.ndjson and parses.tsv; the first has a leftover run directory no journal line names, whose log holds 2 fallback events");
+const quiet = pilotStops(pilotOut("quiet", 1, p1Mix({ missing: 1, "late timeout": 1, findings: 10 }), { stale: true }), "1 fallback in 20 journaled replies; 2 of 12 particle-1 sessions are misses (a missing block, a timeout after model output)");
+const eMax = Math.max(...eCells.map(notDefect)) / 4;
+check("stop (e) takes the highest cell rate, " + eMax.toFixed(3) + ", and fires only above 0.25", eMax > 0 && quiet.stdout.includes("(e) highest rate " + eMax.toFixed(3) + " (stop above 0.25 in any cell): " + (eMax > 0.25 ? "fires" : "does not fire")));
+check("stop (b) reads the journaled sessions' reply sources, not the leftover log: 1 fallback in 20 events is 0.050 and does not fire", quiet.status === 0 && /\(b\) user simulator: 20 ask and prose events in 10 journaled session logs, 1 fallback, share 0\.050 \(stop above 0\.10\): does not fire/.test(quiet.stdout));
+check("stop (c) scores each particle-1 session with the pinned planScore from its cells.ndjson line: 2 misses in 12 is 0.167 and does not fire", /\(c\) the pilot's cells\.ndjson holds 32 sessions and no gap; particle-1: 12 pilot sessions, 2 scored miss by the pinned planScore, share 0\.167 \(stop above 0\.20\): does not fire/.test(quiet.stdout));
+check("stop (e) reads each of the " + eCells.length + " Opus and particle-1 cells, and no Fable cell, with the not-defect counts in their adjudication.tsv over 4 plans x 1 pass", eCells.length === 6 && eCells.every((c) => new RegExp("^\\(e\\) " + c + ": " + notDefect(c) + " must-fix findings ruled not-defect over 4 plans x 1 pass = ", "m").test(quiet.stdout)) && !/^\(e\) \S+-fable:/m.test(quiet.stdout) && /^\(e\) highest rate /m.test(quiet.stdout));
+const noisy = pilotStops(pilotOut("noisy", 3, p1Mix({ missing: 1, malformed: 1, "late timeout": 1, findings: 9 })), "3 fallbacks in 20 replies; 3 of 12 particle-1 sessions are misses (a missing block, a malformed block, a timeout after model output)");
+check("3 fallbacks in 20 (0.150) fire stop (b), and 3 misses in 12 particle-1 sessions (0.250) fire stop (c)", noisy.status === 0 && /share 0\.150 \(stop above 0\.10\): fires/.test(noisy.stdout) && /12 pilot sessions, 3 scored miss by the pinned planScore, share 0\.250 \(stop above 0\.20\): fires/.test(noisy.stdout) && /^stops fired: b, c/m.test(noisy.stdout));
+say("an infra outage: 3 particle-1 sessions end in gaps (an infra failure after model output, a timeout and a crash before any), beside 2 misses");
+const outage = pilotOut("outage", 1, p1Mix({ "infra failure": 1, "early timeout": 1, "early crash": 1, missing: 1, "late timeout": 1, findings: 7 }));
+const oldRule = readFileSync(join(outage, "parses.tsv"), "utf8").split("\n").filter((l) => l.split("\t")[2] === P1 && ["missing", "malformed", "incomplete"].includes(l.split("\t")[5]!)).length;
+say("the rule before this fix counted every missing, malformed or incomplete parses.tsv row: " + oldRule + " of 12 = " + (oldRule / 12).toFixed(3) + ", which would fire (c) and drop the rung on an outage");
+const og = pilotStops(outage, "the outage's 3 gaps still in cells.ndjson, before the pilot's one resume");
+check("with the outage's gaps left, pilot-stops refuses and prints no reading, so an infra gap never fires (c)", og.status === 2 && !/^\((b|c|e)\)/m.test(og.stdout) && /E_USAGE 3 of the pilot's 32 journaled sessions score gap by the pinned planScore; the stops are read only once the pilot has no gap left/.test(og.stderr) && oldRule === 5);
+writeFileSync(outage + ".controller.pid", String(spawnSync("true").pid) + "\n");
+cpSync(join(POST, "refill-gaps.ts.txt"), join(OUT, "refill-gaps.ts"));
+const outageRefill = spawnSync("bun", [join(OUT, "refill-gaps.ts"), scorer, outage], { encoding: "utf8", env: KEYLESS });
+say("$ bun $OUT/refill-gaps.ts $SCORER " + outage);
+say("  exit " + outageRefill.status + "  (the pilot's one refill before its resume, after its controller exited)");
+for (const l of (outageRefill.stdout ?? "").split("\n").filter((l) => /^(controller check|open-file check|refilled|moved) /.test(l))) say("    " + l);
+const journalLines = (path: string) => readFileSync(path, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+const rerun = journalLines(join(outage, "refilled-gaps.ndjson")).map((e: any) => ({ ...e, record: { ...e.record, termination: { kind: "completed" }, model_output: true }, parse: { kind: "findings", findings: [] } }));
+appendFileSync(join(outage, "cells.ndjson"), rerun.map((e: any) => JSON.stringify(e) + "\n").join(""));
+writeJournal(outage, journalLines(join(outage, "cells.ndjson")));
+say("the resume reruns the 3 refilled cells (synthetic: each now reaches its findings), and the runner rewrites parses.tsv");
+const or = pilotStops(outage, "the same pilot after its refill and resume");
+check("refill-gaps moves the outage's 3 gaps, and after the resume (c) reads only the 2 misses: 0.167, which does not fire", outageRefill.status === 0 && rerun.length === 3 && or.status === 0 && /12 pilot sessions, 2 scored miss by the pinned planScore, share 0\.167 \(stop above 0\.20\): does not fire/.test(or.stdout));
+const og2 = pilotStops(pilotOut("opus-gap", 1, p1Mix({ missing: 1, findings: 11 }), { opus: "early timeout" }), "a gap left in an Opus session, particle-1 clean");
+check("a gap left in any pilot session, Opus included, refuses every reading", og2.status === 2 && !/^\((b|c|e)\)/m.test(og2.stdout) && /E_USAGE 1 of the pilot's 32 journaled sessions score gap/.test(og2.stderr));
+const short11 = pilotStops(pilotOut("eleven", 1, p1Mix({ missing: 1, findings: 10 })), "11 particle-1 sessions: one cell never ran");
+check("pilot-stops refuses unless parses.tsv holds exactly 12 particle-1 rows", short11.status === 2 && !/^\((b|c|e)\)/m.test(short11.stdout) && /E_USAGE parses\.tsv holds 11 particle-1 rows, not the pilot's 12/.test(short11.stderr));
+const shortOpus = pilotStops(pilotOut("short-opus", 1, p1Mix({ missing: 1, findings: 11 }), { opusCells: 10 }), "2 Opus cells never ran (a cap stop or a killed resume), particle-1 complete");
+check("pilot-stops refuses unless parses.tsv and cells.ndjson hold all 32 pilot sessions, so cells that never ran cannot shrink (e) or (b)", shortOpus.status === 2 && !/^\((b|c|e)\)/m.test(shortOpus.stdout) && /E_USAGE parses\.tsv holds 30 rows and cells\.ndjson 30 sessions; the readings need exactly the pilot's 32 sessions/.test(shortOpus.stderr));
+const armsWithout = (name: string, change: (dir: string) => void) => {
+  const d = join(OUT, "pilot-arms", name);
+  cpSync(PL.from, d, { recursive: true });
+  change(d);
+  return d;
+};
+const quietOut = join(OUT, "pilot-out", "quiet");
+const noLens = pilotStops(quietOut, "the adjudicated pilot arms without " + id("lens", OPUS), armsWithout("no-lens", (d) => rmSync(join(d, id("lens", OPUS)), { recursive: true })));
+check("stop (e) refuses when one of the six arm ids is missing", noLens.status === 2 && !/^\((b|c|e)\)/m.test(noLens.stdout) && new RegExp("E_USAGE arm " + id("lens", OPUS) + " is missing from ").test(noLens.stderr));
+const shortArm = pilotStops(quietOut, "the adjudicated pilot arms with one of " + id("gstack", P1) + "'s 4 findings files removed", armsWithout("short-arm", (d) => rmSync(join(d, id("gstack", P1), "findings", readdirSync(join(d, id("gstack", P1), "findings")).filter((f) => f.endsWith(".jsonl")).sort()[0]!))));
+const zeroArm = eCells.find((c) => notDefect(c) === 0)!;
+const noAdj = pilotStops(quietOut, "the adjudicated pilot arms with " + zeroArm + "'s adjudication.tsv removed, as for an arm whose must-fix findings all matched", armsWithout("no-adjudication", (d) => rmSync(join(d, zeroArm, "adjudication.tsv"), { force: true })));
+check("stop (e) reads an arm with no adjudication.tsv as 0, says why, and does not refuse it", noAdj.status === 0 && new RegExp("^\\(e\\) " + zeroArm + ": 0 must-fix findings ruled not-defect over 4 plans x 1 pass = 0\\.000 per plan per pass \\(no adjudication\\.tsv: no must-fix finding was left unmatched\\)$", "m").test(noAdj.stdout));
+check("stop (e) refuses an arm that holds other than 4 findings files", shortArm.status === 2 && !/^\((b|c|e)\)/m.test(shortArm.stdout) && new RegExp("E_USAGE arm " + id("gstack", P1) + " holds 3 findings files, not the pilot's 4").test(shortArm.stderr));
+
+say("\n## 16. Fable 5.1 subset, exploratory");
+const F = await judged("fable", suites[3], fablePath, [id("none", FABLE), id("gstack", FABLE)], 1, true);
+const fr = await score("Fable none vs gstack", fableFile, id("none", FABLE), id("gstack", FABLE), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: fablePath, root: F.root });
+check("Fable subset reads 24 flaws in 12 plans and 6 decoys", /on 24 blockers in 12 PRs/.test(fr.out) && /on 6 decoys/.test(fr.out));
+say("The Fable subset makes no claim, whatever its scorer prints (section 4): the lines above are a reading.");
+
+say("\n## 17. Power at the panel's shape");
+const pw = await cli("power on the headline suite", ["power", "--suite", "planrev-ceo-r1a", "--passes", "3", "--recall", "0.35", "--margin", "10", "--loss", "20", "--alpha", "0.025", "--dependence", "0.3", "--sims", "2000", ...S], { show: 8 });
+check("power counts 24 clusters and 48 flaws", /\| planrev-ceo-r1a \| 24 \| 48 \| 3 \|/.test(pw.out));
+
+say("\n## 18. OpenRouter routes: the pinned route, its data policy and price headroom");
+const { chatPrice, openRouterRouting } = await import(join(scorer, "src/runner/pricing/prices.ts"));
+const { canonical } = await import(join(scorer, "src/trial/cache.ts"));
+const readAt = new Date().toISOString();
+const getJson = async (url: string) => {
+  const r = await fetch(url, { headers: { "user-agent": "gstack-evals-r1a-dryrun" } });
+  if (!r.ok) throw new Error(url + " HTTP " + r.status);
+  return r.json();
+};
+let providers: any[] = [];
+try {
+  const p: any = await getJson("https://openrouter.ai/api/frontend/v1/all-providers");
+  providers = p.data ?? p;
+} catch (e) {
+  say("all-providers read failed: " + (e as Error).message);
+}
+say("read keyless at " + readAt + ": OpenRouter's endpoints API and its public all-providers feed (" + providers.length + " providers)");
+const dpOf = (tag: string) => providers.find((p: any) => p.slug === tag.split("/")[0])?.dataPolicy ?? null;
+const usd = (x: string) => Math.round(Number(x) * 1e12) / 1e6;
+const routes: Record<string, unknown> = {};
+for (const [model, inR1a] of [[P1, true], ["deepseek/deepseek-v4.1-flash-1017", false]] as const) {
+  const route: any = openRouterRouting(chatPrice("openrouter:" + model));
+  const sha = createHash("sha256").update(canonical(route)).digest("hex");
+  if (inR1a) routes[model] = { route, sha256: sha };
+  say((inR1a ? "" : "outside R1a: ") + model + " route " + JSON.stringify(route) + " sha256 " + sha);
+  let eps: any[] = [];
+  try {
+    eps = ((await getJson("https://openrouter.ai/api/v1/models/" + model + "/endpoints")) as any).data.endpoints;
+  } catch (e) {
+    say("  endpoints read failed: " + (e as Error).message);
+  }
+  const pinned = eps.filter((e) => (!route.only || route.only.includes(String(e.tag).split("/")[0])) && (!route.quantizations || route.quantizations.includes(e.quantization)));
+  const live: any[] = [];
+  for (const e of pinned) {
+    const dp = dpOf(String(e.tag));
+    const pin = usd(e.pricing.prompt), pout = usd(e.pricing.completion);
+    const keeps = dp?.training === false && dp?.retainsPrompts === false;
+    const under = pin <= route.max_price.prompt && pout <= route.max_price.completion;
+    const exact = pin === route.max_price.prompt || pout === route.max_price.completion;
+    if (keeps && under) live.push(e);
+    say("  endpoint " + String(e.name).split(" | ")[0] + " (" + e.tag + ", " + e.quantization + "): $" + pin + " / $" + pout + " per Mtok, max_price $" + route.max_price.prompt + " / $" + route.max_price.completion + " (headroom x" + (route.max_price.prompt / pin).toFixed(2) + " input, x" + (route.max_price.completion / pout).toFixed(2) + " output" + (exact ? "; max_price equals the current price, so any price rise refuses every call" : "") + "); data policy: training " + dp?.training + ", retains prompts " + dp?.retainsPrompts + (keeps ? ", kept by data_collection deny" : ", dropped by data_collection deny"));
+  }
+  if (!inR1a) {
+    say("  " + model + " is not an R1a model; reported for GST-637, not checked");
+    continue;
+  }
+  check(model + ": the route pins its providers with no fallbacks and sends data_collection deny", Array.isArray(route.only) && route.only.length > 0 && route.allow_fallbacks === false && route.data_collection === "deny");
+  check(model + ": an endpoint of a pinned provider is kept by data_collection deny and priced at or under max_price", live.length > 0);
+}
+const routeRecord = JSON.stringify({ schema_version: 1, scorer: spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(), routes }, null, 2) + "\n";
+writeFileSync(join(OUT, "route.json"), routeRecord);
+say("<out>.route.json, written beside each R1a run's out dir before review-units starts and joined to every session in cells.ndjson: sha256 " + createHash("sha256").update(routeRecord).digest("hex"));
+
+say("\n## 19. Custody and the pin check: the run root, the receipts sink, the retained trees, and HEAD before every call");
+const { insideRepo } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const { receiptsSink, sinkOverlapProblem } = await import(join(scorer, "src/trial/durable.ts"));
+const SINK = join(RUNROOT, "receipts");
+const outs = RUNS.map((r) => join(RUNROOT, r.out));
+say("run root ~/.capy/work/planning-r1a; frozen --out dirs " + outs.map((o) => o.replace(HOME, "~")).join(", ") + "; receipts sink, if one is set, " + SINK.replace(HOME, "~"));
+check("every frozen --out and the receipts sink sit under the run root, which sits outside the repo", [...outs, SINK].every((p) => p.startsWith(RUNROOT + "/")) && !insideRepo(RUNROOT) && [...outs, SINK].every((p) => !insideRepo(p)));
+check("the frozen sink is apart from every out dir and its arms/, by the pinned sinkOverlapProblem", outs.every((o) => sinkOverlapProblem(o, SINK) === null));
+const sunk = receiptsSink({ GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: SINK });
+check("with GSTACK_EVALS_EPHEMERAL=1 the pinned receiptsSink copies receipts to the frozen sink, inside the run root", "sink" in sunk && sunk.sink === SINK);
+check("without GSTACK_EVALS_EPHEMERAL=1 the pinned run copies receipts nowhere, whatever GSTACK_EVALS_RECEIPTS says", JSON.stringify(receiptsSink({ GSTACK_EVALS_RECEIPTS: join(HOME, "elsewhere") })) === JSON.stringify({ sink: null }));
+const sinkAllowed = (value: string | undefined) => !value || resolve(value).startsWith(RUNROOT + "/");
+check("the run's sink rule admits an unset GSTACK_EVALS_RECEIPTS or one under the run root, and stops one outside it", sinkAllowed(undefined) && sinkAllowed(SINK) && !sinkAllowed(join(HOME, ".capy", "work", "receipts")) && !sinkAllowed(RUNROOT + "-receipts"));
+const { stateRoot } = await import(join(scorer, "src/trial/image.ts"));
+const retained = join(stateRoot({}, HOME), "retained");
+say("review-units keeps unit trees under <stateRoot>/retained/trees: on this machine, with XDG_STATE_HOME unset, " + retained.replace(HOME, "~"));
+check("<stateRoot> is ~/.capy/work/gstack-evals on Capy, $XDG_STATE_HOME/gstack-evals when set, as the cleanup rule says", retained === join(HOME, ".capy", "work", "gstack-evals", "retained") && stateRoot({ XDG_STATE_HOME: "/x" }, HOME) === join("/x", "gstack-evals"));
+check("<stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it beside the run root", !insideRepo(retained) && !retained.startsWith(RUNROOT + "/"));
+const PIN_CHECK = 'test "$(git -C "$SCORER" rev-parse HEAD)" = e305ed087b3f17bd211287b0e2d5e3f3960b5a4f && test "$(git -C "$SCORER" status --porcelain)" = "?? lanes/review-noloss/suites/planrev-ceo-r1a.json"';
+check("section 10 gives the pin check that runs before every review-units and judge-run call, word for word", readFileSync(join(POST, "README.md"), "utf8").includes(PIN_CHECK));
+const pinCheck = (dir: string) => spawnSync("bash", ["-c", PIN_CHECK], { env: { ...KEYLESS, SCORER: dir } }).status;
+const pinned = join(OUT, "scorer-pin"), STUB = "lanes/review-noloss/suites/planrev-ceo-r1a.json";
+const pinWt = spawnSync("git", ["-C", scorer, "worktree", "add", "--detach", pinned, "e305ed087b3f17bd211287b0e2d5e3f3960b5a4f"], { encoding: "utf8" });
+const noStub = pinCheck(pinned);
+cpSync(join(scorer, STUB), join(pinned, STUB));
+const withStub = pinCheck(pinned);
+writeFileSync(join(pinned, "extra.txt"), "x\n");
+const extraFile = pinCheck(pinned);
+rmSync(join(pinned, "extra.txt"));
+appendFileSync(join(pinned, "README.md"), "\n");
+const tracked = pinCheck(pinned);
+spawnSync("git", ["-C", scorer, "worktree", "remove", "--force", pinned]);
+say("pin check exits: this scorer " + pinCheck(scorer) + "; a fresh e305ed0 checkout without the stub " + noStub + ", with it " + withStub + ", with one more untracked file " + extraFile + ", with a tracked change " + tracked);
+check("the pin check passes the dry run's scorer, e305ed0 with the sealed stub as its only untracked file", pinWt.status === 0 && pinCheck(scorer) === 0 && withStub === 0);
+check("the pin check refuses e305ed0 without the stub, with another untracked file, and with a tracked change", noStub !== 0 && extraFile !== 0 && tracked !== 0);
+say("\n## 20. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink");
+const TS = ["tests/trial/review/plan-scoring.test.ts", "tests/adapters/claude-code.test.ts", "tests/trial/review/run.test.ts"];
+const tr = spawnSync("bun", ["test", ...TS], { cwd: scorer, encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
+const tout = (tr.stdout ?? "") + "\n" + (tr.stderr ?? "");
+say("$ bun test " + TS.join(" ") + " (keys unset)");
+say("  exit " + tr.status);
+const results = tout.split("\n").filter((l) => /^\((pass|fail)\)/.test(l.trim())).map((l) => l.trim().replace(/ \[[\d.]+m?s\]$/, ""));
+for (const l of results) say("    " + l);
+const passed = (name: string) => results.some((l) => l.startsWith("(pass)") && l.includes(name));
+check("every test in " + TS.join(" and ") + " passes (" + results.length + " tests)", tr.status === 0 && results.length > 0 && results.every((l) => l.startsWith("(pass)")));
+for (const [label, name] of [
+  ["a clean session scores and completes its arm", "a clean session scores its findings"],
+  ["a tool-call-only session that then crashes is a miss", "a tool-call-only session whose CLI then crashes is a miss"],
+  ["a tool-call-only session that times out is a miss", "a tool-call-only session that times out is a miss"],
+  ["a crash before any model output is a gap that stops the arm", "a CLI crash before any model output is a gap"],
+  ["a timeout before any model output is a gap that stops the arm", "a timeout before any model output is a gap"],
+  ["completed with output and no text turn is a miss counted per arm; with no output, a gap", "completed with model output and no text turn is a miss"],
+  ["an evaluator error after a text turn stops the arm, not the arm's miss", "the transcript append failing after one text turn is infra"],
+  ["a provider error after model output is a gap, never a miss", "a provider error after model output is a gap"],
+  ["a record with no model_output flag is a gap", "a record with no model_output flag is a gap"],
+  ["every stopped arm, and only those, is an E_COVERAGE_GAP stop", "every stopped arm, and only those, is an E_COVERAGE_GAP stop"],
+  ["a signed empty thinking block is model output, an unsigned one is not", "A1: a signed empty thinking block is model output, an unsigned empty one is not"],
+  ["a signed empty thinking block, then a timeout, is a miss", "A1: a signed empty thinking block, then a timeout"],
+  ["empty text, whitespace text and empty thinking are no model output", "OV5: empty text, whitespace text and empty thinking are no model output"],
+  ["a stall within the cap is credited and recorded", "B1: a stall within the cap is credited and recorded"],
+  ["a stall past the cap, then a timeout, is infra", "B1: a stall past the cap, then a timeout, is E_INFRA_FAILURE"],
+  ["a stall just before a persona pause is credited", "B1: a stall just before a persona pause is credited"],
+  ["docker exec's own exits 125, 126 and 127 are infra", "an exit of 125, 126 or 127 is the launcher's"],
+  ["the record keeps the CLI's exit_code and signal", "the record keeps the CLI's own exit status"],
+  ["a sealed suite refuses a receipts sink inside the repo before any session", "a sealed suite refuses a receipts sink inside the repo"],
+  ["an unsealed suite reading sealed-root catalogs refuses an in-repo sink", "an unsealed suite that reads sealed-root catalogs refuses a receipts sink inside the repo"],
+  ["a hard-linked file in the sink is refused", "a hard-linked file in the sink refuses the copy"],
+  ["a symlinked directory in the sink is refused", "a symlinked directory in the sink refuses the copy"],
+  ["a dangling symlink above the sink is refused", "a dangling symlink above the sink is refused"],
+  ["--resume reuses every journaled session, a gap included, and spends nothing (section 10's resume rule)", "findings, cost, voice, resume and a changed key"],
+] as const) check("case: " + label, passed(name));
+
+say("\n## 21. Resume procedure: refill-gaps.ts after a killed controller, at the pin, crash-safe (section 10)");
+const { planScore, readReviewJournal } = await import(join(scorer, "src/trial/review/run.ts"));
+const RGS = join(OUT, "refill-gaps.ts"), GA = id("gstack", OPUS);
+cpSync(join(POST, "refill-gaps.ts.txt"), RGS);
+const entry = (n: number, kind: string, modelOutput: boolean, parse: unknown) => JSON.stringify({ cell: { model: OPUS, arm: "gstack", unit: "synthetic/unit-" + n, pass: 1 }, key: {}, meter_id: "synthetic-" + n, record: { task: "task-" + n, termination: { kind }, model_output: modelOutput, cost_micros: n * 1_000_000 }, parse, cost: null });
+const FIND = entry(1, "completed", true, { kind: "findings", findings: [] });
+const MISS = entry(2, "timeout", true, { kind: "incomplete", reason: "the session ended timeout" });
+const GAP = entry(3, "timeout", false, { kind: "incomplete", reason: "the session ended timeout" });
+const ORIGINAL = [FIND, MISS, GAP].map((l) => l + "\n").join("");
+check("the synthetic sessions score findings, miss and gap by the pinned planScore", [FIND, MISS, GAP].map((l) => planScore(JSON.parse(l))).join(",") === "findings,miss,gap");
+const runOf = (n: number) => join("runs", OPUS, "gstack", "task-" + n, "p1");
+const killedRun = (name: string) => {
+  const d = join(OUT, "resume", name);
+  for (const n of [1, 2, 3, 4]) {
+    mkdirSync(join(d, runOf(n)), { recursive: true });
+    writeFileSync(join(d, runOf(n), "record.json"), "synthetic session " + n + "\n");
+  }
+  writeFileSync(join(d, "cells.ndjson"), ORIGINAL);
+  writeFileSync(d + ".controller.pid", String(spawnSync("true").pid) + "\n");
+  return d;
+};
+say("each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, no units.json, arms/ or arm.json, and beside it <out>.controller.pid naming the controller's pid, which has exited");
+const refill = (d: string, label: string, o: { scorer?: string; crash?: string } = {}) => {
+  const r = spawnSync("bun", [RGS, o.scorer ?? scorer, d], { encoding: "utf8", env: { ...KEYLESS, ...(o.crash ? { R1A_REFILL_CRASH: o.crash } : {}) } });
+  say("$ " + (o.crash ? "R1A_REFILL_CRASH=" + o.crash + " " : "") + "bun $OUT/refill-gaps.ts " + (o.scorer ? "<a clean checkout of e305ed0's first parent>" : "$SCORER") + " " + d);
+  say("  exit " + (r.status ?? r.signal) + "  (" + label + ")");
+  for (const l of ((r.stdout ?? "") + "\n" + (r.stderr ?? "")).split("\n").filter((l) => l.trim())) say("    " + l);
+  return r;
+};
+const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : null);
+const tree = (d: string, rel = ""): string[] => (!existsSync(join(d, rel)) ? [] : readdirSync(join(d, rel), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? tree(d, join(rel, e.name)) : [join(rel, e.name) + "=" + readFileSync(join(d, rel, e.name), "utf8")])).sort());
+const state = (d: string) => JSON.stringify({ cells: read(join(d, "cells.ndjson")), moved: read(join(d, "refilled-gaps.ndjson")), raws: tree(join(d, "refilled-gaps")), backup: read(join(d, "refill-gaps.backup.ndjson")), done: existsSync(join(d, "refill-gaps.done")), tmp: readdirSync(d).filter((f) => f.endsWith(".tmp")) });
+const untouched = (d: string) => read(join(d, "cells.ndjson")) === ORIGINAL && ["refilled-gaps.ndjson", "refilled-gaps", "refill-gaps.backup.ndjson", "refill-gaps.done"].every((f) => !existsSync(join(d, f)));
+const ka = killedRun("killed");
+const ra = refill(ka, "a killed controller's out dir");
+check("refill-gaps exits 0 on an out dir with no units.json and no arm.json, and counts 1 refilled session for the arm", ra.status === 0 && new RegExp("^refilled " + GA + " 1, their metered spend \\$3\\.00$", "m").test(ra.stdout) && !existsSync(join(ka, "units.json")) && !existsSync(join(ka, "arms")));
+check("the gap's run directory and the in-flight session's are copied to refilled-gaps/, and no other", JSON.stringify(tree(join(ka, "refilled-gaps"))) === JSON.stringify([runOf(3) + "/record.json=synthetic session 3\n", runOf(4) + "/record.json=synthetic session 4\n"]));
+check("refilled-gaps.ndjson holds the gap's line alone, byte for byte", read(join(ka, "refilled-gaps.ndjson")) === GAP + "\n");
+check("cells.ndjson keeps the findings and miss lines, byte for byte, and nothing else", read(join(ka, "cells.ndjson")) === FIND + "\n" + MISS + "\n");
+check("refill-gaps.backup.ndjson holds the journal before the move, byte for byte, and refill-gaps.done is written last", read(join(ka, "refill-gaps.backup.ndjson")) === ORIGINAL && existsSync(join(ka, "refill-gaps.done")) && !readdirSync(ka).some((f) => f.endsWith(".tmp")));
+const kept = [...readReviewJournal(ka).values()].map((e: any) => e.cell.unit).sort().join(",");
+check("the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap and the never-journaled cell", kept === "synthetic/unit-1,synthetic/unit-2");
+const expected = state(ka);
+const again = refill(ka, "a second use on the same out dir");
+check("a second use refuses on refill-gaps.done (one resume per run) and changes nothing", again.status === 2 && state(ka) === expected);
+for (const point of ["after-copy", "between-renames", "before-done"]) {
+  const d = killedRun("crash-" + point);
+  const c = refill(d, "the script killed at " + point, { crash: point });
+  if (point === "between-renames") check("killed between the renames: refilled-gaps.ndjson is in place, cells.ndjson still holds every line, the new journal waits as cells.ndjson.tmp, and there is no done marker", c.signal === "SIGKILL" && read(join(d, "refilled-gaps.ndjson")) === GAP + "\n" && read(join(d, "cells.ndjson")) === ORIGINAL && existsSync(join(d, "cells.ndjson.tmp")) && !existsSync(join(d, "refill-gaps.done")));
+  else check("killed at " + point + ", before the done marker", c.signal === "SIGKILL" && !existsSync(join(d, "refill-gaps.done")));
+  const rr = refill(d, "the rerun after the crash at " + point);
+  check("after a crash at " + point + " the rerun recovers from the backup and ends in the same bytes as an uninterrupted run", rr.status === 0 && /recovering an interrupted refill/.test(rr.stdout) && state(d) === expected);
+}
+const ed = killedRun("edited");
+refill(ed, "the script killed between the renames", { crash: "between-renames" });
+const extra = entry(5, "completed", true, { kind: "findings", findings: [] }) + "\n";
+appendFileSync(join(ed, "cells.ndjson"), extra);
+const er = refill(ed, "a rerun after cells.ndjson changed (a resume ran before the refill finished)");
+check("a rerun refuses when cells.ndjson changed after the interrupted attempt, and changes nothing", er.status === 2 && read(join(ed, "cells.ndjson")) === ORIGINAL + extra && !existsSync(join(ed, "refill-gaps.done")));
+const md = killedRun("missing");
+rmSync(join(md, runOf(3)), { recursive: true });
+const mr = refill(md, "a gap whose run directory is missing");
+check("a gap with no run directory is refused before anything changes (no backup, no output)", mr.status === 2 && untouched(md));
+const parent = join(OUT, "scorer-parent");
+const wt = spawnSync("git", ["-C", scorer, "worktree", "add", "--detach", parent, "e305ed087b3f17bd211287b0e2d5e3f3960b5a4f~1"], { encoding: "utf8" });
+const pd = killedRun("pin");
+const pinRun = refill(pd, "a scorer checkout at e305ed0's first parent", { scorer: parent });
+spawnSync("git", ["-C", scorer, "worktree", "remove", "--force", parent]);
+check("a scorer checkout not at e305ed0 is refused before anything changes", wt.status === 0 && pinRun.status === 2 && /, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f;/.test(pinRun.stderr) && untouched(pd));
+
+say("the controller check: refill-gaps refuses while the controller's pid runs review-units or any process holds cells.ndjson open, and logs both checks");
+const logged = read(join(ka, "refill-gaps.log")) ?? "";
+check("refill-gaps logs both checks with the time in refill-gaps.log: the controller's pid is not running, and no process holds cells.ndjson open", /^\d{4}-\d\d-\d\dT[\d:.]+Z controller check: \S+\/killed\.controller\.pid pid \d+ is not running$/m.test(logged) && /^\d{4}-\d\d-\d\dT[\d:.]+Z open-file check: no process holds cells\.ndjson open \(\d+ processes scanned, \d+ not readable\)$/m.test(logged));
+const waitFor = async (ok: () => boolean) => {
+  for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 50));
+  return ok();
+};
+const argvOf = (pid: number) => {
+  try {
+    return readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+const holdsOpen = (pid: number, path: string) => {
+  try {
+    return readdirSync("/proc/" + pid + "/fd").some((fd) => {
+      try {
+        return readlinkSync("/proc/" + pid + "/fd/" + fd) === path;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+};
+const reap = async (c: ChildProcess) => {
+  const gone = c.exitCode !== null || c.signalCode !== null ? Promise.resolve() : new Promise((r) => c.once("exit", r));
+  try {
+    process.kill(-c.pid!, "SIGKILL");
+  } catch {
+    c.kill("SIGKILL");
+  }
+  await gone;
+};
+const LAUNCH = "echo $BASHPID > <out>.controller.pid && exec bin/gstack-evals review-units";
+check("section 10 gives the launch line that records the controller's pid, word for word: " + LAUNCH, readFileSync(join(POST, "README.md"), "utf8").includes(LAUNCH));
+const launch = (pidFile: string, script: string) => spawn("bash", ["-c", script, "launcher", pidFile], { detached: true });
+const pidIn = (pidFile: string) => (read(pidFile) ?? "").trim();
+const runsReviewUnits = (pidFile: string) => /^\d+$/.test(pidIn(pidFile)) && argvOf(Number(pidIn(pidFile)))[0] === "review-units";
+const groupRuns = (pgid: number) => readdirSync("/proc").filter((p) => /^\d+$/.test(p)).some((p) => {
+  try {
+    const s = readFileSync("/proc/" + p + "/stat", "utf8");
+    return Number(s.slice(s.lastIndexOf(")") + 2).split(" ")[2]) === pgid && argvOf(Number(p))[0] === "review-units";
+  } catch {
+    return false;
+  }
+});
+const heldDir = killedRun("held");
+const holder = spawn("bash", ["-c", 'exec 3<"$1"; exec sleep 120', "holder", join(heldDir, "cells.ndjson")], { detached: true });
+try {
+  const holding = await waitFor(() => holdsOpen(holder.pid!, realpathSync(join(heldDir, "cells.ndjson"))));
+  const hr = refill(heldDir, "a live process holds cells.ndjson open");
+  check("while a live process holds cells.ndjson open, refill-gaps refuses, names its pid, logs it and changes nothing else", holding && hr.status === 2 && new RegExp("^open-file check: refused: pid " + holder.pid + " holds cells\\.ndjson open$", "m").test(hr.stdout) && new RegExp("Z open-file check: refused: pid " + holder.pid + " holds cells\\.ndjson open$", "m").test(read(join(heldDir, "refill-gaps.log")) ?? "") && untouched(heldDir));
+} finally {
+  await reap(holder);
+}
+const freed = refill(heldDir, "the same out dir once that process has exited");
+check("once the holder has exited, refill-gaps runs on the same out dir", freed.status === 0 && /^open-file check: no process holds cells\.ndjson open/m.test(freed.stdout) && existsSync(join(heldDir, "refill-gaps.done")));
+const liveDir = killedRun("live-controller");
+const controller = spawn("bash", ["-c", "exec -a review-units sleep 120"], { detached: true });
+try {
+  const running = await waitFor(() => argvOf(controller.pid!)[0] === "review-units");
+  writeFileSync(liveDir + ".controller.pid", controller.pid + "\n");
+  const lr = refill(liveDir, "the recorded controller pid is alive and its command line names review-units (a stand-in for a controller still running)");
+  check("while the controller's pid is alive and runs review-units, refill-gaps refuses and changes nothing but its log", running && lr.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + controller.pid + " is alive and runs review-units$", "m").test(lr.stdout) && untouched(liveDir));
+} finally {
+  await reap(controller);
+}
+const reusedDir = killedRun("reused-pid");
+const other = spawn("bash", ["-c", "exec sleep 120"], { detached: true });
+try {
+  const started = await waitFor(() => argvOf(other.pid!)[0] === "sleep");
+  writeFileSync(reusedDir + ".controller.pid", other.pid + "\n");
+  const anHourAgo = new Date(Date.now() - 3_600_000);
+  utimesSync(reusedDir + ".controller.pid", anHourAgo, anHourAgo);
+  const ur = refill(reusedDir, "the recorded pid, written an hour ago, now belongs to a later process that does not run review-units, as after a machine restart");
+  check("a recorded pid held by a process that started after the pid file was written and does not run review-units (a reused pid) does not block, and the check says so", started && ur.status === 0 && new RegExp("^controller check: \\S+ pid " + other.pid + " is alive but started \\d+ s after the pid file was written and does not run review-units \\(a reused pid\\), so the controller has exited$", "m").test(ur.stdout));
+} finally {
+  await reap(other);
+}
+const pipeDir = killedRun("pipelined");
+const piped = launch(pipeDir + ".controller.pid", '{ echo $BASHPID > "$1" && exec -a review-units sleep 120; } | cat');
+try {
+  const up = await waitFor(() => runsReviewUnits(pipeDir + ".controller.pid"));
+  const pr = refill(pipeDir, "the whole launch line, with $BASHPID, as one element of a pipeline (| cat), the controller still running; a stand-in process whose command line names review-units");
+  check("inside a pipeline the launch line still records the controller's own pid, and refill-gaps refuses while it runs", up && pr.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + pidIn(pipeDir + ".controller.pid") + " is alive and runs review-units$", "m").test(pr.stdout) && untouched(pipeDir));
+} finally {
+  await reap(piped);
+}
+const dollarDir = killedRun("pipelined-dollar");
+const dollar = launch(dollarDir + ".controller.pid", 'echo $$ > "$1" && exec -a review-units sleep 120 | cat');
+try {
+  const up = await waitFor(() => pidIn(dollarDir + ".controller.pid") === String(dollar.pid) && groupRuns(dollar.pid!));
+  const dr = refill(dollarDir, "echo $$ > <pid file> && exec ... | cat: the echo runs in the launching shell and only the exec sits in the pipeline, so the file names that shell, the controller still running");
+  check("a launching shell that wrote its own pid, alive since before the pid file was written, blocks refill-gaps by its start time", up && dr.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + dollar.pid + " is alive and started before the pid file was written, or within 2 s after, so it may be the shell that launched the controller$", "m").test(dr.stdout) && untouched(dollarDir));
+} finally {
+  await reap(dollar);
+}
+const bgDir = killedRun("backgrounded");
+const bg = launch(bgDir + ".controller.pid", '( echo $BASHPID > "$1" && exec -a review-units sleep 120 ) & exit 0');
+try {
+  const up = await waitFor(() => runsReviewUnits(bgDir + ".controller.pid"));
+  const br = refill(bgDir, "the launch line in a backgrounded subshell whose launching shell has exited, the controller still running");
+  check("in a backgrounded subshell whose shell has exited, the recorded pid is still the controller's, and refill-gaps refuses", up && br.status === 2 && new RegExp("^controller check: \\S+ refused: pid " + pidIn(bgDir + ".controller.pid") + " is alive and runs review-units$", "m").test(br.stdout) && untouched(bgDir));
+} finally {
+  await reap(bg);
+}
+const noPid = killedRun("no-pid-file");
+rmSync(noPid + ".controller.pid");
+const nr = refill(noPid, "no controller pid file beside the out dir");
+check("with no controller pid file beside the out dir, refill-gaps refuses and changes nothing but its log", nr.status === 2 && /^controller check: \S+ refused: the file is missing or names no pid, so the controller cannot be shown to have exited$/m.test(nr.stdout) && untouched(noPid));
+
+say("\n## Leak check");
+const text = lines.join("\n");
+const hex = [...new Set(text.match(/\b[0-9a-f]{7,40}\b/g) ?? [])];
+const leaked = hex.filter((h) => [...shas].some((s: any) => s.startsWith(h)));
+check("no unit head or base prefix (7+ hex) appears in this transcript", leaked.length === 0);
+check("no unit reference appears in this transcript", !UNIT.test(text));
+say("\n" + (failures ? failures + " FAILED" : "all checks passed"));
+writeFileSync(join(OUT, "transcript.txt"), lines.join("\n") + "\n");
+console.log(lines.join("\n"));
+process.exit(failures ? 1 : 0);

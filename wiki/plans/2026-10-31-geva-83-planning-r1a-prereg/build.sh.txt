@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Builds R1a's run material from the extracted panel: plan cases, the combined source clone, the three suites (headline,
+# pilot, real-neutral), the stub and the reading inputs, using the pinned scorer at $SCORER. Keyless.
+set -euo pipefail
+PANEL=$1; RUN=$2; SCORER=$3; POST=$4
+G="env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY $SCORER/bin/gstack-evals"
+HERE=$(cd "$(dirname "$0")" && pwd)
+python3 "$HERE/convert.py" "$PANEL" "$RUN"
+SR=$RUN/sealed-root; mkdir -p "$SR/suites" "$RUN/stub"
+(cd "$SCORER" && $G noloss suite --from-catalog catalog/plans --id planrev-ceo-r1a --sealed-root "$SR" --out "$SR/suites/planrev-ceo-r1a.json")
+(cd "$SCORER" && $G noloss suite --from-catalog catalog/plans-pilot --stratum pilot --id planrev-ceo-r1a-pilot --sealed-root "$SR" --out "$SR/suites/planrev-ceo-r1a-pilot.json")
+(cd "$SCORER" && $G noloss suite --from-catalog catalog/plans-real --id planrev-ceo-r1a-real --sealed-root "$SR" --out "$SR/suites/planrev-ceo-r1a-real.json")
+(cd "$SCORER" && $G noloss suite --stub --suite "$SR/suites/planrev-ceo-r1a.json" --sealed-root "$SR" --custody "procedural custody (interim, Captain drive, encrypted): the run bundle planning-r1a-ceo-run-v1.tar.age beside the panel bundle, age key held apart in the project-user drive; not sealed in plan v3.2's sense" --out "$RUN/stub/planrev-ceo-r1a.json")
+python3 "$HERE/readings.py" "$SR" planrev-ceo-r1a "$POST/fable-subset.tsv"
+(cd "$SCORER" && $G noloss suite --from-catalog catalog/plans-fable --id planrev-ceo-r1a-fable --sealed-root "$SR" --out "$SR/suites/planrev-ceo-r1a-fable.json")
+git clone -q --mirror "$RUN/source/plans.bundle" "$RUN/source/plans.git"
+echo "built: stub sha256 $(sha256sum "$RUN/stub/planrev-ceo-r1a.json" | cut -c1-64)"
