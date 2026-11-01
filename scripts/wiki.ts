@@ -353,8 +353,8 @@ export function checkWiki(root: string, opts: { baseFiles?: Map<string, Buffer> 
   return { entries, problems };
 }
 
-function git(root: string, args: string[]) {
-  const r = spawnSync("git", args, { cwd: root, maxBuffer: 256 * 1024 * 1024 });
+function git(root: string, args: string[], input?: string) {
+  const r = spawnSync("git", args, { cwd: root, input, maxBuffer: 256 * 1024 * 1024 });
   return { ok: r.status === 0, out: r.stdout ?? Buffer.alloc(0) };
 }
 
@@ -371,9 +371,29 @@ export function resolveBase(root: string, requested?: string): { ref: string | n
 
 export function gitBaseFiles(root: string, ref: string): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
-  for (const path of git(root, ["ls-tree", "-r", "-z", "--name-only", ref, "--", "wiki/"]).out.toString().split("\0")) {
-    if (!path || path === "wiki/README.md" || path === "wiki/INDEX.md") continue;
-    files.set(path, git(root, ["cat-file", "blob", ref + ":" + path]).out);
+  const blobs: [string, string][] = [];
+  for (const record of git(root, ["ls-tree", "-r", "-z", ref, "--", "wiki/"]).out.toString().split("\0")) {
+    const tab = record.indexOf("\t");
+    const path = record.slice(tab + 1);
+    if (tab < 0 || path === "wiki/README.md" || path === "wiki/INDEX.md") continue;
+    const [, type, oid] = record.slice(0, tab).split(" ");
+    files.set(path, Buffer.alloc(0));
+    if (type === "blob") blobs.push([path, oid]);
+  }
+  if (!blobs.length) return files;
+  const out = git(root, ["cat-file", "--batch"], blobs.map(([, oid]) => oid + "\n").join("")).out;
+  let at = 0;
+  for (const [path, oid] of blobs) {
+    const nl = out.indexOf(10, at);
+    if (nl < 0) break;
+    const [name, type, size] = out.subarray(at, nl).toString().split(" ");
+    if (name !== oid) break;
+    at = nl + 1;
+    if (type === "missing") continue;
+    const end = at + Number(size);
+    if (type !== "blob" || !(end < out.length) || out[end] !== 10) break;
+    files.set(path, out.subarray(at, end));
+    at = end + 1;
   }
   return files;
 }

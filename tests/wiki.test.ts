@@ -27,7 +27,7 @@ function fields(id: string, kind: string, extra: Fields = {}): Fields {
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-function write(root: string, path: string, text: string) {
+function write(root: string, path: string, text: string | Buffer) {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), text);
 }
@@ -69,6 +69,23 @@ describe("the committed wiki", () => {
     spawnSync("git", ["add", "wiki"], { cwd: root });
     const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
     expect([...gitBaseFiles(root, tree).keys()]).toEqual([DECISION]);
+  });
+
+  test("reading posts at a commit returns every file byte for byte", () => {
+    const files: Record<string, Buffer> = {
+      "wiki/board/also-empty.md": Buffer.alloc(0),
+      "wiki/board/empty.md": Buffer.alloc(0),
+      "wiki/board/no-newline.md": Buffer.from("no trailing newline"),
+      "wiki/research/bundle/header.txt": Buffer.from("0000000000000000000000000000000000000000 blob 3\nabc\n"),
+      "wiki/research/bundle/latin1.txt": Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a, 0x00, 0xff, 0x80]),
+    };
+    const root = makeWiki({ "wiki/INDEX.md": "# index\n" }, { index: false });
+    for (const [path, bytes] of Object.entries(files)) write(root, path, bytes);
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    const hex = (m: Iterable<[string, Buffer]>) => [...m].map(([path, bytes]) => [path, bytes.toString("hex")]);
+    expect(hex(gitBaseFiles(root, tree))).toEqual(hex(Object.entries(files)));
   });
 });
 
