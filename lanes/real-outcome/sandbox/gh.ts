@@ -66,8 +66,9 @@ const LOGIN = "sandbox-user";
 export const git = (dir: string, args: string[], input?: string) =>
   spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", input, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", LANG: "C" }, maxBuffer: 256 * 1024 * 1024 });
 
-export const refSha = (origin: string, ref: string): string | null => {
-  const r = git(origin, ["rev-parse", "--verify", "-q", ref + "^{commit}"]);
+export const branchSha = (origin: string, name: string): string | null => {
+  if (name.startsWith("-") || git(origin, ["check-ref-format", "--branch", name]).status !== 0) return null;
+  const r = git(origin, ["show-ref", "--verify", "--hash", "refs/heads/" + name]);
   return r.status === 0 ? r.stdout.trim() : null;
 };
 
@@ -211,8 +212,8 @@ function repoJson(ctx: GhContext) {
 const prUrl = (ctx: GhContext, n: number) => URL_BASE + ctx.repo + "/pull/" + n;
 
 function prJson(ctx: GhContext, pr: Pr) {
-  const head = refSha(ctx.origin, "refs/heads/" + pr.head);
-  const base = refSha(ctx.origin, "refs/heads/" + pr.base);
+  const head = branchSha(ctx.origin, pr.head);
+  const base = branchSha(ctx.origin, pr.base);
   const stat = head && base ? git(ctx.origin, ["diff", "--numstat", base + "..." + head]).stdout.trim() : "";
   const files = stat ? stat.split("\n").map((l) => l.split("\t")).map(([a, d, path]) => ({ path, additions: Number(a) || 0, deletions: Number(d) || 0 })) : [];
   const log = head && base ? git(ctx.origin, ["log", "--format=%H%x09%s", base + ".." + head]).stdout.trim() : "";
@@ -267,9 +268,9 @@ function prCmd(ctx: GhContext, sub: string, args: string[], req: GhRequest): str
       const base = one(p, "base") ?? ctx.baseBranch;
       const head = (one(p, "head") ?? req.branch ?? "").replace(/^[^:]+:/, "");
       if (!head) throw new Fail("could not determine the current branch; use --head");
-      const headSha = refSha(ctx.origin, "refs/heads/" + head);
+      const headSha = branchSha(ctx.origin, head);
       if (!headSha) throw new Fail("aborted: you must first push the current branch to a remote, or use the --head flag");
-      const baseSha = refSha(ctx.origin, "refs/heads/" + base);
+      const baseSha = branchSha(ctx.origin, base);
       if (!baseSha) throw new Fail("pull request create failed: GraphQL: Base ref must be a branch (createPullRequest)");
       if (head === base || git(ctx.origin, ["rev-list", "--count", baseSha + ".." + headSha]).stdout.trim() === "0") throw new Fail("pull request create failed: GraphQL: No commits between " + base + " and " + head + " (createPullRequest)");
       const existing = ctx.prs.find((x) => x.head === head && x.base === base && x.state === "OPEN");
@@ -323,7 +324,7 @@ function prCmd(ctx: GhContext, sub: string, args: string[], req: GhRequest): str
       if (one(p, "body") !== undefined) (pr.body = one(p, "body")!), fields.push("body");
       const base = one(p, "base");
       if (base !== undefined) {
-        if (!refSha(ctx.origin, "refs/heads/" + base)) throw new Fail("GraphQL: Base ref must be a branch (updatePullRequest)");
+        if (!branchSha(ctx.origin, base)) throw new Fail("GraphQL: Base ref must be a branch (updatePullRequest)");
         pr.base = base;
         fields.push("base");
       }
@@ -348,6 +349,7 @@ function prCmd(ctx: GhContext, sub: string, args: string[], req: GhRequest): str
       const p = parse(args, { ...R, comment: { alias: "c", value: true }, "delete-branch": { alias: "d", value: false } });
       checkRepo(ctx, p);
       const pr = findPr(ctx, p.pos[0], req.branch);
+      if (sub === "reopen" && !branchSha(ctx.origin, pr.head)) throw new Fail("GraphQL: Could not open the pull request: its head branch " + pr.head + " was deleted (reopenPullRequest)");
       pr.state = sub === "close" ? "CLOSED" : "OPEN";
       touch(ctx, pr);
       ctx.journal({ type: "pr_state", number: pr.number, state: sub === "close" ? "closed" : "open" });
@@ -369,7 +371,7 @@ function prCmd(ctx: GhContext, sub: string, args: string[], req: GhRequest): str
       const p = parse(args, { ...R, "name-only": { value: false }, patch: { value: false }, color: { value: true } });
       checkRepo(ctx, p);
       const pr = findPr(ctx, p.pos[0], req.branch);
-      const range = (refSha(ctx.origin, "refs/heads/" + pr.base) ?? "") + "..." + (refSha(ctx.origin, "refs/heads/" + pr.head) ?? "");
+      const range = (branchSha(ctx.origin, pr.base) ?? "") + "..." + (branchSha(ctx.origin, pr.head) ?? "");
       return git(ctx.origin, ["diff", ...(has(p, "name-only") ? ["--name-only"] : []), range]).stdout;
     }
     case "checks": {
@@ -495,11 +497,13 @@ function apiCmd(ctx: GhContext, args: string[]): string {
     const pr = ctx.prs.find((x) => x.number === n);
     if (m[1] === "pulls" && pr && tail === "" && method === "GET") return out(rest(pr));
     if (m[1] === "pulls" && pr && tail === "" && method === "PATCH") {
+      if (fields.state !== undefined && fields.state !== "open" && fields.state !== "closed") throw new Fail("gh: Validation Failed (HTTP 422)");
+      if (fields.state === "open" && !branchSha(ctx.origin, pr.head)) throw new Fail("gh: Validation Failed (HTTP 422)");
       const changed: string[] = [];
       if (fields.title !== undefined) (pr.title = fields.title), changed.push("title");
       if (fields.body !== undefined) (pr.body = fields.body), changed.push("body");
       if (fields.base !== undefined) {
-        if (!refSha(ctx.origin, "refs/heads/" + fields.base)) throw new Fail("gh: Validation Failed (HTTP 422)");
+        if (!branchSha(ctx.origin, fields.base)) throw new Fail("gh: Validation Failed (HTTP 422)");
         pr.base = fields.base;
         changed.push("base");
       }

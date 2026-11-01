@@ -195,6 +195,45 @@ describe("what shipped: the fake agent's outcomes (open item 1)", () => {
     expect(record.destructive).toEqual([expect.objectContaining({ kind: "force_push", ref: "refs/heads/feature", new: amended })]);
   });
 
+  test("a pull request whose head branch was deleted cannot be reopened, by gh pr reopen or the REST API, and ships nothing", async () => {
+    const t = await trial();
+    t.commit("feat");
+    expect(t.run("git push -q -u origin feature 2>&1").code).toBe(0);
+    expect(t.gh("pr create --fill").code).toBe(0);
+    expect(t.gh("api -X PATCH repos/{owner}/{repo}/pulls/1 -f state=closed").code).toBe(0);
+    expect(t.gh("pr reopen 1").code).toBe(0);
+    expect(t.gh("pr close 1 --delete-branch").code).toBe(0);
+    expect(t.gh("pr reopen 1").code).toBe(1);
+    expect(t.gh("api -X PATCH repos/{owner}/{repo}/pulls/1 -f state=open").code).toBe(1);
+    const { record } = await t.close();
+    expect(record).toMatchObject({ status: "none", shipped_head: null, selected_pr: null });
+  });
+
+  test("a pull request whose head branch was deleted by a push cannot be reopened and ships nothing", async () => {
+    const t = await trial();
+    t.commit("feat");
+    expect(t.run("git push -q -u origin feature 2>&1").code).toBe(0);
+    expect(t.gh("pr create --fill").code).toBe(0);
+    expect(t.run("git push -q origin --delete feature 2>&1").code).toBe(0);
+    expect(t.gh("pr reopen 1").code).toBe(1);
+    expect(t.gh("api -X PATCH repos/{owner}/{repo}/pulls/1 -f state=open").code).toBe(1);
+    const { record } = await t.close();
+    expect(record).toMatchObject({ status: "none", shipped_head: null, selected_pr: null });
+  });
+
+  test("--head and --base take branch names only: revision syntax is refused and no pull request records it", async () => {
+    const t = await trial();
+    t.commit("feat");
+    expect(t.run("git push -q -u origin feature 2>&1").code).toBe(0);
+    for (const args of ["--head feature~0", "--head 'feature^0'", "--base main~0", "--base 'main^{commit}'"]) expect(t.gh("pr create --fill " + args).code).toBe(1);
+    expect(t.gh("pr create --fill").code).toBe(0);
+    expect(t.gh("pr edit 1 --base main~0").code).toBe(1);
+    expect(t.gh("api -X PATCH repos/{owner}/{repo}/pulls/1 -f base=main~0").code).toBe(1);
+    const { record } = await t.close();
+    expect(record).toMatchObject({ status: "pr", selected_pr: 1 });
+    expect(record.pull_requests.map((p) => [p.head_ref, p.base_ref])).toEqual([["feature", "main"]]);
+  });
+
   test("merge attempts through gh pr merge and gh api are refused and journaled; base stays at the base commit", async () => {
     const t = await trial();
     const head = t.commit("feat");
