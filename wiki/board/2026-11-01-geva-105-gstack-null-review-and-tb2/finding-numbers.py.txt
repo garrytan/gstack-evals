@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Recomputes every other number the gstack null finding quotes (GEVA-105, GST-822). Keyless: reads trial files, calls no model, prints no transcript text.
+
+usage: python3 finding_numbers.py <tb2-filtered-root> <tb2-lost-r2-root> <review-root> <stacks-r1.json> [<pilot-ledger.jsonl>]
+  <tb2-filtered-root>  filter.py's filtered copy of the nine analysed TB2 batches
+  <tb2-lost-r2-root>   the lost replicate 2 batches (r2-pulled/runs in the GEVA-89 TB2 archive)
+  <review-root>        the unpacked GEVA-89 review archive (judge/ and runs/)
+  <stacks-r1.json>     wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
+  <pilot-ledger.jsonl> optional: the TB2 pilot ledger (its settled total is added to the spend line)
+"""
+import collections, csv, glob, json, math, os, re, statistics as st, sys
+
+tb2, lost, rev, suite = sys.argv[1:5]
+ledger = sys.argv[5] if len(sys.argv) > 5 else None
+FIT = ["custom-memory-heap-crash", "overfull-hbox", "fix-code-vulnerability", "fix-git", "db-wal-recovery"]
+MODELS = ["claude-opus-5-5", "claude-haiku-5-5", "particle-1"]
+
+print("== TB2 (stacks round 1, 37 graded tasks, 3 replicates)")
+cost = collections.Counter()
+for f in glob.glob(os.path.join(tb2, "*", "pulled", "out", "proxy-sessions.jsonl")):
+    for line in open(f):
+        s = json.loads(line); cost[s["trial"].removesuffix("__env")] += s["spent_micros"] / 1e6
+rows = []
+for cf in sorted(glob.glob(os.path.join(tb2, "*", "pulled", "jobs", "*", "*", "config.json"))):
+    d = os.path.dirname(cf); c = json.load(open(cf)); kw = c["agent"]["kwargs"]
+    res = json.load(open(os.path.join(d, "result.json"))) if os.path.exists(os.path.join(d, "result.json")) else {}
+    rw = ((res.get("verifier_result") or {}).get("rewards") or {}).get("reward")
+    summ = {}
+    try: summ = json.load(open(os.path.join(d, "agent", "laneb-summary.json")))
+    except (OSError, ValueError): pass
+    sess = summ.get("session") or {}
+    text, cmds, tools = [], [], collections.Counter()
+    sm = os.path.join(d, "agent", "sdk-messages.jsonl")
+    if os.path.exists(sm):
+        for line in open(sm):
+            try: o = json.loads(line)
+            except ValueError: continue
+            if o.get("type") == "AssistantMessage":
+                for bl in o.get("content") or []:
+                    if isinstance(bl.get("text"), str): text.append(bl["text"])
+                    if "name" in bl and "input" in bl: tools[bl["name"]] += 1; cmds.append(json.dumps(bl["input"]))
+            elif o.get("type") == "ResultMessage": text.append(o.get("result") or "")
+    T = "\n".join(text); C = "\n".join(cmds)
+    batch = os.path.relpath(cf, tb2).split(os.sep)[0]
+    rows.append(dict(model=kw["upstream_model"], arm=kw["arm"], task=os.path.basename(c["task"]["path"]), batch=batch, usage=sess.get("usage") or {},
+                     passed=1 if (rw is not None and rw >= 1) else 0, usd=cost.get(os.path.basename(d), 0.0),
+                     loaded=bool(sess.get("cmd_expanded")), first=sess.get("first_req_prompt_tokens"),
+                     debug_report=bool(re.search(r"DEBUG REPORT", T)), helper=bool(re.search(r"skills/gstack/bin/", C)),
+                     skill_agent_ask=sum(tools[k] for k in ("Skill", "Agent", "Task", "AskUserQuestion"))))
+print("trials", len(rows))
+cells = collections.defaultdict(list)
+for r in rows: cells[(r["model"], r["arm"])].append(r)
+print("| model | arm | pass | rate | spend USD | USD/trial | USD/success | body loaded | DEBUG REPORT | gstack helper run | Skill, Agent or AskUserQuestion calls | first-request prompt tokens (median) |")
+for m in MODELS:
+    for a in ("none", "gstack", "placebo"):
+        v = cells.get((m, a))
+        if not v: continue
+        p = sum(r["passed"] for r in v); usd = sum(r["usd"] for r in v)
+        fr = [r["first"] for r in v if r["first"]]
+        print(f"| {m} | {a} | {p}/{len(v)} | {100*p/len(v):.1f}% | {usd:.2f} | {usd/len(v):.3f} | {usd/max(p,1):.3f} | {sum(r['loaded'] for r in v)}/{len(v)} | {sum(r['debug_report'] for r in v)}/{len(v)} | {sum(r['helper'] for r in v)}/{len(v)} | {sum(r['skill_agent_ask'] for r in v)} | {st.median(fr) if fr else 'n/a'} |")
+    g, n = cells[(m, "gstack")], cells[(m, "none")]
+    print(f"  {m}: gstack/none spend ratio {sum(r['usd'] for r in g)/sum(r['usd'] for r in n):.2f}")
+for m in MODELS:
+    for a, b in (("gstack", "none"), ("gstack", "placebo"), ("placebo", "none")):
+        A = collections.defaultdict(list); Bv = collections.defaultdict(list)
+        for r in cells.get((m, a), []): A[r["task"]].append(r["passed"])
+        for r in cells.get((m, b), []): Bv[r["task"]].append(r["passed"])
+        if not A or not Bv: continue
+        ts = sorted(set(A) & set(Bv)); ds = [st.mean(A[t]) - st.mean(Bv[t]) for t in ts]
+        se = st.stdev(ds) / math.sqrt(len(ds))
+        line = f"  {m} {a} - {b}: {len(ts)} tasks, {100*st.mean(ds):+.1f} pp, paired task-level SE {100*se:.1f}, MDD at 80% power (2.8 SE) {280*se:.1f} pp"
+        if (a, b) == ("gstack", "none"):
+            anyp = collections.Counter(r["task"] for r in rows if r["model"] == m and r["passed"])
+            nb = sum(len(Bv[t]) for t in ts)
+            fails = sum(len(Bv[t]) - sum(Bv[t]) for t in ts); att = sum(len(Bv[t]) - sum(Bv[t]) for t in ts if anyp[t])
+            sat = sum(1 for t in ts if sum(Bv[t]) == len(Bv[t])); zero = sum(1 for t in ts if sum(Bv[t]) == 0)
+            line += f"; none at 3/3 on {sat} tasks and 0/3 on {zero}; none fails {fails} of {nb}, {att} of them on tasks some arm of this model solved ({100*att/nb:.1f} pp of attainable headroom)"
+        print(line)
+print("per replicate pass rates (replicate 1, 2, 3):")
+for m in MODELS:
+    for a in ("none", "gstack"):
+        reps = collections.defaultdict(list)
+        for r in cells[(m, a)]: reps[r["batch"].split("-")[0]].append(r["passed"])
+        print(f"  {m} {a}: " + ", ".join(f"{k} {100*st.mean(v):.1f}%" for k, v in sorted(reps.items())))
+m = "claude-opus-5-5"
+cand = sorted(glob.glob(os.path.join(tb2, "..", "..", "runs", "r3-opus", "proxy.json")))
+pp = json.load(open(cand[0]))["models"][m]["price_per_mtok"] if cand else None
+if pp:
+    keys = [("input_tokens", "input"), ("output_tokens", "output"), ("cache_creation_input_tokens", "cache_write_5m"), ("cache_creation_1h_input_tokens", "cache_write_1h"), ("cache_read_input_tokens", "cache_read")]
+    mean = {a: {k: st.mean((r["usage"].get(k) or 0) for r in cells[(m, a)]) for k, _ in keys} for a in ("none", "gstack")}
+    usd = {a: {k: mean[a][k] * pp[pk] / 1e6 for k, pk in keys} for a in mean}
+    extra = {k: usd["gstack"][k] - usd["none"][k] for k, _ in keys}; tot = sum(extra.values())
+    print(f"Opus per-trial mean usage at the proxy's prices {json.dumps(pp)} (USD per million tokens):")
+    for a in ("none", "gstack"): print(f"  {a}: " + ", ".join(f"{k} {mean[a][k]:.0f}" for k, _ in keys) + f"; priced USD {sum(usd[a].values()):.3f} a trial")
+    print("  gstack's extra cost a trial USD %.3f: " % tot + ", ".join(f"{k} {100*extra[k]/tot:.0f}%" for k, _ in keys if abs(extra[k]) > 1e-9))
+print("fit tasks (debugging or fix-a-broken-thing): " + ", ".join(FIT))
+for m in MODELS:
+    print("  " + m + ": " + "; ".join(f"{a} {sum(r['passed'] for r in cells[(m, a)] if r['task'] in FIT)}/{sum(1 for r in cells[(m, a)] if r['task'] in FIT)}" for a in ("none", "gstack")))
+spend = {}
+for f in sorted(glob.glob(os.path.join(tb2, "*", "pulled", "out", "proxy-totals.json")) + glob.glob(os.path.join(lost, "*", "pulled", "out", "proxy-totals.json"))):
+    spend[f.split(os.sep)[-4]] = json.load(open(f))["global_spent_micros"] / 1e6
+for k in sorted(spend): print(f"  proxy total {k}: USD {spend[k]:.2f}")
+analysed = sum(v for k, v in spend.items() if not re.fullmatch(r"r2-[a-z-]+", k))
+lostsum = sum(v for k, v in spend.items() if re.fullmatch(r"r2-[a-z-]+", k))
+pilot = 0.0
+if ledger:
+    for line in open(ledger):
+        o = json.loads(line)
+        if o.get("kind") == "settle": pilot += (o.get("usd_micros") or 0) / 1e6
+print(f"  analysed batches USD {analysed:.2f}; lost replicate 2 USD {lostsum:.2f}; pilot ledger settled USD {pilot:.2f}; total USD {analysed + lostsum + pilot:.2f}")
+
+print("\n== Review (stacks round 1, Opus 5.5, 33 units, two passes)")
+units = json.load(open(suite))["units"]
+kind = {}
+for u in units:
+    for bb in u["blockers"]:
+        kind[((u["id"].split("#")[1] if u["pr"] == 3516 else str(u["pr"])), bb["id"])] = bb.get("counts")
+J = {}
+for arm in ("gstack-opus", "none-opus"):
+    J[arm] = {(r["pr"], r["blocker_id"], r["pass"]): r["outcome"] for r in csv.DictReader(open(os.path.join(rev, "judge", "final", "arms", "stacks-r1", arm, "judgments.tsv")), delimiter="\t")}
+for label, hit in (("blocking recall", "F"), ("any-severity recall", "FD")):
+    C = collections.defaultdict(lambda: [0, 0]); N = base = gsum = 0
+    for (pr, bid), ct in kind.items():
+        if ct != "blocking": continue
+        for p in "12":
+            gi = 1 if J["gstack-opus"].get((pr, bid, p), "") in hit else 0; ni = 1 if J["none-opus"].get((pr, bid, p), "") in hit else 0
+            cl = pr.split("@")[0]; C[cl][0] += gi - ni; C[cl][1] += 1; N += 1; base += ni; gsum += gi
+    delta = sum(v[0] for v in C.values()) / N; k = len(C)
+    se = math.sqrt(k / (k - 1) * sum((v[0] - delta * v[1]) ** 2 for v in C.values()) / N ** 2)
+    print(f"  {label}: {k} PR clusters, {N} blocker-passes; gstack {gsum}/{N} ({100*gsum/N:.1f}%), none {base}/{N} ({100*base/N:.1f}%); delta {100*delta:+.1f} pp; cluster-robust SE {100*se:.1f}; MDD at 80% power {280*se:.1f} pp")
+for arm in ("gstack-opus", "none-opus"):
+    c = collections.Counter(o for (pr, bid, p), o in J[arm].items() if kind.get((pr, bid)) == "blocking")
+    print(f"  {arm} per blocking blocker-pass: found and labeled blocking {c['F']}, found and labeled non-blocking {c['D']}, missed {c['M']}")
+for arm in ("gstack-opus", "none-opus"):
+    usd = tok = 0.0; seen = set()
+    for f in glob.glob(os.path.join(rev, "runs", "*", "out", "arms", arm, "cost.tsv")):
+        for r in csv.DictReader(open(f), delimiter="\t"):
+            if r["scope"] == "all": usd += float(r["usd"]); tok += float(r["total_tokens"]); seen.add((r["pr"], r["pass"]))
+    print(f"  {arm}: USD {usd:.2f} over {len(seen)} unit-passes, {tok/len(seen)/1e6:.2f}M tokens a unit-pass")
+ex = collections.defaultdict(list)
+for f in sorted(glob.glob(os.path.join(rev, "runs", "stacks-r1-review-opus-gstack", "out", "runs", "*", "*", "*", "p*", "host", "transcript.ndjson"))):
+    arm = f.split(os.sep)[-5]
+    first = None; agent = helper = 0
+    for line in open(f):
+        try: o = json.loads(line)
+        except ValueError: continue
+        if o.get("type") != "assistant": continue
+        m = o["message"]; u = m.get("usage") or {}
+        if first is None and u: first = (u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0)
+        for b in m.get("content", []):
+            if b.get("type") == "tool_use":
+                if b["name"] in ("Agent", "Task"): agent += 1
+                if re.search(r"skills/gstack/bin/gstack-", json.dumps(b.get("input"))): helper += 1
+    ex[arm].append((first, agent, helper))
+for arm, v in sorted(ex.items()):
+    fc = [x[0] for x in v if x[0]]
+    print(f"  {arm}: {len(v)} sessions; first-request context median {st.median(fc):.0f} (min {min(fc)}, max {max(fc)}); sessions with an Agent call {sum(1 for x in v if x[1])}/{len(v)}; sessions that ran a gstack helper {sum(1 for x in v if x[2])}/{len(v)}")

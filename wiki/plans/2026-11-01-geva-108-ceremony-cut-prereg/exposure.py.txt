@@ -1,0 +1,83 @@
+# Ceremony-cut exposure counts (wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg, section 7).
+# Counts, per arm, the sessions in which each frozen marker appears. Markers are matched against the agent's own tool
+# calls (name plus JSON input) or the tool results it received or its own text, never against the told prompt. Call markers
+# are anchored on the installed paths (~/.claude/skills/gstack/, the render under ~/.claude/gstack-render/), because many
+# review units are gstack's own pull requests and an agent that reads the repository under review touches the same names. Review
+# sessions are review-units transcripts (<out>/runs/<model>/<arm>/<unit>/p<n>/host/transcript.ndjson); TB2 trials are
+# Harbor trial folders (agent/sdk-messages.jsonl, or evaluator/ when present). No transcript text is printed.
+# Usage: python3 exposure.py review <review-units out dir>... | tb2 <job dir>...  [--json <file>]
+import glob, json, os, re, sys, collections
+G = r'\.claude/skills/gstack/'
+S = r'\.claude/(?:skills|gstack-render)/[^\s"\']*'
+CALL = {
+  'start_line': G + r'bin/gstack-skill-start',
+  'any_gstack_helper': G + r'bin/gstack-',
+  'preamble_read': S + r'sections/preamble\.md',
+  'question_tuning': G + r'bin/gstack-question-(?:preference|log)',
+  'telemetry': G + r'bin/(?:gstack-skill-end|gstack-telemetry)',
+  'learnings': G + r'bin/gstack-learnings-(?:search|log)',
+  'aside': r'\baside exec\b|' + G + r'bin/gstack-egress-lib',
+  'queue_status': G + r'bin/gstack-next-version',
+  'brain_sync': G + r'bin/gstack-brain-sync',
+  'review_log': G + r'bin/gstack-review-log',
+  'scope_lock': G + r'freeze/bin/(?:freeze-state|check-freeze)\.sh',
+  'checklist_read': r'\.claude/skills/(?:gstack/)?review/checklist\.md',
+  'review_army_read': S + r'review/sections/review-army\.md',
+  'adversarial_read': S + r'review/sections/adversarial\.md',
+}
+RESULT = {'render_kind_unattended': r'RENDER_KIND: unattended', 'render_kind_mismatch': r'RENDER_KIND_MISMATCH', 'session_kind_unattended': r'SESSION_KIND: unattended'}
+TEXT = {'debug_report': r'DEBUG REPORT', 'status_line': r'Status:\s*\**\s*(DONE|DONE_WITH_CONCERNS|BLOCKED)', 'root_cause_hypothesis': r'Root cause hypothesis', 'pre_landing_review': r'Pre-Landing Review'}
+TOOLS = {'agent_dispatch': ('Agent', 'Task'), 'ask_user': ('AskUserQuestion',), 'skill_tool': ('Skill',)}
+CEREMONY = ['preamble_read', 'question_tuning', 'telemetry', 'learnings', 'aside', 'queue_status', 'brain_sync']
+def blocks(o):
+    if o.get('type') in ('assistant', 'user'): c = (o.get('message') or {}).get('content')
+    else: c = o.get('content')
+    return c if isinstance(c, list) else ([{'text': c}] if isinstance(c, str) else [])
+def flat(x):
+    if isinstance(x, str): return x
+    if isinstance(x, list): return '\n'.join(flat(i) for i in x)
+    if isinstance(x, dict): return flat(x.get('text') or x.get('content') or '')
+    return ''
+def session(path):
+    calls, results, texts, tools, capped = [], [], [], collections.Counter(), False
+    for line in open(path, errors='replace'):
+        try: o = json.loads(line)
+        except ValueError: continue
+        capped = capped or (o.get('type') in ('result', 'ResultMessage') and o.get('subtype') == 'error_max_turns')
+        role = {'assistant': 'a', 'AssistantMessage': 'a', 'user': 'u', 'UserMessage': 'u'}.get(o.get('type'))
+        for b in blocks(o):
+            if not isinstance(b, dict): continue
+            if role == 'a' and 'name' in b and 'input' in b: tools[b['name']] += 1; calls.append(b['name'] + ' ' + json.dumps(b['input']))
+            elif role == 'a' and isinstance(b.get('text'), str): texts.append(b['text'])
+            elif role == 'u' and ('tool_use_id' in b or b.get('type') == 'tool_result'): results.append(flat(b.get('content')))
+    c, r, t = '\n'.join(calls), '\n'.join(results), '\n'.join(texts)
+    m = {k: bool(re.search(x, c)) for k, x in CALL.items()}
+    m.update({k: bool(re.search(x, r)) for k, x in RESULT.items()})
+    m.update({k: bool(re.search(x, t)) for k, x in TEXT.items()})
+    m.update({k: any(tools[n] for n in v) for k, v in TOOLS.items()})
+    m['any_ceremony'] = any(m[k] for k in CEREMONY)
+    m['turn_cap'] = capped
+    return m
+def sessions(kind, roots):
+    for root in roots:
+        if kind == 'review':
+            for f in sorted(glob.glob(os.path.join(root, 'runs', '*', '*', '*', 'p*', 'host', 'transcript.ndjson'))):
+                p = f.split('/'); yield p[-6], p[-5], f
+        else:
+            for d in sorted(glob.glob(os.path.join(root, '*', ''))):
+                cf = os.path.join(d, 'config.json')
+                if not os.path.exists(cf): continue
+                kw = json.load(open(cf))['agent'].get('kwargs', {})
+                f = next((x for x in (os.path.join(d, 'evaluator', 'sdk-messages.jsonl'), os.path.join(d, 'agent', 'sdk-messages.jsonl')) if os.path.exists(x)), None)
+                if f: yield kw.get('upstream_model', '?'), kw.get('arm', '?'), f
+kind, roots = sys.argv[1], [a for a in sys.argv[2:] if not a.startswith('--') and not a.endswith('.json')]
+agg = collections.defaultdict(lambda: collections.Counter()); n = collections.Counter()
+for model, arm, f in sessions(kind, roots):
+    n[(model, arm)] += 1
+    for k, v in session(f).items(): agg[(model, arm)][k] += int(v)
+keys = list(CALL) + list(RESULT) + list(TEXT) + list(TOOLS) + ['any_ceremony', 'turn_cap']
+res = [dict(model=m, arm=a, sessions=n[(m, a)], **{k: agg[(m, a)][k] for k in keys}) for (m, a) in sorted(n)]
+print('| Marker | ' + ' | '.join(f"{r['model']} {r['arm']} (n={r['sessions']})" for r in res) + ' |')
+print('|---|' + '---|' * len(res))
+for k in keys: print(f'| {k} | ' + ' | '.join(str(r[k]) for r in res) + ' |')
+if '--json' in sys.argv: json.dump(res, open(sys.argv[sys.argv.index('--json') + 1], 'w'), indent=1)
