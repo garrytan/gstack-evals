@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { loadSuite, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
+import { insideRepo, loadSuite, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
 import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
 import { recipeHash, recipeInputs } from "../../rig/recipe.ts";
 import { stackKind } from "../../arms/stacks.ts";
@@ -212,6 +212,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     }
   }
   const out = resolve(one("--out")!);
+  if (suite.sealed && insideRepo(out)) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write sealed runs outside it");
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
   const sessions = units.length * passes * arms.reduce((s, a) => s + modelsOf(a.name).length, 0);
   if (dry) {

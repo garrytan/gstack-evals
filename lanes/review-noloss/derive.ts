@@ -198,7 +198,6 @@ export function derive(o: DeriveOptions): DeriveResult {
     units,
     excluded: [...suite.excluded, ...[...dropped].map(([ref, why]) => ({ ref, reason: "dropped by noloss derive: " + why.join("; ") }))],
   };
-  if (derived.sealed && insideRepo(out)) usage("--out " + out + " is inside the repo, and suite " + o.id + " derives from sealed suite " + suite.id + ", so it is sealed too; write it under a directory outside the checkout");
   mkdirSync(out, { recursive: true });
   const suitePath = join(out, o.id + ".json");
   writeFileSync(suitePath, JSON.stringify(derived, null, 2) + "\n");

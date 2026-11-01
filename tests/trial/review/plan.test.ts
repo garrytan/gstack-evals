@@ -243,6 +243,11 @@ describe("plan units in the run loop (keyless)", () => {
       const before = bound.length;
       await expect(runReviewUnits({ ...input, out: durable() }, voiced)).rejects.toThrow("E_USAGE: plan units run no second model, but arm gstack's cell on " + OPUS + " keeps the voice gpt-6.1-sol");
       expect(bound.length).toBe(before);
+      const failing: HostRig = { ...rig, driver: (o) => ({ async run(session, task, hooks) { const r = await rig.driver!(o).run(session, task, hooks); return slots.get(o.proxy.slot)!.arm === "lens" ? { ...r, termination: { kind: "missing" as const, code: "UPSTREAM" as const } } : r; } }) };
+      const broken = await runReviewUnits({ ...input, out: durable() }, failing);
+      const lensArm = JSON.parse(readFileSync(join(broken.armDirs.find((d) => d.endsWith("lens-opus"))!, "arm.json"), "utf8"));
+      expect([lensArm.status, lensArm.coverage_gaps, lensArm.diagnostics]).toEqual(["stopped", [unit.id + " pass 1: incomplete, the session ended missing (UPSTREAM)"], undefined]);
+      expect(JSON.parse(readFileSync(join(broken.armDirs.find((d) => d.endsWith("none-haiku"))!, "arm.json"), "utf8")).status).toBe("complete");
     } finally {
       h.proxy.stop();
     }
@@ -292,6 +297,9 @@ describe("review-units --plan arguments (keyless)", () => {
     expect(dry.out).toContain('placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)');
     expect(dry.out).toContain("sessions " + 3 * 3 * (2 + 1 + 2 + 1));
     expect(existsSync(out)).toBe(false);
+    const inRepo = join(REPO_ROOT, ".review-units-cli-sealed-out");
+    expect((await run([...base.map((a) => (a === out ? inRepo : a)), "--plan", "ceo", "--arms", "none", "--dry-run"])).err).toMatch(/^E_USAGE .*suite \S+ is sealed, and --out .* is inside the repo; write sealed runs outside it/);
+    expect(existsSync(inRepo)).toBe(false);
     expect(CUSTODY).toMatch(/^procedural custody/);
   });
 });
