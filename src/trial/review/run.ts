@@ -260,7 +260,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const receipts = [join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
+  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;

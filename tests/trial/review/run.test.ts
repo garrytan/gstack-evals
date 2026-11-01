@@ -115,6 +115,7 @@ describe("review units in the run loop (keyless)", () => {
     const out = durable();
     const sink = durable();
     const input: ReviewRunInput = { host: "claude", suite: { id: "review-test", sha256: null }, units: [prepared], arms: [{ name: "none", told: "none" }, { name: "gstack", told: "gstack" }], models: [OPUS, HAIKU], passes: 1, parallel: 2, timeoutS: 120, cap: 50_000_000, runId: "review-run", out, date: "2026-10-30", policy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: join(h.dir, "journal.ndjson"), env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } };
+    writeFileSync(join(out, "run.json"), JSON.stringify({ run_id: input.runId, max_turns: 60, session_kind: null }) + "\n");
     try {
       const first = await runReviewUnits(input, rig);
       const gapStop = [{ code: "E_COVERAGE_GAP" as const, message: expect.stringMatching(new RegExp("^arm none-opus stopped with 1 coverage gap, so it gets no verdict: " + unit.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " pass 1: malformed, ")) }];
@@ -152,6 +153,7 @@ describe("review units in the run loop (keyless)", () => {
       expect(JSON.parse(readFileSync(join(out, "arms", "gstack-opus", "arm.json"), "utf8"))).toMatchObject({ id: "gstack-opus", passes: 1, status: "complete", models: [{ role: "driver", model: OPUS }, { role: "voice", model: "gpt-6.1-sol" }], cell_tree_sha256: "gstack-opus" });
       expect(existsSync(join(sink, "arms", "gstack-opus", "cost.tsv"))).toBe(true);
       expect(existsSync(join(sink, "cells.ndjson"))).toBe(true);
+      expect(readFileSync(join(sink, "run.json"), "utf8")).toBe(readFileSync(join(out, "run.json"), "utf8"));
 
       const calls = h.upstream.length;
       mkdirSync(join(out, "arms", "none-particle-ai-particle-1"), { recursive: true });

@@ -79,7 +79,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   preset, which brings Claude Code's own system guidance. arm_provenance.system_prompt in arm.json and system_prompt in
   each session's init.json record it.
 - `--told-prefix <arm>=<file>`, repeatable, code units only. The file's one line replaces the arm's told command (for
-  example R2's full-procedure /review line); its command must name the arm's skill. The template and TOLD_SHA256 stay
+  example R2's full-procedure /review line); it must open with the arm's own command. The template and TOLD_SHA256 stay
   the same. arm.json's told block records the prefix and prefix_sha256; an arm without one keeps today's block.
 - `--render <arm>=interactive|unattended`, repeatable, on a gstack stack arm. The install runs gstack's setup, renders
   the full loadout into ~/.claude/gstack-render, serves each rendered skill's SKILL.md and sections from it, and checks

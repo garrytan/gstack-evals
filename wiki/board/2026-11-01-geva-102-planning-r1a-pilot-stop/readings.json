@@ -1,0 +1,363 @@
+{
+  "arms": {
+    "none-opus": {
+      "sessions": 4,
+      "parse": {
+        "findings": 4
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 0.4508,
+      "cost_mean_usd": 0.1127,
+      "wall_s_max": 36.7,
+      "wall_s_median": 31.2,
+      "agent_turns_median": 3,
+      "output_tokens_median": 2958.5,
+      "findings": 21,
+      "must_fix_findings": 10,
+      "first_request_input_tokens_median": 20345,
+      "tool_calls_median": 2,
+      "blockers": {
+        "F": 8
+      },
+      "adjudication": {
+        "not-defect": 1,
+        "defect": 1
+      }
+    },
+    "lens-opus": {
+      "sessions": 4,
+      "parse": {
+        "findings": 4
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 0.4728,
+      "cost_mean_usd": 0.1182,
+      "wall_s_max": 38.7,
+      "wall_s_median": 34.9,
+      "agent_turns_median": 3,
+      "output_tokens_median": 3232.5,
+      "findings": 24,
+      "must_fix_findings": 12,
+      "first_request_input_tokens_median": 20363,
+      "tool_calls_median": 2,
+      "blockers": {
+        "F": 8
+      },
+      "adjudication": {
+        "defect": 2
+      }
+    },
+    "gstack-opus": {
+      "sessions": 4,
+      "parse": {
+        "findings": 4
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 0.7945,
+      "cost_mean_usd": 0.1986,
+      "wall_s_max": 43.6,
+      "wall_s_median": 41.6,
+      "agent_turns_median": 3.5,
+      "output_tokens_median": 4004,
+      "findings": 28,
+      "must_fix_findings": 13,
+      "first_request_input_tokens_median": 46151,
+      "tool_calls_median": 2.5,
+      "blockers": {
+        "F": 8
+      },
+      "adjudication": {
+        "defect": 3,
+        "not-defect": 1
+      }
+    },
+    "placebo-particle-1": {
+      "sessions": 4,
+      "parse": {
+        "findings": 1,
+        "missing": 3
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 0.0965,
+      "cost_mean_usd": 0.0241,
+      "wall_s_max": 129.2,
+      "wall_s_median": 36.7,
+      "agent_turns_median": 9,
+      "output_tokens_median": 8980.5,
+      "findings": 11,
+      "must_fix_findings": 7,
+      "first_request_input_tokens_median": 0,
+      "tool_calls_median": 8,
+      "blockers": {
+        "F": 2,
+        "M": 6
+      },
+      "adjudication": {
+        "not-defect": 2,
+        "defect": 2
+      }
+    },
+    "none-particle-1": {
+      "sessions": 4,
+      "parse": {
+        "findings": 3,
+        "missing": 1
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 0.0543,
+      "cost_mean_usd": 0.0136,
+      "wall_s_max": 78.5,
+      "wall_s_median": 56.9,
+      "agent_turns_median": 8,
+      "output_tokens_median": 10493.5,
+      "findings": 27,
+      "must_fix_findings": 14,
+      "first_request_input_tokens_median": 0,
+      "tool_calls_median": 7,
+      "blockers": {
+        "F": 6,
+        "M": 2
+      },
+      "adjudication": {
+        "not-defect": 2,
+        "defect": 4
+      }
+    },
+    "gstack-particle-1": {
+      "sessions": 4,
+      "parse": {
+        "findings": 3,
+        "missing": 1
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 0.0879,
+      "cost_mean_usd": 0.022,
+      "wall_s_max": 96.5,
+      "wall_s_median": 61.6,
+      "agent_turns_median": 8,
+      "output_tokens_median": 14086,
+      "findings": 39,
+      "must_fix_findings": 19,
+      "first_request_input_tokens_median": 0,
+      "tool_calls_median": 7,
+      "blockers": {
+        "F": 6,
+        "M": 2
+      },
+      "adjudication": {
+        "defect": 5,
+        "not-defect": 5
+      }
+    },
+    "none-fable": {
+      "sessions": 4,
+      "parse": {
+        "findings": 4
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 1.882,
+      "cost_mean_usd": 0.4705,
+      "wall_s_max": 81.2,
+      "wall_s_median": 73.4,
+      "agent_turns_median": 6.5,
+      "output_tokens_median": 5613.5,
+      "findings": 29,
+      "must_fix_findings": 15,
+      "first_request_input_tokens_median": 20368,
+      "tool_calls_median": 5.5,
+      "blockers": {
+        "F": 8
+      },
+      "adjudication": {
+        "not-defect": 2,
+        "defect": 3
+      }
+    },
+    "gstack-fable": {
+      "sessions": 4,
+      "parse": {
+        "findings": 4
+      },
+      "termination": {
+        "completed": 4
+      },
+      "model_output": 4,
+      "text_output": 4,
+      "exit137": 0,
+      "cost_usd": 5.5883,
+      "cost_mean_usd": 1.3971,
+      "wall_s_max": 329.3,
+      "wall_s_median": 165.9,
+      "agent_turns_median": 12.5,
+      "output_tokens_median": 11572.5,
+      "findings": 38,
+      "must_fix_findings": 18,
+      "first_request_input_tokens_median": 46151,
+      "tool_calls_median": 11.5,
+      "blockers": {
+        "F": 8
+      },
+      "adjudication": {
+        "defect": 8,
+        "not-defect": 1
+      }
+    }
+  },
+  "digests": {
+    "pilot/cells.ndjson": "38c8c762735c42ad4db2d1619912d664c1fa3139f4404f9878a322d0e7ab05a2",
+    "pilot/parses.tsv": "e4207632ac621cfeafaccb7846fd7e188631100f367eccfe24c7b362d51d02df",
+    "pilot/modes.tsv": "466143dd543a3151214fe625966c14d3e770642b09389bd76766b56d593bdfcf",
+    "pilot/arms.json": "91b114a4747c97aab908586c3e72bf2f8b07b24b16e54ba82b12a1035ad238d2",
+    "pilot/units.json": "b378ebe43bd6ffa0f6a86f444de8f133680c10d1cc7047c576ffc654c04aa403",
+    "pilot/refusals.tsv": "41156e42ffc7820216a66fded876b7b7785b1feab63a123dd5b9b8bea2a4849d",
+    "pilot/progress.json": "48debc6933400acdc6ed078162d4b5161b2a744461198af4c5786444930ec715",
+    "pilot.route.json": "06bfdc705bb5fa1426b168d3726e343c70e597a315ad12b980f8bea9c4a8ddcb",
+    "pilot.machine.txt": "3decd6f63950f0494971efb806847d3845505c44a77ba187ee24dda674ac083f",
+    "pin-checks.log": "4ceae09c23e9d30226055e3c5893d956d0bb7bc69a9e4502f81b4c4405ecbde9",
+    "pilot-stops.txt": "991fce920d6d0e16dcc28c2cd8c5a08fa3695e46d9b29d37c022f337b3b0dbcf",
+    "pilot-secondary.txt": "e72d2312f81ba6944af20e2296eee90b5971a1a241c05e044d331912f5cad4e0",
+    "start-rules.log": "5406b6279b8542e52c1ceb0e5e8649992f1a18d05f634fed602284b96c0a98aa",
+    "judging/pilot/key.json": "0371b32c214b50374768a104438c7204b91292d812e625a403a197f2178ed44d",
+    "judging/pilot/adj-key.json": "fe52b8ee57ef9899e5132374cdc5597908ae2e971afd6927d112345114596c1f"
+  },
+  "exposure": {
+    "none-opus": {
+      "sessions": 4,
+      "gstack_helper_ran": 0,
+      "helpers": {},
+      "read_review_sections": 0,
+      "asked_user": 0,
+      "named_mode": 0,
+      "five_plus_numbered_sections": 0
+    },
+    "lens-opus": {
+      "sessions": 4,
+      "gstack_helper_ran": 0,
+      "helpers": {},
+      "read_review_sections": 0,
+      "asked_user": 0,
+      "named_mode": 0,
+      "five_plus_numbered_sections": 0
+    },
+    "gstack-opus": {
+      "sessions": 4,
+      "gstack_helper_ran": 3,
+      "helpers": {
+        "gstack-skill-start": 3,
+        "gstack-skill-end": 2
+      },
+      "read_review_sections": 0,
+      "asked_user": 0,
+      "named_mode": 0,
+      "five_plus_numbered_sections": 0
+    },
+    "placebo-particle-1": {
+      "sessions": 4,
+      "gstack_helper_ran": 0,
+      "helpers": {},
+      "read_review_sections": 0,
+      "asked_user": 0,
+      "named_mode": 0,
+      "five_plus_numbered_sections": 0
+    },
+    "none-particle-1": {
+      "sessions": 4,
+      "gstack_helper_ran": 0,
+      "helpers": {},
+      "read_review_sections": 0,
+      "asked_user": 0,
+      "named_mode": 0,
+      "five_plus_numbered_sections": 0
+    },
+    "gstack-particle-1": {
+      "sessions": 4,
+      "gstack_helper_ran": 2,
+      "helpers": {
+        "gstack-skill-start": 3,
+        "gstack-design-doc-find": 1
+      },
+      "read_review_sections": 1,
+      "asked_user": 0,
+      "named_mode": 1,
+      "five_plus_numbered_sections": 0
+    },
+    "none-fable": {
+      "sessions": 4,
+      "gstack_helper_ran": 0,
+      "helpers": {},
+      "read_review_sections": 0,
+      "asked_user": 0,
+      "named_mode": 0,
+      "five_plus_numbered_sections": 0
+    },
+    "gstack-fable": {
+      "sessions": 4,
+      "gstack_helper_ran": 4,
+      "helpers": {
+        "gstack-skill-start": 4,
+        "gstack-design-doc-find": 3,
+        "gstack-plan-reality": 7,
+        "gstack-slug": 3,
+        "gstack-brain-cache": 5,
+        "gstack-config": 5,
+        "gstack-learnings-search": 3,
+        "gstack-ceo-mode-handoff": 3,
+        "gstack-decision-search": 5,
+        "gstack-skill-end": 4,
+        "gstack-context-recovery": 1,
+        "gstack-review-log": 1,
+        "gstack-review-read": 1
+      },
+      "read_review_sections": 2,
+      "asked_user": 0,
+      "named_mode": 4,
+      "five_plus_numbered_sections": 1
+    }
+  },
+  "run_id": "review-units-20261101T171259Z-b4f9",
+  "machine": [
+    "16",
+    "Mem:     67452215296  1293230080 57939595264    19513344  8985124864 66158985216",
+    "parallel=4"
+  ],
+  "pin_checks": {
+    "pin-check": 1,
+    "pass": 8
+  },
+  "note": "R1a pilot (GEVA-102): counts, shares, costs and digests only, from the pinned run outputs before sealing. Exposure fields are exploratory and post-hoc. blockers: F = flagged must-fix, M = missed, from each arm judgments.tsv. adjudication: blind rulings on must-fix findings that matched no flaw."
+}
