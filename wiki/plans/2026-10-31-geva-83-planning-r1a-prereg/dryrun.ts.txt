@@ -3,13 +3,16 @@
 //   bun dryrun.ts <scorer checkout> <sealed root> <source clone> <post dir> <scratch dir>
 // The stub must sit in the scorer checkout at lanes/review-noloss/suites/planrev-ceo-r1a.json. Every finding, judgment
 // and ruling here is synthetic. The transcript keeps each step's command (paths shortened), exit code and the scorer's
-// summary lines, drops every line that names a unit, and ends with a leak check over every unit's head and base.
-import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+// summary lines, drops every line that names a unit, and ends with a leak check over every unit's head and base. The
+// ledger checks run on a temporary approval record and local ledger under the scratch dir, with the approval mirror stubbed.
+import { createHash, randomBytes } from "node:crypto";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const [scorer, SR, SRC, POST, OUT] = process.argv.slice(2).map((p) => resolve(p));
+const HOME = process.env.HOME ?? "";
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k)));
 const { nolossCli } = await import(join(scorer, "lanes/review-noloss/cli.ts"));
 const { loadSuite } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
 const { writePlanArm } = await import(join(scorer, "tests/noloss/plan-panel.ts"));
@@ -29,7 +32,7 @@ const shas = new Set(suites.flatMap((s: any) => s.units.flatMap((u: any) => [u.h
 
 const lines: string[] = [];
 let failures = 0;
-const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER");
+const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER").replaceAll(HOME || "\0", "~");
 const UNIT = /panel\/plans#\d+|plans-\d+-[0-9a-f]{8}|\br1a-\d+-\d+\b|@[0-9a-f]{12}\b|\bpr-\d+\b/;
 const say = (t: string) => lines.push(scrub(t));
 const check = (label: string, ok: boolean) => {
@@ -154,36 +157,173 @@ check("pilot suite checks", (await cli("pilot suite", ["suite", "--check", "--su
 check("real-neutral suite checks", (await cli("real-neutral suite", ["suite", "--check", "--suite", realPath, ...S])).code === 0);
 check("Fable subset suite checks", (await cli("Fable subset suite", ["suite", "--check", "--suite", fablePath, ...S])).code === 0);
 
-say("\n## 2. The frozen run commands (review-units --dry-run)");
-const POLICY = join(POST, "policy.json"), ITEM = "planning-r1a";
-const common = ["--sealed-root", SR, "--plan", "ceo", "--units", "all", "--source", "panel/plans=" + SRC, "--base-branch", "panel/plans=main", "--dry-run"];
-const base = [...common, "--policy", POLICY, "--item", ITEM, "--out", join(OUT, "ru")];
+say("\n## 2. The frozen run commands (review-units --dry-run): each run under its own line item, spend cap and out dir");
+const POLICY = join(POST, "policy.json");
+const RUNROOT = join(HOME, ".capy", "work", "planning-r1a");
 const GS = "gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f";
-let u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "lens", "placebo", "--models", OPUS, P1, "--arm-models", "lens=" + OPUS, "placebo=" + P1, "--passes", "3", ...base], "headline: 6 cells, 3 passes");
-check("headline run plans 648 sessions", u.code === 0 && /sessions 648\b/.test(u.out));
-u = units(["--suite", realPath, "--arms", "none", GS, "lens", "placebo", "--models", OPUS, P1, "--arm-models", "lens=" + OPUS, "placebo=" + P1, "--passes", "3", ...base], "real-neutral: 6 cells, 3 passes");
-check("real-neutral run plans 36 sessions", u.code === 0 && /sessions 36\b/.test(u.out));
-u = units(["--suite", pilotPath, "--arms", "none", GS, "lens", "placebo", "--models", OPUS, P1, FABLE, "--arm-models", "lens=" + OPUS, "placebo=" + P1, "--passes", "1", ...base], "pilot: 8 cells, 1 pass");
-check("pilot run plans 32 sessions", u.code === 0 && /sessions 32\b/.test(u.out));
-u = units(["--suite", fablePath, "--arms", "none", GS, "--models", FABLE, "--passes", "1", ...base], "Fable subset: 2 cells, 1 pass");
-check("Fable run plans 36 sessions", u.code === 0 && /sessions 36\b/.test(u.out));
-u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", "gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f", "--models", OPUS, "--passes", "3", ...base], "gstack-auto placeholder");
+const ARMS4 = { arms: ["none", GS, "lens", "placebo"], armModels: ["lens=" + OPUS, "placebo=" + P1] };
+const RUNS = [
+  { run: "pilot", item: "planning-r1a-pilot", out: "pilot", suite: pilotPath, units: suites[1].units.length, ...ARMS4, models: [OPUS, P1, FABLE], passes: 1, sessions: 32 },
+  { run: "headline", item: "planning-r1a-headline", out: "headline", suite: "planrev-ceo-r1a", units: suites[0].units.length, ...ARMS4, models: [OPUS, P1], passes: 3, sessions: 648 },
+  { run: "real-neutral", item: "planning-r1a-real", out: "real-neutral", suite: realPath, units: suites[2].units.length, ...ARMS4, models: [OPUS, P1], passes: 3, sessions: 36 },
+  { run: "Fable subset", item: "planning-r1a-fable", out: "fable", suite: fablePath, units: suites[3].units.length, arms: ["none", GS], armModels: [] as string[], models: [FABLE], passes: 1, sessions: 36 },
+];
+const [PILOT, HEAD, REAL, FAB] = RUNS as [(typeof RUNS)[number], (typeof RUNS)[number], (typeof RUNS)[number], (typeof RUNS)[number]];
+const TABLE = new Map([...readFileSync(join(POST, "README.md"), "utf8").matchAll(/^\| [^|\n]*\((planning-r1a-[a-z]+)\)[^|\n]*\|[^|\n]*\| \$([\d,.]+) \| \$([\d,]+) \|$/gm)].map((m) => [m[1]!, { projection: m[2]!, cap: Number(m[3]!.replaceAll(",", "")) }]));
+check("section 9's table gives a projection and an item cap for each of the four runs, in the frozen order pilot, headline, real-neutral, Fable", [...TABLE.keys()].join(",") === RUNS.map((r) => r.item).join(","));
+const capOf = (item: string) => TABLE.get(item)?.cap ?? 0;
+const common = ["--sealed-root", SR, "--plan", "ceo", "--units", "all", "--source", "panel/plans=" + SRC, "--base-branch", "panel/plans=main", "--dry-run"];
+const command = (r: (typeof RUNS)[number], item = r.item, policy = ["--policy", POLICY]) => ["--suite", r.suite, "--arms", ...r.arms, "--models", ...r.models, ...(r.armModels.length ? ["--arm-models", ...r.armModels] : []), "--passes", String(r.passes), ...common, ...policy, "--item", item, "--spend-cap", String(capOf(r.item)), "--out", join(RUNROOT, r.out)];
+let u: ReturnType<typeof units>;
+for (const r of RUNS) {
+  u = units(command(r), r.run + ": " + r.models.length + " model" + (r.models.length > 1 ? "s" : "") + ", " + r.passes + " pass" + (r.passes > 1 ? "es" : "") + ", line item " + r.item);
+  check(r.run + " run plans " + r.sessions + " sessions under " + r.item + ", spend cap $" + capOf(r.item) + ", out " + join(RUNROOT, r.out).replace(HOME, "~"), u.code === 0 && new RegExp("sessions " + r.sessions + "\\b").test(u.out) && /spend cap \$/.test(u.out) && u.out.includes("out " + join(RUNROOT, r.out)));
+}
+u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", "gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f", "--models", OPUS, "--passes", "3", ...common, "--policy", POLICY, "--item", HEAD.item, "--out", join(RUNROOT, HEAD.out)], "gstack-auto placeholder");
 check("gstack-auto is refused until GST-537 sets its release", u.code !== 0 && /GST-537/.test(u.err));
-u = units(["--suite", fablePath, "--arms", "none", GS, "--models", FABLE, "--passes", "1", ...common, "--item", ITEM, "--out", join(OUT, "ru")], "Fable under the default policy");
+u = units(command(FAB, FAB.item, []), "Fable under the default policy");
 check("the default policy refuses Fable as a subject (smoke_only, no rungs)", u.code !== 0 && /smoke/.test(u.err));
-u = units(["--suite", fablePath, "--arms", "none", GS, "--models", FABLE, "--passes", "1", ...common, "--policy", POLICY, "--item", "some-other-item", "--out", join(OUT, "ru")], "Fable under R1a's policy, another ledger item");
-check("R1a's policy refuses Fable under any ledger item but planning-r1a", u.code !== 0 && /smoke/.test(u.err));
-u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "--models", OPUS, "--passes", "3", ...common, "--policy", POLICY, "--item", ITEM, "--out", join(scorer, "runs", "r1a-dry")], "a sealed run with --out inside the repo");
+for (const item of [HEAD.item, REAL.item, "planning-r1a"]) {
+  u = units(command(FAB, item), "Fable under R1a's policy and line item " + item);
+  check("R1a's policy refuses Fable under " + item + ": only the pilot and Fable items name its rung", u.code !== 0 && /smoke/.test(u.err));
+}
+const defaultPolicy = JSON.parse(readFileSync(join(scorer, "policy", "models.json"), "utf8")), r1aPolicy = JSON.parse(readFileSync(POLICY, "utf8"));
+const bare = (p: any) => ({ ...p, name: null, source: null, models: { ...p.models, [FABLE]: { ...p.models[FABLE], rungs: null } } });
+say("policy.json: " + FABLE + " rungs " + JSON.stringify(r1aPolicy.models[FABLE].rungs));
+check("policy.json is the pinned default policy with only its name, its source and Fable's rungs changed, and the rungs are the pilot and Fable items", JSON.stringify(bare(defaultPolicy)) === JSON.stringify(bare(r1aPolicy)) && JSON.stringify(r1aPolicy.models[FABLE].rungs) === JSON.stringify([PILOT.item, FAB.item]));
+u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "--models", OPUS, "--passes", "3", ...common, "--policy", POLICY, "--item", HEAD.item, "--out", join(scorer, "runs", "r1a-dry")], "a sealed run with --out inside the repo");
 check("review-units refuses a sealed run whose --out is inside the repo", u.code !== 0 && /inside the repo/.test(u.err));
 
-say("\n## 3. Headline: synthetic arms through blind judging and adjudication");
+say("\n## 3. Line items: the $2,705 split, each run's start rule, and the spend chain on a temporary ledger");
+const { loadPolicy } = await import(join(scorer, "src/skill-eval/cli/policy.ts"));
+const { allowanceMicros, SESSION_ALLOWANCE } = await import(join(scorer, "src/skill-eval/cli/dry-run.ts"));
+const loadedPolicy = loadPolicy(POLICY);
+const allow = (m: string): number => allowanceMicros({ policy: loadedPolicy }, m, SESSION_ALLOWANCE);
+const RATE: Record<string, number> = { [OPUS]: 5_000_000, [P1]: 192_000, [FABLE]: 12_500_000 };
+const dollars = (micros: number) => "$" + (micros / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+check("the pinned allowances are $7.04 per Opus session, $0.192 per particle-1 session and $17.60 per Fable session (section 9)", allow(OPUS) === 7_040_000 && allow(P1) === 192_000 && allow(FABLE) === 17_600_000);
+const cellsOn = (r: (typeof RUNS)[number], m: string) => r.arms.filter((a) => (a === "lens" ? [OPUS] : a === "placebo" ? [P1] : r.models).includes(m)).length;
+const SESSIONS_CAP = 2705, JUDGE_ENVELOPE = 95;
+const proj = RUNS.map((r) => r.models.reduce((s, m) => s + r.units * r.passes * cellsOn(r, m) * RATE[m]!, 0));
+const projTotal = proj.reduce((a, b) => a + b, 0);
+const floorShare = proj.map((p) => Math.floor((SESSIONS_CAP * p) / projTotal));
+const remainder = proj.map((p, i) => SESSIONS_CAP * p - floorShare[i]! * projTotal);
+const byRemainder = RUNS.map((_, i) => i).sort((a, b) => remainder[b]! - remainder[a]! || a - b);
+const short = SESSIONS_CAP - floorShare.reduce((a, b) => a + b, 0);
+const split = floorShare.map((f, i) => f + (byRemainder.indexOf(i) < short ? 1 : 0));
+RUNS.forEach((r, i) => say(r.run + " (" + r.item + "): " + r.models.map((m) => r.units * r.passes * cellsOn(r, m) + " " + (m === OPUS ? "Opus" : m === P1 ? "particle-1" : "Fable")).join(", ") + " sessions; projection " + dollars(proj[i]!) + "; share of $2,705 " + ((SESSIONS_CAP * proj[i]!) / projTotal).toFixed(2) + "; item cap $" + split[i]));
+check("each run's projection in section 9's table is its sessions at the section 9 rates ($5 Opus, $0.192 particle-1, $12.50 Fable)", RUNS.every((r, i) => TABLE.get(r.item)!.projection === (proj[i]! / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) && RUNS.every((r) => r.models.reduce((s, m) => s + r.units * r.passes * cellsOn(r, m), 0) === r.sessions));
+check("the item caps split $2,705 in proportion to the projections, rounded to whole dollars by largest remainder so they sum to exactly $2,705, as section 9's table prints them", RUNS.every((r, i) => capOf(r.item) === split[i]) && split.reduce((a, b) => a + b, 0) === SESSIONS_CAP);
+const PARALLEL = 4;
+const fits = RUNS.map((r, i) => {
+  const per = Math.min(r.units, Math.max(1, Math.floor(PARALLEL / r.arms.length)));
+  const excess = Math.max(...r.models.map((m) => per * cellsOn(r, m) * (allow(m) - RATE[m]!)));
+  const need = proj[i]! + excess;
+  say("start rule, " + r.run + ": projection " + dollars(proj[i]!) + " plus its costliest round's excess " + dollars(excess) + " (a round is " + per + " unit" + (per > 1 ? "s" : "") + " of every arm on one model at --parallel " + PARALLEL + ", admitted at the allowance, run.ts:345-348) = " + dollars(need) + " against its item cap $" + capOf(r.item) + ": " + (need <= capOf(r.item) * 1e6 ? "fits" : "does not fit, so the run goes back to the Captain"));
+  return need <= capOf(r.item) * 1e6;
+});
+check("at section 9's rates every run's projection plus its costliest round's excess fits under its own item", fits.every(Boolean));
+
+const { ledgerCli } = await import(join(scorer, "src/runner/ledger/cli.ts"));
+const { openLease, settleLease, ledgerStatus } = await import(join(scorer, "src/runner/ledger/ledger.ts"));
+const { openLocalLedger } = await import(join(scorer, "src/runner/ledger/local.ts"));
+const { ledgerPath } = await import(join(scorer, "src/runner/ledger/paths.ts"));
+const { rigAdmission } = await import(join(scorer, "src/rig/admission.ts"));
+const { newRunId } = await import(join(scorer, "src/skill-eval/cli/call.ts"));
+const LDIR = join(OUT, "ledger"), REC = join(LDIR, "record");
+mkdirSync(LDIR, { recursive: true });
+writeFileSync(join(LDIR, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+const lenv = { ...KEYLESS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LDIR, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LDIR, "approvals-stub") };
+say("A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. The items use --admission warn: rig admission needs a green rig CI run and probes on the machine that spends, which a keyless dry run cannot give, so each lease warns RIG_UNPROVEN and admission itself is not exercised here.");
+const ledger = async (label: string, argv: string[]) => {
+  const o: string[] = [], e: string[] = [];
+  const code = await ledgerCli(argv, { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, lenv);
+  say("$ ledger " + argv.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+  say("  exit " + code + "  (" + label + ")");
+  for (const l of [...o, ...e].join("\n").split("\n").filter((l) => l.trim() && !/^E_[A-Z_]+ (fix|docs):/.test(l))) say("    " + l);
+  return { code, out: o.join("\n"), err: e.join("\n") };
+};
+const APPROVE = ["--admission", "warn", "--words", "dry run only", "--by", "dryrun.ts", "--source", "R1a keyless dry run"];
+for (const r of RUNS) check("line item " + r.item + " records its cap of $" + capOf(r.item), (await ledger("record " + r.item, ["init", "--item", r.item, "--cap", String(capOf(r.item)), ...APPROVE])).code === 0);
+const local = openLocalLedger(ledgerPath(undefined, lenv));
+const st = (item: string) => ledgerStatus(REC, item)[0];
+const warned: string[] = [];
+let calls = 0;
+const spend = async (lease: { lease_id: string; run_id: string }, model: string, micros: number) => {
+  calls++;
+  const r = await local.reserve({ idempotency_key: "dry-" + calls, lease_id: lease.lease_id, cell: { run_id: lease.run_id, arm: "none", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + calls }, max_micros: micros });
+  if (!r.ok) throw new Error(r.code + " " + r.message);
+  const s = await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+  if (!s.ok) throw new Error(s.code + " " + s.message);
+};
+const leaseFor = (item: string, run_id: string, proof: "trial" | "direct", amount?: number) => openLease(REC, local, { item, run_id, ...(amount === undefined ? {} : { amount_micros: amount }), requireAdmission: rigAdmission({ proof }), warn: (code: string) => warned.push(code) });
+const codeOf = (f: () => unknown) => {
+  try {
+    f();
+    return "leased";
+  } catch (e) {
+    return (e as { code?: string }).code ?? String(e);
+  }
+};
+const runIds: Record<string, string> = {}, firstLease: Record<string, { lease_id: string; run_id: string }> = {};
+for (const r of RUNS) {
+  const s = st(r.item);
+  const spendCap = s.cap_micros - s.committed_micros;
+  runIds[r.item] = newRunId("review-units");
+  const lease = leaseFor(r.item, runIds[r.item]!, "trial", spendCap);
+  firstLease[r.item] = lease;
+  await spend(lease, r.models[0]!, RATE[r.models[0]!]!);
+  const killed = r.item === FAB.item;
+  const close = killed ? null : settleLease(REC, local, lease.lease_id);
+  say(r.run + ": run id " + runIds[r.item] + ", minted as review-units mints it (cli.ts:280), leases " + r.item + " for " + dollars(spendCap) + ", its --spend-cap (the item's cap less its committed spend), with the rig's own openLease call (run-host.ts:533); one synthetic session meters " + dollars(RATE[r.models[0]!]!) + "; " + (close ? "settled at " + dollars(close.spent_micros) + " spent" : "left open, as a killed controller leaves it"));
+}
+check("each run binds its own item to its own run id, and each settled lease commits its metered spend to that item alone", RUNS.every((r) => st(r.item).run_id === runIds[r.item]) && [PILOT, HEAD, REAL].every((r) => st(r.item).committed_micros === RATE[r.models[0]!] && !st(r.item).open_lease));
+check("each lease on a warn item without an admission record warns RIG_UNPROVEN and is not refused", warned.length === 4 && warned.every((c) => c === "RIG_UNPROVEN"));
+const second = codeOf(() => leaseFor(PILOT.item, newRunId("review-units"), "trial"));
+say("a second review-units run on " + PILOT.item + ": " + second);
+check("an item refuses a second run id with E_ITEM_BOUND, which is why each run has its own item", second === "E_ITEM_BOUND");
+const hs = st(HEAD.item);
+const resumeCap = hs.cap_micros - hs.committed_micros;
+const resumed = leaseFor(HEAD.item, runIds[HEAD.item]!, "trial", resumeCap);
+settleLease(REC, local, resumed.lease_id);
+say("the headline's one resume: same run id (review-units keeps it in run.json, cli.ts:280), lease for " + dollars(resumeCap));
+check("a run's one resume leases its own item again under the same run id, for the item's cap less its committed spend", resumeCap === capOf(HEAD.item) * 1e6 - RATE[OPUS]! && st(HEAD.item).leases === 2 && !st(HEAD.item).open_lease);
+const blocked = codeOf(() => leaseFor(FAB.item, runIds[FAB.item]!, "trial"));
+say("the Fable run's resume while the killed controller's lease is open: " + blocked);
+check("after a killed controller its lease stays open, and the resume's lease is refused with E_LEASE_UNSETTLED", blocked === "E_LEASE_UNSETTLED");
+const settled = await ledger("settle the killed controller's lease on its own machine, before the resume", ["settle", "--lease", firstLease[FAB.item]!.lease_id]);
+const fs = st(FAB.item);
+const fableResume = leaseFor(FAB.item, runIds[FAB.item]!, "trial", fs.cap_micros - fs.committed_micros);
+settleLease(REC, local, fableResume.lease_id);
+check("once that lease is settled, its metered spend is committed and the resume leases the Fable item under the same run id", settled.code === 0 && fs.committed_micros === RATE[FABLE] && st(FAB.item).leases === 2 && !st(FAB.item).open_lease);
+let judged = 0;
+const judgeCaps: number[] = [];
+for (const [item, cost] of [["planning-r1a-judge-pilot-match", 3_250_000], ["planning-r1a-judge-pilot-adjudicate", 1_100_000]] as const) {
+  const cap = JUDGE_ENVELOPE * 1_000_000 - judged;
+  judgeCaps.push(cap);
+  await ledger("record " + item + " at $95 less the settled spend of every earlier R1a judge item", ["init", "--item", item, "--cap", String(cap / 1e6), ...APPROVE]);
+  const jid = "judge-" + randomBytes(6).toString("hex");
+  const jl = leaseFor(item, jid, "direct");
+  await spend(jl, "gpt-6.1-sol", cost);
+  const jc = settleLease(REC, local, jl.lease_id);
+  say(item + ": judge-run's run id " + jid + " (minted per call, judge-run.ts:229) leases all the item has left (judge-run.ts:241); one synthetic call meters " + dollars(cost) + "; settled at " + dollars(jc.spent_micros));
+  const again = codeOf(() => leaseFor(item, "judge-" + randomBytes(6).toString("hex"), "direct"));
+  check(item + " refuses a second judge-run call with " + again + ", so each judge-run call takes its own judge item", again === "E_ITEM_BOUND");
+  judged += st(item).committed_micros;
+}
+check("judge items recorded in turn at $95 less the settled spend of every earlier one never pass the $95 envelope (" + judgeCaps.map(dollars).join(", then ") + "; " + dollars(judged) + " spent)", judgeCaps[1] === JUDGE_ENVELOPE * 1e6 - 3_250_000 && judged <= JUDGE_ENVELOPE * 1e6);
+await ledger("every line item on the temporary record", ["status"]);
+local.close();
+check("the four run items hold $2,705 and the judge envelope $95: $2,800, the cap", RUNS.reduce((s, r) => s + capOf(r.item), 0) === SESSIONS_CAP && SESSIONS_CAP + JUDGE_ENVELOPE === 2800);
+
+say("\n## 4. Headline: synthetic arms through blind judging and adjudication");
 const cells = [id("none", OPUS), id("gstack", OPUS), id("lens", OPUS), id("none", P1), id("gstack", P1), id("placebo", P1), id("flagall", OPUS), id("flagbait", OPUS)];
 const firstSeeded = headline.suite.units.filter((x: any) => !isDecoy(x)).slice(0, 3).map((x: any) => x.id);
 const diag = { [id("gstack", OPUS)]: [firstSeeded[0] + " pass 2: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing", firstSeeded[1] + " pass 3: incomplete, the session ended timeout; scored as finding nothing"], [id("lens", OPUS)]: [firstSeeded[2] + " pass 1: missing; scored as finding nothing"] };
 const H = await judged("headline", headline.suite, "planrev-ceo-r1a", cells, 3, true, diag);
 const PRIMARY = join(POST, "comparisons.primary.json"), SECONDARY = join(POST, "comparisons.secondary.json"), SECOPUS = join(POST, "comparisons.secondary-opus.json");
 
-say("\n## 4. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys");
+say("\n## 5. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys");
 const prim = await score("primary: gstack better", PRIMARY, id("none", OPUS), id("gstack", OPUS), "LOSS", { root: H.root });
 check("primary prints its Holm step of 2", /of 2 in the declared LOSS family/.test(prim.out));
 check("primary gate reads 12 decoys", /on 12 decoys/.test(prim.out));
@@ -192,20 +332,20 @@ const j = JSON.parse((await nolossCli(["score", "--suite", "planrev-ceo-r1a", "-
 say("ceiling rule: none-opus must-fix recall " + j.recall.variant.toFixed(3) + " (ceiling above 0.85: " + (j.recall.variant > 0.85 ? "met, no claim" : "not met") + ")");
 check("the ceiling rule reads none-opus recall", typeof j.recall.variant === "number");
 
-say("\n## 5. Secondary family: Holm over 3");
+say("\n## 6. Secondary family: Holm over 3");
 await score("secondary: particle-1 gstack", SECONDARY, id("none", P1), id("gstack", P1), "LOSS", { root: H.root });
 await score("secondary: Opus lens", SECONDARY, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: H.root });
 const plac = await score("secondary: particle-1 placebo", SECONDARY, id("none", P1), id("placebo", P1), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { root: H.root });
 check("secondary prints its Holm step of 3", /of 3 in the declared LOSS family/.test(plac.out));
 
-say("\n## 6. Frozen particle-1 rung drop (pilot stop c)");
+say("\n## 7. Frozen particle-1 rung drop (pilot stop c)");
 const opusRoot = join(OUT, "arms-opus");
 for (const c of cells.filter((c) => c.endsWith("-opus"))) cpSync(H.armDir(c), join(opusRoot, "planrev-ceo-r1a", c), { recursive: true });
 await score("full secondary file without particle-1 arms", SECONDARY, id("none", OPUS), id("lens", OPUS), "E_NOLOSS_ARM", { root: opusRoot });
 const so = await score("Opus-only secondary file", SECOPUS, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: opusRoot });
 check("Opus-only file is a family of 1", /of 1 in the declared LOSS family/.test(so.out));
 
-say("\n## 7. False-alarm gate at the frozen margin: a flag-everything arm and a flag-every-bait arm");
+say("\n## 8. False-alarm gate at the frozen margin: a flag-everything arm and a flag-every-bait arm");
 const gated = ["comparisons.primary.json", "comparisons.secondary.json", "comparisons.secondary-opus.json", "comparisons.fable.json"].flatMap((f) => JSON.parse(readFileSync(join(POST, f), "utf8")).comparisons);
 check("every primary, secondary and Fable comparison carries false_alarm_gate margin_per_decoy 0.5 (" + gated.length + " comparisons)", gated.length === 8 && gated.every((c: any) => JSON.stringify(c.false_alarm_gate) === JSON.stringify({ margin_per_decoy: 0.5 })));
 const FROZEN_GATE = JSON.parse(readFileSync(PRIMARY, "utf8")).comparisons[0].false_alarm_gate;
@@ -220,22 +360,22 @@ check("flag-every-bait: the gate fails on 12 decoys at margin 0.5", /margin 0\.5
 const fb1 = await score("the same flag-every-bait arm at the old margin 1 (the hole #110's Step 11 found)", gateFile("gate-flagbait-margin-1.json", id("flagbait", OPUS), { margin_per_decoy: 1 }), id("none", OPUS), id("flagbait", OPUS), "LOSS", { root: H.root });
 check("at margin 1 the flag-every-bait arm passes the gate, which margin 0.5 closes", /margin 1 per decoy/.test(fb1.out) && /: PASS\./.test(fb1.out));
 
-say("\n## 8. Volume-matched reading (first 2 must-fix findings per unit-pass)");
+say("\n## 9. Volume-matched reading (first 2 must-fix findings per unit-pass)");
 const k2 = await derive("first-k 2", "planrev-ceo-r1a-k2", PRIMARY, H.root, ["--first-k", "2"]);
 await score("first-k 2: same sign as the primary", k2.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: k2.suite, root: k2.root });
 
-say("\n## 9. Any-severity recall (secondary) and the any-severity fallback");
+say("\n## 10. Any-severity recall (secondary) and the any-severity fallback");
 const anyS = await derive("any severity", "planrev-ceo-r1a-any", PRIMARY, H.root, ["--severity-map", join(POST, "any-severity.json")]);
 await score("any severity", anyS.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: anyS.suite, root: anyS.root });
 check("secondary readings (any severity, new defects)", (await cli("secondary", ["secondary", "--suite", "planrev-ceo-r1a", "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--seed", "20261031", "--root", H.root, ...S], { show: 12 })).code === 0);
 
-say("\n## 10. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names");
+say("\n## 11. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names");
 const named = [...new Set(cells.flatMap((c) => (JSON.parse(readFileSync(join(OUT, "headline/raw", c, "arm.json"), "utf8")).diagnostics ?? []).map((d: string) => d.split(" pass ")[0])))];
 const dropFile = save("missing-cells.drop.tsv", "unit\n" + named.map((x) => x + "\n").join(""));
 const mc = await derive("missing cells", "planrev-ceo-r1a-mc", PRIMARY, H.root, ["--drop-file", dropFile]);
 await score("missing-cell sensitivity", mc.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: mc.suite, root: mc.root });
 
-say("\n## 11. Stopped arm: no verdict, the family keeps its size");
+say("\n## 12. Stopped arm: no verdict, the family keeps its size");
 const r5 = join(OUT, "arms-stopped");
 for (const c of cells.filter((c) => c !== id("lens", OPUS))) cpSync(H.armDir(c), join(r5, "planrev-ceo-r1a", c), { recursive: true });
 const lens = join(OUT, "lens-stopped");
@@ -245,7 +385,7 @@ check("stopped arm ingests", (await nolossCli(["ingest", lens, "--suite", "planr
 const st = await score("stopped lens arm", SECONDARY, id("none", OPUS), id("lens", OPUS), "NO_VERDICT", { root: r5 });
 check("stopped arm keeps step of 3", /of 3 in the declared LOSS family/.test(st.out));
 
-say("\n## 12. Recall by source (T1, T2) and by mode, descriptive");
+say("\n## 13. Recall by source (T1, T2) and by mode, descriptive");
 for (const s of ["T1", "T2"]) {
   const specs = readFileSync(join(SR, "readings/source-" + s + ".detection-only.txt"), "utf8").split("\n").filter(Boolean).flatMap((x) => ["--detection-only", x]);
   const d = await derive("source " + s, "planrev-ceo-r1a-" + s.toLowerCase(), PRIMARY, H.root, specs, ["--detection-only", "<each of the " + specs.length / 2 + " lines of $SEALED/readings/source-" + s + ".detection-only.txt>"]);
@@ -258,12 +398,12 @@ for (const m of ["greenfield", "added-capability", "fix"]) {
   check("mode " + m + " reads 16 flaws in 8 plans", /on 16 blockers in 8 PRs/.test(r.out));
 }
 
-say("\n## 13. Real-neutral stratum, alone");
+say("\n## 14. Real-neutral stratum, alone");
 const realCells = cells.filter((c) => !c.startsWith("flag"));
 const R = await judged("real-neutral", suites[2], realPath, realCells, 3, false);
 await score("real-neutral, descriptive", join(POST, "comparisons.real-neutral.json"), id("none", OPUS), id("gstack", OPUS), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED,LOSS", { suite: realPath, root: R.root });
 
-say("\n## 14. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone");
+say("\n## 15. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone");
 const pilotCells = [...realCells, id("none", FABLE), id("gstack", FABLE)];
 const PL = await judged("pilot", suites[1], pilotPath, pilotCells, 1, false);
 const pilotIds = new Set(suites[1].units.map((u: any) => u.id)), pilotHeads = new Set(suites[1].units.map((u: any) => u.head));
@@ -283,17 +423,17 @@ say("pilot none-opus must-fix recall " + pr.found + "/" + pr.n + " = " + pr.reca
 check("pilot recall reads on the pilot's 8 flaws, from noloss secondary", ps.code === 0 && pr.n === 8 && typeof pr.recall === "number");
 check("the pilot reading carries no verdict and no claim", !/claim|LOSS|NOT_DISTINGUISHED|NO_LOSS|verdict/i.test(ps.out));
 
-say("\n## 15. Fable 5.1 subset, exploratory");
+say("\n## 16. Fable 5.1 subset, exploratory");
 const F = await judged("fable", suites[3], fablePath, [id("none", FABLE), id("gstack", FABLE)], 1, true);
 const fr = await score("Fable none vs gstack", fableFile, id("none", FABLE), id("gstack", FABLE), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: fablePath, root: F.root });
 check("Fable subset reads 24 flaws in 12 plans and 6 decoys", /on 24 blockers in 12 PRs/.test(fr.out) && /on 6 decoys/.test(fr.out));
 say("The Fable subset makes no claim, whatever its scorer prints (section 4): the lines above are a reading.");
 
-say("\n## 16. Power at the panel's shape");
+say("\n## 17. Power at the panel's shape");
 const pw = await cli("power on the headline suite", ["power", "--suite", "planrev-ceo-r1a", "--passes", "3", "--recall", "0.35", "--margin", "10", "--loss", "20", "--alpha", "0.025", "--dependence", "0.3", "--sims", "2000", ...S], { show: 8 });
 check("power counts 24 clusters and 48 flaws", /\| planrev-ceo-r1a \| 24 \| 48 \| 3 \|/.test(pw.out));
 
-say("\n## 17. OpenRouter routes: the pinned route, its data policy and price headroom");
+say("\n## 18. OpenRouter routes: the pinned route, its data policy and price headroom");
 const { chatPrice, openRouterRouting } = await import(join(scorer, "src/runner/pricing/prices.ts"));
 const { canonical } = await import(join(scorer, "src/trial/cache.ts"));
 const readAt = new Date().toISOString();
@@ -346,18 +486,25 @@ const routeRecord = JSON.stringify({ schema_version: 1, scorer: spawnSync("git",
 writeFileSync(join(OUT, "route.json"), routeRecord);
 say("route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 " + createHash("sha256").update(routeRecord).digest("hex"));
 
-say("\n## 18. Receipts and run paths");
+say("\n## 19. Custody: the run root, the receipts sink and the retained trees");
 const { insideRepo } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
-const RUNROOT = join(process.env.HOME ?? "", ".capy", "work", "planning-r1a");
-check("R1a's frozen --out root and receipts sink (~/.capy/work/planning-r1a) sit outside the repo", !insideRepo(RUNROOT) && !insideRepo(join(RUNROOT, "receipts")));
+const { receiptsSink, sinkOverlapProblem } = await import(join(scorer, "src/trial/durable.ts"));
+const SINK = join(RUNROOT, "receipts");
+const outs = RUNS.map((r) => join(RUNROOT, r.out));
+say("run root ~/.capy/work/planning-r1a; frozen --out dirs " + outs.map((o) => o.replace(HOME, "~")).join(", ") + "; receipts sink, if one is set, " + SINK.replace(HOME, "~"));
+check("every frozen --out and the receipts sink sit under the run root, which sits outside the repo", [...outs, SINK].every((p) => p.startsWith(RUNROOT + "/")) && !insideRepo(RUNROOT) && [...outs, SINK].every((p) => !insideRepo(p)));
+check("the frozen sink is apart from every out dir and its arms/, by the pinned sinkOverlapProblem", outs.every((o) => sinkOverlapProblem(o, SINK) === null));
+const sunk = receiptsSink({ GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: SINK });
+check("with GSTACK_EVALS_EPHEMERAL=1 the pinned receiptsSink copies receipts to the frozen sink, inside the run root", "sink" in sunk && sunk.sink === SINK);
+check("without GSTACK_EVALS_EPHEMERAL=1 the pinned run copies receipts nowhere, whatever GSTACK_EVALS_RECEIPTS says", JSON.stringify(receiptsSink({ GSTACK_EVALS_RECEIPTS: join(HOME, "elsewhere") })) === JSON.stringify({ sink: null }));
+const sinkAllowed = (value: string | undefined) => !value || resolve(value).startsWith(RUNROOT + "/");
+check("the run's sink rule admits an unset GSTACK_EVALS_RECEIPTS or one under the run root, and stops one outside it", sinkAllowed(undefined) && sinkAllowed(SINK) && !sinkAllowed(join(HOME, ".capy", "work", "receipts")) && !sinkAllowed(RUNROOT + "-receipts"));
 const { stateRoot } = await import(join(scorer, "src/trial/image.ts"));
-const HOME = process.env.HOME ?? "";
 const retained = join(stateRoot({}, HOME), "retained");
 say("review-units keeps unit trees under <stateRoot>/retained/trees: on this machine, with XDG_STATE_HOME unset, " + retained.replace(HOME, "~"));
 check("<stateRoot> is ~/.capy/work/gstack-evals on Capy, $XDG_STATE_HOME/gstack-evals when set, as the cleanup rule says", retained === join(HOME, ".capy", "work", "gstack-evals", "retained") && stateRoot({ XDG_STATE_HOME: "/x" }, HOME) === join("/x", "gstack-evals"));
-check("<stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it apart from the run dir", !insideRepo(retained) && !retained.startsWith(RUNROOT + "/"));
-
-say("\n## 19. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink");
+check("<stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it beside the run root", !insideRepo(retained) && !retained.startsWith(RUNROOT + "/"));
+say("\n## 20. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink");
 const TS = ["tests/trial/review/plan-scoring.test.ts", "tests/adapters/claude-code.test.ts", "tests/trial/review/run.test.ts"];
 const tr = spawnSync("bun", ["test", ...TS], { cwd: scorer, encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
 const tout = (tr.stdout ?? "") + "\n" + (tr.stderr ?? "");
@@ -394,48 +541,74 @@ for (const [label, name] of [
   ["--resume reuses every journaled session, a gap included, and spends nothing (section 10's resume rule)", "findings, cost, voice, resume and a changed key"],
 ] as const) check("case: " + label, passed(name));
 
-say("\n## 20. Resume procedure: refill-gaps.ts on a synthetic gap (section 10)");
+say("\n## 21. Resume procedure: refill-gaps.ts after a killed controller, at the pin, crash-safe (section 10)");
 const { planScore, readReviewJournal } = await import(join(scorer, "src/trial/review/run.ts"));
 const RGS = join(OUT, "refill-gaps.ts"), GA = id("gstack", OPUS);
 cpSync(join(POST, "refill-gaps.ts.txt"), RGS);
-const entry = (unit: string, kind: string, modelOutput: boolean, parse: unknown) => JSON.stringify({ cell: { model: OPUS, arm: "gstack", unit, pass: 1 }, key: {}, meter_id: "synthetic-" + unit, record: { termination: { kind }, model_output: modelOutput }, parse, cost: null });
-const FIND = entry("synthetic/unit-1", "completed", true, { kind: "findings", findings: [] });
-const MISS = entry("synthetic/unit-2", "timeout", true, { kind: "incomplete", reason: "the session ended timeout" });
-const GAP = entry("synthetic/unit-3", "timeout", false, { kind: "incomplete", reason: "the session ended timeout" });
+const entry = (n: number, kind: string, modelOutput: boolean, parse: unknown) => JSON.stringify({ cell: { model: OPUS, arm: "gstack", unit: "synthetic/unit-" + n, pass: 1 }, key: {}, meter_id: "synthetic-" + n, record: { task: "task-" + n, termination: { kind }, model_output: modelOutput, cost_micros: n * 1_000_000 }, parse, cost: null });
+const FIND = entry(1, "completed", true, { kind: "findings", findings: [] });
+const MISS = entry(2, "timeout", true, { kind: "incomplete", reason: "the session ended timeout" });
+const GAP = entry(3, "timeout", false, { kind: "incomplete", reason: "the session ended timeout" });
+const ORIGINAL = [FIND, MISS, GAP].map((l) => l + "\n").join("");
 check("the synthetic sessions score findings, miss and gap by the pinned planScore", [FIND, MISS, GAP].map((l) => planScore(JSON.parse(l))).join(",") === "findings,miss,gap");
-const runOf = (unit: string) => join("runs", OPUS, "gstack", "task-" + unit.split("-").pop(), "p1");
-const resumeDir = (name: string, gaps: string[]) => {
+const runOf = (n: number) => join("runs", OPUS, "gstack", "task-" + n, "p1");
+const killedRun = (name: string) => {
   const d = join(OUT, "resume", name);
-  mkdirSync(join(d, "arms", GA), { recursive: true });
-  writeFileSync(join(d, "units.json"), JSON.stringify({ schema_version: 1, units: [1, 2, 3].map((n) => ({ id: "synthetic/unit-" + n, task: "task-" + n })) }) + "\n");
-  for (const n of [1, 2, 3]) {
-    mkdirSync(join(d, runOf("synthetic/unit-" + n)), { recursive: true });
-    writeFileSync(join(d, runOf("synthetic/unit-" + n), "record.json"), "synthetic session " + n + "\n");
+  for (const n of [1, 2, 3, 4]) {
+    mkdirSync(join(d, runOf(n)), { recursive: true });
+    writeFileSync(join(d, runOf(n), "record.json"), "synthetic session " + n + "\n");
   }
-  writeFileSync(join(d, "cells.ndjson"), [FIND, MISS, GAP].map((l) => l + "\n").join(""));
-  writeFileSync(join(d, "arms", GA, "arm.json"), JSON.stringify({ id: GA, status: "stopped", coverage_gaps: gaps, diagnostics: ["synthetic/unit-2 pass 1: incomplete, the session ended timeout; scored as finding nothing"] }, null, 2) + "\n");
+  writeFileSync(join(d, "cells.ndjson"), ORIGINAL);
   return d;
 };
-const refill = (d: string, label: string) => {
-  const r = spawnSync("bun", [RGS, scorer, d], { encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
-  say("$ bun $OUT/refill-gaps.ts $SCORER " + d);
-  say("  exit " + r.status + "  (" + label + ")");
+say("each synthetic out dir is what a killed controller leaves: cells.ndjson with a findings line, a miss and a gap, a run directory for each, one more run directory for a session in flight with no journal line, and no units.json, arms/ or arm.json");
+const refill = (d: string, label: string, o: { scorer?: string; crash?: string } = {}) => {
+  const r = spawnSync("bun", [RGS, o.scorer ?? scorer, d], { encoding: "utf8", env: { ...KEYLESS, ...(o.crash ? { R1A_REFILL_CRASH: o.crash } : {}) } });
+  say("$ " + (o.crash ? "R1A_REFILL_CRASH=" + o.crash + " " : "") + "bun $OUT/refill-gaps.ts " + (o.scorer ? "<a clean checkout of e305ed0's first parent>" : "$SCORER") + " " + d);
+  say("  exit " + (r.status ?? r.signal) + "  (" + label + ")");
   for (const l of ((r.stdout ?? "") + "\n" + (r.stderr ?? "")).split("\n").filter((l) => l.trim())) say("    " + l);
   return r;
 };
-const rd = resumeDir("gap", ["synthetic/unit-3 pass 1: incomplete, the session ended timeout before any model output"]);
-const rr = refill(rd, "a findings session, a miss and a gap; arm.json names the gap");
-check("refill-gaps exits 0 and counts 1 refilled session for the arm", rr.status === 0 && new RegExp("^refilled " + GA + " 1, ", "m").test(rr.stdout));
-check("the gap's raw run directory is copied to refilled-gaps/ before the resume deletes it, and no other session's is", readFileSync(join(rd, "refilled-gaps", runOf("synthetic/unit-3"), "record.json"), "utf8") === "synthetic session 3\n" && !existsSync(join(rd, "refilled-gaps", runOf("synthetic/unit-1"))) && !existsSync(join(rd, "refilled-gaps", runOf("synthetic/unit-2"))));
-check("refilled-gaps.ndjson holds the gap's line alone, byte for byte", readFileSync(join(rd, "refilled-gaps.ndjson"), "utf8") === GAP + "\n");
-check("cells.ndjson keeps the findings and miss lines, byte for byte, and nothing else", readFileSync(join(rd, "cells.ndjson"), "utf8") === FIND + "\n" + MISS + "\n");
-const kept = [...readReviewJournal(rd).values()].map((e: any) => e.cell.unit).sort().join(",");
-check("the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap alone", kept === "synthetic/unit-1,synthetic/unit-2");
-const again = refill(rd, "a second use on the same out dir");
-check("a second use refuses (one resume per run) and changes nothing", again.status === 2 && readFileSync(join(rd, "cells.ndjson"), "utf8") === FIND + "\n" + MISS + "\n" && readFileSync(join(rd, "refilled-gaps.ndjson"), "utf8") === GAP + "\n");
-const md = resumeDir("miss", ["synthetic/unit-2 pass 1: incomplete, the session ended timeout"]);
-const mr = refill(md, "arm.json names a miss as a gap");
-check("a named session that is a miss is refused, and nothing moves", mr.status === 2 && !existsSync(join(md, "refilled-gaps.ndjson")) && !existsSync(join(md, "refilled-gaps")) && readFileSync(join(md, "cells.ndjson"), "utf8") === [FIND, MISS, GAP].map((l) => l + "\n").join(""));
+const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : null);
+const tree = (d: string, rel = ""): string[] => (!existsSync(join(d, rel)) ? [] : readdirSync(join(d, rel), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? tree(d, join(rel, e.name)) : [join(rel, e.name) + "=" + readFileSync(join(d, rel, e.name), "utf8")])).sort());
+const state = (d: string) => JSON.stringify({ cells: read(join(d, "cells.ndjson")), moved: read(join(d, "refilled-gaps.ndjson")), raws: tree(join(d, "refilled-gaps")), backup: read(join(d, "refill-gaps.backup.ndjson")), done: existsSync(join(d, "refill-gaps.done")), tmp: readdirSync(d).filter((f) => f.endsWith(".tmp")) });
+const untouched = (d: string) => read(join(d, "cells.ndjson")) === ORIGINAL && ["refilled-gaps.ndjson", "refilled-gaps", "refill-gaps.backup.ndjson", "refill-gaps.done"].every((f) => !existsSync(join(d, f)));
+const ka = killedRun("killed");
+const ra = refill(ka, "a killed controller's out dir");
+check("refill-gaps exits 0 on an out dir with no units.json and no arm.json, and counts 1 refilled session for the arm", ra.status === 0 && new RegExp("^refilled " + GA + " 1, their metered spend \\$3\\.00$", "m").test(ra.stdout) && !existsSync(join(ka, "units.json")) && !existsSync(join(ka, "arms")));
+check("the gap's run directory and the in-flight session's are copied to refilled-gaps/, and no other", JSON.stringify(tree(join(ka, "refilled-gaps"))) === JSON.stringify([runOf(3) + "/record.json=synthetic session 3\n", runOf(4) + "/record.json=synthetic session 4\n"]));
+check("refilled-gaps.ndjson holds the gap's line alone, byte for byte", read(join(ka, "refilled-gaps.ndjson")) === GAP + "\n");
+check("cells.ndjson keeps the findings and miss lines, byte for byte, and nothing else", read(join(ka, "cells.ndjson")) === FIND + "\n" + MISS + "\n");
+check("refill-gaps.backup.ndjson holds the journal before the move, byte for byte, and refill-gaps.done is written last", read(join(ka, "refill-gaps.backup.ndjson")) === ORIGINAL && existsSync(join(ka, "refill-gaps.done")) && !readdirSync(ka).some((f) => f.endsWith(".tmp")));
+const kept = [...readReviewJournal(ka).values()].map((e: any) => e.cell.unit).sort().join(",");
+check("the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap and the never-journaled cell", kept === "synthetic/unit-1,synthetic/unit-2");
+const expected = state(ka);
+const again = refill(ka, "a second use on the same out dir");
+check("a second use refuses on refill-gaps.done (one resume per run) and changes nothing", again.status === 2 && state(ka) === expected);
+for (const point of ["after-copy", "between-renames", "before-done"]) {
+  const d = killedRun("crash-" + point);
+  const c = refill(d, "the script killed at " + point, { crash: point });
+  if (point === "between-renames") check("killed between the renames: refilled-gaps.ndjson is in place, cells.ndjson still holds every line, the new journal waits as cells.ndjson.tmp, and there is no done marker", c.signal === "SIGKILL" && read(join(d, "refilled-gaps.ndjson")) === GAP + "\n" && read(join(d, "cells.ndjson")) === ORIGINAL && existsSync(join(d, "cells.ndjson.tmp")) && !existsSync(join(d, "refill-gaps.done")));
+  else check("killed at " + point + ", before the done marker", c.signal === "SIGKILL" && !existsSync(join(d, "refill-gaps.done")));
+  const rr = refill(d, "the rerun after the crash at " + point);
+  check("after a crash at " + point + " the rerun recovers from the backup and ends in the same bytes as an uninterrupted run", rr.status === 0 && /recovering an interrupted refill/.test(rr.stdout) && state(d) === expected);
+}
+const ed = killedRun("edited");
+refill(ed, "the script killed between the renames", { crash: "between-renames" });
+const extra = entry(5, "completed", true, { kind: "findings", findings: [] }) + "\n";
+appendFileSync(join(ed, "cells.ndjson"), extra);
+const er = refill(ed, "a rerun after cells.ndjson changed (a resume ran before the refill finished)");
+check("a rerun refuses when cells.ndjson changed after the interrupted attempt, and changes nothing", er.status === 2 && read(join(ed, "cells.ndjson")) === ORIGINAL + extra && !existsSync(join(ed, "refill-gaps.done")));
+const md = killedRun("missing");
+rmSync(join(md, runOf(3)), { recursive: true });
+const mr = refill(md, "a gap whose run directory is missing");
+check("a gap with no run directory is refused before anything changes (no backup, no output)", mr.status === 2 && untouched(md));
+const parent = join(OUT, "scorer-parent");
+const wt = spawnSync("git", ["-C", scorer, "worktree", "add", "--detach", parent, "e305ed087b3f17bd211287b0e2d5e3f3960b5a4f~1"], { encoding: "utf8" });
+const pd = killedRun("pin");
+const pr = refill(pd, "a scorer checkout at e305ed0's first parent", { scorer: parent });
+spawnSync("git", ["-C", scorer, "worktree", "remove", "--force", parent]);
+check("a scorer checkout not at e305ed0 is refused before anything changes", wt.status === 0 && pr.status === 2 && /, not e305ed087b3f17bd211287b0e2d5e3f3960b5a4f;/.test(pr.stderr) && untouched(pd));
 
 say("\n## Leak check");
 const text = lines.join("\n");
