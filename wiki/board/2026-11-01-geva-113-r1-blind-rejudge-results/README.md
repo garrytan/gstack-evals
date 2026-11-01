@@ -14,66 +14,9 @@ links:
   - 2026-10-30-gsta-43-noloss-cohort-29-blockers
   - garrytan/gstack-evals#112
 attachments:
-  - 4464d469815d2ce027822ca8e39b6b365db142daf912517fb94c98ece97d8707  arms/C/adjudication.tsv
-  - 87f127b0d7d0173567fcba4e807d20a47aa7453e93a80ff9b91407d9c840cd0e  arms/C/arm.json
-  - 5cd628dd35ed7ec67078f36b40211bed34bf04efd862430fdb5a451d155efaaa  arms/C/cost.tsv
-  - 199b2469f67d60f59e9cff55fced32e6b2b828626a11914d54886887fbeb6e63  arms/C/findings/3516.jsonl
-  - fbeee242f99fa79da0e2067619026b6c7caccd397038789af057ce9052daa98d  arms/C/findings/3524.jsonl
-  - 70090590f50ce86e5dc39ae2c42ddf899ab56773792952ee0365a2bcd3fc2ff7  arms/C/findings/3526.jsonl
-  - 9f7441c75175e5bb885828c4595cf82f253666ad5392781525c1572af6b14b05  arms/C/findings/3527.jsonl
-  - e2b06700a1691fb08701420c3744e09c860bc26f6cb7c5d6be0752c47f5cec67  arms/C/findings/3534.jsonl
-  - 82f3b5b82346027755816042b685d71b81ecc3b26198632c78c948200f2568a4  arms/C/findings/3540.jsonl
-  - 4f1c15467504bfbd2a48a93bba394a207cadcec130d494a52aa95911c9353ddf  arms/C/findings/3545.jsonl
-  - 938a5b825d2ad58789920114ae68b292c132b552e44a9793ba0ee5d5ea4da8c4  arms/C/findings/3564.jsonl
-  - 2db1eeae974eb670469142867e53b49cf2f73a3d141cf22096c75089773c2df2  arms/C/findings/3567.jsonl
-  - 2c8f8128a2cc3e0bf3e283a1d9670fe93ddc1a2f489b79c2b03c89647546a65a  arms/C/findings/3573.jsonl
-  - 8bf10dde9de9569abee46485c951d450fe61ec3f638a10f3335faf2203b9c72d  arms/C/findings/3578.jsonl
-  - 8140b8ccdd558afc5f1420532b468ce644a35d66a89583e59be0bd2a19b888a2  arms/C/findings/3583.jsonl
-  - 450e9e12cdd91626cdda600bb0fdd90c0c9f982e9c85a84e82fd3790fc0eb881  arms/C/findings/3593.jsonl
-  - efa2c5c7996f011fd81c6a44247beed5ea9c007d2cb5aff638a0e3ffc32c6e0b  arms/C/findings/3596.jsonl
-  - 87fe3175734591a3aac613a49f40ef178a9a2d88317532a02b34cb9a9b23c594  arms/C/ingest.json
-  - 3001a14417271f2dcdedeffe6249ad900f4c0c961c2fe5e578c29fe4c029812f  arms/C/judgments.tsv
-  - 99a279c99604179219422cca9b218915307757333bbd32c7667384a7a0643d11  arms/gstack-opus/adjudication.tsv
-  - 243d2f3dde1c425ff7c07bef76f363055e9a41fe991d49e477a1c7a9908ef72a  arms/gstack-opus/arm.json
-  - 6f6e665e0efd67450dc183c4c91d5a37f5eb3ba77705c872456973352a6aecc3  arms/gstack-opus/cost.tsv
-  - f864d7430390a288178911f08a447f18a1f8757e5b9c45c3d9dc9309f868d055  arms/gstack-opus/findings/garrytan__gstack#3516@ee73419c3295.jsonl
-  - bdb75edd11618d6289822748c2a124aa283d33af95fbca3210fa9d6822de9ee9  arms/gstack-opus/findings/garrytan__gstack#3524@205ea0e2e82f.jsonl
-  - 5b72562b4de25165f42e06f6b87ab43c8ad741e5d80597870ccaf4a8f713d3cd  arms/gstack-opus/findings/garrytan__gstack#3526@808dead70e32.jsonl
-  - 4be14cf33c441d2aa10a3bc8551ef64402ccdd4a4871c87706ae7a3c4233178e  arms/gstack-opus/findings/garrytan__gstack#3527@2684974602c1.jsonl
-  - 6c433c8d16f07eceaf462439da33b2d9ba73874cf71118561d4f888d8a61ae88  arms/gstack-opus/findings/garrytan__gstack#3534@a76620148c19.jsonl
-  - dc9aa1eae712cf77e39889dbde865df7b0ef296efc7fba1596003fe333d7334f  arms/gstack-opus/findings/garrytan__gstack#3540@115355a38bd6.jsonl
-  - 72e582880fc59488c7a8e501a60afb0cacecd9e1d9252e9fe5136c760ed00416  arms/gstack-opus/findings/garrytan__gstack#3545@d4f0ea3c314f.jsonl
-  - d55acf8e579873a36b3f2eea66abacfd7882e1b43589b56939bb2c1e9aea5af6  arms/gstack-opus/findings/garrytan__gstack#3564@e97b8573502b.jsonl
-  - 0b2dd94bb07ed838cbc83b2c0f1a890d876fa6e4a9e7558f8c27267e8ba2400b  arms/gstack-opus/findings/garrytan__gstack#3567@2b42ec597e03.jsonl
-  - 86cfd370b9bc7f6da08f0af4231dfc4df47cea4e6e01ba62fcc9ad563ddc386c  arms/gstack-opus/findings/garrytan__gstack#3573@f3a130c760f8.jsonl
-  - d5c363e16c8c77bb4af404e3c883dfec4121bdaeb6eed5cbec8a095509dccd48  arms/gstack-opus/findings/garrytan__gstack#3578@0ff98dba1fdd.jsonl
-  - de995ea017b08f99cdfb329f4f1600cfc18267d28bf4a2558fae0052fef976e2  arms/gstack-opus/findings/garrytan__gstack#3583@f5bcdf71a765.jsonl
-  - d4b17f80b6a488fb8101d7c18e6770f9472a28b05a9a03c1f69b514d6e7e1543  arms/gstack-opus/findings/garrytan__gstack#3593@89156431975e.jsonl
-  - e453cc15b40639123e91a1887b184a9c1f1f32ea3733b93a350e45d54e087032  arms/gstack-opus/findings/garrytan__gstack#3596@0be7c3d44339.jsonl
-  - 2ce9ee477d203154e7200b680f9abd33353c6a0d03c5b8c406cc1424a1663cb1  arms/gstack-opus/ingest.json
-  - 808ff49b035e25050bdee454dc367785a4243e2068fd64bed0bbc43c0266adc7  arms/gstack-opus/judgments.tsv
-  - 69675d2be72cd55bab1a48477a749a29e87bbc144216c107920b245972b5e9dc  arms/none-opus/adjudication.tsv
-  - 9247827f2ecf0ac0d8118892db339a28959736e21cdb2bd825a6a46ecff336fc  arms/none-opus/arm.json
-  - 7c7004627d47cbec3452072858726295aa67230ce5b60b481d35c4d3016f97ea  arms/none-opus/cost.tsv
-  - 705b88b83a5eb162acaba09dc9b0d12b0c361e828ac29cee10ab8322e57a62a8  arms/none-opus/findings/garrytan__gstack#3516@ee73419c3295.jsonl
-  - b214aeb59dbb1c8e60220e9adaed8028ece4af6176bf894aa646baee7059a870  arms/none-opus/findings/garrytan__gstack#3524@205ea0e2e82f.jsonl
-  - 69f847869fd8443116e0d71021de11dc937e2090d14cdbe86838035c1d93544b  arms/none-opus/findings/garrytan__gstack#3526@808dead70e32.jsonl
-  - bceecf4cf16d74143d8d48cb1a938b3d9ca236b2167580a4948100d61ffdcbd7  arms/none-opus/findings/garrytan__gstack#3527@2684974602c1.jsonl
-  - 51280dac15fdf5ed40c6ddee4ebdb139e25c20835f7c6492f34f4270c6f2e011  arms/none-opus/findings/garrytan__gstack#3534@a76620148c19.jsonl
-  - e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  arms/none-opus/findings/garrytan__gstack#3540@115355a38bd6.jsonl
-  - b52d31fcf9aa36006747dbd9b27cb198d2e39f0f260953a4febc2da4b8106d86  arms/none-opus/findings/garrytan__gstack#3545@d4f0ea3c314f.jsonl
-  - e67be0f253b98307df5e3cd234d8e1e466e1c209a2702cc712732b4b44e181cb  arms/none-opus/findings/garrytan__gstack#3564@e97b8573502b.jsonl
-  - 5691228825574fb6f1fc564252f67780a2746be24213c1ced6102a59caea3db2  arms/none-opus/findings/garrytan__gstack#3567@2b42ec597e03.jsonl
-  - ae6457aa70dc35bddd5f88af8e6243b61a9da2aa235d27f10a6de97a355e737d  arms/none-opus/findings/garrytan__gstack#3573@f3a130c760f8.jsonl
-  - 505ed3e0dacea3c5575ed1894baf353560e9080dfe6d7b0507c8ee5d65d13ef1  arms/none-opus/findings/garrytan__gstack#3578@0ff98dba1fdd.jsonl
-  - 516037823346fe626a035d47be74a2e6ea9165f4cbd72427c0970311fd181e00  arms/none-opus/findings/garrytan__gstack#3583@f5bcdf71a765.jsonl
-  - fa255d000fea0e1802438c6acb5533c8a52f9d68d871487f757b3a283f17cd0e  arms/none-opus/findings/garrytan__gstack#3593@89156431975e.jsonl
-  - 39a5ecd98561fbd3b1e56565359779cefeef68c101a6d2be05206868ad2a2b52  arms/none-opus/findings/garrytan__gstack#3596@0be7c3d44339.jsonl
-  - d8c1d1806fd745bc1f6d208fd8ecfbc1934526fb7f9e34c9fcf47b652944cfed  arms/none-opus/ingest.json
-  - 9d16c4b9d57d17f4faa6e2943ec96d299118f6cbc43ed81b90958c307e77f574  arms/none-opus/judgments.tsv
   - 7127a761cb350dc4463a9e1f0e193514166c69a93fad123364d9c7b13684fa22  run.sh.txt
   - ee175d8076d6f57f2942c1eded6cfaf49b8cd48eba17eca47af7ea57176b7e18  run.txt
-  - 3764a53863502cd47c1d5407dff1154d19c54957aa553291fb482c1b542883b4  sha256.txt
+  - 3d0ee45a3a964a5ea2666350552758eefa2f6927d012a75d7f1cac4d95200530  sha256.txt
 ---
 
 # R1 results: blind re-judge of the full /review procedure
@@ -227,7 +170,8 @@ Nothing in R1 is held out or sealed. The suite (lanes/review-noloss/suites/gsta1
 
 | File | What it is |
 |---|---|
-| arms/C, arms/none-opus, arms/gstack-opus | the three final arms as `noloss ingest` published them after both judging batches: findings, judgments.tsv, adjudication.tsv, cost.tsv, arm.json and ingest.json. These are the blinded, scrubbed arms; the source arms are not committed. |
 | run.txt | every phase's printed lines, with machine paths replaced by variables |
 | run.sh.txt | the six phase scripts joined, paths as variables |
-| sha256.txt | the sha256 of every input and output, including the files that stay outside the repo (source arms, packets, keys, judge replies, score records, ledger record files) |
+| sha256.txt | the sha256 of every input and output, all of which stay outside the repo (source arms, final arms, packets, keys, judge replies, score records, ledger record files) |
+
+The three final arms, as `noloss ingest` published them after both judging batches (blinded and scrubbed: findings, judgments.tsv, adjudication.tsv, cost.tsv, arm.json and ingest.json), are kept in the Captain drive at handoffs/GEVA-113/run/r1/final, with every file's digest in sha256.txt. The source arms are not committed. The arms stay out of this post for the same reason GEVA-89's did, and because /ship's review planner reads an arm's cost.tsv as a money path, which would make this post a gate-class change. A separate data PR can publish them through ingest.
