@@ -169,5 +169,5 @@ fi
 
 if has g; then
   echo "== g. route-check command (not run)"
-  echo "PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain drive>/ledger/discovery-r1.jsonl MODELS='$MODELS' OUT=<work>/route-d quick/laneb/runner/route-check.sh"
+  echo "PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain drive>/ledger/discovery-r1.jsonl MODELS='$MODELS' SYSTEM_PROMPT=$PRESET MAX_TURNS=60 OUT=<work>/route-d quick/laneb/runner/route-check.sh"
 fi

@@ -4,6 +4,7 @@
 # session through its route (DeepSeek via OpenRouter's Anthropic route) before any batch.
 # Needs ANTHROPIC_API_KEY and OPENROUTER_API_KEY in this shell; only the proxy sees them.
 # Every phase is public here (Capy cloud kernels cannot run Harbor's egress sidecar).
+# SYSTEM_PROMPT (an agent system_prompt value) and MAX_TURNS (sdk_max_turns) are passed to the agent when set.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/.." && pwd)
@@ -23,6 +24,9 @@ bun "$here/proxy.ts" --config "$root/config/proxy.json" --data-host "$gateway" -
   --log "$out/proxy-requests.jsonl" --sessions "$out/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix route- & pids+=($!)
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:9911/status >/dev/null 2>&1 && break; sleep 0.5; done
 models=${MODELS:-claude-haiku-5-5 deepseek-v4.1-flash-1017 claude-opus-5-5}
+agent_opts=()
+[ -n "${SYSTEM_PROMPT:-}" ] && agent_opts+=(--ak system_prompt="$SYSTEM_PROMPT")
+[ -n "${MAX_TURNS:-}" ] && agent_opts+=(--ak sdk_max_turns="$MAX_TURNS")
 for m in $models; do
   cap=$(jq -r --arg m "$m" '.models[] | select(.id == $m) | .session_cap_usd' "$root/config/cells.json")
   hm=$(jq -r --arg m "$m" '.models[] | select(.id == $m) | .harbor_model' "$root/config/cells.json")
@@ -30,7 +34,7 @@ for m in $models; do
     harbor run -y -p "$out/task" \
     -a laneb_agent:LanebAgent -m "$hm" --base-url "http://$gateway:8787" \
     --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm=none --ak arm_tar="$out/arms/none.tar" \
-    --ak session_cap_usd="$cap" --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model="$m" --ak max_output_tokens=32000 --ak repo_dir=/testbed --ak workdir=/testbed \
+    --ak session_cap_usd="$cap" --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model="$m" --ak max_output_tokens=32000 --ak repo_dir=/testbed --ak workdir=/testbed "${agent_opts[@]}" \
     -e docker -o "$out/jobs" --job-name "route-$m-$(date +%s)" || echo "route check: harbor failed for $m"
 done
 jq -c '{model, spent_usd: (.spent_micros / 1e6), requests, refused, close_reason, usage}' "$out/proxy-sessions.jsonl"
