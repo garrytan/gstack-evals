@@ -142,7 +142,7 @@ describe("review replay runner: GSTA-11 rerun preconditions", () => {
       p.items[1].model = "gpt-6.1-sol";
       p.items[2].model = "deepseek/deepseek-v4.1-flash-1017";
     });
-    t.h.reply = (id) => (id === "a" ? anthropic("", "refusal") : id === "b" ? chat([{ message: { content: "" }, finish_reason: "content_filter" }]) : chat([], { provider: "DeepSeek" }));
+    t.h.reply = (id) => (id === "a" ? anthropic("", "refusal") : id === "b" ? chat([{ message: { content: "" }, finish_reason: "content_filter" }]) : chat([], { provider: "InferenceNet" }));
     expect(await t.run()).toBe(0);
     expect(["a", "b", "c"].map((id) => item(t.out, id).termination)).toEqual([{ kind: "arm_failure", failure: "refusal" }, { kind: "arm_failure", failure: "refusal" }, { kind: "arm_failure", failure: "empty_response" }]);
     expect(t.sent).toEqual(["a", "b", "c"]);
@@ -215,7 +215,8 @@ describe("review replay runner: GSTA-11 rerun preconditions", () => {
   test("G6: an OpenRouter reply from an unpinned provider and a 200 without usage are missing", async () => {
     const reply = { choices: [{ message: { content: LONG }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 50 } };
     expect(readReply("openrouter", "deepseek/deepseek-v4.1-flash-1017", 200, JSON.stringify({ ...reply, provider: "Chutes" }), 20, true).termination).toEqual({ kind: "missing", code: "E_REPLAY_TRANSPORT" });
-    expect(readReply("openrouter", "deepseek/deepseek-v4.1-flash-1017", 200, JSON.stringify({ ...reply, provider: "DeepSeek" }), 20, true).termination).toEqual({ kind: "completed" });
+    expect(readReply("openrouter", "deepseek/deepseek-v4.1-flash-1017", 200, JSON.stringify({ ...reply, provider: "DeepSeek" }), 20, true).termination).toEqual({ kind: "missing", code: "E_REPLAY_TRANSPORT" });
+    expect(readReply("openrouter", "deepseek/deepseek-v4.1-flash-1017", 200, JSON.stringify({ ...reply, provider: "InferenceNet" }), 20, true).termination).toEqual({ kind: "completed" });
     const t = setup();
     t.h.reply = () => Response.json({ id: "msg", type: "message", content: [{ type: "text", text: LONG }], stop_reason: "end_turn" });
     expect(await t.run()).toBe(2);

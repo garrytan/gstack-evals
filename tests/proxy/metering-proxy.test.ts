@@ -3,7 +3,7 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
-import { CHAT_PRICES, priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
+import { CHAT_PRICES, openRouterRouting, priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, routable, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -557,11 +557,21 @@ describe("OpenRouter route", () => {
   const chat = (model = PARTICLE, extra: Record<string, unknown> = {}) => ({ model, messages: [{ role: "user", content: "hi" }], ...extra });
   const PATH = "/openrouter/v1/chat/completions";
 
+  test("the DeepSeek V4.1 Flash row routes only to zero-retention fp8 hosts, with deny, and never to DeepSeek's own endpoint", () => {
+    // OpenRouter's provider-logging table and this model's endpoints list, read 2026-10-31: inference.net keeps no prompts and serves it at fp8; DeepSeek may train on prompts.
+    const ZERO_RETENTION_FP8 = ["inference-net"];
+    const route = openRouterRouting(CHAT_PRICES[`openrouter:${DEEPSEEK}`]!);
+    expect(route.only?.length).toBeGreaterThan(0);
+    expect(route.only!.every((p) => ZERO_RETENTION_FP8.includes(p))).toBe(true);
+    expect(route.only).not.toContain("deepseek");
+    expect([route.data_collection, route.allow_fallbacks, route.quantizations]).toEqual(["deny", false, ["fp8"]]);
+  });
+
   test("a call goes out with OPENROUTER_API_KEY and the price row's routing, and settles from reported tokens at the row", async () => {
     const t = setup(() =>
       t.calls.length === 1
         ? ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.0002 })
-        : ok({ prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 800 }, cost: 0.0001 }),
+        : ok({ prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 800 }, cost: 0.00005 }),
     );
     const a = t.bind({ models });
     expect((await t.call(a.slot, a.token, PATH, chat(PARTICLE, { provider: { sort: "price", only: ["somewhere-pricier"] } }))).status).toBe(200);
@@ -572,10 +582,10 @@ describe("OpenRouter route", () => {
     expect(t.calls[0]!.body.provider).toEqual({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     expect(t.calls[0]!.body.max_tokens).toBe(32_768);
     expect(t.calls[0]!.body.max_completion_tokens).toBeUndefined();
-    expect(t.calls[1]!.body.provider).toEqual({ only: ["deepseek"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.3, completion: 1.2, request: 0, image: 0 } });
+    expect(t.calls[1]!.body.provider).toEqual({ only: ["inference-net"], allow_fallbacks: false, quantizations: ["fp8"], data_collection: "deny", max_price: { prompt: 0.08, completion: 0.55, request: 0, image: 0 } });
     expect(t.ledger.settles).toEqual([
       ["res_1", { kind: "spent", spent_micros: 1000 * 0.1 + 200 * 1, usage: { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 } }],
-      ["res_2", { kind: "spent", spent_micros: Math.ceil(200 * 0.3 + 800 * 0.006 + 100 * 1.2), usage: { input: 200, output: 100, reasoning: 0, cache_read: 800, cache_write: 0 } }],
+      ["res_2", { kind: "spent", spent_micros: Math.ceil(200 * 0.08 + 800 * 0.008 + 100 * 0.55), usage: { input: 200, output: 100, reasoning: 0, cache_read: 800, cache_write: 0 } }],
     ]);
     const meter = await t.proxy.finalize(a.meter_id);
     expect(meter.by_model[`openrouter:${PARTICLE}`]).toEqual({ micros: 300, requests: 1 });
