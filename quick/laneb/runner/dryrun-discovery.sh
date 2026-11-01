@@ -67,12 +67,13 @@ fi
 
 # One harness per run: fake upstream behind the recording shim, the run's temp ledger service, the metering proxy.
 harness_run() {
-  local item=$1 cap=$2; shift 2
+  local item=$1 cap=$2 shim_port=8799; shift 2
+  [ "$item" = texttax-r1 ] && shim_port=8796
   local dir=$out/harness-$item
   rm -rf "$dir" && mkdir -p "$dir"
   rm -rf "$dir/task" && cp -r "$here/smoke-task" "$dir/task-public" && sed -i 's/^network_mode = .*/network_mode = "public"/' "$dir/task-public/task.toml"
   cat > "$dir/proxy.json" <<EOF
-{"routes": {"fake": {"base_url": "http://127.0.0.1:8799", "key_env": "FAKE_UPSTREAM_KEY", "auth": "x-api-key", "count_tokens": "estimate"}},
+{"routes": {"fake": {"base_url": "http://127.0.0.1:$shim_port", "key_env": "FAKE_UPSTREAM_KEY", "auth": "x-api-key", "count_tokens": "estimate"}},
  "models": {"claude-opus-5-5": {"route": "fake", "upstream_model": "claude-opus-5-5", "price_per_mtok": {"input": 5, "output": 25, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5}}}}
 EOF
   bun -e "import {Ledger} from '$here/ledger.ts'; new Ledger('$dir/$item.jsonl','$item').approve($cap, {note: 'GEVA-106 dry run, temp ledger, no spend'})"
@@ -82,21 +83,23 @@ EOF
   bun "$here/ledger.ts" serve --path "$dir/$item.jsonl" --item "$item" --port 9911 --prereg dryrun & pids+=($!)
   FAKE_UPSTREAM_KEY=fake bun "$here/proxy.ts" --config "$dir/proxy.json" --data-host "$gateway" --data-port 8787 --control-port 8788 \
     --log "$dir/proxy-requests.jsonl" --sessions "$dir/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix dry- & pids+=($!)
-  for a in "$@"; do
-    local arm=${a%:*} told=${a#*:} shim
-    cat > "$dir/shim.ts" <<'EOF'
-import { appendFileSync } from "node:fs";
-Bun.serve({ hostname: "127.0.0.1", port: 8799, async fetch(req) {
+  cat > "$dir/shim.ts" <<'EOF'
+import { appendFileSync, readFileSync } from "node:fs";
+Bun.serve({ hostname: "127.0.0.1", port: Number(process.env.SHIM_PORT), async fetch(req) {
   const url = new URL(req.url);
   const body = req.method === "POST" ? await req.text() : undefined;
-  if (body !== undefined) appendFileSync(process.env.SHIM_LOG!, JSON.stringify({ path: url.pathname, bytes: Buffer.byteLength(body), body }) + "\n");
+  if (body !== undefined) appendFileSync(readFileSync(process.env.SHIM_PTR!, "utf8").trim(), JSON.stringify({ path: url.pathname, bytes: Buffer.byteLength(body), body }) + "\n");
   const headers = new Headers(req.headers); headers.delete("host"); headers.delete("content-length");
   const res = await fetch("http://127.0.0.1:8798" + url.pathname + url.search, { method: req.method, headers, body });
   return new Response(res.body, { status: res.status, headers: res.headers });
 } });
 EOF
-    SHIM_LOG="$dir/requests-$arm.jsonl" bun "$dir/shim.ts" & shim=$!
-    for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:8799/healthz >/dev/null 2>&1 && break; sleep 0.5; done
+  echo "$dir/requests-start.jsonl" > "$dir/shim-log"
+  SHIM_PTR="$dir/shim-log" SHIM_PORT=$shim_port bun "$dir/shim.ts" & pids+=($!)
+  for a in "$@"; do
+    local arm=${a%:*} told=${a#*:}
+    echo "$dir/requests-$arm.jsonl" > "$dir/shim-log"
+    for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:$shim_port/healthz >/dev/null 2>&1 && break; sleep 0.5; done
     local extra=()
     [ "$told" = 1 ] && extra=(--ak invoke=true --ak 'skill_map={"task-public":"investigate"}')
     echo "-- $item arm $arm told=$told ($(du -h "$armdir/$arm.tar" | cut -f1) tar)"
@@ -106,8 +109,6 @@ EOF
       --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$(readlink -f "$armdir/$arm.tar")" \
       --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=/testbed --ak workdir=/testbed "${extra[@]}" \
       -e docker -o "$dir/jobs" --job-name "dry-$arm" >"$dir/harbor-$arm.log" 2>&1 || echo "harbor exited non-zero for $arm (log: $dir/harbor-$arm.log)"
-    kill "$shim" 2>/dev/null || true
-    free_ports 8799
     echo "reward: $(cat "$dir"/jobs/dry-$arm/*/verifier/reward.txt 2>/dev/null || echo none)"
     else
     PYTHONPATH="$here/agent" timeout 300 "$sdk_python" "$here/dryrun-direct.py" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" "$claude_bin" "/tmp/geva106-direct/$item-$arm" \
@@ -117,7 +118,7 @@ EOF
     bun "$here/dryrun-inspect.ts" "$dir/requests-$arm.jsonl" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" || true
   done
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done
-  free_ports 8787 8788 8798 9911
+  free_ports 8787 8788 8798 9911 "$shim_port"
   wait 2>/dev/null || true
   echo "-- lease check for $item"
   jq -c '{trial, spent_micros, requests, ok_responses, ledger_settle, close_reason}' "$dir/proxy-sessions.jsonl"
