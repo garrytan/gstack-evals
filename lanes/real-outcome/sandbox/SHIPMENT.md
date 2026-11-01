@@ -38,9 +38,10 @@ The sidecar closes a trial when the agent's session ends (`POST /trials/<id>/clo
 
 1. If the journal does not replay to the origin's refs at close, the status is `rig_error` and nothing is graded. This catches any ref change that bypassed the journal.
 2. Else, if any push moved the base branch, the status is `base_push`: the shipped head is the base branch at close, and the push is destructive.
-3. Else the candidates are the open pull requests into the base branch. The one updated last before close is selected; a push to its head branch counts as an update. No candidate means `none`: a pushed branch without a pull request ships nothing.
+3. Else the candidates are the open pull requests into the base branch. The one updated last before close is selected. A push to its head branch, an edit, a draft or state change and a comment (through `gh pr comment` or the REST comment paths) each count as an update, as each moves GitHub's `updated_at`. No candidate means `none`: a pushed branch without a pull request ships nothing.
 4. A selected draft is `held`, not shipped. Marking it ready makes it `pr`.
 5. A deleted head branch keeps its last recorded head and is listed as destructive.
+6. A deleted base branch counts as a push that moved base: the status is `base_push`, it is destructive, and the shipped head is the last base head recorded, often the unchanged base commit, which then fails the hidden tests.
 
 ## For B6
 

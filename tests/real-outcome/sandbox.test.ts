@@ -12,11 +12,13 @@ import type { TrialSpec } from "../../lanes/real-outcome/sandbox/sidecar.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "real-sandbox-"));
 const sc = { controlUrl: "", proc: null as ReturnType<typeof Bun.spawn> | null };
+// A variable only the sidecar's host holds; nothing a trial runs may read it back.
+const SENTINEL = "host-only-" + Math.random().toString(36).slice(2);
 let n = 0;
 
 // The sidecar runs in its own process, as it does beside the proxy: the fake agent's git and gh calls block this one.
 beforeAll(async () => {
-  sc.proc = Bun.spawn([process.execPath, join(import.meta.dir, "../../bin/gstack-evals"), "real", "sandbox", "serve", "--root", join(tmp, "sidecar"), "--agent-host", "127.0.0.1", "--agent-port", "0", "--control-port", "0"], { stdout: "pipe", stderr: "inherit" });
+  sc.proc = Bun.spawn([process.execPath, join(import.meta.dir, "../../bin/gstack-evals"), "real", "sandbox", "serve", "--root", join(tmp, "sidecar"), "--agent-host", "127.0.0.1", "--agent-port", "0", "--control-port", "0"], { stdout: "pipe", stderr: "inherit", env: { ...process.env, REAL_HOST_SENTINEL: SENTINEL } });
   const reader = (sc.proc.stdout as ReadableStream<Uint8Array>).getReader();
   let text = "";
   while (!text.includes("\n")) {
@@ -227,6 +229,22 @@ describe("what shipped: the fake agent's outcomes (open item 1)", () => {
     expect(b).toMatch(/^[0-9a-f]{40}$/);
   });
 
+  test("a comment counts as an update, through gh pr comment and the REST comment paths, as on GitHub", async () => {
+    for (const comment of ["pr comment 1 --body ping", "api repos/sandbox/repo/issues/1/comments -f body=ping", "api repos/sandbox/repo/pulls/1/comments -f body=ping"]) {
+      const t = await trial();
+      const a = t.commit("a");
+      t.run("git push -q -u origin feature 2>&1");
+      t.gh("pr create --title A --body a");
+      t.run("git checkout -q -b other main && echo b > b.txt && git add b.txt && git commit -qm b && git push -q -u origin other 2>&1");
+      t.gh("pr create --title B --body b");
+      const before = JSON.parse(t.gh("pr view 1 --json updatedAt").out).updatedAt;
+      await Bun.sleep(5);
+      expect([comment, t.gh(comment).code]).toEqual([comment, 0]);
+      expect(JSON.parse(t.gh("pr view 1 --json updatedAt").out).updatedAt > before).toBe(true);
+      expect([comment, (await t.close()).record]).toMatchObject([comment, { status: "pr", selected_pr: 1, shipped_head: a }]);
+    }
+  });
+
   test("a deleted head branch keeps its last recorded head, and the delete is destructive", async () => {
     const t = await trial();
     const head = t.commit("feat");
@@ -285,6 +303,21 @@ describe("integrity: forging, bypassing and touching another trial (open item 1)
     expect(record.events).toBeGreaterThan(3);
     expect(record.refs_at_close["refs/heads/feature"]).toBeDefined();
     expect(record.refused.filter((r) => r.kind === "bad_path").length).toBe(4);
+  });
+
+  test("a --jq expression sees an empty environment: nothing of the sidecar's host comes back", async () => {
+    const t = await trial();
+    t.commit("a");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title A --body a");
+    for (const call of ["api user -q env", "api user -q '$ENV'", "repo view --json name -q 'env'", "pr view 1 --json number -q '$ENV'", "pr list --json number -q 'env | keys'"]) {
+      const r = t.gh(call);
+      expect([call, r.code, r.out + r.err]).toEqual([call, 0, expect.not.stringContaining(SENTINEL)]);
+      expect([call, (r.out + r.err).includes("PATH")]).toEqual([call, false]);
+    }
+    expect(t.gh("api user -q 'env | length'").out.trim()).toBe("0");
+    expect(process.env.REAL_HOST_SENTINEL).toBeUndefined();
+    expect((await t.close()).record.rig_errors).toEqual([]);
   });
 
   test("one trial cannot touch another: another trial's token from this trial's address is refused and journaled here", async () => {

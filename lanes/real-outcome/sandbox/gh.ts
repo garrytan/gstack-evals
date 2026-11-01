@@ -127,8 +127,12 @@ const has = (p: Parsed, name: string): boolean => p.flags.has(name) && one(p, na
 
 const JSON_FLAGS: FlagSpec = { json: { value: true }, jq: { alias: "q", value: true }, template: { alias: "t", value: true } };
 
+/** jq by absolute path, run with an empty environment: an agent's --jq expression can read env and $ENV, so it must see nothing of the sidecar's. */
+const JQ = Bun.which("jq");
+
 function jq(input: unknown, expr: string): string {
-  const r = spawnSync("jq", ["-r", expr], { encoding: "utf8", input: JSON.stringify(input) });
+  if (JQ === null) throw new Fail("jq is not available to the sandbox", "jq_missing");
+  const r = spawnSync(JQ, ["-r", expr], { encoding: "utf8", input: JSON.stringify(input), env: {} });
   if (r.error) throw new Fail("jq is not available to the sandbox: " + r.error.message, "jq_missing");
   if (r.status !== 0) throw new Fail("failed to parse jq expression (line 1, column 1)\n" + r.stderr.trim());
   return r.stdout;
@@ -318,6 +322,7 @@ function prCmd(ctx: GhContext, sub: string, args: string[], req: GhRequest): str
       const body = one(p, "body");
       if (body === undefined) throw new Fail("--body or --body-file required when not running interactively");
       pr.comments.push({ body, createdAt: ctx.now() });
+      touch(ctx, pr);
       ctx.journal({ type: "pr_comment", number: pr.number, action: "comment" });
       return prUrl(ctx, pr.number) + "#issuecomment-" + pr.comments.length + "\n";
     }
@@ -449,6 +454,7 @@ function apiCmd(ctx: GhContext, args: string[]): string {
     if (target && /^\/comments$/.test(tail) && method === "GET") return out(target.comments.map((c, i) => ({ id: i + 1, body: c.body, user: { login: LOGIN }, created_at: c.createdAt })));
     if (target && (/^\/comments$/.test(tail) || /^\/comments\/\d+\/replies$/.test(tail)) && method === "POST") {
       target.comments.push({ body: fields.body ?? "", createdAt: ctx.now() });
+      if (pr) touch(ctx, pr);
       ctx.journal(pr ? { type: "pr_comment", number: n, action: "comment" } : { type: "issue", number: n, action: "comment" });
       return out({ id: target.comments.length, body: fields.body ?? "" });
     }

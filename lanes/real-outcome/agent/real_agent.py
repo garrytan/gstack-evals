@@ -106,6 +106,7 @@ gitdir=$(git rev-parse --absolute-git-dir)
 d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
 mkdir -p "$d/objects"
+if [ -f "$gitdir/index" ]; then cp "$gitdir/index" "$d/index"; else GIT_INDEX_FILE="$d/index" git read-tree HEAD; fi
 export GIT_INDEX_FILE="$d/index" GIT_OBJECT_DIRECTORY="$d/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES="$gitdir/objects"
 git add -A >/dev/null 2>&1
 tree=$(git write-tree)
@@ -176,7 +177,8 @@ class RealAgent(lb.LanebAgent):
             raise
 
     def _snapshot(self, container: str, task: dict, name: str) -> dict:
-        """The working tree against base, written to evaluator/<name>.patch, without touching the agent's index or objects."""
+        """The working tree against base, written to evaluator/<name>.patch, without touching the agent's index or objects.
+        The temporary index starts as a copy of the agent's, so a tracked file that matches .gitignore stays in the tree."""
         res = self._exec(container, SNAPSHOT.format(repo=shlex.quote(task["repo_dir"]), base=task["base_commit"]), timeout=300)
         out = res.stdout
         head, _, patch = out.partition(b"\n")

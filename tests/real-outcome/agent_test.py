@@ -54,7 +54,9 @@ class Case:
         self.bin.mkdir()
         (self.repo / "src").mkdir()
         (self.repo / "src/app.js").write_text("export const add = (a, b) => a + b;\n")
-        sh(self.repo, "git init -q -b main && git add -A && git commit -qm base")
+        (self.repo / ".gitignore").write_text("*.log\n")
+        (self.repo / "keep.log").write_text("a tracked file that matches .gitignore\n")
+        sh(self.repo, "git init -q -b main && git add -A && git add -f keep.log && git commit -qm base")
         self.base = sh(self.repo, "git rev-parse HEAD")
         task = {"repo_dir": str(self.repo), "base_branch": "main", "base_commit": self.base, "kind": kind, "start_ref": "main"}
         if kind == "K4":
@@ -151,6 +153,7 @@ def test_two_turns_wait_for_quiet_and_ship_a_pr():
     t1 = s["turn1"]
     patch = (c.evdir / "turn1.patch").read_text()
     check(t1["branch"] == "feature" and t1["head"] == c.base and "src/feature.js" in patch and "MUL.md" in patch, (t1, patch[:300]))
+    check("keep.log" not in patch and "keep.log" not in (c.evdir / "final.patch").read_text(), "a tracked file that matches .gitignore is not reported deleted")
     check(sh(c.repo, "git status --porcelain") == "", "the turn-1 snapshot left the agent's index alone, and the agent committed everything")
     check(s["final"]["head"] == head and (c.evdir / "final.patch").read_text().count("diff --git") == 2, s["final"])
     steps = {r["step"]: r["status"] for r in s["ship_steps"]}
