@@ -263,6 +263,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if ((suite.sealed || sealedCatalogs) && insideRepo(out)) throw new Usage("suite " + suite.id + (suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and --out " + out + " is inside the repo; write sealed runs outside it");
   const sealedSink = sealedSinkProblem({ id: suite.id, sealed: suite.sealed, sealedCatalogs }, env);
   if (sealedSink) throw new Usage(sealedSink);
+  const runFile = join(out, "run.json");
+  const prior = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; max_turns?: number; session_kind?: string | null }) : null;
+  if (prior && ((prior.max_turns ?? MAX_TURNS) !== maxTurns || (prior.session_kind ?? null) !== sessionKind)) {
+    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with max turns " + (prior.max_turns ?? MAX_TURNS) + " and session kind " + (prior.session_kind ?? "not set") + ", and this resume gives " + maxTurns + " and " + (sessionKind ?? "not set") + "\n  fix: resume with the run's own --max-turns and --session-kind, or start a new run in a new --out");
+    return 2;
+  }
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
   const sessions = units.length * passes * arms.reduce((s, a) => s + modelsOf(a.name).length, 0);
   if (dry) {
@@ -324,8 +330,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const tasks = join(out, "fixtures", "tasks.json");
   mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
-  const runFile = join(out, "run.json");
-  const runId = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string }).run_id : newRunId("review-units");
+  const runId = prior?.run_id ?? newRunId("review-units");
   writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind }, null, 2) + "\n");
   const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
   const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };

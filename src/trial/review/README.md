@@ -87,8 +87,9 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
 - `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
 
-run.json records max_turns and session_kind. A setting off its default joins the session key, so --resume refuses a
-cell run under another value (E_CACHE_STALE).
+run.json records max_turns and session_kind. --resume with other values than run.json records is refused before
+anything runs, and run.json stays as it was (E_CACHE_STALE). A setting off its default also joins the session key, so a
+cell run under another value is never reused.
 
 ## Plan units
 

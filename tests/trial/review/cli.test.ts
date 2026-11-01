@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "../../../src/cli.ts";
 import { buildTrialImage, stateRoot } from "../../../src/trial/image.ts";
@@ -44,6 +44,31 @@ describe("review-units arguments (keyless)", () => {
     expect(dry.out).toContain("spend cap $100.00");
     expect(existsSync(out)).toBe(false);
     removeTree(join(out, ".."));
+  });
+
+  // Value: protects=a resume that gives other run settings than the run recorded is refused before anything runs, and run.json keeps the settings its sessions used; fails_when=a mismatched resume overwrites run.json or proceeds; why_new=Capy review of #119 (a rejected resume rewrote max_turns and session_kind); seam=main's resume check; no_claim=the Docker rig
+  test("a resume with other run settings is refused and leaves run.json as it was", async () => {
+    const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
+    mkdirSync(out, { recursive: true });
+    const recorded = JSON.stringify({ run_id: "review-units-prior", max_turns: 80, session_kind: "unattended" }, null, 2) + "\n";
+    writeFileSync(join(out, "run.json"), recorded);
+    const run = async (argv: string[]) => {
+      const io = collect();
+      const code = await main([...base(out), "--arms", "none", "--resume", "--dry-run", "--spend-cap", "100", ...argv], io, {});
+      return { code, ...io.text() };
+    };
+    try {
+      const changed = await run([]);
+      expect(changed.code).toBe(2);
+      expect(changed.err).toMatch(/^E_CACHE_STALE review-units: run review-units-prior ran with max turns 80 and session kind unattended, and this resume gives 60 and not set/);
+      expect(readFileSync(join(out, "run.json"), "utf8")).toBe(recorded);
+      expect((await run(["--max-turns", "80", "--session-kind", "unattended"])).code).toBe(0);
+      writeFileSync(join(out, "run.json"), JSON.stringify({ run_id: "review-units-old" }) + "\n");
+      expect((await run([])).code).toBe(0);
+      expect((await run(["--max-turns", "80"])).err).toMatch(/^E_CACHE_STALE review-units: run review-units-old ran with max turns 60 and session kind not set/);
+    } finally {
+      removeTree(join(out, ".."));
+    }
   });
 });
 
