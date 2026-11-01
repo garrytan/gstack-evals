@@ -14,7 +14,7 @@ links:
   - 2026-10-31-geva-76-stacks-round-1-prereg
   - 2026-10-30-geva-59-stacks-round-1-plan
 attachments:
-  - afd149278a5974f0e608256b291ddb516eaa67372e1d3e3a9329b9d331857467  derived.sha256.txt
+  - 30440fc9c7f2965d6a5a2f6cf656f93adf218727f6232200c9674620c317ae82  derived.sha256.txt
 ---
 
 # Stacks round 1 results
@@ -76,7 +76,7 @@ Both arms sit near a floor, not a ceiling: each misses more than 90% of the bloc
 **Judging.** Both batches used seed 20261031 and the judges Opus 5.5, gpt-6.1-sol and Sonnet 5.5. Both judge items were admitted with `--proof direct` on ci.yml run 41252431611 at 715f837. Neither run had a provider error, a refusal or a cap stop.
 
 - Match: batch ed4fd89b, 33 packets and 408 findings from five arms. The primary judge answered 33 packets, the second 27 and the third 1, with 0 unjudged. The second judge agreed on 33 blockers at kappa 0.9832. The dry run printed: "worst case: primary $39.206844 on 33 packets; second up to $20.555682 and third up to $19.603818 if they read every packet; $79.366344 in all, $158.732688 if every answer is asked again." Lease stacks-r1-review-judge-match.0001.ca507f settled at $2.219919, with 0 unknown calls.
-- Adjudication: item cap $197.780081, which is $200 minus the match spend. Batch 45b6974e, 19 packets and 83 findings. The primary answered 19, the second 12 and the third 3, with 0 unjudged. Unverifiable not-defect rulings: gstack-opus 1, tstack-opus 2, the rest 0. The dry run printed: "worst case: primary $25.643916 on 19 packets; second up to $13.754016 and third up to $12.822186 if they read every packet; $52.220118 in all, $104.440236 if every answer is asked again." Lease stacks-r1-review-judge-adjudicate.0001.677679 settled at $2.130317, with 0 unknown calls.
+- Adjudication: item cap $197.780081, which is $200 minus the match spend. Batch 45b6974e, 19 packets and 83 findings. The primary answered 19, the second 12 and the third 3, with 0 unjudged. Unverifiable not-defect rulings: gstack-opus 1, tstack-opus 2, the rest 0. Section 3 prints the verifiable sensitivity. The dry run printed: "worst case: primary $25.643916 on 19 packets; second up to $13.754016 and third up to $12.822186 if they read every packet; $52.220118 in all, $104.440236 if every answer is asked again." Lease stacks-r1-review-judge-adjudicate.0001.677679 settled at $2.130317, with 0 unknown calls.
 
 **Review spend.** Pilots $7.31, grids $173.18 and judging $4.35, so $184.84 against the $2,050 stop.
 
@@ -93,6 +93,28 @@ The family is comparisons.stacks-r1.nopstack.json from the amendment (sha256 ae5
 | gstack vs none, particle-1 | no verdict (both arms stopped) | 2.4% vs 2.4% | 0.0 | n/a | none |
 
 The tstack rows are the raw scorer output. Section 4 explains why they carry no primary verdict. The required MAJOR-as-INFORMATIONAL sensitivity (derived suite sha256 ce7cc7a818b284ee04a9df01d9f53d117f12ec6fe5f6a6d21c92a90c8cb5e327, map sha256 9874f9fc9dad67d3c286ccdcd9b85ddb7257ecc09b24bc1d7fb4fb588a143472) gives the same verdict and the same numbers in every column of every comparison. No verdict flips, so each verdict above is robust to that mapping.
+
+**Verifiable sensitivity** (#104 section 3). judge-run's per-arm lines from the adjudication run, verbatim:
+
+```
+unverifiable not-defect rulings, arm none-opus: 0, 0.0000 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm gstack-opus: 1, 0.0156 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm tstack-opus: 2, 0.0313 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm none-particle-1: 0, 0.0000 per PR cluster per pass (1 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm gstack-particle-1: 0, 0.0000 per PR cluster per pass (1 passes, 32 PR clusters)
+```
+
+Each arm's false blockers per PR per pass, as `score` reports them, sit beside the same rate minus that arm's unverifiable figure. The sensitivity is a count, not a test.
+
+| Arm | False blockers per PR per pass | Minus unverifiable |
+|---|---|---|
+| none, Opus | 0.0000 | 0.0000 |
+| gstack, Opus | 0.0156 | 0.0000 |
+| tstack, Opus | 0.0781 | 0.0469 |
+| none, particle-1 | no reading (arm stopped) | no reading |
+| gstack, particle-1 | no reading (arm stopped) | no reading |
+
+gstack's one unverifiable ruling falls on gstack#3527 in pass 1, where its only false blocker is, so its adjusted rate is zero. tstack's two fall on gstack#1808 pass 1 and gstack#3567 pass 2, both among its false blockers, and leave it at 0.0469 (from the unrounded 0.078125 and 0.03125).
 
 ## 4. tstack gets no primary verdict
 
@@ -138,18 +160,37 @@ Each runs `noloss derive` at the pin, then scores the whole family on the derive
 
 The impact reading prints the note that the variant's unmatched blocking findings are not adjudicated under that mapping, and it prints no false-blocker line. Under tstack-should, almost all of tstack's blocking finds turn out to be should-level: its blocking recall falls from 11.9% to 1.2%.
 
+**Contamination disclosure** (#104 section 4 and #95 section 5). Of the 264 scored transcripts, 1 has an `ls` carrying an option that takes a value: gstack on Opus, gstack#3381 pass 1, `ls -la --time-style=full-iso .gstack-home`. By hand against the frozen rule text: the value is joined to its option with `=`, so the scanner cannot read it as an operand or as `-d`, and the directory it lists is the rig's gstack state directory inside the unit checkout, none of whose entries is a file contamination.tsv lists for that unit. It flags nothing, which matches flag-scan. No session used the LS tool with an ignore list.
+
+flag-scan's flags by unit-pass, all in the gstack arms (tstack has none):
+
+| Unit | Model | Pass | Flags (rule: file, with the tool where it is not Bash) |
+|---|---|---|---|
+| gstack#3516@ee73419c3295 | Opus | 1 | read: review/SKILL.md (Skill, and once by Bash) |
+| gstack#3516@ee73419c3295 | Opus | 2 | read: review/SKILL.md (Skill) |
+| gstack#3516@3712b7971126 | Opus | 1 | read: review/SKILL.md (Skill) |
+| gstack#3516@3712b7971126 | Opus | 2 | read: review/SKILL.md (Skill) |
+| gstack#3524@205ea0e2e82f | Opus | 1 | list: AGENTS.md (2 calls), learn/SKILL.md; search: 2 calls |
+| gstack#3578@0ff98dba1fdd | Opus | 2 | list: lib/redact-patterns.ts (2 calls) |
+| gstack#3516@ee73419c3295 | particle-1 | 1 | read: review/SKILL.md (Skill) |
+| gstack#3516@3712b7971126 | particle-1 | 1 | list: review/SKILL.md, review/sections/manifest.json; read: review/sections/plan-completion.md (Read), review/SKILL.md (Skill); search: 5 calls |
+| gstack#3526@808dead70e32 | particle-1 | 1 | list: CHANGELOG.md; recursive: CHANGELOG.md; read: test/fixtures/module-size-ratchet.json; search: 1 call |
+| gstack#3494@c555ce3a8324 | particle-1 | 1 | list: CHANGELOG.md |
+
+The reading without flagged units drops these six units for every arm.
+
 **Escaped defect.** gstack#1808 B1, the one fixed-by blocker, was missed by every arm in every pass.
 
 ## 6. Secondaries
 
-Recall at any severity, the new-blocker test (unmatched blocking findings that blind adjudication upholds) and the review idea cards, from `noloss secondary` with seed 20261031.
+Recall at any severity, the new-blocker test (unmatched blocking findings that blind adjudication upholds) and the review idea cards, from `noloss secondary` with seed 20261031. tstack's comparison runs on stacks-r1-sol-incomplete (section 4), the derived suite the 05:01:10.244Z ruling names as tstack's reading. The other two run on stacks-r1.
 
 ```
-tstack-opus vs gstack-opus
-recall, tstack-opus: blocking 5/42 = 0.119 [0.0375, 0.2162]; at any severity 7/42 = 0.1667 [0.0606, 0.2841]; 0 judgments with coverage incomplete
-recall, gstack-opus: blocking 4/42 = 0.0952 [0.0385, 0.1667]; at any severity 12/42 = 0.2857 [0.1757, 0.4146]; 0 judgments with coverage incomplete
-new blockers per pass per PR: variant 0.7656, reference 0.25 (49 and 16 in all, 32 PRs); difference 0.5156 [0.2969, 0.7656], exact two-sided sign-flip p 0.000122 (min p 0.0000152587890625)
-idea-card wins: 0 of 42 blocking blockers (found by tstack-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 0.5077, 95th percentile 1; above the null: no
+noloss secondary: tstack-opus vs gstack-opus on stacks-r1-sol-incomplete (sha256 2d80e7af0799676822b5abb3c31d7085f75cff1805b56d0283c0b23287542c45), seed 20261031
+recall, tstack-opus: blocking 5/40 = 0.125 [0.0417, 0.2283]; at any severity 7/40 = 0.175 [0.0641, 0.2976]; 0 judgments with coverage incomplete
+recall, gstack-opus: blocking 4/40 = 0.1 [0.0385, 0.1765]; at any severity 11.5/40 = 0.2875 [0.1711, 0.4219]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.7833, reference 0.25 (47 and 15 in all, 30 PRs); difference 0.5333 [0.3, 0.7833], exact two-sided sign-flip p 0.000214 (min p 0.000030517578125)
+idea-card wins: 0 of 40 blocking blockers (found by tstack-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 0.4994, 95th percentile 1; above the null: no
 
 none-opus vs gstack-opus
 recall, none-opus: blocking 3/42 = 0.0714 [0.0208, 0.1389]; at any severity 10/42 = 0.2381 [0.1429, 0.3378]; 0 judgments with coverage incomplete
@@ -165,7 +206,7 @@ new blockers: no reading: arm none-particle-1 stopped; arm gstack-particle-1 sto
 idea-card wins: 0 of 42 blocking blockers (found by none-particle-1 in every pass and by gstack-particle-1 in none; 0 left out); null from 10000 within-unit label swaps: mean 0, 95th percentile 0; above the null: no
 ```
 
-tstack raises about three times as many new blockers as gstack that blind adjudication upholds as defects: 0.77 against 0.25 per pass per PR, p 0.000122. It finds fewer of the known blockers at any severity (7 against 12). No idea card clears its null.
+On the derived suite, tstack raises about three times as many new blockers as gstack that blind adjudication upholds as defects: 0.78 against 0.25 per pass per PR, p 0.000214. So the lead holds without the two Sol-incomplete units. tstack finds fewer of the known blockers at any severity (7 against 11.5 of 40). No idea card clears its null.
 
 ## 7. particle-1
 
@@ -194,13 +235,28 @@ Each ruling is the Captain's (GSTA-2), recorded in approvals/2026-10-31-stacks-r
 - 05:06:54.993Z (item 10): the pinned `noloss ingest` refused all five arms. The frozen severity map has uppercase keys only, the parser keeps each model's own lowercase label, and `mapSeverity` matches exactly. Unmapped findings: none-opus 121 of 122, tstack-opus 101 of 101, none-particle-1 28 of 28. Ingest then reads derived arm copies whose severity map is the frozen map plus a lowercase twin of every key. MAJOR maps like HIGH and MINOR like LOW, and a compound label maps on its first word (tstack's "nit (Sol labelled it should)" maps as NIT). The MAJOR-as-INFORMATIONAL sensitivity is required. No code changed, and the judge admission still binds to 715f837.
 - 05:09:43.834Z and 05:11:52.203Z (items 11 and 12): the publication scan refused 37 lines across the five arms for machine paths in finding prose. A blind script, identical for every arm, replaced only the prefix and kept the rest of each path. Temporary-directory, sandbox-home and VM-home prefixes became `<sandbox>/`, and home-relative and user-home prefixes (POSIX and Windows) became `<home>/`. Item 12 covered names with spaces and temporary entries with no closing slash. Ingest then passed clean, and no finding needed `--digest-only`. Replacements per arm: none-opus 14, gstack-opus 13, tstack-opus 11, none-particle-1 9, gstack-particle-1 6.
 - 07:25:15.841Z: after the replicate 2 outage, TB2's results move to their own post (section 8). The two TB2 task drops apply the frozen in-run oracle rule and needed no ruling.
-- The sha256 of every derived file and every script is in [derived.sha256.txt](derived.sha256.txt) (182 lines).
+- 2026-11-01T07:47Z, on GST-762: Capy's review of this post found three readings the frozen rules require missing or run on the wrong suite. The Captain ruled that GEVA-92, the thread shipping this post, run them from GEVA-89's data, keyless at 715f837: the tstack secondary on stacks-r1-sol-incomplete (section 6), the ls audit and the per-unit-pass flag list (section 5), and the verifiable sensitivity (section 3). The ruling came after the readings were read. It applies the frozen rules and changes no verdict. Rerunning the full-suite tstack secondary reproduced GEVA-89's log byte for byte before the derived run. Only the tstack secondary's numbers moved:
+
+| tstack-opus vs gstack-opus secondary | Was, on stacks-r1 | Now, on stacks-r1-sol-incomplete |
+|---|---|---|
+| tstack blocking recall | 5/42 = 0.119 [0.0375, 0.2162] | 5/40 = 0.125 [0.0417, 0.2283] |
+| tstack recall at any severity | 7/42 = 0.1667 [0.0606, 0.2841] | 7/40 = 0.175 [0.0641, 0.2976] |
+| gstack blocking recall | 4/42 = 0.0952 [0.0385, 0.1667] | 4/40 = 0.1 [0.0385, 0.1765] |
+| gstack recall at any severity | 12/42 = 0.2857 [0.1757, 0.4146] | 11.5/40 = 0.2875 [0.1711, 0.4219] |
+| New blockers per pass per PR, tstack | 0.7656 (49 in all, 32 PRs) | 0.7833 (47 in all, 30 PRs) |
+| New blockers per pass per PR, gstack | 0.25 (16 in all) | 0.25 (15 in all) |
+| Difference [95% CI] | 0.5156 [0.2969, 0.7656] | 0.5333 [0.3, 0.7833] |
+| Sign-flip p (minimum reachable) | 0.000122 (0.0000152587890625) | 0.000214 (0.000030517578125) |
+| Idea-card wins, null mean | 0 of 42, 0.5077 | 0 of 40, 0.4994 |
+| Sections 6 and 10 prose | 0.77 against 0.25, p 0.000122, 7 against 12 | 0.78 against 0.25, p 0.000214, 7 against 11.5 |
+
+- The sha256 of every derived file and every script is in [derived.sha256.txt](derived.sha256.txt) (186 lines). The four lines under geva92/ are GEVA-92's scripts and outputs for the three readings above.
 
 The derived files, the judges' packets and the session transcripts quote reviewed material, so they stay outside the repo.
 
 ## 10. What this steers
 
 - **gstack review at Opus.** It shows no lift and costs about 50% more. Under the CREW rule this is a useful result, and it goes to one of two tracks. The suite has headroom, since both arms miss over 90% of the blocking blockers. The cheaper first test is gstack's severity assignment: it finds 12 of 42 blockers at some severity but marks only 4 as blocking. A before/after skill eval on that one change would show whether it lifts blocking recall without raising false blockers.
-- **tstack (Theo Browne).** Its Sol second opinion goes with about three times as many upheld new blockers per pass (p 0.000122), and with false blockers above zero against none. Its blocking finds are almost all should-level. A Sol-style second reader is an idea worth a gstack variant, measured against the same suite.
+- **tstack (Theo Browne).** Its Sol second opinion goes with about three times as many upheld new blockers per pass (p 0.000214, on the derived suite), and with false blockers above zero against none. Its blocking finds are almost all should-level. A Sol-style second reader is an idea worth a gstack variant, measured against the same suite.
 - **pstack (Lauren Tan).** It has no review result this round, because the headless harness closed its background adversaries. GST-734 fixes the driver for round 2.
 - **particle-1.** It runs out of turns on review. A rung that can't finish the task can't show gstack closing the gap.
