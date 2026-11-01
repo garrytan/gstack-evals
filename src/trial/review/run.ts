@@ -100,7 +100,10 @@ export interface ReviewRunInput {
   severityMap?: Readonly<Record<string, unknown>>;
   /**
    * Plan units (planning lane B2 to B4): the plan prompt and parser, the rec user, no second model, gstack's questions
-   * set to auto-decide, and a failed pass scored as finding nothing with a diagnostic note instead of stopping the arm.
+   * set to auto-decide, and planScore's failure rule. A malformed or missing block, or, after model output, a timeout, the
+   * arm's CLI failing or a session that completed with no text turn (counted as completed_without_text), is a miss scored
+   * as finding nothing with a diagnostic note. A timeout, a CLI failure or a completed session before any model output,
+   * or an infra failure at any point, is a coverage gap that stops the arm.
    */
   plan?: { lens: PlanLens };
   /** The models each named arm runs on; an arm not named runs on every model. */
