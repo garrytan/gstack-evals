@@ -164,7 +164,7 @@ The case where every answer is asked again is not covered. Neither item's cap ho
 
 **Fit check.** The review arms' central projection is $1,043 for the Opus cells and $187 for the particle-1 cell (the plan's cost table), plus $120 for the three pilot items in #95's ledger table ($60, $30 and $30). That is $1,350. Adding the $200 envelope gives $1,550, under $2,050. The start rule (#95 section 9) still checks the real figures before each grid starts.
 
-**Stops.** judge-run stops a run with no reply files on a provider error or a proxy refusal. Requests already in flight when a run stops keep retrying within their own budget (GST-579). The proxy meters them against the item's lease, so the ledger cap still binds. A stop for an infrastructure reason (a provider error other than a cap stop, the proxy down, a lost machine) is run again fresh once, under `stacks-r1-review-judge-<match|adjudicate>-rerun`, with what the $200 has left. A cap stop is never rerun.
+**Stops.** judge-run stops a run with no reply files on a provider error or a proxy refusal. Requests already in flight when a run stops keep retrying within their own budget (GST-579). The proxy meters them against the item's lease, so the ledger cap still binds. A stop for an infrastructure reason (a provider error other than a cap stop, the proxy down, a lost machine) is run again fresh once, under `stacks-r1-review-judge-<match|adjudicate>-rerun`. A match rerun gets $90 minus the first match run's settled spend, so adjudicate is never admitted below $110. An adjudicate rerun gets what the $200 has left. This can lose the match batch: after a late failure, the match rerun has little of the $90 left and can stop at its cap. A cap stop is never rerun.
 
 ## 6. The dry run
 
