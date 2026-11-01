@@ -14,7 +14,7 @@ links:
   - 2026-10-31-geva-76-stacks-round-1-prereg
   - 2026-10-30-geva-59-stacks-round-1-plan
 attachments:
-  - 30440fc9c7f2965d6a5a2f6cf656f93adf218727f6232200c9674620c317ae82  derived.sha256.txt
+  - 4815985ccf0eda6b3c164746310f875c671ed5ad7cea572915b9b04e08743279  derived.sha256.txt
 ---
 
 # Stacks round 1 results
@@ -104,17 +104,17 @@ unverifiable not-defect rulings, arm none-particle-1: 0, 0.0000 per PR cluster p
 unverifiable not-defect rulings, arm gstack-particle-1: 0, 0.0000 per PR cluster per pass (1 passes, 32 PR clusters)
 ```
 
-Each arm's false blockers per PR per pass, as `score` reports them, sit beside the same rate minus that arm's unverifiable figure. The sensitivity is a count, not a test.
+Each arm's false blockers per PR per pass, as `score` records them in its JSON output (its printed lines round to two decimals), sit beside the same rate minus that arm's unverifiable figure. The sensitivity is a count, not a test.
 
 | Arm | False blockers per PR per pass | Minus unverifiable |
 |---|---|---|
 | none, Opus | 0.0000 | 0.0000 |
 | gstack, Opus | 0.0156 | 0.0000 |
-| tstack, Opus | 0.0781 | 0.0469 |
+| tstack, Opus (raw, full suite, like section 3's tstack rows) | 0.0781 | 0.0469 |
 | none, particle-1 | no reading (arm stopped) | no reading |
 | gstack, particle-1 | no reading (arm stopped) | no reading |
 
-gstack's one unverifiable ruling falls on gstack#3527 in pass 1, where its only false blocker is, so its adjusted rate is zero. tstack's two fall on gstack#1808 pass 1 and gstack#3567 pass 2, both among its false blockers, and leave it at 0.0469 (from the unrounded 0.078125 and 0.03125).
+gstack's one unverifiable ruling falls on gstack#3527 in pass 1, where its only false blocker is, so its adjusted rate is zero. tstack's two fall on gstack#1808 pass 1 and gstack#3567 pass 2, both among its false blockers, and leave it at 0.0469 (from the unrounded 0.078125 and 0.03125). On stacks-r1-sol-incomplete, tstack's reading under the 05:01:10.244Z ruling, `score` records 0.0833 on 30 PRs, and the same two rulings make the figure 2/60 = 0.0333, so the adjusted rate is 0.0500.
 
 ## 4. tstack gets no primary verdict
 
@@ -226,7 +226,7 @@ TB2's results come in a separate post. Nobody has read a reward from the TB2 gri
 
 ## 9. Deviations and rulings
 
-Each ruling is the Captain's (GSTA-2), recorded in approvals/2026-10-31-stacks-round1-cap.md in the Captain drive at the time shown. Each was made before anyone read a finding it touches.
+Each ruling is the Captain's (GSTA-2). The rulings through 07:25:15.841Z are recorded in approvals/2026-10-31-stacks-round1-cap.md in the Captain drive at the time shown, and each was made before anyone read a finding it touches. The last one is on GST-762 and came after the readings were read.
 
 - 01:58:58.165Z: pstack leaves the review lane, a $15 allowance applies, and the grid caps are set (the amendment, #105).
 - 02:31:03.176Z: TB2's start rule failed at $308.98 against $300. TB2's stop rises to $320, out of the $50 under the $2,400 cap that no lane holds. pstack stays in TB2. TB2 runs as per-model batches on separate VMs, with replicates in sequence and one shared ledger service.
@@ -250,7 +250,7 @@ Each ruling is the Captain's (GSTA-2), recorded in approvals/2026-10-31-stacks-r
 | Idea-card wins, null mean | 0 of 42, 0.5077 | 0 of 40, 0.4994 |
 | Sections 6 and 10 prose | 0.77 against 0.25, p 0.000122, 7 against 12 | 0.78 against 0.25, p 0.000214, 7 against 11.5 |
 
-- The sha256 of every derived file and every script is in [derived.sha256.txt](derived.sha256.txt) (186 lines). The four lines under geva92/ are GEVA-92's scripts and outputs for the three readings above.
+- The sha256 of every derived file and every script is in [derived.sha256.txt](derived.sha256.txt) (192 lines). The last ten are new in GEVA-92's ship. Four hash its scripts and outputs under geva92/ (the derived-suite secondary and the ls audit's hit list). Six hash the GEVA-89 files that sections 3 and 5 quote: flags.tsv, the adjudication run's log and unverifiable.tsv, and three score outputs.
 
 The derived files, the judges' packets and the session transcripts quote reviewed material, so they stay outside the repo.
 
