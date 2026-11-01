@@ -1,0 +1,136 @@
+# Keyless test of the G3 amendment (wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment). It writes synthetic review-units
+# transcripts and Harbor trial folders, runs exposure.py on them and decide.py on its counts, with stub inputs that pass every other
+# gate, and checks the G3 gates and the Opus verdict. The synthetic start output follows the marker logic of bin/gstack-skill-start
+# at gstack 142757b (lines 115-117, 185 and 359). With --evidence it also runs GEVA-131's pilot G3 evidence (Captain drive
+# handoffs/GEVA-131/g3-evidence) through the same two scripts. It calls no model, reads no key and prints no evidence text.
+# With --same-as it also runs another exposure.py (#122's) on every case and checks that each count it prints is unchanged.
+# Usage: python3 g3-test.py <dir holding decide.py and exposure.py> [--same-as <dir>] [--evidence <g3-evidence dir>]
+import glob, json, os, re, subprocess, sys, tempfile
+OPUS, PARTICLE = 'claude-opus-5-5', 'particle-1'
+SERVED = '~/.claude/skills/gstack/bin/gstack-skill-start --skill "{}" --model "claude"'
+
+def start_output(render, kind):
+    out = ['SKILL_START_PROTO: 1']
+    if render:
+        out.append('RENDER_KIND: unattended')
+        if kind != 'unattended': out.append(f'RENDER_KIND_MISMATCH: env={kind}; launch this render with GSTACK_SESSION_KIND=unattended')
+    out += [f'STATUS_{i}: x' for i in range(5)] + [f'SESSION_KIND: {kind}'] + [f'STATUS_{i}: x' for i in range(5, 26)]
+    if kind == 'unattended': out += ['UNATTENDED_SESSION: true', 'GSTACK_INSTRUCTION_BEGIN: unattended-session 1', 'You are running unattended.', 'GSTACK_INSTRUCTION_END']
+    return out
+
+def run(skill='review', render=True, kind='unattended', pipe=None, served_render=None):
+    cmd = SERVED.format(skill) + (' --render unattended' if (render if served_render is None else served_render) else '')
+    out = start_output(render, kind)
+    if pipe:
+        cmd += ' 2>&1 | ' + pipe
+        n = int(pipe.split()[-1]); out = out[-n:] if pipe.startswith('tail') else out[:n]
+    return cmd + '; git log --oneline -3', '\n'.join(out + ['abc1234 a commit subject'])
+
+def write_session(path, runs, tb2):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        for i, (cmd, out) in enumerate(runs):
+            use = {'id': f'toolu_{i}', 'name': 'Bash', 'input': {'command': cmd}}
+            res = {'tool_use_id': f'toolu_{i}', 'content': out, 'is_error': False}
+            if tb2: rows = [{'type': 'AssistantMessage', 'content': [use]}, {'type': 'UserMessage', 'content': [res]}]
+            else: rows = [{'type': 'assistant', 'message': {'content': [dict(type='tool_use', **use)]}}, {'type': 'user', 'message': {'content': [dict(type='tool_result', **res)]}}]
+            for r in rows: f.write(json.dumps(r) + '\n')
+        f.write(json.dumps({'type': 'ResultMessage' if tb2 else 'result', 'subtype': 'success'}) + '\n')
+
+def lay_out(root, review, tb2):
+    for arm, sessions in review.items():
+        for u, runs in enumerate(sessions): write_session(f'{root}/review/runs/{OPUS}/{arm}/unit-{u}/p1/host/transcript.ndjson', runs, False)
+    for (model, arm), sessions in tb2.items():
+        for t, runs in enumerate(sessions):
+            d = f'{root}/tb2/job/{model}-{arm}-{t}'
+            write_session(f'{d}/agent/sdk-messages.jsonl', runs, True)
+            json.dump({'agent': {'kwargs': {'upstream_model': model, 'arm': arm}}}, open(f'{d}/config.json', 'w'))
+
+def stubs(root):
+    cells = [{'model': m, 'arm': a, 'firstMedian': 20000 if a == 'control' else 10000, 'graded': 111} for m in (OPUS, PARTICLE) for a in ('control', 'variant')]
+    con = [{'model': m, 'contrast': 'variant - control', 'tasks': 37, 'pAtOrAbove0': 0.5, 'verdict': 'NO_LOSS', 'point': 0.0, 'lo90': -0.03, 'margin': 7.5, 'size': 0.9} for m in (OPUS, PARTICLE)]
+    json.dump({'zero': {'cells': cells, 'contrasts': con, 'cost': []}, 'mechanical': None}, open(f'{root}/tb2.json', 'w'))
+    json.dump({'result': {'verdict': 'NO_LOSS', 'p_loss': 0.5}}, open(f'{root}/score.json', 'w'))
+    json.dump({'arms': {'variant': {'first_request_tokens': {'median': 10000}}, 'control': {'first_request_tokens': {'median': 20000}}}, 'ratios': []}, open(f'{root}/cost.json', 'w'))
+
+def decide(scripts, root):
+    stubs(root)
+    for lane, d in (('review', 'review'), ('tb2', 'tb2/job')):
+        p = subprocess.run([sys.executable, f'{scripts}/exposure.py', lane, f'{root}/{d}', '--json', f'{root}/exposure-{lane}.json'], capture_output=True, text=True)
+        assert p.returncode == 0, p.stderr
+    p = subprocess.run([sys.executable, f'{scripts}/decide.py', '--tb2', f'{root}/tb2.json', '--review-score', f'{root}/score.json', '--review-cost', f'{root}/cost.json', '--exposure-review', f'{root}/exposure-review.json', '--exposure-tb2', f'{root}/exposure-tb2.json', '--json', f'{root}/decide.json'], capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    return json.load(open(f'{root}/decide.json')), json.load(open(f'{root}/exposure-review.json')), [l for l in p.stdout.splitlines() if l.startswith('G3')]
+
+def tb2_default():
+    d = {}
+    for m in (OPUS, PARTICLE):
+        d[(m, 'control')] = [[run('investigate', render=False)]] * 2
+        d[(m, 'variant')] = [[run('investigate', pipe='head -30')]] * 2
+    return d
+
+CLEAN, CUT = [run()], [run(pipe='tail -20')]
+CONTROL = [[run(render=False)]] * 2
+CASES = [
+    ('clean RENDER_KIND: unattended line passes', {'control': CONTROL, 'variant': [CLEAN] * 2}, {}, True, None),
+    ('start line cut by the session, UNATTENDED_SESSION: true kept: not observable, not a fail', {'control': CONTROL, 'variant': [CUT] * 2}, {}, True, {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut': 2, 'start_line_cut_render': 2}),
+    ('RENDER_KIND_MISMATCH line fails', {'control': CONTROL, 'variant': [CLEAN, [run(kind='interactive')]]}, {}, False, None),
+    ('SESSION_KIND mismatch in control fails', {'control': [[run(render=False, kind='interactive')], [run(render=False)]], 'variant': [CLEAN] * 2}, {}, False, None),
+    ('cut line beside a mismatch session fails', {'control': CONTROL, 'variant': [CUT, [run(kind='interactive')]]}, {}, False, None),
+    ('cut line that kept no UNATTENDED_SESSION: true stays observable and fails', {'control': CONTROL, 'variant': [[run(pipe='tail -3')]] * 2}, {}, False, None),
+    ('cut line run without the served --render unattended stays observable and fails', {'control': CONTROL, 'variant': [[run(pipe='tail -20', served_render=False)]] * 2}, {}, False, None),
+    ('no control session ran the start line: control half not observable, not a fail', {'control': [[]] * 2, 'variant': [CLEAN] * 2}, {}, True, None),
+    ('TB2: Opus variant start lines cut by the session pass', {'control': CONTROL, 'variant': [CLEAN] * 2}, {(OPUS, 'variant'): [[run('investigate', pipe='tail -20')]] * 2}, True, None),
+]
+
+def main():
+    scripts = os.path.abspath(sys.argv[1]); failed = 0
+    for name, review, tb2_over, want, counts in CASES:
+        with tempfile.TemporaryDirectory() as root:
+            tb2 = tb2_default(); tb2.update(tb2_over)
+            lay_out(root, review, tb2)
+            d, ex, g3 = decide(scripts, root)
+            gates = {k: v for k, v in d['gates'].items() if k.startswith('G3')}
+            row = next(r for r in ex if r['arm'] == 'variant')
+            ok = all(gates.values()) == want and d['verdicts'][OPUS][0] == ('CUT' if want else 'FIX-METHOD') and all(row.get(k) == v for k, v in (counts or {}).items())
+            same = '--same-as' not in sys.argv or unchanged(sys.argv[sys.argv.index('--same-as') + 1], root)
+            failed += not (ok and same)
+            print(f"{'ok  ' if ok else 'FAIL'} {name}: G3 {'pass' if all(gates.values()) else 'fail'} (want {'pass' if want else 'fail'}), Opus {d['verdicts'][OPUS][0]}" + (f", variant counts {({k: row.get(k) for k in counts})}" if counts else '') + ('' if '--same-as' not in sys.argv else '; other counts unchanged' if same else '; OTHER COUNTS CHANGED'))
+            for l in g3:
+                if (OPUS + ':' in l) if name.startswith('TB2') else ('review' in l): print('       ' + l)
+    if '--evidence' in sys.argv: evidence(scripts, sys.argv[sys.argv.index('--evidence') + 1])
+    print(f'{len(CASES) - failed} of {len(CASES)} cases as expected')
+    sys.exit(1 if failed else 0)
+
+def unchanged(other, root):
+    for lane, d in (('review', 'review'), ('tb2', 'tb2/job')):
+        subprocess.run([sys.executable, f'{other}/exposure.py', lane, f'{root}/{d}', '--json', f'{root}/other-{lane}.json'], capture_output=True, check=True)
+        new = json.load(open(f'{root}/exposure-{lane}.json'))
+        if any(any(n[k] != v for k, v in o.items()) for o, n in zip(json.load(open(f'{root}/other-{lane}.json')), new)): return False
+    return True
+
+def parse(f):
+    t = open(f).read()
+    cmd = json.loads(t.split('(JSON input of the Bash call):\n', 1)[1].split('\n', 1)[0])['command']
+    out = t.split(' of the tool result ---\n', 1)[1]
+    return cmd, out
+
+def evidence(scripts, ev):
+    print(f'\nGEVA-131 pilot evidence ({ev}):')
+    files = sorted(glob.glob(f'{ev}/review-variant-*.txt'))
+    with tempfile.TemporaryDirectory() as root:
+        lay_out(root, {'variant': [[parse(f)] for f in files], 'control': [[]] * 2}, tb2_default())
+        d, ex, g3 = decide(scripts, root)
+        for r in ex:
+            print(f"  review {r['arm']} (n={r['sessions']}{', stand-ins that run no start line, as GEVA-131 reports' if r['arm'] == 'control' else ''}): " + ', '.join(f'{k} {r.get(k)}' for k in ('start_line', 'render_kind_unattended', 'session_kind_unattended', 'render_kind_mismatch', 'session_kind_mismatch', 'start_line_cut', 'start_line_cut_render')))
+        print(f"  decide.py gate G3 render kind, review: {'pass' if d['gates']['G3 render kind, review'] else 'fail'}")
+        for l in g3:
+            if 'review' in l: print('  ' + l)
+    with tempfile.TemporaryDirectory() as root:
+        tb2 = tb2_default(); tb2[(OPUS, 'variant')] = [[parse(f)] for f in sorted(glob.glob(f'{ev}/tb2-variant-opus-*.txt'))]
+        lay_out(root, {'control': CONTROL, 'variant': [CLEAN]}, tb2)
+        subprocess.run([sys.executable, f'{scripts}/exposure.py', 'tb2', f'{root}/tb2/job', '--json', f'{root}/x.json'], capture_output=True, check=True)
+        r = next(r for r in json.load(open(f'{root}/x.json')) if r['model'] == OPUS and r['arm'] == 'variant')
+        print(f"  TB2 Opus variant (n={r['sessions']}, the evidence session): " + ', '.join(f'{k} {r.get(k)}' for k in ('start_line', 'render_kind_unattended', 'session_kind_unattended', 'render_kind_mismatch', 'session_kind_mismatch', 'start_line_cut', 'start_line_cut_render')))
+
+main()
