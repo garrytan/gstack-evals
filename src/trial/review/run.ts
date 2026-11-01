@@ -18,10 +18,13 @@
 //   GSTACK_EVALS_RECEIPTS before the run returns.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
 //   that keeps a voice, since a plan arm runs no second model.
-// - A plan session scores by planScore: a malformed or missing block, a timeout, or the arm's CLI failing after the model
-//   produced output (the record's model_output, never its turns) is a miss with a diagnostic note; the CLI failing before
-//   any model output, an infra failure (E_INFRA_FAILURE) or any other incomplete session is a coverage gap that stops the
-//   arm, so the arm gets no verdict. progress.json counts each session the way arm.json scores it.
+// - A plan session scores by planScore. After the model produced output (the record's model_output, never its turns), a
+//   malformed or missing block, a timeout, the arm's CLI failing, or a session that completed with no text turn is a miss
+//   with a diagnostic note; arm.json counts the last kind as completed_without_text, since the parser reads text turns
+//   only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the arm, as
+//   is an infra failure (E_INFRA_FAILURE) or any other incomplete session at any point, so the arm gets no verdict.
+//   progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as failed, a gap as
+//   missing.
 // - A sealed suite refuses a receipts sink inside the repo (E_USAGE), as review-units refuses an in-repo --out.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -153,14 +156,15 @@ export const unitFile = (unitId: string): string => unitId.replaceAll("/", "__")
 
 /**
  * How a plan session scores: findings; a miss, scored as finding nothing with a diagnostic note (a malformed or missing
- * block, a timeout, or the arm's CLI failing after model output); or a coverage gap that stops the arm (the CLI failing
- * before any model output, an infra failure, or any other incomplete session).
+ * block, or, after model output, a timeout, the arm's CLI failing or a session that completed with no text turn); or a
+ * coverage gap that stops the arm (a timeout, a CLI failure or a completed session before any model output, an infra
+ * failure, or any other incomplete session).
  */
 export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" | "miss" | "gap" {
   if (e.parse.kind === "findings") return "findings";
   if (e.parse.kind !== "incomplete") return "miss";
   const kind = e.record.termination.kind;
-  return kind === "timeout" || (kind === "arm_failure" && e.record.model_output === true) ? "miss" : "gap";
+  return e.record.model_output === true && (kind === "timeout" || kind === "arm_failure" || kind === "completed") ? "miss" : "gap";
 }
 
 const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
@@ -308,7 +312,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const kind = trial.record.termination.kind;
     wall += trial.record.wall_ms ?? 0;
     ran++;
-    progress = recordSession(progress, cellName(cell), kind === "timeout" ? "timeout" : plan ? PROGRESS[planScore(entry)] : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
+    progress = recordSession(progress, cellName(cell), plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
     writeProgress(o.out, progress);
     if (kind !== "cap_stop") appendFileSync(journal, JSON.stringify(entry) + "\n");
     return entry;
@@ -345,6 +349,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const gaps: string[] = [];
     const diagnostics: string[] = [];
     const modes: Record<string, number> = {};
+    let withoutText = 0;
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
     for (const unit of o.units) {
@@ -359,8 +364,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         counts[outcome]!++;
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
+        const ended = e.record.termination.kind;
+        if (score === "miss" && e.parse.kind === "incomplete" && ended === "completed") withoutText++;
         if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
-        else if (score === "gap") gaps.push(note + (plan && e.record.termination.kind === "arm_failure" ? " before any model output" : ""));
+        else if (score === "gap") gaps.push(note + (!plan ? "" : ended === "arm_failure" || ended === "timeout" ? " before any model output" : ended === "completed" ? " and no model output" : ""));
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (plan) {
           modes[e.ceo_mode ?? "unstated"] = (modes[e.ceo_mode ?? "unstated"] ?? 0) + 1;
@@ -387,7 +394,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: TOLD_PREFIX[arm.told as ToldArm], template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
-      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
+      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: provenance, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");

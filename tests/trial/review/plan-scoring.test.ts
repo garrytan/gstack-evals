@@ -1,8 +1,8 @@
 // The planning lane's failure rule (GST-737, the follow-up to #101), the sealed receipts sink and the seeded question
-// preferences, keyless. The failure rule: the arm's own CLI crashing or timing out after the model produced output is a
-// miss; the CLI crashing before any model output is a coverage gap that stops the arm; an infra failure (the evaluator's
-// own code, the link to the CLI, the provider or the machine) is a gap at any point, never a miss; a stopped arm gets no
-// verdict and its arm.json says why. Every session runs the real Claude Code driver on a stand-in for the Agent SDK's
+// preferences, keyless. The failure rule: after the model produced output, the arm's own CLI crashing or timing out, or
+// the session completing with no text turn, is a miss; before any model output, a crash, a timeout or a completed session
+// is a coverage gap that stops the arm; an infra failure (the evaluator's own code, the link to the CLI, the provider or
+// the machine) is a gap at any point, never a miss; a stopped arm gets no verdict and its arm.json says why. Every session runs the real Claude Code driver on a stand-in for the Agent SDK's
 // query, which spawns a stand-in CLI process through the driver the way the SDK does.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -107,6 +107,9 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
   toolcrash: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; await crash(cli); } },
   tooltimeout: { script: () => async function* (sdk) { yield init; yield toolsOnly; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); } },
   early: { script: () => async function* (_sdk, cli) { yield init; await crash(cli); } },
+  hang: { script: () => async function* (sdk) { yield init; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); } },
+  toolsdone: { script: () => async function* () { yield init; yield toolsOnly; yield result; } },
+  silent: { script: () => async function* () { yield init; yield result; } },
   transcript: { script: (out) => async function* () { yield init; yield assistant(text("Reading the plan.")); rmSync(join(out, "transcript.ndjson")); mkdirSync(join(out, "transcript.ndjson")); yield result; } },
   afterturn: { persona: "down", script: () => async function* () { yield init; yield assistant(text("I have read the plan. Should I also review the rollout section?")); yield result; } },
   ask: { persona: "down", script: () => async function* (sdk) {
@@ -217,6 +220,21 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect([armJson("early").status, armJson("early").coverage_gaps, armJson("early").diagnostics]).toEqual(["stopped", [note("incomplete, the session ended arm_failure before any model output")], undefined]);
   });
 
+  // Value: protects=ruling A1: a timeout before any model output (a hung proxy or provider looks the same) is a gap that stops the arm, like a crash before output; fails_when=it scores as the arm's miss; why_new=GST-737 ruling A1; seam=planScore; no_claim=none beyond protects
+  test("ruling A1: a timeout before any model output is a gap that stops the arm", () => {
+    expect(record("hang")).toEqual({ termination: { kind: "timeout" }, model_output: false, turns: 0 });
+    expect([armJson("hang").status, armJson("hang").coverage_gaps, armJson("hang").diagnostics]).toEqual(["stopped", [note("incomplete, the session ended timeout before any model output")], undefined]);
+  });
+
+  // Value: protects=ruling B1: a session that completed after model output but with no text turn is a miss, counted per arm as completed_without_text so an arm that answers only through files shows; with no model output it stays a gap; fails_when=it stops the arm, or the count is missing; why_new=GST-737 ruling B1 (the plan parser reads text turns only); seam=planScore, arm.json; no_claim=none beyond protects
+  test("ruling B1: completed with model output and no text turn is a miss, counted per arm; with no model output it is a gap", () => {
+    expect(record("toolsdone")).toEqual({ termination: { kind: "completed" }, model_output: true, turns: 0 });
+    expect([armJson("toolsdone").status, armJson("toolsdone").coverage_gaps, armJson("toolsdone").diagnostics, armJson("toolsdone").completed_without_text]).toEqual(["complete", undefined, [note("incomplete, the session completed with no assistant turn; scored as finding nothing")], 1]);
+    expect(record("silent")).toEqual({ termination: { kind: "completed" }, model_output: false, turns: 0 });
+    expect([armJson("silent").status, armJson("silent").coverage_gaps, armJson("silent").completed_without_text]).toEqual(["stopped", [note("incomplete, the session completed with no assistant turn and no model output")], 0]);
+    expect(arms.filter((a) => armJson(a).completed_without_text !== 0)).toEqual(["toolsdone"]);
+  });
+
   // Value: protects=rule 4's repro: the evaluator's own transcript append failing after one text turn is an infra failure, a gap that stops the arm, never the arm's crash or miss; fails_when=the driver's catch tags it arm_failure harness_crash and the turn makes it a miss; why_new=GST-737 rule 4 (driver.ts:275 at 1a6f747); seam=the driver's message loop; no_claim=none beyond protects
   test("rule 4: the transcript append failing after one text turn is infra, a gap that stops the arm", () => {
     expect(record("transcript")).toEqual({ termination: INFRA, model_output: true, turns: 1 });
@@ -254,10 +272,10 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     for (const arm of ["machine", "nospawn"]) expect([armJson(arm).status, armJson(arm).coverage_gaps]).toEqual(["stopped", [note("incomplete, the session ended missing (E_INFRA_FAILURE)")]]);
   });
 
-  // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each session the way arm.json scores it, so an arm failure scored as a miss is a fail and every gap is missing; fails_when=progress counts the miss as missing; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
+  // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 1, 1, 8]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 3, 0, 10]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);

@@ -89,12 +89,15 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
 - No second model: --plan builds every cell without its Codex voice (gstack's config gets codex_reviews disabled and the
   cell tree records it), the run refuses a cell that keeps one, the slot admits only the driver model and arm.json lists
   the driver alone.
-- The parser reads the last `plan-findings` block in any assistant turn. A malformed, missing or incomplete (timed out, or
-  ended by the arm's own CLI failing after the model produced output) pass is scored as finding nothing and listed in
-  arm.json `diagnostics`. Model output is the session record's `model_output`, any assistant text, thinking or tool call
-  the driver saw, never its turns, which hold main-agent text only. A session that ended any other way (a provider
-  failure, the CLI failing before any model output, an infra incident, an infra failure (E_INFRA_FAILURE: the
-  evaluator's own code, the link to the CLI or the machine, at any point), rejected credentials, an unknown send, or no assistant turn) is a
-  coverage gap that stops the arm, as are a cell not run and a cap stop; a stopped arm gets no verdict. progress.json
-  counts each session the way arm.json scores it: a miss as failed, a gap as missing.
+- The parser reads the last `plan-findings` block in any assistant turn, and nothing else: no file the session wrote
+  and no subagent's text. A malformed or missing block is scored as finding nothing and listed in arm.json
+  `diagnostics`, and so is a pass that, after the model produced output, timed out, ended by the arm's own CLI failing,
+  or completed with no text turn; arm.json counts the last kind per arm as `completed_without_text`, so an arm that
+  answers only through files shows. Model output is the session record's `model_output`, any assistant text, thinking
+  or tool call the driver saw, never its turns, which hold main-agent text only. A session that ended any other way (a
+  timeout, a CLI failure or a completed session before any model output, a provider failure, an infra incident, an infra
+  failure (E_INFRA_FAILURE: the evaluator's own code, the link to the CLI or the machine, at any point), rejected
+  credentials or an unknown send) is a coverage gap that stops the arm, as are a cell not run and a cap stop; a stopped
+  arm gets no verdict. progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as
+  failed, a gap as missing.
 - Each session's CEO review mode, from gstack's mode handoff line, goes to modes.tsv and arm.json `ceo_modes`.

@@ -204,7 +204,7 @@ describe("plan units in the run loop (keyless)", () => {
           const read = (f: string) => session.exec('cat "$GSTACK_STATE_ROOT/' + f + '" 2>/dev/null', 10_000).stdout;
           seen[cell.arm + " " + cell.model] = { prompt: task.prompt, entry: o.entry, freeform: typeof o.freeform === "function", codex: o.codex ?? null, config: read("config.yaml"), prefs: read(GLOBAL_PREFERENCES) };
           const t = turns[cell.arm + " " + cell.model]!;
-          return { turns: t, termination: cell.model === HAIKU ? { kind: "timeout" } : { kind: "completed" }, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: t.length, loaded_bytes: null };
+          return { turns: t, termination: cell.model === HAIKU ? { kind: "timeout" } : { kind: "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: t.length, loaded_bytes: null };
         },
       }),
     };
@@ -243,13 +243,13 @@ describe("plan units in the run loop (keyless)", () => {
       const before = bound.length;
       await expect(runReviewUnits({ ...input, out: durable() }, voiced)).rejects.toThrow("E_USAGE: plan units run no second model, but arm gstack's cell on " + OPUS + " keeps the voice gpt-6.1-sol");
       expect(bound.length).toBe(before);
-      const failing: HostRig = { ...rig, driver: (o) => ({ async run(session, task, hooks) { const r = await rig.driver!(o).run(session, task, hooks); const c = slots.get(o.proxy.slot)!; if (c.arm === "lens") return { ...r, termination: { kind: "missing" as const, code: "UPSTREAM" as const } }; if (c.arm === "gstack") return { ...r, model_output: true, termination: { kind: "arm_failure" as const, failure: "harness_crash" as const } }; return c.model === OPUS ? { ...r, turns: [] } : { ...r, turns: [], model_output: false, termination: { kind: "arm_failure" as const, failure: "harness_crash" as const } }; } }) };
+      const failing: HostRig = { ...rig, driver: (o) => ({ async run(session, task, hooks) { const r = await rig.driver!(o).run(session, task, hooks); const c = slots.get(o.proxy.slot)!; if (c.arm === "lens") return { ...r, termination: { kind: "missing" as const, code: "UPSTREAM" as const } }; if (c.arm === "gstack") return { ...r, model_output: true, termination: { kind: "arm_failure" as const, failure: "harness_crash" as const } }; return c.model === OPUS ? { ...r, turns: [], model_output: false } : { ...r, turns: [], model_output: false, termination: { kind: "arm_failure" as const, failure: "harness_crash" as const } }; } }) };
       const broken = await runReviewUnits({ ...input, out: durable() }, failing);
       const lensArm = JSON.parse(readFileSync(join(broken.armDirs.find((d) => d.endsWith("lens-opus"))!, "arm.json"), "utf8"));
       expect([lensArm.status, lensArm.coverage_gaps, lensArm.diagnostics]).toEqual(["stopped", [unit.id + " pass 1: incomplete, the session ended missing (UPSTREAM)"], undefined]);
       const brokenArm = (id: string) => JSON.parse(readFileSync(join(broken.armDirs.find((d) => d.endsWith(id))!, "arm.json"), "utf8"));
       expect([brokenArm("gstack-opus").status, brokenArm("gstack-opus").coverage_gaps, brokenArm("gstack-opus").diagnostics]).toEqual(["complete", undefined, [unit.id + " pass 1: incomplete, the session ended arm_failure; scored as finding nothing"]]);
-      expect([brokenArm("none-opus").status, brokenArm("none-opus").coverage_gaps]).toEqual(["stopped", [unit.id + " pass 1: incomplete, the session completed with no assistant turn"]]);
+      expect([brokenArm("none-opus").status, brokenArm("none-opus").coverage_gaps]).toEqual(["stopped", [unit.id + " pass 1: incomplete, the session completed with no assistant turn and no model output"]]);
       expect([brokenArm("none-haiku").status, brokenArm("none-haiku").coverage_gaps]).toEqual(["stopped", [unit.id + " pass 1: incomplete, the session ended arm_failure before any model output"]]);
     } finally {
       h.proxy.stop();
