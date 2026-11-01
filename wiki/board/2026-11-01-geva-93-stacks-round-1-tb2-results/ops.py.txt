@@ -1,0 +1,64 @@
+import json, os, sys, collections
+# Blind operational counts for TB2 grid job folders (GEVA-89): never reads or prints reward values beyond presence.
+runs = sys.argv[1:]
+cells = collections.OrderedDict()
+crack = []
+for run in runs:
+    sess = {}
+    sp = os.path.join(run, "pulled/out/proxy-sessions.jsonl")
+    if os.path.exists(sp):
+        for line in open(sp):
+            s = json.loads(line)
+            t = s["trial"].removesuffix("__env")
+            sess[t] = sess.get(t, 0) + s["spent_micros"] / 1e6
+    jd = os.path.join(run, "pulled/jobs")
+    for job in sorted(os.listdir(jd)) if os.path.isdir(jd) else []:
+        if job.endswith("-oracle"):
+            continue
+        for d in sorted(os.listdir(os.path.join(jd, job))):
+            p = os.path.join(jd, job, d)
+            if not os.path.isdir(p):
+                continue
+            kw = json.load(open(os.path.join(p, "config.json")))["agent"]["kwargs"]
+            rp = os.path.join(p, "result.json")
+            res = json.load(open(rp)) if os.path.exists(rp) else {}
+            has_reward = ((res.get("verifier_result") or {}).get("rewards") or {}).get("reward") is not None
+            exc = (res.get("exception_info") or {}).get("exception_type")
+            sm = os.path.join(p, "agent/laneb-summary.json")
+            ok = ((json.load(open(sm)).get("session") or {}).get("ok_responses", 0)) if os.path.exists(sm) else 0
+            started = notified = bg_agent = 0
+            mp = os.path.join(p, "agent/sdk-messages.jsonl")
+            if os.path.exists(mp):
+                for line in open(mp):
+                    try:
+                        m = json.loads(line)
+                    except Exception:
+                        continue
+                    ty = m.get("type")
+                    if ty == "TaskStartedMessage": started += 1
+                    elif ty == "TaskNotificationMessage": notified += 1
+                    elif ty == "AssistantMessage":
+                        for c in m.get("content") or []:
+                            if isinstance(c, dict) and c.get("name") in ("Agent", "Task") and (c.get("input") or {}).get("run_in_background"):
+                                bg_agent += 1
+            task = d.split("__")[0]
+            if task == "crack-7z-hash":
+                crack.append((job, d, kw["upstream_model"], kw["arm"], round(sess.get(d, 0), 6)))
+                continue
+            k = (kw["upstream_model"], kw["arm"])
+            c = cells.setdefault(k, collections.Counter())
+            c["trials"] += 1
+            c["settled_usd"] += sess.get(d, 0)
+            if has_reward: c["with_reward"] += 1
+            elif ok > 0: c["no_reward_after_response"] += 1
+            else: c["infrastructure"] += 1
+            if exc == "AgentTimeoutError": c["agent_timeout"] += 1
+            if exc == "VerifierTimeoutError": c["verifier_timeout"] += 1
+            if started > notified: c["ended_with_bg_task_running"] += 1
+            if bg_agent: c["trials_with_bg_agent_call"] += 1
+print("model arm trials with_reward no_reward_after_response infrastructure agent_timeout verifier_timeout ended_with_bg_task_running trials_with_bg_agent_call settled_usd")
+for (m, a), c in cells.items():
+    print(m, a, *[c[x] for x in ["trials", "with_reward", "no_reward_after_response", "infrastructure", "agent_timeout", "verifier_timeout", "ended_with_bg_task_running", "trials_with_bg_agent_call"]], round(c["settled_usd"], 4))
+print("crack-7z-hash trials left out of the analysis:", len(crack), "spend", round(sum(x[4] for x in crack), 4))
+for x in crack:
+    print("  ", *x)

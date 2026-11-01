@@ -1,0 +1,14 @@
+model arm n pass pass_pct spend_usd usd_per_trial usd_per_success
+claude-haiku-5-5 gstack 111 85 76.6 1.5 0.014 0.018
+claude-haiku-5-5 none 111 84 75.7 0.98 0.009 0.012
+claude-haiku-5-5 placebo 111 79 71.2 1.49 0.013 0.019
+claude-haiku-5-5 pstack 111 81 73.0 1.26 0.011 0.016
+claude-haiku-5-5 pstack-placebo 111 84 75.7 1.29 0.012 0.015
+claude-opus-5-5 gstack 111 93 83.8 30.5 0.275 0.328
+claude-opus-5-5 none 111 90 81.1 16.12 0.145 0.179
+claude-opus-5-5 pstack 111 94 84.7 25.62 0.231 0.273
+particle-1 gstack 111 86 77.5 9.01 0.081 0.105
+particle-1 none 111 92 82.9 8.04 0.072 0.087
+particle-1 placebo 111 81 73.0 9.76 0.088 0.121
+particle-1 pstack 111 88 79.3 10.45 0.094 0.119
+particle-1 pstack-placebo 111 92 82.9 7.54 0.068 0.082

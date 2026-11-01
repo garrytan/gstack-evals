@@ -1,0 +1,30 @@
+import json, os, glob, collections
+P=os.path.expanduser('~/.capy/work/geva93/post/filtered')
+c=collections.defaultdict(collections.Counter)
+kinds=collections.defaultdict(collections.Counter)
+for p in glob.glob(P+'/*/pulled/jobs/*/*/config.json'):
+    d=os.path.dirname(p); kw=json.load(open(p))['agent']['kwargs']; k=(kw['upstream_model'],kw['arm'])
+    sm=d+'/agent/laneb-summary.json'; s=json.load(open(sm)) if os.path.exists(sm) else {}
+    sess=s.get('session') or {}
+    c[k]['n']+=1
+    if sess.get('cmd_expanded'): c[k]['body_loaded']+=1
+    started=notified=tr=0; bgtools=collections.Counter()
+    mp=d+'/agent/sdk-messages.jsonl'
+    if os.path.exists(mp):
+        for line in open(mp):
+            try: m=json.loads(line)
+            except Exception: continue
+            ty=m.get('type')
+            if ty=='TaskStartedMessage': started+=1
+            elif ty=='TaskNotificationMessage': notified+=1
+            elif ty=='UserMessage' and isinstance(m.get('content'),list): tr+=sum(1 for x in m['content'] if isinstance(x,dict) and 'tool_use_id' in x)
+            elif ty=='AssistantMessage':
+                for x in m.get('content') or []:
+                    if isinstance(x,dict) and 'name' in x and (x.get('input') or {}).get('run_in_background'): bgtools[x['name']]+=1
+    if tr>0: c[k]['tool_use']+=1
+    if started>notified:
+        c[k]['bg_running']+=1
+        for t in bgtools: kinds[k][t]+=1
+print('model arm n body_loaded tool_use bg_running bg_running_by_tool')
+for k in sorted(c):
+    v=c[k]; print(*k, v['n'], v['body_loaded'], v['tool_use'], v['bg_running'], dict(kinds[k]))

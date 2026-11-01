@@ -1,0 +1,14 @@
+model arm n body_loaded tool_use bg_running bg_running_by_tool
+claude-haiku-5-5 gstack 111 111 111 2 {}
+claude-haiku-5-5 none 111 0 111 3 {}
+claude-haiku-5-5 placebo 111 111 111 3 {'Bash': 2}
+claude-haiku-5-5 pstack 111 111 111 5 {'Bash': 1}
+claude-haiku-5-5 pstack-placebo 111 111 111 3 {}
+claude-opus-5-5 gstack 111 111 108 5 {'Bash': 3}
+claude-opus-5-5 none 111 0 108 0 {}
+claude-opus-5-5 pstack 111 111 108 1 {'Bash': 1}
+particle-1 gstack 111 111 111 3 {}
+particle-1 none 111 0 111 5 {'Bash': 1}
+particle-1 placebo 111 111 111 2 {}
+particle-1 pstack 111 111 111 5 {'Bash': 2}
+particle-1 pstack-placebo 111 111 111 1 {}
