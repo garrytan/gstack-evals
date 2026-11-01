@@ -14,9 +14,8 @@ links:
   - 2026-10-30-gsta-43-noloss-cohort-29-blockers
   - garrytan/gstack-evals#112
 attachments:
-  - 665dbcaee1fa8f14e7e9f02cdc40aae73991926179d01de0dbcca4db23be8549  run.sh.txt
   - ee175d8076d6f57f2942c1eded6cfaf49b8cd48eba17eca47af7ea57176b7e18  run.txt
-  - 3d0ee45a3a964a5ea2666350552758eefa2f6927d012a75d7f1cac4d95200530  sha256.txt
+  - c037ecb6790b574a41fd85b878c9a6fdc158be8ee161e2fe88dcb4e4aec5c0f5  sha256.txt
 ---
 
 # R1 results: blind re-judge of the full /review procedure
@@ -156,9 +155,7 @@ Verdict: **FIX-METHOD**, the same as GEVA-100's. R2 is the fix: it tells /review
 
 ## 8. Replication
 
-Inputs: the rig at 715f837; the prereg bundle at f0b81c0 (D); arm C from the org drive's handoffs/GSTA-167/arm-C (ARMC); the GEVA-89 archive in the Captain drive's handoffs/GEVA-89/review-data, unpacked after sha256sum -c, its judge dir (REV); the three scrub scripts from the Captain drive's handoffs/GEVA-101/scrub (SCRUB); clones of garrytan/gstack and garrytan/gbrain (GSRC, GBSRC); an approval record dir (REC); and a gstack launch file so the ledger can mirror approvals. Then:
-
-    R=... D=... ARMC=... REV=... SCRUB=... GSRC=... GBSRC=... REC=... GSTACK_LAUNCH_FILE=... bash run.sh.txt <empty work dir>
+Inputs: the rig at 715f837; the prereg bundle at f0b81c0 (D); arm C from the org drive's handoffs/GSTA-167/arm-C (ARMC); the GEVA-89 archive in the Captain drive's handoffs/GEVA-89/review-data, unpacked after sha256sum -c, its judge dir (REV); the three scrub scripts from the Captain drive's handoffs/GEVA-101/scrub (SCRUB); clones of garrytan/gstack and garrytan/gbrain (GSRC, GBSRC); an approval record dir (REC); and a gstack launch file so the ledger can mirror approvals. Then run the commands in run.txt in order. run.txt is the record of the commands as they ran, and no separate replication script is attached.
 
 A replay needs fresh ledger items, since each R1 item is bound to its run, and its judges' answers will differ. The keyless steps reproduce from the inputs; the judgments reproduce only from the published arms.
 
@@ -171,7 +168,6 @@ Nothing in R1 is held out or sealed. The suite (lanes/review-noloss/suites/gsta1
 | File | What it is |
 |---|---|
 | run.txt | every phase's printed lines, with machine paths replaced by variables |
-| run.sh.txt | the six phase scripts joined, paths as variables |
 | sha256.txt | the sha256 of every input and output, all of which stay outside the repo (source arms, final arms, packets, keys, judge replies, score records, ledger record files) |
 
 The three final arms, as `noloss ingest` published them after both judging batches (blinded and scrubbed: findings, judgments.tsv, adjudication.tsv, cost.tsv, arm.json and ingest.json), are kept in the Captain drive at handoffs/GEVA-113/run/r1/final, with every file's digest in sha256.txt. The source arms are not committed. The arms stay out of this post for the same reason GEVA-89's did, and because /ship's review planner reads an arm's cost.tsv as a money path, which would make this post a gate-class change. A separate data PR can publish them through ingest.

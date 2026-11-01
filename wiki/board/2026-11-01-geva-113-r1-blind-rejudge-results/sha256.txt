@@ -1,5 +1,5 @@
 # sha256 of every R1 input and output (GEVA-113, 2026-11-01). Paths: $W is the run dir, $ARMC the org drive's GSTA-167 arm C, $REC the ledger record.
-# Only run.txt, run.sh.txt and this file are in this bundle. Everything listed stays outside the repo; the run dir, final arms included, is in the Captain drive at handoffs/GEVA-113/run.
+# Only run.txt and this file are in this bundle. Everything listed stays outside the repo; the run dir, final arms included, is in the Captain drive at handoffs/GEVA-113/run.
 87f127b0d7d0173567fcba4e807d20a47aa7453e93a80ff9b91407d9c840cd0e  $ARMC/arm.json
 5cd628dd35ed7ec67078f36b40211bed34bf04efd862430fdb5a451d155efaaa  $ARMC/cost.tsv
 f7c24aa6fe0bb028fc83639449ae53e3a23bcbf8310331be5ae50c0ac4c9e8f3  $ARMC/findings/3516.jsonl
