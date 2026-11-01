@@ -114,6 +114,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_STACK_DIGEST](#e_stack_digest) | 2 | U10 |
 | [E_CELL_RULE](#e_cell_rule) | 2 | U10 |
 | [E_CODEX_CONFIG](#e_codex_config) | 2 | U10 |
+| [E_INFRA_FAILURE](#e_infra_failure) | 2 | U10 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
 
@@ -768,6 +769,14 @@ The Claude Code adapter could not write the session's Codex config (~/.codex/con
 Fix: Check that the arm image leaves HOME and ~/.codex writable for the agent (mode 1777) and that no layer installs its own ~/.codex/config.toml, then rerun the cell with --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U10.
+
+### E_INFRA_FAILURE
+
+A Claude Code session ended on an infra failure, not on anything the arm did: the evaluator's own code (the transcript or init write, the user simulator, the persona), the SDK's link to the CLI (a reset or a broken pipe while the CLI still ran, or a CLI that exited 0, or a stream that ended, while the turn's result was still awaited), or the machine (the CLI could not be spawned, or the agent's session stopped answering once the CLI ended). The cell is missing, never a miss or an arm failure; in a review run it is a coverage gap that stops its arm, so that arm gets no verdict, and under skill-eval --host claude it is a missing cell under the prereg's missing-cell rule, never a fail against the arm. An error from the adapter's own abort or teardown after a recorded timeout or arm failure does not replace it; the adapter line names it as teardown.
+
+Fix: Read the adapter line in the trial's host/cli-stderr.log, which names what failed, and fix the evaluator or the machine before a counted run. Start a new run for the arm's verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

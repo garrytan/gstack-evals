@@ -27,6 +27,13 @@ import { seedStateRoot, type Proactive } from "./state-root.ts";
 export interface AgentOutcome {
   turns: string[];
   termination: Termination;
+  /** Whether the model produced any output (text, thinking or a tool call); set by drivers that see each assistant message. */
+  model_output?: boolean;
+  /** Whether the main agent wrote any text block, apart from the AskUserQuestion questions turns also hold. */
+  text_output?: boolean;
+  /** The agent CLI's exit code and signal when it exited on its own; null for both when the adapter's abort or teardown killed it. */
+  exit_code?: number | null;
+  signal?: string | null;
   opened: boolean | null;
   files_read: string[];
   asked: (Category | null)[];
@@ -66,6 +73,8 @@ export interface TrialSpec {
   stateConfig?: Record<string, string>;
   /** Files written at the top of the gstack state root after the seed, such as a plan run's global question preferences. */
   stateFiles?: Record<string, string>;
+  /** Files written over the same name in each projects/<slug>/ the unit ships under the state root, such as a plan run's never-ask preferences. */
+  stateProjectFiles?: Record<string, string>;
   /** A directory copied into the work dir before setup, such as a review unit's repository; it never holds an answer key. */
   seed?: string;
 }
@@ -126,7 +135,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       logs.setup = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       if (r.exitCode !== 0) return missing("E_TASKS_INVALID", "setup " + (r.timedOut ? "timed out" : "exited " + r.exitCode) + ": " + tail(r));
     }
-    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles);
+    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles, spec.stateProjectFiles);
     snapshot(work, baseline);
     const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
     let outcome: AgentOutcome;
@@ -135,7 +144,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     } finally {
       session.stop();
     }
-    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
+    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);

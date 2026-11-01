@@ -27,7 +27,22 @@
 // - A proxy refusal reaches the session as an API error whose text carries the refusal's code: CAP_STOP stops the cell
 //   as a cap stop, E_KEY_REJECTED as rejected credentials, and E_KEY_MISSING, E_SLOT_DENIED, E_ALLOWANCE or UPSTREAM leave a missing
 //   cell, as does any other API error the CLI gives up on: a provider failure is no outcome to count, before or after the
-//   session's first model output. A crash of the CLI is an arm failure (harness_crash); the wall-clock limit is a timeout.
+//   session's first model output. The wall-clock limit is a timeout. The CLI's process ending on its own while the agent's
+//   session still answers is an arm failure (harness_crash), and so is an error result after model output (before any,
+//   it is a missing cell, UPSTREAM). While the turn's result is still awaited and the adapter has not ended
+//   the session, a stream that ends, or a CLI that exits 0 with no signal before the SDK's error, is infra, never a
+//   crash: a normal finish delivers a result, so that end means the link broke. Any other failure is
+//   infra, never the arm's: the evaluator's
+//   own code (the transcript or init write, the user simulator, the persona), the SDK's link to a CLI that still runs (a
+//   reset or a broken pipe), or the machine (a spawn that fails, a session that no longer answers once the CLI ends). An
+//   infra failure leaves a missing cell, E_INFRA_FAILURE. Once a timeout or an arm failure is recorded, an error from the
+//   adapter's own abort or teardown (a kill that hits a docker exec already gone, a child error after the abort) does not
+//   replace it; cli-stderr.log names it as teardown after that stop.
+// - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
+//   with text, thinking or a tool call. Scorers read it instead of turns, which hold main-agent text only. text_output
+//   says whether the main agent wrote any text, apart from the AskUserQuestion questions turns also hold. exit_code and
+//   signal record the CLI's own exit; both are null when it did not exit on its own (the adapter's abort or teardown
+//   killed it, or it never ended).
 // - CLAUDE_CODE_MAX_OUTPUT_TOKENS holds each request to the proxy's per-call output cap, which Claude Code's default
 //   (128k) passes. CLAUDE_CODE_MAX_RETRIES=0 leaves retries to the proxy, which journals and charges every paid attempt
 //   under its own budget, so the CLI never multiplies them or waits out its backoff on a refusal.
@@ -38,6 +53,7 @@
 //   adapter's settings, retries off) and the voice's model, and OPENAI_API_KEY carries the slot's bearer, so no file
 //   holds a credential and no provider key enters the session. A step that cannot write it leaves a missing cell,
 //   E_CODEX_CONFIG.
+import type { ChildProcess } from "node:child_process";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
@@ -177,6 +193,18 @@ export function refusalTermination(refusal: ReasonCode): Termination {
   return { kind: "missing", code: refusal };
 }
 
+/** A session that failed for no reason of the arm's: the evaluator, the link to the CLI or the machine. */
+const INFRA: Termination = { kind: "missing", code: "E_INFRA_FAILURE" };
+
+/** Whether the agent's session still runs a command; one that does not after the CLI ended means the machine failed. */
+const answers = (session: AgentSession): boolean => {
+  try {
+    return session.exec("true", 30_000).exitCode === 0;
+  } catch {
+    return false;
+  }
+};
+
 const tokens = (u: Record<string, any> | undefined): TokenUsage | null =>
   u ? { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, reasoning: 0, cache_read: u.cache_read_input_tokens ?? 0, cache_write: u.cache_creation_input_tokens ?? 0 } : null;
 
@@ -195,7 +223,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
           appendFileSync(join(o.out, "cli-stderr.log"), "adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
-          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
+          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, model_output: false, text_output: false, exit_code: null, signal: null, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
         }
       }
       const transcript = join(o.out, "transcript.ndjson");
@@ -207,12 +235,23 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let stop: Termination | null = null;
       let missingQuestion: string | null = null;
       let modelOutput = false;
+      let textOutput = false;
+      let exitCode: number | null = null;
+      let exitSignal: string | null = null;
+      let awaitingResult = true;
+      let ended = false;
+      let cli: ChildProcess | null = null;
       let agentTurns = 0;
       let usage: TokenUsage | null = null;
       const end = (t: Termination) => {
         stop ??= t;
         inbox.close();
         abort.abort();
+      };
+      const infra = (error: unknown) => {
+        const before = stop;
+        end(INFRA);
+        appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (before ? "after the " + before.kind + " stop, teardown: " : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
       };
       let deadline = Date.now() + timeoutMs;
       let timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs);
@@ -243,7 +282,13 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const canUseTool = async (name: string, input: Record<string, unknown>, options?: { toolUseID?: string }) => {
         if (options?.toolUseID) approved.add(options.toolUseID);
         if (name !== "AskUserQuestion") return { behavior: "allow", updatedInput: input };
-        const r = await sim.answerAsk(Array.isArray(input.questions) ? (input.questions as AskQuestion[]) : []);
+        let r: Awaited<ReturnType<UserSim["answerAsk"]>>;
+        try {
+          r = await sim.answerAsk(Array.isArray(input.questions) ? (input.questions as AskQuestion[]) : []);
+        } catch (error) {
+          infra(error);
+          return { behavior: "deny", message: "The evaluator failed.", interrupt: true };
+        }
         if ("missing" in r) {
           missingQuestion = r.missing;
           setTimeout(() => end({ kind: "missing", code: "E_USER_TURNS_MISSING" }), 0);
@@ -251,62 +296,94 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         }
         return { behavior: "allow", updatedInput: { ...input, answers: r.answers } };
       };
-      const q = query({
-        prompt: inbox.stream(),
-        options: {
-          model: o.model,
-          maxTurns: o.maxTurns ?? MAX_TURNS,
-          permissionMode: "default",
-          settingSources: ["user", "project", "local"],
-          disallowedTools: DISALLOWED_TOOLS,
-          ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
-          abortController: abort,
-          canUseTool,
-          hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
-          stderr: (d: string) => appendFileSync(join(o.out, "cli-stderr.log"), d),
-          spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) =>
-            session.spawn([CLAUDE_BIN, ...s.args], Object.fromEntries(SDK_ENV.flatMap((k) => (s.env[k] ? [[k, s.env[k]!]] : [])))),
-        },
-      });
       let turnText = "";
       try {
+        const q = query({
+          prompt: inbox.stream(),
+          options: {
+            model: o.model,
+            maxTurns: o.maxTurns ?? MAX_TURNS,
+            permissionMode: "default",
+            settingSources: ["user", "project", "local"],
+            disallowedTools: DISALLOWED_TOOLS,
+            ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
+            abortController: abort,
+            canUseTool,
+            hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
+            stderr: (d: string) => appendFileSync(join(o.out, "cli-stderr.log"), d),
+            spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
+              try {
+                cli = session.spawn([CLAUDE_BIN, ...s.args], Object.fromEntries(SDK_ENV.flatMap((k) => (s.env[k] ? [[k, s.env[k]!]] : []))));
+              } catch (error) {
+                infra(error);
+                throw error;
+              }
+              cli.on("error", infra);
+              cli.on("exit", (code, signal) => {
+                if (abort.signal.aborted) return;
+                exitCode = code;
+                exitSignal = signal;
+              });
+              return cli;
+            },
+          },
+        });
         for await (const m of q) {
-          messages.push(m);
-          appendFileSync(transcript, JSON.stringify(m) + "\n");
-          if (m.type === "system" && m.subtype === "init") {
-            writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, tools: m.tools, skills: m.skills, cwd: m.cwd }, null, 2) + "\n");
-          } else if (m.type === "assistant") {
-            const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
-            if (m.error || m.is_api_error_message) {
-              const refusal = refusalIn(text);
-              if (refusal) end(refusalTermination(refusal));
-              else if (m.error === "authentication_failed") end({ kind: "credentials_rejected" });
-              else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
-            } else {
-              modelOutput = true;
-              if (!m.parent_tool_use_id && text.trim()) turnText = text;
+          try {
+            messages.push(m);
+            appendFileSync(transcript, JSON.stringify(m) + "\n");
+            if (m.type === "system" && m.subtype === "init") {
+              writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, tools: m.tools, skills: m.skills, cwd: m.cwd }, null, 2) + "\n");
+            } else if (m.type === "assistant") {
+              const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
+              if (m.error || m.is_api_error_message) {
+                const refusal = refusalIn(text);
+                if (refusal) end(refusalTermination(refusal));
+                else if (m.error === "authentication_failed") end({ kind: "credentials_rejected" });
+                else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
+              } else {
+                if ((m.message?.content ?? []).some((b: SdkMessage) => b.type === "text" || b.type === "thinking" || b.type === "tool_use")) modelOutput = true;
+                if (!m.parent_tool_use_id && text.trim()) {
+                  turnText = text;
+                  textOutput = true;
+                }
+              }
+            } else if (m.type === "result") {
+              awaitingResult = false;
+              agentTurns += m.num_turns ?? 0;
+              usage = tokens(m.usage) ?? usage;
+              if (stop) break;
+              if (m.subtype !== "success" && m.subtype !== "error_max_turns") {
+                end(modelOutput ? { kind: "arm_failure", failure: "harness_crash" } : { kind: "missing", code: "UPSTREAM" });
+                break;
+              }
+              const next = m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" };
+              turnText = "";
+              if ("reply" in next) {
+                inbox.push(userMessage(next.reply));
+                awaitingResult = true;
+              } else {
+                ended = true;
+                inbox.close();
+                break;
+              }
             }
-          } else if (m.type === "result") {
-            agentTurns += m.num_turns ?? 0;
-            usage = tokens(m.usage) ?? usage;
-            if (stop) break;
-            if (m.subtype !== "success" && m.subtype !== "error_max_turns") {
-              end(modelOutput ? { kind: "arm_failure", failure: "harness_crash" } : { kind: "missing", code: "UPSTREAM" });
-              break;
-            }
-            const next = m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" };
-            turnText = "";
-            if ("reply" in next) inbox.push(userMessage(next.reply));
-            else {
-              inbox.close();
-              break;
-            }
+          } catch (error) {
+            infra(error);
+            break;
           }
+        }
+        if (!stop && !ended && awaitingResult) {
+          stop = INFRA;
+          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code " + exitCode + ", signal " + exitSignal + ")\n");
         }
       } catch (error) {
         if (!stop) {
-          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + String((error as Error)?.message ?? error) + "\n");
-          stop = { kind: "arm_failure", failure: "harness_crash" };
+          const child = cli as ChildProcess | null;
+          const died = child !== null && (child.exitCode !== null || child.signalCode !== null);
+          const linkBroke = exitCode === 0 && exitSignal === null && awaitingResult;
+          stop = died && !linkBroke && answers(session) ? { kind: "arm_failure", failure: "harness_crash" } : INFRA;
+          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (stop === INFRA ? "infra failure, not the arm's: " : "") + String((error as Error)?.message ?? error) + "\n");
         }
       } finally {
         clearTimeout(timer);
@@ -327,6 +404,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       return {
         turns,
         termination: stop ?? { kind: "completed" },
+        model_output: modelOutput,
+        text_output: textOutput,
+        exit_code: exitCode,
+        signal: exitSignal,
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

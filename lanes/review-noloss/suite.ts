@@ -225,6 +225,8 @@ export function checkSealedRoot(dir: string, repoRoot = REPO_ROOT): string {
 /** Where each loaded suite's catalogs resolve: its sealed root, or the repo for a public suite. */
 const catalogRoots = new WeakMap<Suite, string>();
 export const catalogRoot = (suite: Suite): string => catalogRoots.get(suite) ?? REPO_ROOT;
+/** Whether a loaded suite's catalogs resolve under the sealed root, so its runs hold held-out cases even when it is not sealed. */
+export const readsSealedRoot = (suite: Suite): boolean => catalogRoots.has(suite);
 
 function readJson(path: string, what: string): { text: string; value: unknown } {
   let text: string;
