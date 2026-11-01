@@ -1,0 +1,22 @@
+// GEVA-101 prereg dry run: the frozen ledger items on temporary ledgers, each at its frozen cap (section 5). Keyless.
+// The review lane items use gstack-evals' ledger (recordApproval); the Lane B items are jsonl ledgers with one approval
+// row each, as the runner tag's ledger.ts reads them. r3b-opus and r3b-particle get their caps from Garry after R3a; the
+// dry run uses the plan's top ($550 between them). Usage: R=<rig> bun items.ts <record dir> <laneb dir>
+import { mkdirSync, writeFileSync } from "node:fs";
+const R = process.env.R!;
+const { recordApproval } = await import(R + "/src/runner/ledger/ledger.ts");
+const [record, laneb] = process.argv.slice(2);
+const quote = { words: "Dry run: keyless items at the frozen caps, no spend", by: "GEVA-101", source: "dry-run" };
+const items: Array<[string, number]> = [
+  ["r1-judge-match", 25], ["r1-judge-adjudicate", 15],
+  ["r2a-grid", 25], ["r2b-grid", 325], ["r2-judge-match", 25], ["r2-judge-adjudicate", 25],
+];
+for (const [item, cap] of items) {
+  recordApproval(record!, { action: "init", item, cap_micros: cap * 1_000_000, quotes: [quote], admission: "warn" });
+  console.log("review item " + item + " at $" + cap);
+}
+mkdirSync(laneb!, { recursive: true });
+for (const [item, cap] of [["r3a-screen", 150], ["r3b-opus", 450], ["r3b-particle", 100]] as Array<[string, number]>) {
+  writeFileSync(laneb + "/" + item + ".jsonl", JSON.stringify({ ts: new Date(0).toISOString(), item, kind: "approval", id: item + "-approval", usd_micros: cap * 1_000_000, cap_micros: cap * 1_000_000, words: quote.words, by: quote.by }) + "\n");
+  console.log("lane b item " + item + " at $" + cap);
+}
