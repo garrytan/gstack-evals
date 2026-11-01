@@ -15,9 +15,9 @@ exit 0 (log/3.txt)
 $ sh -c cd $W/prereg && sha256sum comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json decide.py exposure.py review-cost.py projection.py caps.py peak.py renders.txt $REPO/quick/laneb/analysis/ceremony-tb2.ts $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json
 d5dfdf48fadac37286c494e7a414187ec9f9a476100e26c1889f11eae1ef71b2  comparisons.ceremony-r1.json
 c4ad189204ee2bec4ad40db4b22073c57c0234c0033142a088c721ca00374d10  comparisons.ceremony-r1-secondary.json
-5b16ccd3e59c5598aa8c4bd007c77838bd3c8da535ec56b863c3306d2dce0167  decide.py
+000cfad35b9aab5502802c3027e4fa7d1b0eed423b1beb2499a5f62c50cc95a2  decide.py
 33c8a3548789a10e949143287e42d698130b4af3ad310e9a1518f27887672212  exposure.py
-20b996dea8733511515e3c515d80aa0ea92b10c0d7bed4724fb4c7fec2bb45c2  review-cost.py
+704f65b8e4cd36aa345dc534a538f9f0770a6dab289e3ea3087d7c53ab5f35e8  review-cost.py
 1cd81c87d3e9f7f8da3c7b772b42f26eaad3eaf78f86417a8b09a3c9f7ee7c2c  projection.py
 c4f7a497e4d89a5261a63d1fe0e8d661dc98853856dd93d800ddea720d953a11  caps.py
 c534e90bf5ea6cee45388951838652e4dd163c10243b8668450080480a4f3860  peak.py
@@ -75,12 +75,12 @@ APPROVED: item=ceremony-r1-review-pilot cap=$70.00 admission=warn approval=1 rec
 exit 0 (log/10.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-pilot --run dry-ceremony-r1-review-pilot --json
-  "lease_id": "ceremony-r1-review-pilot.0001.c53edf",
+  "lease_id": "ceremony-r1-review-pilot.0001.9fa8d3",
     "RIG_UNPROVEN line item ceremony-r1-review-pilot leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-pilot/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-pilot on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-review-pilot leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-pilot/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-pilot on the machine that will spend (docs/rig.md)
 exit 0 (log/11.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-pilot.0001.c53edf
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-pilot.0001.9fa8d3
 exit 0 (log/12.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 227.44 --item ceremony-r1-review-grid --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -88,12 +88,12 @@ APPROVED: item=ceremony-r1-review-grid cap=$227.44 admission=warn approval=1 rec
 exit 0 (log/13.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-grid --run dry-ceremony-r1-review-grid --json
-  "lease_id": "ceremony-r1-review-grid.0001.423ce4",
+  "lease_id": "ceremony-r1-review-grid.0001.200862",
     "RIG_UNPROVEN line item ceremony-r1-review-grid leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-grid/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-grid on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-review-grid leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-grid/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-grid on the machine that will spend (docs/rig.md)
 exit 0 (log/14.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-grid.0001.423ce4
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-grid.0001.200862
 exit 0 (log/15.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 66.84 --item ceremony-r1-review-sdk --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -101,12 +101,12 @@ APPROVED: item=ceremony-r1-review-sdk cap=$66.84 admission=warn approval=1 recor
 exit 0 (log/16.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-sdk --run dry-ceremony-r1-review-sdk --json
-  "lease_id": "ceremony-r1-review-sdk.0001.473970",
+  "lease_id": "ceremony-r1-review-sdk.0001.4cd987",
     "RIG_UNPROVEN line item ceremony-r1-review-sdk leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-sdk/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-sdk on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-review-sdk leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-sdk/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-sdk on the machine that will spend (docs/rig.md)
 exit 0 (log/17.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-sdk.0001.473970
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-sdk.0001.4cd987
 exit 0 (log/18.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 20 --item ceremony-r1-judge-match --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -114,12 +114,12 @@ APPROVED: item=ceremony-r1-judge-match cap=$20.00 admission=warn approval=1 reco
 exit 0 (log/19.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-judge-match --run dry-ceremony-r1-judge-match --json
-  "lease_id": "ceremony-r1-judge-match.0001.3e02a8",
+  "lease_id": "ceremony-r1-judge-match.0001.b809a3",
     "RIG_UNPROVEN line item ceremony-r1-judge-match leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-match on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-judge-match leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-match on the machine that will spend (docs/rig.md)
 exit 0 (log/20.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-match.0001.3e02a8
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-match.0001.b809a3
 exit 0 (log/21.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 20 --item ceremony-r1-judge-adj --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -127,12 +127,12 @@ APPROVED: item=ceremony-r1-judge-adj cap=$20.00 admission=warn approval=1 record
 exit 0 (log/22.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-judge-adj --run dry-ceremony-r1-judge-adj --json
-  "lease_id": "ceremony-r1-judge-adj.0001.0e09f6",
+  "lease_id": "ceremony-r1-judge-adj.0001.9ecb85",
     "RIG_UNPROVEN line item ceremony-r1-judge-adj leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-adj/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-adj on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-judge-adj leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-adj/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-adj on the machine that will spend (docs/rig.md)
 exit 0 (log/23.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-adj.0001.0e09f6
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-adj.0001.9ecb85
 exit 0 (log/24.txt)
 # a second run on a bound item is refused
 
@@ -309,18 +309,21 @@ $ bun $W/rig/quick/laneb/analysis/ceremony-tb2.ts $W/prereg/dry-tb2-config.json 
 exit 0 (log/37.txt)
 
 ## 7. Exposure, cost, caps and the decision rule
+# all four roles; control-sdk reads its own out dir (particle-1's gstack run stands in for it, as in section 6)
 
-$ python3 $W/prereg/review-cost.py $W/review/runs/stacks-r1-review-opus-gstack/out {"control":["gstack-opus","gstack"],"variant":["none-opus","none"],"none":["none-opus","none"]} --json $W/dry/review-cost.json
+$ python3 $W/prereg/review-cost.py {"control":["$W/review/runs/stacks-r1-review-opus-gstack/out","gstack-opus","gstack"],"variant":["$W/review/runs/stacks-r1-review-opus-gstack/out","none-opus","none"],"none":["$W/review/runs/stacks-r1-review-opus-gstack/out","none-opus","none"],"control-sdk":["$W/review/runs/stacks-r1-review-particle-gstack/out","gstack-particle-1","gstack"]} --json $W/dry/review-cost.json
 | Role | Arm | Unit-passes | Dollars | Per unit-pass | Tokens per unit-pass | Requests | First-request tokens (median, min, max) |
 |---|---|---|---|---|---|---|---|
 | control | gstack-opus | 66 | $66.99 | $1.015 | 1,760,915 | 17.8 | 60027.0, 59902, 67517 |
 | variant | none-opus | 66 | $45.51 | $0.690 | 1,053,915 | 15.55 | 34415.0, 34290, 41905 |
 | none | none-opus | 66 | $45.51 | $0.690 | 1,053,915 | 15.55 | 34415.0, 34290, 41905 |
+| control-sdk | gstack-particle-1 | 33 | $5.33 | $0.162 | 5,277,265 | 53.39 | 0, 0, 0 |
 | Ratio of mean dollars per unit-pass | Units | PRs | Ratio [95% CI] |
 |---|---|---|---|
 | variant / control | 33 | 32 | 0.679 [0.633, 0.730] |
 | control / none | 33 | 32 | 1.472 [1.370, 1.581] |
 | variant / none | 33 | 32 | 1.000 [1.000, 1.000] |
+| control / control-sdk | 33 | 32 | 6.284 [5.537, 7.025] |
 exit 0 (log/38.txt)
 
 $ python3 $W/prereg/exposure.py review $W/review/runs/stacks-r1-review-opus-gstack/out --json $W/dry/exposure-review.json
@@ -374,18 +377,31 @@ $ python3 $W/prereg/caps.py --review $W/review/runs/stacks-r1-review-opus-gstack
 exit 0 (log/41.txt)
 
 $ python3 $W/prereg/decide.py --tb2 $W/dry/tb2.json --review-score $W/dry/score/variant-vs-control.json --review-cost $W/dry/review-cost.json --exposure-review $W/dry/exposure-review.json --exposure-tb2 $W/dry/exposure-tb2.json --arms {"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}} --json $W/dry/decide.json
-claude-opus-5-5: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 claude-opus-5-5 control: 74 graded of 111 planned (3 replicates of 37 paired tasks); G4 coverage, TB2 claude-opus-5-5 variant: 74 graded of 111 planned (3 replicates of 37 paired tasks)
-particle-1: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 particle-1 control: 75 graded of 114 planned (3 replicates of 38 paired tasks); G4 coverage, TB2 particle-1 variant: 75 graded of 114 planned (3 replicates of 38 paired tasks)
+claude-opus-5-5: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 claude-opus-5-5 control: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks); G4 coverage, TB2 claude-opus-5-5 variant: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks)
+particle-1: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 particle-1 control: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks); G4 coverage, TB2 particle-1 variant: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks)
 LOSS test review: Holm-adjusted p 1.0000
 LOSS test TB2 claude-opus-5-5: Holm-adjusted p 1.0000
 LOSS test TB2 particle-1: Holm-adjusted p 1.0000
-gate failed: G4 coverage, TB2 claude-opus-5-5 control: 74 graded of 111 planned (3 replicates of 37 paired tasks)
-gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 74 graded of 111 planned (3 replicates of 37 paired tasks)
-gate failed: G4 coverage, TB2 particle-1 control: 75 graded of 114 planned (3 replicates of 38 paired tasks)
-gate failed: G4 coverage, TB2 particle-1 variant: 75 graded of 114 planned (3 replicates of 38 paired tasks)
+gate failed: G4 coverage, TB2 claude-opus-5-5 control: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks)
+gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks)
+gate failed: G4 coverage, TB2 particle-1 control: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks)
+gate failed: G4 coverage, TB2 particle-1 variant: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks)
 TB2 claude-opus-5-5 cost per trial, variant/control: 0.860 [0.806, 0.910]
 TB2 particle-1 cost per trial, variant/control: 1.078 [0.915, 1.281]
 review cost per unit-pass, variant/control: 0.679 [0.633, 0.730]
 exit 0 (log/42.txt)
+# G4's planned count: the stand-in with 111 graded trials in every TB2 cell, then four tasks dropped from Opus's variant
+# (99 graded, 33 paired tasks). G4 holds on the first and must fail on the second: planned stays 3 x 37 = 111.
+
+$ python3 $W/prereg/decide.py --tb2 $W/dry/tb2-full.json --review-score $W/dry/score/variant-vs-control.json --review-cost $W/dry/review-cost.json --exposure-review $W/dry/exposure-review.json --exposure-tb2 $W/dry/exposure-tb2.json --arms {"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}
+claude-opus-5-5: CUT, no-loss yes. TB2 variant minus control +0.0 pp, 90% CI lower end -2.7 above -7.5, size 0.989
+particle-1: FIX-METHOD, no-loss no. no LOSS and no NO_LOSS: TB2 NOLOSS_UNDERPOWERED (90% CI lower end -5.3, margin 10, size 0.698)
+exit 0 (log/43.txt)
+
+$ python3 $W/prereg/decide.py --tb2 $W/dry/tb2-drop4.json --review-score $W/dry/score/variant-vs-control.json --review-cost $W/dry/review-cost.json --exposure-review $W/dry/exposure-review.json --exposure-tb2 $W/dry/exposure-tb2.json --arms {"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}
+claude-opus-5-5: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 99 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 33 paired tasks)
+particle-1: FIX-METHOD, no-loss no. no LOSS and no NO_LOSS: TB2 NOLOSS_UNDERPOWERED (90% CI lower end -5.3, margin 10, size 0.698)
+gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 99 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 33 paired tasks)
+exit 0 (log/44.txt)
 
 dry run done

@@ -21,14 +21,14 @@ attachments:
   - b6b53a098b84182ceecdd530ee8daee60af27aafef9d51d304190a6eda8fcad8  ceremony-tb2.ts.txt
   - c4ad189204ee2bec4ad40db4b22073c57c0234c0033142a088c721ca00374d10  comparisons.ceremony-r1-secondary.json
   - d5dfdf48fadac37286c494e7a414187ec9f9a476100e26c1889f11eae1ef71b2  comparisons.ceremony-r1.json
-  - 5b16ccd3e59c5598aa8c4bd007c77838bd3c8da535ec56b863c3306d2dce0167  decide.py.txt
-  - 14b24df7df98d69ae110bcbd4c87ddd4b3081e8566b489ce9171e884f008cbe3  dry-run.sh.txt
-  - 2db9b65885cb6e6b84275021ba2c283a8cc1da6a05ac6c2abda60f182e90aa6c  dry-run.txt
+  - 000cfad35b9aab5502802c3027e4fa7d1b0eed423b1beb2499a5f62c50cc95a2  decide.py.txt
+  - 39f269da8d6a2c8921bc0e508d508e2a05b523f706e4504d03279cd690609aaf  dry-run.sh.txt
+  - 680b8fe84e2e40f83d9294bdbc42f8a1a34793be001662e9572bcca924ee92db  dry-run.txt
   - 33c8a3548789a10e949143287e42d698130b4af3ad310e9a1518f27887672212  exposure.py.txt
   - c534e90bf5ea6cee45388951838652e4dd163c10243b8668450080480a4f3860  peak.py.txt
   - 1cd81c87d3e9f7f8da3c7b772b42f26eaad3eaf78f86417a8b09a3c9f7ee7c2c  projection.py.txt
   - 7ec737bd085bb6b6ba23ebf8d5a3f1f990d679252b3fb7e8339472d1195ffd0e  renders.txt
-  - 20b996dea8733511515e3c515d80aa0ea92b10c0d7bed4724fb4c7fec2bb45c2  review-cost.py.txt
+  - 704f65b8e4cd36aa345dc534a538f9f0770a6dab289e3ea3087d7c53ab5f35e8  review-cost.py.txt
 ---
 
 # Ceremony-cut preregistration
@@ -121,7 +121,7 @@ The suites sit at a floor (review) and near a ceiling (TB2 Opus). The cost diffe
 - **G1 install**: the harness's install check (section 2.1) passed for every gstack arm, and arm.json records each render's lock.
 - **G2 body load**: in each lane and model, the variant's median first-request prompt tokens sit at least 2,000 below control's (the renders differ by about 10,700 and 12,000 bytes on the told skills).
 - **G3 render kind**: among variant sessions that ran the start line, at least 95% printed RENDER_KIND: unattended, no control or control-sdk session did, and no session in any arm printed RENDER_KIND_MISMATCH. If no session ran the start line, G3 is reported as not observable and doesn't fail.
-- **G4 coverage**: each primary TB2 cell has at least 90% of its planned trials graded (3 replicates of its paired tasks), and the review comparison has a verdict (no arm stopped, no coverage gap).
+- **G4 coverage**: each primary TB2 cell has at least 90% of its planned trials graded (3 replicates of its frozen tasks, less documented oracle exclusions: 3 × 37 = 111, since this prereg documents none), and the review comparison has a verdict (no arm stopped, no coverage gap). Planned never comes from the tasks that ended up paired, so a task whose trials all fail as infrastructure in one arm, or that the in-run oracle rule drops, still counts against coverage. This brings decide.py in line with the written 90%-of-111 rule and can only make G4 stricter.
 
 ## 8. Failure handling
 
@@ -181,7 +181,8 @@ The review pilot's `--parallel 1` makes each round one unit with its four arms, 
 - approved, reserved and settled under each TB2 ledger file, and saw a reserve past the cap refused;
 - built none.tar (8bab4833…, as its manifest says) and wrote the TB2 job configs: every arm carries claude-code-preset and unattended, with Opus at a $2.50 session cap and particle-1 at $0.50;
 - rebuilt both rendered tars from laneb-stacks-3-runner and matched the digests in section 2.1. A second clean build on another machine, from a fresh clone, matched all four files and the manifests;
-- ran noloss score with both comparisons files, then ceremony-tb2.ts, exposure.py, review-cost.py, caps.py and decide.py, end to end. decide.py printed FIX-METHOD for both models, as it should: the stand-in TB2 data has 2 replicates, so G4 fails.
+- ran noloss score with both comparisons files, then ceremony-tb2.ts, exposure.py, review-cost.py, caps.py and decide.py, end to end. review-cost.py read all four roles, control-sdk from its own out dir, and printed the control over control-sdk ratio. particle-1's gstack run stands in for control-sdk, as in the scoring step; its transcripts record no usage, so its first-request reading is 0. decide.py printed FIX-METHOD for both models, as it should: the stand-in TB2 data has 2 replicates, so G4 fails at 74 and 75 graded of 111 planned;
+- gave decide.py the stand-in with 111 graded trials in every TB2 cell, where Opus read CUT, then the same with four tasks dropped from Opus's variant (99 graded, 33 paired tasks), where G4 failed at 99 of 111 and Opus read FIX-METHOD. Had planned followed the paired tasks, it would have been 99, and G4 would have passed.
 
 ## 12. What this can't say
 

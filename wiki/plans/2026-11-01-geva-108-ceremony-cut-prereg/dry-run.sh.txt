@@ -73,10 +73,19 @@ rm -f "$R/quick/laneb/analysis/ceremony-tb2.ts"
 
 echo; echo "## 7. Exposure, cost, caps and the decision rule"
 RV=$W/review/runs
-step . python3 $P/review-cost.py $RV/stacks-r1-review-opus-gstack/out '{"control":["gstack-opus","gstack"],"variant":["none-opus","none"],"none":["none-opus","none"]}' --json "$X/review-cost.json"
+RG=$RV/stacks-r1-review-opus-gstack/out; RS=$RV/stacks-r1-review-particle-gstack/out
+echo "# all four roles; control-sdk reads its own out dir (particle-1's gstack run stands in for it, as in section 6)"
+step . python3 $P/review-cost.py "{\"control\":[\"$RG\",\"gstack-opus\",\"gstack\"],\"variant\":[\"$RG\",\"none-opus\",\"none\"],\"none\":[\"$RG\",\"none-opus\",\"none\"],\"control-sdk\":[\"$RS\",\"gstack-particle-1\",\"gstack\"]}" --json "$X/review-cost.json"
 step . python3 $P/exposure.py review $RV/stacks-r1-review-opus-gstack/out --json "$X/exposure-review.json"
 step . sh -c "python3 $P/exposure.py tb2 \$(jq -r '.jobs[]' $P/dry-tb2-config.json) --json $X/exposure-tb2.json | tail -12"
 T=$HOME/.capy/work/geva100/geva93/geva93-tb2/runs
 step 'allowance|session_cap|caps|verdict|fits' python3 $P/caps.py --review $RV/stacks-r1-review-opus-gstack/out --tb2 $T/r3-opus/pulled/out/proxy-sessions.jsonl $T/r3-particle/pulled/out/proxy-sessions.jsonl --map gstack=control,variant,control-sdk none=none --settled 17 --json "$X/caps.json"
 SHOW=40 step . python3 $P/decide.py --tb2 "$X/tb2.json" --review-score "$X/score/variant-vs-control.json" --review-cost "$X/review-cost.json" --exposure-review "$X/exposure-review.json" --exposure-tb2 "$X/exposure-tb2.json" --arms '{"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}' --json "$X/decide.json"
+echo "# G4's planned count: the stand-in with 111 graded trials in every TB2 cell, then four tasks dropped from Opus's variant"
+echo "# (99 graded, 33 paired tasks). G4 holds on the first and must fail on the second: planned stays 3 x 37 = 111."
+jq '(.zero.cells[].graded) |= 111 | (.zero.contrasts[].tasks) |= 37' "$X/tb2.json" > "$X/tb2-full.json"
+jq '(.zero.cells[] | select(.model == "claude-opus-5-5" and .arm == "variant") | .graded) |= 99 | (.zero.contrasts[] | select(.model == "claude-opus-5-5") | .tasks) |= 33' "$X/tb2-full.json" > "$X/tb2-drop4.json"
+for t in full drop4; do
+  step '^(claude-opus-5-5|particle-1):|G4' python3 $P/decide.py --tb2 "$X/tb2-$t.json" --review-score "$X/score/variant-vs-control.json" --review-cost "$X/review-cost.json" --exposure-review "$X/exposure-review.json" --exposure-tb2 "$X/exposure-tb2.json" --arms '{"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}'
+done
 echo; echo "dry run done"

@@ -5,18 +5,19 @@
 # first-request tokens. Ratios of mean cost per unit-pass (variant/control, control/none, variant/none,
 # control/control-sdk) use a PR-clustered bootstrap: resample PRs with replacement, 10,000 draws, seed 20261101, and take
 # the ratio of summed per-unit mean dollars over the units of the drawn PRs, units metered in both arms only.
-# Usage: python3 review-cost.py <out dir of the review-units run> <arm name map JSON> [--json <file>]
-# The arm name map maps each role to [ingested arm folder under <out>/arms, arm name under <out>/runs/<model>], for example
-# {"control": ["control-opus", "control"], "variant": ["variant-opus", "variant"], "none": ["none-opus", "none"],
-# "control-sdk": ["control-sdk-opus", "control-sdk"]}; the dry run maps them onto stacks round 1's arms.
+# Usage: python3 review-cost.py <role map JSON> [--json <file>]
+# The role map maps each role to [out dir of the review-units run that ran it, ingested arm folder under <out>/arms, arm
+# name under <out>/runs/<model>], for example {"control": ["<grid out>", "control-opus", "control"], "variant": ["<grid out>",
+# "variant-opus", "variant"], "none": ["<grid out>", "none-opus", "none"], "control-sdk": ["<sdk out>", "control-sdk-opus",
+# "control-sdk"]}; control-sdk runs on its own, so it reads its own out dir. The dry run maps them onto stacks round 1's arms.
 import csv, glob, json, os, random, statistics as st, sys
 SEED, DRAWS = 20261101, 10000
-out, names = sys.argv[1], json.loads(sys.argv[2])
-def arm_dir(name):
+names = json.loads(sys.argv[1])
+def arm_dir(out, name):
     d = os.path.join(out, 'arms', name)
     if not os.path.isfile(os.path.join(d, 'cost.tsv')): sys.exit('E_USAGE: no cost.tsv for arm ' + name + ' under ' + out + '/arms')
     return d
-def first_tokens(run_name):
+def first_tokens(out, run_name):
     vals = {}
     for f in glob.glob(os.path.join(out, 'runs', '*', run_name, '*', 'p*', 'host', 'transcript.ndjson')):
         unit, p = f.split('/')[-4], f.split('/')[-3]
@@ -27,10 +28,11 @@ def first_tokens(run_name):
                 u = o['message']['usage']; vals[(unit, p)] = (u.get('input_tokens') or 0) + (u.get('cache_read_input_tokens') or 0) + (u.get('cache_creation_input_tokens') or 0); break
     return vals
 def load(role):
-    d = arm_dir(names[role][0]); rows = [r for r in csv.DictReader(open(os.path.join(d, 'cost.tsv')), delimiter='\t') if r['scope'] == 'all']
+    out, arm, run_name = names[role]
+    d = arm_dir(out, arm); rows = [r for r in csv.DictReader(open(os.path.join(d, 'cost.tsv')), delimiter='\t') if r['scope'] == 'all']
     units = {}
     for r in rows: units.setdefault(r['pr'], []).append(r)
-    ft = first_tokens(names[role][1])
+    ft = first_tokens(out, run_name)
     n = len(rows); usd = sum(float(r['usd']) for r in rows)
     cls = ['total_tokens', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'reasoning_tokens']
     f = sorted(ft.values())

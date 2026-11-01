@@ -8,7 +8,7 @@ import json, sys
 a = dict(zip(sys.argv[1::2], sys.argv[2::2]))
 arms = json.loads(a.get('--arms', '{"tb2": {"control": "control", "variant": "variant"}, "review": {"control": "control", "variant": "variant"}}'))
 OPUS, PARTICLE = 'claude-opus-5-5', 'particle-1'
-ALPHA, BODY_DROP, RENDER_SHARE, GRADED_SHARE, REPS = 0.05, 2000, 0.95, 0.90, 3
+ALPHA, BODY_DROP, RENDER_SHARE, GRADED_SHARE, REPS, TASKS, ORACLE_EXCLUDED = 0.05, 2000, 0.95, 0.90, 3, 37, ()
 tb2 = json.load(open(a['--tb2'])); score = json.load(open(a['--review-score'])); rc = json.load(open(a['--review-cost']))
 ex = {'review': json.load(open(a['--exposure-review'])), 'tb2': json.load(open(a['--exposure-tb2']))}
 z = tb2['zero']
@@ -24,8 +24,8 @@ def gate(name, ok, why):
 for m in (OPUS, PARTICLE):
     c, v = cell(m, 'control'), cell(m, 'variant')
     gate('G2 body load, TB2 ' + m, v['firstMedian'] <= c['firstMedian'] - BODY_DROP, f"variant median {v['firstMedian']} vs control {c['firstMedian']}")
-    planned = REPS * vc(m)['tasks']
-    for role, x in (('control', c), ('variant', v)): gate('G4 coverage, TB2 ' + m + ' ' + role, x['graded'] >= GRADED_SHARE * planned, f"{x['graded']} graded of {planned} planned ({REPS} replicates of {vc(m)['tasks']} paired tasks)")
+    planned = REPS * (TASKS - len(ORACLE_EXCLUDED))
+    for role, x in (('control', c), ('variant', v)): gate('G4 coverage, TB2 ' + m + ' ' + role, x['graded'] >= GRADED_SHARE * planned, f"{x['graded']} graded of {planned} planned ({REPS} replicates of {TASKS} frozen tasks less {len(ORACLE_EXCLUDED)} oracle exclusions; {vc(m)['tasks']} paired tasks)")
     ev, ec = expo('tb2', m, 'variant'), expo('tb2', m, 'control')
     gate('G3 render kind, TB2 ' + m, ev and ec and ev['render_kind_unattended'] >= RENDER_SHARE * ev['start_line'] and ec['render_kind_unattended'] == 0 and ev['render_kind_mismatch'] + ec['render_kind_mismatch'] == 0, f"mismatch lines {ev and ec and ev['render_kind_mismatch'] + ec['render_kind_mismatch']}; variant {ev and ev['render_kind_unattended']} of {ev and ev['start_line']} start lines; control {ec and ec['render_kind_unattended']}")
 rcv, rcc = rc['arms']['variant']['first_request_tokens'], rc['arms']['control']['first_request_tokens']
