@@ -15,8 +15,8 @@ links:
   - GST-824
 attachments:
   - 3386a06e688653d83f15209a75ebde0872d552610c102a8ee564f7dd8c21bc2f  admission.txt
-  - c9309a66eda2bc83fb42ecbc084e40b987f43215168b2f11d06788da189fe281  admit1.py.txt
-  - 2f8ec84a316e820035868b1f5e6db6e2c9a51695a51ff5789c36338436849bcf  admit2.py.txt
+  - eef5d1071e648db26ee768dcf231f09903ea5a82e64deeae911caed4f3473683  admit1.py.txt
+  - bcc382bc4e04cf4f419dae40d59dda3c0f0ddf66e52957529eef1a554f236d55  admit2.py.txt
   - c4f7a497e4d89a5261a63d1fe0e8d661dc98853856dd93d800ddea720d953a11  caps.py.txt
   - b6b53a098b84182ceecdd530ee8daee60af27aafef9d51d304190a6eda8fcad8  ceremony-tb2.ts.txt
   - c4ad189204ee2bec4ad40db4b22073c57c0234c0033142a088c721ca00374d10  comparisons.ceremony-r1-secondary.json

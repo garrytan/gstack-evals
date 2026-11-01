@@ -1,5 +1,5 @@
 
-import json,collections,statistics as st,math,csv,glob,random,os, os
+import json,collections,statistics as st,math,csv,glob,random,os
 W=os.path.expanduser('~/.capy/work/geva100')
 rows=json.load(open(W+'/tb2_rows.json'))
 Z95=1.6449; Z80=0.8416

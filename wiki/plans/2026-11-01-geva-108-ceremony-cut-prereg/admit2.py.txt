@@ -1,5 +1,5 @@
 
-import csv,collections,statistics as st,math, os
+import csv,collections,statistics as st,math,os
 B=os.environ['W'] + '/review/runs/stacks-r1-review-opus-gstack/out/arms/'
 for arm in ['gstack-opus','none-opus']:
     rows=[r for r in csv.DictReader(open(B+arm+'/cost.tsv'),delimiter='\t') if r['scope']=='all']
