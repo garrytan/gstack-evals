@@ -40,6 +40,7 @@ step . bash -c "cd $R && sha256sum lanes/review-noloss/{cli,contract,derive,inge
 step . sh -c "cd $D && sha256sum *.txt *.json"
 
 step 'OK|FAILED' sh -c "cd $W/bin && printf '%s  %s\\n' c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e scrub.ts cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237 scrub2.ts 3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886 r1-scrub3.ts | sha256sum -c"
+sh -c "cd $W/bin && printf '%s  %s\\n' c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e scrub.ts cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237 scrub2.ts 3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886 r1-scrub3.ts | sha256sum -c --status" || { echo "E_R1_SCRUB a scrub script differs from its pinned digest; stopping before any scrub runs"; exit 1; }
 
 echo; echo "## Ledger items at their frozen caps (section 5)"
 step '^(review|lane)' bun "$W/bin/items.ts" "$W/record" "$W/laneb"
@@ -83,12 +84,18 @@ judge_round() {
   step '^(recall|new|idea|E_)' $G secondary --suite "$SUITE" --root "$X/final" --variant $VAR --reference $REF --seed 20261031
   $DECIDE "$X" "$SID"
 }
-r1_decide() { step '^(R1|exposure|gate|delta|decision|CUT|R2|volume|E_)' python3 "$W/bin/r1-decide.py" "$1/score-C-vs-none.json" "$W/r1src/C" "$1/final/$2"; }
+# incomplete <score json> <out json>: the same record with a judgment marked coverage incomplete, as the scorer writes it
+# (no_verdict_reason set, verdict null). Synthetic: it drives the decision guard, not the scorer.
+incomplete() { jq '.result.no_verdict_reason = "a judgment has coverage incomplete" | .result.verdict = null' "$1" > "$2"; }
+r1_decide() { step '^(R1|exposure|gate|delta|decision|CUT|R2|volume|E_)' python3 "$W/bin/r1-decide.py" "${3:-$1/score-C-vs-none.json}" "$W/r1src/C" "$1/final/$2"; }
 SUITE=$S1; RAWR=$W/r1/raw/gsta167-14pr; ARMS=$R1ARMS; COMP=$W/bin/comparisons.r1.json; IDS="C-vs-none C-vs-gstack gstack-vs-none"; VAR=C; REF=none-opus; DECIDE=r1_decide
 echo; echo "## R1 judging, scenario 1: fake answers that give arm C a lead (section 2)"
 judge_round r1 lead "C=40,none-opus=30,gstack-opus=30"
 echo; echo "## R1 judging, scenario 2: fake answers with no lead for arm C"
 judge_round r1 nolead "C=2,none-opus=30,gstack-opus=30"
+echo; echo "# R1 with a judgment marked coverage incomplete on scenario 1's scores: no decision."
+incomplete "$W/r1/lead/score-C-vs-none.json" "$W/r1/lead/score-incomplete.json"
+r1_decide "$W/r1/lead" gsta167-14pr "$W/r1/lead/score-incomplete.json"
 
 echo; echo "## R2: the 19-unit suite, fixture arms and the procedure gate (section 3)"
 mkdir -p "$W/r2"
@@ -110,7 +117,7 @@ for pair in r2a-grid:r2-none:25 r2b-grid:r2-full:325; do IFS=: read -r it run am
 step 'E_' $L lease --item r2b-grid --run r2-full-again --amount 1 $LG
 for run in r2-none r2-full; do step 'settle|E_' $L settle --lease "$(jq -r .lease_id "$W/r2/grid/$run.json")" $LG; done
 step 'committed|settled|open|E_' $L status $LG
-r2_decide() { step '^(R2|exposure|gate|E_)' python3 "$W/bin/r2-decide.py" "$1/score-gstack-full-vs-none.json" "$W/r2src/gstack-full"; }
+r2_decide() { step '^(R2|exposure|gate|E_)' python3 "$W/bin/r2-decide.py" "${3:-$1/score-gstack-full-vs-none.json}" "$W/r2src/gstack-full"; }
 SUITE=$S2; RAWR=$W/r2/raw/stacks-r1-out19; ARMS="gstack-full none-r2"; COMP=$W/bin/comparisons.r2.json; IDS=gstack-full-vs-none; VAR=gstack-full; REF=none-r2; DECIDE=r2_decide
 echo; echo "## R2 judging, scenario 1: fake answers that favour gstack-full"
 judge_round r2 lift "gstack-full=90,none-r2=10"
@@ -118,6 +125,9 @@ echo; echo "## R2 judging, scenario 2: fake answers with no lift (the kill rule)
 judge_round r2 nolift "gstack-full=10,none-r2=50"
 echo; echo "# R2 with the procedure gate failing on scenario 1's scores: no outcome."
 step '^(R2|exposure|gate|E_)' python3 "$W/bin/r2-decide.py" "$W/r2/lift/score-gstack-full-vs-none.json" "$W/r2src-fail/gstack-full"
+echo; echo "# R2 with a judgment marked coverage incomplete on scenario 1's scores: no outcome."
+incomplete "$W/r2/lift/score-gstack-full-vs-none.json" "$W/r2/lift/score-incomplete.json"
+r2_decide "$W/r2/lift" stacks-r1-out19 "$W/r2/lift/score-incomplete.json"
 
 echo; echo "## R3: the in-band set and every frozen rule on synthetic trials (section 4)"
 step . git -C "$TAG" log -1 --format='lane b runner %H %s'

@@ -5,12 +5,13 @@ R1: true lead 10 points: R2 runs (estimate at least 10 points) in 52.5% of runs
 R1: true lead 20 points: R2 runs (estimate at least 10 points) in 95.1% of runs
 R1: true lead 30 points: R2 runs (estimate at least 10 points) in 100.0% of runs
 R1: true lead 55 points: R2 runs (estimate at least 10 points) in 100.0% of runs
-R2: true lift  0 points: CUT-CANDIDATE (full <= none) in 75.9% of runs; interval excludes zero (exact sign-flip, two-sided 0.05) in 0.0%
-R2: true lift 10 points: CUT-CANDIDATE (full <= none) in 28.6% of runs; interval excludes zero (exact sign-flip, two-sided 0.05) in 0.1%
-R2: true lift 20 points: CUT-CANDIDATE (full <= none) in 9.2% of runs; interval excludes zero (exact sign-flip, two-sided 0.05) in 4.2%
-R2: true lift 30 points: CUT-CANDIDATE (full <= none) in 2.1% of runs; interval excludes zero (exact sign-flip, two-sided 0.05) in 18.2%
-R2: true lift 45 points: CUT-CANDIDATE (full <= none) in 0.1% of runs; interval excludes zero (exact sign-flip, two-sided 0.05) in 54.4%
-R2: MDD (80% power for the exact sign-flip test on 13 blockers) about 56 points
+R2: true lift  0 points: CUT-CANDIDATE (full <= none) in 75.9% of runs; KEEP (bootstrap lower bound above 0) in 0.0%
+R2: true lift 10 points: CUT-CANDIDATE (full <= none) in 28.6% of runs; KEEP (bootstrap lower bound above 0) in 5.6%
+R2: true lift 20 points: CUT-CANDIDATE (full <= none) in 9.2% of runs; KEEP (bootstrap lower bound above 0) in 26.0%
+R2: true lift 30 points: CUT-CANDIDATE (full <= none) in 2.1% of runs; KEEP (bootstrap lower bound above 0) in 53.0%
+R2: true lift 45 points: CUT-CANDIDATE (full <= none) in 0.1% of runs; KEEP (bootstrap lower bound above 0) in 83.0%
+R2: MDD (80% power for KEEP, the bootstrap rule on 13 blockers) about 43 points
+R2: smallest KEEP: 4 gains and no losses (7 gains with one loss)
 R3: 70 tasks: frozen MDD formula 10.9 points; simulated 11.1 points
 R3: 50 tasks: frozen MDD formula 12.9 points; simulated 12.9 points
 R3: 30 tasks: frozen MDD formula 16.7 points; simulated 17.0 points

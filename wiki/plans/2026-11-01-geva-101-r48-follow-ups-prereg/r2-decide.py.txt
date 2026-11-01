@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # R2 decision (GEVA-101 prereg, section 3). Reads the pinned scorer's JSON record for gstack-full-vs-none and the
 # procedure gate on gstack-full's source arm (r1-exposure.py, the same gate as R1), and prints the frozen outcome:
-#  - none, when the gate failed, an arm stopped, or the scorer gave no delta: R2 is incomplete and goes to the Captain
+#  - none, when the gate failed, an arm stopped, or the scorer gave no verdict or no delta (no_verdict_reason set): R2 is incomplete and goes to the Captain
 #    as FIX-METHOD (the procedure under test didn't run, so nothing about it was measured);
 #  - CUT-CANDIDATE, when gstack-full found no more blocking blockers than none-r2 (the kill rule);
 #  - KEEP, when the 95% PR-clustered interval of the recall difference is above zero;
@@ -14,7 +14,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 gate = subprocess.run([sys.executable, os.path.join(here, "r1-exposure.py"), sys.argv[2]], capture_output=True, text=True)
 print(gate.stdout.strip())
 res = s["result"]
-if gate.returncode != 0 or res.get("delta") is None or s["variant"]["status"] != "complete" or s["reference"]["status"] != "complete":
+if gate.returncode != 0 or res.get("no_verdict_reason") or res.get("delta") is None or s["variant"]["status"] != "complete" or s["reference"]["status"] != "complete":
     print("R2 outcome: none (" + ("procedure gate failed" if gate.returncode else (res.get("no_verdict_reason") or "an arm stopped")) + "). FIX-METHOD to the Captain; no CUT-CANDIDATE and no KEEP.")
     sys.exit(4)
 b = res["blockers"]
@@ -27,5 +27,5 @@ if f <= n:
 if lo > 0:
     print("R2 outcome: KEEP. The full procedure found more blocking blockers than plain Opus 5.5, and the interval is above zero.")
     sys.exit(0)
-print("R2 outcome: FIX-METHOD. The full procedure found more, but the interval includes zero; 13 blockers give an MDD of about 56 points (section 6). A larger suite needs its own prereg.")
+print("R2 outcome: FIX-METHOD. The full procedure found more, but the interval includes zero; 13 blockers give an MDD of about 43 points (section 6). A larger suite needs its own prereg.")
 sys.exit(2)

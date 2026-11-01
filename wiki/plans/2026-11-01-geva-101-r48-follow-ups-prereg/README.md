@@ -17,18 +17,18 @@ attachments:
   - 201b7ed3ca17b90ba2f162ac80e39ed4de086247e161972c682955846431a6e9  blind.py.txt
   - 472ab0a1b37a88c0ed0f79e34c63ce635c320d74065414f5fc30e1c145733f91  comparisons.r1.json
   - 31d9baab2996406922d197fa83e5727fdf828a6198a1c87d65a9721b2af6f064  comparisons.r2.json
-  - 504529d54d1d1a85760f09b026df0dcb46481acd10603a23e420778bf7ed1abc  dry-run.sh.txt
-  - 7744b0ae694340606060c9d47a5292bd9842052c755904c68fe181683e6d402f  dry-run.txt
+  - f8ab4865c985d0bbbe57de7a4490990c8d14da8fcc02a7693ac124e2a6cf1308  dry-run.sh.txt
+  - ce365f81626e8ceab74a82e376273d7fcd4af0135ab3c13b663a1784ea2d26e8  dry-run.txt
   - f9df72f7f982b3d94fac54a3cb150633283c4811420d926309c7bf8222bba294  items.ts.txt
   - fb0e95efbb67c335d0f4ccd5231e597f8cf872207f3170ca07de15707da80d48  judge-fake.ts.txt
-  - f54c46360bd2b1ccc26f4669062526e2a4567b1ee535f7da051b76f4a4a8a60b  power.py.txt
-  - ba60bd9b0e971de5a546415fa3fdb8b875e9fcb20b09b7327fdaabed79813908  power.txt
+  - 0f09dfb2c689642a3c1e987056065be25e99c3aa521689b2e0be18189b7e0c7f  power.py.txt
+  - 9794d548de82cc14848283acef333fc93cc10cd3dd479ea84e6bfa47ffbab7ce  power.txt
   - 6b5e20d77bbc29c19d55c096931a06862c7f97faa060e1041de519771d3cffe1  r1-arms.py.txt
-  - 17bd181011d02b6297252d87ba1123111ab0e8d2e5ba399b60e42c9d39d85073  r1-decide.py.txt
+  - 259d87a46e3218d71fc85d5e8951ff0ec654706fe061a2e40e3262f0e72c9e22  r1-decide.py.txt
   - ce77791053ca95153860cd6903dae3b765c7535db963082041e7689a699e9e2c  r1-exposure.py.txt
   - f08dee862b7997d05c877a76a909c770c3fbefa20ae9ed2bb36f93495b489171  r1-scrub.sh.txt
   - ba9acf3555680f66c8c4429de46975f188f888b7aef6882349da8590137c24a2  r2-arms.py.txt
-  - d4491c2d1c5a1cf64562ffb7d8c86558309f37b5f8dfc54ac690c22611009afe  r2-decide.py.txt
+  - 3ebdda714465c02dc61669c4ef0ed227473319f9e67dc71aaeddda044f87cef6  r2-decide.py.txt
   - 6db889579b2faff1dab4d5f6864f5b4ebb040056d683808ab05713a2958dd210  r3-band.py.txt
   - 24d82cdd6b9562b926ca527498e3ba8051e79bd172fde414a773f40d4648a21f  r3-dry.ts.txt
 ---
@@ -92,7 +92,7 @@ Two batches through #108's pipeline at the rig pin: matching (judge-packet, judg
 
 ### 2.5 Decision (r1-decide.py)
 
-- **No decision** when arm C's procedure gate fails, an arm stopped, or the scorer gives no delta (a coverage gap). R1 is incomplete, R2 does not start, and the Captain gets the record.
+- **No decision** when arm C's procedure gate fails, an arm stopped, or the scorer gives no verdict or no delta (a coverage gap, or a judgment with coverage incomplete, which sets the record's no_verdict_reason). R1 is incomplete, R2 does not start, and the Captain gets the record.
 - **R2 runs** when C's blind blocking recall minus none-opus's is at least 10 points.
 - **Otherwise R2 does not run**, and the Review Army and adversarial passes in gstack /review on Opus 5.5 go to Garry as a CUT-CANDIDATE with the record.
 
@@ -137,10 +137,10 @@ The same two batches as R1, with blind.py first, on items r2-judge-match and r2-
 
 ### 3.5 Outcome (r2-decide.py)
 
-- **None** when the procedure gate fails, an arm stopped, or the scorer gives no delta. The Captain gets it as FIX-METHOD: the procedure under test didn't run, so nothing about it was measured.
+- **None** when the procedure gate fails, an arm stopped, or the scorer gives no verdict or no delta (no_verdict_reason set). The Captain gets it as FIX-METHOD: the procedure under test didn't run, so nothing about it was measured.
 - **CUT-CANDIDATE** when gstack-full found no more blocking blockers than none-r2. The Review Army and adversarial passes go to Garry with the record.
 - **KEEP** when the 95% PR-clustered interval of the recall difference is above zero.
-- **FIX-METHOD** otherwise: gstack-full found more, but 13 blockers can't show it. Power is the Why-null reason (MDD about 56 points, section 6), and a larger suite needs its own prereg.
+- **FIX-METHOD** otherwise: gstack-full found more, but 13 blockers can't show it. Power is the Why-null reason (MDD about 43 points, section 6), and a larger suite needs its own prereg.
 
 The scorer's NO_LOSS, LOSS and size-rule lines print but decide nothing. False blockers per PR (6 over-blocking units) and every unmatched blocking finding are reported beside.
 
@@ -252,10 +252,10 @@ power.py (seeded; output in power.txt) simulates each rule on its own cluster st
 | Experiment | MDD | Rule characteristics |
 |---|---|---|
 | R1 (29 blockers in 14 PRs, 2 passes) | 19.3 points | R2 runs in 1.9% of runs at a true lead of 0, 19.3% at 5, 52.5% at 10, 95.1% at 20 |
-| R2 (13 blockers, 1 pass) | about 56 points | CUT-CANDIDATE in 75.9% of runs at a true lift of 0, 28.6% at 10, 9.2% at 20, 2.1% at 30 |
+| R2 (13 blockers, 1 pass) | about 43 points | CUT-CANDIDATE in 75.9% of runs at a true lift of 0, 28.6% at 10, 9.2% at 20, 2.1% at 30; KEEP in 0.0% at 0, 5.6% at 10, 26.0% at 20, 53.0% at 30 |
 | R3 (n tasks, 3 replicates, paired) | 10.9 points at 70 tasks, 12.9 at 50, 16.7 at 30 | at 70 tasks: KEEP in 3.5% of runs at a true lift of 0, 74.2% at the MDD; CUT-CANDIDATE in 48.6% at 0, 0.5% at the MDD |
 
-R2 can show only a large lift; its main use is the kill rule. R3's CUT-CANDIDATE fires in about half of runs when the true lift is zero and rarely when it is at the MDD, so a CUT-CANDIDATE from R3 means no lift of MDD size, not proof of zero.
+R2's MDD is for its frozen KEEP rule, the scorer's PR-clustered bootstrap interval, computed exactly for 13 one-blocker clusters: the smallest KEEP is 4 gains and no losses, or 7 gains with one loss. R2 can show only a large lift; its main use is the kill rule. R3's CUT-CANDIDATE fires in about half of runs when the true lift is zero and rarely when it is at the MDD, so a CUT-CANDIDATE from R3 means no lift of MDD size, not proof of zero.
 
 ## 7. Dry run
 
@@ -268,8 +268,8 @@ dry-run.sh drives every frozen rule, keyless, through the code at the pins, with
 
 What it shows (dry-run.txt):
 
-- **R1.** Arm C's 526 findings match their C12 digests; the scrub scan goes 18, 3, 2, 0 hits; blinding as in section 2.2; all three arms ingest; the gate passes 28 of 28. Both batches run with 0 unjudged (the second judge reads 27 blockers, kappa 0.85), a second run on a bound item is refused, and the ledger shows one settled lease per item. With fake answers that favour arm C, r1-decide.py prints "R2 runs"; with fake answers that don't, it prints the CUT-CANDIDATE.
-- **R2.** The derived suite matches its sha256. The fixture arms pass and fail the gate (19 of 19, then 12 of 19); one lease each on r2a-grid and r2b-grid settles, and a second run on r2b-grid is refused. Fake answers give KEEP (12 of 13 against 2) and CUT-CANDIDATE (2 against 8); the failing gate gives no outcome.
+- **R1.** Arm C's 526 findings match their C12 digests; the scrub scan goes 18, 3, 2, 0 hits; blinding as in section 2.2; all three arms ingest; the gate passes 28 of 28. Both batches run with 0 unjudged (the second judge reads 27 blockers, kappa 0.85), a second run on a bound item is refused, and the ledger shows one settled lease per item. With fake answers that favour arm C, r1-decide.py prints "R2 runs"; with fake answers that don't, it prints the CUT-CANDIDATE; and with a judgment marked coverage incomplete (a synthetic copy of the first record), it gives no decision. A scrub script whose digest doesn't match stops the dry run before any scrub runs.
+- **R2.** The derived suite matches its sha256. The fixture arms pass and fail the gate (19 of 19, then 12 of 19); one lease each on r2a-grid and r2b-grid settles, and a second run on r2b-grid is refused. Fake answers give KEEP (12 of 13 against 2) and CUT-CANDIDATE (2 against 8); the failing gate and a judgment marked coverage incomplete each give no outcome.
 - **R3.** The band list matches its sha256. On synthetic trials through the tag's Ledger and analyze(): KEEP, FIX-METHOD, CUT-CANDIDATE, the gate failing, the saturation stop (9 tasks admitted), the pilot stop (4 of 10) and a cap stop that leaves R3 incomplete.
 
 ## 8. Attachments

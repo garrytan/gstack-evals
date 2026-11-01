@@ -29,26 +29,41 @@ for d in (0.0, 0.05, 0.10, 0.20, 0.30, 0.55):
     print("R1: true lead %2d points: R2 runs (estimate at least 10 points) in %.1f%% of runs" % (100 * d, 100 * sum(r1_delta(d) >= 0.10 for _ in range(SIMS)) / SIMS))
 
 # R2: 13 blocking blockers on 13 PRs, one pass per arm. none-opus found 0 of 26 blocker-passes on them in #108; the
-# simulation uses 5%. Kill rule: gstack-full finds no more blocking blockers than none-r2.
+# simulation uses 5%. Kill rule: gstack-full finds no more blocking blockers than none-r2. KEEP: the scorer's 95%
+# PR-clustered percentile bootstrap interval is above zero. With one blocker per PR, a bootstrap draw's difference is
+# (G - L) / 13, where (G, L, rest) is multinomial over the observed gains g, losses l and ties, so the lower bound is
+# above zero when P(G - L <= 0) < 0.025; that probability is computed exactly here (the scorer's 10000 draws estimate it).
+from functools import lru_cache
+@lru_cache(maxsize=None)
+def keep(g, l, n=13):
+    if g <= l:
+        return False
+    pg, pl = g / n, l / n
+    pz = 1 - pg - pl
+    tail = 0.0
+    for G in range(n + 1):
+        for L in range(n - G + 1):
+            if G - L <= 0:
+                Z = n - G - L
+                tail += math.factorial(n) / (math.factorial(G) * math.factorial(L) * math.factorial(Z)) * pg ** G * pl ** L * pz ** Z
+    return tail < 0.025
 def r2(d):
-    f = n = 0
-    gains = losses = 0
+    f = n = gains = losses = 0
     for _ in range(13):
         p = beta(0.05, 2)
         a, b = rng.random() < min(1.0, p + d), rng.random() < p
         f += a; n += b; gains += a and not b; losses += b and not a
-    k = gains + losses
-    pval = min(1.0, 2 * sum(math.comb(k, i) for i in range(0, min(gains, losses) + 1)) / 2 ** k) if k else 1.0
-    return f, n, pval
+    return f, n, keep(gains, losses)
 for d in (0.0, 0.10, 0.20, 0.30, 0.45):
     rs = [r2(d) for _ in range(SIMS)]
-    print("R2: true lift %2d points: CUT-CANDIDATE (full <= none) in %.1f%% of runs; interval excludes zero (exact sign-flip, two-sided 0.05) in %.1f%%" % (100 * d, 100 * sum(f <= n for f, n, _ in rs) / SIMS, 100 * sum(p < 0.05 and f > n for f, n, p in rs) / SIMS))
+    print("R2: true lift %2d points: CUT-CANDIDATE (full <= none) in %.1f%% of runs; KEEP (bootstrap lower bound above 0) in %.1f%%" % (100 * d, 100 * sum(f <= n for f, n, _ in rs) / SIMS, 100 * sum(k for _, _, k in rs) / SIMS))
 lo, hi = 0.0, 1.0
 for _ in range(14):
     mid = (lo + hi) / 2
-    pw = sum((lambda r: r[2] < 0.05 and r[0] > r[1])(r2(mid)) for _ in range(2000)) / 2000
+    pw = sum(r2(mid)[2] for _ in range(2000)) / 2000
     lo, hi = (lo, mid) if pw >= 0.8 else (mid, hi)
-print("R2: MDD (80%% power for the exact sign-flip test on 13 blockers) about %.0f points" % (100 * hi))
+print("R2: MDD (80%% power for KEEP, the bootstrap rule on 13 blockers) about %.0f points" % (100 * hi))
+print("R2: smallest KEEP: %d gains and no losses (%d gains with one loss)" % (min(g for g in range(14) if keep(g, 0)), min(g for g in range(13) if keep(g, 1))))
 
 # R3: in-band tasks, per-task pass chance with mean 0.5 and spread 0.3 (GEVA-100), 3 replicates per arm, paired by task.
 def r3_formula(n, reps=3, epq=0.16):
