@@ -3,7 +3,7 @@
 // stub, as a trial's agent would, against a sidecar on 127.0.0.1.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { git } from "../../lanes/real-outcome/sandbox/gh.ts";
@@ -46,7 +46,8 @@ async function control(path: string, body: unknown) {
 }
 
 /** A fixture repository and a trial opened on it; the fake agent acts in c/testbed with the stub first on PATH. */
-async function trial(o: { kind?: TrialSpec["kind"]; files?: Record<string, string>; replay?: boolean; agent_ip?: string; skipPrep?: boolean } = {}) {
+async function trial(o: { kind?: TrialSpec["kind"]; files?: Record<string, string>; replay?: boolean; agent_ip?: string; skipPrep?: boolean; branch?: string; setup?: string } = {}) {
+  const branch = o.branch ?? "main";
   const id = "t" + ++n;
   const c = join(tmp, id);
   const repo = join(c, "testbed");
@@ -57,12 +58,13 @@ async function trial(o: { kind?: TrialSpec["kind"]; files?: Record<string, strin
     mkdirSync(join(repo, path, ".."), { recursive: true });
     writeFileSync(join(repo, path), text);
   }
-  expect(run("git init -q -b main && git add -A && git commit -q -m base").code).toBe(0);
+  expect(run("git init -q -b '" + branch + "' && git add -A && git commit -q -m base").code).toBe(0);
   const base = run("git rev-parse HEAD").out.trim();
   if (o.replay) expect(run("git checkout -q -b change && echo 'export const sub = (a, b) => a - b;' >> src/app.js && git commit -qam 'Add sub'").code).toBe(0);
+  if (o.setup) expect(run(o.setup).code).toBe(0);
   const bundle = join(c, "base.bundle");
-  expect(run("git bundle create -q " + bundle + " refs/heads/main").code).toBe(0);
-  const spec: TrialSpec = { trial: id, repo: "sandbox/repo", kind: o.kind ?? (o.replay ? "K4" : "K2"), base_branch: "main", base_commit: base, start_ref: o.replay ? "change" : "main", bundle, repo_dir: repo, config_dir: join(c, "etc"), bin_dir: join(c, "bin"), node: process.execPath, ...(o.agent_ip ? { agent_ip: o.agent_ip } : {}) };
+  expect(run("git bundle create -q " + bundle + " 'refs/heads/" + branch + "'").code).toBe(0);
+  const spec: TrialSpec = { trial: id, repo: "sandbox/repo", kind: o.kind ?? (o.replay ? "K4" : "K2"), base_branch: branch, base_commit: base, start_ref: o.replay ? "change" : branch, bundle, repo_dir: repo, config_dir: join(c, "etc"), bin_dir: join(c, "bin"), node: process.execPath, ...(o.agent_ip ? { agent_ip: o.agent_ip } : {}) };
   const opened = await control("/trials", spec);
   const token = opened.body.token as string;
   const prep = o.skipPrep || opened.status !== 200 ? null : run("sh -s", opened.body.prep as string);
@@ -107,6 +109,25 @@ describe("trial start: a feature branch cut from base, with origin and origin/HE
     }
     const ok = await trial({ files: { "CLAUDE.md": "# notes\n", "docs/AGENTS.md": "x\n" } });
     expect(ok.opened.body.project_docs).toEqual(["CLAUDE.md", "docs/AGENTS.md"]);
+  });
+
+  test("prep refuses project-local Claude Code configuration in the checked-out replay tree and in untracked or ignored files", async () => {
+    const replay = await trial({ replay: true, setup: "mkdir -p .claude && echo '{}' > .claude/settings.json && git add -A && git commit -qm cfg" });
+    const untracked = await trial({ setup: "mkdir -p pkg/.claude && echo x > pkg/.claude/CLAUDE.md" });
+    const ignored = await trial({ files: { ".gitignore": ".mcp.json\n" }, setup: "echo '{}' > .mcp.json" });
+    for (const t of [replay, untracked, ignored]) {
+      expect(t.opened.status).toBe(200);
+      expect(t.prep!.code).toBe(4);
+      expect(t.prep!.err).toContain("REAL_PREP_PROJECT_CONFIG");
+    }
+  });
+
+  test("a base branch name with shell characters is quoted in prep and runs nothing", async () => {
+    const name = "b$(touch${IFS}PWNED)";
+    expect(spawnSync("git", ["check-ref-format", "--branch", name]).status).toBe(0);
+    const t = await trial({ branch: name });
+    expect(t.prep!.out.trim()).toBe("REAL_PREP_OK feature " + t.base + " " + t.base);
+    expect(existsSync(join(t.repo, "PWNED"))).toBe(false);
   });
 
   test("open refuses a bundle whose base branch is not the base commit, and a K4 spec that starts on base", async () => {

@@ -120,7 +120,7 @@ export function prepScript(o: { spec: TrialSpec; agentUrl: string; token: string
     "chmod 0755 " + shq(binDir + "/gh"),
     "chmod 0644 " + shq(cfgDir + "/gh.json") + " " + shq(cfgDir + "/gh.cjs"),
     "cd " + shq(s.repo_dir ?? "/testbed"),
-    "test \"$(git rev-parse --verify -q refs/heads/" + base + ")\" = " + s.base_commit + " || { echo 'REAL_PREP_FAIL the base branch is not at the base commit' >&2; exit 3; }",
+    "test \"$(git rev-parse --verify -q " + shq("refs/heads/" + base) + ")\" = " + s.base_commit + " || { echo 'REAL_PREP_FAIL the base branch is not at the base commit' >&2; exit 3; }",
     "git remote remove origin 2>/dev/null || true",
     "git remote add origin " + shq(url + "/git/origin.git"),
     "git config " + shq("http." + url + "/.extraHeader") + " " + shq("Authorization: Bearer " + o.token),
@@ -129,6 +129,8 @@ export function prepScript(o: { spec: TrialSpec; agentUrl: string; token: string
     "git fetch -q origin " + shq("+refs/heads/" + base + ":refs/remotes/origin/" + base),
     "git remote set-head origin " + shq(base) + " >/dev/null",
     s.start_ref === base ? "git checkout -q -b " + shq(feature) + " " + shq(base) : "git checkout -q " + shq(s.start_ref),
+    "bad=$({ git ls-tree -r --name-only HEAD; git ls-files -o; } | grep -E " + shq('(^|/|")(\.claude/|\.mcp\.json"?$)') + " | head -n 5 | tr '\n' ' ')",
+    'test -z "$bad" || { echo "REAL_PREP_PROJECT_CONFIG the checked-out tree or its untracked files hold project-local Claude Code configuration: $bad" >&2; exit 4; }',
     "test \"$(command -v gh)\" = " + shq(binDir + "/gh") + " || { echo \"REAL_PREP_FAIL gh resolves to $(command -v gh), not the sandbox stub\" >&2; exit 3; }",
     'echo "REAL_PREP_OK $(git symbolic-ref --short HEAD) $(git rev-parse HEAD) $(git rev-parse refs/remotes/origin/HEAD)"',
   ];
