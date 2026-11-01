@@ -17,7 +17,6 @@ links:
   - GST-821
 attachments:
   - 2af63298f216b7484105e2931b175759fe3f5fefc546afb8a8b2391e5cd7fdc0  dryrun.txt
-  - 1cf83c910d8fba22c751dfc7fc77e933ecf63239142844cc982a28dc30570395  runner.patch.txt
 ---
 
 # Preregistration: does told skill text tax cheap models?
@@ -129,7 +128,7 @@ Run T projects to $64.75.
 
 ## 9. Runner
 
-The runner tag `laneb-texttax-1-runner` (665920ddaf4101fdb029ef60c40388ee75de58b1) is `laneb-stacks-1-runner` (bcf91cbba2afb8c2a822e937e0e23be9e541e110), which ran #109, plus the changes below. The diff is attached as runner.patch.txt, without the per-file tar listings in `arms/manifests/*.files.tsv`, which the tag carries.
+The runner tag `laneb-texttax-1-runner` (665920ddaf4101fdb029ef60c40388ee75de58b1) is `laneb-stacks-1-runner` (bcf91cbba2afb8c2a822e937e0e23be9e541e110), which ran #109, plus the changes below. Both tags are in this repository, so the exact change is `git diff bcf91cbba2afb8c2a822e937e0e23be9e541e110 665920ddaf4101fdb029ef60c40388ee75de58b1 -- quick/laneb`.
 
 1. `arms/variants.ts` and the placebo-short manifest, which prepare-run checks.
 2. `runner/skill-map.stacks.json` maps placebo-short to investigate on every task, as it maps placebo.
