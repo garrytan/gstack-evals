@@ -90,6 +90,26 @@ RUN set -eu; \
       done; \
       "$cfg" set routing_declined true; \
     fi
+# Rendered arms (build-render.sh). GSTACK_RENDER=interactive or unattended
+# renders the full loadout after setup to R=/root/.claude/gstack-render, outside
+# skills/, so Claude Code does not register it, and serves it: for each
+# R/<skill>/SKILL.md, the served folder's SKILL.md and sections entries point
+# at R and every other entry is left alone. The render's root router stays
+# unserved. A rendered skill with no served folder fails the build. The
+# default, empty, renders nothing, so the plain gstack arm is unchanged.
+ARG GSTACK_RENDER=
+RUN set -eu; \
+    [ -n "$GSTACK_RENDER" ] || exit 0; \
+    R=/root/.claude/gstack-render; \
+    kind=(); [ "$GSTACK_RENDER" = interactive ] || kind=(--session-kind "$GSTACK_RENDER"); \
+    cd /root/.claude/skills/gstack; \
+    bin/gstack-modules render --host claude --loadout full "${kind[@]}" --out-dir "$R"; \
+    for f in "$R"/*/SKILL.md; do \
+      s="$(basename "$(dirname "$f")")"; served="/root/.claude/skills/$s"; \
+      if [ ! -d "$served" ] || [ -L "$served" ]; then echo "rendered skill $s has no served folder" >&2; exit 1; fi; \
+      ln -sfn "$f" "$served/SKILL.md"; \
+      if [ -e "$R/$s/sections" ]; then rm -rf "$served/sections"; ln -s "$R/$s/sections" "$served/sections"; fi; \
+    done
 # Make the tree self-contained and reproducible:
 # - every symlink outside node_modules (setup links each skill folder's files
 #   into the checkout) becomes a copy of its target; node_modules keeps its

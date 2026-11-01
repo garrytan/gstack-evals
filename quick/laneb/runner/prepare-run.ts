@@ -2,13 +2,15 @@
 // tasks/tasks.json), arm tarballs, the proxy config and a Harbor JobConfig whose paths point
 // at the VM layout launch.sh syncs (runner at <vm>/runner, run dir at <vm>/run).
 // Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>
+// An arms entry may set agent options per arm (grid.ts armSpec), e.g. gstack:system_prompt=claude-code-preset; the
+// manifest records every arm's system_prompt and session_kind.
 // Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM's work directory, default below),
 // NETWORK (default allowlist), WRAPPER (a prompt-wrapper*.md file in this directory, default prompt-wrapper.md), TASKS (comma list from tasks/final.json, default all).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { materializeTb2 } from "./materialize.ts";
-import { jobConfig, invokesArm } from "./grid.ts";
+import { armSpec, jobConfig, invokesArm } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -37,7 +39,9 @@ if (import.meta.main) {
   for (const id of final) if (!finalAll.includes(id)) throw new Error(`E_USAGE task ${id} is not in tasks/final.json`);
   const wrapper = process.env.WRAPPER ?? "prompt-wrapper.md";
   if (!/^prompt-wrapper[\w-]*\.md$/.test(wrapper) || !existsSync(join(here, wrapper))) throw new Error(`E_USAGE WRAPPER ${wrapper} is not a prompt-wrapper*.md file in ${here}`);
-  const skillMaps = toldSkillMaps(JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), armsCsv.split(","), final);
+  const armSpecs = armsCsv.split(",").map(armSpec);
+  if (new Set(armSpecs.map((a) => a.name)).size !== armSpecs.length) throw new Error(`E_USAGE arms ${armsCsv}: an arm is named twice`);
+  const skillMaps = toldSkillMaps(JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), armSpecs.map((a) => a.name), final);
   const expected = new Map<string, string>([...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
@@ -51,7 +55,7 @@ if (import.meta.main) {
     tasks[id] = m;
   }
   // Every arm must be the preregistered bytes: its tar sha256 must equal the committed manifest's.
-  const arms = armsCsv.split(",").map((name) => {
+  const arms = armSpecs.map(({ name, ...options }) => {
     const tar = `${vm}/run/arms/${name}.tar`;
     const manifestPath = join(here, "../arms/manifests", `${name}.json`);
     const want = process.env.ALLOW_UNREGISTERED_ARMS === "1" && !existsSync(manifestPath) ? null : JSON.parse(readFileSync(manifestPath, "utf8")).tar.sha256;
@@ -67,7 +71,7 @@ if (import.meta.main) {
       got = sha256(join(run, "arms", `${name}.tar`));
     }
     if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (arms/manifests/${name}.json)`);
-    return { name, tar, sha256: got, ...extra };
+    return { name, tar, sha256: got, ...extra, options };
   });
   const models = modelsCsv.split(",").map((spec) => {
     const [id, only, ...rest] = spec.split(":");
@@ -81,7 +85,7 @@ if (import.meta.main) {
   });
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
   const job = jobConfig({
-    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256 }) => ({ name, tar, sha256 })),
+    job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`, wrapper,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
     skill_maps: skillMaps,
@@ -97,7 +101,8 @@ if (import.meta.main) {
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
     wrapper, wrapper_sha256: sha256(join(here, wrapper)), persona_sha256: sha256(join(here, "agent/persona.json")),
     skill_map_sha256: sha256(join(here, "skill-map.stacks.json")), invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invokesArm(name)])),
-    proxy_config_sha256: sha256(join(run, "proxy.json")), cells, arms, tasks,
+    proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
+    arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "" })), tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   console.log(`${run}: ${final.length} tasks x ${job.agents.length} (model, arm) cells x ${attempts} attempts, git ${manifest.git_head.slice(0, 7)}${manifest.git_dirty ? " (dirty)" : ""}`);

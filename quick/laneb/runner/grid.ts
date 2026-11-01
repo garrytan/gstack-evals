@@ -9,7 +9,7 @@ export type BatchSpec = {
   tasks_dir: string;
   tasks: string[];
   models: { id: string; harbor_model: string; session_cap_usd: number; only_arms?: string[] }[];
-  arms: { name: string; tar: string; sha256: string }[];
+  arms: ({ name: string; tar: string; sha256: string } & AgentOptions)[];
   attempts: number;
   n_concurrent: number;
   agent_dir: string;
@@ -26,6 +26,27 @@ export type BatchSpec = {
 // defaults on and is a per-batch off switch; none never invokes. Each arm reads its own skill map
 // (arm, then task, to skill), so the stacks batch tells gstack and pstack arms different skills.
 export const invokesArm = (name: string) => name !== "none";
+
+// Agent options an arm may set, with laneb_agent.py's allowed values (SYSTEM_PROMPTS, SESSION_KINDS). An option
+// left out keeps the agent's default (sdk-default, no session kind) and stays out of the kwargs, so a batch that sets
+// none writes the same JobConfig as before.
+export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"] };
+export type AgentOptions = { system_prompt?: string; session_kind?: string };
+
+// One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
+// gstack:system_prompt=claude-code-preset:session_kind=unattended.
+export function armSpec(entry: string): { name: string } & AgentOptions {
+  const [name, ...settings] = entry.split(":");
+  const options: Record<string, string> = {};
+  for (const setting of settings) {
+    const [, key, value] = /^(\w+)=(.*)$/.exec(setting) ?? [];
+    if (!AGENT_OPTIONS[key as keyof AgentOptions]?.includes(value) || key in options) {
+      throw new Error(`E_USAGE arm ${entry}: ${setting} is not one of ${JSON.stringify(AGENT_OPTIONS)}, or is set twice`);
+    }
+    options[key] = value;
+  }
+  return { name, ...options };
+}
 
 // Harbor's default no-retry list at f3a5a92, plus our ledger cap stop. A trial that fails for any
 // other reason before it is graded (image build, container start, proxy unreachable) gets two reruns.
@@ -54,6 +75,8 @@ export function jobConfig(b: BatchSpec) {
         max_output_tokens: b.max_output_tokens,
         invoke: (b.invoke ?? true) && invokesArm(a.name),
         skill_map: b.skill_maps?.[a.name] ?? {},
+        ...(a.system_prompt ? { system_prompt: a.system_prompt } : {}),
+        ...(a.session_kind ? { session_kind: a.session_kind } : {}),
       },
     })),
   );

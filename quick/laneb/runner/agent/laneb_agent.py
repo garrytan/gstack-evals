@@ -88,6 +88,17 @@ def sha256_file(path: Path) -> str:
     return _DIGESTS[key]
 
 
+# The agent's system prompt setting, by name, as extra ClaudeAgentOptions. sdk-default passes none, so the SDK sends
+# --system-prompt "" and the CLI keeps only its short Agent SDK line; claude-code-preset adds Claude Code's own guidance.
+SYSTEM_PROMPTS = {
+    "sdk-default": {},
+    "claude-code-preset": {"system_prompt": {"type": "preset", "preset": "claude_code"}},
+}
+
+# GSTACK_SESSION_KIND for the container's claude. Empty sets nothing; unattended is passed through docker exec -e.
+SESSION_KINDS = ("", "unattended")
+
+
 def post_json(url: str, body: dict, timeout: float = 30) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"content-type": "application/json"}, method="POST")
     try:
@@ -113,6 +124,8 @@ class LanebOptions(ClaudeCodeOptions):
     invoke: bool = Field(default=False, description="When true the prompt opens with a slash command '/<skill> ' so the CLI expands it and injects that skill's SKILL.md body. Every arm but none sets it.")
     skill_map: dict[str, str] = Field(default_factory=dict, description="Task id to the preregistered skill this arm invokes for it, from the arm's entry in skill-map.stacks.json; read only when invoke is true.")
     invocation_sep: str = Field(default=" ", description="Separator between the slash command and the wrapper text; the CLI needs one space to parse the slash command.")
+    system_prompt: str = Field(default="sdk-default", description="A key of SYSTEM_PROMPTS: sdk-default or claude-code-preset.")
+    session_kind: str = Field(default="", description="GSTACK_SESSION_KIND in the container: empty (unset) or unattended.")
 
 
 class LanebAgent(ClaudeCode):
@@ -169,6 +182,11 @@ class LanebAgent(ClaudeCode):
         return {"event": "patch", "rc": res.returncode, "bytes": res.stdout.decode().strip(), "stderr": res.stderr.decode()[-300:]}
 
     async def run(self, instruction: str, environment: BaseEnvironment, context: AgentContext) -> None:
+        if self.options.system_prompt not in SYSTEM_PROMPTS:
+            raise ValueError(f"system_prompt {self.options.system_prompt!r} is not one of {sorted(SYSTEM_PROMPTS)}")
+        if self.options.session_kind not in SESSION_KINDS:
+            raise ValueError(f"session_kind {self.options.session_kind!r} is not one of {list(SESSION_KINDS)}")
+        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind}
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
         sim = Simulator(persona, self.logs_dir / "usersim-events.jsonl")
@@ -187,7 +205,7 @@ class LanebAgent(ClaudeCode):
             session = post_json(
                 self.options.control_url + "/sessions",
                 {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
-                 "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}},
+                 "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"], **agent_options}},
             )
         except RuntimeError as e:
             if "-> 409" in str(e):
@@ -212,6 +230,10 @@ class LanebAgent(ClaudeCode):
             "DISABLE_ERROR_REPORTING": "1",
             "IS_SANDBOX": "1",
         }
+        forwarded = FORWARDED_ENV
+        if self.options.session_kind:
+            env["GSTACK_SESSION_KIND"] = self.options.session_kind
+            forwarded += ("GSTACK_SESSION_KIND",)
 
         wrapper_text = Path(self.options.wrapper_path).read_text()
         task_id = environment.session_id.split("__")[0]
@@ -226,7 +248,7 @@ class LanebAgent(ClaudeCode):
 
         host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
         wrapper = host_dir / "claude-in-container"
-        forward = " ".join(f"-e {name}" for name in FORWARDED_ENV)
+        forward = " ".join(f"-e {name}" for name in forwarded)
         workdir = f"-w {self.options.workdir} " if self.options.workdir else ""
         wrapper.write_text(f"#!/bin/sh\nexec docker exec -i {workdir}{forward} {container} claude \"$@\"\n")
         wrapper.chmod(0o755)
@@ -255,6 +277,7 @@ class LanebAgent(ClaudeCode):
             setting_sources=["user", "project"],
             max_turns=self.options.sdk_max_turns,
             disallowed_tools=disallowed,
+            **SYSTEM_PROMPTS[self.options.system_prompt],
         )
         log({"event": "disallowed_tools", "tools": disallowed})
         started = time.time()
@@ -266,7 +289,7 @@ class LanebAgent(ClaudeCode):
                     record = {"type": type(message).__name__, "t": round(time.time() - started, 2)}
                     data = getattr(message, "data", None)
                     if isinstance(data, dict) and data.get("subtype") == "init":
-                        record["init"] = {k: data.get(k) for k in ("tools", "skills", "slash_commands", "model", "permissionMode", "cwd", "claude_code_version", "apiKeySource")}
+                        record["init"] = {k: data.get(k) for k in ("tools", "skills", "slash_commands", "model", "permissionMode", "cwd", "claude_code_version", "apiKeySource")} | agent_options
                     for attr in ("content", "subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason"):
                         if hasattr(message, attr):
                             record[attr] = getattr(message, attr)
@@ -282,7 +305,7 @@ class LanebAgent(ClaudeCode):
             log(patch)
             closed = post_json(self.options.control_url + f"/sessions/{session['id']}/close", {"reason": "agent_finished"})
             usage = closed.get("usage", {})
-            summary = {"session": closed, "result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, "wall_s": round(time.time() - started, 1), "patch": patch}
+            summary = {"session": closed, "result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, **agent_options, "wall_s": round(time.time() - started, 1), "patch": patch}
             (self.logs_dir / "laneb-summary.json").write_text(json.dumps(summary, indent=2, default=str))
             cached = usage.get("cache_read_input_tokens", 0)
             context.n_input_tokens = usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_creation_1h_input_tokens", 0) + cached

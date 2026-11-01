@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { jobConfig } from "../runner/grid.ts";
+import { armSpec, jobConfig } from "../runner/grid.ts";
 import { tb2TaskToml, TB2_AGENT_HOSTS } from "../runner/materialize.ts";
 
 describe("grid", () => {
@@ -17,6 +17,24 @@ describe("grid", () => {
     expect(job.retry.max_retries).toBe(2);
     expect(job.retry.exclude_exceptions).toContain("LedgerCapStop");
     expect(job.retry.exclude_exceptions).toContain("AgentTimeoutError");
+  });
+
+  test("an arm's system prompt and session kind reach its kwargs only when set", () => {
+    const spec = {
+      job_name: "r1", tasks_dir: "/run/tasks", tasks: ["a"], attempts: 1, n_concurrent: 1, agent_dir: "/r/agent", runner_dir: "/r", base_url: "http://__GATEWAY__:8787", max_output_tokens: 32000, verifier_timeout_multiplier: 2,
+      models: [{ id: "particle-1", harbor_model: "anthropic/particle-1", session_cap_usd: 1 }],
+      arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }],
+    };
+    const arms = [armSpec("none:session_kind=unattended"), armSpec("gstack-render-unattended:system_prompt=claude-code-preset:session_kind=unattended")];
+    const job = jobConfig({ ...spec, arms: arms.map((a) => ({ ...a, tar: `/run/arms/${a.name}.tar`, sha256: "a" })) });
+    expect(job.agents[0].kwargs).not.toHaveProperty("system_prompt");
+    expect(job.agents[0].kwargs).toMatchObject({ arm: "none", session_kind: "unattended" });
+    expect(job.agents[1].kwargs).toMatchObject({ arm: "gstack-render-unattended", system_prompt: "claude-code-preset", session_kind: "unattended" });
+    expect(JSON.stringify(jobConfig(spec))).toBe(JSON.stringify(jobConfig({ ...spec, arms: [{ ...spec.arms[0], ...armSpec("none") }] })));
+    expect(armSpec("none:system_prompt=sdk-default")).toEqual({ name: "none", system_prompt: "sdk-default" });
+    for (const bad of ["gstack:system_prompt=claude_code", "gstack:session_kind=", "gstack:session_kind=interactive", "gstack:model=x", "gstack:system_prompt", "gstack:session_kind=unattended:session_kind=unattended"]) {
+      expect(() => armSpec(bad)).toThrow("E_USAGE");
+    }
   });
 
   test("a model with only_arms gets just those arms, in arm order, after the full models", () => {
