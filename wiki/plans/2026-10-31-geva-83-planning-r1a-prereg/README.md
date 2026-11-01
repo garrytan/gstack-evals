@@ -57,7 +57,7 @@ It pins the scorer and harness at main e305ed0, the merge of #100 (0239f14), #10
 
 ## 2. Arms, models and pins
 
-Every arm runs through `review-units --plan ceo` in the Docker rig at the pin, on the same unit tree, with the same tools, the rec user and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. Each prompt is the arm's line, a blank line, then the told plan template (TOLD_PLAN_SHA256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291). The parser reads the last `plan-findings` block (PLAN_PARSER_SHA256 ff1b10cadccfe13c9f4ba443b97d56fddb2a47aa83a66766503a9a7e096cda11). Critical and High are must-fix (PLAN_SEVERITY_MAP).
+Every arm runs through `review-units --plan ceo` in the Docker rig at the pin, on the same unit tree, with the same tools, the rec user and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. Each prompt is the arm's line, a blank line, then the told plan template (TOLD_PLAN_SHA256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291). The parser reads the last `plan-findings` block (PLAN_PARSER_SHA256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46). Critical and High are must-fix (PLAN_SEVERITY_MAP).
 
 | Arm id | Install | Line | Role |
 |---|---|---|---|
@@ -117,8 +117,8 @@ All are reported, none is a claim. Each runs through the pinned scorer as the dr
 - **Not-defect must-fix findings** on every scored plan, per arm, from blind adjudication.
 - **Missing cells** (open item 2): a malformed, missing or timed-out pass scores as finding nothing and is listed in arm.json diagnostics. Failure scoring at the pin, from #101, #106 (GST-737) and #107 (GST-748), as the Captain settled it:
   - Model output is non-empty text, non-empty thinking, a thinking block with a non-empty signature (Claude 5.5 models send empty thinking with a signature), redacted thinking, or a tool_use block. An empty assistant message is no model output, and a record with no model_output flag is a gap.
-  - A session the arm's own failure ends (a crash, a provider failure or a timeout) after model output scores as finding nothing: a miss for that arm. The same failure before any model output is a coverage gap.
-  - Infra is never the arm's miss. An evaluator error, a user-simulator failure, docker exec's own exits 125, 126 and 127, an ECONNRESET followed by exit 1 after the SDK closes stdin (teardown), and a machine that stops answering are coverage gaps.
+  - A session the arm's own failure ends (a crash or a timeout) after model output scores as finding nothing: a miss for that arm. The same failure before any model output is a coverage gap.
+  - Infra is never the arm's miss. A provider API error, an evaluator error, a user-simulator failure, docker exec's own exits 125, 126 and 127, an ECONNRESET followed by exit 1 after the SDK closes stdin (teardown), and a machine that stops answering are coverage gaps.
   - An evaluator stall is credited to the session, timed with performance.now, capped at 10% of the session timeout and recorded as credited_stall_ms. A stall just before a persona pause is credited. A timeout reached only past that cap is infra.
   - A completed session with model output but no text turn scores as a miss, because the plan parser reads reviews only from text turns. The results count these misses per arm.
   - A coverage gap stops the arm with E_COVERAGE_GAP, and review-units exits 2. The run procedure reads exit 2 as a stopped arm, records it, and never reruns it as a crashed run.
