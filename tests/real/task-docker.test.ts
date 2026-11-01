@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// B2 in Docker (GSTACK_EVALS_DOCKER=1): fixture tasks built and checked end to end (K1, K4 replay, K4 decoy, a Go K2),
-// a task that breaks V2, a planted leak, and the verifier's negative fixtures: skip markers, conftest hooks, symlinked
-// tests, a swapped runner, an exit at import or inside a test and agent-side config, each graded as a failure, beside
-// honest fixes that pass. Keyless: no model call; the images install pinned, hashed packages at build time.
+// B2 in Docker (GSTACK_EVALS_DOCKER=1): fixture tasks built and checked end to end (K1, K4 replay, K4 decoy, a Go K2
+// on Go 1.23 and 1.25), a task that breaks V2, a planted leak, and the verifier's negative fixtures: skip markers,
+// conftest hooks, symlinked tests, a swapped runner, a plugin in the tree, an exit at import or inside a test,
+// agent-side config, an early TestMain, a weakened helper, a go.mod edit and a patch that does not apply, none of
+// which passes a hidden test it should fail, beside honest fixes that pass. Keyless: no model call; the images install pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { appendFileSync, cpSync } from "node:fs";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ import { buildImage, checkTask, type CheckResult } from "../../lanes/real-outcom
 import { readTask, type TaskJson } from "../../lanes/real-outcome/task/format.ts";
 import { resultFor } from "../../lanes/real-outcome/task/record.ts";
 import { allPass, verifyTree } from "../../lanes/real-outcome/task/verify.ts";
-import { buildRepo, calcCommits, calcSpecs, clampyRepo, FMT_4, OPS_4, patchFrom, tempDir, TEST_OPS_4 } from "./fixture.ts";
+import { buildRepo, calcCommits, calcSpecs, CLAMP_2, clampyRepo, FMT_4, GO_IMAGE, GO_IMAGE_125, OPS_4, patchFrom, tempDir, TEST_OPS_4 } from "./fixture.ts";
 
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";
 const LONG = 900_000;
@@ -83,11 +84,22 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     const exit = grade("exit-at-import", { ...intro, "calc/fmt.py": "import os\nos._exit(0)\n" + FMT_4 });
     expect(exit.pass).toBe(false);
     expect(exit.half.status).toBe("missing");
+    const plugin = grade("plugin-dist-info", { ...intro, "calc/fmt.py": FMT_4, "evil-1.0.dist-info/METADATA": "Metadata-Version: 2.1\nName: evil\nVersion: 1.0\n", "evil-1.0.dist-info/entry_points.txt": "[pytest11]\nevil = evil_plugin\n", "evil_plugin.py": "def pytest_configure(config):\n    import calc.fmt\n    calc.fmt.percent = lambda x: f\"{x * 100:.1f}%\"\n" });
+    expect(plugin.half).toMatchObject({ status: "fail", cls: "assert" });
     const exitInCall = grade("exit-in-call", { ...intro, "calc/fmt.py": FMT_4.replace('return f"{x * 10:.1f}%"', '__import__("os")._exit(0)') });
     expect(exitInCall.half.status).not.toBe("pass");
     const config = grade("agent-config", { ...intro, "calc/fmt.py": FMT_4, "pyproject.toml": '[project]\nname = "calc-fixture"\nversion = "0.1.0"\n\n[tool.pytest.ini_options]\npythonpath = ["."]\naddopts = "--deselect tests/test_percent.py::test_percent_half -p no:python"\n', "pytest.ini": "[pytest]\naddopts = -k nothing\n" });
     expect(config.half).toMatchObject({ status: "fail", cls: "assert" });
-    for (const g of [skipSource, skipTests, hook, link, runner, exit, exitInCall, config]) expect(g.pass).toBe(false);
+    for (const g of [skipSource, skipTests, hook, link, runner, plugin, exit, exitInCall, config]) expect(g.pass).toBe(false);
+  }, LONG);
+
+  test("a tree whose patch does not apply grades as a failure", () => {
+    const patch = "diff --git a/calc/fmt.py b/calc/fmt.py\n--- a/calc/fmt.py\n+++ b/calc/fmt.py\n@@ -1 +1 @@\n-no such line\n+x = 1\n";
+    const tree = verifyTree({ taskDir: k1Dir, task: k1, image, label: "no-apply", patch, runs: 1, seed: 7, work: join(tmp.dir, "work-neg") });
+    expect(tree.prepare.patch).toBe("failed");
+    expect(tree.prepare.error).toContain("patch failed");
+    expect(tree.runs).toEqual([]);
+    expect(allPass(tree, [...k1.tests.functional, ...k1.tests.escaped_defect])).toBe(false);
   }, LONG);
 
   test("K4 replay and decoy tasks are valid", () => {
@@ -113,22 +125,27 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(r.rules.filter((x) => !x.pass).map((x) => x.rule.split(" ")[0]).sort()).toEqual(["L2", "V2"]);
   }, LONG);
 
-  test("a Go task is valid, and a TestMain that exits early or a weakened helper fails", () => {
-    const g = clampyRepo(tmp.dir);
-    const dir = buildTask(g.spec, g.repo, join(tmp.dir, "out/clampy")).dir;
-    const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-go"), runs: 2, mechanical: true });
-    expect(r.rules.filter((x) => !x.pass)).toEqual([]);
-    expect(r.derived.regression).toEqual(["clamp::TestClampLow"]);
-    const t = readTask(dir);
-    const goImage = buildImage(dir, t).tag;
-    const base = git1(g.repo);
-    const run = (label: string, files: Record<string, string>) => verifyTree({ taskDir: dir, task: t, image: goImage, label, patch: patchFrom(g.repo, base, files), runs: 1, seed: 3, work: join(tmp.dir, "work-go-neg") });
-    const exitEarly = run("testmain", { "clamp/zz_test.go": 'package clamp\n\nimport (\n\t"os"\n\t"testing"\n)\n\nfunc TestMain(m *testing.M) { os.Exit(0) }\n', "go.work": "go 1.23\n\nuse .\n" });
-    expect(exitEarly.prepare.deleted.sort()).toEqual(["clamp/zz_test.go", "go.work"]);
-    expect(resultFor(exitEarly.runs[0].parsed, "clamp::TestClampHigh")).toMatchObject({ status: "fail", cls: "assert" });
-    const weak = run("weak-helper", { "clamp/helpers_test.go": 'package clamp\n\nimport "testing"\n\nfunc check(t *testing.T, got, want int) {}\n' });
-    expect(resultFor(weak.runs[0].parsed, "clamp::TestClampHigh")).toMatchObject({ status: "fail", cls: "assert" });
-  }, LONG);
+  for (const [version, goImage] of [["1.23", GO_IMAGE], ["1.25", GO_IMAGE_125]] as const) {
+    test("a Go " + version + " task is valid; an early TestMain, a weakened helper, a go.mod edit and a missing symbol grade right", () => {
+      const g = clampyRepo(tmp.dir, goImage, "clampy-" + version);
+      const dir = buildTask(g.spec, g.repo, join(tmp.dir, "out/clampy-" + version)).dir;
+      const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-go-" + version), runs: 2, mechanical: true });
+      expect(r.rules.filter((x) => !x.pass)).toEqual([]);
+      expect(r.derived.regression).toEqual(["clamp::TestClampLow"]);
+      const t = readTask(dir);
+      const goImageTag = buildImage(dir, t).tag;
+      const base = git1(g.repo);
+      const run = (label: string, files: Record<string, string>) => verifyTree({ taskDir: dir, task: t, image: goImageTag, label, patch: patchFrom(g.repo, base, files), runs: 1, seed: 3, work: join(tmp.dir, "work-go-neg-" + version) });
+      const high = (tree: ReturnType<typeof run>) => resultFor(tree.runs[0].parsed, "clamp::TestClampHigh");
+      const exitEarly = run("testmain", { "clamp/zz_test.go": 'package clamp\n\nimport (\n\t"os"\n\t"testing"\n)\n\nfunc TestMain(m *testing.M) { os.Exit(0) }\n', "go.work": "go 1.23\n\nuse .\n" });
+      expect(exitEarly.prepare.deleted.sort()).toEqual(["clamp/zz_test.go", "go.work"]);
+      expect(high(exitEarly)).toMatchObject({ status: "fail", cls: "assert" });
+      const weak = run("weak-helper", { "clamp/helpers_test.go": 'package clamp\n\nimport "testing"\n\nfunc check(t *testing.T, got, want int) {}\n' });
+      expect(high(weak)).toMatchObject({ status: "fail", cls: "assert" });
+      expect(high(run("go-mod", { "clamp/clamp.go": CLAMP_2, "go.mod": "module example.com/clampy\n\ngo 1.99\n" }))).toEqual({ status: "pass" });
+      expect(high(run("missing-symbol", { "clamp/clamp.go": CLAMP_2.replace("func Clamp(", "func Clamp2(") }))).toMatchObject({ status: "fail", cls: "missing_name", name: "Clamp" });
+    }, LONG);
+  }
 });
 
 function git1(repo: string): string {

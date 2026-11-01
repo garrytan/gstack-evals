@@ -18,7 +18,7 @@ export const TEST_PATTERNS = [
 ];
 
 /** Files that change how a test run starts or what it loads. The hidden run keeps only gold's copies. */
-export const RUNNER_CONFIG_PATTERNS = ["(^|/)(sitecustomize|usercustomize)\\.py$", "\\.pth$", "(^|/)go\\.work(\\.sum)?$"];
+export const RUNNER_CONFIG_PATTERNS = ["(^|/)(sitecustomize|usercustomize)\\.py$", "\\.pth$", "(^|/)go\\.work(\\.sum)?$", "(^|/)go\\.(mod|sum)$"];
 
 /** Directories that hold installed dependencies. They come from the task image, never from a tree under test. */
 export const INSTALL_DIRS = [".git", ".venv", "venv", "node_modules", ".tox", "__pypackages__"];

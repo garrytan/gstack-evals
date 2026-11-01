@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { docker } from "./docker.ts";
-import { detectLicence, installProblem, keysInEnv, readTask, sha256, TaskError, type TaskJson } from "./format.ts";
+import { detectLicence, installProblem, keysInEnv, readTask, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
 import { resultFor, type TestResult } from "./record.ts";
 import { allPass, idResults, verifyTree, type TreeResult } from "./verify.ts";
 
@@ -121,8 +121,11 @@ export function checkTask(o: CheckOptions): CheckResult {
 
   const runs = o.runs ?? 10;
   const seed = o.seed ?? 1;
-  const tree = (label: string, patchFile: string | null, n: number, releaseEdits = false) =>
-    verifyTree({ taskDir: o.taskDir, task: t, image: tag, label, patch: patchFile ? readFileSync(join(o.taskDir, patchFile), "utf8") : "", runs: n, seed, work: o.work, releaseEdits, cpus: o.cpus });
+  const tree = (label: string, patchFile: string | null, n: number, releaseEdits = false) => {
+    const r = verifyTree({ taskDir: o.taskDir, task: t, image: tag, label, patch: patchFile ? readFileSync(join(o.taskDir, patchFile), "utf8") : "", runs: n, seed, work: o.work, releaseEdits, cpus: o.cpus });
+    if (r.prepare.patch === "failed") throw new TaskError("E_REAL_TASK_FORMAT", label + ": " + patchFile + " does not apply to the starting tree: " + r.prepare.error);
+    return r;
+  };
   const decoy = t.replay?.role === "decoy";
   const start = tree("start", null, decoy ? runs : 1);
   const gold = decoy ? start : tree("gold", "solution/gold.patch", runs);
@@ -135,7 +138,7 @@ export function checkTask(o: CheckOptions): CheckResult {
   let regression = t.tests.regression;
   let quarantine = t.tests.quarantine;
   if (regression.length === 0 && t.tests.regression_scope.length > 0) {
-    const ids = new Set([...start.runs, ...gold.runs].flatMap((r) => Object.keys(r.parsed.results)).filter((id) => !id.startsWith("collect:") && !core.includes(id)));
+    const ids = new Set([...start.runs, ...gold.runs].flatMap((r) => Object.keys(r.parsed.results)).filter((id) => !id.startsWith("collect:") && !core.includes(id) && validTestId(t.runner.kind, id)));
     const passStart = (id: string) => idResults(start, id).every((r) => r.status === "pass");
     const goldPasses = (id: string) => idResults(gold, id).filter((r) => r.status === "pass").length;
     regression = [...ids].filter((id) => passStart(id) && goldPasses(id) === gold.runs.length).sort();

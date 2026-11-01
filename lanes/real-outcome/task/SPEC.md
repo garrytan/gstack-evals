@@ -27,7 +27,7 @@ repo. Only fixture tasks, built from fixture repositories in tests/real/, appear
 
 - `restore/<path>` and `restore.list`: every file in gold's tree that matches the protected patterns. That is gold's
   whole test tree (the hidden tests, their helpers and fixtures) and its runner config (`conftest.py`,
-  `pytest.ini`, `sitecustomize.py`, `*.pth`, `go.work`).
+  `pytest.ini`, `sitecustomize.py`, `*.pth`, `go.work`, `go.mod`, `go.sum`).
 - `protect.ere`: the protected patterns, from lanes/real-outcome/mine/paths.ts.
 - `config/<file>`: pytest only. Gold's pytest config file (`pytest.ini`, `pyproject.toml`, `tox.ini` or `setup.cfg`).
 - `prepare.sh` and `vrun.py`: the verifier's own scripts, copied from lanes/real-outcome/task/verifier/.
@@ -48,7 +48,7 @@ repo. Only fixture tasks, built from fixture repositories in tests/real/, appear
 | `base_branch`, `base_commit` | Always `main`, at the upstream base commit (its sha is kept) |
 | `start_ref` | The ref checked out in the image: `main` for K1 to K3, `change` for K4 |
 | `replay` | K4 only: `role` (`replay` or `decoy`), `branch` (`change`), `commit` (one commit on top of base holding exactly the change), `description` and `change_sha256` (sha256 of the upstream diff from base to the change) |
-| `image` | `from` (pinned by digest) and `apt` packages. The image must be Debian-based and have git |
+| `image` | `from` (`<name>@sha256:<digest>`; readTask refuses any other form) and `apt` packages. The image must be Debian-based and have git |
 | `install` | `lockfile`, `command` and `exclude` (install artifacts to add to .git/info/exclude) |
 | `runner` | `{kind: "pytest", python, config}` or `{kind: "go", module}` |
 | `tests` | `functional`, `escaped_defect`, `regression`, `regression_scope`, `quarantine` (below) |
@@ -93,16 +93,19 @@ shell.
    git's own reading of the paths, so quoted paths and plain unified diffs are covered. After the apply, every
    dependency directory the tree still changed, created or replaced is reset to the image's copy.
 2. Prepare, as root in a container from the task image with no network and an empty environment: copy the pristine
-   `/testbed` (with its installed dependencies) into a fresh volume and apply the patch as in step 1. Every file at a protected
-   path that gold lacks is deleted. No symlink, and no file standing where a directory should be, may sit at or above
+   `/testbed` (with its installed dependencies) into a fresh volume and apply the patch as in step 1. A patch that does
+   not apply grades as a failure (`prepare.patch` is `failed`, no runs, every required test missing). Any path holding
+   a newline is removed. Every file at a protected path that gold lacks is deleted. No symlink, and no file standing where a directory should be, may sit at or above
    a restored path. Every restored path then holds gold's bytes, and gold's pytest config is copied to the tree root as
    `.real-verifier-config.<ext>`.
 3. Run, in a container from the same image: the volume mounted read-only at `/testbed`, user 10001, `--network
    none`, `--read-only` root, a tmpfs `/tmp`, no capabilities, no-new-privileges, a CPU quota and a memory cap.
-   pytest runs through `vrun.py`, which imports pytest from the image's install (never from the tree), reads ini
-   options only from gold's config (`-c`), shuffles the tests with a recorded seed and writes each test's phases to
+   pytest runs through `vrun.py`, which imports pytest and the image's pytest11 plugins while only the image's paths
+   are on `sys.path`, then runs with plugin autoload off, so no module or dist-info in the tree loads as a plugin. It
+   reads ini options only from gold's config (`-c`), shuffles the tests with a recorded seed and writes each test's phases to
    the record as it goes. Go runs `go test -json -count=1 -shuffle=<seed>` with `GOFLAGS=-mod=readonly` and
-   `GOPROXY=off`.
+   `GOPROXY=off`; gold's go.mod and go.sum are restored, so a `replace` in the tree can't swap a dependency. Build
+   errors are read from stderr (Go 1.23 and older) or from build-output events (Go 1.24 and newer).
 4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
    only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it.
 
@@ -112,6 +115,11 @@ doesn't exist) and `load` (collection, import, setup or build failed otherwise).
 Out of this contract: code in the tree under test runs in the test process, so it could patch pytest in memory or
 print forged go test events. That is check-gaming, which the check-gaming lane's detector (#102) and B6 read from the
 diff and transcript.
+
+Open for B3 and B6: test helpers outside the protected patterns (a Go `internal/testutil` package, a Python
+`testing.py`, modules named by `pytest_plugins` or `-p`) come from the tree, not gold. A gold config that runs xdist
+(`-n`) records no phases, so gold fails V1 and the task drops. The checked image and the graded image are both built
+from the task directory, but their ids are not compared yet.
 
 ## Validity rules (`real task check`)
 

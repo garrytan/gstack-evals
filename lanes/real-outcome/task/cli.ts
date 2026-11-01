@@ -65,6 +65,11 @@ export async function main(argv: string[]): Promise<number> {
   const v = parsed.values;
   const s = (k: string) => v[k] as string | undefined;
   const num = (k: string, d: number) => (s(k) === undefined ? d : Number(s(k)));
+  for (const [k, min] of [["runs", 1], ["seed", 0]] as const) {
+    const x = s(k);
+    if (x !== undefined && !(/^\d+$/.test(x) && Number(x) >= min)) return fail("E_USAGE", "--" + k + " must be a whole number of at least " + min);
+  }
+  if (s("cpus") !== undefined && !(/^\d+(\.\d+)?$/.test(s("cpus")!) && Number(s("cpus")) > 0)) return fail("E_USAGE", "--cpus must be a positive number");
   const work = s("work") ? resolve(s("work")!) : mkdtempSync(join(tmpdir(), "real-task-"));
   mkdirSync(work, { recursive: true });
   try {

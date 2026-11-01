@@ -26,7 +26,7 @@ export interface TreeResult {
   label: string;
   /** skipped: patch sections git apply left out because they sit in installed-dependency directories; restored:
    * dependency directories the tree still changed, created or replaced, reset to the image's copy. */
-  prepare: { patch: string; deleted: string[]; unlinked: string[]; skipped: string[]; restored: string[] };
+  prepare: { patch: string; deleted: string[]; unlinked: string[]; skipped: string[]; restored: string[]; error?: string };
   runs: RunRecord[];
 }
 
@@ -82,6 +82,10 @@ export function verifyTree(o: VerifyOptions): TreeResult {
       { timeoutMs: 600000 },
     );
     const prepState = readLines(join(dir, "status/prepare.txt"));
+    const status = (name: string) => readLines(join(dir, "status", name));
+    if (prepState[0] === "patch=failed") {
+      return { label: o.label, prepare: { patch: "failed", deleted: [], unlinked: [], skipped: [], restored: [], error: status("apply.err").join(" ").slice(0, 400) }, runs: [] };
+    }
     if (prep.status !== 0 || !prepState.includes("done")) {
       throw new TaskError("E_REAL_TASK_DOCKER", o.label + ": prepare failed (" + (prepState[0] ?? "exit " + prep.status) + "): " + (prep.stderr + readLines(join(dir, "status/apply.err")).join(" ")).trim().slice(0, 400));
     }
@@ -105,7 +109,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
       const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, existsSync(join(out, "stderr.txt")) ? readFileSync(join(out, "stderr.txt"), "utf8") : "", r.module);
       runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, exit: r.kind === "pytest" ? res.status : Number(readLines(join(out, "exit"))[0] ?? res.status), parsed });
     }
-    return { label: o.label, prepare: { patch: prepState[0] ?? "", deleted: readLines(join(dir, "status/deleted.txt")), unlinked: readLines(join(dir, "status/unlinked.txt")), skipped: readLines(join(dir, "status/skipped.txt")), restored: readLines(join(dir, "status/restored.txt")) }, runs };
+    return { label: o.label, prepare: { patch: prepState[0] ?? "", deleted: status("deleted.txt"), unlinked: status("unlinked.txt"), skipped: status("skipped.txt"), restored: status("restored.txt") }, runs };
   } finally {
     docker(["volume", "rm", "-f", volume]);
   }

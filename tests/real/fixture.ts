@@ -167,6 +167,8 @@ export function calcMeta(sha: Record<string, string>): RepoMeta {
 
 export const PY_IMAGE = "python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337";
 export const GO_IMAGE = "golang:1.23-bookworm@sha256:167053a2bb901972bf2c1611f8f52c44d5fe7e762e5cab213708d82c421614db";
+/** Go 1.24 and newer report build errors as build-output events instead of stderr text. */
+export const GO_IMAGE_125 = "golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437";
 const PY_INSTALL = { lockfile: "requirements.lock", command: "pip install --no-cache-dir --no-deps --require-hashes -r requirements.lock" };
 
 /** Writes build specs for the calc fixture's K1 pair (c4, c6), its K4 replay and a K4 decoy (c5); returns their paths. */
@@ -188,20 +190,20 @@ export function calcSpecs(dir: string, sha: Record<string, string>): { k1: strin
 }
 
 const CLAMP_1 = "package clamp\n\n// Clamp limits x to the range from lo to hi.\nfunc Clamp(x, lo, hi int) int {\n\tif x < lo {\n\t\treturn lo\n\t}\n\treturn x\n}\n";
-const CLAMP_2 = CLAMP_1.replace("\treturn x\n}", "\tif x > hi {\n\t\treturn hi\n\t}\n\treturn x\n}");
+export const CLAMP_2 = CLAMP_1.replace("\treturn x\n}", "\tif x > hi {\n\t\treturn hi\n\t}\n\treturn x\n}");
 const HELPERS = 'package clamp\n\nimport "testing"\n\nfunc check(t *testing.T, got, want int) {\n\tt.Helper()\n\tif got != want {\n\t\tt.Fatalf("got %d, want %d", got, want)\n\t}\n}\n';
 const CLAMP_TEST_1 = 'package clamp\n\nimport "testing"\n\nfunc TestClampLow(t *testing.T) {\n\tcheck(t, Clamp(-5, 0, 10), 0)\n}\n';
 const CLAMP_TEST_2 = CLAMP_TEST_1 + '\nfunc TestClampHigh(t *testing.T) {\n\tcheck(t, Clamp(15, 0, 10), 10)\n}\n';
 
-/** The clampy fixture: a Go module with one K2 change, and its build spec. */
-export function clampyRepo(dir: string): { repo: string; spec: string } {
-  const repo = join(dir, "clampy");
+/** The clampy fixture: a Go module with one K2 change, and its build spec for a Go image. */
+export function clampyRepo(dir: string, image = GO_IMAGE, name = "clampy"): { repo: string; spec: string } {
+  const repo = join(dir, name);
   const sha = buildRepo(repo, [
     { name: "g1", message: "Initial clamp package", date: "2026-08-01T10:00:00Z", files: { LICENSE: MIT, "go.mod": "module example.com/clampy\n\ngo 1.23\n", "clamp/clamp.go": CLAMP_1, "clamp/helpers_test.go": HELPERS, "clamp/clamp_test.go": CLAMP_TEST_1 } },
     { name: "g2", message: "Clamp values above hi (#3)", date: "2026-09-01T10:00:00Z", files: { "clamp/clamp.go": CLAMP_2, "clamp/clamp_test.go": CLAMP_TEST_2 } },
   ]);
   writeFileSync(join(dir, "clampy.md"), "Clamp should also limit values above hi: Clamp(x, lo, hi) returns hi when x is greater than hi.\n");
-  const spec = { id: "fx-clampy-k2", kind: "K2", trust: "fixture", repo: "fixture/clampy", licence: "MIT", change: sha.g2, statement: "clampy.md", image: { from: GO_IMAGE, apt: [] }, install: { lockfile: null, command: null }, runner: { kind: "go" }, tests: { functional: ["clamp::TestClampHigh"], regression_scope: ["clamp"] }, limits: { verifier_sec: 300 } };
-  writeFileSync(join(dir, "clampy.json"), JSON.stringify(spec, null, 2));
-  return { repo, spec: join(dir, "clampy.json") };
+  const spec = { id: "fx-clampy-k2", kind: "K2", trust: "fixture", repo: "fixture/clampy", licence: "MIT", change: sha.g2, statement: "clampy.md", image: { from: image, apt: [] }, install: { lockfile: null, command: null }, runner: { kind: "go" }, tests: { functional: ["clamp::TestClampHigh"], regression_scope: ["clamp"] }, limits: { verifier_sec: 300 } };
+  writeFileSync(join(dir, name + ".json"), JSON.stringify(spec, null, 2));
+  return { repo, spec: join(dir, name + ".json") };
 }

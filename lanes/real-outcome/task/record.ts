@@ -113,17 +113,24 @@ export function resultFor(parsed: Parsed, id: string): TestResult {
 interface GoEvent {
   Action: string;
   Package?: string;
+  ImportPath?: string;
+  FailedBuild?: string;
   Test?: string;
   Output?: string;
 }
 
-/** go test -json: one result per top-level and subtest; a package that failed to build fails every id in it. */
+/**
+ * go test -json: one result per top-level and subtest; a package that failed to build fails every id in it. Build
+ * errors arrive on stderr up to Go 1.23 and as build-output events (ImportPath, no Package) from Go 1.24.
+ */
 export function parseGoTest(jsonl: string, stderr: string, module: string): Parsed {
   const results: Results = {};
   const order: string[] = [];
   const notes: string[] = [];
   const dirOf = (pkg: string) => (pkg === module ? "." : pkg.startsWith(module + "/") ? pkg.slice(module.length + 1) : pkg);
   const output = new Map<string, string>();
+  const build = new Map<string, string>();
+  const pkgOf = (importPath: string) => importPath.split(" ")[0];
   for (const line of jsonl.split("\n")) {
     if (!line.trim().startsWith("{")) continue;
     let e: GoEvent;
@@ -133,14 +140,15 @@ export function parseGoTest(jsonl: string, stderr: string, module: string): Pars
       notes.push("unparsable go event");
       continue;
     }
+    if (e.Action === "build-output" && e.ImportPath) build.set(pkgOf(e.ImportPath), (build.get(pkgOf(e.ImportPath)) ?? "") + (e.Output ?? ""));
     if (!e.Package) continue;
     const key = dirOf(e.Package) + (e.Test ? "::" + e.Test : "");
     if (e.Action === "output") output.set(key, (output.get(key) ?? "") + (e.Output ?? ""));
     if (e.Action === "run" && e.Test) order.push(key);
     if (!e.Test && e.Action === "fail") {
       const out = output.get(key) ?? "";
-      if (/\[(build|setup) failed\]/.test(out) || !order.some((id) => id.startsWith(key + "::"))) {
-        const text = stderr + "\n" + out;
+      if (e.FailedBuild || /\[(build|setup) failed\]/.test(out) || !order.some((id) => id.startsWith(key + "::"))) {
+        const text = stderr + "\n" + (build.get(pkgOf(e.FailedBuild ?? e.Package)) ?? "") + out;
         const name = missingName(text);
         results["collect:" + key] = { status: "fail", cls: name ? "missing_name" : "load", ...(name ? { name } : {}), msg: text.trim().slice(0, 300) };
       }

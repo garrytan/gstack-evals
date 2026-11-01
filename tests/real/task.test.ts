@@ -6,9 +6,10 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
-import { buildTask } from "../../lanes/real-outcome/task/build.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
-import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, statementLeaks, TaskError, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
+import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
+import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
+import { isProtectedPath } from "../../lanes/real-outcome/mine/paths.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
 import { buildRepo, calcCommits, calcSpecs, clampyRepo, MIT, tempDir } from "./fixture.ts";
 
@@ -55,6 +56,20 @@ describe("per-test record", () => {
     expect(resultFor(p, "t.py::f")).toMatchObject({ status: "fail", cls: "assert" });
     expect(resultFor(p, "u.py::g")).toMatchObject({ status: "fail", cls: "missing_name", name: "extra" });
     expect(resultFor(p, "t.py::zz")).toEqual({ status: "missing" });
+  });
+
+  test("Go 1.24 build-output events carry the missing name of a package that failed to build", () => {
+    const ip = "example.com/clampy/clamp [example.com/clampy/clamp.test]";
+    const events = [
+      { ImportPath: ip, Action: "build-output", Output: "# " + ip + "\n" },
+      { ImportPath: ip, Action: "build-output", Output: "clamp/clamp_test.go:12:8: undefined: Clamp\n" },
+      { ImportPath: ip, Action: "build-fail" },
+      { Action: "start", Package: "example.com/clampy/clamp" },
+      { Action: "output", Package: "example.com/clampy/clamp", Output: "FAIL\texample.com/clampy/clamp [build failed]\n" },
+      { Action: "fail", Package: "example.com/clampy/clamp", Elapsed: 0, FailedBuild: ip },
+    ];
+    const p = parseGoTest(events.map((e) => JSON.stringify(e)).join("\n"), "", "example.com/clampy");
+    expect(resultFor(p, "clamp::TestClampHigh")).toMatchObject({ status: "fail", cls: "missing_name", name: "Clamp" });
   });
 
   test("a pytest id passes only when setup, call and teardown all reported passed", () => {
@@ -110,6 +125,25 @@ describe("policies", () => {
   test("statements may not name upstream commits, GitHub references or pull request links", () => {
     expect(statementLeaks("Fix it as in abc1234def and #42; see https://github.com/o/r/pull/42.", ["abc1234def0000"])).toEqual(["names commit abc1234def", "names #42", "links github.com/o/r/pull/42."]);
     expect(statementLeaks("Use color #fff and item 3.", ["abc1234def0000"])).toEqual([]);
+  });
+
+  test("test ids, protected runner files and pinned images", () => {
+    expect(validTestId("go", "clamp::TestClampHigh")).toBe(true);
+    expect(validTestId("go", "clamp::TestClampHigh/case_1")).toBe(false);
+    expect(validTestId("pytest", "tests/test_a.py::test_x[1]")).toBe(true);
+    for (const p of ["go.mod", "sub/go.sum", "go.work", "x/sitecustomize.py"]) expect(isProtectedPath(p)).toBe(true);
+    const dir = join(tmp.dir, "out/unpinned");
+    buildTask(specs.k1, repo(), dir);
+    const t = readTask(dir);
+    t.image.from = "python:3.12-slim-bookworm";
+    saveTask(dir, t);
+    let message = "";
+    try {
+      readTask(dir);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("image.from must be pinned by digest");
   });
 
   test("licences and credentials", () => {
@@ -231,6 +265,8 @@ describe("the real dispatcher", () => {
       expect(await real(["mine", "--help"])).toBe(0);
       expect(await real(["task", "check"])).toBe(2);
       expect(await real(["task", "verify", join(tmp.dir, "absent"), "--bogus"])).toBe(2);
+      expect(await real(["task", "check", join(tmp.dir, "absent"), "--runs", "abc"])).toBe(2);
+      expect(await real(["task", "check", join(tmp.dir, "absent"), "--cpus", "abc"])).toBe(2);
     } finally {
       console.log = log;
       console.error = error;
@@ -241,10 +277,42 @@ describe("the real dispatcher", () => {
     expect(out[2]).toContain("gstack-evals real mine");
     expect(err.join("\n")).toMatch(/^E_USAGE check needs a task directory$/m);
     expect(err.join("\n")).toMatch(/^E_USAGE .*bogus/m);
+    expect(err.join("\n")).toMatch(/^E_USAGE --runs must be a whole number of at least 1$/m);
+    expect(err.join("\n")).toMatch(/^E_USAGE --cpus must be a positive number$/m);
   });
 });
 
 describe("prepare.sh and installed dependencies", () => {
+  test("a path holding a newline is removed before the protected-path scan", () => {
+    const root = join(tmp.dir, "prep-newline");
+    const src = join(root, "src");
+    const v = join(root, "verifier");
+    const out = join(root, "out");
+    for (const d of [src + "/clamp", v, root + "/input", out, root + "/status"]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(src, "clamp/clamp.go"), "package clamp\n");
+    writeFileSync(join(src, "clamp/zz\n_test.go"), "package clamp\n");
+    writeFileSync(join(v, "restore.list"), "");
+    writeFileSync(join(v, "protect.ere"), PROTECT_ERE);
+    writeFileSync(join(root, "input/tree.patch"), "");
+    const r = spawnSync("sh", [join(VERIFIER_DIR, "prepare.sh")], { env: { PATH: process.env.PATH, SRC: src, V: v, PATCH: join(root, "input/tree.patch"), OUT: out, STATUS: join(root, "status") }, encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(readdirSync(join(out, "clamp"))).toEqual(["clamp.go"]);
+    expect(readFileSync(join(root, "status/prepare.txt"), "utf8")).toContain("newline_paths=removed");
+  });
+
+  test("a patch that does not apply stops prepare with patch=failed", () => {
+    const root = join(tmp.dir, "prep-badpatch");
+    for (const d of [root + "/src", root + "/verifier", root + "/input", root + "/out", root + "/status"]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(root, "src/a.py"), "x = 1\n");
+    writeFileSync(join(root, "verifier/restore.list"), "");
+    writeFileSync(join(root, "verifier/protect.ere"), PROTECT_ERE);
+    writeFileSync(join(root, "input/tree.patch"), "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-x = 9\n+x = 2\n");
+    const r = spawnSync("sh", [join(VERIFIER_DIR, "prepare.sh")], { env: { PATH: process.env.PATH, SRC: join(root, "src"), V: join(root, "verifier"), PATCH: join(root, "input/tree.patch"), OUT: join(root, "out"), STATUS: join(root, "status") }, encoding: "utf8" });
+    expect(r.status).toBe(3);
+    expect(readFileSync(join(root, "status/prepare.txt"), "utf8")).toBe("patch=failed\n");
+    expect(readFileSync(join(root, "status/apply.err"), "utf8")).toContain("patch failed");
+  });
+
   test("dependency directories come only from the image, whatever the patch's format or path quoting", () => {
     const root = join(tmp.dir, "prep-deps");
     const src = join(root, "src");

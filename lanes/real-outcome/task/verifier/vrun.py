@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Garry Tan. MIT License.
 # gstack-evals real-outcome verifier, pytest entry (lanes/real-outcome/task/SPEC.md). Verifier-owned. It imports
 # pytest from the image's own install, never from the tree under test, so a pytest.py or pytest/ package the tree adds
-# can't stand in for the runner. It reads ini options only from the verifier's copy of gold's config (-c), runs the
-# targets in a seeded random order, and writes every test's phases to a record line by line, so a run that dies keeps
+# can't stand in for the runner. Plugin autoload is off: the image's pytest11 plugins load while only trusted paths are
+# on sys.path, so a tree module or dist-info can't pose as one. It reads ini options only from the verifier's copy of
+# gold's config (-c), runs the targets in a seeded random order, and writes every test's phases to a record line by line, so a run that dies keeps
 # what it recorded and every id it never reached reads as missing.
 import json
 import os
@@ -39,7 +40,13 @@ def main():
         if not trusted(mod.__file__):
             emit(event="runner_swapped", module=mod.__name__, path=mod.__file__)
             sys.exit(4)
-    emit(event="runner", pytest=pytest.__version__, path=os.path.realpath(pytest.__file__))
+    from importlib.metadata import entry_points
+
+    eps = entry_points()
+    eps = eps.select(group="pytest11") if hasattr(eps, "select") else eps.get("pytest11", [])
+    plugins = [ep.load() for ep in eps]
+    os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    emit(event="runner", pytest=pytest.__version__, path=os.path.realpath(pytest.__file__), plugins=sorted(ep.name for ep in eps))
     sys.path[:] = [REPO] + [p for p in saved if p and os.path.realpath(p) != REPO]
 
     class Recorder:
@@ -61,7 +68,7 @@ def main():
 
     targets = [line.strip() for line in open(targets_file) if line.strip()]
     os.chdir(REPO)
-    code = pytest.main(["-c", config, "--rootdir", REPO, "-p", "no:cacheprovider", "-q", *targets], plugins=[Recorder()])
+    code = pytest.main(["-c", config, "--rootdir", REPO, "-p", "no:cacheprovider", "-q", *targets], plugins=[Recorder(), *plugins])
     emit(event="exit", code=int(code))
 
 

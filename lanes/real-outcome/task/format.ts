@@ -221,6 +221,9 @@ const required = (t: TaskJson): string[] => [
 /** The test file (pytest) or package dir (go) an id runs in. */
 export const targetOf = (id: string): string => id.split("::")[0];
 
+/** A test id the task may list: <file>.py::<name> for pytest, <package dir>::<TopLevelTest> for Go (no subtests). */
+export const validTestId = (runner: "pytest" | "go", id: string): boolean => (runner === "go" ? /^[^:]+::Test[A-Za-z0-9_]*$/ : /^[^:]+\.py::\S+$/).test(id);
+
 /** Static checks, no Docker: structure, digests, generated files, verifier scripts, ids, statement, licence, install. */
 export function readTask(dir: string): TaskJson {
   const fail = (m: string): never => {
@@ -241,6 +244,7 @@ export function readTask(dir: string): TaskJson {
   if (!SHA.test(t.base_commit) || !SHA.test(t.upstream?.change ?? "")) fail("base_commit and upstream.change must be full shas");
   if (!LICENCES.includes(t.licence)) fail("licence " + JSON.stringify(t.licence) + " is not permissive (" + LICENCES.join(", ") + ")");
   if (!t.attribution || t.attribution.length < 10) fail("attribution is missing");
+  if (!/^[^\s@]+@sha256:[0-9a-f]{64}$/.test(t.image?.from ?? "")) fail("image.from must be pinned by digest (<name>@sha256:<64 hex>)");
   if (t.kind === "K4") {
     if (!t.replay || !SHA.test(t.replay.commit) || !["replay", "decoy"].includes(t.replay.role) || t.start_ref !== REPLAY_BRANCH) fail("K4 needs replay.role, replay.commit and start_ref " + REPLAY_BRANCH);
     if (t.replay!.description.includes("\n") || t.replay!.description.trim().length === 0) fail("replay.description must be one line");
@@ -251,8 +255,7 @@ export function readTask(dir: string): TaskJson {
   if (t.kind === "K4" && t.replay?.role === "decoy" && functional.length + t.tests.regression.length + t.tests.regression_scope.length === 0) fail("a decoy needs tests to pass");
   const ids = [...functional, ...escaped, ...t.tests.regression];
   if (new Set(ids).size !== ids.length) fail("a test id is listed twice across functional, escaped_defect and regression");
-  if (t.runner.kind === "go" && ids.some((id) => !/^[^:]+::Test[A-Za-z0-9_]*$/.test(id))) fail("go ids are <package dir>::<TopLevelTest>");
-  if (t.runner.kind === "pytest" && ids.some((id) => !/^[^:]+\.py::\S+$/.test(id))) fail("pytest ids are <file>.py::<name>");
+  if (ids.some((id) => !validTestId(t.runner.kind, id))) fail(t.runner.kind === "go" ? "go ids are <package dir>::<TopLevelTest>" : "pytest ids are <file>.py::<name>");
   const { files, links } = walk(dir);
   if (links.length > 0) fail("symlinks are not allowed: " + links.join(", "));
   for (const f of required(t)) if (!files.includes(f)) fail("missing " + f);

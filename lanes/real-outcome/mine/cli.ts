@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { CODES, docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { CUTOFF } from "./exposure.ts";
 import { fetchMeta } from "./fetch.ts";
+import { GitError } from "./git.ts";
 import { MetaError, parseMeta } from "./meta.ts";
 import { MineError, mineRepo, type Candidate, type MineResult } from "./mine.ts";
 import { sampleRepos, type RepoCandidate } from "./sample.ts";
@@ -78,6 +79,10 @@ export async function main(argv: string[]): Promise<number> {
   }
   const s = (k: string) => v[k] as string | undefined;
   const from = (v.from as string[] | undefined) ?? [];
+  for (const [k, min] of [["active-days", 1], ["min-window-commits", 0], ["per-repo", 1]] as const) {
+    const x = s(k);
+    if (x !== undefined && !(/^\d+$/.test(x) && Number(x) >= min)) return fail("E_USAGE", "--" + k + " must be a whole number of at least " + min);
+  }
   try {
     if (cmd === "sample") {
       if (from.length !== 1 || !isDate(s("mined-at"))) return fail("E_USAGE", "sample needs one --from and a --mined-at date");
@@ -111,7 +116,8 @@ export async function main(argv: string[]): Promise<number> {
     }
   } catch (error) {
     if (error instanceof MineError) return fail(error.code, error.message);
-    if (error instanceof MetaError || error instanceof SyntaxError) return fail("E_REAL_MINE_INPUT", error.message);
+    if (error instanceof MetaError || error instanceof SyntaxError || error instanceof GitError) return fail("E_REAL_MINE_INPUT", error.message);
+    if (typeof (error as { code?: unknown }).code === "string") return fail("E_REAL_MINE_INPUT", (error as Error).message);
     throw error;
   }
   return fail("E_USAGE", "unknown command " + JSON.stringify(cmd) + "; gstack-evals real mine --help lists them");

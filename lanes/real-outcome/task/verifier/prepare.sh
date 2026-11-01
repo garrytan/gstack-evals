@@ -54,6 +54,15 @@ else
   echo "patch=none" > "$STATUS/prepare.txt"
 fi
 
+# A path holding a newline would split in the line lists below, so every such file or directory outside installed
+# dependencies is removed first.
+nl='
+'
+if [ -n "$(find . \( -name .git -o -name .venv -o -name venv -o -name node_modules -o -name .tox -o -name __pypackages__ \) -prune -o -name "*$nl*" -print -prune)" ]; then
+  find . \( -name .git -o -name .venv -o -name venv -o -name node_modules -o -name .tox -o -name __pypackages__ \) -prune -o -name "*$nl*" -prune -exec rm -rf -- {} +
+  echo "newline_paths=removed" >> "$STATUS/prepare.txt"
+fi
+
 # Installed dependencies come only from the image, whatever the patch's format or path quoting: git apply skipped
 # their sections above, and every dependency directory the tree still changed, created or replaced is reset to the
 # image's copy.

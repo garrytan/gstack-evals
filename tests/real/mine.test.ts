@@ -215,4 +215,19 @@ describe("fetch and the CLI", () => {
     expect(await main(["repo", "--repo-dir", join(tmp.dir, "shallow"), "--repo", "fixture/calc", "--mined-at", "2026-10-31"])).toBe(2);
     expect(await main(["repo", "--repo", "x"])).toBe(2);
   });
+
+  test("bad numbers and unreadable inputs are usage and input errors", async () => {
+    const err: string[] = [];
+    const error = console.error;
+    console.error = (s: string) => void err.push(String(s));
+    try {
+      expect(await main(["panel", "--from", join(tmp.dir, "absent.json"), "--seed", "s", "--per-repo", "abc"])).toBe(2);
+      expect(await main(["panel", "--from", join(tmp.dir, "absent.json"), "--seed", "s"])).toBe(2);
+      expect(await main(["repo", "--repo-dir", tmp.dir, "--repo", "fixture/calc", "--mined-at", "2026-10-31"])).toBe(2);
+    } finally {
+      console.error = error;
+    }
+    expect(err.map((l) => l.split(" ")[0])).toEqual(["E_USAGE", "E_REAL_MINE_INPUT", "E_REAL_MINE_INPUT"]);
+    expect(err[0]).toStartWith("E_USAGE --per-repo must be a whole number of at least 1\n");
+  });
 });
