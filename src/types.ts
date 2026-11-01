@@ -212,6 +212,11 @@ export interface TrialRecord {
    * is the final answer. Empty when the session produced no output.
    */
   turns: string[];
+  /**
+   * Whether the model produced any output: an assistant message with text, thinking or a tool call, as the adapter saw it.
+   * Set by adapters that see each assistant message; turns cannot tell, since a session of tool calls alone has none.
+   */
+  model_output?: boolean;
   /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
   check: boolean | null;
   /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */

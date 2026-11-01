@@ -62,7 +62,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
   unavailable. requests, refused and unknown_calls are extra columns; refusals.tsv marks an arm and cell degraded when
   more than 2% of its requests were refused.
 - The out dir must outlive the machine (E_RECEIPTS_VOLATILE). With GSTACK_EVALS_EPHEMERAL=1 the receipts are copied to
-  GSTACK_EVALS_RECEIPTS, which the run refuses (E_USAGE) when it is the out dir or sits under <out>/arms.
+  GSTACK_EVALS_RECEIPTS, which the run refuses (E_USAGE) when it is the out dir or sits under <out>/arms, and, for a
+  sealed suite, when it resolves inside the repo, since cells.ndjson quotes held-out material.
 
 The rig's arm installer takes one target skill for every arm, so one invocation runs arms that share a told skill:
 none with gstack, or none with one other stack. `--dry-run` prints the plan and writes nothing.
@@ -83,12 +84,17 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
 - Every arm runs with the rec user: each question gets "Go with your recommendation.", one that offers another skill or
   review, or to promote or commit docs, gets "No, not now.", and the simulator's binding rules still refuse gated
   effects. No model answers for the user. An arm that installs gstack gets every question in its registry set to
-  never-ask (auto-decide) in the trial's throwaway state root.
+  never-ask (auto-decide) in the trial's throwaway state root, written over any preferences file the unit's tree ships;
+  arm.json records that file's sha256 as `question_preferences_sha256`.
 - No second model: --plan builds every cell without its Codex voice (gstack's config gets codex_reviews disabled and the
   cell tree records it), the run refuses a cell that keeps one, the slot admits only the driver model and arm.json lists
   the driver alone.
 - The parser reads the last `plan-findings` block in any assistant turn. A malformed, missing or incomplete (timed out, or
-  ended by the arm's own failure after model output) pass is scored as finding nothing and listed in arm.json `diagnostics`. A session that ended any other way (a provider
-  failure, a crash before any model output, rejected credentials, an infra incident, an unknown send, or no assistant turn) is a coverage gap that stops
-  the arm, as are a cell not run and a cap stop.
+  ended by the arm's own CLI failing after the model produced output) pass is scored as finding nothing and listed in
+  arm.json `diagnostics`. Model output is the session record's `model_output`, any assistant text, thinking or tool call
+  the driver saw, never its turns, which hold main-agent text only. A session that ended any other way (a provider
+  failure, the CLI failing before any model output, an infra incident, an infra failure (E_INFRA_FAILURE: the
+  evaluator's own code, the link to the CLI or the machine, at any point), rejected credentials, an unknown send, or no assistant turn) is a
+  coverage gap that stops the arm, as are a cell not run and a cap stop; a stopped arm gets no verdict. progress.json
+  counts each session the way arm.json scores it: a miss as failed, a gap as missing.
 - Each session's CEO review mode, from gstack's mode handoff line, goes to modes.tsv and arm.json `ceo_modes`.
