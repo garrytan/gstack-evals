@@ -430,6 +430,7 @@ const noRead: Array<[string, any, RegExp]> = [
   ["a none judgment row missing", { ...BAND, edit: (f: string) => { const l = readFileSync(f, "utf8").split("\n"); l.splice(5, 1); writeFileSync(f, l.join("\n")); } }, /none has judgments with coverage incomplete/],
   ["the system-prompt check failed", { ...BAND, exp: expStub({ sp: "FAIL" }) }, /system-prompt check failed/],
   ["a cap stop", { ...BAND, extra: ["--cap-stop", "yes"] }, /cap stop/],
+  ["a gstack arm with no judgments.tsv", { ...BAND, edit: (f: string) => rmSync(join(f, "..", "..", armId("gstack", OPUS), "judgments.tsv")) }, /gstack has no judgments\.tsv/],
 ];
 for (const [label, o, re] of noRead) {
   const r = await admission("NO READ: " + label, o);
@@ -472,7 +473,7 @@ const SEC_FILE = "/srv/rec/.claude/skills/gstack/plan-ceo-review/sections/review
 const body = (n: number) => ("Finding for this section, number " + n + ", with the plan's own facts. ").repeat(4);
 const sectionsText = (order: number[], withBody = true) => order.map((n) => secHeads[n - 1]!.replace(/^### /, "## ") + "\n\n" + (withBody ? body(n) + "\n" : "")).join("\n");
 type Ev = ["use", string, string, object] | ["res", string, string, boolean?] | ["text", string];
-function session(dir: string, events: Ev[], o: { sp?: string | null; first?: number } = {}) {
+function session(dir: string, events: Ev[], o: { sp?: string | null; first?: number; subtype?: string } = {}) {
   mkdirSync(join(dir, "host"), { recursive: true });
   let k = 0;
   const usage = () => (k === 1 ? { usage: { input_tokens: 3, cache_creation_input_tokens: (o.first ?? 22270) - 3, cache_read_input_tokens: 0 } } : {});
@@ -481,7 +482,7 @@ function session(dir: string, events: Ev[], o: { sp?: string | null; first?: num
     if (e[0] === "res") return { type: "user", message: { content: [{ type: "tool_result", tool_use_id: e[1], is_error: !!e[3], content: [{ type: "text", text: e[2] }] }] } };
     return { type: "assistant", message: { id: "msg_" + ++k, content: [{ type: "text", text: e[1] }], ...usage() } };
   });
-  msgs.push({ type: "result", subtype: "success" });
+  msgs.push({ type: "result", subtype: o.subtype ?? "success" });
   writeFileSync(join(dir, "host", "transcript.ndjson"), msgs.map((m) => JSON.stringify(m)).join("\n") + "\n");
   if (o.sp !== null) writeFileSync(join(dir, "host", "init.json"), JSON.stringify({ model: OPUS, claude_code_version: "2.1.314", system_prompt: o.sp ?? "claude-code-preset" }));
 }
@@ -501,6 +502,7 @@ const fixtures: Array<[string, string, Ev[], ReturnType<typeof want>]> = [
   ["a quoted list of all four modes", "gstack-forced", [["text", "The modes are SCOPE EXPANSION, SELECTIVE EXPANSION, HOLD SCOPE and SCOPE REDUCTION."], ...readOk(), ["text", sectionsText(ALL10)]], want(true, false, false, false)],
   ["section headings with no text under them", "gstack-forced", [M, ...readOk(), ["text", sectionsText(ALL10, false) + "\nNo issues."]], want(true, true, true, false)],
   ["sections in reverse order", "gstack-forced", [M, ...readOk(), ["text", sectionsText([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])]], want(true, true, true, false)],
+  ["sections 10 to 1, then 1 to 10 again (first appearances reversed)", "gstack-forced", [M, ...readOk(), ["text", sectionsText([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]) + "\n" + sectionsText(ALL10)]], want(true, true, true, false)],
   ["sections 4 and 5 swapped (9 still in order)", "gstack-forced", [M, ...readOk(), ["text", sectionsText([1, 2, 3, 5, 4, 6, 7, 8, 9, 10])]], want(true, true, true, true)],
   ["only 8 sections written", "gstack-forced", [M, ...readOk(), ["text", sectionsText([1, 2, 3, 4, 5, 6, 7, 8])]], want(true, true, true, false)],
   ["sections written before the Read", "gstack-forced", [["text", "Mode: HOLD SCOPE.\n" + sectionsText(ALL10)], ...readOk(), ["text", "Done."]], want(true, true, true, false)],
@@ -537,6 +539,10 @@ const proc = (label: string, n: number, ran: number) => {
 check("procedure disposition: 15 of 16 forced sessions ran it -> READY", proc("ready", 16, 15) === "READY");
 check("procedure disposition: 14 of 16 -> FIX-METHOD", proc("fix", 16, 14) === "FIX-METHOD");
 check("procedure disposition: 15 transcripts of 16 scheduled -> NO READ", proc("gap", 15, 15) === "NO READ");
+const capD = join(EXP, "proc-capped");
+for (let i = 1; i <= 16; i++) session(join(capD, "runs", OPUS, "gstack-forced", "plans-" + i + "-abcdef01", "p1"), [M, ...readOk(), ["text", sectionsText(ALL10)]], { subtype: "error_max_turns" });
+const capped = expo(capD, "gstack-forced", 16);
+check("procedure disposition: 16 forced sessions that write all 10 sections and then end on the turn cap -> FIX-METHOD (ran " + capped?.arms["gstack-forced"].ran + ", turn-cap endings " + capped?.arms["gstack-forced"].max_turn_endings + ")", capped?.procedure === "FIX-METHOD" && capped?.arms["gstack-forced"].ran === 0 && capped?.arms["gstack-forced"].max_turn_endings === 16);
 const sp = (label: string, o: Record<string, { sp?: string | null; first?: number }> = {}) => {
   const d = join(EXP, "sp-" + label.replace(/\W+/g, "-"));
   for (const a of ["none", "gstack"]) for (const i of [1, 2]) session(join(d, "runs", OPUS, a, "plans-" + i + "-abcdef01", "p1"), [["text", "Findings."]], o[a + i] ?? {});

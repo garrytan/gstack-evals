@@ -1,14 +1,14 @@
-# CEO panel v2 admission pilot: keyless dry run, 2026-11-01T23:24:57.799Z
+# CEO panel v2 admission pilot: keyless dry run, 2026-11-01T23:47:57.191Z
 scorer pin a5633c6205b735989c9fbe082092947dec9c2f19; forced arm on; gstack 1ea86923a86129d1f32828b36acfe6f91f17c8e6 (1.92.37.0)
 post forced-line.txt sha256 d4f56ad49c82e6b8ca9a2ec05b24a641c45e9d158e11c9de65420008b66d4e43
 post judge-brief.md sha256 cd0a42d036d2b05e44eadadc7211a25937134a42856b30f44dad03af55e34285
-post admission.ts sha256 14a0bda3b5aa97bfef9e1a485d55cc21c52985b7728664a6f9ca7abb8bc829b6
-post exposure.py sha256 07d5e78d256066a27133c43c85cb5700aa821670fb4633975a825d280c6a9998
+post admission.ts sha256 66a715883610095ed208038a04b1cbc9680ec4c5ecb1c14fedaab3d6b1070bd0
+post exposure.py sha256 3804fbed74bcad1fe296805f3cabb606df4a6658e29bc01a54290c199570c8a9
 post gen-synth.py sha256 e2a30bc669fba27b92f476e687abc6590310c9aa48e237c43ece976b5d8fe84c
 post seal.py sha256 cc478b2fd713224fd6f1272eb2472618c29e3ad3530df9d969fc6c7e422d7fc1
 post convert-v2.py sha256 939f8f59c42fd95a4f36145a4d976e3bc01dff4eb9954431ad582177d2de07d2
 post build-v2.sh sha256 dfbf30ce43665862f126113f9dff27b89edaa9280b1184c2c87f25d4f2a32014
-post dryrun.ts sha256 6cc9ce6c029653ab960dc1ae771ea60d3124ebc2c0bd2f47c52201ad1e54cb94
+post dryrun.ts sha256 65091069a043c874ac1c7e298667988c3f4f138ae4f0f4ca5d7cce9ffabd2883
 
 ## 1. Pin, panel and suites
 PASS the scorer checkout is at the pin a5633c6205b735989c9fbe082092947dec9c2f19 with no tracked change
@@ -121,7 +121,7 @@ $ bun test tests/trial/review/plan-told.test.ts
   exit 0
     8 pass
     0 fail
-    Ran 8 tests across 1 file. [2.27s]
+    Ran 8 tests across 1 file. [2.14s]
 PASS the pin's own forced-arm tests pass (told block records prefix and prefix_sha256; refusals for none, lens, placebo and gstack-auto)
 
 ## 3. Start rule and caps (README section 9)
@@ -142,7 +142,7 @@ $ ledger init --item planning-v2-admission --cap 100 --admission warn --words "d
   exit 0  (record planning-v2-admission)
     APPROVED: item=planning-v2-admission cap=$100.00 admission=warn approval=1 record=$OUT/ledger/record
 PASS line item planning-v2-admission records its cap of $100
-the pilot: run id review-units-20261101T232507Z-8161, minted as review-units mints it, leases planning-v2-admission for $100.00 (its --spend-cap) with the rig's own openLease call; one synthetic none session meters $0.17; settled at $0.17 spent
+the pilot: run id review-units-20261101T234805Z-889d, minted as review-units mints it, leases planning-v2-admission for $100.00 (its --spend-cap) with the rig's own openLease call; one synthetic none session meters $0.17; settled at $0.17 spent
 PASS the run binds planning-v2-admission to its run id, leases the whole $100 and commits only the metered spend
 PASS the warn-mode lease warned RIG_UNPROVEN and opened
 a second review-units run on planning-v2-admission: E_ITEM_BOUND
@@ -150,37 +150,37 @@ PASS the run item refuses a second run id with E_ITEM_BOUND, so a rerun needs a 
 $ ledger init --item planning-v2-judge-match --cap 20 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
   exit 0  (record planning-v2-judge-match at $20 less the settled spend of every earlier judge item)
     APPROVED: item=planning-v2-judge-match cap=$20.00 admission=warn approval=1 record=$OUT/ledger/record
-planning-v2-judge-match: judge-run's run id judge-e6c8151f47a8 leases all the item has left; one synthetic call meters $3.00; settled at $3.00
+planning-v2-judge-match: judge-run's run id judge-21c722681396 leases all the item has left; one synthetic call meters $3.00; settled at $3.00
 PASS planning-v2-judge-match refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
 $ ledger init --item planning-v2-judge-second --cap 17 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
   exit 0  (record planning-v2-judge-second at $20 less the settled spend of every earlier judge item)
     APPROVED: item=planning-v2-judge-second cap=$17.00 admission=warn approval=1 record=$OUT/ledger/record
-planning-v2-judge-second: judge-run's run id judge-202077a56b96 leases all the item has left; one synthetic call meters $1.50; settled at $1.50
+planning-v2-judge-second: judge-run's run id judge-3211684b1221 leases all the item has left; one synthetic call meters $1.50; settled at $1.50
 PASS planning-v2-judge-second refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
 $ ledger init --item planning-v2-judge-third --cap 15.5 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
   exit 0  (record planning-v2-judge-third at $20 less the settled spend of every earlier judge item)
     APPROVED: item=planning-v2-judge-third cap=$15.50 admission=warn approval=1 record=$OUT/ledger/record
-planning-v2-judge-third: judge-run's run id judge-6f7f2296daf2 leases all the item has left; one synthetic call meters $0.40; settled at $0.40
+planning-v2-judge-third: judge-run's run id judge-e3f21fda25b0 leases all the item has left; one synthetic call meters $0.40; settled at $0.40
 PASS planning-v2-judge-third refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
 $ ledger init --item planning-v2-judge-adjudicate --cap 15.1 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
   exit 0  (record planning-v2-judge-adjudicate at $20 less the settled spend of every earlier judge item)
     APPROVED: item=planning-v2-judge-adjudicate cap=$15.10 admission=warn approval=1 record=$OUT/ledger/record
-planning-v2-judge-adjudicate: judge-run's run id judge-4d30b79a3e2c leases all the item has left; one synthetic call meters $1.10; settled at $1.10
+planning-v2-judge-adjudicate: judge-run's run id judge-748ad166d1f9 leases all the item has left; one synthetic call meters $1.10; settled at $1.10
 PASS planning-v2-judge-adjudicate refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
 PASS judge items recorded in turn at $20 less the settled spend of every earlier one never pass the envelope ($20.00, then $17.00, then $15.50, then $15.10; $6.00 spent)
 $ ledger status
   exit 0  (every line item on the temporary record)
     RECORD: $OUT/ledger/record (GSTACK_EVALS_LEDGER_RECORD)
     LEDGER: $OUT/ledger/local.sqlite (GSTACK_EVALS_LEDGER)
-    ITEM: planning-v2-admission cap=$100.00 admission=warn committed=$0.17 left=$99.83 run=review-units-20261101T232507Z-8161 leases=1 open=-
+    ITEM: planning-v2-admission cap=$100.00 admission=warn committed=$0.17 left=$99.83 run=review-units-20261101T234805Z-889d leases=1 open=-
       words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
-    ITEM: planning-v2-judge-adjudicate cap=$15.10 admission=warn committed=$1.10 left=$14.00 run=judge-4d30b79a3e2c leases=1 open=-
+    ITEM: planning-v2-judge-adjudicate cap=$15.10 admission=warn committed=$1.10 left=$14.00 run=judge-748ad166d1f9 leases=1 open=-
       words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
-    ITEM: planning-v2-judge-match cap=$20.00 admission=warn committed=$3.00 left=$17.00 run=judge-e6c8151f47a8 leases=1 open=-
+    ITEM: planning-v2-judge-match cap=$20.00 admission=warn committed=$3.00 left=$17.00 run=judge-21c722681396 leases=1 open=-
       words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
-    ITEM: planning-v2-judge-second cap=$17.00 admission=warn committed=$1.50 left=$15.50 run=judge-202077a56b96 leases=1 open=-
+    ITEM: planning-v2-judge-second cap=$17.00 admission=warn committed=$1.50 left=$15.50 run=judge-3211684b1221 leases=1 open=-
       words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
-    ITEM: planning-v2-judge-third cap=$15.50 admission=warn committed=$0.40 left=$15.10 run=judge-6f7f2296daf2 leases=1 open=-
+    ITEM: planning-v2-judge-third cap=$15.50 admission=warn committed=$0.40 left=$15.10 run=judge-e3f21fda25b0 leases=1 open=-
       words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
 
 ## 5. Judging on synthetic arms: blind packets, three judges, adjudication, ingest
@@ -336,6 +336,14 @@ $ bun admission.ts ... (NO READ: a cap stop)
     recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
     headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
 PASS admission.ts: a cap stop -> NO READ
+$ bun admission.ts ... (NO READ: a gstack arm with no judgments.tsv)
+  exit 0
+    Panel: NO READ (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: gstack has no judgments.tsv
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack n/a, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack n/a; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: a gstack arm with no judgments.tsv -> NO READ
 $ bun admission.ts ... (procedure from exposure: FIX-METHOD)
   exit 0
     Panel: ADMIT (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: FIX-METHOD (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
@@ -371,6 +379,7 @@ PASS exposure.py, a cat of plan-eng-review's file from inside plan-ceo-review (g
 PASS exposure.py, a quoted list of all four modes (gstack-forced): read true, mode false, exposed false, ran false (10 sections counted)
 PASS exposure.py, section headings with no text under them (gstack-forced): read true, mode true, exposed true, ran false (0 sections counted)
 PASS exposure.py, sections in reverse order (gstack-forced): read true, mode true, exposed true, ran false (1 sections counted)
+PASS exposure.py, sections 10 to 1, then 1 to 10 again (first appearances reversed) (gstack-forced): read true, mode true, exposed true, ran false (1 sections counted)
 PASS exposure.py, sections 4 and 5 swapped (9 still in order) (gstack-forced): read true, mode true, exposed true, ran true (9 sections counted)
 PASS exposure.py, only 8 sections written (gstack-forced): read true, mode true, exposed true, ran false (8 sections counted)
 PASS exposure.py, sections written before the Read (gstack-forced): read true, mode true, exposed true, ran false (0 sections counted)
@@ -381,6 +390,7 @@ PASS a mode named only by the pin's handoff line (modes.tsv) counts, keyed by ar
 PASS procedure disposition: 15 of 16 forced sessions ran it -> READY
 PASS procedure disposition: 14 of 16 -> FIX-METHOD
 PASS procedure disposition: 15 transcripts of 16 scheduled -> NO READ
+PASS procedure disposition: 16 forced sessions that write all 10 sections and then end on the turn cap -> FIX-METHOD (ran 0, turn-cap endings 16)
   preset: none first-request tokens min 22270, preset 4/4 -> PASS
 PASS system-prompt check: preset recorded on every session and none's first request at 22,270 tokens (stub median plus the preset's 1,926) -> PASS
   below floor: none first-request tokens min 20345, preset 4/4 -> FAIL
@@ -403,4 +413,4 @@ PASS no unit reference (PR number, task id, unit id or case id) appears in this 
 PASS no line of any unit file (2277 distinct lines of 24+ characters from 44 units) appears in this transcript
 PASS no catalog cause or evidence line appears in this transcript
 
-all checks passed: PASS 124, FAIL 0, SKIP 0
+all checks passed: PASS 127, FAIL 0, SKIP 0

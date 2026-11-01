@@ -43,12 +43,14 @@ def section_of(line):
 
 def sections_ran(text):
     lines = text.split("\n")
-    heads = []
+    heads, seen = [], set()
     for i, l in enumerate(lines):
         if HEADING.match(l):
             n = section_of(l)
-            if n: heads.append((i, n))
-    # longest strictly increasing run of section numbers, in order of appearance (O(k^2), k is small)
+            if n and n not in seen:
+                seen.add(n)
+                heads.append((i, n))
+    # longest strictly increasing run of section numbers, each at its first appearance (O(k^2), k is small)
     best = [[h] for h in heads]
     for j in range(len(heads)):
         for i in range(j):
@@ -157,7 +159,7 @@ def main():
                     s["mode_tsv"] = (arm, task_pr(task), p[1:]) in mt
                     s["mode"] = s["mode_text"] or s["mode_tsv"]
                     s["exposed"] = s["read"] and s["mode"]
-                    s["ran"] = s["exposed"] and s["sections"] >= MIN_SECTIONS
+                    s["ran"] = s["exposed"] and s["sections"] >= MIN_SECTIONS and s["subtype"] != "error_max_turns"
                     sess.append(s)
                     rows.append([arm, task, p] + [str(s[k]) for k in ("read", "mode_text", "mode_tsv", "exposed", "sections", "ran", "first_tokens", "system_prompt", "helpers", "agents", "turns", "subtype")])
         ft = [s["first_tokens"] for s in sess if s["first_tokens"] is not None]

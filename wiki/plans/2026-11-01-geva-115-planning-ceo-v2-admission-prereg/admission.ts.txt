@@ -80,9 +80,11 @@ const noRead: string[] = [];
 const n = cells[ARMS.none]!;
 if (n.findings !== nUnits * passes) noRead.push("none has " + (n.gap + n.not_run) + " gap or unrun sessions and " + n.miss + " sessions with no parsed findings block (" + n.findings + " of " + nUnits * passes + " have findings)");
 const jn = J[ARMS.none];
-if (!jn) noRead.push("none has no judgments.tsv");
 const complete = (rows: Row[]) => items.every((i) => Array.from({ length: passes }, (_, p) => rows.filter((r) => r.blocker === i && r.pass === p + 1)).every((x) => x.length === 1 && x[0]!.coverage === "complete")) && rows.length === items.length * passes;
-for (const [a, rows] of Object.entries(J)) if (rows && !complete(rows)) noRead.push(a + " has judgments with coverage incomplete (a row missing, extra or not complete)");
+for (const [a, rows] of Object.entries(J)) {
+  if (!rows) noRead.push(a + " has no judgments.tsv");
+  else if (!complete(rows)) noRead.push(a + " has judgments with coverage incomplete (a row missing, extra or not complete)");
+}
 if (exp.system_prompt_check !== "PASS") noRead.push("the system-prompt check failed");
 if (args.get("--cap-stop") === "yes") noRead.push("the run hit a cap stop");
 
