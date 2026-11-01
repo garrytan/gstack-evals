@@ -50,7 +50,7 @@ describe("stacks batch", () => {
 
   test("gstack and placebo are told what quick look 3 told them", () => {
     const ql3 = JSON.parse(readFileSync(join(here, "../runner/skill-map.json"), "utf8")) as Record<string, { skill: string }>;
-    expect(Object.keys(stacksMap).sort()).toEqual(["gstack", "placebo", "pstack", "pstack-placebo"]);
+    expect(Object.keys(stacksMap).sort()).toEqual(["gstack", "placebo", "placebo-short", "pstack", "pstack-placebo"]);
     for (const arm of ["gstack", "placebo"]) for (const task of final) expect(stacksMap[arm][task]).toBe(ql3[task].skill);
   });
 

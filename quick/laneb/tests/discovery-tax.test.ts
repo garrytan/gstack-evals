@@ -14,21 +14,21 @@ const t = (name: string) => runT(loadRun(cfgs[name]).recs, cfgs[name]).join("\n"
 describe("section 7 scoring rows", () => {
   const at = (model: string, arm: string, task: string) => d.recs.filter((r) => r.model === model && r.label === arm && r.task === task);
   test("reward 1 passes, reward 0 fails, both eligible", () => {
-    expect(at("m-claim", "none", "t07")[0]).toMatchObject({ status: "graded", pass: 1, eligible: true });
-    expect(at("m-claim", "none", "t06")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true });
+    expect(at("m-claim", "none", "t06")[0]).toMatchObject({ status: "graded", pass: 1, eligible: true });
+    expect(at("m-claim", "none", "t07")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true });
   });
   test("no reward after a response (agent timeout) fails and is eligible; a session-cap stop is graded as it stands", () => {
-    expect(at("m-claim", "none", "t15")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true, agentTimeout: true });
-    expect(at("m-claim", "placebo", "t15")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true, budgetStop: true });
+    expect(at("m-claim", "none", "t11")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true, agentTimeout: true });
+    expect(at("m-claim", "placebo", "t11")[0]).toMatchObject({ status: "graded", pass: 0, eligible: true, budgetStop: true });
   });
   test("a refused first request fails, is not eligible and is counted", () => {
     expect(at("m-gate", "none", FIRST)[0]).toMatchObject({ status: "graded", pass: 0, refused: true, eligible: false });
   });
   test("no model response is an infrastructure trial: missing, out of both rates", () => {
-    expect(at("m-claim", "gstack", "t15")[0]).toMatchObject({ status: "missing", eligible: false });
+    expect(at("m-claim", "gstack", "t11")[0]).toMatchObject({ status: "missing", eligible: false });
   });
   test("a rerun after a response is graded on the rerun and counted", () => {
-    expect(at("m-claim", "none", "t16")[0]).toMatchObject({ status: "graded", retried: true, pass: 1 });
+    expect(at("m-claim", "none", "t12")[0]).toMatchObject({ status: "graded", retried: true, pass: 1 });
   });
   test("a task dropped by the oracle rule leaves the whole run, with its spend reported", () => {
     expect(d.recs.some((r) => r.task === "dropped-task")).toBe(false);
@@ -38,7 +38,7 @@ describe("section 7 scoring rows", () => {
     const r = at("m-claim", "gstack", FIRST)[0]!;
     expect(r.opens).toEqual(["investigate"]);
     expect(r.loaded).toEqual(["investigate"]);
-    const rw = at("m-claim", "gstack-rewritten", "t15")[0]!;
+    const rw = at("m-claim", "gstack-rewritten", "t11")[0]!;
     expect([rw.pluginOpens, rw.browses, rw.opens.length]).toEqual([1, 1, 0]);
   });
 });

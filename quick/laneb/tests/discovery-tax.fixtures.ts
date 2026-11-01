@@ -83,7 +83,7 @@ export function scenarios(root: string): Record<string, object> {
       return a === "placebo" ? 1 : i % 4 === 0 ? 1 : 0;
     }),
     "run-t-reversed": runT(root, "reversed", (m, a, i) => (m === "particle-1" ? (a === "none" ? (i % 3 === 0 ? 1 : 0) : 1) : i % 2), (m, a, i) => !(m === "deepseek-v4.1-flash-1017" && a === "placebo" && i < 4)),
-    "run-t-not-confirmed": runT(root, "not-confirmed", (m, a, i) => (a === "placebo" && i % 7 === 0 ? 0 : (i + (a === "none" && i % 7 === 1 ? 1 : 0)) % 2)),
+    "run-t-not-confirmed": runT(root, "not-confirmed", (m, a, i) => (a === "placebo" && (i === 7 || i === 8) ? 1 - (i % 2) : i % 2)),
   };
 }
 
