@@ -35,7 +35,7 @@ const investigate = listing.entries.some((e) => /^(?:\.\/)?\.claude\/skills\/inv
 closeSync(fd);
 const container = fields.find(([, t]) => t.includes("plugin-authoring"));
 const listed = container ? names.filter((n) => new RegExp("(^|\\n)- " + n.replace(/[-]/g, "\\-") + ":").test(container[1])) : [];
-console.log(`${arm}: first request ${first.bytes} bytes, ${body.tools.length} tools, system ${text(body.system).length} chars`);
+console.log(`${arm}: first request ${first.bytes} bytes, ${body.tools.length} tools, system ${text(body.system).length} chars: ${JSON.stringify(text(body.system).slice(0, 160))}`);
 console.log(`${arm}: listing in ${container ? container[0] : "nowhere"}; skills listed ${listed.length} (${listed.length <= 3 ? listed.join(", ") : listed.slice(0, 3).join(", ") + ", ..."})`);
 for (const [label, needle] of [["shipped investigate description", SHIPPED], ["rewritten investigate description", REWRITTEN_TAIL]] as const) {
   const hits = where(needle);

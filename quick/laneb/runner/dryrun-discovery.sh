@@ -17,6 +17,9 @@ armsrc=${ARMS_DIR:-$HOME/.capy/work/geva106/arms}
 out=${OUT:-$HOME/.capy/work/geva106/dryrun}
 export TB2=${TB2:-$HOME/.capy/work/ref/terminal-bench-2}
 steps=" ${*:-a b c d e f g} "
+driver=${DRIVER:-direct}
+sdk_python=${SDK_PYTHON:-$(head -1 "$(command -v harbor)" | sed 's/^#!//')}
+claude_bin=${CLAUDE_BIN:-$HOME/.capy/work/geva106/cc/package/claude}
 has() { [[ "$steps" == *" $1 "* ]]; }
 mkdir -p "$out"
 armdir=$out/arms
@@ -86,13 +89,20 @@ EOF
     local extra=()
     [ "$told" = 1 ] && extra=(--ak invoke=true --ak 'skill_map={"task-public":"investigate"}')
     echo "-- $item arm $arm told=$told ($(du -h "$armdir/$arm.tar" | cut -f1) tar)"
+    if [ "$driver" = harbor ]; then
     PYTHONPATH="$here/agent" ANTHROPIC_API_KEY=placeholder-not-a-key timeout 1800 harbor run -y -q -p "$dir/task-public" \
       -a laneb_agent:LanebAgent -m anthropic/claude-opus-5-5 --base-url "http://$gateway:8787" \
       --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$(readlink -f "$armdir/$arm.tar")" \
       --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=/testbed --ak workdir=/testbed "${extra[@]}" \
       -e docker -o "$dir/jobs" --job-name "dry-$arm" >"$dir/harbor-$arm.log" 2>&1 || echo "harbor exited non-zero for $arm (log: $dir/harbor-$arm.log)"
     kill "$shim" 2>/dev/null || true; wait "$shim" 2>/dev/null || true
+    for _ in $(seq 1 20); do (echo > /dev/tcp/127.0.0.1/8799) 2>/dev/null || break; fuser -k 8799/tcp >/dev/null 2>&1; sleep 0.5; done
     echo "reward: $(cat "$dir"/jobs/dry-$arm/*/verifier/reward.txt 2>/dev/null || echo none)"
+    else
+    PYTHONPATH="$here/agent" timeout 300 "$sdk_python" "$here/dryrun-direct.py" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" "$claude_bin" "/tmp/geva106-direct/$item-$arm" \
+      "http://$gateway:8787" "$dir/task-public/instruction.md" "$here/prompt-wrapper.md" >"$dir/direct-$arm.log" 2>&1 || echo "direct driver exited non-zero for $arm (log: $dir/direct-$arm.log)"
+    echo "$(tail -1 "$dir/direct-$arm.log") ($SECONDS s into the dry run)"
+    fi
     bun "$here/dryrun-inspect.ts" "$dir/requests-$arm.jsonl" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" || true
   done
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done
@@ -115,6 +125,7 @@ EOF
 
 if has b || has c; then
   echo "== b, c. listing and told checks, one lease per run"
+  if [ "$driver" = harbor ]; then echo "driver: Harbor trial (laneb_agent in the task container)"; else echo "driver: direct. The Harbor trial stalled after 'Skipping install' with no proxy session, so runner/dryrun-direct.py drives claude-agent-sdk $("$sdk_python" -c 'import claude_agent_sdk as s; print(s.__version__)') and Claude Code $("$claude_bin" --version | cut -d' ' -f1) on the host with laneb_agent.py's options, env and build_prompt, HOME and CLAUDE_CONFIG_DIR at the arm's extracted .claude/, through the metering proxy."; fi
   harness_run discovery-r1 100 none:0 placebo:0 gstack-rewritten:0 gstack:0
   harness_run texttax-r1 75 placebo:1 placebo-short:1
 fi
