@@ -103,20 +103,24 @@ shell.
    `.real-verifier-config.<ext>`.
 3. Run, in a container from the same image: the volume mounted read-only at `/testbed`, user 10001, `--network
    none`, `--read-only` root, a tmpfs `/tmp`, no capabilities, no-new-privileges, a CPU quota and a memory cap.
-   pytest runs through `vrun.py`, which imports pytest and the image's pytest11 plugins while only the image's paths
-   are on `sys.path`, then runs with plugin autoload off, so no module or dist-info in the tree loads as a plugin. It
+   pytest runs through `vrun.py`, which prints the start line (step 5) first, then imports pytest and the image's
+   pytest11 plugins while only the image's paths are on `sys.path`, then runs with plugin autoload off, so no module or
+   dist-info in the tree loads as a plugin. An editable install in the image can still map a package name into the
+   tree, so an image plugin that imports it runs tree code; that code runs after the start line. It
    reads ini options only from gold's config (`-c`), shuffles the tests with a recorded seed and writes each test's phases to
    the record as it goes. Go runs `go test -json -count=1 -shuffle=<seed>` with `GOFLAGS=-mod=readonly` and
    `GOPROXY=off`; gold's go.mod and go.sum are restored, so a `replace` in the tree can't swap a dependency. Build
    errors are read from stderr (Go 1.23 and older) or from build-output events (Go 1.24 and newer).
 4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
    only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it.
-5. Each run prints `real-verifier: started` on stdout before any code from the tree can run: vrun.py at its runner
-   event, the Go command before `go test`. A run that never printed it has no verdict, and `verify` and `check` stop
-   with E_REAL_TASK_DOCKER: Docker could not start the container (exit 125 to 127), or vrun.py stopped before its
-   runner event, a swapped runner included. Once the line is out, code from the tree runs as the same user, can write
-   `/out` and can pick its own exit status, so every exit status, crash, missing record or missing `/out/exit` after it
-   is the tree's outcome, as is a timeout. Nothing the tree can touch turns a failure into no verdict.
+5. Each run prints `real-verifier: started` on stdout before any code from the tree can run: vrun.py as the first act
+   of its main, before it imports pytest or loads a plugin, and the Go command before `go test`. A run that never
+   printed it and did not time out has no verdict, and `verify` and `check` stop with E_REAL_TASK_DOCKER: Docker could
+   not start the container or its entrypoint (exit 125 to 127), or the interpreter exited before vrun.py's first line.
+   Once the line is out, code from the tree can run as the same user, write `/out` and pick its own exit status, so
+   every exit status, crash, missing record or missing `/out/exit` after it is the tree's outcome, a swapped runner or
+   a plugin that fails to load included. Every timeout is the tree's outcome too, with or without the line. Nothing the
+   tree can touch turns a failure into no verdict.
 
 Failure classes: `assert` (the test body ran and failed), `missing_name` (an attribute, import or symbol that
 doesn't exist) and `load` (collection, import, setup or build failed otherwise).
@@ -129,9 +133,9 @@ Open for B3 and B6: test helpers outside the protected patterns (a Go `internal/
 `testing.py`, modules named by `pytest_plugins` or `-p`) come from the tree, not gold. A gold config that runs xdist
 (`-n`) records no phases, so gold fails V1 and the task drops. The checked image and the graded image are both built
 from the task directory, but their ids are not compared yet. B3 screening drops repositories that ship their own
-pytest11 plugin and install themselves editable: vrun.py loads entry points while only the image's paths are on
-`sys.path`, so such a plugin fails to load, vrun.py stops before its runner event and the task has no verdict, and
-loading the plugin from the tree would let the tree rewrite reports. A Docker failure after the verifier started
+pytest11 plugin and install themselves editable: with a path-based editable install (a `.pth` naming a tree path)
+the plugin fails to load and gold fails V1, and with a finder-based one (setuptools 64 and newer) the plugin loads
+from the tree, which would let the tree rewrite reports. A Docker failure after the verifier started
 (the daemon dying mid-run) grades as the tree's, because the host can't tell it from the tree's own doing.
 
 ## Validity rules (`real task check`)

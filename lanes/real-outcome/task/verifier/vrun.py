@@ -1,7 +1,9 @@
 # Copyright (c) 2026 Garry Tan. MIT License.
 # gstack-evals real-outcome verifier, pytest entry (lanes/real-outcome/task/SPEC.md). Verifier-owned. It imports
 # pytest from the image's own install, never from the tree under test, so a pytest.py or pytest/ package the tree adds
-# can't stand in for the runner. Plugin autoload is off: the image's pytest11 plugins load while only trusted paths are
+# can't stand in for the runner. It prints its start line before it imports pytest or loads a plugin, so whatever the
+# tree does after that, through an editable install an image plugin imports included, is the tree's outcome (SPEC.md
+# step 5). Plugin autoload is off: the image's pytest11 plugins load while only trusted paths are
 # on sys.path, so a tree module or dist-info can't pose as one. It reads ini options only from the verifier's copy of
 # gold's config (-c), runs the targets in a seeded random order, and writes every test's phases to a record line by line, so a run that dies keeps
 # what it recorded and every id it never reached reads as missing.
@@ -24,6 +26,7 @@ def trusted(path):
 
 
 def main():
+    print("real-verifier: started", flush=True)
     out, config, targets_file, seed = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
     record = open(out, "a", buffering=1)
 
@@ -47,7 +50,6 @@ def main():
     plugins = [ep.load() for ep in eps]
     os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     emit(event="runner", pytest=pytest.__version__, path=os.path.realpath(pytest.__file__), plugins=sorted(ep.name for ep in eps))
-    print("real-verifier: started", flush=True)
     sys.path[:] = [REPO] + [p for p in saved if p and os.path.realpath(p) != REPO]
 
     class Recorder:

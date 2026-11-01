@@ -255,8 +255,7 @@ describe("prepare.sh on a host tree", () => {
 
 describe("what a grader grades", () => {
   test("verify refuses a regression list check did not freeze, or one changed since, before any Docker call", async () => {
-    const dir = join(tmp.dir, "out/unfrozen");
-    cpSync(join(tmp.dir, "out/k1"), dir, { recursive: true });
+    const dir = buildTask(specs.k1, repo(), join(tmp.dir, "out/unfrozen")).dir;
     const t = readTask(dir);
     expect(t.tests.regression_scope).toEqual(["tests/test_ops.py"]);
     expect(code(() => requiredTests(t))).toBe("E_REAL_TASK_FORMAT");
@@ -291,7 +290,9 @@ describe("what a grader grades", () => {
     expect(runInfra({ status: 126, stdout: RUN_STARTED + "\n", timed_out: false })).toBeNull();
     expect(runInfra({ status: 1, stdout: "a plugin banner\n" + RUN_STARTED + "\n1 failed\n", timed_out: false })).toBeNull();
     expect(runInfra({ status: 137, stdout: "", timed_out: true })).toBeNull();
-    expect(readFileSync(join(VERIFIER_DIR, "vrun.py"), "utf8")).toContain('    print("' + RUN_STARTED + '", flush=True)\n');
+    const vrun = readFileSync(join(VERIFIER_DIR, "vrun.py"), "utf8");
+    expect(vrun).toContain('    print("' + RUN_STARTED + '", flush=True)\n');
+    expect(vrun.indexOf('    print("' + RUN_STARTED + '", flush=True)\n')).toBeLessThan(vrun.indexOf("\n    import pytest\n"));
   });
 });
 

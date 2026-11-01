@@ -4,13 +4,15 @@
 // conftest hooks, symlinked tests, a swapped runner, a plugin in the tree, an exit at import or inside a test,
 // agent-side config, an early TestMain, a weakened helper, a go.mod edit and a patch that does not apply, none of
 // which passes a hidden test it should fail, beside honest fixes that pass. Also: the regression list grades only once
-// frozen, and a run the verifier never started has no verdict. Keyless: no model call; the images install pinned, hashed packages at build time.
+// frozen, a run the verifier never started has no verdict, and a tree an image plugin imports through an editable
+// install still fails when it exits or breaks at that import. Keyless: no model call; the images install pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { appendFileSync, cpSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { buildImage, checkTask, type CheckResult } from "../../lanes/real-outcome/task/check.ts";
 import { main as task } from "../../lanes/real-outcome/task/cli.ts";
+import { docker } from "../../lanes/real-outcome/task/docker.ts";
 import { readTask, type TaskJson } from "../../lanes/real-outcome/task/format.ts";
 import { resultFor } from "../../lanes/real-outcome/task/record.ts";
 import { allPass, requiredTests, verifyTree } from "../../lanes/real-outcome/task/verify.ts";
@@ -136,6 +138,33 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(forged.tree.runs[0].exit).toBe(126);
     expect(forged.pass).toBe(false);
     expect(forged.half.status).toBe("missing");
+  }, LONG);
+
+  test("a tree an image plugin imports through an editable install is graded when it exits or breaks at that import", () => {
+    const ctx = join(tmp.dir, "editable-image");
+    const sp = join(ctx, "sp");
+    mkdirSync(join(sp, "calcplug-1.0.dist-info"), { recursive: true });
+    const finder = ["import sys", "from importlib.util import spec_from_file_location", "", 'MAPPING = {"calc": "/testbed/calc"}', "", "", "class _EditableFinder:", "    @classmethod", "    def find_spec(cls, fullname, path=None, target=None):", "        if fullname not in MAPPING:", "            return None", '        return spec_from_file_location(fullname, MAPPING[fullname] + "/__init__.py", submodule_search_locations=[MAPPING[fullname]])', "", "", "def install():", "    if _EditableFinder not in sys.meta_path:", "        sys.meta_path.append(_EditableFinder)", ""];
+    writeFileSync(join(sp, "__editable___calc_finder.py"), finder.join("\n"));
+    writeFileSync(join(sp, "__editable__.calc_fixture-0.1.0.pth"), "import __editable___calc_finder; __editable___calc_finder.install()\n");
+    writeFileSync(join(sp, "calcplug.py"), "import calc.fmt\n");
+    writeFileSync(join(sp, "calcplug-1.0.dist-info/METADATA"), "Metadata-Version: 2.1\nName: calcplug\nVersion: 1.0\n");
+    writeFileSync(join(sp, "calcplug-1.0.dist-info/entry_points.txt"), "[pytest11]\ncalcplug = calcplug\n");
+    const python = (k1.runner as { python: string }).python;
+    writeFileSync(join(ctx, "Dockerfile"), "FROM " + image + "\nCOPY sp/ /tmp/sp/\nRUN " + python + " -c \"import shutil, sysconfig; shutil.copytree('/tmp/sp', sysconfig.get_paths()['purelib'], dirs_exist_ok=True)\" && rm -rf /tmp/sp\n");
+    const tag = "real-editable-test:" + process.pid;
+    expect(docker(["build", "-q", "-t", tag, ctx], { timeoutMs: LONG }).status).toBe(0);
+    try {
+      const on = (label: string, head: string) => {
+        const tree = verifyTree({ taskDir: k1Dir, task: k1, image: tag, label, patch: patchFrom(calc(), sha.c3, { ...intro, "calc/fmt.py": head + fixed }), runs: 1, seed: 7, work: join(tmp.dir, "work-editable") });
+        return { pass: allPass(tree, [...k1.tests.functional, ...k1.tests.escaped_defect]), half: resultFor(tree.runs[0].parsed, "tests/test_percent.py::test_percent_half").status };
+      };
+      expect(on("editable-honest", "")).toEqual({ pass: true, half: "pass" });
+      expect(on("editable-exit", "import os\nos._exit(0)\n")).toEqual({ pass: false, half: "missing" });
+      expect(on("editable-import-error", 'raise ImportError("broken by the tree")\n')).toEqual({ pass: false, half: "missing" });
+    } finally {
+      docker(["rmi", "-f", tag]);
+    }
   }, LONG);
 
   test("K4 replay and decoy tasks are valid", () => {

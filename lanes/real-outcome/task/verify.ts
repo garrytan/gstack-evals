@@ -14,8 +14,8 @@ import { parseGoTest, parsePytest, resultFor, type Parsed, type TestResult } fro
 
 export const RUN_UID = "10001:10001";
 
-/** The line each run prints on stdout before any code from the tree can run: vrun.py at its runner event, the Go
- * command before go test. Code from the tree can only add to stdout after it, never take it back. */
+/** The line each run prints on stdout before any code from the tree can run: vrun.py as the first act of its main,
+ * before it imports pytest or loads a plugin, the Go command before go test. Code from the tree can only add to stdout after it, never take it back. */
 export const RUN_STARTED = "real-verifier: started";
 
 export interface RunRecord {
@@ -48,10 +48,12 @@ export interface VerifyOptions {
   cpus?: number;
 }
 
-/** Why a run has no verdict for the tree, or null when it has one. A run that never printed RUN_STARTED was never
- * graded: Docker could not start the container (exit 125 to 127), or vrun.py stopped before its runner event. After
- * RUN_STARTED, code from the tree runs as the same user and can write /out and pick its own exit status, so every exit
- * status, crash, missing record or missing /out/exit is the tree's outcome, and so is a timeout. */
+/** Why a run has no verdict for the tree, or null when it has one. A run that never printed RUN_STARTED and did not
+ * time out was never graded: Docker could not start the container or its entrypoint (exit 125 to 127), or the
+ * interpreter exited before vrun.py's first line. vrun.py prints RUN_STARTED before it imports pytest or loads a
+ * plugin, so code from the tree (same user, can write /out and pick its own exit status) runs only after it, and every
+ * exit status, crash, missing record or missing /out/exit is the tree's outcome. Every timeout is the tree's outcome
+ * too, with or without the line. */
 export function runInfra(res: { status: number; stdout: string; timed_out: boolean }): string | null {
   if (res.timed_out || res.stdout.split("\n").includes(RUN_STARTED)) return null;
   return "the verifier never started (docker exited " + res.status + ")";
