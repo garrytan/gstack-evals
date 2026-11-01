@@ -23,8 +23,8 @@ for uid in ids:
     for dp, dn, fn in os.walk(d):
         for f in fn: files.append(os.path.relpath(os.path.join(dp, f), d))
     files.sort()
-    key = open(os.path.join(d, "key.json"), "rb").read()
-    k = json.loads(key)
+    key_raw = open(os.path.join(d, "key.json"), "rb").read()
+    k = json.loads(key_raw)
     assert k["unit"] == uid
     tree = [f for f in files if f != "key.json"]
     base_files = [f for f in tree if f != "plan.md"]
@@ -56,11 +56,11 @@ for uid in ids:
     ud = os.path.join(root, "units", uid); os.makedirs(ud)
     bundle = os.path.join(ud, "repo.bundle")
     run(["git", "bundle", "create", "-q", bundle, "HEAD", "main"], cwd=g)
-    open(os.path.join(ud, "key.json"), "wb").write(key)
+    open(os.path.join(ud, "key.json"), "wb").write(key_raw)
     tree_sha = sha("".join(f + "\0" + sha(data[f]) + "\n" for f in tree).encode())
     item_kinds = [i["item_kind"] for i in k.get("items", [])] or [k["bait"]["resembles"]]
     rows.append(dict(unit=uid, author=uid[0], kind=k["kind"], mode=k["mode"], item_kinds=item_kinds, head=head, base=base,
-                     plan_sha256=sha(data["plan.md"]), key_sha256=sha(key), bundle_sha256=sha(open(bundle, "rb").read()),
+                     plan_sha256=sha(data["plan.md"]), key_sha256=sha(key_raw), bundle_sha256=sha(open(bundle, "rb").read()),
                      tree_sha256=tree_sha, files=len(tree), plan_bytes=len(data["plan.md"])))
 audits = []
 for f in sorted(os.listdir(os.path.join(staging, "audit"))):

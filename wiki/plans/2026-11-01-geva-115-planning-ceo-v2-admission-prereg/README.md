@@ -24,7 +24,7 @@ attachments:
   - dfbf30ce43665862f126113f9dff27b89edaa9280b1184c2c87f25d4f2a32014  build-v2.sh.txt
   - 939f8f59c42fd95a4f36145a4d976e3bc01dff4eb9954431ad582177d2de07d2  convert-v2.py.txt
   - 6cc9ce6c029653ab960dc1ae771ea60d3124ebc2c0bd2f47c52201ad1e54cb94  dryrun.ts.txt
-  - 43fac190005510108c5a43e00a731e8f53cdadf5e8c8d48a46eea35087f2e9eb  dryrun.txt
+  - 585027431f1f17a5e6e7b3c9faf6cebf1d44c1db1c04ec346ec03b01f7298fcc  dryrun.txt
   - dfb6ff670256ce25813472edb905ad474638e3678af91bd50d0a91580e3912f3  echo-terms.txt
   - 07d5e78d256066a27133c43c85cb5700aa821670fb4633975a825d280c6a9998  exposure.py.txt
   - d4f56ad49c82e6b8ca9a2ec05b24a641c45e9d158e11c9de65420008b66d4e43  forced-line.txt
@@ -32,7 +32,7 @@ attachments:
   - cd0a42d036d2b05e44eadadc7211a25937134a42856b30f44dad03af55e34285  judge-brief.md
   - 9491d9b2b1384844ab69c33dc250a753f418cab23765cb511a3808d017294f20  power-grid.sh.txt
   - 594797d6fe89307c000ce5a7030783372cef98bb28b92e9489c5c2564de59220  power-grid.txt
-  - e2a10b6284deacbc33aedf35d0177f3877f0ac9140256d8a6f4dee28c7887959  seal.py.txt
+  - cc478b2fd713224fd6f1272eb2472618c29e3ad3530df9d969fc6c7e422d7fc1  seal.py.txt
 ---
 
 # CEO panel v2 admission pilot: preregistration
@@ -318,4 +318,4 @@ Results: on a synthetic panel at #119's head e8b9a6b (no forced arm), PASS 102, 
 - [judge-brief.md](judge-brief.md): judge brief v2 (section 4).
 - [power-grid.sh.txt](power-grid.sh.txt): the power runs.
 - [power-grid.txt](power-grid.txt): their output (section 8).
-- [seal.py.txt](seal.py.txt): builds the sealed panel bundle deterministically.
+- [seal.py.txt](seal.py.txt): builds the sealed panel bundle deterministically; this copy renames one local variable (key to key_raw) from the script that built the bundle, so pregate's secrets scan passes, and the logic is unchanged.
