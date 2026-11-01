@@ -480,6 +480,21 @@ describe("a symlink in the receipts sink (keyless)", () => {
     await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig)).rejects.toThrow("E_USAGE: the receipts sink ");
     expect(bound).toEqual([]);
   });
+
+  // Value: protects=RT1 (#107 /ship pass 2 fix-check): a sink under a dangling symlink, <dir>/link/sink with link pointing at a missing target, is refused before any session, since the copy could never create it; fails_when=the dangling-link walk stops at the sink; why_new=#107 /ship pass 2 fix-check, ruled by GSTA-2; seam=sinkLinkProblem, runReviewUnits's early sink checks; no_claim=a link created after the check
+  test("RT1: a dangling symlink above the sink is refused before any session", async () => {
+    const { out } = receipts();
+    const dir = scratch("plan-scoring-dangling-parent-");
+    symlinkSync(join(scratch("plan-scoring-gone-"), "missing"), join(dir, "link"));
+    const sink = join(dir, "link", "sink");
+    expect(sinkLinkProblem(out, [join(out, "cells.ndjson")], sink)).toContain("the receipts sink ");
+    const fx = unitFixture();
+    const bound: string[] = [];
+    const rig = { bind: async () => { bound.push("bound"); throw new Error("no session may start"); }, arms: { none: bare("none") }, cells: {} } as unknown as HostRig;
+    const input = baseInput(fx.prepared, fx.panel.suite.id, ["none"], durable(), null);
+    await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } }, rig)).rejects.toThrow("E_USAGE: the receipts sink ");
+    expect(bound).toEqual([]);
+  });
 });
 
 describe("the seeded question preferences (keyless)", () => {

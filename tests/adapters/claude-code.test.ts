@@ -307,7 +307,7 @@ describe("the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless
 describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless)", () => {
   const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
   const INFRA = { kind: "missing", code: "E_INFRA_FAILURE" } as const;
-  const stubRun = async (stub: Record<string, string>, o: { timeoutMs?: number; reset?: true; missing?: true; stderrDir?: true; stall?: number; clockStep?: number } = {}) => {
+  const stubRun = async (stub: Record<string, string>, o: { timeoutMs?: number; reset?: true; missing?: true; stderrDir?: true; stall?: number; clockStep?: number; persona?: number; stallOn?: { text: string; ms: number } } = {}) => {
     const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
     if (o.stderrDir) mkdirSync(join(out, "cli-stderr.log"));
     const calls = { exec: 0, probe: 0 };
@@ -323,11 +323,21 @@ describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (
         }
         const child = o.missing ? spawn(join(out, "no-such-cli"), [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", ...stub }, stdio: ["pipe", "pipe", "pipe"] });
         if (o.reset) child.stdout!.once("data", () => setTimeout(() => child.stdout!.destroy(Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })), 50));
+        const { stallOn } = o;
+        let stalledOnce = false;
+        if (stallOn) child.stdout!.on("data", (chunk) => {
+          if (stalledOnce || !String(chunk).includes(stallOn.text)) return;
+          stalledOnce = true;
+          spawnSync("sleep", [String(stallOn.ms / 1000)]);
+        });
         return child;
       },
       stop: () => {},
     };
-    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, freeform: async () => ({ text: "Go with your recommendation." }), entry: { user: { persona: "p" } } as never });
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, freeform: async () => {
+      if (o.persona) await new Promise((r) => setTimeout(r, o.persona));
+      return { text: "Go with your recommendation." };
+    }, entry: { user: { persona: "p" } } as never });
     const run = driver.run(session as never, { id: "t", prompt: "Review the plan." }, o.timeoutMs ?? 10_000);
     const { stall, clockStep } = o;
     if (stall) setTimeout(() => spawnSync("sleep", [String(stall / 1000)]), 100);
@@ -449,6 +459,15 @@ describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (
       expect([clockStep, r.outcome.termination, r.outcome.credited_stall_ms]).toEqual([clockStep, { kind: "timeout" }, 0]);
     }
   }, 30_000);
+
+  // Value: protects=B1 (#107 /ship pass 2 red team 1): an evaluator stall that ends just as the CLI's question arrives is measured before the persona's pause starts, so it is credited and never charged to the arm; fails_when=the pause starts first and the next tick drops the stall, so a session that answered in time can time out, a miss; why_new=#107 /ship pass 2 red team 1, ruled by GSTA-2; seam=the driver's stall-compensated clock and the persona pause, on the real SDK; no_claim=a real docker step
+  // gstack-timing-ok: the stall and the persona's latency are the repro; the assertions are on the outcome and the recorded credit
+  test("B1: a stall just before a persona pause is credited, not charged to the arm", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Shall I proceed with the plan?" }], { STUB_DELAY: "300", STUB_CONTENT_LATER: JSON.stringify([{ type: "text", text: "Done." }]) }), { timeoutMs: 20_000, persona: 300, stallOn: { text: '"type":"result"', ms: 1_200 } });
+    if (r.outcome === "hung") throw new Error("the session hung");
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.credited_stall_ms).toBeGreaterThan(500);
+  }, 60_000);
 
   // Value: protects=rule 1 and B1: with no stall, a CLI that answers past the limit is the arm's own timeout and nothing is credited; fails_when=the clock credits time it did not lose, or the timeout reads as infra; why_new=#107 /ship red team RT4; seam=the driver's session clock; no_claim=none beyond protects
   // gstack-timing-ok: the delay is the repro; the assertion is on the outcome and the recorded credit

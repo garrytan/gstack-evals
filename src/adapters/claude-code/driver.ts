@@ -16,7 +16,7 @@
 //   reason) ends the cell as a missing cell, E_APPROVAL_BYPASS, unless it was a cap stop: no route answers a question
 //   without the simulator.
 // - The session's clock stops while the persona's free-form source answers, from the first pending answer until the last
-//   one returns, so usersim latency never times the arm out.
+//   one returns, so usersim latency never times the arm out. A stall that ends as the pause starts is credited first.
 // - A question the sidecar does not answer goes to the persona's free-form source when the run passes one
 //   (src/usersim/persona.ts); a source that cannot answer ends the cell with its termination.
 // - After each turn whose last text ends in a question, the simulator's reply goes in as the next user message; the
@@ -348,16 +348,19 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const watch = setInterval(stalled, TICK_MS);
       const persona = o.freeform;
       const freeform = persona && (async (text: string, question: string) => {
-        if (pauses++ === 0) {
+        if (pauses === 0) {
+          stalled();
           clearTimeout(timer);
           paused = performance.now();
         }
+        pauses++;
         let a: Awaited<ReturnType<typeof persona>>;
         try {
           a = await persona(text, question);
         } finally {
           if (--pauses === 0) {
             deadline += performance.now() - paused;
+            last = performance.now();
             timer = setTimeout(expire, Math.max(0, deadline - performance.now()));
           }
         }

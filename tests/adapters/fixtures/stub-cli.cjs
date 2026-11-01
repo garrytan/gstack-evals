@@ -2,7 +2,8 @@
 // requests and, on each user message, emits one tool_use. STUB_MODE=turn1 exits 0 right after the first tool_use;
 // STUB_MODE=turn2 ends the first turn with a question and a result, then exits 0 after the second turn's tool_use.
 // STUB_MODE=content answers instead with the blocks STUB_CONTENT holds (a JSON array) and a success result, STUB_DELAY ms
-// after the user message (no result with STUB_HANG=1, so the turn never ends). STUB_MODE=exit exits with STUB_EXIT after the tool_use: STUB_DELAY ms later, or with
+// after the user message (no result with STUB_HANG=1, so the turn never ends; STUB_CONTENT_LATER, when set, answers every
+// user message after the first). STUB_MODE=exit exits with STUB_EXIT after the tool_use: STUB_DELAY ms later, or with
 // STUB_ON_EOF=1 only once its stdin closes. STUB_STDERR is written to stderr STUB_STDERR_TIMES times (default once) on each
 // user message.
 const rl = require("readline").createInterface({ input: process.stdin });
@@ -31,7 +32,7 @@ rl.on("line", (line) => {
   if (env.STUB_MODE === "content") {
     const n = users;
     setTimeout(() => {
-      out(assistant("c" + n, JSON.parse(env.STUB_CONTENT), "end_turn"));
+      out(assistant("c" + n, JSON.parse(n > 1 && env.STUB_CONTENT_LATER ? env.STUB_CONTENT_LATER : env.STUB_CONTENT), "end_turn"));
       if (!env.STUB_HANG) out(result(n, ""));
     }, Number(env.STUB_DELAY ?? 0));
     return;

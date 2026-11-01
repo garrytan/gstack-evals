@@ -31,7 +31,7 @@
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
-//   path, or a dangling one at the sink, is refused too. Both checks run before any session.
+//   path, or a dangling one at or above the sink, is refused too. Both checks run before any session.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
