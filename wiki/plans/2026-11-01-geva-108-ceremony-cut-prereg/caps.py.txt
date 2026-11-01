@@ -1,0 +1,112 @@
+# Grid caps from the pilots (prereg section 9). Keyless. Reads the review pilot's review-units out dirs and the TB2
+# pilot's proxy-sessions.jsonl files, scales #108's and #109's real per-session cost by each arm's pilot ratio, and
+# prints each item's projection, cap and the start rule at the planned launch order.
+# Usage: python3 caps.py --review <out dir>... --tb2 <proxy-sessions.jsonl>... --settled <usd> [--open <usd>]
+#        [--done <item>=<settled usd>...] [--map <pilot arm>=<arm>...] [--json <file>]
+import json, sys, csv, glob, math, collections, os
+CEILING = 430.0
+MARGIN = 1.1
+REVIEW_PARALLEL = 3
+TB2_CONCURRENT = 12
+UNITS = ['garrytan/gstack#3524@205ea0e2e82f', 'garrytan/gstack#3527@2684974602c1']
+TASKS = ['pypi-server', 'dna-insert', 'headless-terminal', 'pytorch-model-cli', 'mailman']
+# #108 (review, Opus, sdk-default, pin 53522b1) and #109 (TB2, 37 tasks, 3 replicates, pin 61e201e): mean dollars per
+# session over the whole grid, and per pilot unit or task (mean over its passes or replicates).
+REF = {
+ ('review', 'opus', 'gstack'): (1.015, {UNITS[0]: 1.0533, UNITS[1]: 1.2436}),
+ ('review', 'opus', 'none'): (0.6895, {UNITS[0]: 0.611, UNITS[1]: 0.6755}),
+ ('tb2', 'opus', 'gstack'): (0.2748, dict(zip(TASKS, [0.1626, 0.1794, 0.2077, 0.2712, 0.3763]))),
+ ('tb2', 'opus', 'none'): (0.1452, dict(zip(TASKS, [0.064, 0.136, 0.1158, 0.1702, 0.3171]))),
+ ('tb2', 'particle', 'gstack'): (0.0812, dict(zip(TASKS, [0.0452, 0.1341, 0.0821, 0.0744, 0.1939]))),
+ ('tb2', 'particle', 'none'): (0.0724, dict(zip(TASKS, [0.0167, 0.2292, 0.0413, 0.1064, 0.1947]))),
+}
+MATCH = {'control': 'gstack', 'variant': 'gstack', 'control-sdk': 'gstack', 'none': 'none'}
+CELLS = [  # item, lane, model, arm, sessions
+ ('review-grid', 'review', 'opus', 'control', 66), ('review-grid', 'review', 'opus', 'variant', 66),
+ ('review-grid', 'review', 'opus', 'none', 66), ('review-sdk', 'review', 'opus', 'control-sdk', 33),
+ ('tb2-grid', 'tb2', 'opus', 'control', 111), ('tb2-grid', 'tb2', 'opus', 'variant', 111), ('tb2-grid', 'tb2', 'opus', 'none', 111),
+ ('tb2-grid', 'tb2', 'particle', 'control', 111), ('tb2-grid', 'tb2', 'particle', 'variant', 111), ('tb2-grid', 'tb2', 'particle', 'none', 111),
+]
+JUDGES = {'judge-match': (20.0, 3.0), 'judge-adj': (20.0, 3.0)}  # cap, projection
+ORDER = ['review-grid', 'review-sdk', 'tb2-grid', 'judge-match', 'judge-adj']
+
+def args():
+    a = collections.defaultdict(list); k = None
+    for x in sys.argv[1:]:
+        if x.startswith('--'): k = x; a[k]
+        else: a[k].append(x)
+    return a
+A = args()
+amap = {k: v.split(',') for k, v in (x.split('=', 1) for x in A['--map'])}
+arms_of = lambda a: amap.get(a, [a])
+model_of = lambda m: 'opus' if 'opus' in m else 'particle' if 'particle' in m else m
+
+def peak(journal):
+    open_, rid, settled, top, arm = {}, {}, collections.Counter(), collections.Counter(), {}
+    for l in open(journal):
+        d = json.loads(l); k = d['kind']
+        if k == 'reserve':
+            m = d['cell']['meter_id']; open_[d['idempotency_key']] = (m, d['max_micros']); arm[m] = d['cell']['arm']
+        elif k == 'request':
+            rid[d['reservation_id']] = d['idempotency_key']; continue
+        elif k == 'outcome':
+            open_.pop(rid.get(d['reservation_id']), None); m = d['meter_id']
+            settled[m] += (d.get('outcome') or {}).get('spent_micros') or 0
+        else:
+            continue
+        top[m] = max(top[m], settled[m] + sum(v for mm, v in open_.values() if mm == m))
+    return [(arm[m], v / 1e6) for m, v in top.items()]
+
+pilot = collections.defaultdict(lambda: collections.defaultdict(list))  # (lane, model, arm) -> unit -> [usd]
+peaks, maxtrial = [], collections.Counter()
+for d in A['--review']:
+    for f in glob.glob(os.path.join(d, 'arms', '*', 'cost.tsv')):
+        aid = os.path.basename(os.path.dirname(f))
+        if not aid.endswith('-opus'): continue
+        for r in csv.DictReader(open(f), delimiter='\t'):
+            if r['scope'] == 'all' and r['pr'] in UNITS:
+                for arm in arms_of(aid[:-len('-opus')]): pilot[('review', 'opus', arm)][r['pr']].append(float(r['usd']))
+    j = os.path.join(d, 'proxy', 'journal.ndjson')
+    if os.path.exists(j): peaks += [v for _, v in peak(j)]
+for f in A['--tb2']:
+    for l in open(f):
+        s = json.loads(l); t = s['trial'].split('__')[0]; m = model_of(s['model'])
+        if t not in TASKS: continue
+        usd = s['spent_micros'] / 1e6
+        for arm in arms_of((s.get('meta') or {}).get('arm', '?')): pilot[('tb2', m, arm)][t].append(usd)
+        maxtrial[m] = max(maxtrial[m], usd)
+
+ratios, rows = {}, []
+for item, lane, model, arm, n in CELLS:
+    full, per = REF[(lane, model, MATCH[arm])]
+    got = pilot.get((lane, model, arm))
+    if not got: sys.exit('E_USAGE: no pilot sessions for ' + lane + ' ' + model + ' ' + arm)
+    units = sorted(got)
+    ratio = (sum(sum(got[u]) / len(got[u]) for u in units) / len(units)) / (sum(per[u] for u in units) / len(units))
+    ratios[(lane, model, arm)] = round(ratio, 4)
+    rows.append(dict(item=item, lane=lane, model=model, arm=arm, sessions=n, ratio=round(ratio, 4), per_session=round(ratio * full, 4), projected=round(ratio * full * n, 2)))
+
+allowance = max(8, math.ceil(1.5 * max(peaks))) if peaks else 8
+cap_opus = max(2.5, math.ceil(20 * maxtrial['opus']) / 10)
+cap_particle = max(0.5, math.ceil(20 * maxtrial['particle']) / 10)
+head = {'review-grid': REVIEW_PARALLEL * allowance, 'review-sdk': REVIEW_PARALLEL * allowance,
+        'tb2-grid': TB2_CONCURRENT * (cap_opus + cap_particle)}
+proj = {i: round(sum(r['projected'] for r in rows if r['item'] == i), 2) for i in head}
+proj.update({i: p for i, (_, p) in JUDGES.items()})
+cap = {i: round(math.ceil(100 * (MARGIN * proj[i] + head[i])) / 100, 2) for i in head}
+cap.update({i: c for i, (c, _) in JUDGES.items()})
+done = {k: float(v) for k, v in (x.split('=', 1) for x in A['--done'])}
+settled = float((A['--settled'] or ['0'])[0]) + sum(done.values())
+opened = float((A['--open'] or ['0'])[0])
+plan, s = [], settled
+for i, item in enumerate(ORDER):
+    if item in done: continue
+    later = sum(proj[j] for j in ORDER[i + 1:] if j not in done)
+    need = s + opened + cap[item] + later
+    plan.append(dict(item=item, settled_before=round(s, 2), cap=cap[item], headroom=head.get(item, 0), later_projected=round(later, 2), need=round(need, 2), fits=need <= CEILING))
+    s += proj[item]
+out = dict(ceiling=CEILING, margin=MARGIN, allowance_usd=allowance, peak_max_usd=round(max(peaks), 4) if peaks else None,
+           session_cap_usd=dict(opus=cap_opus, particle=cap_particle), max_pilot_trial_usd=dict(maxtrial), rows=rows,
+           projected=proj, caps=cap, start_rule=plan, verdict='launch ' + plan[0]['item'] if plan and plan[0]['fits'] else 'STOP: take the pilot numbers to the Captain')
+print(json.dumps(out, indent=1))
+if A['--json']: json.dump(out, open(A['--json'][0], 'w'), indent=1)
