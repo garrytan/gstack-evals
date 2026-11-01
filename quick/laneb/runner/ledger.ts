@@ -171,11 +171,13 @@ if (import.meta.main) {
     const reused = "existing" in out && out.existing;
     console.log(JSON.stringify(reused ? { ok: false, reason: "id already reserved" } : out));
     process.exit(out.ok && !reused ? 0 : 3);
+  } else if (cmd === "open") {
+    for (const id of new Ledger(args.path, args.item).status().openIds) console.log(id);
   } else if (cmd === "status") {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("E_USAGE usage: bun ledger.ts serve|status|reconcile|reserve|settle --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status|open|reconcile|reserve|settle --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>]");
     process.exit(2);
   }
 }

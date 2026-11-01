@@ -148,6 +148,39 @@ describe("launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS
     expect(code).toBe(130);
   }, 60_000);
 
+  test("a ledger service that can't be reached is retried, never latched as a cap stop", async () => {
+    const r = rig({});
+    Object.assign(r.env, { VM_USD_PER_HOUR: "36", VM_RESERVE_HOURS: "0.001", VM_EXTEND_POLL_SEC: "0.2" });
+    const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 300 && !existsSync(join(r.vm, "started")); i++) await Bun.sleep(50);
+    Bun.spawnSync(["pkill", "-f", `serve --path ${r.ledgerPath}`]);
+    await Bun.sleep(4000);
+    writeFileSync(join(r.vm, "work/run/STOP"), "");
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    const stderr = await new Response(proc.stderr).text();
+    expect(stderr).toContain("launch.sh: VM block 2 reserve got HTTP 000 from the ledger service; retrying");
+    expect(existsSync(join(r.run, "vm-cap-stop"))).toBe(false);
+    expect(vmRows(r).map((x) => x.kind)).toEqual(["reserve", "settle"]);
+    expect(code).toBe(130);
+  }, 60_000);
+
+  test("every open VM block the ledger holds is settled, recorded by the extender or not", async () => {
+    const r = rig({ finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "0.25", VM_RESERVE_HOURS: "4" });
+    new Ledger(r.ledgerPath, "laneb-quick").reserve("p-vm-2", toMicros(1));
+    const { code } = await runToEnd(r);
+    const settles = readRows(r.ledgerPath).filter((x) => x.kind === "settle" && String(x.id).startsWith("p-vm"));
+    expect(settles.map((x) => [x.id, String(x.kind_detail).replace(/[\d.]+ h at/, "N h at")])).toEqual([
+      ["p-vm", "VM hours: N h at $0.25/h, block 1 of 2"],
+      ["p-vm-2", "VM hours: N h at $0.25/h, block 2 of 2"],
+    ]);
+    expect(settles[1]!.usd_micros).toBe(0);
+    expect(new Ledger(r.ledgerPath, "laneb-quick").status().openIds).toEqual([]);
+    expect(code).toBe(0);
+  }, 60_000);
+
   test("a VM reserve the ledger refuses is a cap stop: exit 9 and no VM", async () => {
     const r = rig({ finish: 0 });
     Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "5" });
