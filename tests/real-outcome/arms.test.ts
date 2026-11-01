@@ -50,6 +50,8 @@ describe("frozen texts and pins", () => {
       expect(arm.limits.session_cap_usd).toBeGreaterThanOrEqual(2 * 15);
       expect(arm.limits.wall_limit_sec).toBeGreaterThanOrEqual(3 * 3600);
       expect(arm.limits.quiet_sec).toBeGreaterThan(0);
+      expect(arm.limits.bg_wait_sec).toBeGreaterThan(0);
+      expect(arm.limits.bg_wait_sec).toBeLessThan(arm.limits.wall_limit_sec);
     }
   });
 

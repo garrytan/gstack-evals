@@ -10,7 +10,8 @@
         "session_cap_usd": 40,
         "wall_limit_sec": 10800,
         "max_turns": 1000,
-        "quiet_sec": 30
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
       }
     },
     "gstack": {
@@ -21,7 +22,8 @@
         "session_cap_usd": 40,
         "wall_limit_sec": 10800,
         "max_turns": 1000,
-        "quiet_sec": 30
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
       }
     },
     "gstack-untold": {
@@ -32,7 +34,8 @@
         "session_cap_usd": 40,
         "wall_limit_sec": 10800,
         "max_turns": 1000,
-        "quiet_sec": 30
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
       }
     }
   }

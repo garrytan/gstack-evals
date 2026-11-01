@@ -19,7 +19,7 @@ The sidecar closes a trial when the agent's session ends (`POST /trials/<id>/clo
 | `schema` | `real-outcome/shipment/v1`. |
 | `trial`, `repo`, `kind` | The trial id, the owner/name the gh stub reported (never the upstream's), and K1 to K4. |
 | `base_branch`, `base_commit`, `start_ref` | The base, and where the agent started: the feature branch cut from base (K1 to K3) or the replay branch (K4). |
-| `close_reason` | Why the session ended, from the agent: `completed`, `wall_limit`, `turn_ceiling`, `error_result`, `cli_exit` or `error`; `setup_failed` or `session_open_failed` when the trial never ran; `unclosed` if the journal has no close. |
+| `close_reason` | Why the session ended, from the agent: `completed`, `wall_limit`, `turn_ceiling`, `error_result`, `cli_exit`, `error` or `cancelled` (Harbor's timeout or an interrupt cancelled the run); `setup_failed` or `session_open_failed` when the trial never ran; `unclosed` if the journal has no close. The sidecar writes `agent_finished` only for a close request that names no reason, which the agent never sends. |
 | `status` | `pr`, `base_push`, `held`, `none` or `rig_error` (below). Exclusive. |
 | `shipped_head` | The commit B6 grades: set for `pr` and `base_push`, null otherwise. |
 | `held_head` | The head of a selected draft pull request (`held`), graded only as a sensitivity. |
@@ -47,4 +47,4 @@ The sidecar closes a trial when the agent's session ends (`POST /trials/<id>/clo
 
 - Grade `shipped_head` from `shipped.bundle` (`refs/real-outcome/shipped`), never from the container.
 - Every outcome category derives from `status` plus `destructive`, so categories stay exclusive. `rig_error` and a non-empty `rig_errors` are rig reasons, not arm failures.
-- The trial's `real-summary.json` (agent) adds the termination cause, the turn-1 tree (`turn1.patch`, against `base_commit`), the final tree (`final.patch`), the persona's counts and which /ship steps ran.
+- The trial's `real-summary.json` (agent) adds the termination cause, each phase's end (a phase whose background tasks outlive `bg_wait_sec` ends quiet with `bg_wait_expired` and lists them in `active_tasks`), the turn-1 tree (`turn1.patch`, against `base_commit`), the final tree (`final.patch`), the persona's counts and which /ship steps ran.

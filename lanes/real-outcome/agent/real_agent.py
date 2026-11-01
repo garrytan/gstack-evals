@@ -11,7 +11,7 @@ tests/real-outcome/arms.test.ts). Per trial it:
      empty one, which no user of bare Claude Code gets) and a frozen environment: every GSTACK_ and CONDUCTOR_
      variable, CI, GITHUB_ACTIONS and OPENCLAW_SESSION the image sets is unset for claude and its children;
   3. sends the build turn (the statement and the shared line), waits until the session is quiet (its turn ended and no
-     background task it started is still running, bounded by the wall limit), snapshots the tree against base, then
+     background task it started is still running, or bg_wait_sec passed after quiet_sec; bounded by the wall limit), snapshots the tree against base, then
      sends the arm's ship turn in the same conversation and waits for quiet again (a K4 replay sends only the ship turn);
   4. answers AskUserQuestion and prose questions from the ship persona (ship_user.py);
   5. always: closes the sidecar trial first and copies its shipment record, journal and bundle out, so nothing after the
@@ -208,20 +208,31 @@ class RealAgent(lb.LanebAgent):
 
     async def _drive(self, client, queue: asyncio.Queue, user: ShipUser, phase: str, text: str, deadline: float, record) -> dict:
         """Sends one phase's opening turn and reads until the session is quiet: the last turn ended, every background task
-        it started reached a terminal status, and nothing arrived for quiet_sec. A prose question gets the persona's reply."""
+        it started reached a terminal status, and nothing arrived for quiet_sec. Background tasks still running then get at
+        most bg_wait_sec more, and the phase ends quiet with bg_wait_expired. A prose question gets the persona's reply. The
+        wall deadline ends the phase as wall_limit, inside any wait and before any turn is sent."""
+        if time.time() >= deadline:
+            return {"phase": phase, "end": "wall_limit", "results": 0, "active_tasks": []}
         user.start(phase)
         await client.query(text)
-        turn_open, active, last_text, results, quiet = True, set(), "", 0, float(self.limits["quiet_sec"])
+        turn_open, active, last_text, results, bg_until = True, set(), "", 0, None
+        quiet, bg_wait = float(self.limits["quiet_sec"]), float(self.limits["bg_wait_sec"])
         while True:
-            remaining = deadline - time.time()
+            now = time.time()
+            remaining = deadline - now
             if remaining <= 0:
                 return {"phase": phase, "end": "wall_limit", "results": results, "active_tasks": sorted(active)}
-            idle = not turn_open and not active
+            wait = remaining if turn_open else min(bg_until - now if active and bg_until is not None else quiet, remaining)
             try:
-                kind, message = await asyncio.wait_for(queue.get(), timeout=min(quiet, remaining) if idle else remaining)
+                kind, message = await asyncio.wait_for(queue.get(), timeout=max(wait, 0))
             except (asyncio.TimeoutError, TimeoutError):
-                if not idle:
+                if wait >= remaining or time.time() >= deadline:
                     return {"phase": phase, "end": "wall_limit", "results": results, "active_tasks": sorted(active)}
+                if active and bg_until is None:
+                    bg_until = time.time() + bg_wait
+                    continue
+                if active:
+                    return {"phase": phase, "end": "quiet", "results": results, "active_tasks": sorted(active), "bg_wait_expired": True}
                 reply = user.prose(last_text)
                 if reply is None:
                     return {"phase": phase, "end": "quiet", "results": results, "active_tasks": []}
@@ -250,7 +261,7 @@ class RealAgent(lb.LanebAgent):
             elif sub == "task_updated" and (data.get("patch") or {}).get("status") in TERMINAL_TASK_STATUSES:
                 active.discard(data.get("task_id"))
             elif name in ("AssistantMessage", "UserMessage", "StreamEvent"):
-                turn_open = True
+                turn_open, bg_until = True, None
                 texts = [getattr(b, "text", "") for b in getattr(message, "content", []) or [] if type(b).__name__ == "TextBlock"]
                 if name == "AssistantMessage" and texts:
                     last_text = "\n".join(texts)
@@ -273,18 +284,23 @@ class RealAgent(lb.LanebAgent):
         if not base_url:
             raise RuntimeError("the real-outcome agent needs --base-url pointing at the metering proxy")
         trial = TRIAL_CHARS.sub("-", environment.session_id)[:100] + "-" + uuid.uuid4().hex[:8]
-        sandbox = await asyncio.to_thread(self._open_sandbox, container, trial, task, base_url, log)
+        opening = asyncio.ensure_future(asyncio.to_thread(self._open_sandbox, container, trial, task, base_url, log))
+        try:
+            sandbox = await asyncio.shield(opening)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._close_cancelled_open(opening, trial, log)
+            raise
         try:
             session = await asyncio.to_thread(self._open_session, trial, self.options.upstream_model, float(self.limits["session_cap_usd"]), log)
-        except Exception:
-            await asyncio.to_thread(self._close_sandbox, trial, "session_open_failed", log)
+        except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
+            await asyncio.shield(asyncio.to_thread(self._close_sandbox, trial, "session_open_failed" if isinstance(e, Exception) else "cancelled", log))
             raise
         log({"event": "session_open", "session": session["id"], "cap_usd": self.limits["session_cap_usd"]})
 
         started = time.time()
         deadline = started + float(self.limits["wall_limit_sec"])
         outcome = {"phases": [], "termination": None, "turn1": None}
-        error = None
+        error = interrupted = None
         result = {}
         by_phase = {p: [] for p, _ in phases}
         reader = None
@@ -355,6 +371,10 @@ class RealAgent(lb.LanebAgent):
             error = e
             outcome["termination"] = "error"
             log({"event": "agent_error", "type": type(e).__name__, "message": str(e)[:500]})
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            interrupted = e
+            outcome["termination"] = "cancelled"
+            log({"event": "agent_cancelled", "type": type(e).__name__})
         finally:
             if reader is not None:
                 reader.cancel()
@@ -382,8 +402,24 @@ class RealAgent(lb.LanebAgent):
             context.metadata = {"real_outcome": {"arm": self.options.arm, "session": session["id"], "termination": outcome["termination"], "shipment": summary.get("real", {}).get("shipment")}}
             if cancelled is not None:
                 raise cancelled
+        if interrupted is not None:
+            raise interrupted
         if summary["session"] is not None and not summary["session"].get("ok_responses"):
             raise lb.LanebInfraError(f"no model response reached the agent, so this is an infrastructure failure: {error or result}") from error
+
+    async def _close_cancelled_open(self, opening, trial: str, log) -> None:
+        """A cancellation while the sandbox opens: the open runs on in its thread, so wait for it, then close the trial as
+        cancelled. An open that failed has closed its trial itself (setup_failed)."""
+        while not opening.done():
+            try:
+                await asyncio.shield(opening)
+            except BaseException:
+                pass
+        if opening.exception() is None:
+            try:
+                await asyncio.shield(asyncio.to_thread(self._close_sandbox, trial, "cancelled", log))
+            except BaseException:
+                pass
 
     def _close_sandbox(self, trial: str, reason: str, log) -> dict:
         closed = self._sidecar(f"/trials/{trial}/close", {"reason": reason})
@@ -407,7 +443,7 @@ class RealAgent(lb.LanebAgent):
         errors = {}
         shipment = None
         try:
-            shipment = self._close_sandbox(trial, outcome["termination"] or "agent_finished", log)
+            shipment = self._close_sandbox(trial, outcome["termination"] or "error", log)
         except Exception as e:
             errors["sandbox_close"] = f"{type(e).__name__}: {e}"[:500]
         summary = self._teardown(container, session_id, log, base)

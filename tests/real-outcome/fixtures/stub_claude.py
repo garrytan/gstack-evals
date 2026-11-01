@@ -160,6 +160,9 @@ elif SCENARIO == "updated_killed":
     next_user()
     text("Nothing to ship.")
     result()
+elif SCENARIO == "turn_never_ends":
+    text("Working.")
+    next_user()
 elif SCENARIO == "max_turns":
     text("Working.")
     result("error_max_turns", True)

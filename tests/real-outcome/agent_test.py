@@ -46,7 +46,7 @@ def sh(cwd, cmd):
 
 
 class Case:
-    def __init__(self, name, arm="none", kind="K2", scenario="two_turn", wall=60):
+    def __init__(self, name, arm="none", kind="K2", scenario="two_turn", wall=60, quiet=1, bg_wait=None):
         self.dir = TMP / name
         self.repo = self.dir / "testbed"
         self.bin = self.dir / "bin"
@@ -65,7 +65,7 @@ class Case:
         (self.dir / "task.json").write_text(json.dumps(task))
         arms = json.loads(json.dumps(ARMS))
         for spec in arms["arms"].values():
-            spec["limits"] = {**spec["limits"], "wall_limit_sec": wall, "quiet_sec": 1}
+            spec["limits"] = {**spec["limits"], "wall_limit_sec": wall, "quiet_sec": quiet, **({} if bg_wait is None else {"bg_wait_sec": bg_wait})}
         (self.dir / "arms.json").write_text(json.dumps(arms))
         os.symlink(FIXTURES / "fake-docker.sh", self.bin / "docker")
         os.symlink(FIXTURES / "stub_claude.py", self.bin / "claude")
@@ -97,15 +97,28 @@ class Case:
             return {"id": "s-1", "token": "real-session-token"}
         return {"id": "s-1", "ok_responses": 3, "spent_micros": 1500, "usage": {"input_tokens": 10, "output_tokens": 5}}
 
-    def run(self):
+    def run(self, cancel_on=None):
         saved = dict(os.environ)
         os.environ.update(self.env)
         lb.post_json = self.post
         egress.apply = lambda container, allow: self.egress.append(("apply", allow)) or {"event": "egress", "allow": allow}
         egress.probe = lambda exec_fn, container, allow, node: self.egress.append(("probe", allow)) or {"event": "egress_probe"}
         context = types.SimpleNamespace()
+        self.cancelled = False
+
+        async def go():
+            task = asyncio.ensure_future(self.agent.run(STATEMENT, types.SimpleNamespace(session_id="trial-" + self.dir.name), context))
+            while cancel_on and not task.done() and f'"event": "{cancel_on}"' not in (self.log.read_text() if self.log.exists() else ""):
+                await asyncio.sleep(0.1)
+            if cancel_on:
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                self.cancelled = True
+
         try:
-            asyncio.run(self.agent.run(STATEMENT, types.SimpleNamespace(session_id="trial-" + self.dir.name), context))
+            asyncio.run(go())
         finally:
             os.environ.clear()
             os.environ.update(saved)
@@ -165,12 +178,35 @@ def test_two_turns_wait_for_quiet_and_ship_a_pr():
     check(c.context.cost_usd == 0.0015 and c.context.metadata["real_outcome"]["termination"] == "completed", c.context.metadata)
 
 
-def test_a_task_that_never_ends_hits_the_wall_and_nothing_ships():
-    c = Case("never-quiet", scenario="never_quiet", wall=3).run()
+def test_a_task_that_never_ends_gets_bg_wait_sec_then_the_ship_turn():
+    c = Case("never-quiet", scenario="never_quiet", bg_wait=2).run()
+    s = c.summary
+    users_t = [e["t"] for e in c.events if e["event"] == "user"]
+    check(c.users() == [STATEMENT + "\n\n" + ARMS["build_suffix"], ARMS["arms"]["none"]["turn2"]], c.users())
+    check(users_t[1] - users_t[0] >= 2.5, "the ship turn waited quiet_sec, then bg_wait_sec, for the task")
+    check(s["phases"][0]["end"] == "quiet" and s["phases"][0]["active_tasks"] == ["bg1"] and s["phases"][0].get("bg_wait_expired") is True, s["phases"])
+    check(s["termination"] == "completed", s["termination"])
+
+
+def test_a_turn_that_never_ends_hits_the_wall_and_nothing_ships():
+    c = Case("turn-never-ends", scenario="turn_never_ends", wall=3).run()
     s = c.summary
     check(c.users() == [STATEMENT + "\n\n" + ARMS["build_suffix"]], c.users())
-    check(s["termination"] == "wall_limit" and s["phases"][0]["active_tasks"] == ["bg1"], s["phases"])
+    check(s["termination"] == "wall_limit" and [p["end"] for p in s["phases"]] == ["wall_limit"], s["phases"])
     check(s["shipment"]["status"] == "none" and s["shipment"]["shipped_head"] is None, s["shipment"])
+
+
+def test_a_deadline_inside_the_quiet_window_is_the_wall_and_no_ship_turn_goes_out():
+    c = Case("deadline-in-quiet", scenario="one", wall=3, quiet=30).run()
+    s = c.summary
+    check(c.users() == [STATEMENT + "\n\n" + ARMS["build_suffix"]], c.users())
+    check(s["termination"] == "wall_limit" and [p["end"] for p in s["phases"]] == ["wall_limit"], s["phases"])
+
+
+def test_a_cancelled_run_closes_the_trial_as_cancelled():
+    c = Case("cancelled", scenario="turn_never_ends").run(cancel_on="user")
+    record = json.loads((c.evdir / "shipment.json").read_text())
+    check(c.cancelled and record["close_reason"] == "cancelled" and c.summary["termination"] == "cancelled", (c.cancelled, record["close_reason"], c.summary["termination"]))
 
 
 def test_a_task_killed_through_task_updated_counts_as_ended():
