@@ -111,8 +111,9 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
 - **Cap stops.** A run with `--cap-stops` records a code session that either cap ends as its own termination:
   turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
   names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
-  against its own arm, the same in every arm: its findings are those of the latest main-agent text turn whose last json
-  block parses as findings, and with no such turn it is a missing pass, scored as finding nothing. arm.json counts them
+  against its own arm, the same in every arm: its findings are those of the latest main-agent text block in the session's
+  transcript.ndjson whose last json block parses as findings (an AskUserQuestion's question never counts), and with no
+  such block, or no readable transcript, it is a missing pass, scored as finding nothing. arm.json counts them
   in `cap_stops: {turn_cap, allowance_stop, units, parser_sha256}`, where units names each unit a cap stop hit and
   parser_sha256 is capped.ts's (the read rule), and diagnostics names each session with its settled metered spend. In
   such a run the session key's verifier is the findings parser's sha256 and capped.ts's, so a change to either refuses

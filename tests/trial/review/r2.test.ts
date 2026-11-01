@@ -1,11 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { parseArm } from "../../../lanes/review-noloss/contract.ts";
 import type { Suite } from "../../../lanes/review-noloss/suite.ts";
+import { hostDriver } from "../../../src/adapters/host.ts";
 import { REPO_ROOT } from "../../../src/cli.ts";
+import { parseClaudeCode } from "../../../src/grade/transcript.ts";
 import { openLease, recordApproval } from "../../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { LedgerError } from "../../../src/runner/ledger/record.ts";
@@ -14,7 +16,7 @@ import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
-import { loadReaderMap, READER_ROW, type ReaderMap } from "../../../src/trial/review/readers.ts";
+import { loadReaderMap, READER_ROW, readTranscript, type ReaderMap } from "../../../src/trial/review/readers.ts";
 import { CAPPED_PARSER_SHA256, cappedParse } from "../../../src/trial/review/capped.ts";
 import { PARSER_SHA256 } from "../../../src/trial/review/findings.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
@@ -210,6 +212,51 @@ describe("R2 build: a stub run through the run loop with the real driver and the
     expect(cappedParse([block(one), "Checking one more file.", block("not json")])).toEqual({ kind: "findings", findings: [{ file: "a.ts", line: 1, severity: "HIGH", claim: "c", evidence: "e" }] });
     expect(cappedParse([block(one), block("[]")])).toEqual({ kind: "findings", findings: [] });
   });
+
+  // Value: protects=the cap-stop read rule's source: a capped session is scored on its main agent's own text, read from the session's transcript, so a findings-shaped json block inside an AskUserQuestion question (which the driver's turns also hold, unmarked) earns no credit, the same block in main-agent text still scores, and a capped session whose transcript is gone scores as finding nothing; fails_when=a capped session is credited with a question's findings, loses its main agent's findings, or scores findings without a transcript; why_new=GEVA-129's /ship outside voice (capped.ts read every entry of record.turns); seam=runReviewUnits' capped parse, the driver's transcript.ndjson and turns; no_claim=a real model asking a question in a review session
+  test("a findings block inside an AskUserQuestion question earns no capped credit", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const asked = findings("A question carried this block.");
+    const ask = { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "tu_ask", name: "AskUserQuestion", input: { questions: [{ question: asked, header: "Post", options: [{ label: "Yes", description: "" }, { label: "No", description: "" }], multiSelect: false }] } }] }, parent_tool_use_id: null, session_id: "s" };
+    const capped = async (keep: boolean) => {
+      const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "turnsReview", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { maxTurns: 5, capStops: true } });
+      const rig: HostRig = {
+        ...run.rig,
+        driver: (o) => {
+          const d = hostDriver(o);
+          return {
+            ...d,
+            async run(...args: Parameters<typeof d.run>) {
+              const r = await d.run(...args);
+              if (r.termination.kind !== "turn_cap") return r;
+              const file = join(o.out, "transcript.ndjson");
+              appendFileSync(file, JSON.stringify(ask) + "\n");
+              const turns = parseClaudeCode(readTranscript(readFileSync(file, "utf8"))).turns;
+              if (!keep) rmSync(file);
+              return { ...r, turns };
+            },
+          };
+        },
+      };
+      try {
+        await runReviewUnits(run.input, rig);
+        const journal = [...readReviewJournal(run.out).values()].filter((e) => e.cell.arm === "gstack-full");
+        const lines = (unit: string) => readFileSync(join(run.out, "arms", "gstack-full-opus", "findings", unit.replaceAll("/", "__") + ".jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l).summary);
+        return { ended: [a, b].map((u) => journal.find((e) => e.cell.unit === u)!.record).map((r) => [r.termination.kind, r.turns.at(-1)!.startsWith(asked)]), diagnostics: arm(run.out, "gstack-full-opus").diagnostics, findings: [lines(a), lines(b)] };
+      } finally {
+        run.h.proxy.stop();
+      }
+    };
+    const kept = await capped(true);
+    expect(kept.ended).toEqual([["turn_cap", true], ["turn_cap", true]]);
+    expect(kept.diagnostics).toEqual([a + " pass 1: findings; ended turn_cap, settled spend $0.000000, scored on the findings it wrote before the stop", b + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing"]);
+    expect(kept.findings).toEqual([["The cache key drops the allowance."], []]);
+    const gone = await capped(false);
+    expect(gone.ended).toEqual([["turn_cap", true], ["turn_cap", true]]);
+    expect(gone.diagnostics).toEqual([a + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing", b + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing"]);
+    expect(gone.findings).toEqual([[], []]);
+  }, 240_000);
 
   // Value: protects=GEVA-116's byte-for-byte line: a run at today's defaults (60 turns, the policy allowance, no reader map) records the same stub sessions as before the build: the turn cap as completed, the allowance as a missing E_ALLOWANCE cell, no cap_stops or reader_map_sha256 in arm.json and no reader rows; fails_when=a default run gains a cap kind, an arm.json field or a cost row; why_new=GEVA-116's note on #119; seam=runReviewUnits' capStops and readers gates
   test("a default run keeps today's records", async () => {

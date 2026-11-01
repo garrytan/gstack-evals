@@ -24,8 +24,9 @@
 //   with its sha256 in told, on either kind of unit.
 //   terminations (the driver's capStops): turn_cap and allowance_stop. A capped
 //   session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts against its own arm: capped.ts reads
-//   its findings from the latest main-agent text turn whose last json block parses as findings, and with no such turn it
-//   is missing, scored as finding nothing. The session key's verifier then also covers capped.ts, and arm.json counts
+//   its findings from the latest main-agent text block in its transcript.ndjson whose last json block parses as findings
+//   (never an AskUserQuestion's question), and with no such block, or no readable transcript, it is missing, scored as
+//   finding nothing. The session key's verifier then also covers capped.ts, and arm.json counts
 //   cap stops in cap_stops with the units they hit and capped.ts's sha256; diagnostics names each capped session with its
 //   settled metered spend. Only then does the allowance join the session key. A run without capStops, whatever its turn
 //   cap or allowance, and every plan unit, keeps today's records and keys.
@@ -64,7 +65,7 @@ import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatile
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
-import { CAPPED_PARSER_SHA256, cappedParse } from "./capped.ts";
+import { CAPPED_PARSER_SHA256, cappedParse, mainAgentTexts } from "./capped.ts";
 import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
@@ -367,13 +368,14 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     spent += meter.micros;
     trial.record.cost_micros = meter.micros;
     const kind = trial.record.termination.kind;
-    const parse = plan ? parsePlanSession(trial.record) : kind === "turn_cap" || kind === "allowance_stop" ? cappedParse(trial.record.turns) : parseFindings(trial.record);
+    const capStopped = !plan && (kind === "turn_cap" || kind === "allowance_stop");
     let transcript = "";
     try {
-      transcript = readers ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
+      transcript = readers || capStopped ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
     } catch {
       transcript = "";
     }
+    const parse = plan ? parsePlanSession(trial.record) : capStopped ? cappedParse(mainAgentTexts(transcript)) : parseFindings(trial.record);
     const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
