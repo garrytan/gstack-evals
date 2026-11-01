@@ -50,7 +50,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 |---|---|---|
 | `--arms` | required | The arms, in the grammar above. |
 | `--tasks` | required | The contract tasks file, usually `test/fixtures/skill-evals/<skill>/tasks.json`. |
-| `--host` | required | claude runs every task; codex runs non-interactive tasks only (E_INTERACTIVE_HOST names the others). |
+| `--host` | required | claude runs every task; codex runs non-interactive tasks only (E_INTERACTIVE_HOST names the others). On claude, an evaluator, machine or SDK-link failure leaves a missing cell (E_INFRA_FAILURE), scored under the prereg's missing-cell rule, not a harness_crash fail against the arm. |
 | `--model` | required | Models under test, comma-separated, one verdict each. The policy must allow each as a subject. |
 | `--trials` | 3 | Trials per task in each arm. |
 | `--spend-cap` | required to spend | The run's dollar limit. It must be at most the line item's approved cap and at least one arm-balanced round. |
@@ -119,6 +119,8 @@ On a VM that is deleted after the run, set `GSTACK_EVALS_EPHEMERAL=1` and `GSTAC
 ## Model policy
 
 The default policy, `policy/models.json`, lists the newest generation of each family. Opus 5.5, Sonnet 5.5, Haiku 5.5, gpt-6-astra, gpt-6.1-sol and gpt-6-luna may be subjects. Opus 5.5, Sonnet 5.5, gpt-6-astra and gpt-6.1-sol may also judge and adjudicate, and gpt-6-luna simulates the user. Fable 5.1 is allowed only with `--smoke`, and gpt-5.4-mini is refused. particle-1 and DeepSeek V4.1 Flash run through OpenRouter as subjects, with `OPENROUTER_API_KEY`: on `--host claude` through OpenRouter's Anthropic-compatible Messages route, and on `--host codex`. Any model the metering proxy cannot route and price is refused (E_MODEL_POLICY). Pass your own file with `--policy`; policy/examples/gbrain.json shows a narrower ladder.
+
+Each row of a policy names the model's `provider` and its `roles` (subject, judge, adjudicator, usersim). `refused_because` refuses the model with that reason. `smoke_only: true` allows it only with `--smoke`, or as a model under test in a run whose ledger line item (`--item`, or `GSTACK_EVALS_ITEM`) the row's `rungs` list names: a prereg that runs the model as a capped rung adds its line item there. `rungs` is valid only on a `smoke_only` row and lists distinct line items; it never admits the model as a judge or the user simulator. review-units applies the same rule with its own `--item`.
 
 The judge is chosen per preregistration, always from another family than the models under test. gstack's own runs prefer Opus 5.5 wherever that rule allows it, because Garry prefers Opus. This preference is stated here and not enforced in code: the default judge is Opus 5.5 for OpenAI and OpenRouter subjects and gpt-6.1-sol for Anthropic subjects, and `--judge-model` picks any judge the policy allows.
 

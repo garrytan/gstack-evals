@@ -148,6 +148,9 @@ symlink into it, is refused, and every sealed output path is checked with its sy
 `suite --stub` prints: id, kind, counts by blocker kind and group, the suite's sha256 and the sha256 over its catalogs'
 case files, and a custody line that starts "procedural custody". The stub is refused when its id, title, purpose,
 custody or group names name a sealed unit, cluster, repo, commit or case.
+A sealed suite's catalogs resolve under the sealed root, and so do the catalogs of any suite read by path from outside
+the repo, sealed or not, when `--sealed-root` is given. Without it, such a suite's catalogs resolve under the repo, and
+a catalog that is not there refuses with E_NOLOSS_SUITE, naming `--sealed-root`.
 A stub loads only with a sealed root whose suite and catalogs match its digests and counts. Decrypting a panel into a
 sealed root happens outside the scorer. `export --publish-sealed-table` writes a sealed suite's table into the repo
 only when it names no sealed unit, cluster, commit or case.

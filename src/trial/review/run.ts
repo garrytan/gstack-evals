@@ -18,9 +18,20 @@
 //   GSTACK_EVALS_RECEIPTS before the run returns.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
 //   that keeps a voice, since a plan arm runs no second model.
+// - A plan session scores by planScore. After the model produced output (the record's model_output, never its turns), a
+//   malformed or missing block, a timeout, the arm's CLI failing, or a session that completed with no text turn is a miss
+//   with a diagnostic note. arm.json counts as completed_without_text every miss whose session completed with no text from
+//   the main agent (no turn, or only AskUserQuestion questions, which parse as missing), since the parser reads text
+//   turns only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the arm, as
+//   is an infra failure (E_INFRA_FAILURE) or any other incomplete session at any point, so the arm gets no verdict.
+//   progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as failed, a gap as
+//   missing.
+// - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
+//   (E_USAGE), as review-units refuses an in-repo --out.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
+import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
 import { hostDriver } from "../../adapters/host.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
@@ -34,7 +45,7 @@ import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
 import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
-import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, planArmLine, parsePlanSession, planPrompt, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
+import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, planArmLine, parsePlanSession, planPrompt, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
 import type { UnitRef } from "./unit.ts";
 
@@ -63,7 +74,7 @@ export interface ReviewArm {
 
 export interface ReviewRunInput {
   host: Host;
-  suite: { id: string; sha256: string | null };
+  suite: { id: string; sha256: string | null; sealed?: boolean; sealedCatalogs?: boolean };
   units: PreparedUnit[];
   arms: ReviewArm[];
   models: string[];
@@ -91,7 +102,10 @@ export interface ReviewRunInput {
   severityMap?: Readonly<Record<string, unknown>>;
   /**
    * Plan units (planning lane B2 to B4): the plan prompt and parser, the rec user, no second model, gstack's questions
-   * set to auto-decide, and a failed pass scored as finding nothing with a diagnostic note instead of stopping the arm.
+   * set to auto-decide, and planScore's failure rule. A malformed or missing block, or, after model output, a timeout, the
+   * arm's CLI failing or a session that completed with no text turn (counted as completed_without_text), is a miss scored
+   * as finding nothing with a diagnostic note. A timeout, a CLI failure or a completed session before any model output,
+   * or an infra failure at any point, is a coverage gap that stops the arm.
    */
   plan?: { lens: PlanLens };
   /** The models each named arm runs on; an arm not named runs on every model. */
@@ -145,6 +159,21 @@ export const armId = (arm: string, model: string): string => arm + "-" + modelTa
 /** A unit id as a findings file name: / written __. */
 export const unitFile = (unitId: string): string => unitId.replaceAll("/", "__");
 
+/**
+ * How a plan session scores: findings; a miss, scored as finding nothing with a diagnostic note (a malformed or missing
+ * block, or, after model output, a timeout, the arm's CLI failing or a session that completed with no text turn); or a
+ * coverage gap that stops the arm (a timeout, a CLI failure or a completed session before any model output, an infra
+ * failure, or any other incomplete session).
+ */
+export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" | "miss" | "gap" {
+  if (e.parse.kind === "findings") return "findings";
+  if (e.parse.kind !== "incomplete") return "miss";
+  const kind = e.record.termination.kind;
+  return e.record.model_output === true && (kind === "timeout" || kind === "arm_failure" || kind === "completed") ? "miss" : "gap";
+}
+
+const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
+
 /** The journal of finished review sessions in an out directory, by cell. */
 export function readReviewJournal(out: string): Map<string, ReviewEntry> {
   const file = join(out, "cells.ndjson");
@@ -195,6 +224,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   }
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
+  if ((o.suite.sealed || o.suite.sealedCatalogs) && "sink" in sink && sink.sink && insideRepo(sink.sink)) throw new Error("E_USAGE: suite " + o.suite.id + (o.suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and the receipts sink " + sink.sink + " (GSTACK_EVALS_RECEIPTS) is inside the repo; copy sealed receipts outside it");
   const plan = o.plan ?? null;
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();
@@ -276,7 +306,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
     const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
-    const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
+    const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
@@ -287,7 +317,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const kind = trial.record.termination.kind;
     wall += trial.record.wall_ms ?? 0;
     ran++;
-    progress = recordSession(progress, cellName(cell), kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
+    progress = recordSession(progress, cellName(cell), plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
     writeProgress(o.out, progress);
     if (kind !== "cap_stop") appendFileSync(journal, JSON.stringify(entry) + "\n");
     return entry;
@@ -324,6 +354,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const gaps: string[] = [];
     const diagnostics: string[] = [];
     const modes: Record<string, number> = {};
+    let withoutText = 0;
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
     for (const unit of o.units) {
@@ -337,8 +368,11 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const outcome = label(e.parse);
         counts[outcome]!++;
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
-        if (plan && (outcome === "malformed" || outcome === "missing" || (outcome === "incomplete" && (e.record.termination.kind === "timeout" || (e.record.termination.kind === "arm_failure" && e.record.turns.length > 0))))) diagnostics.push(note + "; scored as finding nothing");
-        else if (outcome === "malformed" || outcome === "incomplete") gaps.push(note);
+        const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
+        const ended = e.record.termination.kind;
+        if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
+        if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
+        else if (score === "gap") gaps.push(note + (!plan ? "" : ended === "arm_failure" || ended === "timeout" ? " before any model output" : ended === "completed" ? " and no model output" : ""));
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (plan) {
           modes[e.ceo_mode ?? "unstated"] = (modes[e.ceo_mode ?? "unstated"] ?? 0) + 1;
@@ -365,7 +399,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: TOLD_PREFIX[arm.told as ToldArm], template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
-      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES } : {}), ...(plan ? { ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
+      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: provenance, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");

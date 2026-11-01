@@ -117,7 +117,7 @@ describe("B7: the R1a frozen rules, keyless, on the B5 panel's shape", () => {
         async run(_session, task): Promise<AgentOutcome> {
           const s = slots.get(o.proxy.slot)!;
           const r = reply(s.arm, s.model, unitOf.get(task.id)!, s.pass);
-          return { turns: r.turns, termination: { kind: r.timeout ? "timeout" : "completed" }, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: r.turns.length, loaded_bytes: null };
+          return { turns: r.turns, termination: { kind: r.timeout ? "timeout" : "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: r.turns.length, loaded_bytes: null };
         },
       }),
     };

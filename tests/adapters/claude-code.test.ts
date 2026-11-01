@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
@@ -140,6 +143,32 @@ describe.skipIf(!HAS_CLAUDE_CLI)("Claude Code adapter on the Agent SDK, against 
     expect(r.outcome.turns).toEqual(["Looking around first."]);
   }, 180_000);
 
+  // Value: protects=an ECONNRESET on the link from the CLI to the proxy after one text turn is a missing cell (UPSTREAM), an infra failure that never counts against the arm; fails_when=it reads as an arm failure or completes; why_new=GST-737 (#101's outside voice: an ECONNRESET after one text turn); seam=the adapter's API-error mapping; no_claim=a reset between the SDK and the CLI, which tests/trial/review/plan-scoring.test.ts covers
+  test("a connection reset between the CLI and the proxy after one text turn is a missing cell, UPSTREAM", async () => {
+    const h = harness(({ results }) => (results.size ? [{ type: "text", text: "never seen" }] : [{ type: "text", text: "Looking around first." }, { type: "tool_use", id: "toolu_ls", name: "Bash", input: { command: "ls", description: "List files" } }]));
+    open.push(h);
+    let main = 0;
+    const front = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      const body = Buffer.concat(chunks);
+      const tools = (JSON.parse(body.toString() || "{}").tools ?? []) as { name: string }[];
+      if (req.url!.split("?")[0]!.endsWith("/v1/messages") && tools.some((t) => t.name === "Bash") && ++main === 2) return req.socket.destroy();
+      const r = await fetch(h.baseUrl + req.url, { method: req.method, headers: req.headers as Record<string, string>, ...(req.method === "GET" ? {} : { body }) });
+      res.writeHead(r.status, Object.fromEntries(r.headers));
+      res.end(Buffer.from(await r.arrayBuffer()));
+    });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", () => r()));
+    try {
+      const binding = h.bind(MODEL);
+      const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:" + (front.address() as { port: number }).port, slot: binding.slot, token: binding.token }, skill: null, out: join(h.dir, "host"), query: query as never });
+      const outcome = await driver.run(h.session(join(h.dir, "work", "t"), join(h.dir, "home"), driver.env!), { id: "t", prompt: "Look around." }, 120_000);
+      expect([main, outcome.termination, outcome.model_output, outcome.turns]).toEqual([2, { kind: "missing", code: "UPSTREAM" }, true, ["Looking around first."]]);
+    } finally {
+      front.close();
+    }
+  }, 180_000);
+
   // Value: protects=a subject key missing from the proxy's env leaves a missing cell naming E_KEY_MISSING, with nothing sent upstream or charged, and the CLI does not retry the refusal; fails_when=it reads as an arm failure, a pass or fail, or a generic UPSTREAM; why_new=U10 conformance (missing key); seam=refusalIn, CLAUDE_CODE_MAX_RETRIES; no_claim=preflight's own key check, which tests/cli covers
   test("a key missing from the proxy is a missing cell, E_KEY_MISSING", async () => {
     const { ANTHROPIC_API_KEY: _drop, ...rest } = KEYS;
@@ -252,4 +281,23 @@ describe.skipIf(!HAS_CLAUDE_CLI)("a settings hook that denies AskUserQuestion, o
     expect(outcome.termination).toEqual({ kind: "missing", code: "E_APPROVAL_BYPASS" });
     expect(JSON.stringify(h.upstream.map((u) => u.body.messages ?? []))).toContain("The user chose Approach A.");
   }, 180_000);
+});
+
+// Value: protects=the Captain's R1 ruling (#106 /ship): on the pinned Agent SDK, a CLI that exits 0 mid-turn ends the stream with no error and no result, which is infra (E_INFRA_FAILURE), in turn 1 and after a first result; fails_when=the stream's end reads as completed and scores a miss; why_new=#106 /ship pass 2 red team R1; seam=the driver's loop end and awaitingResult, the real SDK's ProcessTransport; no_claim=a real Claude Code CLI or Docker
+describe("the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless)", () => {
+  const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
+  for (const [mode, turns] of [["turn1", 0], ["turn2", 1]] as const) {
+    test("an exit 0 with the turn's result still awaited is E_INFRA_FAILURE (" + mode + ")", async () => {
+      const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
+      const session = {
+        exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
+        spawn: (argv: string[], env: Record<string, string>) => spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", STUB_MODE: mode }, stdio: ["pipe", "pipe", "pipe"] }),
+        stop: () => {},
+      };
+      const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, freeform: async () => ({ text: "Go with your recommendation." }), entry: { user: { persona: "p" } } as never });
+      const outcome = await driver.run(session as never, { id: "t", prompt: "Review the plan." }, 20_000);
+      expect([outcome.termination, outcome.model_output, outcome.exit_code, outcome.signal, outcome.turns.length]).toEqual([{ kind: "missing", code: "E_INFRA_FAILURE" }, true, 0, null, turns]);
+      expect(readFileSync(join(out, "cli-stderr.log"), "utf8")).toContain("adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code 0, signal null)\n");
+    }, 30_000);
+  }
 });

@@ -120,6 +120,8 @@ export const gstackVersion = (dir: string | null): string | null => (dir && exis
 
 /** The global preference file that sets every question gstack's registry lists to never-ask, which gstack reads as auto-decide (one-way doors still ask). */
 export const GLOBAL_PREFERENCES = "global-question-preferences.json";
+/** gstack's project-level preferences file, <state root>/projects/<slug>/question-preferences.json; its entry for an id wins over the global file. */
+export const PROJECT_PREFERENCES = "question-preferences.json";
 export function neverAskPreferences(dir: string | null): string | null {
   const registry = dir ? join(dir, "scripts", "question-registry.ts") : null;
   if (!registry || !existsSync(registry)) return null;

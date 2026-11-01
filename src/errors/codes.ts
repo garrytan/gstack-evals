@@ -902,6 +902,15 @@ export const CODES = {
     resumable: true,
     owner: "U10",
   },
+  E_INFRA_FAILURE: {
+    exit: 2,
+    meaning: "A Claude Code session ended on an infra failure, not on anything the arm did: the evaluator's own code (the transcript or init write, the user simulator, the persona), the SDK's link to the CLI (a reset or a broken pipe while the CLI still ran, or a CLI that exited 0, or a stream that ended, while the turn's result was still awaited), or the machine (the CLI could not be spawned, or the agent's session stopped answering once the CLI ended). The cell is missing, never a miss or an arm failure; in a review run it is a coverage gap that stops its arm, so that arm gets no verdict, and under skill-eval --host claude it is a missing cell under the prereg's missing-cell rule, never a fail against the arm. An error from the adapter's own abort or teardown after a recorded timeout or arm failure does not replace it; the adapter line names it as teardown.",
+    fix: "Read the adapter line in the trial's host/cli-stderr.log, which names what failed, and fix the evaluator or the machine before a counted run. Start a new run for the arm's verdict.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
   NOLOSS_UNDERPOWERED: {
     exit: null,
     meaning: "A review no-loss comparison reached NO_LOSS, but the size rule is unchecked or below 80%: an arm exactly as good as the reference would pass less than 80% of the time. The verdict prints with this warning, exits 2, and is not a no-loss claim.",
