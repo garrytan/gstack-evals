@@ -10,6 +10,11 @@
 // - The system prompt is the Agent SDK's default unless the options ask for Claude Code's: systemPrompt sdk-default
 //   passes no systemPrompt option at all, and claude-code-preset passes the SDK's claude_code preset. init.json records
 //   which one ran (system_prompt). A session takes at most maxTurns model turns, MAX_TURNS unless the run sets another.
+// - capStops records a session's own caps as their own terminations: a session the turn cap ends (an error_max_turns
+//   result) is turn_cap, and one whose next call the slot's allowance cannot hold (the proxy's E_ALLOWANCE refusal that
+//   names the slot's allowance) is allowance_stop. Without it, as before, the turn cap ends the session as completed and
+//   the allowance as a missing cell (E_ALLOWANCE). Any other E_ALLOWANCE refusal (a route, model or price the slot does
+//   not allow) stays a missing cell either way.
 //   sessionKind unattended adds GSTACK_SESSION_KIND=unattended to the agent env; unset, the adapter sets no session kind.
 // - canUseTool answers AskUserQuestion from the user simulator (src/usersim/sim.ts) and allows every other tool. An
 //   AskUserQuestion in a task that declared no user replies ends the trial as a missing cell, E_USER_TURNS_MISSING,
@@ -118,6 +123,8 @@ export interface ClaudeCodeOptions {
   systemPrompt?: SystemPrompt;
   /** GSTACK_SESSION_KIND for the agent env; unset, the adapter sets none. */
   sessionKind?: "unattended";
+  /** Record the turn cap and the slot's allowance as their own terminations (turn_cap, allowance_stop); unset, today's. */
+  capStops?: boolean;
   /** The persona's free-form answers, evaluator side; absent, an unanswered question gets the simulator's fallback. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** The Agent SDK's query function; tests pass the real one or a stand-in. */
@@ -210,6 +217,9 @@ const ROUTE_TO_CAN_USE_TOOL = { hookSpecificOutput: { hookEventName: "PreToolUse
 export function refusalIn(text: string): ReasonCode | null {
   return REFUSALS.find((code) => new RegExp("\\b" + code + "\\b").test(text)) ?? null;
 }
+
+/** The metering proxy's refusal when the slot's allowance cannot hold a call's worst case (src/runner/proxy/metering-proxy.ts). */
+export const ALLOWANCE_SPENT = /the slot's allowance of \$\d+(?:\.\d+)? cannot hold this call's worst case/;
 
 /** The termination a proxy refusal ends the cell with. */
 export function refusalTermination(refusal: ReasonCode): Termination {
@@ -452,7 +462,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
               if (m.error || m.is_api_error_message) {
                 const refusal = refusalIn(text);
-                if (refusal) end(refusalTermination(refusal));
+                if (refusal) end(o.capStops && refusal === "E_ALLOWANCE" && ALLOWANCE_SPENT.test(text) ? { kind: "allowance_stop" } : refusalTermination(refusal));
                 else if (m.error === "authentication_failed") end({ kind: "credentials_rejected" });
                 else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
               } else {
@@ -471,6 +481,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 end(modelOutput ? { kind: "arm_failure", failure: "harness_crash" } : { kind: "missing", code: "UPSTREAM" });
                 break;
               }
+              if (m.subtype === "error_max_turns" && o.capStops) stop ??= { kind: "turn_cap" };
               const next = m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" };
               turnText = "";
               if ("reply" in next) {

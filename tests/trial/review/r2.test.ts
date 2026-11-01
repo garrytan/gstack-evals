@@ -1,0 +1,240 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import { parseArm } from "../../../lanes/review-noloss/contract.ts";
+import type { Suite } from "../../../lanes/review-noloss/suite.ts";
+import { REPO_ROOT } from "../../../src/cli.ts";
+import { openLease, recordApproval } from "../../../src/runner/ledger/ledger.ts";
+import { LocalLedger } from "../../../src/runner/ledger/local.ts";
+import { LedgerError } from "../../../src/runner/ledger/record.ts";
+import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
+import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
+import { dirTreeSha256 } from "../../../src/trial/cache.ts";
+import { removeTree } from "../../../src/trial/cleanup.ts";
+import type { Sandbox } from "../../../src/trial/sandbox.ts";
+import { loadReaderMap, READER_ROW, type ReaderMap } from "../../../src/trial/review/readers.ts";
+import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
+import { buildUnitRepo, unitTaskId } from "../../../src/trial/review/unit.ts";
+import { harness } from "../../adapters/harness.ts";
+import { sourceRepo } from "./helpers.ts";
+
+// The R2 build end to end without a key (R48 follow-ups prereg, section 3.6): review units through runReviewUnits with
+// the real Claude Code driver and the pinned Agent SDK, whose CLI is the stub (tests/adapters/fixtures/stub-cli.cjs), so
+// every record below is the driver's own output. The stub launches readers, hits the turn cap or answers with the
+// metering proxy's allowance refusal, as each cell asks.
+
+const OPUS = "claude-opus-5-5";
+const STUB = join(REPO_ROOT, "tests", "adapters", "fixtures", "stub-cli.cjs");
+const MAP_FILE = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-1ea86923a861.json");
+const GATE = join(REPO_ROOT, "wiki", "plans", "2026-11-01-geva-101-r48-follow-ups-prereg", "r1-exposure.py.txt");
+const R2_PREFIX = "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed.";
+const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
+const loaded = loadReaderMap(MAP_FILE) as { map: ReaderMap; sha256: string };
+const roots: string[] = [];
+afterAll(() => roots.forEach((r) => removeTree(r)));
+const durable = () => {
+  const dir = mkdtempSync(join(REPO_ROOT, ".review-units-test-"));
+  roots.push(dir);
+  return dir;
+};
+const files = (dir: string) => {
+  const map = new Map<string, Buffer>();
+  const walk = (d: string) => {
+    for (const n of readdirSync(d)) statSync(join(d, n)).isDirectory() ? walk(join(d, n)) : map.set(relative(dir, join(d, n)), readFileSync(join(d, n)));
+  };
+  walk(dir);
+  return map;
+};
+
+const specialist = (name: string) => "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/" + name + ".md, then run DIFF_BASE=$(git merge-base origin/main HEAD) && git diff \"$DIFF_BASE\" to get the full diff.";
+const ADVERSARIAL = "Read the diff for this branch. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production.";
+const ARMY = [
+  { id: "tu_testing", prompt: specialist("testing"), started: true, tokens: 41000 },
+  { id: "tu_api", prompt: specialist("api-contract"), started: true, tokens: 38000 },
+  { id: "tu_state", prompt: specialist("state-machines"), started: true, tokens: 36000 },
+  { id: "tu_adv", prompt: ADVERSARIAL, started: true, tokens: 52000 },
+];
+const findings = (claim: string) => "Review done.\n\n```json\n" + JSON.stringify([{ file: "src/a.ts", line: 1, severity: "CRITICAL", claim, evidence: "src/a.ts:1 changes the exported value." }]) + "\n```\n";
+const SPENT = 'API Error: 402 {"type":"https://github.com/garrytan/gstack-evals/blob/main/docs/errors.md#e_allowance","title":"E_ALLOWANCE","status":402,"code":"E_ALLOWANCE","detail":"E_ALLOWANCE: metering proxy: the slot\'s allowance of $40.000000 cannot hold this call\'s worst case of $1.120000 ($39.100000 already committed)"}';
+const cells = {
+  readers: { STUB_MODE: "agents", STUB_AGENTS: JSON.stringify(ARMY), STUB_FINAL: findings("The API contract changes: callers of a now get 2.") },
+  plain: { STUB_MODE: "agents", STUB_AGENTS: "[]", STUB_FINAL: findings("The data migration leaves old rows on 1.") },
+  turns: { STUB_MODE: "turns" },
+  spent: { STUB_MODE: "apierror", STUB_API_ERROR: SPENT, STUB_API_STATUS: "402" },
+} as const;
+
+/** The harness's local sandbox, with the stub as the CLI and each cell's stub settings in its env. */
+function stubSandbox(cell: (task: string) => Record<string, string>): Sandbox {
+  return {
+    isolation: "process",
+    workPath: (work) => work,
+    fixturesPath: (fixtures) => fixtures,
+    homePath: (dir) => join(dir, "home"),
+    step(_role, command, _task, o) {
+      const r = spawnSync("sh", ["-c", command], { cwd: o.work, env: o.env, timeout: o.timeoutMs, encoding: "utf8" });
+      return { exitCode: r.status ?? 1, timedOut: false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    },
+    agent(task, o) {
+      mkdirSync(o.env.HOME!, { recursive: true });
+      return {
+        exec: (command, timeoutMs) => {
+          const r = spawnSync("sh", ["-c", command], { cwd: o.work, env: o.env, timeout: timeoutMs, encoding: "utf8" });
+          return { exitCode: r.status ?? 1, timedOut: false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+        },
+        spawn: (argv, extra = {}) => (argv[0] === "claude" ? spawn(process.execPath, [STUB, ...argv.slice(1)], { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? "", ...extra, ...cell(task) }, stdio: ["pipe", "pipe", "pipe"] }) : spawn(argv[0]!, argv.slice(1), { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? "", ...extra }, stdio: ["pipe", "pipe", "pipe"] })),
+        stop() {},
+      };
+    },
+  } as Sandbox;
+}
+
+/** Two units of one synthetic repo, and a suite naming them. */
+function twoUnits() {
+  const s = sourceRepo();
+  const dir = join(mkdtempSync(join(tmpdir(), "gse-r2unit-")), "repo");
+  roots.push(dir);
+  const units = [7, 8].map((pr) => ({ id: "garrytan/gstack#" + pr + "@" + s.head.slice(0, 12), repo: "garrytan/gstack", pr, head: s.head, base: s.base }));
+  const repo = buildUnitRepo({ unit: units[0]!, source: s.root, dest: dir });
+  const prepared: PreparedUnit[] = units.map((unit) => ({ unit, task: unitTaskId(unit), base_branch: repo.base_branch, merge_base: repo.merge_base, tree: dir, tree_sha256: dirTreeSha256(dir), instructions: repo.instructions }));
+  const suite = { schema_version: 1, id: "r2-test", title: "t", kind: "noloss", units: units.map((u) => ({ ...u, cluster: u.repo + "#" + u.pr, group: null, blockers: [] })) };
+  return { prepared, suite };
+}
+
+function stubRun(o: { prepared: PreparedUnit[]; plan: Record<string, Record<string, keyof typeof cells>>; settings: Partial<ReviewRunInput> }) {
+  const h = harness(() => [{ type: "text", text: "ok" }]);
+  roots.push(h.dir);
+  const byTask = new Map(o.prepared.map((p) => [p.task, p.unit.id]));
+  const rig: HostRig = {
+    baseUrl: h.baseUrl, network: null, imageDigest: null,
+    bind: async (request) => h.proxy.bind(request),
+    finalize: (m) => h.proxy.finalize(m),
+    arms: { "gstack-full": { tree_sha256: "gstack-tree", skill: null, gstack: null, plugins: [], provenance: { kind: "stack", stack: { repo: "garrytan/gstack", sha: loaded.map.gstack.sha, source: "local-git" } } } as never, "none-r2": { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] } },
+    sandbox: (arm) => stubSandbox((task) => cells[o.plan[arm]![byTask.get(task)!]!]),
+    judgeSandbox: () => stubSandbox(() => ({})),
+    egress: () => ({ open: false, detail: "test rig" }),
+    close: async () => ({ committed: 0, unknown: 0, lease_id: null }),
+    recovery: null,
+  };
+  const out = durable();
+  const input: ReviewRunInput = { host: "claude", suite: { id: "r2-test", sha256: null }, units: o.prepared, arms: [{ name: "gstack-full", told: "gstack", toldPrefix: R2_PREFIX, systemPrompt: "claude-code-preset" }, { name: "none-r2", told: "none", systemPrompt: "claude-code-preset" }], models: [OPUS], passes: 1, parallel: 2, timeoutS: 120, cap: 1_000_000_000, runId: "r2-stub", out, date: "2026-11-01", policy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: join(h.dir, "journal.ndjson"), env: {}, ...o.settings };
+  return { rig, input, out, h };
+}
+
+const arm = (out: string, id: string) => JSON.parse(readFileSync(join(out, "arms", id, "arm.json"), "utf8"));
+const costRows = (out: string, id: string) => readFileSync(join(out, "arms", id, "cost.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
+
+describe("R2 build: a stub run through the run loop with the real driver and the pinned Agent SDK (keyless)", () => {
+  // Value: protects=section 3.6 items 2 and 3 and GEVA-116's note in the records R2 scores: under R2's settings (200 turns, a $40 allowance) a session the turn cap ends and one the allowance stops are journaled as turn_cap and allowance_stop, each a coverage gap that stops its arm and is counted in arm.json's cap_stops, in both arms alike; the reader map's rows reach cost.tsv in the pinned format, ingest's contract accepts the arms, and resume reuses every cell; fails_when=a cap stop parses as findings or a miss, a capped arm reads complete, reader rows are missing, malformed or written for a session with no launches, or the contract refuses a reader row; why_new=R2 build (GEVA-122); seam=runReviewUnits, hostDriver, claudeCodeDriver, readers.ts, costTsv; no_claim=a real model or the Docker rig
+  test("cap stops are their own terminations and coverage gaps, and reader rows land in cost.tsv", async () => {
+    const { prepared, suite } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "readers", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "spent" } }, settings: { maxTurns: 200, allowanceMicros: 40_000_000, readers: { map: loaded.map, sha256: loaded.sha256 } } });
+    try {
+      const first = await runReviewUnits(run.input, run.rig);
+      const journal = readReviewJournal(run.out);
+      const ended = (armName: string, unit: string) => [...journal.values()].find((e) => e.cell.arm === armName && e.cell.unit === unit)!.record.termination;
+      expect([ended("gstack-full", a), ended("gstack-full", b), ended("none-r2", a), ended("none-r2", b)]).toEqual([{ kind: "completed" }, { kind: "turn_cap" }, { kind: "completed" }, { kind: "allowance_stop" }]);
+      expect(first.stops.map((s) => s.code)).toEqual(["E_COVERAGE_GAP", "E_COVERAGE_GAP"]);
+      const full = arm(run.out, "gstack-full-opus");
+      const none = arm(run.out, "none-r2-opus");
+      expect([full.status, none.status]).toEqual(["stopped", "stopped"]);
+      expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0 }, { turn_cap: 0, allowance_stop: 1 }]);
+      expect(full.coverage_gaps).toEqual([b + " pass 1: incomplete, the session ended turn_cap"]);
+      expect(none.coverage_gaps).toEqual([b + " pass 1: incomplete, the session ended allowance_stop"]);
+      expect([full.parse_outcomes.findings, full.parse_outcomes.incomplete, none.parse_outcomes.findings, none.parse_outcomes.incomplete]).toEqual([1, 1, 1, 1]);
+      expect([full.reader_map_sha256, none.reader_map_sha256]).toEqual([loaded.sha256, loaded.sha256]);
+      expect(full.told.prefix_sha256).toBe(new Bun.CryptoHasher("sha256").update(R2_PREFIX).digest("hex"));
+      const rows = costRows(run.out, "gstack-full-opus");
+      expect(rows.map((r) => [r[0], r[1], r[2], r[3], r[11]])).toEqual([
+        [a, "all", "1", "0", "proxy-journal"],
+        [a, "reader:adversarial-native", "1", "52000", "reader-counter"],
+        [a, "reader:api-contract", "1", "38000", "reader-counter"],
+        [a, "reader:state-machines", "1", "36000", "reader-counter"],
+        [a, "reader:testing", "1", "41000", "reader-counter"],
+        [b, "all", "1", "0", "proxy-journal"],
+      ]);
+      for (const r of rows.filter((x) => x[1]!.startsWith("reader:"))) {
+        expect(r[1]).toMatch(READER_ROW.scope);
+        expect(r[2]).toMatch(READER_ROW.pass);
+        expect(r[11]).toBe(READER_ROW.meter_source);
+        expect(r[0]).toBe(rows.find((x) => x[1] === "all" && x[2] === r[2] && x[0] === r[0])![0]);
+      }
+      expect(costRows(run.out, "none-r2-opus").map((r) => r[1])).toEqual(["all", "all"]);
+      for (const id of ["gstack-full-opus", "none-r2-opus"]) expect(() => parseArm(files(join(run.out, "arms", id)), suite as unknown as Suite)).not.toThrow();
+      const again = await runReviewUnits({ ...run.input, reuse: readReviewJournal(run.out) }, run.rig);
+      expect(again.spent).toBe(0);
+      expect(costRows(run.out, "gstack-full-opus")).toEqual(rows);
+      const changed = await runReviewUnits({ ...run.input, allowanceMicros: 15_000_000, reuse: readReviewJournal(run.out) }, run.rig);
+      expect([changed.stale.length, changed.stale[0]!.message]).toEqual([4, expect.stringContaining("task")]);
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
+  // Value: protects=GEVA-116's byte-for-byte line: a run at today's defaults (60 turns, the policy allowance, no reader map) records the same stub sessions as before the build: the turn cap as completed, the allowance as a missing E_ALLOWANCE cell, no cap_stops or reader_map_sha256 in arm.json and no reader rows; fails_when=a default run gains a cap kind, an arm.json field or a cost row; why_new=GEVA-116's note on #119; seam=runReviewUnits' capStops and readers gates
+  test("a default run keeps today's records", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "readers", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "spent" } }, settings: {} });
+    try {
+      await runReviewUnits(run.input, run.rig);
+      const journal = [...readReviewJournal(run.out).values()];
+      expect(journal.map((e) => [e.cell.arm, e.cell.unit, e.record.termination]).sort()).toEqual([["gstack-full", a, { kind: "completed" }], ["gstack-full", b, { kind: "completed" }], ["none-r2", a, { kind: "completed" }], ["none-r2", b, { kind: "missing", code: "E_ALLOWANCE" }]].sort() as never);
+      expect(journal.every((e) => !("readers" in e))).toBe(true);
+      for (const id of ["gstack-full-opus", "none-r2-opus"]) {
+        expect(Object.keys(arm(run.out, id)).filter((k) => k === "cap_stops" || k === "reader_map_sha256")).toEqual([]);
+        expect(costRows(run.out, id).map((r) => r[1])).toEqual(["all", "all"]);
+      }
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
+  // Value: protects=section 3.6's gate test: the frozen procedure gate (r1-exposure.py, attached to the merged prereg) passes on reader rows the driver recorded from sessions that ran three specialists and the adversarial pass, and fails on rows from sessions that launched no reader; fails_when=the rows' pr or pass don't resolve to the suite's PR-passes, or the scope isn't reader:<name>; why_new=section 3.6 item 3 and the B1 note; seam=cost.tsv reader rows, r1-exposure.py
+  test("the frozen procedure gate passes on the specialists' rows and fails with no readers", async () => {
+    const { prepared, suite } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "readers", [b]: "readers" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { readers: { map: loaded.map, sha256: loaded.sha256 } } });
+    try {
+      await runReviewUnits(run.input, run.rig);
+      const suiteFile = join(run.out, "suite.json");
+      writeFileSync(suiteFile, JSON.stringify(suite));
+      const gate = (id: string) => spawnSync("python3", [GATE, suiteFile, join(run.out, "arms", id)], { encoding: "utf8" });
+      const pass = gate("gstack-full-opus");
+      const fail = gate("none-r2-opus");
+      expect([pass.status, pass.stdout.trim().split("\n")]).toEqual([0, ["exposure: Review Army specialists ran in 2 of 2 PR-passes, the adversarial pass in 2, both in 2 (0 rows or findings name no PR-pass of the suite)", "gate: pass (both in at least 2 of 2 PR-passes)"]]);
+      expect([fail.status, fail.stdout.trim().split("\n").at(-1)]).toEqual([3, "gate: FAIL (both in at least 2 of 2 PR-passes)"]);
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+});
+
+describe("R2 ledger items (keyless)", () => {
+  // Value: protects=section 3.6 item 4: r2a-grid funds none-r2's run and r2b-grid gstack-full's, one run each at the recorded caps; a second run on a bound grid item is refused with E_ITEM_BOUND, and a lease past an item's cap is refused; fails_when=a grid item funds two runs or a run outspends its item; why_new=R48 follow-ups prereg section 5; seam=recordApproval and openLease, as review-units' rig opens its lease
+  test("one lease per grid item; a second run on a bound item is refused", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gse-r2-ledger-"));
+    roots.push(dir);
+    const record = join(dir, "record");
+    const local = LocalLedger.open(join(dir, "ledger.sqlite"));
+    const quote = { words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0).", by: "GSTA-2", source: "approvals/2026-11-01-r48-follow-ups-caps.md" };
+    for (const [item, usd] of [["r2a-grid", 25], ["r2b-grid", 325]] as const) recordApproval(record, { action: "init", item, cap_micros: usd * 1_000_000, quotes: [quote], admission: "warn" });
+    const code = (fn: () => unknown) => {
+      try {
+        fn();
+        return "ok";
+      } catch (e) {
+        if (e instanceof LedgerError) return e.code;
+        throw e;
+      }
+    };
+    expect(code(() => openLease(record, local, { item: "r2a-grid", run_id: "r2-none", amount_micros: 26_000_000, requireAdmission: () => null }))).toBe("CAP_STOP");
+    const none = openLease(record, local, { item: "r2a-grid", run_id: "r2-none", amount_micros: 25_000_000, requireAdmission: () => null });
+    const full = openLease(record, local, { item: "r2b-grid", run_id: "r2-full", amount_micros: 325_000_000, requireAdmission: () => null });
+    expect([none.line_item, none.run_id, full.line_item, full.run_id]).toEqual(["r2a-grid", "r2-none", "r2b-grid", "r2-full"]);
+    expect(code(() => openLease(record, local, { item: "r2b-grid", run_id: "r2-full-again", amount_micros: 1_000_000, requireAdmission: () => null }))).toBe("E_ITEM_BOUND");
+    expect(code(() => openLease(record, local, { item: "r2a-grid", run_id: "r2-full", amount_micros: 1_000_000, requireAdmission: () => null }))).toBe("E_ITEM_BOUND");
+  });
+});
