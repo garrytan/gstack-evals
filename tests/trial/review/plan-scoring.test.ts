@@ -149,6 +149,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
   let stops: { code: string; message: string }[];
   const entry = (arm: string) => [...journal.values()].find((e) => e.cell.arm === arm)!;
   const armJson = (arm: string) => JSON.parse(readFileSync(join(out, "arms", arm + "-opus", "arm.json"), "utf8"));
+  const stderr = (arm: string) => readFileSync(join(out, "runs", OPUS, arm, fx.prepared.task, "p1", "host", "cli-stderr.log"), "utf8");
   const calls = (arm: string) => JSON.parse(readFileSync(join(out, "runs", OPUS, arm, fx.prepared.task, "p1", "host", "calls.json"), "utf8")).calls.map((c: { tool: string }) => c.tool);
   const note = (rest: string) => fx.unit.id + " pass 1: " + rest;
   const record = (arm: string) => { const r = entry(arm).record; return { termination: r.termination, model_output: r.model_output, turns: r.turns.length }; };
@@ -286,6 +287,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect(record("machine")).toEqual({ termination: INFRA, model_output: true, turns: 1 });
     expect(record("nospawn")).toEqual({ termination: INFRA, model_output: false, turns: 0 });
     for (const arm of ["machine", "nospawn"]) expect([armJson(arm).status, armJson(arm).coverage_gaps]).toEqual(["stopped", [note("incomplete, the session ended missing (E_INFRA_FAILURE)")]]);
+    expect(stderr("machine")).toContain("adapter: infra failure, not the arm's: Claude Code process terminated by signal SIGKILL\n");
   });
 
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects

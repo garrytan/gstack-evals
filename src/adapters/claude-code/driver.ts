@@ -358,7 +358,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
           const child = cli as ChildProcess | null;
           const died = child !== null && (child.exitCode !== null || child.signalCode !== null);
           stop = died && answers(session) ? { kind: "arm_failure", failure: "harness_crash" } : INFRA;
-          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (died ? "" : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
+          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (stop === INFRA ? "infra failure, not the arm's: " : "") + String((error as Error)?.message ?? error) + "\n");
         }
       } finally {
         clearTimeout(timer);
