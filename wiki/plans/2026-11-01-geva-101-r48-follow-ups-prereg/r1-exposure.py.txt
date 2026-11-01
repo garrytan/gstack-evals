@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# R1 procedure gate (GEVA-101 prereg, section 2): did arm C's full procedure run? Per PR-pass, a reader counts as run
+# when cost.tsv has a reader:<name> row for it or a finding carries reader <name>. The Review Army ran when a specialist
+# reader ran (testing, maintainability, security, performance, data-migration, api-contract, design, simplification,
+# state-machines, red-team, or batched: GSTA-167's one reader that ran the plan's selected checklists together); the
+# adversarial pass ran when adversarial-native ran. The denominator is every PR-pass the suite asks for, its units times
+# arm.json's passes, so a PR-pass that left no rows is a miss. A row or finding whose pass is blank or not a pass number
+# (a run-level row), or whose unit ref names no suite unit, counts toward no PR-pass. The gate passes when both ran in
+# at least 90% of PR-passes. R2 runs the same gate on gstack-full.
+# Exit 0 when the gate passes and 3 when it fails; any other exit is an error, never a gate result.
+# Usage: python3 r1-exposure.py <suite json> <source arm dir>
+import csv, json, math, os, re, sys
+
+suite, a = json.load(open(sys.argv[1])), sys.argv[2]
+passes = json.load(open(os.path.join(a, "arm.json")))["passes"]
+SPEC = {"testing", "maintainability", "security", "performance", "data-migration", "api-contract", "design", "simplification", "state-machines", "red-team", "batched"}
+REF = re.compile(r"^(?:([A-Za-z0-9_.-]+)(?:/|__)([A-Za-z0-9_.-]+)#)?(\d+)(?:@([0-9a-f]{7,40}))?$")
+
+
+def unit(ref):
+    m = REF.match(ref)
+    if not m:
+        return None
+    repo = m.group(1) + "/" + m.group(2) if m.group(1) else None
+    hits = [u["id"] for u in suite["units"] if u["pr"] == int(m.group(3)) and (repo is None or u["repo"] == repo) and (not m.group(4) or u["head"].startswith(m.group(4)))]
+    return hits[0] if len(hits) == 1 else None
+
+
+ran = {(u["id"], p): set() for u in suite["units"] for p in range(1, passes + 1)}
+loose = 0
+
+
+def note(ref, p, reader):
+    global loose
+    k = (unit(ref), int(p) if re.fullmatch(r"\d+", str(p).strip()) else None)
+    if k not in ran:
+        loose += 1
+    elif reader:
+        ran[k].add(reader)
+
+
+for r in csv.DictReader(open(os.path.join(a, "cost.tsv")), delimiter="\t"):
+    scope = r.get("scope") or ""
+    note(r.get("pr") or "", r.get("pass") or "", scope[7:] if scope.startswith("reader:") else None)
+for f in os.listdir(os.path.join(a, "findings")):
+    for line in open(os.path.join(a, "findings", f)):
+        if line.strip():
+            o = json.loads(line)
+            note(f[:-6], o.get("pass", ""), o.get("reader"))
+n = len(ran)
+army = sum(1 for k in ran if ran[k] & SPEC)
+adv = sum(1 for k in ran if "adversarial-native" in ran[k])
+both = sum(1 for k in ran if ran[k] & SPEC and "adversarial-native" in ran[k])
+need = math.ceil(0.9 * n)
+print("exposure: Review Army specialists ran in %d of %d PR-passes, the adversarial pass in %d, both in %d (%d rows or findings name no PR-pass of the suite)" % (army, n, adv, both, loose))
+print("gate: %s (both in at least %d of %d PR-passes)" % ("pass" if both >= need else "FAIL", need, n))
+sys.exit(0 if both >= need else 3)

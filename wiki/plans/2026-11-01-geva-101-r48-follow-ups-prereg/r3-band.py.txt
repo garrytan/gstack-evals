@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+# R3's in-band task set (GEVA-101 prereg, section 4). SWE-bench Verified tasks that the frontier triple of the mini-SWE-agent
+# v2 runs (the same three runs quick/laneb/tasks/prescreen_swebv.py names FRONTIER) solves 1 or 2 of 3 times. Prints the
+# count, the sha256 of the sorted id list (one id per line), and the Opus 4.6 cost of the set.
+# Usage: python3 r3-band.py <SWE-bench/experiments checkout> <out tsv>
+import hashlib, json, os, statistics, sys
+
+exp, out = sys.argv[1:3]
+FRONTIER = ["20260217_mini-v2.0.0_claude-4-6-opus", "20260217_mini-v2.0.0_claude-4-5-opus-high", "20260217_mini-v2.0.0_gpt-5-2-high"]
+d = {s: json.load(open(os.path.join(exp, "evaluation/verified", s, "per_instance_details.json"))) for s in FRONTIER}
+ids = sorted(set.intersection(*(set(v) for v in d.values())))
+band = [i for i in ids if sum(bool(d[s][i].get("resolved")) for s in FRONTIER) in (1, 2)]
+text = "".join(i + "\n" for i in band)
+open(out, "w").write(text)
+cost = [d[FRONTIER[0]][i].get("cost") or 0 for i in band]
+print("band: %d of %d tasks solved 1 or 2 of 3 times by the frontier triple; sha256 %s" % (len(band), len(ids), hashlib.sha256(text.encode()).hexdigest()))
+print("band cost: Opus 4.6 mini-SWE-agent per task median $%.3f, mean $%.3f" % (statistics.median(cost), statistics.mean(cost)))

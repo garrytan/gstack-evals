@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "suite": "gsta167-14pr",
+  "decision_rule": "Preregistered in wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg (section 2, R1). One blind batch judges GSTA-167's arm C (both passes) beside #108's none-opus and gstack-opus on the 14 cohort units at the rig pin. Each blocking blocker's value is the share of an arm's passes that FOUND it; PR clusters are the units. R1's decision reads only C-vs-none: R2 runs when C's blocking recall minus none-opus's, the scorer's paired delta, is at least 10 points and arm C's procedure gate passed; otherwise the Review Army and adversarial passes on Opus go to Garry as a CUT-CANDIDATE and R2 does not run. The scorer's NO_LOSS, LOSS and size-rule lines are printed but decide nothing here. C-vs-gstack and gstack-vs-none are descriptive. An arm that stopped, or a blocker recorded with coverage incomplete, gives no decision.",
+  "seed": 20261031,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "C-vs-none",
+      "variant": "C",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R1 reuses it as the smallest lead that sends R2 forward",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "R1 decision: the full /ship-class review procedure against plain Opus, judged blind."
+    },
+    {
+      "id": "C-vs-gstack",
+      "variant": "C",
+      "reference": "gstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R1 reuses it as the smallest lead that sends R2 forward",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Descriptive: the full procedure against #108's told /review on Opus."
+    },
+    {
+      "id": "gstack-vs-none",
+      "variant": "gstack-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R1 reuses it as the smallest lead that sends R2 forward",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Descriptive: #108's comparison re-judged on the 14 cohort units in this batch."
+    }
+  ]
+}

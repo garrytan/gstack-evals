@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# R1 publication-scan scrub (GEVA-101 prereg, section 2): #108's frozen blind scrub (GEVA-89 items 11 and 12: scrub.ts,
+# then scrub2.ts), then r1-scrub3.ts, each only on the lines the pinned ingest's publication scan still flags.
+# Logs counts and file:line only, never finding text.
+# Usage: R=<rig> bash r1-scrub.sh <source arm dir> <scrub.ts> <scrub2.ts> <r1-scrub3.ts>
+set -u
+A=$1; S=$R/lanes/review-noloss/suites/gsta167-14pr.json
+hits() { "$R/bin/gstack-evals" noloss ingest "$A" --suite "$S" --check 2>&1 | sed -n 's/^E_NOLOSS_ARM \(findings\/[^ ]*\.jsonl\) line \([0-9]*\) (finding .*breaks the publication scan.*/\1:\2/p' | sort -t: -k1,1 -k2,2n -u; }
+hits > "$A.hits0"; echo "scan hits before the scrub: $(wc -l < "$A.hits0")"
+n=0
+for s in "$2" "$3" "$4"; do
+  n=$((n + 1)); [ -s "$A.hits$((n - 1))" ] && bun "$s" "$A" "$A.hits$((n - 1))"
+  hits > "$A.hits$n"; echo "scan hits after step $n: $(wc -l < "$A.hits$n")"
+done
+echo "left for --digest-only: $(sed -n 's/^findings\/\(.*\)\.jsonl:\([0-9]*\)$/\1 line \2/p' "$A.hits3" | tr '\n' ',' )"
