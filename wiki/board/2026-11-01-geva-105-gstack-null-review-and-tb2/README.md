@@ -61,6 +61,7 @@ So the honest reading is "no detectable gain, and these suites can't tell". TB2 
 - **Arms.** none (no gstack installed, plain prompt); gstack, told /investigate on TB2 (gstack 61e201e, v1.91.295.0) and /review on review (gstack 53522b1, v1.91.342.0); gstack-placebo on TB2 for Haiku and particle-1 (length-matched prose with no procedure); pstack (Lauren Tan's, told /pstack:poteto-mode) and pstack-placebo on TB2; tstack (Theo Browne's) on review. This file reports gstack against none; #108 and #109 report the other stacks.
 - **Models.** claude-opus-5-5 and claude-haiku-5-5 on Anthropic's API; particle-1 as particle-ai/particle-1 on OpenRouter. The route of every session is in the proxy files in the bundles.
 - **Harness.** Claude Code 2.1.312 with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm. TB2 ran in Harbor f3a5a923 with claude-agent-sdk 0.2.174.
+- **System prompt (unverified): the Claude Agent SDK's default, not Claude Code's.** GEVA-104 found that claude-agent-sdk 0.2.174 passes an empty --system-prompt unless the caller sets one, and neither the review driver (src/adapters/claude-code/driver.ts) nor Lane B's TB2 agent sets one. So both lanes probably ran Claude Code without its own system prompt, the same way in every arm. GEVA-109 is checking this against the code and the session journals.
 - **TB2 tasks.** 40 tasks from quick look 3 (quick/laneb/tasks/final.json, sha256 9ccfec13f01c150f4ec838e19285375a1f034522c1a069c0ee83d75d12dd56d9, at the tag laneb-stacks-1-runner), TB2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c. Three tasks left the grid under the frozen oracle rule (crack-7z-hash, adaptive-rejection-sampler, largest-eigenval), so 37 are graded. Each task has its own agent time limit. Three replicates, 111 trials a cell, 1,443 trials in all, all run on 2026-11-01 UTC.
 - **Review suite.** stacks-r1 from #95: 33 units (27 blocking, 6 over-blocking), 42 blocking bugs on 26 merged PRs (gstack and gbrain), sha256 4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d. Opus arms ran two passes, 66 unit-passes an arm.
 - **Judges (review).** Opus 5.5 primary, gpt-6.1-sol second, Sonnet 5.5 third, blind to arm, on the match brief with sha256 ef33d5ca0f802e49e18d1f3e4b16f989bcbd48fa4c46f339bc0533dfb1364427. The second judge agreed on 33 blockers at kappa 0.9832. No human spot check.
@@ -156,6 +157,8 @@ Totals: TB2 spent $165.36 (pilot $9.07, the nine analysed batches $131.63, and a
 
 The Why-null cycle is GEVA-100's (report at the Captain drive's reports/GEVA-100.md); its counts reproduce from the bundles.
 
+A possible cause of both exposure findings below, unverified: the sessions probably ran without Claude Code's own system prompt (see Setup). If so, Opus skipped the procedure in a setting it doesn't normally run in, and the exposure rates may differ with Claude Code's system prompt in place. Item 2 (GEVA-106) tests the system prompt as a factor.
+
 **Review (#108): FIX-METHOD.**
 - Exposure: the body loaded in 66 of 66 sessions (first-request context median 60,027 tokens against 34,415; the smallest gstack session is above the largest none). No session made an Agent call, so no specialist and no adversarial subagent ran (0 of 66), and none ran a gstack helper (0 of 66). In 48 of 66 replies Opus says it skipped the specialists, the adversarial pass or the full procedure (a text match).
 - Task fit: good. Pre-landing review of a PR diff is what /review is for.
@@ -174,7 +177,8 @@ The Why-null cycle is GEVA-100's (report at the Captain drive's reports/GEVA-100
 
 ## Limits and threats
 
-- Exploratory, one harness, told invocation only. Untold, gstack's skills were never opened (0 of 180 trials in quick look 1), so these results don't speak to untold use.
+- Exploratory, one harness, told invocation only. Untold, gstack's skills were never opened (0 of 180 trials in quick look 1), so these results don't speak to untold use. The untold-skill hook (X4 in the insight plan) is held until item 2 (GEVA-106) tests the system prompt as a factor.
+- Possibly not Claude Code as people run it (unverified; see Setup). If every arm ran without Claude Code's own system prompt, the comparison between arms is still like for like, but the results may not carry over to Claude Code with its system prompt in place. This is a threat to external validity until GEVA-109 settles it.
 - Near ceiling on TB2 for Opus and particle-1; near floor on review.
 - TB2 is public, so its tasks may be in training data.
 - The review suite was mined partly from bugs that gstack-family reviews caught (29 of the 42 blocking bugs are GSTA-167's cohort), and 25 of 33 units could run their diff-scoped tests.
@@ -244,3 +248,4 @@ Nothing. TB2 is public at 69671fb, and the stacks-r1 suite and its answer key ar
 ## Changelog
 
 - 2026-11-01: first version (GEVA-105).
+- 2026-11-01: after the claim check, added the system-prompt setting as unverified to Setup, Limits and the Why-null section, and held the untold-skill hook, on GSTA-2's correction from GEVA-104's finding (GEVA-105). These lines were not part of the cross-family review.
