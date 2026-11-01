@@ -1,38 +1,51 @@
 #!/usr/bin/env python3
-# Blinding step for R1 and R2 (GEVA-101 prereg, sections 2 and 3). The pinned judge-packet refuses a finding whose text
-# would show the judges what blinding hides (leakRules in lanes/review-noloss/judge.ts at the rig pin): a reader name
-# with a hyphen or digit that any judged arm uses (whole word, case-insensitive), or a model id an arm lists (any
-# substring, case-insensitive). gstack's and gbrain's own PRs change those readers and model routes, so findings name
-# them as code. In every judged arm alike, before ingest, this step:
-#  - rewrites each such reader name in summary, fix and evidence with its hyphen turned into a space;
-#  - rewrites each such model id in summary, fix and evidence as "<model id>";
-#  - leaves out a finding whose path names one. The suite check below fails if any blocker lists such a path, so a
-#    left-out finding can never match a blocker; it is listed, and the false-blocker reading counts it as unadjudicated.
-# Paths, lines and every other field stay as they are. Logs ids and counts only, never text.
+# Blinding step for R1 and R2 (GEVA-101 prereg, sections 2 and 3). Judges must not learn from a finding's text which
+# arm or procedure wrote it. In every judged arm alike, before ingest, this step:
+#  - rewrites every reader name any judged arm uses (a finding's reader, or a reader:<name> row in cost.tsv), and the
+#    procedure name "Review Army", to the neutral token "<reader>" in summary, fix and evidence. A name matches as a whole
+#    word, case-insensitive, with each hyphen written as a hyphen, a space or an underscore, so "red-team", "red team"
+#    and "Red_Team" all match. Reader names that are ordinary words a finding uses in its own right (ORDINARY) stay;
+#  - rewrites each model id an arm lists in summary, fix and evidence as "<model id>";
+#  - leaves out a finding whose path names a finding reader with a hyphen or digit, or a model id. The pinned
+#    judge-packet refuses such a path as a leak (leakRules in lanes/review-noloss/judge.ts at the rig pin), and a path
+#    can't be rewritten. The suite check below fails if any blocker lists such a path, so a left-out finding can never
+#    match a blocker. Its id is listed here, and it drops out of the false-blocker and new-blocker counts.
+# Paths, lines and every other field stay as they are. Each file is replaced atomically. Logs ids and counts only, never text.
 # Usage: python3 blind.py <suite json> <source arm dir>...
-import json, os, re, sys
+import csv, json, os, re, sys
 
+ORDINARY = {"security", "testing", "maintainability", "performance", "design", "simplification", "confirmed", "unconfirmed", "other"}
+PROCEDURES = {"Review Army"}
 suite, arms = json.load(open(sys.argv[1])), sys.argv[2:]
-readers, models = set(), set()
+readers, leaky, models = set(), set(), set()
 for a in arms:
     for m in json.load(open(os.path.join(a, "arm.json"))).get("models") or []:
         models.update({m["model"], m["model"].split("/")[-1]})
+    if os.path.exists(os.path.join(a, "cost.tsv")):
+        for r in csv.DictReader(open(os.path.join(a, "cost.tsv")), delimiter="\t"):
+            if (r.get("scope") or "").startswith("reader:"):
+                readers.add(r["scope"][7:])
     for f in os.listdir(os.path.join(a, "findings")):
         for line in open(os.path.join(a, "findings", f)):
             if line.strip():
                 r = json.loads(line).get("reader")
-                if r and re.search(r"[-0-9]", r):
+                if r:
                     readers.add(r)
-rp = [(n, re.compile(r"(?<![A-Za-z0-9_])" + re.escape(n) + r"(?![A-Za-z0-9_])", re.I)) for n in sorted(readers)]
+                    if re.search(r"[-0-9]", r):
+                        leaky.add(r)
+B, E = r"(?<![A-Za-z0-9_])", r"(?![A-Za-z0-9_])"
+names = sorted({r for r in readers if r.lower() not in ORDINARY} | PROCEDURES, key=lambda s: (-len(s), s.lower()))
+rp = [(n, re.compile(B + "[-_ ]".join(re.escape(p) for p in re.split(r"[-_ ]", n)) + E, re.I)) for n in names]
 mp = [(n, re.compile(re.escape(n), re.I)) for n in sorted(models, key=lambda s: (-len(s), s))]
-names_path = lambda s: any(p.search(s) for _, p in rp + mp)
-print("reader names: " + (", ".join(sorted(readers)) or "none") + "; model ids: " + ", ".join(sorted(models)))
+lp = [re.compile(B + re.escape(n) + E, re.I) for n in sorted(leaky)] + [p for _, p in mp]
+names_path = lambda s: any(p.search(s) for p in lp)
+print("reader names rewritten to <reader>: " + ", ".join(names) + "; left as ordinary words: " + (", ".join(sorted(r for r in readers if r.lower() in ORDINARY)) or "none") + "; model ids: " + ", ".join(sorted(models)))
 for u in suite["units"]:
     for b in u["blockers"]:
         if any(names_path(p) for p in b["paths"]):
             sys.exit("E_BLIND blocker " + u["id"] + " " + b["id"] + " lists a path that names a reader or model id")
 for a in arms:
-    count = {n: 0 for n in sorted(readers | models)}
+    count = {n: 0 for n in names + sorted(models)}
     rows, dropped = 0, []
     for f in sorted(os.listdir(os.path.join(a, "findings"))):
         p = os.path.join(a, "findings", f)
@@ -50,7 +63,7 @@ for a in arms:
                 if not isinstance(v, str):
                     continue
                 for n, pat in rp:
-                    v, c = pat.subn(lambda m: m.group(0).replace("-", " "), v)
+                    v, c = pat.subn("<reader>", v)
                     count[n] += c
                     changed = changed or c > 0
                 for n, pat in mp:
@@ -60,6 +73,8 @@ for a in arms:
                 o[k] = v
             rows += changed
             out.append(json.dumps(o, ensure_ascii=False, separators=(",", ":")) if changed else line)
-        open(p, "w").write("".join(x + "\n" for x in out))
+        with open(p + ".tmp", "w") as w:
+            w.write("".join(x + "\n" for x in out))
+        os.replace(p + ".tmp", p)
     hits = {k: v for k, v in count.items() if v}
     print("%s: %d findings rewritten %s; left out (path names a reader or model id): %s" % (os.path.basename(a), rows, json.dumps(hits, sort_keys=True), ", ".join(dropped) or "none"))

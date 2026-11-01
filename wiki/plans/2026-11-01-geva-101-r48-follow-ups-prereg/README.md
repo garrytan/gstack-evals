@@ -14,23 +14,23 @@ links:
   - 2026-11-01-geva-89-stacks-round-1-amendment
   - 2026-10-31-geva-76-stacks-round-1-prereg
 attachments:
-  - 201b7ed3ca17b90ba2f162ac80e39ed4de086247e161972c682955846431a6e9  blind.py.txt
+  - 4d0879c01a29f1b85231ba12bea53475dc569cb1fc4397f56692d36d2d441eab  blind.py.txt
   - 472ab0a1b37a88c0ed0f79e34c63ce635c320d74065414f5fc30e1c145733f91  comparisons.r1.json
   - 31d9baab2996406922d197fa83e5727fdf828a6198a1c87d65a9721b2af6f064  comparisons.r2.json
-  - f8ab4865c985d0bbbe57de7a4490990c8d14da8fcc02a7693ac124e2a6cf1308  dry-run.sh.txt
-  - ce365f81626e8ceab74a82e376273d7fcd4af0135ab3c13b663a1784ea2d26e8  dry-run.txt
+  - 8c770cb53dcb751b66584765cb5ca4a8c57485133b08ca11b96fd01446421322  dry-run.sh.txt
+  - 1dff5530ea0e698a306595bcce4be7c6c606cea71292903441a5f3c87ab8299c  dry-run.txt
   - f9df72f7f982b3d94fac54a3cb150633283c4811420d926309c7bf8222bba294  items.ts.txt
   - fb0e95efbb67c335d0f4ccd5231e597f8cf872207f3170ca07de15707da80d48  judge-fake.ts.txt
   - 0f09dfb2c689642a3c1e987056065be25e99c3aa521689b2e0be18189b7e0c7f  power.py.txt
   - 9794d548de82cc14848283acef333fc93cc10cd3dd479ea84e6bfa47ffbab7ce  power.txt
   - 6b5e20d77bbc29c19d55c096931a06862c7f97faa060e1041de519771d3cffe1  r1-arms.py.txt
-  - 259d87a46e3218d71fc85d5e8951ff0ec654706fe061a2e40e3262f0e72c9e22  r1-decide.py.txt
-  - ce77791053ca95153860cd6903dae3b765c7535db963082041e7689a699e9e2c  r1-exposure.py.txt
+  - 54f81ea3d3b6400b5579fec0390f19f2d7bf1bbfcb7d466f57324dae0fa4906c  r1-decide.py.txt
+  - 258b655b0dd49c9c94f750484f5c1916bd2435ff7d53e8f551318da0160935ab  r1-exposure.py.txt
   - f08dee862b7997d05c877a76a909c770c3fbefa20ae9ed2bb36f93495b489171  r1-scrub.sh.txt
   - ba9acf3555680f66c8c4429de46975f188f888b7aef6882349da8590137c24a2  r2-arms.py.txt
-  - 3ebdda714465c02dc61669c4ef0ed227473319f9e67dc71aaeddda044f87cef6  r2-decide.py.txt
+  - 36157582cd812ade5207cdfc709293a2d4d4267bb688da32b7c00ef8545b8be3  r2-decide.py.txt
   - 6db889579b2faff1dab4d5f6864f5b4ebb040056d683808ab05713a2958dd210  r3-band.py.txt
-  - 24d82cdd6b9562b926ca527498e3ba8051e79bd172fde414a773f40d4648a21f  r3-dry.ts.txt
+  - 2fcd024d11074a4692816ea5bd9bf94ae90e77b45d4fe345612c060597cce7ec  r3-dry.ts.txt
 ---
 
 # R48 follow-ups: blind re-judge, the full /review procedure, and told /investigate on in-band bug fixes
@@ -80,11 +80,11 @@ Arm C was written by Capy subagents, so its text carries machine paths, reader n
 
 The three scrub scripts are not attached. They hold machine-path patterns, and the repo's sealed-output guard refuses those in a public repo. They are pinned here by sha256 and kept in the Captain drive at handoffs/GEVA-101/scrub/ (scrub.ts and scrub2.ts are also in the GEVA-89 archive, judge/scripts): scrub.ts c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e, scrub2.ts cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237, r1-scrub3.ts 3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886. The dry run checks all three digests before it uses them.
 
-blind.py runs on all three arms, the same way. Hyphens in reader names become spaces, and model ids become \`<model id>\` in summary, fix and evidence. A finding whose path names a reader or model id is left out, and blind.py fails if any suite blocker lists such a path, so a left-out finding can never match a blocker. It is listed, and the false-blocker reading counts it as unadjudicated. In the dry run blind.py rewrites 17 of arm C's findings, 5 of none-opus's and 4 of gstack-opus's, and leaves out one arm C finding (3516-p1-8, a CRITICAL finding on scripts/resolvers/outside-voice-steps.ts, whose path names the outside-voice reader). Leaving it out can only lower arm C's false-blocker and new-blocker counts by one; it can't change blocking recall.
+blind.py runs on all three arms, the same way. It rewrites every reader name any arm uses (a finding's reader, or a `reader:<name>` cost row) to the neutral token `<reader>` in summary, fix and evidence. A name matches as a whole word in any case, with each hyphen written as a hyphen, a space or an underscore, so "red-team", "red team" and "Red_Team" all match. The procedure name "Review Army" is rewritten the same way. Reader names that are ordinary words a finding uses in its own right stay: security, testing, maintainability, performance, design, simplification, confirmed, unconfirmed and other. Model ids become `<model id>`. The rewrite treats every arm alike, so a finding about a reader's own code (gstack's PRs change those readers) loses the name in every arm. A finding whose path names a finding reader with a hyphen or digit, or a model id, is left out, because the pinned judge-packet refuses such a path and a path can't be rewritten. blind.py fails if any suite blocker lists such a path, so a left-out finding can never match a blocker. blind.py lists the left-out finding's id, and it drops out of the false-blocker and new-blocker counts. In the dry run blind.py rewrites 52 of arm C's findings, 9 of none-opus's and 7 of gstack-opus's, and leaves out one arm C finding (3516-p1-8, a CRITICAL finding on scripts/resolvers/outside-voice-steps.ts, whose path names the outside-voice reader). Leaving it out can only lower arm C's false-blocker and new-blocker counts by one; it can't change blocking recall.
 
 ### 2.3 Procedure gate
 
-r1-exposure.py counts, per PR-pass of arm C, which readers ran: a \`reader:<name>\` cost row or a finding with that reader. The Review Army ran when a specialist reader ran (testing, maintainability, security, performance, data-migration, api-contract, design, simplification, state-machines, red-team, or batched, GSTA-167's one reader that ran the plan's selected checklists together). The adversarial pass ran when adversarial-native ran. The gate passes when both ran in at least 90% of PR-passes. Arm C passes it in the dry run, 28 of 28.
+r1-exposure.py counts, per PR-pass of arm C, which readers ran: a `reader:<name>` cost row or a finding with that reader. The Review Army ran when a specialist reader ran (testing, maintainability, security, performance, data-migration, api-contract, design, simplification, state-machines, red-team, or batched, GSTA-167's one reader that ran the plan's selected checklists together). The adversarial pass ran when adversarial-native ran. The denominator is every PR-pass the suite asks for, its units times the arm's passes (28 for arm C), so a PR-pass that left no rows is a miss. A row or finding with a blank pass, such as a run-level row, counts toward no PR-pass. The gate passes when both ran in at least 90% of PR-passes. Arm C passes it in the dry run, 28 of 28, and fails it, 24 of 28, once two units' rows are removed.
 
 ### 2.4 Judging and scoring
 
@@ -92,13 +92,15 @@ Two batches through #108's pipeline at the rig pin: matching (judge-packet, judg
 
 ### 2.5 Decision (r1-decide.py)
 
-- **No decision** when arm C's procedure gate fails, an arm stopped, or the scorer gives no verdict or no delta (a coverage gap, or a judgment with coverage incomplete, which sets the record's no_verdict_reason). R1 is incomplete, R2 does not start, and the Captain gets the record.
+- **No decision** when arm C's procedure gate fails, an arm stopped, or the scorer gives no verdict, no delta or no interval (a coverage gap, or a judgment with coverage incomplete, which sets the record's no_verdict_reason). R1 is incomplete, R2 does not start, and the Captain gets the record. Bad input or a gate error makes r1-decide.py exit 5, which is an error and never a decision.
 - **R2 runs** when C's blind blocking recall minus none-opus's is at least 10 points.
 - **Otherwise R2 does not run**, and the Review Army and adversarial passes in gstack /review on Opus 5.5 go to Garry as a CUT-CANDIDATE with the record.
 
 The brief's default was "R2 does not run if C's blind recall is not above none-opus's". This post tightens it to a 10-point lead. The reason: 10 points is the review no-loss lane's own margin, so a smaller lead is not one the lane counts, and R2 spends $400 to test it. Section 6 gives the rule's operating characteristics: with a true lead of 0, R2 runs in 1.9% of runs; at 10 points, 52.5%; at 20 points, 95.1%.
 
 R1's limit, stated in the results whatever they show: arm C ran in a different harness and gstack version, at about 28.8M tokens per PR-pass against #108's 1.1M to 1.8M per unit, and the cohort was built from blockers gstack's own reviews caught. R1 asks whether the labelled lead was a judging artifact. It does not show that the procedure works, which is R2's job. The results also print blocking findings per unit-pass per arm (r1-decide.py's volume line), since a reader that blocks on everything finds more blockers.
+
+Blinding hides names, not volume. Arm C raised 8.8 blocking findings per unit-pass, against 0.4 for none-opus and 0.6 for gstack-opus (the dry run's volume line), so a judge reading one packet can often tell which opaque arm wrote a finding. R1 removes the arm labels GSTA-167's judges saw. It can't stop a judge from recognizing arm C by how much it says, and the results state this limit beside the decision.
 
 ## 3. R2: the full /review procedure against no gstack
 
@@ -110,7 +112,7 @@ R2 runs on the 19 stacks-r1 units outside GSTA-167's cohort, so it never reuses 
       --comparisons <GEVA-89 archive>/judge/comparisons.stacks-r1.nopstack.json --id stacks-r1-out19 \
       --out <dir> --root <GEVA-89 archive>/judge/final/arms --drop-file cohort14.tsv
 
-cohort14.tsv is the header \`unit\` and gsta167-14pr's 14 unit ids (sha256 0dd8894f3fcb42200cd8644960329eabdd1cf344956303112ff3219c092db180). The result has 19 units and 13 blocking blockers on 13 PRs. #108's none-opus and gstack-opus found none of the 13 as blocking.
+cohort14.tsv is the header `unit` and gsta167-14pr's 14 unit ids (sha256 0dd8894f3fcb42200cd8644960329eabdd1cf344956303112ff3219c092db180). The result has 19 units and 13 blocking blockers on 13 PRs. #108's none-opus and gstack-opus found none of the 13 as blocking.
 
 ### 3.2 Arms
 
@@ -129,7 +131,7 @@ R2 runs Opus only. It is a kill test on the frontier model, where GEVA-100's sig
 
 ### 3.3 Procedure gate
 
-The same gate as R1 (r1-exposure.py) on gstack-full's source arm, from the reader rows the R2 build records. It needs a specialist reader and adversarial-native in at least 90% of PR-passes (18 of 19).
+The same gate as R1 (r1-exposure.py) on gstack-full's source arm, from the reader rows the R2 build records. It needs a specialist reader and adversarial-native in at least 90% of the suite's PR-passes (18 of 19), and a PR-pass that left no rows is a miss.
 
 ### 3.4 Judging and scoring
 
@@ -137,7 +139,7 @@ The same two batches as R1, with blind.py first, on items r2-judge-match and r2-
 
 ### 3.5 Outcome (r2-decide.py)
 
-- **None** when the procedure gate fails, an arm stopped, or the scorer gives no verdict or no delta (no_verdict_reason set). The Captain gets it as FIX-METHOD: the procedure under test didn't run, so nothing about it was measured.
+- **None** when the procedure gate fails, an arm stopped, or the scorer gives no verdict, no delta or no interval (no_verdict_reason set). The Captain gets it as FIX-METHOD: the procedure under test didn't run, so nothing about it was measured. Bad input or a gate error makes r2-decide.py exit 5, which is an error and never an outcome.
 - **CUT-CANDIDATE** when gstack-full found no more blocking blockers than none-r2. The Review Army and adversarial passes go to Garry with the record.
 - **KEEP** when the 95% PR-clustered interval of the recall difference is above zero.
 - **FIX-METHOD** otherwise: gstack-full found more, but 13 blockers can't show it. Power is the Why-null reason (MDD about 43 points, section 6), and a larger suite needs its own prereg.
@@ -150,10 +152,11 @@ The R2 build is one PR to gstack-evals. It touches code that spends money, so it
 
 1. **Told prefix per arm.** src/trial/review/told.ts takes an arm's told prefix from the arm spec instead of the hard-coded table, with the current table as the default, and records the prefix and its sha256 in arm.json's told block. gstack-full's prefix is the line in section 3.2.
 2. **Turn cap and allowance from the run config.** driver.ts's 60-turn constant (driver.ts:90) and the $15 allowance become run settings, defaulting to today's values, both recorded in run.json.
-3. **Reader rows.** The driver records \`reader:<name>\` cost rows per PR-pass from the session transcript: each subagent launch maps to a reader name through a map pinned to the gstack commit (/review's specialist names, adversarial-native for the adversarial pass, batched when one subagent runs several checklists, other for anything unmapped).
+3. **Reader rows.** The driver records `reader:<name>` cost rows per PR-pass from the session transcript: each subagent launch maps to a reader name through a map pinned to the gstack commit (/review's specialist names, adversarial-native for the adversarial pass, batched when one subagent runs several checklists, other for anything unmapped).
 4. **Ledger.** r2a-grid leases none-r2's run and r2b-grid leases gstack-full's run, one lease each.
+5. **Arm provenance without a machine path (GST-837).** review-units writes a machine path into arm.json's arm_provenance.stack.source, so noloss ingest refuses real gstack arms. The build records the source without a machine path, so later runs need no scrub.
 
-Keyless tests that prove it: the told prefix and its digest land in arm.json, and an arm without one gets today's prompt byte for byte; the turn cap and allowance stop a session at the configured value, tested against the real pinned Agent SDK with a stub CLI (the #101 and #106 lesson); reader rows from two recorded stub transcripts, one with three specialists and the adversarial pass and one with none; r1-exposure.py passes on the first and fails on the second; a second lease on a bound grid item is refused.
+Keyless tests that prove it: ingest accepts a real gstack arm.json that review-units wrote, and its arm_provenance.stack.source holds no machine path; the told prefix and its digest land in arm.json, and an arm without one gets today's prompt byte for byte; the turn cap and allowance stop a session at the configured value, tested against the real pinned Agent SDK with a stub CLI (the #101 and #106 lesson); reader rows from two recorded stub transcripts, one with three specialists and the adversarial pass and one with none; r1-exposure.py passes on the first and fails on the second; a second lease on a bound grid item is refused.
 
 **Done line.** The R2 build PR is merged with these tests green and a full-panel /ship receipt. Then an amendment pins the build commit and the gstack commit, records gstack-full's told digest, reruns this post's dry run with the R2 fixtures replaced by a stub run's real driver output, and R2 starts if R1 said "R2 runs".
 
@@ -181,6 +184,8 @@ The harness is Lane B's (Harbor, Claude Code) at the R3 build pin, with CLAUDE_C
 2. A told pilot: 10 tasks drawn from the 93 with seed 20261101 (r3-dry.ts's draw), one told trial each on Opus 5.5.
 3. VM hours are settled to the same item.
 
+If r3a-screen refuses a trial at its cap, R3a is incomplete: R3 stops there, R3b does not start, and the Captain gets the record.
+
 **Admission.** A task is admitted when its graded screen trial failed; infra trials admit nothing. R3b starts only when all of these hold:
 
 - at least 30 tasks are admitted. Fewer means saturation: R3 stops, and the report says told /investigate can't be tested on Opus 5.5 on SWE-bench Verified with this many in-band tasks. That report is a finding.
@@ -199,13 +204,15 @@ A told trial ran /investigate's procedure when it opened /investigate's SKILL.md
 
 From analyze() at the tag, on task-clustered paired data (10000 draws, seed 20261101):
 
-- **None (incomplete)** when an item stopped at its cap or more than 10% of an Opus cell's trials are infra. The Captain gets the record, and no rerun changes a verdict.
+- **None (incomplete)** when r3b-opus refused a trial at its cap, or more than 10% of an Opus cell's trials are infra. The Captain gets the record, and no rerun changes a verdict.
 - **None (FIX-METHOD)** when the procedure gate fails.
 - **CUT-CANDIDATE** when told minus none on Opus 5.5 is at or below zero.
 - **KEEP** when its 95% interval is above zero.
 - **FIX-METHOD** otherwise, with the MDD at the realized n (section 6) as the Why-null reason.
 
 particle-1's told minus none, told minus placebo, placebo minus none, the share of the Opus none gap that told closes, and cost per success are reported beside and decide nothing.
+
+If r3b-particle refuses a trial at its cap, the Opus 5.5 outcome stands. The stop is reported beside the result, and particle-1's cells, contrasts and gap share are marked incomplete. r3b-particle's cap rests on a planning estimate of $0.15 a trial that R3a doesn't measure, so its stop must not void the Opus verdict.
 
 ### 4.7 Contamination
 
@@ -268,9 +275,9 @@ dry-run.sh drives every frozen rule, keyless, through the code at the pins, with
 
 What it shows (dry-run.txt):
 
-- **R1.** Arm C's 526 findings match their C12 digests; the scrub scan goes 18, 3, 2, 0 hits; blinding as in section 2.2; all three arms ingest; the gate passes 28 of 28. Both batches run with 0 unjudged (the second judge reads 27 blockers, kappa 0.85), a second run on a bound item is refused, and the ledger shows one settled lease per item. With fake answers that favour arm C, r1-decide.py prints "R2 runs"; with fake answers that don't, it prints the CUT-CANDIDATE; and with a judgment marked coverage incomplete (a synthetic copy of the first record), it gives no decision. A scrub script whose digest doesn't match stops the dry run before any scrub runs.
-- **R2.** The derived suite matches its sha256. The fixture arms pass and fail the gate (19 of 19, then 12 of 19); one lease each on r2a-grid and r2b-grid settles, and a second run on r2b-grid is refused. Fake answers give KEEP (12 of 13 against 2) and CUT-CANDIDATE (2 against 8); the failing gate and a judgment marked coverage incomplete each give no outcome.
-- **R3.** The band list matches its sha256. On synthetic trials through the tag's Ledger and analyze(): KEEP, FIX-METHOD, CUT-CANDIDATE, the gate failing, the saturation stop (9 tasks admitted), the pilot stop (4 of 10) and a cap stop that leaves R3 incomplete.
+- **R1.** Arm C's 526 findings match their C12 digests; the scrub scan goes 18, 3, 2, 0 hits; blinding as in section 2.2; all three arms ingest; the gate passes 28 of 28. Both batches run with 0 unjudged (the second judge reads 27 blockers, kappa 0.85), a second run on a bound item is refused, and the ledger shows one settled lease per item. With fake answers that favour arm C, r1-decide.py prints "R2 runs"; with fake answers that don't, it prints the CUT-CANDIDATE. It gives no decision with a judgment marked coverage incomplete, an arm marked stopped or a null interval (synthetic copies of the first record), and with arm C's gate failing 24 of 28 once two units' rows are removed and a run-level row with a blank pass is added. A missing score file makes it exit 5, an error rather than a decision. A scrub script whose digest doesn't match stops the dry run before any scrub runs.
+- **R2.** The derived suite matches its sha256. The fixture arms pass and fail the gate (19 of 19, then 12 of 19); one lease each on r2a-grid and r2b-grid settles, and a second run on r2b-grid is refused. Fake answers give KEEP (12 of 13 against 2), CUT-CANDIDATE (2 against 8) and FIX-METHOD (7 against 4, interval +0.0 to +46.2). The failing gate, an arm marked stopped, a null interval and a judgment marked coverage incomplete each give no outcome, and a missing score file makes r2-decide.py exit 5.
+- **R3.** The band list matches its sha256. On synthetic trials through the tag's Ledger and analyze(): KEEP, FIX-METHOD, CUT-CANDIDATE, the gate failing, the saturation stop (9 tasks admitted) and the pilot stop (4 of 10). An r3a-screen cap stop ends R3 before R3b. An r3b-opus cap stop and 13.8% infra in the Opus told cell each leave R3 incomplete. An r3b-particle cap stop marks particle-1's numbers incomplete, and the Opus verdict stands (KEEP in that scenario).
 
 ## 8. Attachments
 

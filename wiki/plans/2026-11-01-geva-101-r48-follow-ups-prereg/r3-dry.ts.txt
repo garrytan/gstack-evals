@@ -3,7 +3,9 @@
 // build merges, so trial outcomes, costs and transcripts here are fixtures. One ledger per frozen run, each a fresh copy
 // of the items.ts approval row: r3a-screen, r3b-opus and r3b-particle.
 // Usage: TAG=<checkout at the tag> bun r3-dry.ts <band list> <laneb item dir> <out dir> <scenario>
-// Scenarios: lift, small, nolift, gatefail, saturated, pilotfail, capstop.
+// Scenarios: lift, small, nolift, gatefail, saturated, pilotfail, screenstop, opusstop, partstop, infra.
+// Stop scope: an r3a-screen refusal stops R3 before R3b; an r3b-opus refusal or more than 10% infra in an Opus cell makes
+// R3 incomplete; an r3b-particle refusal is reported beside the result and leaves only particle-1's numbers incomplete.
 import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 const TAG = process.env.TAG!;
 const { Ledger, readRows, totals, toMicros, fromMicros } = await import(TAG + "/quick/laneb/runner/ledger.ts");
@@ -15,28 +17,30 @@ const OPUS = "claude-opus-5-5", PART = "particle-1";
 const ALLOW = { [OPUS]: 4, [PART]: 1 };
 const r = rng([...scen].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 20261101));
 const ledgerFor = (item: string) => { copyFileSync(items + "/" + item + ".jsonl", out + "/" + item + ".jsonl"); return new Ledger(out + "/" + item + ".jsonl", item); };
+const hold = (item: string, left: number) => new Ledger(out + "/" + item + ".jsonl", item).reserve("hold", toMicros(fromMicros(totals(readRows(out + "/" + item + ".jsonl")).capMicros) - left));
 const EXPOSED = /DEBUG REPORT|Phase [1-5]/;
 const exposed = (t: any) => t.skillOpens.includes("investigate") && EXPOSED.test(t.text);
 type T = { task: string; arm: string; model: string; trialName: string; outcome: string; reason: string; costUsd: number; requests: number; refused: number; skillOpens: string[]; budgetStop: boolean; agentTimeout: boolean; wallS: null; text: string };
-let stopped = "";
-function trial(L: any, task: string, arm: string, model: string, rep: number, p: number, expo: number): T | null {
+const stops: Record<string, string> = {};
+function trial(L: any, task: string, arm: string, model: string, rep: number, p: number, expo: number, infraP = 0.02): T | null {
   const id = [model, arm, task, rep].join("|");
   const res = L.reserve(id, toMicros(ALLOW[model]));
-  if (!res.ok) { stopped ||= L.item + " refused " + id + " (" + res.reason + ")"; return null; }
+  if (!res.ok) { stops[L.item] ||= L.item + " refused " + id + " (" + res.reason + ")"; return null; }
   const cost = Math.round((model === OPUS ? 0.3 + r() * 0.9 : 0.05 + r() * 0.2) * (arm === "gstack" ? 1.9 : 1) * 100) / 100;
   L.settle(id, toMicros(cost));
   const told = arm === "gstack", show = told && r() < expo;
-  const outcome = r() < 0.02 ? "infra" : r() < p ? "pass" : "fail";
+  const outcome = r() < infraP ? "infra" : r() < p ? "pass" : "fail";
   return { task, arm, model, trialName: id, outcome, reason: outcome, costUsd: cost, requests: 0, refused: 0, budgetStop: false, agentTimeout: false, wallS: null,
     skillOpens: show ? ["investigate"] : [], text: show ? "## Phase 1: Root cause investigation ... DEBUG REPORT ... Status: DONE" : "Fixed the bug." };
 }
 const pNone = new Map(band.map((t) => [t, r()]));
-const S = { lift: [0.45, 0.95, 0.95, 0.15], small: [0.45, 0.95, 0.95, 0.1], nolift: [0.45, 0.95, 0.95, -0.05], gatefail: [0.45, 0.95, 0.6, 0.15], saturated: [0.1, 0.95, 0.95, 0.15], pilotfail: [0.45, 0.5, 0.95, 0.15], capstop: [0.45, 0.95, 0.95, 0.15] }[scen]!;
-const [failShare, pilotExpo, expo, lift] = S;
+const S = { lift: [0.45, 0.95, 0.95, 0.15], small: [0.45, 0.95, 0.95, 0.1], nolift: [0.45, 0.95, 0.95, -0.05], gatefail: [0.45, 0.95, 0.6, 0.15], saturated: [0.1, 0.95, 0.95, 0.15], pilotfail: [0.45, 0.5, 0.95, 0.15], screenstop: [0.45, 0.95, 0.95, 0.15], opusstop: [0.45, 0.95, 0.95, 0.15], partstop: [0.45, 0.95, 0.95, 0.15], infra: [0.45, 0.95, 0.95, 0.15, 0.15] }[scen]!;
+const [failShare, pilotExpo, expo, lift, infraOpus = 0.02] = S;
 
 // R3a: one none trial per in-band task on Opus 5.5, and a told pilot on 10 tasks drawn by seed.
 const A = ledgerFor("r3a-screen");
 A.reserve("vm-screen", toMicros(30)); A.settle("vm-screen", toMicros(14), { kind_detail: "VM hours" });
+if (scen === "screenstop") hold("r3a-screen", 44);
 const screen = band.map((t, i) => trial(A, t, "none", OPUS, 1, i < band.length * failShare ? 0 : 1, 0)).filter(Boolean) as T[];
 const pr = rng(20261101), pool = [...band].sort();
 const pilotTasks: string[] = [];
@@ -44,6 +48,7 @@ while (pilotTasks.length < 10) { const t = pool.splice(Math.floor(pr() * pool.le
 const pilot = pilotTasks.map((t) => trial(A, t, "gstack", OPUS, 1, 0.5, pilotExpo)).filter(Boolean) as T[];
 const tA = totals(readRows(out + "/r3a-screen.jsonl"));
 console.log("r3a-screen: %d screen trials, %d pilot trials, settled $%s of $%s, open reserves %d", screen.length, pilot.length, fromMicros(tA.settledMicros).toFixed(2), fromMicros(tA.capMicros), tA.openIds.length);
+if (stops["r3a-screen"]) { console.log("R3 outcome: none (incomplete: %s). R3a stopped at its cap, so R3b does not start; the Captain gets the record.", stops["r3a-screen"]); process.exit(4); }
 const graded = screen.filter((t) => t.outcome !== "infra");
 const admitted = graded.filter((t) => t.outcome === "fail").map((t) => t.task).sort();
 const pg = pilot.filter((t) => t.outcome !== "infra");
@@ -66,26 +71,29 @@ console.log("R3b start: %d tasks; measured cost per trial none $%s, told $%s; pr
 
 // R3b: Opus 5.5 none and told; particle-1 none, told and length-matched placebo; 3 replicates each.
 const BO = ledgerFor("r3b-opus"), BP = ledgerFor("r3b-particle");
-if (scen === "capstop") { const L = new Ledger(out + "/r3b-opus.jsonl", "r3b-opus"); L.reserve("hold", toMicros(fromMicros(totals(readRows(out + "/r3b-opus.jsonl")).capMicros) - 60)); }
+if (scen === "opusstop") hold("r3b-opus", 60);
+if (scen === "partstop") hold("r3b-particle", 20);
 const trials: T[] = [];
 for (const t of tasks) for (let rep = 1; rep <= 3; rep++) {
   const p = Math.min(1, pNone.get(t)! * 0.6);
-  for (const [L, model, arm, pp, ex] of [[BO, OPUS, "none", p, 0], [BO, OPUS, "gstack", Math.max(0, Math.min(1, p + lift)), expo], [BP, PART, "none", p * 0.5, 0], [BP, PART, "gstack", Math.max(0, p * 0.5 + lift / 2), expo], [BP, PART, "placebo", p * 0.5, 0]] as any[]) {
-    const x = trial(L, t, arm, model, rep, pp, ex); if (x) trials.push(x);
+  for (const [L, model, arm, pp, ex, inf] of [[BO, OPUS, "none", p, 0], [BO, OPUS, "gstack", Math.max(0, Math.min(1, p + lift)), expo, infraOpus], [BP, PART, "none", p * 0.5, 0], [BP, PART, "gstack", Math.max(0, p * 0.5 + lift / 2), expo], [BP, PART, "placebo", p * 0.5, 0]] as any[]) {
+    const x = trial(L, t, arm, model, rep, pp, ex, inf); if (x) trials.push(x);
   }
 }
 for (const it of ["r3b-opus", "r3b-particle"]) { const x = totals(readRows(out + "/" + it + ".jsonl")); console.log("%s: settled $%s of $%s, open reserves %d", it, fromMicros(x.settledMicros).toFixed(2), fromMicros(x.capMicros), x.openIds.length); }
 const rep = analyze(trials as any, { models: [OPUS, PART], arms: ["none", "gstack", "placebo"].filter((a) => trials.some((t) => t.arm === a)), reference: OPUS, seed: 20261101, b: 10000 });
-for (const c of rep.passRates) if (c.trials) console.log("cell %s %s: %d trials on %d tasks, pass %s%% [%s, %s], cost $%s", c.model, c.arm, c.trials, c.tasks, (100 * c.rate).toFixed(1), (100 * c.lo).toFixed(1), (100 * c.hi).toFixed(1), c.costUsd.toFixed(2));
-for (const c of rep.contrasts) if (c.tasks) console.log("contrast %s %s: %s points [95%% CI %s, %s] on %d tasks", c.model, c.contrast, (100 * c.diff).toFixed(1), (100 * c.lo).toFixed(1), (100 * c.hi).toFixed(1), c.tasks);
-for (const g of rep.gap) console.log("gap: particle-1 told closes %s of the Opus none gap [%s, %s]", g.share.toFixed(2), g.lo.toFixed(2), g.hi.toFixed(2));
+const inc = (m: string) => (m === PART && stops["r3b-particle"] ? " [incomplete]" : "");
+if (stops["r3b-particle"]) console.log("particle-1: incomplete (%s). Its cells, contrasts and gap share are reported beside the result marked [incomplete] and decide nothing; the Opus 5.5 outcome below stands.", stops["r3b-particle"]);
+for (const c of rep.passRates) if (c.trials) console.log("cell %s %s: %d trials on %d tasks, pass %s%% [%s, %s], cost $%s%s", c.model, c.arm, c.trials, c.tasks, (100 * c.rate).toFixed(1), (100 * c.lo).toFixed(1), (100 * c.hi).toFixed(1), c.costUsd.toFixed(2), inc(c.model));
+for (const c of rep.contrasts) if (c.tasks) console.log("contrast %s %s: %s points [95%% CI %s, %s] on %d tasks%s", c.model, c.contrast, (100 * c.diff).toFixed(1), (100 * c.lo).toFixed(1), (100 * c.hi).toFixed(1), c.tasks, inc(c.model));
+for (const g of rep.gap) console.log("gap: particle-1 told closes %s of the Opus none gap [%s, %s]%s", g.share.toFixed(2), g.lo.toFixed(2), g.hi.toFixed(2), inc(PART));
 console.log("contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.");
 const told = trials.filter((t) => t.model === OPUS && t.arm === "gstack" && t.outcome !== "infra");
 const ex = told.filter(exposed).length;
 const cellsInfra = [["none", OPUS], ["gstack", OPUS]].map(([a, m]) => { const all = trials.filter((t) => t.arm === a && t.model === m); return all.filter((t) => t.outcome === "infra").length / Math.max(1, all.length); });
 console.log("procedure gate: told /investigate ran its procedure in " + ex + " of " + told.length + " graded Opus told trials (" + (100 * ex / Math.max(1, told.length)).toFixed(1) + " percent; the gate needs 90)");
 const main = rep.contrasts.find((c) => c.model === OPUS && c.contrast === "gstack - none")!;
-if (stopped || Math.max(...cellsInfra) > 0.1) { console.log("R3 outcome: none (incomplete: %s). The Captain gets the record; no rerun to change a verdict.", stopped || "infra over 10% in an Opus cell"); process.exit(4); }
+if (stops["r3b-opus"] || Math.max(...cellsInfra) > 0.1) { console.log("R3 outcome: none (incomplete: %s). The Captain gets the record; no rerun to change a verdict.", stops["r3b-opus"] || "infra over 10% in an Opus cell (none " + (100 * cellsInfra[0]!).toFixed(1) + "%, told " + (100 * cellsInfra[1]!).toFixed(1) + "%)"); process.exit(4); }
 if (ex < 0.9 * told.length) { console.log("R3 outcome: none (procedure gate failed). FIX-METHOD to the Captain."); process.exit(4); }
 const mdd = 2.8 * Math.sqrt((2 * 0.16) / 3 / main.tasks);
 if (main.diff <= 0) { console.log("R3 outcome: CUT-CANDIDATE. Told /investigate gave Opus 5.5 no lift (%s points); to Garry with this record.", (100 * main.diff).toFixed(1)); process.exit(1); }
