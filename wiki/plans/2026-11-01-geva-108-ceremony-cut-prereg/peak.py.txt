@@ -2,16 +2,16 @@
 # Usage: python3 peak.py <journal.ndjson>...
 import json,sys,collections
 for path in sys.argv[1:]:
-    open_={}; rid2key={}; settled=collections.Counter(); peak=collections.Counter(); arm={}
+    open_={}; rid2idem={}; settled=collections.Counter(); peak=collections.Counter(); arm={}
     for l in open(path):
         d=json.loads(l); k=d['kind']
         if k=='reserve':
             m=d['cell']['meter_id']; open_[d['idempotency_key']]=(m,d['max_micros']); arm[m]=d['cell']['arm']
         elif k=='request':
-            rid2key[d['reservation_id']]=d['idempotency_key']; continue
+            rid2idem[d['reservation_id']]=d['idempotency_key']; continue
         elif k=='outcome':
-            key=rid2key.get(d['reservation_id']); m=d['meter_id']
-            if key in open_: open_.pop(key)
+            idem=rid2idem.get(d['reservation_id']); m=d['meter_id']
+            if idem in open_: open_.pop(idem)
             settled[m]+=(d.get('outcome') or {}).get('spent_micros') or 0
         else: continue
         cur=settled[m]+sum(v for (mm,v) in open_.values() if mm==m)

@@ -20,7 +20,7 @@ c4ad189204ee2bec4ad40db4b22073c57c0234c0033142a088c721ca00374d10  comparisons.ce
 704f65b8e4cd36aa345dc534a538f9f0770a6dab289e3ea3087d7c53ab5f35e8  review-cost.py
 1cd81c87d3e9f7f8da3c7b772b42f26eaad3eaf78f86417a8b09a3c9f7ee7c2c  projection.py
 c4f7a497e4d89a5261a63d1fe0e8d661dc98853856dd93d800ddea720d953a11  caps.py
-c534e90bf5ea6cee45388951838652e4dd163c10243b8668450080480a4f3860  peak.py
+fabfcc9e802d0b790cf1e329f731874b7b2b222e08472d1316e2cf1e803a6311  peak.py
 7ec737bd085bb6b6ba23ebf8d5a3f1f990d679252b3fb7e8339472d1195ffd0e  renders.txt
 b6b53a098b84182ceecdd530ee8daee60af27aafef9d51d304190a6eda8fcad8  $REPO/quick/laneb/analysis/ceremony-tb2.ts
 4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d  $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
@@ -75,12 +75,12 @@ APPROVED: item=ceremony-r1-review-pilot cap=$70.00 admission=warn approval=1 rec
 exit 0 (log/10.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-pilot --run dry-ceremony-r1-review-pilot --json
-  "lease_id": "ceremony-r1-review-pilot.0001.9fa8d3",
+  "lease_id": "ceremony-r1-review-pilot.0001.8bd55a",
     "RIG_UNPROVEN line item ceremony-r1-review-pilot leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-pilot/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-pilot on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-review-pilot leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-pilot/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-pilot on the machine that will spend (docs/rig.md)
 exit 0 (log/11.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-pilot.0001.9fa8d3
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-pilot.0001.8bd55a
 exit 0 (log/12.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 227.44 --item ceremony-r1-review-grid --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -88,12 +88,12 @@ APPROVED: item=ceremony-r1-review-grid cap=$227.44 admission=warn approval=1 rec
 exit 0 (log/13.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-grid --run dry-ceremony-r1-review-grid --json
-  "lease_id": "ceremony-r1-review-grid.0001.200862",
+  "lease_id": "ceremony-r1-review-grid.0001.257f0f",
     "RIG_UNPROVEN line item ceremony-r1-review-grid leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-grid/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-grid on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-review-grid leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-grid/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-grid on the machine that will spend (docs/rig.md)
 exit 0 (log/14.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-grid.0001.200862
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-grid.0001.257f0f
 exit 0 (log/15.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 66.84 --item ceremony-r1-review-sdk --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -101,12 +101,12 @@ APPROVED: item=ceremony-r1-review-sdk cap=$66.84 admission=warn approval=1 recor
 exit 0 (log/16.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-sdk --run dry-ceremony-r1-review-sdk --json
-  "lease_id": "ceremony-r1-review-sdk.0001.4cd987",
+  "lease_id": "ceremony-r1-review-sdk.0001.d61163",
     "RIG_UNPROVEN line item ceremony-r1-review-sdk leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-sdk/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-sdk on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-review-sdk leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-sdk/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-sdk on the machine that will spend (docs/rig.md)
 exit 0 (log/17.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-sdk.0001.4cd987
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-sdk.0001.d61163
 exit 0 (log/18.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 20 --item ceremony-r1-judge-match --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -114,12 +114,12 @@ APPROVED: item=ceremony-r1-judge-match cap=$20.00 admission=warn approval=1 reco
 exit 0 (log/19.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-judge-match --run dry-ceremony-r1-judge-match --json
-  "lease_id": "ceremony-r1-judge-match.0001.b809a3",
+  "lease_id": "ceremony-r1-judge-match.0001.058601",
     "RIG_UNPROVEN line item ceremony-r1-judge-match leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-match on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-judge-match leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-match on the machine that will spend (docs/rig.md)
 exit 0 (log/20.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-match.0001.b809a3
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-match.0001.058601
 exit 0 (log/21.txt)
 
 $ $W/rig/bin/gstack-evals ledger init --cap 20 --item ceremony-r1-judge-adj --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
@@ -127,12 +127,12 @@ APPROVED: item=ceremony-r1-judge-adj cap=$20.00 admission=warn approval=1 record
 exit 0 (log/22.txt)
 
 $ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-judge-adj --run dry-ceremony-r1-judge-adj --json
-  "lease_id": "ceremony-r1-judge-adj.0001.9ecb85",
+  "lease_id": "ceremony-r1-judge-adj.0001.2a332f",
     "RIG_UNPROVEN line item ceremony-r1-judge-adj leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-adj/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-adj on the machine that will spend (docs/rig.md)"
 RIG_UNPROVEN line item ceremony-r1-judge-adj leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-adj/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-adj on the machine that will spend (docs/rig.md)
 exit 0 (log/23.txt)
 
-$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-adj.0001.9ecb85
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-adj.0001.2a332f
 exit 0 (log/24.txt)
 # a second run on a bound item is refused
 
