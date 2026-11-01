@@ -10,6 +10,9 @@
 # from starting or stops Harbor, waits for vm-run.sh to close every session (settling
 # through the tunnel, so the ledger service stays up until then), and then pulls as usual.
 # After the pull, open reserves are reconciled from the pulled proxy-sessions.jsonl.
+# With VM_USD_PER_HOUR and VM_RESERVE_HOURS set, the VM's hours go to the same item: a reserve of rate x hours before
+# the VM starts (a refusal is a cap stop: exit 9, no VM) and, once the VM is destroyed, a settle at rate x the hours from
+# just before it started. A kept VM leaves its reserve open at the full amount.
 # Usage: UBI_OWNER=<thread code> launch.sh <run dir> <ledger prefix> <batch cap usd>
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -24,6 +27,14 @@ state_root=${UBI_RUNNER_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner}
 lport=${LEDGER_PORT:-9911}
 
 bun "$here/ledger.ts" status --path "$LEDGER" --item "$ITEM"
+vm_rate=${VM_USD_PER_HOUR:-}
+vm_id="${prefix}vm"
+vm_up_at=""
+if [ -n "$vm_rate" ]; then
+  vm_reserve=$(awk -v r="$vm_rate" -v h="${VM_RESERVE_HOURS:?set VM_RESERVE_HOURS with VM_USD_PER_HOUR}" 'BEGIN { printf "%.6f", r * h }')
+  bun "$here/ledger.ts" reserve --path "$LEDGER" --item "$ITEM" --id "$vm_id" --usd "$vm_reserve" --detail "VM hours, reserved at $VM_RESERVE_HOURS h" \
+    || { echo "launch.sh: the ledger refused the VM reserve of \$$vm_reserve for $ITEM; no VM started (cap stop)" >&2; exit 9; }
+fi
 # setsid keeps a terminal interrupt from reaching the ledger service and the batch's SSH session.
 setsid bun "$here/ledger.ts" serve --path "$LEDGER" --item "$ITEM" --port "$lport" > "$run/ledger-service.log" 2>&1 < /dev/null &
 lpid=$!
@@ -32,14 +43,26 @@ started=no
 pulled=no
 stopping=no
 say() { (echo "$*" >&2) || true; }
+vm_settle() {
+  [ -n "$vm_rate" ] || return 0
+  local hours usd
+  hours=$(awk -v s="${vm_up_at:-$(date +%s)}" -v e="$(date +%s)" 'BEGIN { printf "%.6f", (e - s) / 3600 }')
+  usd=$(awk -v r="$vm_rate" -v h="$hours" 'BEGIN { printf "%.6f", r * h }')
+  bun "$here/ledger.ts" settle --path "$LEDGER" --item "$ITEM" --id "$vm_id" --usd "$usd" --detail "VM hours: $hours h at \$$vm_rate/h" \
+    || say "WARNING: the VM settle failed; settle $vm_id at \$$usd with: bun $here/ledger.ts settle --path $LEDGER --item $ITEM --id $vm_id --usd $usd"
+}
 finish() {
   kill "$lpid" 2>/dev/null || true
-  if [ -n "$name" ]; then
-    if [ "$started" = no ] || [ "$pulled" = yes ]; then
-      "$S" down "$name" || say "WARNING: VM $name may still exist; run: $S down $name"
-    else
+  wait "$lpid" 2>/dev/null || true
+  if [ -z "$name" ]; then
+    vm_settle
+  elif [ "$started" = no ] || [ "$pulled" = yes ]; then
+    if "$S" down "$name"; then vm_settle; else say "WARNING: VM $name may still exist; run: $S down $name"; fi
+  else
+    {
       say "WARNING: results not fully pulled; VM $name is kept. Once work/run/out/vm-run.exit exists on it, pull with: $S pull $name work/run/out $run/pulled; $S pull $name work/run/jobs $run/pulled; reconcile with: bun $here/ledger.ts reconcile --path $LEDGER --item $ITEM --sessions $run/pulled/out/proxy-sessions.jsonl --prefix $prefix; then: $S down $name"
-    fi
+      [ -z "$vm_rate" ] || say "The VM reserve $vm_id stays open; once the VM is down, settle it at VM_USD_PER_HOUR x its hours with ledger.ts settle"
+    }
   fi
 }
 trap finish EXIT
@@ -55,6 +78,7 @@ on_signal() {
 trap on_signal INT TERM HUP
 not_stopping() { [ "$stopping" = no ] || exit 130; }
 
+vm_up_at=$(date +%s)
 name=$("$S" up -s "${UBI_SIZE:-standard-16}" -S "${UBI_STORAGE:-600}")
 echo "vm: $name"
 not_stopping

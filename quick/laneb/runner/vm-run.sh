@@ -52,13 +52,23 @@ for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && bre
 curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
 sed "s#__GATEWAY__#$gw#g" "$run/job.json" > "$run/out/job.resolved.json"
 cd "$run"
-(while kill -0 $$ 2>/dev/null; do [ -e "$run/STOP" ] && pkill -INT -f "/bin/harbor run" && break; sleep 2; done) >/dev/null 2>&1 </dev/null &
+# With a STOP_ON_CAP file in the run dir, a latched cap stop (the ledger or the batch cap refused a session) also stops
+# Harbor, so the run ends incomplete instead of starting trials that can't open a session; out/cap-stop.json records it.
+(while kill -0 $$ 2>/dev/null; do
+  [ -e "$run/STOP" ] && pkill -INT -f "/bin/harbor run" && break
+  if [ -e "$run/STOP_ON_CAP" ] && curl -fsS 127.0.0.1:8788/status 2>/dev/null | jq -e '.cap_stop != null' >/dev/null 2>&1; then
+    curl -fsS 127.0.0.1:8788/status > "$run/out/cap-stop.json" 2>/dev/null
+    pkill -INT -f "/bin/harbor run" && break
+  fi
+  sleep 2
+done) >/dev/null 2>&1 </dev/null &
 set +e
 sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' harbor run -y -c '$run/out/job.resolved.json'" > "$run/out/harbor.log" 2>&1
 rc=$?
 set -e
 curl -fsS -X POST 127.0.0.1:8788/close-all > "$run/out/close-all.json" || true
 curl -fsS 127.0.0.1:8788/totals > "$run/out/proxy-totals.json" || true
+curl -fsS 127.0.0.1:8788/status > "$run/out/proxy-status-end.json" || true
 curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-end.json" || true
 echo "harbor exit $rc"; tail -5 "$run/out/harbor.log"; cat "$run/out/proxy-totals.json"
 exit $rc

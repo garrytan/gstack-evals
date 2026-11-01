@@ -36,6 +36,7 @@ from harbor.agents.installed.claude_code import ClaudeCode, ClaudeCodeOptions
 from harbor.environments.base import BaseEnvironment
 from harbor.environments.docker.docker import _sanitize_docker_compose_project_name
 from harbor.models.agent.context import AgentContext
+from prompt_builder import build_prompt
 from pydantic import Field
 from usersim import Simulator
 
@@ -177,6 +178,7 @@ class LanebOptions(ClaudeCodeOptions):
     close_timeout_sec: float = Field(default=120, description="Session close timeout: above the proxy's 30 s drain plus its settle retries.")
     system_prompt: str = Field(default="sdk-default", description="A key of SYSTEM_PROMPTS: sdk-default or claude-code-preset.")
     session_kind: str = Field(default="", description="GSTACK_SESSION_KIND in the container: empty (unset) or unattended.")
+    told_skill: str = Field(default="", description="Skill this arm is told: the prompt opens with '/<told_skill> ' so the CLI expands it and injects that SKILL.md body. Empty sends the wrapper unchanged.")
 
 
 class LanebAgent(ClaudeCode):
@@ -269,7 +271,7 @@ class LanebAgent(ClaudeCode):
             raise ValueError(f"system_prompt {self.options.system_prompt!r} is not one of {sorted(SYSTEM_PROMPTS)}")
         if self.options.session_kind not in SESSION_KINDS:
             raise ValueError(f"session_kind {self.options.session_kind!r} is not one of {list(SESSION_KINDS)}")
-        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind}
+        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind, **({"told_skill": self.options.told_skill} if self.options.told_skill else {})}
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
@@ -333,8 +335,9 @@ class LanebAgent(ClaudeCode):
                 forwarded += ("GSTACK_SESSION_KIND",)
 
             wrapper_text = Path(self.options.wrapper_path).read_text()
-            prompt_text = wrapper_text.replace("{instruction}", instruction)
-            log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest()})
+            told = self.options.told_skill
+            prompt_text = build_prompt(wrapper_text, instruction, bool(told), told)
+            log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(), "told_skill": told})
 
             host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
             wrapper = host_dir / "claude-in-container"

@@ -16,22 +16,26 @@ export type BatchSpec = {
   base_url: string;
   max_output_tokens: number;
   verifier_timeout_multiplier: number;
+  repo_dir?: string;
 };
 
 // Agent options an arm may set, with laneb_agent.py's allowed values (SYSTEM_PROMPTS, SESSION_KINDS). An option
 // left out keeps the agent's default (sdk-default, no session kind) and stays out of the kwargs, so a batch that sets
 // none writes the same JobConfig as before.
+// told takes a skill name rather than a value from a list: the agent opens the prompt with /<skill>.
 export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"] };
-export type AgentOptions = { system_prompt?: string; session_kind?: string };
+export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string };
+const SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 // One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
-// gstack:system_prompt=claude-code-preset:session_kind=unattended.
+// gstack:told=investigate:system_prompt=claude-code-preset:session_kind=unattended.
 export function armSpec(entry: string): { name: string } & AgentOptions {
   const [name, ...settings] = entry.split(":");
   const options: Record<string, string> = {};
   for (const setting of settings) {
     const [, key, value] = /^(\w+)=(.*)$/.exec(setting) ?? [];
-    if (!AGENT_OPTIONS[key as keyof AgentOptions]?.includes(value) || key in options) {
+    const allowed = key === "told" ? SKILL_NAME.test(value ?? "") : AGENT_OPTIONS[key as keyof typeof AGENT_OPTIONS]?.includes(value);
+    if (!allowed || key in options) {
       throw new Error(`E_USAGE arm ${entry}: ${setting} is not one of ${JSON.stringify(AGENT_OPTIONS)}, or is set twice`);
     }
     options[key] = value;
@@ -71,6 +75,8 @@ export function jobConfig(b: BatchSpec) {
         max_output_tokens: b.max_output_tokens,
         ...(a.system_prompt ? { system_prompt: a.system_prompt } : {}),
         ...(a.session_kind ? { session_kind: a.session_kind } : {}),
+        ...(a.told ? { told_skill: a.told } : {}),
+        ...(b.repo_dir ? { repo_dir: b.repo_dir } : {}),
       },
     })),
   );
