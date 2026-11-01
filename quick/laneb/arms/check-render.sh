@@ -2,7 +2,8 @@
 # Offline checks of the two rendered gstack arms that build-render.sh wrote (GEVA-108's install-time evidence).
 # Usage: bash quick/laneb/arms/check-render.sh [out dir]   (default ~/.capy/work/laneb-arms)
 # On each arm's extracted tree: the lock carries the arm's session kind and no machine path, every served SKILL.md
-# and sections file has the bytes the render's lock records, the root router is not served, and every
+# and sections file has the bytes the render's lock records, the checkout's root SKILL.md is its committed one (the
+# render's root router is not served), and every
 # "Read \`/root/.claude/gstack-render/...\`" pointer in a served skill resolves in the tree. Then, in the check image
 # with --network none and the tar extracted into /root, it runs served /investigate's start line and shows its
 # RENDER_KIND line, which only the unattended arm may print. Exits nonzero on any failed check.
@@ -18,7 +19,7 @@ for arm in gstack-render gstack-render-unattended; do
   [ "$arm" = gstack-render ] || kind=unattended
   echo "== $arm"
   python3 - "$OUT/trees/$arm/.claude" "$kind" <<'PY'
-import hashlib, json, re, sys
+import hashlib, json, re, subprocess, sys
 from pathlib import Path
 claude, kind = Path(sys.argv[1]), sys.argv[2]
 render = claude / "gstack-render"
@@ -36,7 +37,8 @@ for s in skills:
         if f.is_file():
             assert sha(f) == locked[f"{s}/{f.relative_to(folder)}"], f"{f} is not the rendered file"
             served += 1
-assert sha(claude / "skills" / "gstack" / "SKILL.md") != sha(render / "SKILL.md"), "the root router is served"
+committed = subprocess.run(["git", "--git-dir", str(claude / "skills" / "gstack" / ".git"), "show", "HEAD:SKILL.md"], capture_output=True, check=True).stdout
+assert (claude / "skills" / "gstack" / "SKILL.md").read_bytes() == committed, "the root SKILL.md is not the checkout's own, so the router is served"
 pointers = set()
 for s in skills:
     pointers.update(re.findall(r"/root/\.claude/gstack-render/[\w./-]+", (claude / "skills" / s / "SKILL.md").read_text()))
