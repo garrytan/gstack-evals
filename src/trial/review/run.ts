@@ -22,10 +22,11 @@
 //   keys. arm.json records the system prompt in arm_provenance, and an overridden prefix with its sha256 in told.
 // - A run whose turn cap or allowance is off its default (maxTurns other than MAX_TURNS, or allowanceMicros set) records
 //   its code sessions' cap stops as their own terminations (the driver's capStops): turn_cap and allowance_stop. A capped
-//   session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts against its own arm: its findings are
-//   those of the latest main-agent text turn whose last json block parses as findings (cappedParse), and with no such
-//   turn it is missing, scored as finding nothing. arm.json counts cap stops in cap_stops with the units they hit, and
-//   diagnostics names each. A default run, and every plan unit, keeps today's records.
+//   session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts against its own arm: capped.ts reads
+//   its findings from the latest main-agent text turn whose last json block parses as findings, and with no such turn it
+//   is missing, scored as finding nothing. The session key's verifier then also covers capped.ts, and arm.json counts
+//   cap stops in cap_stops with the units they hit and capped.ts's sha256; diagnostics names each capped session. A
+//   default run, and every plan unit, keeps today's records and keys.
 // - A run with a reader map (readers.ts) records each code session's readers from its transcript in the journal and
 //   writes them to cost.tsv as reader:<name> rows; arm.json names the map's sha256 in reader_map_sha256.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
@@ -61,7 +62,8 @@ import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatile
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
-import { PARSER_SHA256, parseFinalTurn, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
+import { CAPPED_PARSER_SHA256, cappedParse } from "./capped.ts";
+import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, planArmLine, parsePlanSession, planPrompt, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
@@ -202,9 +204,6 @@ export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" 
   return e.record.model_output === true && (kind === "timeout" || kind === "arm_failure" || kind === "completed") ? "miss" : "gap";
 }
 
-/** A cap-stopped code session's parse: the latest main-agent text turn whose last json block parses as findings, else missing. */
-export const cappedParse = (turns: readonly string[]): ParseOutcome => turns.map(parseFinalTurn).findLast((p) => p.kind === "findings") ?? { kind: "missing" };
-
 const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
 
 /** Why a suite's receipts sink would copy held-out material into the repo, or null: a sealed suite, or one whose catalogs resolve under the sealed root, never copies receipts inside it. */
@@ -307,7 +306,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planPrompt(arm.told as PlanArm, plan.lens) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...((o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...((o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : capStops ? PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -463,7 +462,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
-      ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits] } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
+      ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);

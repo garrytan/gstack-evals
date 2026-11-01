@@ -108,8 +108,9 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
   names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
   against its own arm, the same in every arm: its findings are those of the latest main-agent text turn whose last json
   block parses as findings, and with no such turn it is a missing pass, scored as finding nothing. arm.json counts them
-  in `cap_stops: {turn_cap, allowance_stop, units}`, where units names each unit a cap stop hit, and diagnostics names
-  each session. A run at the defaults, and every plan unit, keeps today's records: the turn cap ends a session as
+  in `cap_stops: {turn_cap, allowance_stop, units, parser_sha256}`, where units names each unit a cap stop hit and
+  parser_sha256 is capped.ts's (the read rule), and diagnostics names each session. In such a run the session key's
+  verifier is the findings parser's sha256 and capped.ts's, so a change to either refuses its cached cells. A run at the defaults, and every plan unit, keeps today's records: the turn cap ends a session as
   completed, and the allowance as a missing cell (E_ALLOWANCE).
 - **Reader rows.** With `--reader-map`, each code session's readers go to the journal and to cost.tsv as
   `reader:<name>` rows after the unit-pass's all and voice rows, sorted by name. A reader is a subagent the main agent

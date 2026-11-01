@@ -15,7 +15,9 @@ import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { loadReaderMap, READER_ROW, type ReaderMap } from "../../../src/trial/review/readers.ts";
-import { cappedParse, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
+import { CAPPED_PARSER_SHA256, cappedParse } from "../../../src/trial/review/capped.ts";
+import { PARSER_SHA256 } from "../../../src/trial/review/findings.ts";
+import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, unitTaskId } from "../../../src/trial/review/unit.ts";
 import { harness } from "../../adapters/harness.ts";
 import { sourceRepo } from "./helpers.ts";
@@ -123,6 +125,8 @@ function stubRun(o: { prepared: PreparedUnit[]; plan: Record<string, Record<stri
   return { rig, input, out, h };
 }
 
+/** A session key part's hash for a string value, as sessionKey writes it. */
+const keyPart = (value: string) => new Bun.CryptoHasher("sha256").update(JSON.stringify(value)).digest("hex");
 const arm = (out: string, id: string) => JSON.parse(readFileSync(join(out, "arms", id, "arm.json"), "utf8"));
 const costRows = (out: string, id: string) => readFileSync(join(out, "arms", id, "cost.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
 
@@ -141,7 +145,8 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       const full = arm(run.out, "gstack-full-opus");
       const none = arm(run.out, "none-r2-opus");
       expect([full.status, none.status]).toEqual(["complete", "complete"]);
-      expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0, units: [b] }, { turn_cap: 0, allowance_stop: 1, units: [b] }]);
+      expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }, { turn_cap: 0, allowance_stop: 1, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }]);
+      expect(new Set([...journal.values()].map((e) => e.key.parts.verifier))).toEqual(new Set([keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256)]));
       expect([full.coverage_gaps, none.coverage_gaps]).toEqual([undefined, undefined]);
       expect(full.diagnostics).toEqual([b + " pass 1: missing; ended turn_cap, scored as finding nothing"]);
       expect(none.diagnostics).toEqual([b + " pass 1: missing; ended allowance_stop, scored as finding nothing"]);
@@ -185,11 +190,11 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       const first = await runReviewUnits(run.input, run.rig);
       expect(first.stops).toEqual([]);
       const full = arm(run.out, "gstack-full-opus");
-      expect([full.status, full.cap_stops, full.coverage_gaps]).toEqual(["complete", { turn_cap: 2, allowance_stop: 0, units: [a, b] }, undefined]);
+      expect([full.status, full.cap_stops, full.coverage_gaps]).toEqual(["complete", { turn_cap: 2, allowance_stop: 0, units: [a, b], parser_sha256: CAPPED_PARSER_SHA256 }, undefined]);
       expect(full.diagnostics).toEqual([a + " pass 1: findings; ended turn_cap, scored on the findings it wrote before the stop", b + " pass 1: missing; ended turn_cap, scored as finding nothing"]);
       const lines = readFileSync(join(run.out, "arms", "gstack-full-opus", "findings", a.replaceAll("/", "__") + ".jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
       expect(lines.map((f) => [f.severity, f.path, f.summary])).toEqual([["CRITICAL", "src/a.ts", "The cache key drops the allowance."]]);
-      expect(arm(run.out, "none-r2-opus").cap_stops).toEqual({ turn_cap: 0, allowance_stop: 0, units: [] });
+      expect(arm(run.out, "none-r2-opus").cap_stops).toEqual({ turn_cap: 0, allowance_stop: 0, units: [], parser_sha256: CAPPED_PARSER_SHA256 });
       for (const id of ["gstack-full-opus", "none-r2-opus"]) expect(() => parseArm(files(join(run.out, "arms", id)), suite as unknown as Suite)).not.toThrow();
     } finally {
       run.h.proxy.stop();
@@ -215,7 +220,7 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       await runReviewUnits(run.input, run.rig);
       const journal = [...readReviewJournal(run.out).values()];
       expect(journal.map((e) => [e.cell.arm, e.cell.unit, e.record.termination]).sort()).toEqual([["gstack-full", a, { kind: "completed" }], ["gstack-full", b, { kind: "completed" }], ["none-r2", a, { kind: "completed" }], ["none-r2", b, { kind: "missing", code: "E_ALLOWANCE" }]].sort() as never);
-      expect(journal.every((e) => !("readers" in e))).toBe(true);
+      expect(journal.every((e) => !("readers" in e) && e.key.parts.verifier === keyPart(PARSER_SHA256))).toBe(true);
       for (const id of ["gstack-full-opus", "none-r2-opus"]) {
         expect(Object.keys(arm(run.out, id)).filter((k) => k === "cap_stops" || k === "reader_map_sha256")).toEqual([]);
         expect(costRows(run.out, id).map((r) => r[1])).toEqual(["all", "all"]);
