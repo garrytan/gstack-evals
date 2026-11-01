@@ -20,6 +20,17 @@ steps=" ${*:-a b c d e f g} "
 driver=${DRIVER:-direct}
 sdk_python=${SDK_PYTHON:-$(head -1 "$(command -v harbor)" | sed 's/^#!//')}
 claude_bin=${CLAUDE_BIN:-$HOME/.capy/work/geva106/cc/package/claude}
+# Kill whatever still listens on these ports and wait until each is free: a bun server outlived its kill once.
+free_ports() {
+  local p pid
+  for p in "$@"; do
+    for _ in $(seq 1 20); do
+      pid=$(ss -ltnpH "sport = :$p" | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)
+      [ -z "$pid" ] && break
+      kill -9 $pid 2>/dev/null || true; sleep 0.5
+    done
+  done
+}
 has() { [[ "$steps" == *" $1 "* ]]; }
 mkdir -p "$out"
 armdir=$out/arms
@@ -95,8 +106,8 @@ EOF
       --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$(readlink -f "$armdir/$arm.tar")" \
       --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=/testbed --ak workdir=/testbed "${extra[@]}" \
       -e docker -o "$dir/jobs" --job-name "dry-$arm" >"$dir/harbor-$arm.log" 2>&1 || echo "harbor exited non-zero for $arm (log: $dir/harbor-$arm.log)"
-    kill "$shim" 2>/dev/null || true; wait "$shim" 2>/dev/null || true
-    for _ in $(seq 1 20); do (echo > /dev/tcp/127.0.0.1/8799) 2>/dev/null || break; fuser -k 8799/tcp >/dev/null 2>&1; sleep 0.5; done
+    kill "$shim" 2>/dev/null || true
+    free_ports 8799
     echo "reward: $(cat "$dir"/jobs/dry-$arm/*/verifier/reward.txt 2>/dev/null || echo none)"
     else
     PYTHONPATH="$here/agent" timeout 300 "$sdk_python" "$here/dryrun-direct.py" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" "$claude_bin" "/tmp/geva106-direct/$item-$arm" \
@@ -106,6 +117,7 @@ EOF
     bun "$here/dryrun-inspect.ts" "$dir/requests-$arm.jsonl" "$arm" "$(readlink -f "$armdir/$arm.tar")" "$told" || true
   done
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done
+  free_ports 8787 8788 8798 9911
   wait 2>/dev/null || true
   echo "-- lease check for $item"
   jq -c '{trial, spent_micros, requests, ok_responses, ledger_settle, close_reason}' "$dir/proxy-sessions.jsonl"
