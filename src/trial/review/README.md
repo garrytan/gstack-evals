@@ -68,6 +68,29 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 The rig's arm installer takes one target skill for every arm, so one invocation runs arms that share a told skill:
 none with gstack, or none with one other stack. `--dry-run` prints the plan and writes nothing.
 
+## Per-arm and per-run settings (GEVA-109)
+
+Every default keeps a frozen preregistration's run as it was: same options, same prompts, same session keys.
+
+- `--system-prompt <arm>=sdk-default|claude-code-preset`, repeatable. sdk-default (the default for every arm not named)
+  passes no system prompt option, so the Agent SDK sends its empty one. claude-code-preset passes the SDK's claude_code
+  preset, which brings Claude Code's own system guidance. arm_provenance.system_prompt in arm.json and system_prompt in
+  each session's init.json record it.
+- `--told-prefix <arm>=<file>`, repeatable, code units only. The file's one line replaces the arm's told command (for
+  example R2's full-procedure /review line); it must open with the arm's own command. The template and TOLD_SHA256 stay
+  the same. arm.json's told block records the prefix and prefix_sha256; an arm without one keeps today's block.
+- `--render <arm>=interactive|unattended`, repeatable, on a gstack stack arm. The install runs gstack's setup, renders
+  the full loadout into ~/.claude/gstack-render, serves each rendered skill's SKILL.md and sections from it, and checks
+  the lock's session_kind and the served review and investigate start lines (src/arms/install.ts). arm_provenance.render
+  records the lock. Two arm names may share a stack ref and render, so they install the same tree and differ only in
+  their settings.
+- `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
+- `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
+
+run.json records max_turns and session_kind. --resume with other values than run.json records is refused before
+anything runs, and run.json stays as it was (E_CACHE_STALE). A setting off its default also joins the session key, so a
+cell run under another value is never reused.
+
 ## Plan units
 
 `--plan ceo` runs plan units from a plan suite (planning lane plan wiki/plans/2026-10-31-geva-79-planning-lane-plan,

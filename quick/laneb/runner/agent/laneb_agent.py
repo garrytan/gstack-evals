@@ -91,6 +91,16 @@ NET_CAPS = {"CAP_NET_ADMIN": 12, "CAP_NET_RAW": 13}
 
 PROBE_TIMEOUT_S = 60
 
+# The agent's system prompt setting, by name, as extra ClaudeAgentOptions. sdk-default passes none, so the SDK sends
+# --system-prompt "" and the CLI keeps only its short Agent SDK line; claude-code-preset adds Claude Code's own guidance.
+SYSTEM_PROMPTS = {
+    "sdk-default": {},
+    "claude-code-preset": {"system_prompt": {"type": "preset", "preset": "claude_code"}},
+}
+
+# GSTACK_SESSION_KIND for the container's claude. Empty sets nothing; unattended is passed through docker exec -e.
+SESSION_KINDS = ("", "unattended")
+
 # A session open that fails with a timeout, a dropped connection or a 5xx (the proxy's ledger reserve failed and may
 # have landed) is sent again with the same open_key, so the proxy hands back the session it may already have opened,
 # and the ledger reuses a reserve that landed, instead of reserving a second one.
@@ -165,6 +175,8 @@ class LanebOptions(ClaudeCodeOptions):
     max_output_tokens: int = Field(default=32000, description="CLAUDE_CODE_MAX_OUTPUT_TOKENS; Claude Code otherwise asks for 128k, whose worst case exceeds the cheap cells' caps.")
     sdk_max_turns: int = Field(default=200, description="Hard turn ceiling; the session cap and agent timeout bind first.")
     close_timeout_sec: float = Field(default=120, description="Session close timeout: above the proxy's 30 s drain plus its settle retries.")
+    system_prompt: str = Field(default="sdk-default", description="A key of SYSTEM_PROMPTS: sdk-default or claude-code-preset.")
+    session_kind: str = Field(default="", description="GSTACK_SESSION_KIND in the container: empty (unset) or unattended.")
 
 
 class LanebAgent(ClaudeCode):
@@ -253,6 +265,11 @@ class LanebAgent(ClaudeCode):
         return {"event": "patch", "rc": res.returncode, "bytes": res.stdout.decode().strip(), "stderr": res.stderr.decode()[-300:]}
 
     async def run(self, instruction: str, environment: BaseEnvironment, context: AgentContext) -> None:
+        if self.options.system_prompt not in SYSTEM_PROMPTS:
+            raise ValueError(f"system_prompt {self.options.system_prompt!r} is not one of {sorted(SYSTEM_PROMPTS)}")
+        if self.options.session_kind not in SESSION_KINDS:
+            raise ValueError(f"session_kind {self.options.session_kind!r} is not one of {list(SESSION_KINDS)}")
+        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind}
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
@@ -269,7 +286,7 @@ class LanebAgent(ClaudeCode):
             raise RuntimeError("laneb agent needs --base-url pointing at the metering proxy")
 
         open_body = {"trial": environment.session_id, "model": self.options.upstream_model, "cap_usd": self.options.session_cap_usd,
-                     "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"]}, "open_key": uuid.uuid4().hex}
+                     "meta": {"arm": self.options.arm, "arm_tar_sha256": arm_info["tar_sha256"], **agent_options}, "open_key": uuid.uuid4().hex}
         for attempt in range(1, OPEN_ATTEMPTS + 1):
             try:
                 session = await asyncio.to_thread(post_json, self.options.control_url + "/sessions", open_body)
@@ -310,6 +327,10 @@ class LanebAgent(ClaudeCode):
                 "DISABLE_ERROR_REPORTING": "1",
                 "IS_SANDBOX": "1",
             }
+            forwarded = FORWARDED_ENV
+            if self.options.session_kind:
+                env["GSTACK_SESSION_KIND"] = self.options.session_kind
+                forwarded += ("GSTACK_SESSION_KIND",)
 
             wrapper_text = Path(self.options.wrapper_path).read_text()
             prompt_text = wrapper_text.replace("{instruction}", instruction)
@@ -317,7 +338,7 @@ class LanebAgent(ClaudeCode):
 
             host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
             wrapper = host_dir / "claude-in-container"
-            forward = " ".join(f"-e {name}" for name in FORWARDED_ENV)
+            forward = " ".join(f"-e {name}" for name in forwarded)
             workdir = f"-w {self.options.workdir} " if self.options.workdir else ""
             wrapper.write_text(f"#!/bin/sh\nexec docker exec -i {workdir}{forward} {container} claude \"$@\"\n")
             wrapper.chmod(0o755)
@@ -346,6 +367,7 @@ class LanebAgent(ClaudeCode):
                 setting_sources=["user", "project"],
                 max_turns=self.options.sdk_max_turns,
                 disallowed_tools=disallowed,
+                **SYSTEM_PROMPTS[self.options.system_prompt],
             )
             log({"event": "disallowed_tools", "tools": disallowed})
             with (evdir / "sdk-messages.jsonl").open("a") as out:
@@ -353,7 +375,7 @@ class LanebAgent(ClaudeCode):
                     record = {"type": type(message).__name__, "t": round(time.time() - started, 2)}
                     data = getattr(message, "data", None)
                     if isinstance(data, dict) and data.get("subtype") == "init":
-                        record["init"] = {k: data.get(k) for k in ("tools", "skills", "slash_commands", "model", "permissionMode", "cwd", "claude_code_version", "apiKeySource")}
+                        record["init"] = {k: data.get(k) for k in ("tools", "skills", "slash_commands", "model", "permissionMode", "cwd", "claude_code_version", "apiKeySource")} | agent_options
                     for attr in ("content", "subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason"):
                         if hasattr(message, attr):
                             record[attr] = getattr(message, attr)
@@ -366,7 +388,7 @@ class LanebAgent(ClaudeCode):
         finally:
             # Run in a thread and awaited to the end even if this task is cancelled again, so Harbor never moves on to the
             # verifier before the teardown, close and summary finish.
-            base = {"result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, "wall_s": round(time.time() - started, 1)}
+            base = {"result": result, "error": None if error is None else {"type": type(error).__name__, "message": str(error)[:500]}, "arm": arm_info, **agent_options, "wall_s": round(time.time() - started, 1)}
             teardown = asyncio.ensure_future(asyncio.to_thread(self._teardown, container, session["id"], log, base))
             cancelled = None
             while not teardown.done():

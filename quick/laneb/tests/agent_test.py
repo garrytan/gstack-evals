@@ -106,7 +106,7 @@ def agent(tmp: Path, fake: Fake, messages=()):
     a.options = types.SimpleNamespace(
         persona_path=str(tmp / "persona.json"), arm="none", arm_tar="", arm_sha256="", control_url="http://127.0.0.1:8788",
         session_cap_usd=1.0, wrapper_path=str(tmp / "wrapper.md"), upstream_model="claude-opus-5-5", repo_dir="", workdir="",
-        max_output_tokens=32000, sdk_max_turns=5, close_timeout_sec=120,
+        max_output_tokens=32000, sdk_max_turns=5, close_timeout_sec=120, system_prompt="sdk-default", session_kind="",
     )
     a.logs_dir = tmp / "trial" / "agent"
     a.logs_dir.mkdir(parents=True, exist_ok=True)

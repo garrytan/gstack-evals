@@ -22,7 +22,7 @@ afterEach(() => {
 
 const MODEL = "claude-haiku-5-5";
 
-async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void } = {}) {
+async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void; options?: Pick<ClaudeCodeOptions, "systemPrompt" | "maxTurns"> } = {}) {
   const h = harness(script, { ...(o.capMicros === undefined ? {} : { capMicros: o.capMicros }), ...(o.env ? { env: o.env } : {}) });
   open.push(h);
   const model = o.model ?? MODEL;
@@ -30,7 +30,7 @@ async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: stri
   const binding = h.bind(model, provider);
   const home = join(h.dir, "home");
   o.setupHome?.(home);
-  const driver = claudeCodeDriver({ model, provider, proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, ...(o.entry ? { entry: o.entry } : {}), skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), query: query as never });
+  const driver = claudeCodeDriver({ model, provider, proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, ...(o.entry ? { entry: o.entry } : {}), skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), query: query as never, ...o.options });
   const session = h.session(join(h.dir, "work", "t"), home, driver.env!);
   const outcome = await driver.run(session, { id: "t", prompt: o.prompt ?? "Help me think about my idea." }, 120_000);
   const meter = await h.proxy.finalize(binding.meter_id);
@@ -514,4 +514,68 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-748: model output on the real pinned CLI (
     const r = await cliRun(() => [{ type: "text", text: ++calls === 1 ? "Partial review of the pl" : "Done." }], () => (calls === 1 ? "max_tokens" : undefined));
     expect(r).toEqual({ termination: { kind: "completed" }, model_output: true, turns: ["Partial review of the pl", "Done."] });
   }, 180_000);
+});
+
+// Value: protects=GEVA-109's per-arm system prompt and the run's turn cap on the pinned Agent SDK: sdk-default sends what no option sends (the SDK's initialize systemPrompt [""]), claude-code-preset sends the SDK's preset, and the cap reaches the CLI's argv; fails_when=sdk-default passes any systemPrompt option, the preset is dropped, or --max-turns is not the configured number; why_new=GEVA-108 runs control-preset and control-sdk-default in one invocation; seam=the driver's query options, the real SDK's initialize request
+describe("GEVA-109: system prompt and turn cap on the pinned Agent SDK against a stub CLI (keyless)", () => {
+  const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
+  const record = async (o: { systemPrompt?: "sdk-default" | "claude-code-preset"; maxTurns?: number }) => {
+    const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
+    const file = join(out, "record.ndjson");
+    const session = {
+      exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
+      spawn: (argv: string[], env: Record<string, string>) => (argv[0] === "true" ? spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", STUB_MODE: "content", STUB_CONTENT: JSON.stringify([{ type: "text", text: "done" }]), STUB_RECORD: file }, stdio: ["pipe", "pipe", "pipe"] })),
+      stop: () => {},
+    };
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, ...o });
+    const outcome = await driver.run(session as never, { id: "t", prompt: "Go." }, 20_000);
+    const lines = readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const { request_id: _id, ...init } = lines.find((l) => l.request?.subtype === "initialize")!;
+    return { outcome, argv: lines[0].argv as string[], init, recorded: JSON.parse(readFileSync(join(out, "init.json"), "utf8")).system_prompt };
+  };
+  test("sdk-default sends the SDK's empty system prompt, the preset sends claude_code, and the cap reaches the CLI", async () => {
+    const plain = await record({});
+    const explicit = await record({ systemPrompt: "sdk-default" });
+    const preset = await record({ systemPrompt: "claude-code-preset", maxTurns: 7 });
+    expect(plain.outcome.termination).toEqual({ kind: "completed" });
+    expect(plain.init.request.systemPrompt).toEqual([""]);
+    expect([explicit.argv, explicit.init]).toEqual([plain.argv, plain.init]);
+    expect([plain.recorded, explicit.recorded, preset.recorded]).toEqual(["sdk-default", "sdk-default", "claude-code-preset"]);
+    expect([plain.argv.filter((a) => a.startsWith("--max-turns")), preset.argv.filter((a) => a.startsWith("--max-turns"))]).toEqual([["--max-turns=60"], ["--max-turns=7"]]);
+    expect(preset.argv.filter((a) => !plain.argv.includes(a))).toEqual(["--max-turns=7"]);
+    const { systemPrompt: _empty, ...rest } = plain.init.request;
+    expect(preset.init.request).toEqual(rest);
+  }, 60_000);
+  test("sessionKind unattended adds GSTACK_SESSION_KIND to the agent env, and unset adds none", () => {
+    const base = { model: MODEL, provider: "anthropic" as const, proxy: { baseUrl: "http://p", slot: "s", token: "t" } };
+    expect(claudeCodeEnv(base).GSTACK_SESSION_KIND).toBeUndefined();
+    expect(claudeCodeEnv({ ...base, sessionKind: "unattended" }).GSTACK_SESSION_KIND).toBe("unattended");
+  });
+});
+
+// Value: protects=GEVA-109 on the real CLI: under claude-code-preset the first model request carries Claude Code's system guidance, under sdk-default only the SDK's short blocks, and a configured turn cap ends a session the way an error_max_turns result does; fails_when=the preset never reaches the request, sdk-default grows a system prompt, or the cap is ignored; why_new=GEVA-108 runs both system prompts in one invocation; seam=the driver's options through the pinned SDK into CLI 2.1.314
+describe.skipIf(!HAS_CLAUDE_CLI)("GEVA-109: system prompt and turn cap on the real CLI", () => {
+  const text: Script = () => [{ type: "text", text: "FINAL: done." }];
+  const system = (r: Awaited<ReturnType<typeof run>>) => {
+    const first = r.h.upstream.find((u) => new URL(u.url).pathname.endsWith("/v1/messages") && JSON.stringify(u.body.messages ?? []).includes("Go."))!;
+    return (first.body.system as { text: string }[]).map((b) => b.text);
+  };
+  test("claude-code-preset sends Claude Code's guidance; sdk-default sends only the SDK's two short blocks", async () => {
+    const plain = system(await run(text, { prompt: "Go.", options: { systemPrompt: "sdk-default" } }));
+    const preset = system(await run(text, { prompt: "Go.", options: { systemPrompt: "claude-code-preset" } }));
+    expect(plain.length).toBe(2);
+    expect(plain[1]).toBe("You are a Claude agent, built on Anthropic's Claude Agent SDK.");
+    expect(plain.join("").length).toBeLessThan(500);
+    expect(preset.join("").length).toBeGreaterThan(5000);
+  }, 240_000);
+  test("a configured turn cap reaches the CLI and ends the session as error_max_turns", async () => {
+    let n = 0;
+    const loop: Script = () => [{ type: "tool_use", id: "toolu_loop" + n++, name: "Bash", input: { command: "true" } }];
+    const r = await run(loop, { prompt: "Go.", options: { maxTurns: 2 } });
+    const result = r.lines("transcript.ndjson").filter((m) => m.type === "result").at(-1);
+    const asked = r.h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/messages") && JSON.stringify(u.body.messages ?? []).includes("toolu_loop") === false && JSON.stringify(u.body.messages ?? []).includes("Go.")).length;
+    const calls = r.h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/messages") && JSON.stringify(u.body.messages ?? []).includes("Go.")).length;
+    expect([result.subtype, asked, calls]).toEqual(["error_max_turns", 1, 2]);
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+  }, 240_000);
 });

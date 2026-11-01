@@ -8,7 +8,7 @@ import type { SkillRef } from "../grade/transcript.ts";
 import type { AgentDriver } from "../trial/trial.ts";
 import type { PersonaAnswer } from "../usersim/persona.ts";
 import type { Host } from "../types.ts";
-import { claudeCodeDriver } from "./claude-code/driver.ts";
+import { claudeCodeDriver, type SystemPrompt } from "./claude-code/driver.ts";
 import { codexDriver, type CodexProvider } from "./codex/driver.ts";
 
 export const SKILL_DIRS: Record<Host, string> = { claude: ".claude/skills", codex: ".codex/skills" };
@@ -31,13 +31,17 @@ export interface HostDriverOptions {
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI (Claude Code only). */
   codex?: { provider: CodexProvider; model: string };
+  /** The session's system prompt, its turn cap and its GSTACK_SESSION_KIND (Claude Code only; see its driver). */
+  systemPrompt?: SystemPrompt;
+  maxTurns?: number;
+  sessionKind?: "unattended";
 }
 
 /** The adapter for one session. Claude Code takes Anthropic and OpenRouter models; Codex takes OpenAI and OpenRouter ones. */
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
   return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });

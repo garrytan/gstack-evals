@@ -27,3 +27,14 @@ describe("the frozen told prompt", () => {
     expect(toldArmOf({ name: "placebo", kind: "placebo", of: "gstack" })).toBeNull();
   });
 });
+
+// Value: protects=GEVA-109's told override (R2): an arm's own prefix replaces only the command, still names review, and an arm without one gets today's prompt byte for byte with TOLD_SHA256 unchanged; fails_when=the override touches the template or the default prompt changes; seam=toldPrompt and toldSkill
+describe("GEVA-109: an arm's told prefix override", () => {
+  const R2 = "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed.";
+  test("the override replaces the prefix only; no override is today's prompt", () => {
+    expect(toldPrompt("gstack", "main", R2)).toBe(R2 + " " + TOLD_TEMPLATE.replaceAll("{base}", "main"));
+    expect(toldPrompt("gstack", "main", undefined)).toBe("/review " + TOLD_TEMPLATE.replaceAll("{base}", "main"));
+    expect(toldPrompt("none", "main")).toBe(TOLD_TEMPLATE.replaceAll("{base}", "main"));
+    expect([toldSkill("gstack", R2), toldSkill("gstack"), toldSkill("none")]).toEqual(["review", "review", null]);
+  });
+});
