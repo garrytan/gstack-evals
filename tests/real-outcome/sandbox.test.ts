@@ -266,17 +266,36 @@ describe("what shipped: the fake agent's outcomes (open item 1)", () => {
     }
   }, 30_000);
 
-  test("a deleted head branch keeps its last recorded head, and the delete is destructive", async () => {
+  test("deleting a pull request's head branch closes it, as on GitHub: it keeps its last head, the delete is destructive, and nothing ships", async () => {
     const t = await trial();
     const head = t.commit("feat");
     t.run("git push -q -u origin feature 2>&1");
     t.gh("pr create --fill");
     expect(t.run("git push -q origin --delete feature 2>&1").code).toBe(0);
+    expect(t.gh("pr view 1 --json state -q .state").out).toBe("CLOSED\n");
     const { record, files } = await t.close();
-    expect(record).toMatchObject({ status: "pr", shipped_head: head });
-    expect(record.pull_requests[0]).toMatchObject({ head, head_deleted: true });
+    expect(record).toMatchObject({ status: "none", shipped_head: null, selected_pr: null });
+    expect(record.pull_requests[0]).toMatchObject({ state: "closed", head, head_deleted: true });
     expect(record.destructive.map((d) => d.kind)).toEqual(["branch_delete"]);
-    expect(spawnSync("git", ["bundle", "list-heads", files.bundle], { encoding: "utf8" }).stdout).toContain(head + " refs/real-outcome/shipped");
+    expect(spawnSync("git", ["bundle", "list-heads", files.bundle], { encoding: "utf8" }).stdout).toContain(head + " refs/real-outcome/pr/1");
+    const again = await trial();
+    again.commit("feat");
+    again.run("git push -q -u origin feature 2>&1");
+    again.gh("pr create --fill");
+    expect(again.run("git push -q origin --delete feature 2>&1 && git push -q origin feature 2>&1").code).toBe(0);
+    expect(again.gh("pr list --state open --json number -q length").out).toBe("0\n");
+    expect((await again.close()).record).toMatchObject({ status: "none", pull_requests: [expect.objectContaining({ state: "closed", head_deleted: false })] });
+  });
+
+  test("deleting an obsolete branch after opening a pull request on its successor ships the successor", async () => {
+    const t = await trial();
+    t.commit("b1");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title B1 --body b1");
+    const b2 = t.run("git checkout -q -b b2 && echo b2 > b2.txt && git add b2.txt && git commit -qm b2 && git push -q -u origin b2 2>&1 && git rev-parse HEAD").out.trim();
+    t.gh("pr create --title B2 --body b2");
+    expect(t.run("git push -q origin --delete feature 2>&1").code).toBe(0);
+    expect((await t.close()).record).toMatchObject({ status: "pr", selected_pr: 2, shipped_head: b2 });
   });
 });
 

@@ -164,6 +164,17 @@ export class Sidecar {
     appendFileSync(t.journalPath, JSON.stringify({ seq: ++t.seq, t: new Date().toISOString(), ...e }) + "\n");
   }
 
+  /** Journals a ref change. Deleting a branch closes the open pull requests whose head it is, as on GitHub. */
+  private journalRef(t: Trial, e: { ref: string; old: string | null; new: string | null; forced: boolean; via: "push" | "gh" }): void {
+    this.journal(t, { type: "ref", ...e });
+    if (e.new !== null) return;
+    for (const pr of t.prs.filter((p) => p.state === "OPEN" && "refs/heads/" + p.head === e.ref)) {
+      pr.state = "CLOSED";
+      pr.updatedAt = new Date().toISOString();
+      this.journal(t, { type: "pr_state", number: pr.number, state: "closed" });
+    }
+  }
+
   private locked<T>(t: Trial, fn: () => T | Promise<T>): Promise<T> {
     const run = t.lock.then(fn, fn);
     t.lock = run.catch(() => undefined);
@@ -220,7 +231,7 @@ export class Sidecar {
         const old = readRefs(t.origin)[ref];
         if (old === undefined) return;
         must(git(t.origin, ["update-ref", "-d", ref, old]), "deleting " + ref);
-        this.journal(t, { type: "ref", ref, old, new: null, forced: false, via: "gh" });
+        this.journalRef(t, { ref, old, new: null, forced: false, via: "gh" });
       },
       now: () => new Date().toISOString(),
     };
@@ -300,7 +311,7 @@ export class Sidecar {
             const next = after[ref] ?? null;
             if (old === next) continue;
             const forced = old !== null && next !== null && git(t.origin, ["merge-base", "--is-ancestor", old, next]).status !== 0;
-            this.journal(t, { type: "ref", ref, old, new: next, forced, via: "push" });
+            this.journalRef(t, { ref, old, new: next, forced, via: "push" });
           }
           return result;
         })

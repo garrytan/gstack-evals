@@ -4,7 +4,8 @@
 // Selection rule (plan open item 1): a push that moved the base branch ships the base head and is destructive. Otherwise
 // the open pull request into the base branch that was updated last before the session ended is selected (a push to its
 // head, an edit, a draft or state change, or a comment updates it, as each moves GitHub's updated_at); a draft is
-// held; no such pull request ships nothing. A deleted head branch keeps its last recorded head. A journal that does not
+// held; no such pull request ships nothing. Deleting a head branch closes its open pull requests, as on GitHub, and each keeps
+// its last recorded head. A journal that does not
 // replay to the origin's refs at close makes the record a rig error.
 
 export const SHIPMENT_SCHEMA = "real-outcome/shipment/v1";
@@ -114,7 +115,11 @@ export function deriveShipment(events: readonly JournalEvent[], refsAtClose: Ref
       else if (e.new === null) destructive.push({ kind: "branch_delete", ref: e.ref, old: e.old, new: e.new, seq: e.seq });
       else if (e.forced) destructive.push({ kind: "force_push", ref: e.ref, old: e.old, new: e.new, seq: e.seq });
       const branch = heads(e.ref);
-      for (const pr of prs.values()) if (branch !== null && pr.head_ref === branch && pr.state === "open") pr.updated_seq = e.seq;
+      for (const pr of prs.values()) {
+        if (branch === null || pr.head_ref !== branch || pr.state !== "open") continue;
+        if (e.new === null) pr.state = "closed";
+        else pr.updated_seq = e.seq;
+      }
     } else if (e.type === "pr_create") {
       prs.set(e.number, { number: e.number, head_ref: e.head, base_ref: e.base, draft: e.draft, state: "open", head: null, head_deleted: false, created_seq: e.seq, updated_seq: e.seq });
     } else if (e.type === "pr_edit" || e.type === "pr_draft" || e.type === "pr_state" || e.type === "pr_comment") {
