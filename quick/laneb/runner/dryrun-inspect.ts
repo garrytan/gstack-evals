@@ -1,4 +1,4 @@
-// Reads the first main-loop request a dry-run arm sent (recorded by the dry run's pass-through shim) and
+// Reads the first main-loop request a dry-run cell sent (recorded by the dry run's pass-through shim) and
 // prints what reached the model: request bytes, where investigate's description sits, how many skills
 // the listing names, and for a told arm whether the body's first 200 characters came with the /investigate line.
 //   bun runner/dryrun-inspect.ts <shim log> <arm> <arm tar> <told 0|1>
@@ -6,6 +6,7 @@ import { closeSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { entryBytes, onlyFile, REWRITTEN_DESCRIPTION, tarEntries } from "../arms/variants.ts";
 import { splitSkill } from "../arms/placebo/placebo.ts";
+import { BUILTIN } from "../analysis/discovery-tax.ts";
 
 const [logPath, arm, tar, told] = Bun.argv.slice(2);
 const SHIPPED = "Systematic debugging with root cause investigation. (gstack)";
@@ -30,13 +31,13 @@ const where = (needle: string) => fields.filter(([, t]) => t.includes(needle)).m
 });
 const fd = openSync(tar!, "r");
 const listing = tarEntries(fd);
-const names = [...new Set(listing.entries.map((e) => /^(?:\.\/)?\.claude\/skills\/([^/]+)\/SKILL\.md$/.exec(e.name)?.[1]).filter((n): n is string => !!n)), "plugin-authoring"];
+const names = [...new Set(listing.entries.map((e) => /^(?:\.\/)?\.claude\/skills\/([^/]+)\/SKILL\.md$/.exec(e.name)?.[1]).filter((n): n is string => !!n)), ...BUILTIN];
 const investigate = listing.entries.some((e) => /^(?:\.\/)?\.claude\/skills\/investigate\/SKILL\.md$/.test(e.name)) ? splitSkill(entryBytes(fd, onlyFile(listing.entries, ".claude/skills/investigate/SKILL.md")).toString("utf8")).body : null;
 closeSync(fd);
-const container = fields.find(([, t]) => t.includes("plugin-authoring"));
+const container = fields.find(([, t]) => BUILTIN.some((b) => new RegExp("(^|\\n)- " + b + ":").test(t)));
 const listed = container ? names.filter((n) => new RegExp("(^|\\n)- " + n.replace(/[-]/g, "\\-") + ":").test(container[1])) : [];
 console.log(`${arm}: first request ${first.bytes} bytes, ${body.tools.length} tools, system ${text(body.system).length} chars: ${JSON.stringify(text(body.system).slice(0, 160))}`);
-console.log(`${arm}: listing in ${container ? container[0] : "nowhere"}; skills listed ${listed.length} (${listed.length <= 3 ? listed.join(", ") : listed.slice(0, 3).join(", ") + ", ..."})`);
+console.log(`${arm}: listing in ${container ? container[0] : "nowhere"}; skills listed ${listed.length} (${listed.length <= 3 ? listed.join(", ") : listed.slice(0, 3).join(", ") + ", ..."}); built-ins listed: ${BUILTIN.map((b) => `${b} ${listed.includes(b) ? "yes" : "no"}`).join(", ")}`);
 for (const [label, needle] of [["shipped investigate description", SHIPPED], ["rewritten investigate description", REWRITTEN_TAIL]] as const) {
   const hits = where(needle);
   console.log(`${arm}: ${label}: ${hits.length ? hits.join("; ") : "absent"}`);

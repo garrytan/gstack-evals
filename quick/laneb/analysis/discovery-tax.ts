@@ -1,22 +1,26 @@
-// Readings for GEVA-106's preregistration (sections 5 to 7): Run D, untold skill discovery, and Run T,
-// the told-text tax. Reuses analyze.ts: loadTrial (task, arm, model, reward, cost, budget stops),
+// Readings for Run D, untold skill discovery (GEVA-125's preregistration, sections 5 to 7), and Run T, the told-text tax
+// (GEVA-106's). Reuses analyze.ts: loadTrial (task, arm, model, reward, cost, budget stops),
 // skillOpensFromMessages (the open rule, applied one tool call at a time), rng and bootstrap.
 //   bun analysis/discovery-tax.ts <config.json>
 // config: { run: "D" | "T", models: [...], jobs: [Harbor job dirs], sessions?: [proxy-sessions.jsonl],
 //   cells?: { role: label }, dropped_tasks?: [...], fit?: [...], listing_check?: { arm: true|false },
-//   bodies?: { arm: { folder: SKILL.md body } }, arm_tars?: { arm: tar path } }
-// Cells are keyed by a label: the arm name today. A later per-batch setting appends "@setting"; armOf strips it.
+//   bodies?: { arm: { folder: SKILL.md body } }, arm_tars?: { arm: tar path },
+//   Run D only: setting?, contrast?: { setting, models }, d2?, d3?: "pooled" | "per-model", mdd?: { reading: points } }
+// Cells are keyed by a label: grid.ts armLabel rebuilt from each trial's kwargs (gstack@claude-code-preset); armOf strips it.
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { bootstrap, loadTrial, rng, skillOpensFromMessages } from "./analyze.ts";
 import { entryBytes, tarEntries } from "../arms/variants.ts";
 import { splitSkill } from "../arms/placebo/placebo.ts";
+import { armLabel } from "../runner/grid.ts";
 
 export const SEED = 20261101;
 export const RESAMPLES = 10_000;
 export const DRAWS = 100_000;
 export const FIT = ["custom-memory-heap-crash", "overfull-hbox", "fix-code-vulnerability", "fix-git", "db-wal-recovery"];
 const MARKERS: Record<string, RegExp> = { debug_report: /DEBUG REPORT/, phase: /Phase [1-5]\b/, iron_law: /Iron Law/i, root_cause: /root cause/i, hypothesis: /hypothes[ie]s/i };
+// Claude Code's built-in skills, listed in every arm: their opens are counted on their own, never as gstack opens.
+export const BUILTIN = ["doctor", "plugin-authoring"];
 const D_CELLS = { none: "none", gstack: "gstack", rewritten: "gstack-rewritten", placebo: "placebo" };
 const T_CELLS = { none: "none", short: "placebo-short", placebo: "placebo" };
 
@@ -24,9 +28,9 @@ export const armOf = (label: string) => label.split("@")[0]!;
 
 export type Rec = {
   trial: string; task: string; label: string; model: string; status: "graded" | "missing"; pass: number;
-  responded: boolean; refused: boolean; eligible: boolean; opens: string[]; pluginOpens: number; browses: number;
+  responded: boolean; refused: boolean; eligible: boolean; opens: string[]; builtinOpens: Record<string, number>; browses: number;
   loaded: string[]; markers: Record<string, boolean>; bodyLoad: boolean; firstTokens: number | null; requests: number;
-  costUsd: number; budgetStop: boolean; agentTimeout: boolean; retried: boolean;
+  costUsd: number; budgetStop: boolean; agentTimeout: boolean; turnCap: boolean; retried: boolean;
 };
 export type Ctx = { installed: (arm: string) => string[]; bodies: Record<string, Record<string, string>>; sessions: Map<string, any[]> };
 
@@ -60,11 +64,11 @@ export function loadRec(dir: string, ctx: Ctx): Rec | null {
   const installed = ctx.installed(arm);
   const opens: string[] = [];
   const loaded: string[] = [];
-  let pluginOpens = 0;
+  const builtinOpens: Record<string, number> = Object.fromEntries(BUILTIN.map((b) => [b, 0]));
   let browses = 0;
   for (const b of calls) {
     const name = skillOpensFromMessages([JSON.stringify({ type: "AssistantMessage", content: [b] })])[0];
-    if (name === "plugin-authoring") { pluginOpens++; continue; }
+    if (name !== undefined && BUILTIN.includes(name)) { builtinOpens[name]!++; continue; }
     if (name !== undefined && installed.includes(name)) {
       opens.push(name);
       const r = results.get(b.id);
@@ -76,14 +80,15 @@ export function loadRec(dir: string, ctx: Ctx): Rec | null {
     if (JSON.stringify(b.input ?? {}).includes("/.claude/skills/")) browses++;
   }
   const session = readJson(join(dir, "agent", "laneb-summary.json"))?.session ?? {};
+  const kwargs = readJson(join(dir, "config.json"))?.agent?.kwargs ?? {};
   const attempts = ctx.sessions.get(t.trialName) ?? [];
   const graded = responded || refused;
   return {
-    trial: t.trialName, task: t.task, label: t.arm, model: t.model, status: graded ? "graded" : "missing", pass: t.outcome === "pass" ? 1 : 0,
-    responded, refused, eligible: graded && responded, opens, pluginOpens, browses, loaded,
+    trial: t.trialName, task: t.task, label: armLabel({ name: t.arm, system_prompt: kwargs.system_prompt, session_kind: kwargs.session_kind }), model: t.model, status: graded ? "graded" : "missing", pass: t.outcome === "pass" ? 1 : 0,
+    responded, refused, eligible: graded && responded, opens, builtinOpens, browses, loaded,
     markers: Object.fromEntries(Object.entries(MARKERS).map(([k, re]) => [k, texts.some((x) => re.test(x))])),
     bodyLoad: session.cmd_expanded === true, firstTokens: session.first_req_prompt_tokens ?? null, requests: t.requests, costUsd: t.costUsd,
-    budgetStop: t.budgetStop, agentTimeout: t.agentTimeout, retried: attempts.slice(0, -1).some((s) => (s.ok_responses ?? 0) > 0),
+    budgetStop: t.budgetStop, agentTimeout: t.agentTimeout, turnCap: msgs.some((m) => m.type === "ResultMessage" && m.subtype === "error_max_turns"), retried: attempts.slice(0, -1).some((s) => (s.ok_responses ?? 0) > 0),
   };
 }
 
@@ -182,29 +187,69 @@ function cellLine(recs: Rec[], model: string, label: string, told: boolean) {
     graded: g, eligibleShare: share(g.filter((r) => r.eligible).length), bodyLoadShare: share(g.filter((r) => r.bodyLoad).length),
     text: `${model} ${label}: graded ${g.length}, missing ${all.length - g.length}, refused ${g.filter((r) => r.refused).length}, retried after a response ${g.filter((r) => r.retried).length}; ` +
       (told ? `body load ${pct(share(g.filter((r) => r.bodyLoad).length))}; ` : `eligible ${pct(share(g.filter((r) => r.eligible).length))}; `) +
-      `pass ${ci(rate(perTask(g, (r) => r.pass)))}; session-cap stops ${g.filter((r) => r.budgetStop).length} (${pct(share(g.filter((r) => r.budgetStop).length))}), agent timeouts ${g.filter((r) => r.agentTimeout).length}; ` +
+      `pass ${ci(rate(perTask(g, (r) => r.pass)))}; session-cap stops ${g.filter((r) => r.budgetStop).length} (${pct(share(g.filter((r) => r.budgetStop).length))}), agent timeouts ${g.filter((r) => r.agentTimeout).length}, turn-cap stops (error_max_turns) ${g.filter((r) => r.turnCap).length}; ` +
       `median requests ${median(g.map((r) => r.requests))}, median first-request tokens ${median(g.flatMap((r) => (r.firstTokens === null ? [] : [r.firstTokens])))}; ` +
       `cost per trial $${(g.length ? cost / g.length : 0).toFixed(3)}, per success ${passes ? "$" + (cost / passes).toFixed(3) : "n/a"}`,
   };
 }
 
+// A pooled contrast over models: per task, the mean over the models that have both cells of their difference, then
+// the task-clustered interval and the sign-flip test on those per-task means. Equal weight per model when every model
+// has every task.
+export function pooledContrast(pairs: [Map<string, number>, Map<string, number>][], test = true) {
+  const acc = new Map<string, number[]>();
+  for (const [a, b] of pairs) for (const [k, v] of a) if (b.has(k)) acc.set(k, [...(acc.get(k) ?? []), v - b.get(k)!]);
+  const per = new Map([...acc].map(([k, xs]) => [k, mean(xs)]));
+  const tasks = [...per.keys()].sort();
+  return { tasks: tasks.length, ...bootstrap(tasks, (s) => mean(s.map((k) => per.get(k)!)), bopts), p: test ? signFlip(tasks.map((k) => per.get(k)!)) : NaN };
+}
+export const lab = (arm: string, setting?: string) => (setting ? `${arm}@${setting}` : arm);
+const MIN_POOLED_D2 = 3;
+
+// Run D. cfg.setting is the primary cells' system prompt (labels arm@setting; absent, bare arm names), cfg.contrast
+// { setting, models } the second setting's cells, cfg.d2 and cfg.d3 "pooled" or "per-model" (section 11's power
+// choice), cfg.mdd the frozen MDDs in points that exploratory rows print beside them.
 export function runD(recs: Rec[], cfg: any): string[] {
   const c = { ...D_CELLS, ...(cfg.cells ?? {}) };
+  const P: string | undefined = cfg.setting;
+  const S: string | undefined = cfg.contrast?.setting;
+  const sModels: string[] = cfg.contrast?.models ?? [];
+  const d2Pooled = cfg.d2 === "pooled";
+  const d3Pooled = cfg.d3 === "pooled";
+  const mdd = (k: string) => (cfg.mdd?.[k] !== undefined ? `; MDD ${cfg.mdd[k]} points (section 11)` : "");
   const out: string[] = ["# Run D: untold discovery"];
   const failed = Object.entries(cfg.listing_check ?? {}).filter(([, ok]) => ok !== true).map(([a]) => a);
   out.push(failed.length ? `Listing check FAILED for ${failed.join(", ")}: the run stops before any batch.` : `Listing check: ${Object.keys(cfg.listing_check ?? {}).length ? "passed for every arm" : "not supplied"}.`);
+  if (P) out.push(`Primary cells: ${P} on ${cfg.models.join(", ")}. Contrast cells: ${S ?? "none"}${sModels.length ? " on " + sModels.join(", ") : ""}. D2 primary: ${d2Pooled ? "pooled across models, one test; per-model D2 exploratory" : "per model, Holm"}. D3 primary: ${d3Pooled ? "pooled across the contrast models, one test; per-model D3 exploratory" : "per model, Holm"}.`);
+  const elig = (m: string, l: string) => recs.filter((r) => r.model === m && r.label === l && r.eligible);
+  const opened = (r: Rec) => (r.opens.length ? 1 : 0);
+  const fitOnly = (xs: Rec[]) => xs.filter((r) => (cfg.fit ?? FIT).includes(r.task));
+  const passMap = (m: string, l: string, f: (r: Rec) => number = (r) => r.pass) => perTask(recs.filter((r) => r.model === m && r.label === l && r.status === "graded"), f);
+  const detail = (m: string, l: string) => {
+    const e = elig(m, l);
+    const op = e.filter((r) => r.opens.length);
+    const any = e.filter((r) => r.opens.length || Object.values(r.builtinOpens).some((n) => n > 0));
+    const inv = e.filter((r) => r.loaded.includes("investigate"));
+    const counts: Record<string, number> = {};
+    for (const r of op) for (const s of new Set(r.opens)) counts[s] = (counts[s] ?? 0) + 1;
+    return `${l}: browse ${pct(e.length ? e.filter((r) => r.browses).length / e.length : NaN)}, opened ${op.length}, loaded among opened ${op.length ? pct(op.filter((r) => r.loaded.length).length / op.length) : "n/a"}, ` +
+      `built-in opens ${BUILTIN.map((b) => `${b} ${e.reduce((s, r) => s + (r.builtinOpens[b] ?? 0), 0)}`).join(", ")}, opened any listed skill ${pct(e.length ? any.length / e.length : NaN)}, ` +
+      `loaded /investigate ${inv.length} (DEBUG REPORT ${inv.filter((r) => r.markers.debug_report).length}; ` +
+      Object.keys(MARKERS).filter((k) => k !== "debug_report").map((k) => `${k} ${inv.filter((r) => r.markers[k]).length}`).join(", ") + `), skills opened ${JSON.stringify(counts)}`;
+  };
+  const noneLines = (m: string, arms: string[], setting?: string) => arms.map((a) => {
+    const [l, n] = [lab(a, setting), lab(c.none, setting)];
+    return `${l} minus ${n}, pass: ${ci(contrast(passMap(m, l), passMap(m, n), false), pp)} pp; retried-after-response scored 0: ${ci(contrast(passMap(m, l, (r) => (r.retried ? 0 : r.pass)), passMap(m, n, (r) => (r.retried ? 0 : r.pass)), false), pp)} pp`;
+  });
   const per = cfg.models.map((m: string) => {
-    const cells = [c.none, c.gstack, c.rewritten, c.placebo].map((l) => cellLine(recs, m, l, false));
-    const elig = (l: string) => recs.filter((r) => r.model === m && r.label === l && r.eligible);
-    const opened = (r: Rec) => (r.opens.length ? 1 : 0);
-    const pool = [...elig(c.gstack), ...elig(c.placebo)];
-    const fitOnly = (xs: Rec[]) => xs.filter((r) => (cfg.fit ?? FIT).includes(r.task));
+    const L = (a: string) => lab(a, P);
+    const cells = [c.none, c.gstack, c.rewritten, c.placebo].map((a) => cellLine(recs, m, L(a), false));
+    const pool = [...elig(m, L(c.gstack)), ...elig(m, L(c.placebo))];
     const d1Map = perTask(pool, opened);
-    const d1 = rate(d1Map);
-    const d2 = contrast(perTask(elig(c.rewritten), opened), d1Map);
-    return { m, cells, pool, elig, opened, d1, d1Count: pool.filter((r) => r.opens.length).length, d2, flagged: cells.some((x) => !(x.eligibleShare >= 0.9)),
-      fit: { d1: rate(perTask(fitOnly(pool), opened)), d2: contrast(perTask(fitOnly(elig(c.rewritten)), opened), perTask(fitOnly(pool), opened), false) },
-      d1MapRaw: d1Map, rwMap: perTask(elig(c.rewritten), opened) };
+    const rwMap = perTask(elig(m, L(c.rewritten)), opened);
+    return { m, cells, pool, d1: rate(d1Map), d1Count: pool.filter((r) => r.opens.length).length, d1Map, rwMap, d2: contrast(rwMap, d1Map),
+      flagged: cells.some((x) => !(x.eligibleShare >= 0.9)),
+      fit: { d1: rate(perTask(fitOnly(pool), opened)), d2: contrast(perTask(fitOnly(elig(m, L(c.rewritten))), opened), perTask(fitOnly(pool), opened), false) } };
   });
   const adj = holm(per.map((x: any) => x.d2.p));
   per.forEach((x: any, i: number) => {
@@ -212,28 +257,64 @@ export function runD(recs: Rec[], cfg: any): string[] {
     if (x.flagged) out.push("Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.");
     const bound = zeroBound(x.d1.tasks);
     out.push(`D1 (gstack and placebo pooled, eligible): ${x.d1Count} opened of ${x.pool.length} trials, rate ${ci(x.d1)} over ${x.d1.tasks} tasks` + (x.d1Count === 0 ? `, exact one-sided 95% upper bound ${pct(bound)}` : ""));
-    const d1Claim = x.flagged ? "no claim (gate)" : x.d1.lo > 0 ? `claim: opened an untold gstack skill in ${pct(x.d1.point)} of eligible trials` : `claim: fewer than ${pct(x.d1Count === 0 ? bound : x.d1.hi)} (95% upper bound)`;
-    out.push(`D1 ${d1Claim}`);
-    out.push(`D2 (rewritten minus pooled): ${ci(x.d2, pp)} pp over ${x.d2.tasks} tasks, p ${pv(x.d2.p)}, Holm ${pv(adj[i]!)}`);
-    const sig = adj[i]! < 0.05 && (x.d2.lo > 0 || x.d2.hi < 0);
-    out.push(`D2 ${x.flagged ? "no claim (gate)" : sig ? `claim: the rewritten description ${x.d2.lo > 0 ? "raised" : "lowered"} opens by ${pp(x.d2.point)} points` : "no claim"}`);
+    out.push(`D1 ${x.flagged ? "no claim (gate)" : x.d1.lo > 0 ? `claim: opened an untold gstack skill in ${pct(x.d1.point)} of eligible trials` : `claim: fewer than ${pct(x.d1Count === 0 ? bound : x.d1.hi)} (95% upper bound)`}`);
+    if (d2Pooled) out.push(`D2 (rewritten minus pooled), exploratory: ${ci(x.d2, pp)} pp over ${x.d2.tasks} tasks, p ${pv(x.d2.p)} unadjusted${mdd("d2_per_model")}; no claim`);
+    else {
+      out.push(`D2 (rewritten minus pooled): ${ci(x.d2, pp)} pp over ${x.d2.tasks} tasks, p ${pv(x.d2.p)}, Holm ${pv(adj[i]!)}`);
+      const sig = adj[i]! < 0.05 && (x.d2.lo > 0 || x.d2.hi < 0);
+      out.push(`D2 ${x.flagged ? "no claim (gate)" : sig ? `claim: the rewritten description ${x.d2.lo > 0 ? "raised" : "lowered"} opens by ${pp(x.d2.point)} points` : "no claim"}`);
+    }
     out.push(`Fit stratum (${x.fit.d1.tasks} tasks, no verdict): D1 ${ci(x.fit.d1)}, D2 ${ci(x.fit.d2, pp)} pp`);
-    for (const l of [c.none, c.gstack, c.rewritten, c.placebo]) {
-      const e = x.elig(l) as Rec[];
-      const op = e.filter((r) => r.opens.length);
-      const inv = e.filter((r) => r.loaded.includes("investigate"));
-      const counts: Record<string, number> = {};
-      for (const r of op) for (const s of new Set(r.opens)) counts[s] = (counts[s] ?? 0) + 1;
-      out.push(`${l}: browse ${pct(e.length ? e.filter((r) => r.browses).length / e.length : NaN)}, opened ${op.length}, loaded among opened ${op.length ? pct(op.filter((r) => r.loaded.length).length / op.length) : "n/a"}, ` +
-        `plugin-authoring opens ${e.reduce((s, r) => s + r.pluginOpens, 0)}, loaded /investigate ${inv.length} (DEBUG REPORT ${inv.filter((r) => r.markers.debug_report).length}; ` +
-        Object.keys(MARKERS).filter((k) => k !== "debug_report").map((k) => `${k} ${inv.filter((r) => r.markers[k]).length}`).join(", ") + `), skills opened ${JSON.stringify(counts)}`);
-    }
-    const passMap = (l: string, f: (r: Rec) => number = (r) => r.pass) => perTask(recs.filter((r) => r.model === x.m && r.label === l && r.status === "graded"), f);
-    for (const l of [c.gstack, c.rewritten, c.placebo]) {
-      out.push(`${l} minus none, pass: ${ci(contrast(passMap(l), passMap(c.none), false), pp)} pp; retried-after-response scored 0: ${ci(contrast(passMap(l, (r) => (r.retried ? 0 : r.pass)), passMap(c.none, (r) => (r.retried ? 0 : r.pass)), false), pp)} pp`);
-    }
+    for (const a of [c.none, c.gstack, c.rewritten, c.placebo]) out.push(detail(x.m, lab(a, P)));
+    out.push(...noneLines(x.m, [c.gstack, c.rewritten, c.placebo], P));
+    if (!S || !sModels.includes(x.m)) return;
+    const cellsS = [c.none, c.gstack, c.rewritten].map((a) => cellLine(recs, x.m, lab(a, S), false));
+    const gS = elig(x.m, lab(c.gstack, S));
+    out.push(`### ${x.m} under ${S} (secondary)`, ...cellsS.map((cl) => cl.text));
+    if (cellsS.some((cl) => !(cl.eligibleShare >= 0.9))) out.push(`Gate: a ${S} cell is under 90% eligible; flagged.`);
+    out.push(`D1 under ${S} (gstack alone, eligible): ${gS.filter((r) => r.opens.length).length} opened of ${gS.length} trials, rate ${ci(rate(perTask(gS, opened)))}`);
+    out.push(`D2 under ${S} (rewritten minus gstack): ${ci(contrast(perTask(elig(x.m, lab(c.rewritten, S)), opened), perTask(gS, opened), false), pp)} pp`);
+    for (const a of [c.none, c.gstack, c.rewritten]) out.push(detail(x.m, lab(a, S)));
+    out.push(...noneLines(x.m, [c.gstack, c.rewritten], S));
   });
-  out.push("", `Pooled across models, equal weight (secondary): D1 ${ci(pooled(per.map((x: any) => x.d1MapRaw)))}; rewritten ${ci(pooled(per.map((x: any) => x.rwMap)))}`);
+
+  const inD2 = per.filter((x: any) => !x.flagged);
+  const left = per.filter((x: any) => x.flagged).map((x: any) => x.m);
+  const d2p = pooledContrast(inD2.map((x: any) => [x.rwMap, x.d1Map]));
+  out.push("", `## D2 pooled across models (${d2Pooled ? "primary, one test" : "secondary"})`);
+  out.push(`D2 pooled over ${inD2.length} models (${inD2.map((x: any) => x.m).join(", ")})${left.length ? `; left out by the gate or missing: ${left.join(", ")}` : ""}: ${ci(d2p, pp)} pp over ${d2p.tasks} tasks, p ${pv(d2p.p)}${d2Pooled ? mdd("d2_pooled") : ""}`);
+  if (d2Pooled) {
+    const sig = inD2.length >= MIN_POOLED_D2 && d2p.p < 0.05 && (d2p.lo > 0 || d2p.hi < 0);
+    out.push(`D2 pooled ${inD2.length < MIN_POOLED_D2 ? `no claim (fewer than ${MIN_POOLED_D2} models)` : sig ? `claim: the rewritten description ${d2p.lo > 0 ? "raised" : "lowered"} opens by ${pp(d2p.point)} points, pooled across models` : "no claim"}`);
+  }
+  const passPairs = (a: string, models: string[], setting?: string) => models.map((m) => [passMap(m, lab(a, setting)), passMap(m, lab(c.none, setting))] as [Map<string, number>, Map<string, number>]);
+  const d2Models = inD2.map((x: any) => x.m);
+  out.push(`Beside D2, no gstack (pooled over the same models): ` + [c.gstack, c.rewritten, c.placebo].map((a) => `${lab(a, P)} minus ${lab(c.none, P)}, pass ${ci(pooledContrast(passPairs(a, d2Models, P), false), pp)} pp`).join("; "));
+
+  if (S && sModels.length) {
+    const d3 = sModels.map((m) => {
+      const g = [lab(c.gstack, P), lab(c.gstack, S)].map((l) => cellLine(recs, m, l, false));
+      const [a, b] = [perTask(elig(m, lab(c.gstack, P)), opened), perTask(elig(m, lab(c.gstack, S)), opened)];
+      return { m, a, b, flagged: g.some((x) => !(x.eligibleShare >= 0.9)), r: contrast(a, b) };
+    });
+    const adj3 = holm(d3.map((x) => x.r.p));
+    out.push("", `## D3, ${lab(c.gstack, P)} minus ${lab(c.gstack, S)} open rate (${d3Pooled ? "pooled primary, one test" : "per model, Holm"})`);
+    d3.forEach((x, i) => {
+      if (d3Pooled) out.push(`D3 ${x.m}, exploratory: ${ci(x.r, pp)} pp over ${x.r.tasks} tasks, p ${pv(x.r.p)} unadjusted${mdd("d3_per_model")}${x.flagged ? "; gate flagged" : ""}; no claim`);
+      else {
+        const sig = adj3[i]! < 0.05 && (x.r.lo > 0 || x.r.hi < 0);
+        out.push(`D3 ${x.m}: ${ci(x.r, pp)} pp over ${x.r.tasks} tasks, p ${pv(x.r.p)}, Holm ${pv(adj3[i]!)}; ${x.flagged ? "no claim (gate)" : sig ? `claim: ${P} ${x.r.lo > 0 ? "raised" : "lowered"} opens by ${pp(x.r.point)} points` : "no claim"}`);
+      }
+    });
+    if (d3Pooled) {
+      const ok = d3.every((x) => !x.flagged);
+      const r = pooledContrast(d3.map((x) => [x.a, x.b] as [Map<string, number>, Map<string, number>]));
+      const sig = ok && r.p < 0.05 && (r.lo > 0 || r.hi < 0);
+      out.push(`D3 pooled over ${d3.map((x) => x.m).join(", ")}: ${ci(r, pp)} pp over ${r.tasks} tasks, p ${pv(r.p)}${mdd("d3_pooled")}; ${!ok ? "no claim (gate)" : sig ? `claim: ${P} ${r.lo > 0 ? "raised" : "lowered"} opens by ${pp(r.point)} points, pooled` : "no claim"}`);
+    }
+    out.push(`Beside D3, no gstack (pooled over ${sModels.join(", ")}): ` + [P, S].map((s) => `${lab(c.gstack, s)} minus ${lab(c.none, s)}, pass ${ci(pooledContrast(passPairs(c.gstack, sModels, s), false), pp)} pp`).join("; "));
+  }
+  out.push("", `Pooled across models, equal weight (secondary): D1 ${ci(pooled(per.map((x: any) => x.d1Map)))}; rewritten ${ci(pooled(per.map((x: any) => x.rwMap)))}`);
   out.push("Retried-trial open sensitivity: at Harbor f3a5a923 a retry deletes the first attempt's trial folder, so no first-attempt messages exist and the reading equals the primary one.");
   return out;
 }

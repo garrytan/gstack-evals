@@ -20,6 +20,7 @@ export type BatchSpec = {
   verifier_timeout_multiplier: number;
   invoke?: boolean;
   skill_maps?: Record<string, Record<string, string>>;
+  max_turns?: number;
 };
 
 // The invoked arms open the prompt with a slash command so the CLI injects a skill body. invoke
@@ -47,6 +48,11 @@ export function armSpec(entry: string): { name: string } & AgentOptions {
   }
   return { name, ...options };
 }
+
+// A cell's label: the arm name, then each agent option it sets, joined by "@" (gstack@claude-code-preset). An arm that
+// sets no option keeps its bare name, so earlier batches keep their labels. One batch may list an arm more than once
+// only under different labels, and the analysis keys cells by the label it rebuilds from each trial's kwargs.
+export const armLabel = (a: { name: string } & AgentOptions) => [a.name, a.system_prompt, a.session_kind].filter(Boolean).join("@");
 
 // Harbor's default no-retry list at f3a5a92, plus our ledger cap stop. A trial that fails for any
 // other reason before it is graded (image build, container start, proxy unreachable) gets two reruns.
@@ -77,6 +83,7 @@ export function jobConfig(b: BatchSpec) {
         skill_map: b.skill_maps?.[a.name] ?? {},
         ...(a.system_prompt ? { system_prompt: a.system_prompt } : {}),
         ...(a.session_kind ? { session_kind: a.session_kind } : {}),
+        ...(b.max_turns ? { sdk_max_turns: b.max_turns } : {}),
       },
     })),
   );

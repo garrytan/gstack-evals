@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { armSpec, jobConfig } from "../runner/grid.ts";
+import { armLabel, armSpec, jobConfig } from "../runner/grid.ts";
 import { tb2TaskToml, TB2_AGENT_HOSTS } from "../runner/materialize.ts";
 
 describe("grid", () => {
@@ -37,6 +37,19 @@ describe("grid", () => {
     for (const bad of ["gstack:system_prompt=claude_code", "gstack:session_kind=", "gstack:session_kind=interactive", "gstack:model=x", "gstack:system_prompt", "gstack:session_kind=unattended:session_kind=unattended"]) {
       expect(() => armSpec(bad)).toThrow("E_USAGE");
     }
+  });
+
+  test("Run D: one arm under two system prompts is two cells with their own labels, and max_turns reaches every agent", () => {
+    const base = {
+      job_name: "d", tasks_dir: "/run/tasks", tasks: ["a"], attempts: 1, n_concurrent: 1, agent_dir: "/r/agent", runner_dir: "/r", base_url: "http://g:8787", max_output_tokens: 32000, verifier_timeout_multiplier: 1,
+      models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }], invoke: false,
+    };
+    const arms = ["gstack:system_prompt=claude-code-preset", "gstack:system_prompt=sdk-default", "none"].map(armSpec);
+    expect(arms.map(armLabel)).toEqual(["gstack@claude-code-preset", "gstack@sdk-default", "none"]);
+    expect(armLabel(armSpec("gstack-render-unattended:system_prompt=claude-code-preset:session_kind=unattended"))).toBe("gstack-render-unattended@claude-code-preset@unattended");
+    const job = jobConfig({ ...base, max_turns: 60, arms: arms.map((a) => ({ ...a, tar: `/run/arms/${a.name}.tar`, sha256: "a" })) });
+    expect(job.agents.map((a) => [a.kwargs.arm, a.kwargs.system_prompt, a.kwargs.sdk_max_turns, a.kwargs.invoke])).toEqual([["gstack", "claude-code-preset", 60, false], ["gstack", "sdk-default", 60, false], ["none", undefined, 60, false]]);
+    expect(jobConfig({ ...base, arms: [{ name: "none", tar: "/t", sha256: "a" }] }).agents[0]!.kwargs).not.toHaveProperty("sdk_max_turns");
   });
 
   test("the rendered gstack arms are told /investigate for every task, from their own map", () => {
