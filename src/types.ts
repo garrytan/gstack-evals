@@ -38,7 +38,7 @@ export type ArmSpec =
   /** Generated from the named arm's installed tree by the seeded placebo generator. */
   | { name: string; kind: "placebo"; of: string }
   /** A whole stack at a sha, installed by its own setup; one install command per host. */
-  | { name: string; kind: "stack"; stack: StackRef; install: Partial<Record<Host, string>> }
+  | { name: string; kind: "stack"; stack: StackRef; install: Partial<Record<Host, string>>; /** A gstack stack served from its own render of this session kind (src/arms/install.ts). */ render?: "interactive" | "unattended" }
   /**
    * A base with the target skill replaced at its real install path (dir set), or removed (dir null).
    * With base null, dir is a loose folder, as in skill-diet.

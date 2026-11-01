@@ -2,7 +2,9 @@
 // instruction for every arm, in our own words, prefixed by the arm's command: none has no prefix, gstack /review,
 // pstack /pstack:interrogate and tstack /sol-loop with "run one review round and stop before any fix" (the commands come
 // from src/arms/stacks.ts where listed). The preregistration freezes TOLD_SHA256, the sha256 of TOLD_TEMPLATE; a test
-// pins it, so any edit to the text fails until the test is changed on purpose.
+// pins it, so any edit to the text fails until the test is changed on purpose. An arm may take its own prefix in place of
+// TOLD_PREFIX's (review-units --told-prefix); the template, and so TOLD_SHA256, stays the same, and an arm without one
+// gets TOLD_PREFIX's.
 import { createHash } from "node:crypto";
 import { stackKind, STACKS } from "../../arms/stacks.ts";
 import type { ArmSpec } from "../../types.ts";
@@ -37,13 +39,13 @@ export const TOLD_PREFIX: Readonly<Record<ToldArm, string>> = {
   tstack: stackTold("tstack") + " Run one review round and stop before any fix.",
 };
 
-export function toldPrompt(arm: ToldArm, base: string): string {
+export function toldPrompt(arm: ToldArm, base: string, prefix: string = TOLD_PREFIX[arm]): string {
   const text = TOLD_TEMPLATE.replaceAll("{base}", base);
-  return TOLD_PREFIX[arm] ? TOLD_PREFIX[arm] + " " + text : text;
+  return prefix ? prefix + " " + text : text;
 }
 
-/** The skill the arm's told command names, such as review or interrogate; null for none. */
-export const toldSkill = (arm: ToldArm): string | null => (TOLD_PREFIX[arm] ? TOLD_PREFIX[arm].split(" ")[0]!.slice(1).split(":").pop()! : null);
+/** The skill the arm's told command (or the given prefix's) names, such as review or interrogate; null for none. */
+export const toldSkill = (arm: ToldArm, prefix: string = TOLD_PREFIX[arm]): string | null => (prefix ? prefix.split(" ")[0]!.slice(1).split(":").pop()! : null);
 
 /** Which told arm an arm spec runs: a listed stack by its kind, gstack for a gstack stack or base, none for an arm with no skill; null otherwise. */
 export function toldArmOf(arm: ArmSpec): ToldArm | null {

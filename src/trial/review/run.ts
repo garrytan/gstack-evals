@@ -16,6 +16,10 @@
 //   judgments.tsv, so it is raw and judge-packet can read it. <out>/units.json, parses.tsv and refusals.tsv sit beside.
 // - Receipts never sit on a volatile path (E_RECEIPTS_VOLATILE); with GSTACK_EVALS_EPHEMERAL=1 they are copied to
 //   GSTACK_EVALS_RECEIPTS before the run returns.
+// - An arm may set its sessions' system prompt (systemPrompt, sdk-default when unset) and, on code units, its told prefix
+//   (toldPrefix, in place of TOLD_PREFIX's). The run may set the turn cap (maxTurns) and GSTACK_SESSION_KIND=unattended
+//   for every arm (sessionKind). A setting off its default joins the session key's task, so a default run keeps today's
+//   keys. arm.json records the system prompt in arm_provenance, and an overridden prefix with its sha256 in told.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
 //   that keeps a voice, since a plan arm runs no second model.
 // - A plan session scores by planScore. After the model produced output (the record's model_output: non-empty text or
@@ -36,6 +40,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
+import { MAX_TURNS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { hostDriver } from "../../adapters/host.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
@@ -74,6 +79,10 @@ export interface ReviewArm {
   name: string;
   /** A told arm for code units, a plan arm for plan units. */
   told: ToldArm | PlanArm;
+  /** The session's system prompt; sdk-default when unset. */
+  systemPrompt?: SystemPrompt;
+  /** The told prefix in place of TOLD_PREFIX's (code units only). */
+  toldPrefix?: string;
 }
 
 export interface ReviewRunInput {
@@ -114,6 +123,10 @@ export interface ReviewRunInput {
   plan?: { lens: PlanLens };
   /** The models each named arm runs on; an arm not named runs on every model. */
   armModels?: Readonly<Record<string, readonly string[]>>;
+  /** The most model turns a session may take; the driver's MAX_TURNS when unset. */
+  maxTurns?: number;
+  /** GSTACK_SESSION_KIND=unattended in every arm's agent env; unset, none is set. */
+  sessionKind?: "unattended";
   env?: Env;
 }
 
@@ -273,10 +286,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (text === null) throw new Error("E_USAGE: arm " + arm.name + "'s gstack tree has no question registry (scripts/question-registry.ts), so its questions cannot be set to auto-decide");
     prefs.set(arm.name, text);
   }
-  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planPrompt(arm.told as PlanArm, plan.lens) : toldPrompt(arm.told as ToldArm, unit.base_branch) });
+  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planPrompt(arm.told as PlanArm, plan.lens) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -319,9 +332,9 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const home = sandbox.homePath(dir);
     const install = rig.arms[arm.name]!;
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
-    const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm);
+    const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}) });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
@@ -416,9 +429,9 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(diagnostics.length ? { diagnostics } : {}), ...(source ? { source } : {}),
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
-      told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: TOLD_PREFIX[arm.told as ToldArm], template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
+      told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: provenance, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);

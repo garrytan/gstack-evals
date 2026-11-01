@@ -8,7 +8,7 @@ export type BatchSpec = {
   tasks_dir: string;
   tasks: string[];
   models: { id: string; harbor_model: string; session_cap_usd: number }[];
-  arms: { name: string; tar: string; sha256: string }[];
+  arms: ({ name: string; tar: string; sha256: string } & AgentOptions)[];
   attempts: number;
   n_concurrent: number;
   agent_dir: string;
@@ -17,6 +17,27 @@ export type BatchSpec = {
   max_output_tokens: number;
   verifier_timeout_multiplier: number;
 };
+
+// Agent options an arm may set, with laneb_agent.py's allowed values (SYSTEM_PROMPTS, SESSION_KINDS). An option
+// left out keeps the agent's default (sdk-default, no session kind) and stays out of the kwargs, so a batch that sets
+// none writes the same JobConfig as before.
+export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"] };
+export type AgentOptions = { system_prompt?: string; session_kind?: string };
+
+// One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
+// gstack:system_prompt=claude-code-preset:session_kind=unattended.
+export function armSpec(entry: string): { name: string } & AgentOptions {
+  const [name, ...settings] = entry.split(":");
+  const options: Record<string, string> = {};
+  for (const setting of settings) {
+    const [, key, value] = /^(\w+)=(.*)$/.exec(setting) ?? [];
+    if (!AGENT_OPTIONS[key as keyof AgentOptions]?.includes(value) || key in options) {
+      throw new Error(`E_USAGE arm ${entry}: ${setting} is not one of ${JSON.stringify(AGENT_OPTIONS)}, or is set twice`);
+    }
+    options[key] = value;
+  }
+  return { name, ...options };
+}
 
 // Harbor reruns a trial only for these exception types, and deletes the trial directory first, so the
 // list holds only failures that come before any model response: Harbor's environment start and agent
@@ -48,6 +69,8 @@ export function jobConfig(b: BatchSpec) {
         persona_path: `${b.agent_dir}/persona.json`,
         wrapper_path: `${b.runner_dir}/prompt-wrapper.md`,
         max_output_tokens: b.max_output_tokens,
+        ...(a.system_prompt ? { system_prompt: a.system_prompt } : {}),
+        ...(a.session_kind ? { session_kind: a.session_kind } : {}),
       },
     })),
   );

@@ -3,6 +3,7 @@
 // trial network and the metering proxy) and runs runReviewUnits. --dry-run prints the plan and writes nothing. Whatever
 // it cannot do refuses with E_USAGE before anything is built or spent.
 import { randomBytes } from "node:crypto";
+import { MAX_TURNS, SYSTEM_PROMPTS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { insideRepo, loadSuite, readsSealedRoot, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
@@ -37,14 +38,22 @@ export const REVIEW_UNITS_HELP = [
   "    [--parallel <n>] [--timeout <s>] [--allowance <usd>] [--severity-map <file>] [--policy <file>] [--date YYYY-MM-DD]",
   "    [--resume] [--repair <note>] [--dry-run]",
   "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
+  "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
+  "    [--max-turns <n>] [--session-kind unattended]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha> and gstack-auto=<repo>@<sha>, each with",
   "its plan line and the frozen plan output block, the rec user, no second model, and no install or test step. --arm-models",
   "limits an arm to some of --models. --sealed-root names the directory outside the repo that holds a sealed suite.",
+  "",
+  "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
+  "--told-prefix gives a code arm's told command the text of a file (one line; its command names the same skill) in place",
+  "of the frozen one. --render serves a gstack stack arm from its own gstack-modules render of that session kind. --max-turns",
+  "caps each session's model turns (default " + MAX_TURNS + "). --session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's",
+  "agent env, none included; left out, no arm gets one.",
 ].join("\n");
 
-const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root"]);
-const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models"]);
+const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind"]);
+const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render"]);
 const BOOL = new Set(["--resume", "--dry-run"]);
 
 class Usage extends Error {}
@@ -144,16 +153,54 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     return { name: s.slice(0, at), kind: "stack", stack, install: { ...stackKind(stack)?.install } };
   });
   if (new Set(specs.map((a) => a.name)).size !== specs.length) throw new Usage("--arms names an arm twice");
+  const perArm = (flag: string, values: readonly string[] | null): Map<string, string> => {
+    const m = new Map<string, string>();
+    for (const v of flags.get(flag) ?? []) {
+      const at = v.indexOf("=");
+      const arm = v.slice(0, at);
+      const value = v.slice(at + 1);
+      if (at <= 0 || !value) throw new Usage(flag + " takes <arm>=<value>, not " + JSON.stringify(v));
+      if (!specs.some((a) => a.name === arm)) throw new Usage(flag + " names arm " + arm + ", which --arms does not run");
+      if (m.has(arm)) throw new Usage(flag + " names arm " + arm + " twice");
+      if (values && !values.includes(value)) throw new Usage(flag + " gives arm " + arm + " " + JSON.stringify(value) + "; it takes " + values.join(" or "));
+      m.set(arm, value);
+    }
+    return m;
+  };
+  const systemPrompts = perArm("--system-prompt", SYSTEM_PROMPTS);
+  const renders = perArm("--render", ["interactive", "unattended"]);
+  for (const name of renders.keys()) {
+    const spec = specs.find((a) => a.name === name)!;
+    if (spec.kind !== "stack" || toldArmOf(spec) !== "gstack") throw new Usage("--render names arm " + name + ", which is not a gstack stack arm (<name>=<gstack repo>@<sha>)");
+  }
+  const prefixes = new Map([...perArm("--told-prefix", null)].map(([arm, file]) => {
+    if (lens) throw new Usage("--told-prefix runs on code units, not with --plan");
+    try {
+      return [arm, readFileSync(file, "utf8").replace(/\n$/, "")] as const;
+    } catch (e) {
+      throw new Usage("--told-prefix " + arm + ": " + (e as Error).message);
+    }
+  }));
+  const maxTurns = Number(one("--max-turns") ?? MAX_TURNS);
+  if (!Number.isSafeInteger(maxTurns) || maxTurns < 1) throw new Usage("--max-turns must be a whole number from 1");
+  const sessionKind = one("--session-kind");
+  if (sessionKind !== null && sessionKind !== "unattended") throw new Usage("--session-kind takes unattended; leave it out for no session kind");
   const arms: ReviewArm[] = specs.map((a) => {
     if (lens) {
       const plan = planArmOf(a);
       if (!plan) throw new Usage("arm " + a.name + " (" + a.kind + "): plan units run none, lens, placebo, gstack=<gstack repo>@<sha> and gstack-auto=<gstack repo>@<sha>");
       if (plan === "gstack-auto" && GSTACK_AUTO.min_version === null) throw new Usage("arm gstack-auto: " + gstackAutoProblem(null));
-      return { name: a.name, told: plan };
+      return { name: a.name, told: plan, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}) };
     }
     const told = toldArmOf(a);
     if (!told) throw new Usage("arm " + a.name + " (" + a.kind + "): review units run none, gstack, pstack and tstack arms only");
-    return { name: a.name, told };
+    const prefix = prefixes.get(a.name);
+    if (prefix !== undefined) {
+      if (told === "none") throw new Usage("arm " + a.name + " runs no told command, so it takes no --told-prefix");
+      if (!/^\/\S+( [^\n]*)?$/.test(prefix)) throw new Usage("--told-prefix " + a.name + ": the prefix must be one line that opens with the arm's command, such as " + JSON.stringify(TOLD_PREFIX[told]));
+      if (toldSkill(told, prefix) !== toldSkill(told)) throw new Usage("--told-prefix " + a.name + " names skill " + toldSkill(told, prefix) + ", but the arm's told command names " + toldSkill(told));
+    }
+    return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
   if (lens && specs.some((a) => a.kind === "placebo") && !specs.some((a) => a.name === "gstack")) throw new Usage("the placebo arm is generated from the gstack arm, so --arms needs gstack=<repo>@<sha> too");
   const armModels = new Map<string, string[]>();
@@ -224,8 +271,9 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out(lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
     io.out("units (" + units.length + "):");
     for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + (lens ? "  plan unit: no install or test" : "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test")));
-    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planArmLine(a.told as Parameters<typeof planArmLine>[0], lens)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + (TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX] ? ", " + JSON.stringify(TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")")).join(", "));
+    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planArmLine(a.told as Parameters<typeof planArmLine>[0], lens)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
+    if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));
     return 0;
@@ -278,13 +326,14 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   writeFileSync(tasks, "[]\n");
   const runFile = join(out, "run.json");
   const runId = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string }).run_id : newRunId("review-units");
-  writeFileSync(runFile, JSON.stringify({ run_id: runId }, null, 2) + "\n");
-  const resolved: ResolvedArms = { arms: [...specs.filter((a) => a.kind !== "placebo"), ...specs.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind }, null, 2) + "\n");
+  const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
+  const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");
