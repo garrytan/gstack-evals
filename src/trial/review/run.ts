@@ -26,7 +26,8 @@
 //   is an infra failure (E_INFRA_FAILURE) or any other incomplete session at any point, so the arm gets no verdict.
 //   progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as failed, a gap as
 //   missing.
-// - A sealed suite refuses a receipts sink inside the repo (E_USAGE), as review-units refuses an in-repo --out.
+// - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
+//   (E_USAGE), as review-units refuses an in-repo --out.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
@@ -73,7 +74,7 @@ export interface ReviewArm {
 
 export interface ReviewRunInput {
   host: Host;
-  suite: { id: string; sha256: string | null; sealed?: boolean };
+  suite: { id: string; sha256: string | null; sealed?: boolean; sealedCatalogs?: boolean };
   units: PreparedUnit[];
   arms: ReviewArm[];
   models: string[];
@@ -223,7 +224,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   }
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
-  if (o.suite.sealed && "sink" in sink && sink.sink && insideRepo(sink.sink)) throw new Error("E_USAGE: suite " + o.suite.id + " is sealed, and the receipts sink " + sink.sink + " (GSTACK_EVALS_RECEIPTS) is inside the repo; copy sealed receipts outside it");
+  if ((o.suite.sealed || o.suite.sealedCatalogs) && "sink" in sink && sink.sink && insideRepo(sink.sink)) throw new Error("E_USAGE: suite " + o.suite.id + (o.suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and the receipts sink " + sink.sink + " (GSTACK_EVALS_RECEIPTS) is inside the repo; copy sealed receipts outside it");
   const plan = o.plan ?? null;
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();

@@ -302,6 +302,8 @@ describe("review-units --plan arguments (keyless)", () => {
     expect(existsSync(out)).toBe(false);
     const inRepo = join(REPO_ROOT, ".review-units-cli-sealed-out");
     expect((await run([...base.map((a) => (a === out ? inRepo : a)), "--plan", "ceo", "--arms", "none", "--dry-run"])).err).toMatch(/^E_USAGE .*suite \S+ is sealed, and --out .* is inside the repo; write sealed runs outside it/);
+    const pub = planPanel(scratch("plan-cli-pub-"), { seeded: 1 }, { visibility: "public" });
+    expect((await run(["--suite", pub.suitePath, "--sealed-root", pub.sealedRoot, "--units", "all", "--models", OPUS, "--out", inRepo, "--source", PANEL_REPO + "=" + pub.clone, "--base-branch", PANEL_REPO + "=main", "--plan", "ceo", "--arms", "none", "--dry-run"])).err).toMatch(/^E_USAGE .*suite \S+ reads catalogs under the sealed root, and --out .* is inside the repo/);
     expect(existsSync(inRepo)).toBe(false);
     expect(CUSTODY).toMatch(/^procedural custody/);
   });

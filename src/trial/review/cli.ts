@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { insideRepo, loadSuite, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
+import { insideRepo, loadSuite, readsSealedRoot, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
 import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
 import { recipeHash, recipeInputs } from "../../rig/recipe.ts";
 import { stackKind } from "../../arms/stacks.ts";
@@ -212,7 +212,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     }
   }
   const out = resolve(one("--out")!);
-  if (suite.sealed && insideRepo(out)) throw new Usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; write sealed runs outside it");
+  const sealedCatalogs = !suite.sealed && readsSealedRoot(suite);
+  if ((suite.sealed || sealedCatalogs) && insideRepo(out)) throw new Usage("suite " + suite.id + (suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and --out " + out + " is inside the repo; write sealed runs outside it");
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
   const sessions = units.length * passes * arms.reduce((s, a) => s + modelsOf(a.name).length, 0);
   if (dry) {
@@ -281,7 +282,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");

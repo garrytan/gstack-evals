@@ -395,6 +395,16 @@ describe("the receipts sink of a sealed suite (keyless)", () => {
     await expect(runReviewUnits({ ...input, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: join(REPO_ROOT, "receipts") } }, rig)).rejects.toThrow("no session may start");
     expect(readFileSync(join(REPO_ROOT, ".gitignore"), "utf8").split("\n")).toContain("receipts/");
   });
+
+  // Value: protects=S1 (#106 /ship): an unsealed suite that reads catalogs under the sealed root holds held-out cases too, so it refuses an in-repo receipts sink like a sealed suite; fails_when=only suite.sealed is checked; why_new=#106 /ship pass 2 specialist S1; seam=runReviewUnits's sink check (review-units sets sealedCatalogs from readsSealedRoot, tests/trial/review/plan.test.ts); no_claim=none beyond protects
+  test("an unsealed suite that reads sealed-root catalogs refuses a receipts sink inside the repo", async () => {
+    const fx = unitFixture();
+    const bound: string[] = [];
+    const rig = { bind: async () => { bound.push("bound"); throw new Error("no session may start"); }, arms: { none: bare("none") }, cells: {} } as unknown as HostRig;
+    const input = baseInput(fx.prepared, fx.panel.suite.id, ["none"], durable(), null);
+    await expect(runReviewUnits({ ...input, suite: { ...input.suite, sealedCatalogs: true }, env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: join(REPO_ROOT, "receipts") } }, rig)).rejects.toThrow("E_USAGE: suite " + fx.panel.suite.id + " reads catalogs under the sealed root, and the receipts sink ");
+    expect(bound).toEqual([]);
+  });
 });
 
 describe("the seeded question preferences (keyless)", () => {
