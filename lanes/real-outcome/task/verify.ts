@@ -1,0 +1,134 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// Grades one tree under test against a task's hidden tests (plan open item 2, adopting #102's verifier contract).
+// The tree is a patch against the task image's starting tree. A prepare container (root, no network, empty
+// environment) copies the pristine repository and its installed dependencies into a fresh volume, applies the patch,
+// and restores gold's test files and runner config. Each run then mounts that volume read-only into a container from
+// the same image as a non-root user, with no network, no capabilities, a read-only root filesystem and a CPU quota,
+// and the verifier-owned entrypoint writes the per-test record. The B6 scorer grades a shipped head the same way.
+import { randomBytes } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { INSTALL_DIRS } from "../mine/paths.ts";
+import { docker } from "./docker.ts";
+import { TaskError, targetOf, type TaskJson } from "./format.ts";
+import { parseGoTest, parsePytest, resultFor, type Parsed, type TestResult } from "./record.ts";
+
+export const RUN_UID = "10001:10001";
+
+/** Drops a patch's file sections that touch installed-dependency directories; they come from the image, never the tree. */
+export function stripPatch(patch: string): { patch: string; stripped: string[] } {
+  const sections = patch.split(/(?=^diff --git )/m);
+  const kept: string[] = [];
+  const stripped: string[] = [];
+  for (const s of sections) {
+    const m = /^diff --git a\/(\S+) b\/(\S+)/.exec(s);
+    const paths = m ? [m[1], m[2]] : [];
+    if (paths.some((p) => p.split("/").some((part) => INSTALL_DIRS.includes(part)))) stripped.push(paths[1]);
+    else kept.push(s);
+  }
+  return { patch: kept.join(""), stripped };
+}
+
+export interface RunRecord {
+  seed: number;
+  wall_ms: number;
+  timed_out: boolean;
+  exit: number;
+  parsed: Parsed;
+}
+
+export interface TreeResult {
+  label: string;
+  prepare: { patch: string; deleted: string[]; unlinked: string[]; stripped: string[] };
+  runs: RunRecord[];
+}
+
+export interface VerifyOptions {
+  taskDir: string;
+  task: TaskJson;
+  image: string;
+  label: string;
+  patch: string;
+  runs: number;
+  seed: number;
+  /** Scratch directory on the host; each tree gets its own subdirectory. */
+  work: string;
+  releaseEdits?: boolean;
+  cpus?: number;
+}
+
+/** Where prepare.sh puts gold's pytest config in the tree, keeping the suffix pytest reads its format from. */
+export const configName = (config: string): string => ".real-verifier-config." + (config.endsWith(".toml") ? "toml" : config.endsWith(".cfg") ? "cfg" : "ini");
+
+/** Runner targets: test files for pytest, package dirs for go. Every required id's target, plus the regression scope. */
+export function targets(t: TaskJson): string[] {
+  const ids = [...t.tests.functional, ...t.tests.escaped_defect, ...t.tests.regression];
+  return [...new Set([...ids.map(targetOf), ...t.tests.regression_scope])].sort();
+}
+
+function shuffled<T>(xs: T[], seed: number): T[] {
+  const out = [...xs];
+  let s = seed >>> 0 || 1;
+  for (let i = out.length - 1; i > 0; i--) {
+    s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0;
+    const j = s % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+const readLines = (p: string): string[] => (existsSync(p) ? readFileSync(p, "utf8").split("\n").filter(Boolean) : []);
+
+export function verifyTree(o: VerifyOptions): TreeResult {
+  const dir = join(o.work, o.label);
+  rmSync(dir, { recursive: true, force: true });
+  for (const d of ["input", "status"]) mkdirSync(join(dir, d), { recursive: true });
+  chmodSync(join(dir, "status"), 0o777);
+  const { patch, stripped } = stripPatch(o.patch);
+  writeFileSync(join(dir, "input/tree.patch"), patch);
+  const volume = "real-verify-" + randomBytes(6).toString("hex");
+  const tests = join(o.taskDir, "tests");
+  const limits = o.task.limits;
+  try {
+    if (docker(["volume", "create", volume]).status !== 0) throw new TaskError("E_REAL_TASK_DOCKER", "docker volume create failed");
+    const prep = docker(
+      ["run", "--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-e", "RELEASE_EDITS=" + (o.releaseEdits ? "1" : "0"), "-v", volume + ":/work", "-v", tests + ":/verifier:ro", "-v", join(dir, "input") + ":/input:ro", "-v", join(dir, "status") + ":/status", o.image, "/verifier/prepare.sh"],
+      { timeoutMs: 600000 },
+    );
+    const prepState = readLines(join(dir, "status/prepare.txt"));
+    if (prep.status !== 0 || !prepState.includes("done")) {
+      throw new TaskError("E_REAL_TASK_DOCKER", o.label + ": prepare failed (" + (prepState[0] ?? "exit " + prep.status) + "): " + (prep.stderr + readLines(join(dir, "status/apply.err")).join(" ")).trim().slice(0, 400));
+    }
+    const runs: RunRecord[] = [];
+    for (let i = 0; i < o.runs; i++) {
+      const seed = o.seed + i;
+      const out = join(dir, "out-" + i);
+      mkdirSync(out, { recursive: true });
+      chmodSync(out, 0o777);
+      writeFileSync(join(out, "targets.txt"), shuffled(targets(o.task), seed).join("\n") + "\n");
+      const name = "real-run-" + randomBytes(6).toString("hex");
+      const base = ["run", "--rm", "--name", name, "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=2g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus ?? limits.cpus), "--memory", limits.memory, "--pids-limit", "2048", "-e", "HOME=/tmp", "-v", volume + ":/testbed:ro", "-v", tests + ":/verifier:ro", "-v", out + ":/out", "--workdir", "/testbed"];
+      const r = o.task.runner;
+      const cmd =
+        r.kind === "pytest"
+          ? [...base, "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "PYTHONPYCACHEPREFIX=/tmp/pycache", "--entrypoint", r.python, o.image, "-s", "/verifier/vrun.py", "/out/record.jsonl", "/testbed/" + configName(r.config), "/out/targets.txt", String(seed)]
+          : [...base, "-e", "GOFLAGS=-mod=readonly", "-e", "GOPROXY=off", "-e", "GOTOOLCHAIN=local", "-e", "GOCACHE=/tmp/gocache", "-e", "GOTMPDIR=/tmp", "--entrypoint", "sh", o.image, "-c", 'go test -json -count=1 -shuffle=' + seed + ' $(sed "s|^|./|" /out/targets.txt) > /out/record.jsonl 2> /out/stderr.txt; echo $? > /out/exit'];
+      const res = docker(cmd, { timeoutMs: limits.verifier_sec * 1000 });
+      if (res.timed_out) docker(["kill", name]);
+      const record = existsSync(join(out, "record.jsonl")) ? readFileSync(join(out, "record.jsonl"), "utf8") : "";
+      const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, existsSync(join(out, "stderr.txt")) ? readFileSync(join(out, "stderr.txt"), "utf8") : "", r.module);
+      runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, exit: r.kind === "pytest" ? res.status : Number(readLines(join(out, "exit"))[0] ?? res.status), parsed });
+    }
+    return { label: o.label, prepare: { patch: prepState[0] ?? "", deleted: readLines(join(dir, "status/deleted.txt")), unlinked: readLines(join(dir, "status/unlinked.txt")), stripped }, runs };
+  } finally {
+    docker(["volume", "rm", "-f", volume]);
+  }
+}
+
+/** One id's result in each run. */
+export const idResults = (tree: TreeResult, id: string): TestResult[] => tree.runs.map((r) => resultFor(r.parsed, id));
+
+/** Whether every required id passed in every run. */
+export function allPass(tree: TreeResult, ids: string[]): boolean {
+  return tree.runs.length > 0 && ids.every((id) => idResults(tree, id).every((r) => r.status === "pass"));
+}

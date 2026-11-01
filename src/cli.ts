@@ -31,6 +31,7 @@ export const COMMANDS: Command[] = [
   { name: "tokens", summary: "Export the review token table for gstack's review-dispatch-compare.", module: "lanes/review-replay/tokens-cli.ts", owner: "U13, M1c" },
   { name: "noloss", summary: "Review no-loss category: suites, arm ingest, paired scoring, export, power and blinded judge packets.", module: "lanes/review-noloss/cli.ts", owner: "U13, GSTA-43, GSTA-45" },
   { name: "review-units", summary: "Run review units as Lane A trials: unit repos from head-only fetches, the told prompt, the findings parser and cost.tsv.", module: "src/trial/review/cli.ts", owner: "U9, GST-381" },
+  { name: "real", summary: "Real-world outcome lane: mining, task format, ship sandbox, arms and scoring (plan 2026-11-01-geva-87).", module: "lanes/real-outcome/cli.ts", owner: "RO-B1 to RO-B7, GST-690" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },

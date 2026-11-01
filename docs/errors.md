@@ -71,6 +71,14 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_IMAGE_STALE](#e_image_stale) | 2 | U9 |
 | [E_USERSIM](#e_usersim) | 2 | U10 |
 | [E_VERIFIER](#e_verifier) | 2 | U9 |
+| [E_REAL_MINE_SHALLOW](#e_real_mine_shallow) | 2 | U14 |
+| [E_REAL_MINE_INPUT](#e_real_mine_input) | 2 | U14 |
+| [E_REAL_MINE_FETCH](#e_real_mine_fetch) | 2 | U14 |
+| [E_REAL_TASK_FORMAT](#e_real_task_format) | 2 | U20 |
+| [E_REAL_TASK_LOCKFILE](#e_real_task_lockfile) | 2 | U20 |
+| [E_REAL_TASK_KEYED_HOST](#e_real_task_keyed_host) | 2 | U20 |
+| [E_REAL_TASK_GOLD_CONFLICT](#e_real_task_gold_conflict) | 2 | U20 |
+| [E_REAL_TASK_DOCKER](#e_real_task_docker) | 2 | U20 |
 | [E_INTERNAL](#e_internal) | 2 | U1 |
 | [E_TOKENS_COVERAGE](#e_tokens_coverage) | 2 | U13 |
 | [E_REPLAY_PLAN](#e_replay_plan) | 2 | U13 |
@@ -586,6 +594,70 @@ The verifier refused to grade a trial: the read-only check runner (Lane A) or Ha
 Fix: Read the trace file and the check it names. If nothing changed, --resume &lt;out>; after fixing a check or fixture, use --repair, since the cache key changed.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U9.
+
+### E_REAL_MINE_SHALLOW
+
+gstack-evals real mine repo was given a shallow clone. SZZ blame and the first-parent walk need the whole history, so nothing was mined.
+
+Fix: Clone the repository in full (git clone without --depth, or git fetch --unshallow) and run the command again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U14.
+
+### E_REAL_MINE_INPUT
+
+A real mine input file could not be read: the repository list, the GitHub metadata file or a mine result is not the JSON shape lanes/real-outcome/mine/ expects.
+
+Fix: Regenerate the file (real mine fetch-meta writes the metadata file) or fix the field the message names, then run the command again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U14.
+
+### E_REAL_MINE_FETCH
+
+real mine fetch-meta could not read pull request metadata from GitHub through gh. No file was written.
+
+Fix: Check gh auth status and the repository name, wait out any rate limit, then run the command again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U14.
+
+### E_REAL_TASK_FORMAT
+
+A real-outcome task directory breaks its format (lanes/real-outcome/task/SPEC.md): a missing or extra file, a bad task.json field, a symlink, a statement that names an upstream pull request or later commit, or a base tree with project Claude config. Nothing ran in Docker.
+
+Fix: Fix the file the message names, or rebuild the directory with gstack-evals real task build, then check it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_TASK_LOCKFILE
+
+A real-outcome task installs dependencies without a lockfile, or with a command that does not hold to its lockfile (npm ci, pip --require-hashes, uv sync --frozen and the like). Untrusted installs without a lockfile are refused.
+
+Fix: Pick a base commit whose tree holds a lockfile and give the frozen install command for it in the build spec, or drop the candidate.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_TASK_KEYED_HOST
+
+An untrusted real-outcome task (an upstream repository, not a fixture) was about to be built or run on a host whose environment holds a provider or GitHub credential. Task installs and tests run only on keyless build hosts.
+
+Fix: Run the build or check on a build host with no provider keys in its environment (a fresh VM, not a Capy shell), then run it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_TASK_GOLD_CONFLICT
+
+A K1 or K4 gold tree could not be built: the later fix does not apply onto the introducing change (or a re-land onto the base) without conflicts.
+
+Fix: Hand-port the fix onto the introducing commit and pass it as gold_patch in the build spec, or drop the pair and record why.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_REAL_TASK_DOCKER
+
+Docker failed while building a real-outcome task image or running its verifier, so the task got no validity verdict.
+
+Fix: Read the build or run log the message names, fix the Dockerfile input or the host, and check the task again.
+
+Exit 2. Side effects: Partial: images and volumes the check created are removed; nothing was spent. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_INTERNAL
 
