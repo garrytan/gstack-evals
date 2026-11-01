@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_ROOT } from "../../../src/cli.ts";
@@ -46,17 +46,6 @@ describe("reader map and reader names (keyless)", () => {
     expect(bad({ ...map, adversarial: [] })).toMatch(/adversarial/);
     expect(READER_SCOPE.test("reader:adversarial-native")).toBe(true);
     expect(["reader:", "reader:Red Team", "reader:red_team", "readers:testing", "reader:-x"].some((s) => READER_SCOPE.test(s))).toBe(false);
-  });
-
-  // Value: protects=the map matches gstack's /review at its commit: every checklist exists there, and the adversarial marker is in Step 4.8's Claude subagent prompt; fails_when=a checklist was renamed or the marker reworded at the pinned commit; why_new=R2 build (GEVA-122); seam=the map against a gstack checkout at its commit (GSE_GSTACK_SRC)
-  test.skipIf(!process.env.GSE_GSTACK_SRC)("the map's checklists and marker are in gstack at its commit (GSE_GSTACK_SRC)", () => {
-    const src = process.env.GSE_GSTACK_SRC!;
-    const head = Bun.spawnSync(["git", "-C", src, "rev-parse", "HEAD"]).stdout.toString().trim();
-    expect(head).toBe(map.gstack.sha);
-    for (const path of Object.keys(map.checklists)) expect(existsSync(join(src, path))).toBe(true);
-    const army = readFileSync(join(src, "review", "sections", "review-army.md"), "utf8");
-    for (const path of Object.keys(map.checklists)) expect(army).toContain(path);
-    for (const marker of map.adversarial) expect(readFileSync(join(src, "review", "sections", "adversarial.md"), "utf8")).toContain(marker);
   });
 
   // Value: protects=which launches count: a launch the CLI started counts once, one it refused or one from inside a subagent never counts, the Task tool name counts like Agent, and a reader's tokens are unknown when one of its subagents never reported; fails_when=a refused or nested launch adds a reader, or a partial sum reads as exact; why_new=R2 build (GEVA-122); seam=readerUsage

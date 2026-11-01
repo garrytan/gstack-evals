@@ -121,7 +121,7 @@ describe("review-units R2 settings (keyless)", () => {
     };
     const dry = await run([...base(out), "--arms", PINNED, "--reader-map", MAP, "--max-turns", "200", "--allowance", "40", "--dry-run"]);
     expect(dry.code).toBe(0);
-    expect(dry.out).toContain("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop, a coverage gap");
+    expect(dry.out).toContain("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
     expect(dry.out).toContain("reader map " + MAP + " (sha256 ");
     expect(dry.out).toContain("worst case at the allowance: $80.00");
     expect((await run([...base(out), "--arms", PINNED, "--dry-run"])).out).not.toContain("cap stops");

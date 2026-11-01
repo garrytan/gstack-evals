@@ -8,7 +8,8 @@
 // user message. STUB_RECORD, when set, names a file the stub appends its argv and every control request to, one JSON
 // line each. The modes below copy pinned CLI 2.1.314's messages (tests/adapters/claude-code.test.ts runs the real CLI):
 // STUB_MODE=turns takes one Bash turn per model turn until the argv's --max-turns=<n>, then ends with an error_max_turns
-// result. STUB_MODE=apierror answers with one tool_use, then the CLI's synthetic API error message whose text is
+// result; STUB_TURN_TEXTS, a JSON object from turn number to text, writes that text as its own message before the turn's
+// tool_use. STUB_MODE=apierror answers with one tool_use, then the CLI's synthetic API error message whose text is
 // STUB_API_ERROR (status STUB_API_STATUS) and its result. STUB_MODE=agents launches the subagents STUB_AGENTS lists (a
 // JSON array of {id, prompt, started, tokens}) through the Agent tool in one message, starts each with started true
 // (task_started, one subagent message, task_notification with tokens as total_tokens when given), then answers with
@@ -40,7 +41,9 @@ rl.on("line", (line) => {
   if (env.STUB_STDERR) process.stderr.write(env.STUB_STDERR.repeat(Number(env.STUB_STDERR_TIMES ?? 1)));
   if (env.STUB_MODE === "turns") {
     const cap = Number((process.argv.find((a) => a.startsWith("--max-turns=")) ?? "=0").split("=")[1]);
+    const texts = JSON.parse(env.STUB_TURN_TEXTS || "{}");
     for (let n = 1; n <= cap; n++) {
+      if (texts[n]) out(assistant("t" + n, [{ type: "text", text: texts[n] }], "tool_use"));
       out(assistant("t" + n, [{ type: "tool_use", id: "tu_t" + n, name: "Bash", input: { command: "true" } }], "tool_use"));
       out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_t" + n, content: "", is_error: false }] }, parent_tool_use_id: null, session_id: "s", uuid: "ur" + n });
     }

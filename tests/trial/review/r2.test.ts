@@ -15,15 +15,15 @@ import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { loadReaderMap, READER_ROW, type ReaderMap } from "../../../src/trial/review/readers.ts";
-import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
+import { cappedParse, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, unitTaskId } from "../../../src/trial/review/unit.ts";
 import { harness } from "../../adapters/harness.ts";
 import { sourceRepo } from "./helpers.ts";
 
 // The R2 build end to end without a key (R48 follow-ups prereg, section 3.6): review units through runReviewUnits with
 // the real Claude Code driver and the pinned Agent SDK, whose CLI is the stub (tests/adapters/fixtures/stub-cli.cjs), so
-// every record below is the driver's own output. The stub launches readers, hits the turn cap or answers with the
-// metering proxy's allowance refusal, as each cell asks.
+// every record below is the driver's own output. The stub launches readers, hits the turn cap (after writing a findings
+// block, when the cell asks) or answers with the metering proxy's allowance refusal, as each cell asks.
 
 const OPUS = "claude-opus-5-5";
 const STUB = join(REPO_ROOT, "tests", "adapters", "fixtures", "stub-cli.cjs");
@@ -62,6 +62,7 @@ const cells = {
   readers: { STUB_MODE: "agents", STUB_AGENTS: JSON.stringify(ARMY), STUB_FINAL: findings("The API contract changes: callers of a now get 2.") },
   plain: { STUB_MODE: "agents", STUB_AGENTS: "[]", STUB_FINAL: findings("The data migration leaves old rows on 1.") },
   turns: { STUB_MODE: "turns" },
+  turnsReview: { STUB_MODE: "turns", STUB_TURN_TEXTS: JSON.stringify({ 2: findings("The cache key drops the allowance."), 3: "One more check.\n\n```json\n{\"draft\": true}\n```\n" }) },
   spent: { STUB_MODE: "apierror", STUB_API_ERROR: SPENT, STUB_API_STATUS: "402" },
 } as const;
 
@@ -126,8 +127,8 @@ const arm = (out: string, id: string) => JSON.parse(readFileSync(join(out, "arms
 const costRows = (out: string, id: string) => readFileSync(join(out, "arms", id, "cost.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
 
 describe("R2 build: a stub run through the run loop with the real driver and the pinned Agent SDK (keyless)", () => {
-  // Value: protects=section 3.6 items 2 and 3 and GEVA-116's note in the records R2 scores: under R2's settings (200 turns, a $40 allowance) a session the turn cap ends and one the allowance stops are journaled as turn_cap and allowance_stop, each a coverage gap that stops its arm and is counted in arm.json's cap_stops, in both arms alike; the reader map's rows reach cost.tsv in the pinned format, ingest's contract accepts the arms, and resume reuses every cell; fails_when=a cap stop parses as findings or a miss, a capped arm reads complete, reader rows are missing, malformed or written for a session with no launches, or the contract refuses a reader row; why_new=R2 build (GEVA-122); seam=runReviewUnits, hostDriver, claudeCodeDriver, readers.ts, costTsv; no_claim=a real model or the Docker rig
-  test("cap stops are their own terminations and coverage gaps, and reader rows land in cost.tsv", async () => {
+  // Value: protects=section 3.6 items 2 and 3, GEVA-116's note and GSTA-2's cap-stop ruling in the records R2 scores: under R2's settings (200 turns, a $40 allowance) a session the turn cap ends and one the allowance stops are journaled as turn_cap and allowance_stop, each scored against its own arm (with no findings block, as finding nothing), never a coverage gap, counted with its unit in arm.json's cap_stops and named in diagnostics, in both arms alike; the reader map's rows reach cost.tsv in the pinned format, ingest's contract accepts the arms, and resume reuses every cell; fails_when=a cap stop becomes a coverage gap or stops its arm, goes uncounted or unnamed, reader rows are missing, malformed or written for a session with no launches, or the contract refuses a reader row; why_new=R2 build (GEVA-122), GSTA-2's ruling (GEVA-129); seam=runReviewUnits, hostDriver, claudeCodeDriver, readers.ts, costTsv; no_claim=a real model or the Docker rig
+  test("cap stops are their own terminations, scored against their own arm, and reader rows land in cost.tsv", async () => {
     const { prepared, suite } = twoUnits();
     const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
     const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "readers", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "spent" } }, settings: { maxTurns: 200, allowanceMicros: 40_000_000, readers: { map: loaded.map, sha256: loaded.sha256 } } });
@@ -136,14 +137,16 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       const journal = readReviewJournal(run.out);
       const ended = (armName: string, unit: string) => [...journal.values()].find((e) => e.cell.arm === armName && e.cell.unit === unit)!.record.termination;
       expect([ended("gstack-full", a), ended("gstack-full", b), ended("none-r2", a), ended("none-r2", b)]).toEqual([{ kind: "completed" }, { kind: "turn_cap" }, { kind: "completed" }, { kind: "allowance_stop" }]);
-      expect(first.stops.map((s) => s.code)).toEqual(["E_COVERAGE_GAP", "E_COVERAGE_GAP"]);
+      expect(first.stops).toEqual([]);
       const full = arm(run.out, "gstack-full-opus");
       const none = arm(run.out, "none-r2-opus");
-      expect([full.status, none.status]).toEqual(["stopped", "stopped"]);
-      expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0 }, { turn_cap: 0, allowance_stop: 1 }]);
-      expect(full.coverage_gaps).toEqual([b + " pass 1: incomplete, the session ended turn_cap"]);
-      expect(none.coverage_gaps).toEqual([b + " pass 1: incomplete, the session ended allowance_stop"]);
-      expect([full.parse_outcomes.findings, full.parse_outcomes.incomplete, none.parse_outcomes.findings, none.parse_outcomes.incomplete]).toEqual([1, 1, 1, 1]);
+      expect([full.status, none.status]).toEqual(["complete", "complete"]);
+      expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0, units: [b] }, { turn_cap: 0, allowance_stop: 1, units: [b] }]);
+      expect([full.coverage_gaps, none.coverage_gaps]).toEqual([undefined, undefined]);
+      expect(full.diagnostics).toEqual([b + " pass 1: missing; ended turn_cap, scored as finding nothing"]);
+      expect(none.diagnostics).toEqual([b + " pass 1: missing; ended allowance_stop, scored as finding nothing"]);
+      expect([full.parse_outcomes, none.parse_outcomes].map((c) => [c.findings, c.missing, c.incomplete])).toEqual([[1, 1, 0], [1, 1, 0]]);
+      for (const id of ["gstack-full-opus", "none-r2-opus"]) expect(readFileSync(join(run.out, "arms", id, "findings", b.replaceAll("/", "__") + ".jsonl"), "utf8")).toBe("");
       expect([full.reader_map_sha256, none.reader_map_sha256]).toEqual([loaded.sha256, loaded.sha256]);
       expect(full.told.prefix_sha256).toBe(new Bun.CryptoHasher("sha256").update(R2_PREFIX).digest("hex"));
       const rows = costRows(run.out, "gstack-full-opus");
@@ -172,6 +175,36 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       run.h.proxy.stop();
     }
   }, 120_000);
+
+  // Value: protects=GSTA-2's cap-stop ruling: a session the turn cap ends is scored on the last findings block its main agent wrote before the stop, past a later json block that is not findings, and one that wrote none is scored as finding nothing; the arm stays complete and counts both; fails_when=a capped session's findings are dropped, read from a non-findings block, or the arm stops; why_new=GSTA-2's ruling (GEVA-129); seam=cappedParse in runReviewUnits, the driver's turns; no_claim=a real model
+  test("a capped session is scored on the findings it wrote before the stop", async () => {
+    const { prepared, suite } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "turnsReview", [b]: "turns" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { maxTurns: 5 } });
+    try {
+      const first = await runReviewUnits(run.input, run.rig);
+      expect(first.stops).toEqual([]);
+      const full = arm(run.out, "gstack-full-opus");
+      expect([full.status, full.cap_stops, full.coverage_gaps]).toEqual(["complete", { turn_cap: 2, allowance_stop: 0, units: [a, b] }, undefined]);
+      expect(full.diagnostics).toEqual([a + " pass 1: findings; ended turn_cap, scored on the findings it wrote before the stop", b + " pass 1: missing; ended turn_cap, scored as finding nothing"]);
+      const lines = readFileSync(join(run.out, "arms", "gstack-full-opus", "findings", a.replaceAll("/", "__") + ".jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(lines.map((f) => [f.severity, f.path, f.summary])).toEqual([["CRITICAL", "src/a.ts", "The cache key drops the allowance."]]);
+      expect(arm(run.out, "none-r2-opus").cap_stops).toEqual({ turn_cap: 0, allowance_stop: 0, units: [] });
+      for (const id of ["gstack-full-opus", "none-r2-opus"]) expect(() => parseArm(files(join(run.out, "arms", id)), suite as unknown as Suite)).not.toThrow();
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
+  // Value: protects=the cap-stop read rule itself: the latest text turn whose last json block parses as findings wins, an empty array is a real zero, and malformed or non-array blocks never count; fails_when=an earlier block beats a later valid one, a malformed block scores, or no block reads as anything but missing; why_new=GSTA-2's ruling (GEVA-129); seam=cappedParse; no_claim=the driver
+  test("cappedParse reads the latest findings block and ignores the rest", () => {
+    const block = (body: string) => "x\n\n```json\n" + body + "\n```\n";
+    const one = JSON.stringify([{ file: "a.ts", line: 1, severity: "HIGH", claim: "c", evidence: "e" }]);
+    expect(cappedParse([])).toEqual({ kind: "missing" });
+    expect(cappedParse(["Looking at the diff.", block("{\"a\": 1}"), block("[{\"file\": 3}]")])).toEqual({ kind: "missing" });
+    expect(cappedParse([block(one), "Checking one more file.", block("not json")])).toEqual({ kind: "findings", findings: [{ file: "a.ts", line: 1, severity: "HIGH", claim: "c", evidence: "e" }] });
+    expect(cappedParse([block(one), block("[]")])).toEqual({ kind: "findings", findings: [] });
+  });
 
   // Value: protects=GEVA-116's byte-for-byte line: a run at today's defaults (60 turns, the policy allowance, no reader map) records the same stub sessions as before the build: the turn cap as completed, the allowance as a missing E_ALLOWANCE cell, no cap_stops or reader_map_sha256 in arm.json and no reader rows; fails_when=a default run gains a cap kind, an arm.json field or a cost row; why_new=GEVA-116's note on #119; seam=runReviewUnits' capStops and readers gates
   test("a default run keeps today's records", async () => {

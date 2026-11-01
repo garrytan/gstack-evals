@@ -53,10 +53,11 @@ export const REVIEW_UNITS_HELP = [
   "agent env, none included; left out, no arm gets one.",
   "",
   "--allowance caps each session's spend in dollars (default: 1.6M input and 32k output tokens at the model's price). A run whose",
-  "--max-turns or --allowance is off its default records a code session that either cap ends as turn_cap or allowance_stop, a",
-  "coverage gap. --reader-map writes each code session's readers (the subagents it launched, named through a map pinned to",
-  "one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json) to cost.tsv as reader:<name> rows;",
-  "every gstack arm must run the map's commit. run.json records the allowance and the map when they are set.",
+  "--max-turns or --allowance is off its default records a code session that either cap ends as turn_cap or allowance_stop,",
+  "scored on the findings it wrote before the stop. --reader-map writes each code session's readers (the subagents it",
+  "launched, named through a map pinned to one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json)",
+  "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit. run.json records the allowance and the map",
+  "when they are set.",
 ].join("\n");
 
 const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map"]);
@@ -301,7 +302,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planArmLine(a.told as Parameters<typeof planArmLine>[0], lens)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
-    if (maxTurns !== MAX_TURNS || allowance !== null) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop, a coverage gap");
+    if (maxTurns !== MAX_TURNS || allowance !== null) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
     if (mapPin) io.out("reader map " + mapPin.file + " (sha256 " + mapPin.sha256 + ", gstack " + mapPin.gstack.repo + "@" + mapPin.gstack.sha + ")");
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));

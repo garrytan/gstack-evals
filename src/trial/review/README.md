@@ -105,10 +105,12 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
 
 - **Cap stops.** A run whose turn cap or allowance is off its default records a code session that either cap ends as its
   own termination: turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
-  names the slot's allowance). The parser reads neither as completed, so each is an incomplete pass: a coverage gap that
-  stops the arm, never scored as missed blockers, the same in every arm. arm.json counts them in
-  `cap_stops: {turn_cap, allowance_stop}`, and coverage_gaps names each. A run at the defaults, and every plan unit, keeps
-  today's records: the turn cap ends a session as completed, and the allowance as a missing cell (E_ALLOWANCE).
+  names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
+  against its own arm, the same in every arm: its findings are those of the latest main-agent text turn whose last json
+  block parses as findings, and with no such turn it is a missing pass, scored as finding nothing. arm.json counts them
+  in `cap_stops: {turn_cap, allowance_stop, units}`, where units names each unit a cap stop hit, and diagnostics names
+  each session. A run at the defaults, and every plan unit, keeps today's records: the turn cap ends a session as
+  completed, and the allowance as a missing cell (E_ALLOWANCE).
 - **Reader rows.** With `--reader-map`, each code session's readers go to the journal and to cost.tsv as
   `reader:<name>` rows after the unit-pass's all and voice rows, sorted by name. A reader is a subagent the main agent
   launched through the Agent tool (Task in older CLIs) and the CLI started (task_started, or a message from the

@@ -21,9 +21,11 @@
 //   for every arm (sessionKind). A setting off its default joins the session key's task, so a default run keeps today's
 //   keys. arm.json records the system prompt in arm_provenance, and an overridden prefix with its sha256 in told.
 // - A run whose turn cap or allowance is off its default (maxTurns other than MAX_TURNS, or allowanceMicros set) records
-//   its code sessions' cap stops as their own terminations (the driver's capStops): turn_cap and allowance_stop. The
-//   parser reads neither as completed, so each is an incomplete pass, a coverage gap that stops the arm, never scored as
-//   missed blockers; arm.json counts them in cap_stops. A default run, and every plan unit, keeps today's records.
+//   its code sessions' cap stops as their own terminations (the driver's capStops): turn_cap and allowance_stop. A capped
+//   session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts against its own arm: its findings are
+//   those of the latest main-agent text turn whose last json block parses as findings (cappedParse), and with no such
+//   turn it is missing, scored as finding nothing. arm.json counts cap stops in cap_stops with the units they hit, and
+//   diagnostics names each. A default run, and every plan unit, keeps today's records.
 // - A run with a reader map (readers.ts) records each code session's readers from its transcript in the journal and
 //   writes them to cost.tsv as reader:<name> rows; arm.json names the map's sha256 in reader_map_sha256.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
@@ -59,7 +61,7 @@ import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatile
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
-import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
+import { PARSER_SHA256, parseFinalTurn, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, planArmLine, parsePlanSession, planPrompt, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
@@ -199,6 +201,9 @@ export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" 
   const kind = e.record.termination.kind;
   return e.record.model_output === true && (kind === "timeout" || kind === "arm_failure" || kind === "completed") ? "miss" : "gap";
 }
+
+/** A cap-stopped code session's parse: the latest main-agent text turn whose last json block parses as findings, else missing. */
+export const cappedParse = (turns: readonly string[]): ParseOutcome => turns.map(parseFinalTurn).findLast((p) => p.kind === "findings") ?? { kind: "missing" };
 
 const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
 
@@ -354,7 +359,8 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
     trial.record.cost_micros = meter.micros;
-    const parse = plan ? parsePlanSession(trial.record) : parseFindings(trial.record);
+    const kind = trial.record.termination.kind;
+    const parse = plan ? parsePlanSession(trial.record) : kind === "turn_cap" || kind === "allowance_stop" ? cappedParse(trial.record.turns) : parseFindings(trial.record);
     let transcript = "";
     try {
       transcript = readers ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
@@ -363,7 +369,6 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     }
     const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
-    const kind = trial.record.termination.kind;
     wall += trial.record.wall_ms ?? 0;
     ran++;
     progress = recordSession(progress, cellName(cell), plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
@@ -406,6 +411,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const modes: Record<string, number> = {};
     let withoutText = 0;
     const capped = { turn_cap: 0, allowance_stop: 0 };
+    const cappedUnits = new Set<string>();
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
     for (const unit of o.units) {
@@ -421,7 +427,11 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
-        if (ended === "turn_cap" || ended === "allowance_stop") capped[ended]++;
+        if (ended === "turn_cap" || ended === "allowance_stop") {
+          capped[ended]++;
+          cappedUnits.add(unit.unit.id);
+          diagnostics.push(note + "; ended " + ended + ", " + (e.parse.kind === "findings" ? "scored on the findings it wrote before the stop" : "scored as finding nothing"));
+        }
         if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
         if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
         else if (score === "gap") gaps.push(note + (!plan || (ended !== "arm_failure" && ended !== "timeout" && ended !== "completed") ? "" : e.record.model_output !== false ? " with no model_output recorded" : ended === "completed" ? " and no model output" : " before any model output"));
@@ -453,7 +463,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
-      ...(capStops ? { cap_stops: capped } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
+      ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits] } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);
