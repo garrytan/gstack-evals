@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "suite": "stacks-r1-out19",
+  "decision_rule": "Preregistered in wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg (section 3, R2). One pass each of gstack-full (gstack /review on Opus 5.5, told to run the Review Army and the adversarial pass) and none-r2 (Opus 5.5, no gstack, the same told template) on the 19 stacks-r1 units outside GSTA-167's cohort, judged blind in one batch at the rig pin. Each blocking blocker's value is FOUND or not; PR clusters are the units. The kill rule reads only gstack-full-vs-none: when the procedure gate passed, gstack-full finding no more blocking blockers than none-r2 sends the Review Army (and the adversarial pass, when its own gate passed) to Garry as a CUT-CANDIDATE. KEEP needs the scorer's 95% interval above zero. The scorer's NO_LOSS, LOSS and size-rule lines are printed but decide nothing. False blockers per PR on the 6 over-blocking units and every unmatched blocking finding are reported beside. An arm that stopped, or a blocker recorded with coverage incomplete, gives no verdict.",
+  "seed": 20261031,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "gstack-full-vs-none",
+      "variant": "gstack-full",
+      "reference": "none-r2",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R2's kill rule is a count rule, so the margin decides nothing",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "R2 kill rule: the full procedure against plain Opus on the same units, harness and settings."
+    }
+  ]
+}
