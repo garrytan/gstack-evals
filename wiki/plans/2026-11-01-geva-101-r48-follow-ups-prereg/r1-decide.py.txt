@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# R1 decision (GEVA-101 prereg, section 2). Reads the pinned scorer's JSON record for C-vs-none and arm C's procedure
+# gate, and prints the frozen decision:
+#  - no decision when the gate fails, an arm stopped, or the scorer gave no delta (a coverage gap): R1 is incomplete and
+#    goes to the Captain; R2 does not start;
+#  - R2 runs when C's blocking recall minus none-opus's is at least 10 points;
+#  - otherwise R2 does not run, and the Review Army and adversarial passes on Opus go to Garry as a CUT-CANDIDATE.
+# It also prints the volume line: blocking findings per unit-pass per arm.
+# Usage: python3 r1-decide.py <score-C-vs-none.json> <arm C source dir> <final arms root for the suite>
+import json, os, subprocess, sys
+
+score, armc, root = sys.argv[1:4]
+s = json.load(open(score))
+here = os.path.dirname(os.path.abspath(__file__))
+gate = subprocess.run([sys.executable, os.path.join(here, "r1-exposure.py"), armc], capture_output=True, text=True)
+print(gate.stdout.strip())
+res = s["result"]
+for arm in ("C", "none-opus", "gstack-opus"):
+    a = json.load(open(os.path.join(root, arm, "arm.json")))
+    sev = a.get("severity_map", {}).get("default", {})
+    crit = units = 0
+    for f in os.listdir(os.path.join(root, arm, "findings")):
+        units += 1
+        for line in open(os.path.join(root, arm, "findings", f)):
+            if line.strip():
+                o = json.loads(line)
+                raw = (o.get("label") or o.get("severity") or "")
+                crit += sev.get(raw, sev.get(str(raw).split(",")[0].strip(), o.get("severity"))) == "CRITICAL"
+    print("volume: %s %.1f blocking findings per unit-pass" % (arm, crit / (units * a["passes"])))
+if gate.returncode != 0 or res.get("delta") is None or s["variant"]["status"] != "complete" or s["reference"]["status"] != "complete":
+    print("decision: none. R1 is incomplete (" + ("procedure gate failed" if gate.returncode else (res.get("no_verdict_reason") or "an arm stopped")) + "); R2 does not start, and the Captain gets the record.")
+    sys.exit(4)
+d = res["delta"] * 100
+lo, hi = res["ci95"][0] * 100, res["ci95"][1] * 100
+print("delta: C %.1f%% vs none-opus %.1f%% blocking recall, %+.1f points [95%% CI %+.1f, %+.1f], %d blockers in %d PRs" % (res["recall"]["variant"] * 100, res["recall"]["reference"] * 100, d, lo, hi, res["blockers"], res["clusters"]))
+if d >= 10:
+    print("decision: R2 runs. Arm C's lead survives blind judging by at least the lane's 10-point margin.")
+    sys.exit(0)
+print("decision: R2 does not run. Arm C's lead is under 10 points under blind judging, so the full procedure's lead was mostly a judging artifact.")
+print("CUT-CANDIDATE: the Review Army and adversarial passes in gstack /review on Opus 5.5 (R1, GEVA-101 prereg section 2), to Garry with this record.")
+sys.exit(1)

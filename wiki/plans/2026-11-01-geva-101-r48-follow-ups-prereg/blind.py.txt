@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+# Blinding step for R1 and R2 (GEVA-101 prereg, sections 2 and 3). The pinned judge-packet refuses a finding whose text
+# would show the judges what blinding hides (leakRules in lanes/review-noloss/judge.ts at the rig pin): a reader name
+# with a hyphen or digit that any judged arm uses (whole word, case-insensitive), or a model id an arm lists (any
+# substring, case-insensitive). gstack's and gbrain's own PRs change those readers and model routes, so findings name
+# them as code. In every judged arm alike, before ingest, this step:
+#  - rewrites each such reader name in summary, fix and evidence with its hyphen turned into a space;
+#  - rewrites each such model id in summary, fix and evidence as "<model id>";
+#  - leaves out a finding whose path names one. The suite check below fails if any blocker lists such a path, so a
+#    left-out finding can never match a blocker; it is listed, and the false-blocker reading counts it as unadjudicated.
+# Paths, lines and every other field stay as they are. Logs ids and counts only, never text.
+# Usage: python3 blind.py <suite json> <source arm dir>...
+import json, os, re, sys
+
+suite, arms = json.load(open(sys.argv[1])), sys.argv[2:]
+readers, models = set(), set()
+for a in arms:
+    for m in json.load(open(os.path.join(a, "arm.json"))).get("models") or []:
+        models.update({m["model"], m["model"].split("/")[-1]})
+    for f in os.listdir(os.path.join(a, "findings")):
+        for line in open(os.path.join(a, "findings", f)):
+            if line.strip():
+                r = json.loads(line).get("reader")
+                if r and re.search(r"[-0-9]", r):
+                    readers.add(r)
+rp = [(n, re.compile(r"(?<![A-Za-z0-9_])" + re.escape(n) + r"(?![A-Za-z0-9_])", re.I)) for n in sorted(readers)]
+mp = [(n, re.compile(re.escape(n), re.I)) for n in sorted(models, key=lambda s: (-len(s), s))]
+names_path = lambda s: any(p.search(s) for _, p in rp + mp)
+print("reader names: " + (", ".join(sorted(readers)) or "none") + "; model ids: " + ", ".join(sorted(models)))
+for u in suite["units"]:
+    for b in u["blockers"]:
+        if any(names_path(p) for p in b["paths"]):
+            sys.exit("E_BLIND blocker " + u["id"] + " " + b["id"] + " lists a path that names a reader or model id")
+for a in arms:
+    count = {n: 0 for n in sorted(readers | models)}
+    rows, dropped = 0, []
+    for f in sorted(os.listdir(os.path.join(a, "findings"))):
+        p = os.path.join(a, "findings", f)
+        out = []
+        for line in open(p).read().splitlines():
+            if not line.strip():
+                continue
+            o = json.loads(line)
+            if o.get("path") and names_path(o["path"]):
+                dropped.append(o.get("id", "?"))
+                continue
+            changed = False
+            for k in ("summary", "fix", "evidence"):
+                v = o.get(k)
+                if not isinstance(v, str):
+                    continue
+                for n, pat in rp:
+                    v, c = pat.subn(lambda m: m.group(0).replace("-", " "), v)
+                    count[n] += c
+                    changed = changed or c > 0
+                for n, pat in mp:
+                    v, c = pat.subn("<model id>", v)
+                    count[n] += c
+                    changed = changed or c > 0
+                o[k] = v
+            rows += changed
+            out.append(json.dumps(o, ensure_ascii=False, separators=(",", ":")) if changed else line)
+        open(p, "w").write("".join(x + "\n" for x in out))
+    hits = {k: v for k, v in count.items() if v}
+    print("%s: %d findings rewritten %s; left out (path names a reader or model id): %s" % (os.path.basename(a), rows, json.dumps(hits, sort_keys=True), ", ".join(dropped) or "none"))

@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+# R1 procedure gate (GEVA-101 prereg, section 2): did arm C's full procedure run? Per PR-pass, a reader counts as run
+# when cost.tsv has a reader:<name> row for it or a finding carries reader <name>. The Review Army ran when a specialist
+# reader ran (testing, maintainability, security, performance, data-migration, api-contract, design, simplification,
+# state-machines, red-team, or batched: GSTA-167's one reader that ran the plan's selected checklists together); the
+# adversarial pass ran when adversarial-native ran. The gate passes when both ran in at least 90% of PR-passes.
+# R2 runs the same gate on gstack-full. Usage: python3 r1-exposure.py <source arm dir>
+import csv, json, math, os, sys, collections
+
+a = sys.argv[1]
+SPEC = {"testing", "maintainability", "security", "performance", "data-migration", "api-contract", "design", "simplification", "state-machines", "red-team", "batched"}
+ran = collections.defaultdict(set)
+for r in csv.DictReader(open(os.path.join(a, "cost.tsv")), delimiter="\t"):
+    k = (r["pr"].replace("/", "__"), int(r["pass"]))
+    ran[k]
+    if r["scope"].startswith("reader:"):
+        ran[k].add(r["scope"][7:])
+for f in os.listdir(os.path.join(a, "findings")):
+    for line in open(os.path.join(a, "findings", f)):
+        if line.strip():
+            o = json.loads(line)
+            ran[(f[:-6], int(o["pass"]))].add(o.get("reader"))
+n = len(ran)
+army = sum(1 for k in ran if ran[k] & SPEC)
+adv = sum(1 for k in ran if "adversarial-native" in ran[k])
+both = sum(1 for k in ran if ran[k] & SPEC and "adversarial-native" in ran[k])
+need = math.ceil(0.9 * n)
+print("exposure: Review Army specialists ran in %d of %d PR-passes, the adversarial pass in %d, both in %d" % (army, n, adv, both))
+print("gate: %s (both in at least %d of %d PR-passes)" % ("pass" if both >= need else "FAIL", need, n))
+sys.exit(0 if both >= need else 3)
