@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+# Converts planning-r1a-ceo-panel-v1 (GEVA-82's B5 bundle, extracted) into R1a's run material: plan cases in the one
+# catalog schema, a combined source clone, and the reading files. Suites and the stub are built after this by the
+# pinned scorer (noloss suite --from-catalog, suite --stub). Prints counts and digests only, never plan, context or key
+# text, and never the unit-to-number map. GEVA-83, 2026-10-31.
+import hashlib, json, os, random, re, subprocess, sys, tempfile, shutil
+
+panel, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
+REPO = "panel/plans"
+sha = lambda b: hashlib.sha256(b).hexdigest()
+def git(d, *a):
+    r = subprocess.run(["git", "-C", d, *a], capture_output=True)
+    if r.returncode: raise SystemExit("git " + a[0] + " failed in a unit clone")
+    return r.stdout
+os.makedirs(out)
+man = json.load(open(os.path.join(panel, "manifest.json")))
+units = man["units"]
+assert len(units) == 42
+audit = {}
+for f in ["b1-verdicts.json", "b2-verdicts.json", "b1-verdicts-real.json"]:
+    for v in json.load(open(os.path.join(panel, "audit", f))):
+        audit[v["unit"]] = (f, v["verdict"])
+nums = list(range(1, 43))
+random.SystemRandom().shuffle(nums)
+src = os.path.join(out, "work-source")
+subprocess.run(["git", "init", "-q", "-b", "main", src], check=True)
+cat = {"seeded": "plans", "decoy": "plans", "pilot": "plans-pilot", "real-neutral": "plans-real"}
+for d in set(cat.values()): os.makedirs(os.path.join(out, "sealed-root", "catalog", d))
+mapping, cases, checks = [], 0, {"head": 0, "base": 0, "plan_only": 0, "plan_digest": 0, "key_digest": 0, "bundle_digest": 0, "two_commits": 0}
+tmp = tempfile.mkdtemp(dir=out)
+for u, pr in zip(units, nums):
+    uid = u["unit"]
+    udir = os.path.join(panel, "units", uid)
+    bundle = os.path.join(udir, "repo.bundle")
+    keyb = open(os.path.join(udir, "key.json"), "rb").read()
+    checks["key_digest"] += sha(keyb) == u["key_sha256"]
+    checks["bundle_digest"] += sha(open(bundle, "rb").read()) == u["bundle_sha256"]
+    c = os.path.join(tmp, uid)
+    subprocess.run(["git", "clone", "-q", bundle, c], check=True, capture_output=True)
+    head = git(c, "rev-parse", "HEAD").decode().strip()
+    base = git(c, "rev-parse", "HEAD~1").decode().strip()
+    checks["head"] += head == u["head"]
+    checks["base"] += base == u["base"]
+    checks["two_commits"] += git(c, "rev-list", "--count", "HEAD").decode().strip() == "2"
+    checks["plan_only"] += git(c, "diff", "--name-only", base, head).decode().split() == ["plan.md"]
+    plan = git(c, "show", head + ":plan.md")
+    checks["plan_digest"] += sha(plan) == u["plan_sha256"]
+    lines = plan.decode().split("\n")
+    def heading_line(section):
+        want = section.strip().lstrip("#").strip()
+        hits = [i + 1 for i, l in enumerate(lines) if re.match(r"^#{1,6}\s", l) and l.lstrip("#").strip() == want]
+        if not hits: raise SystemExit("no heading for a keyed section in one unit")
+        return hits[0]
+    if subprocess.run(["git", "-C", src, "fetch", "-q", "--no-tags", bundle, "HEAD:refs/heads/unit-" + str(pr)], capture_output=True).returncode: raise SystemExit("fetch into the source clone failed")
+    key = json.loads(keyb)
+    kind = key["kind"]
+    assert kind == u["kind"] and key["mode"] == u["mode"]
+    af, verdict = audit[uid]
+    assert verdict == "pass"
+    vis = "sealed"
+    credit = ("Restated from public gstack-evals history by GEVA-82 (GST-576); found by " + key["found_by"]) if kind == "real-neutral" else "Planning R1a CEO panel v1 (GEVA-82, GST-576): written blind to gstack by openai/gpt-6.1-sol, audited by anthropic/claude-opus-5-5 without gstack"
+    entries = []
+    if kind == "decoy":
+        b = key["bait"]
+        entries.append(dict(section=b["plan_section"], cause=b["choice"].strip() + " " + b["why_not_a_flaw"].strip(), summary="bait resembling " + b["resembles"], source=b["source"] + " (bait resembles " + b["resembles"] + ")", flaw_class="bait", deserved="INFORMATIONAL", basis="Decoy bait: a choice the unit's context justifies, so a must-fix finding on it is a false alarm.", evidence=[j["path"] + ": " + j["what"] for j in b["justification"]], ref="bait"))
+    else:
+        for f in key["flaws"]:
+            src_txt = ("real: " + key["public_source"]) if f["source"] == "real" else f["source"] + " (" + f["category"] + ")"
+            entries.append(dict(section=f["plan_section"], cause=f["cause"].strip(), summary=f["category"] + ", group " + f["group"], source=src_txt, flaw_class="wrong-thing" if f["group"] == "W" else "right-thing-badly", deserved="CRITICAL", basis="Panel key deserved severity " + f["deserved_severity"] + "; Critical and High are must-fix under the plan told prompt.", evidence=[e["path"] + ": " + e["what"] for e in f["evidence"]], ref=f["id"]))
+    ids = []
+    for k, e in enumerate(entries, 1):
+        cid = "r1a-" + str(pr) + "-" + str(k)
+        ids.append(cid)
+        case = {
+            "schema_version": 1, "kind": "plan", "id": cid, "visibility": vis, "repo": REPO, "pr": pr, "reviewed_head": head, "merge_base": base,
+            "plan": {"digest": u["plan_sha256"], "lens": "ceo", "stratum": kind, "source": e["source"], "plan_type": key["mode"], "flaw_class": e["flaw_class"]},
+            "defect": {"file": "plan.md", "line": heading_line(e["section"]), "section": e["section"].strip().lstrip("#").strip(), "cause": e["cause"], "summary": e["summary"]},
+            "severity": {"deserved": e["deserved"], "basis": e["basis"]},
+            "receipt": {"source": "planning-r1a-ceo-panel-v1 units/" + uid + "/key.json (sha256 " + u["key_sha256"] + "), " + e["ref"], "evidence": e["evidence"]},
+            "answer_key_audit": {"by": "GEVA-82 auditor, anthropic/claude-opus-5-5 without gstack (audit/" + af + ")", "at": "2026-10-31", "verdict": "confirmed", "notes": "Panel audit verdict pass."},
+            "credit": credit,
+        }
+        with open(os.path.join(out, "sealed-root", "catalog", cat[kind], cid + ".json"), "w") as fh: fh.write(json.dumps(case, indent=2) + "\n")
+        cases += 1
+    mapping.append({"unit": uid, "kind": kind, "mode": key["mode"], "pr": pr, "head": head, "base": base, "cases": ids, "categories": [x["category"] for x in key["flaws"]] or [key["bait"]["resembles"]], "sources": [x["source"] for x in key["flaws"]] or [key["bait"]["source"]]})
+shutil.rmtree(tmp)
+os.makedirs(os.path.join(out, "source"))
+subprocess.run(["git", "-C", src, "bundle", "create", "-q", os.path.join(out, "source", "plans.bundle"), "--all"], check=True, capture_output=True)
+shutil.rmtree(src)
+mapping.sort(key=lambda m: m["pr"])
+with open(os.path.join(out, "map.json"), "w") as fh: fh.write(json.dumps({"repo": REPO, "panel": man["name"], "units": mapping}, indent=2) + "\n")
+print("units", len(mapping), "cases", cases, "checks", json.dumps(checks))
+for d in sorted(set(cat.values())): print("catalog", d, len(os.listdir(os.path.join(out, "sealed-root", "catalog", d))), "cases")

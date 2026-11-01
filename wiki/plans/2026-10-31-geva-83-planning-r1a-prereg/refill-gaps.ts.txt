@@ -1,0 +1,202 @@
+// R1a resume procedure (GEVA-96 and GEVA-97, 2026-11-01, GSTA-2's rulings). Before a run's one same-sha --resume, it moves
+// the cells.ndjson lines of the run's coverage gaps, and only those, into refilled-gaps.ndjson in the same out dir, so the
+// resume reruns them. A gap is a journal line the pinned planScore scores "gap". The script reads cells.ndjson alone, so it
+// works after a killed controller, which leaves no arm.json and no units.json (the pinned runner writes both after its
+// session loop, src/trial/review/run.ts:423 and :434). Each session's run directory comes from its own line: runs/<model,
+// "/" as "_">/<arm>/<record.task>/p<pass>, the path the runner wrote (run.ts:317). Before it moves anything it copies each
+// gap's run directory, and each run directory no journal line names (a session in flight when the controller stopped), to
+// refilled-gaps/, because the resume deletes a rerun cell's directory first (run.ts:318). Every miss and findings line stays.
+//   bun refill-gaps.ts <scorer checkout at e305ed0> <review-units out dir>
+// Crash safety: it copies cells.ndjson to refill-gaps.backup.ndjson before it changes anything and writes refill-gaps.done
+// last. A rerun that finds the backup and no done marker removes what the interrupted attempt wrote and does the move
+// again from the backup, provided cells.ndjson still holds one of the two states the move leaves (before or after).
+// Controller check (GSTA-2, 2026-11-01): before anything else it reads <out dir>.controller.pid, the pid the run script
+// records beside the out dir with $BASHPID when it starts review-units (section 10), and scans /proc for any process other
+// than itself with cells.ndjson open. It refuses while that pid is alive and either its command line names review-units or
+// it started no later than 2 s after the pid file was written (its start from /proc/<pid>/stat and /proc/uptime, at Linux's
+// 100 clock ticks a second), so a launching shell that wrote its own pid still blocks. Only a live process that started
+// later and does not run review-units is a reused pid. It also refuses while the pid file is missing or names no pid, and
+// while any process holds cells.ndjson open. It prints both checks and appends them, with the time, to refill-gaps.log in
+// the out dir.
+// It refuses, and changes nothing but that log, when the scorer checkout is not at e305ed0 with no tracked change, when
+// the controller check fails, when refill-gaps.done exists (a run takes one resume), when refilled-gaps output exists with
+// no backup, when cells.ndjson changed after an interrupted attempt, when a cell has more than one journal line, or when a
+// gap's run directory is missing. It prints digests, per-arm counts and the gaps' metered spend, and never prints a unit id. R1A_REFILL_CRASH=<point> kills it at
+// that point (after-copy, between-renames or before-done); only the dry run sets it.
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { appendFileSync, closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const PIN = "e305ed087b3f17bd211287b0e2d5e3f3960b5a4f";
+const fail = (message: string): never => {
+  console.error("E_USAGE " + message);
+  process.exit(2);
+};
+const [scorer, out] = process.argv.slice(2).map((p) => resolve(p));
+if (!scorer || !out) fail("usage: bun refill-gaps.ts <scorer checkout at e305ed0> <review-units out dir>");
+const git = (...args: string[]) => {
+  try {
+    return execFileSync("git", ["-C", scorer!, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return null;
+  }
+};
+const head = git("rev-parse", "HEAD");
+if (head !== PIN) fail("the scorer checkout is at " + (head ?? "no git commit") + ", not " + PIN + "; the resume and this script run at the pinned scorer only");
+if (git("status", "--porcelain", "--untracked-files=no") !== "") fail("the scorer checkout at " + PIN + " has tracked changes; use a clean checkout");
+const { armId, planScore, reviewCellId } = await import(join(scorer!, "src/trial/review/run.ts"));
+
+const journal = join(out!, "cells.ndjson"), moved = join(out!, "refilled-gaps.ndjson"), raws = join(out!, "refilled-gaps");
+const backup = join(out!, "refill-gaps.backup.ndjson"), done = join(out!, "refill-gaps.done");
+const crash = (point: string) => process.env.R1A_REFILL_CRASH === point && process.kill(process.pid, "SIGKILL");
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const syncFile = (path: string) => {
+  const fd = openSync(path, "r");
+  fsyncSync(fd);
+  closeSync(fd);
+};
+const stage = (path: string, text: string | Buffer) => {
+  writeFileSync(path + ".tmp", text);
+  syncFile(path + ".tmp");
+};
+
+if (!existsSync(out!)) fail("the out dir " + out + " is missing");
+const pidFile = out + ".controller.pid", at = new Date().toISOString();
+const note = (line: string) => {
+  console.log(line);
+  appendFileSync(join(out!, "refill-gaps.log"), at + " " + line + "\n");
+};
+const argvOf = (pid: string) => {
+  try {
+    return readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+const startedMs = (pid: string) => {
+  try {
+    const stat = readFileSync("/proc/" + pid + "/stat", "utf8");
+    const ticks = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]);
+    const uptime = Number(readFileSync("/proc/uptime", "utf8").split(" ")[0]);
+    return Number.isFinite(ticks) && Number.isFinite(uptime) ? Date.now() - (uptime - ticks / 100) * 1000 : null;
+  } catch {
+    return null;
+  }
+};
+const pidText = existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : "";
+const pidArgv = /^\d+$/.test(pidText) ? argvOf(pidText) : [];
+const lag = pidArgv.length ? (startedMs(pidText) ?? -Infinity) - statSync(pidFile).mtimeMs : 0;
+const controller = !/^\d+$/.test(pidText)
+  ? "refused: the file is missing or names no pid, so the controller cannot be shown to have exited"
+  : !pidArgv.length
+    ? "pid " + pidText + " is not running"
+    : pidArgv.includes("review-units")
+      ? "refused: pid " + pidText + " is alive and runs review-units"
+      : lag <= 2000
+        ? "refused: pid " + pidText + " is alive and started before the pid file was written, or within 2 s after, so it may be the shell that launched the controller"
+        : "pid " + pidText + " is alive but started " + Math.round(lag / 1000) + " s after the pid file was written and does not run review-units (a reused pid), so the controller has exited";
+note("controller check: " + pidFile + " " + controller);
+const target = existsSync(journal) ? realpathSync(journal) : null;
+const holders: string[] = [];
+let scanned = 0, unreadable = 0;
+if (target)
+  for (const p of readdirSync("/proc").filter((p) => /^\d+$/.test(p) && Number(p) !== process.pid)) {
+    let fds: string[];
+    try {
+      fds = readdirSync("/proc/" + p + "/fd");
+    } catch {
+      unreadable++;
+      continue;
+    }
+    scanned++;
+    const holds = fds.some((fd) => {
+      try {
+        return readlinkSync("/proc/" + p + "/fd/" + fd) === target;
+      } catch {
+        return false;
+      }
+    });
+    if (holds) holders.push(p);
+  }
+const held = !target ? "cells.ndjson is absent, so no process holds it" : holders.length ? "refused: pid " + holders.join(", ") + " hold" + (holders.length === 1 ? "s" : "") + " cells.ndjson open" : "no process holds cells.ndjson open (" + scanned + " processes scanned, " + unreadable + " not readable)";
+note("open-file check: " + held);
+if (controller.startsWith("refused") || held.startsWith("refused")) fail("the controller may still be writing cells.ndjson; refill-gaps changes nothing while it runs");
+if (existsSync(done)) fail("refill-gaps.done exists: a run takes one resume, and its gaps were moved already");
+const recovering = existsSync(backup);
+const partial = [moved, raws, moved + ".tmp", raws + ".tmp", journal + ".tmp"].filter((p) => existsSync(p));
+if (!recovering && partial.length) fail("refilled-gaps output exists with no refill-gaps.backup.ndjson, so the journal before the move is unknown");
+if (!recovering && !existsSync(journal)) fail("cells.ndjson is missing from the out dir");
+const raw = readFileSync(recovering ? backup : journal, "utf8");
+
+const lines = raw.split("\n").filter((l) => l.trim());
+const parsed = lines.map((l) => {
+  try {
+    const e = JSON.parse(l);
+    return { e, id: reviewCellId(e.cell) as string };
+  } catch {
+    return null;
+  }
+});
+const seen = new Map<string, number>();
+for (const p of parsed) if (p) seen.set(p.id, (seen.get(p.id) ?? 0) + 1);
+if ([...seen.values()].some((n) => n > 1)) fail("a cell has more than one line in cells.ndjson, so the run was resumed already or its journal was written twice");
+const runDir = (e: any) => {
+  if (typeof e.record?.task !== "string" || !e.record.task) fail("a journal line has no record.task, so its run directory cannot be found");
+  return join("runs", e.cell.model.replaceAll("/", "_"), e.cell.arm, e.record.task, "p" + e.cell.pass);
+};
+const take = new Set<number>();
+parsed.forEach((p, i) => {
+  if (!p) return;
+  let score: string;
+  try {
+    score = planScore(p.e);
+  } catch {
+    return fail("journal line " + (i + 1) + " has no record or parse the pinned planScore can read");
+  }
+  if (score === "gap") take.add(i);
+});
+const keep = (gap: boolean) => lines.filter((_, i) => take.has(i) === gap).map((l) => l + "\n").join("");
+const after = keep(false);
+for (const i of take) if (!existsSync(join(out!, runDir(parsed[i]!.e)))) fail("a gap's run directory is missing, so its evidence cannot be kept");
+const journaled = new Set(parsed.flatMap((p) => (p ? [runDir(p.e)] : [])));
+const listDirs = (rel: string, depth: number): string[] =>
+  !existsSync(join(out!, rel)) ? [] : depth === 0 ? [rel] : readdirSync(join(out!, rel), { withFileTypes: true }).filter((d) => d.isDirectory()).flatMap((d) => listDirs(join(rel, d.name), depth - 1));
+const inFlight = listDirs("runs", 4).filter((d) => /\/p\d+$/.test(d) && !journaled.has(d)).sort();
+
+if (recovering) {
+  const now = existsSync(journal) ? readFileSync(journal, "utf8") : null;
+  if (now !== raw && now !== after) fail("cells.ndjson changed after the interrupted refill (it is neither the backup nor the backup less its gaps), so recovery would drop those changes");
+  for (const p of partial) rmSync(p, { recursive: true, force: true });
+  console.log("recovering an interrupted refill from refill-gaps.backup.ndjson (sha256 " + sha(raw) + ")");
+} else {
+  stage(backup, raw);
+  renameSync(backup + ".tmp", backup);
+  syncFile(out!);
+}
+mkdirSync(raws + ".tmp", { recursive: true });
+for (const rel of [...[...take].map((i) => runDir(parsed[i]!.e)), ...inFlight]) cpSync(join(out!, rel), join(raws + ".tmp", rel), { recursive: true });
+renameSync(raws + ".tmp", raws);
+crash("after-copy");
+stage(moved, keep(true));
+stage(journal, after);
+renameSync(moved + ".tmp", moved);
+crash("between-renames");
+renameSync(journal + ".tmp", journal);
+syncFile(out!);
+crash("before-done");
+stage(done, JSON.stringify({ scorer: PIN, before_sha256: sha(raw), after_sha256: sha(after), refilled_sha256: sha(keep(true)), gaps: take.size, in_flight: inFlight.length, lines: lines.length }) + "\n");
+renameSync(done + ".tmp", done);
+syncFile(out!);
+
+console.log("scorer at " + PIN + " with no tracked change");
+console.log("cells.ndjson sha256 " + sha(raw) + " before, " + sha(after) + " after; refilled-gaps.ndjson sha256 " + sha(keep(true)));
+const arms = [...new Set(parsed.flatMap((p) => (p ? [armId(p.e.cell.arm, p.e.cell.model) as string] : [])))].sort();
+for (const arm of arms) {
+  const mine = [...take].filter((i) => armId(parsed[i]!.e.cell.arm, parsed[i]!.e.cell.model) === arm);
+  console.log("refilled " + arm + " " + mine.length + ", their metered spend $" + (mine.reduce((s, i) => s + (parsed[i]!.e.record.cost_micros ?? 0), 0) / 1e6).toFixed(2));
+}
+console.log("copied " + inFlight.length + " run director" + (inFlight.length === 1 ? "y" : "ies") + " that no journal line names (sessions in flight when the controller stopped)");
+const unread = parsed.filter((p) => !p).length;
+if (unread) console.log("kept " + unread + " line" + (unread === 1 ? "" : "s") + " that do not parse; the pinned journal reader skips them");
+console.log("moved " + take.size + " of " + lines.length + " journal lines; refill-gaps.done written. Now run the same review-units command once with --resume, at the same scorer sha");
