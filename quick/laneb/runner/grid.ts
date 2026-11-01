@@ -34,7 +34,7 @@ export function armSpec(entry: string): { name: string } & AgentOptions {
   const options: Record<string, string> = {};
   for (const setting of settings) {
     const [, key, value] = /^(\w+)=(.*)$/.exec(setting) ?? [];
-    const allowed = key === "told" ? SKILL_NAME.test(value ?? "") : AGENT_OPTIONS[key as keyof typeof AGENT_OPTIONS]?.includes(value);
+    const allowed = key === "told" ? SKILL_NAME.test(value ?? "") : Object.hasOwn(AGENT_OPTIONS, key ?? "") && AGENT_OPTIONS[key as keyof typeof AGENT_OPTIONS].includes(value);
     if (!allowed || key in options) {
       throw new Error(`E_USAGE arm ${entry}: ${setting} is not one of ${JSON.stringify(AGENT_OPTIONS)}, or is set twice`);
     }

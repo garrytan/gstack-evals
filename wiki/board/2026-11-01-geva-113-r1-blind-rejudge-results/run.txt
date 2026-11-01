@@ -1,0 +1,337 @@
+# R1 real run output (GEVA-113, 2026-11-01). Each phase's script printed these lines; full logs stay outside the repo.
+
+## Phase a
+
+$ git -C $R log -1 --format=rig %H %s
+rig 715f837c353700344785e2ae2c721e8195d616cd Stacks round 1 step 5a fixes: judge-run retries, flag-scan rules, impact binding, secondary guards (GST-517) (#97)
+exit 0 (log/a1.txt)
+
+$ sh -c git -C $R status --porcelain | wc -l
+0
+exit 0 (log/a2.txt)
+
+$ sh -c cd $D && sha256sum blind.py.txt comparisons.r1.json items.ts.txt judge-fake.ts.txt r1-arms.py.txt r1-decide.py.txt r1-exposure.py.txt r1-scrub.sh.txt
+4d0879c01a29f1b85231ba12bea53475dc569cb1fc4397f56692d36d2d441eab  blind.py.txt
+472ab0a1b37a88c0ed0f79e34c63ce635c320d74065414f5fc30e1c145733f91  comparisons.r1.json
+f9df72f7f982b3d94fac54a3cb150633283c4811420d926309c7bf8222bba294  items.ts.txt
+fb0e95efbb67c335d0f4ccd5231e597f8cf872207f3170ca07de15707da80d48  judge-fake.ts.txt
+6b5e20d77bbc29c19d55c096931a06862c7f97faa060e1041de519771d3cffe1  r1-arms.py.txt
+54f81ea3d3b6400b5579fec0390f19f2d7bf1bbfcb7d466f57324dae0fa4906c  r1-decide.py.txt
+258b655b0dd49c9c94f750484f5c1916bd2435ff7d53e8f551318da0160935ab  r1-exposure.py.txt
+f08dee862b7997d05c877a76a909c770c3fbefa20ae9ed2bb36f93495b489171  r1-scrub.sh.txt
+exit 0 (log/a3.txt)
+
+$ sh -c cd $W/bin && printf '%s  %s\n' c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e scrub.ts cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237 scrub2.ts 3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886 r1-scrub3.ts | sha256sum -c
+scrub.ts: OK
+scrub2.ts: OK
+r1-scrub3.ts: OK
+exit 0 (log/a4.txt)
+
+$ python3 $W/bin/r1-arms.py $ARMC $REV/raw/stacks-r1 $R $W/r1src
+arm C: 526 findings on 14 units, every line matches its C12 digest; labelled judgments.tsv left out
+arm none-opus: 49 findings on 14 units, 28 cost rows
+arm gstack-opus: 56 findings on 14 units, 56 cost rows
+suite gsta167-14pr sha256 20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789
+exit 0 (log/a5.txt)
+
+$ bash $W/bin/r1-scrub.sh $W/r1src/C $W/bin/scrub.ts $W/bin/scrub2.ts $W/bin/r1-scrub3.ts
+scan hits before the scrub: 18
+scan hits after step 1: 3
+scan hits after step 2: 2
+scan hits after step 3: 0
+left for --digest-only: 
+exit 0 (log/a6.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1src/C --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --check
+ingest --check ok: arm C (live, raw, 2 passes) fits contract v1 and suite gsta167-14pr; nothing written
+exit 0 (log/a7.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1src/none-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --check
+ingest --check ok: arm none-opus (live, raw, 2 passes) fits contract v1 and suite gsta167-14pr; nothing written
+exit 0 (log/a8.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1src/gstack-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --check
+ingest --check ok: arm gstack-opus (live, raw, 2 passes) fits contract v1 and suite gsta167-14pr; nothing written
+exit 0 (log/a9.txt)
+
+$ python3 $W/bin/blind.py $R/lanes/review-noloss/suites/gsta167-14pr.json $W/r1src/C $W/r1src/none-opus $W/r1src/gstack-opus
+reader names rewritten to <reader>: adversarial-native, state-machines, outside-voice, Review Army, normalizer, red-team, batched; left as ordinary words: confirmed, maintainability, performance, security, simplification, testing, unconfirmed; model ids: anthropic/claude-opus-5-5, claude-opus-5-5, gpt-6.1-sol, openai/gpt-6.1-sol
+C: 52 findings rewritten {"Review Army": 15, "adversarial-native": 7, "batched": 3, "outside-voice": 49, "red-team": 21}; left out (path names a reader or model id): 3516-p1-8
+none-opus: 9 findings rewritten {"Review Army": 3, "adversarial-native": 2, "batched": 2, "outside-voice": 10, "red-team": 7}; left out (path names a reader or model id): none
+gstack-opus: 7 findings rewritten {"Review Army": 1, "adversarial-native": 2, "batched": 1, "openai/gpt-6.1-sol": 1, "outside-voice": 7, "red-team": 6}; left out (path names a reader or model id): none
+exit 0 (log/a10.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1src/C --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/raw
+ingest published: arm C (live, raw, 2 passes) at $W/r1/raw/gsta167-14pr/C
+exit 0 (log/a11.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1src/none-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/raw
+ingest published: arm none-opus (live, raw, 2 passes) at $W/r1/raw/gsta167-14pr/none-opus
+exit 0 (log/a12.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1src/gstack-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/raw
+ingest published: arm gstack-opus (live, raw, 2 passes) at $W/r1/raw/gsta167-14pr/gstack-opus
+exit 0 (log/a13.txt)
+
+$ sh -c cd $W/r1src/C && python3 -c "import csv,sys; r=[x for x in csv.DictReader(open('cost.tsv'),delimiter='\t')]; print('arm C cost rows', len(r))"
+arm C cost rows 241
+exit 0 (log/a14.txt)
+
+$ python3 $W/bin/r1-exposure.py $R/lanes/review-noloss/suites/gsta167-14pr.json $W/r1src/C
+exposure: Review Army specialists ran in 28 of 28 PR-passes, the adversarial pass in 28, both in 28 (0 rows or findings name no PR-pass of the suite)
+gate: pass (both in at least 26 of 28 PR-passes)
+exit 0 (log/a15.txt)
+
+## Phase b1
+
+$ $R/bin/gstack-evals ledger init --item r1-judge-match --cap 25 --admission warn --words R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0). --by GSTA-2 --source Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846) --branch geva-113-r1-results --ledger $W/ledger.sqlite --ledger-record $REC
+APPROVED: item=r1-judge-match cap=$25.00 admission=warn approval=1 record=$REC
+exit 0 (log/b1.txt)
+
+$ $R/bin/gstack-evals ledger init --item r1-judge-adjudicate --cap 15 --admission warn --words R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0). --by GSTA-2 --source Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846) --branch geva-113-r1-results --ledger $W/ledger.sqlite --ledger-record $REC
+APPROVED: item=r1-judge-adjudicate cap=$15.00 admission=warn approval=1 record=$REC
+exit 0 (log/b2.txt)
+
+$ $R/bin/gstack-evals ledger status --ledger $W/ledger.sqlite --ledger-record $REC
+RECORD: $REC (--ledger-record)
+LEDGER: $W/ledger.sqlite (--ledger)
+ITEM: r1-judge-adjudicate cap=$15.00 admission=warn committed=$0.00 left=$15.00 run=- leases=0 open=-
+  words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)." by GSTA-2 (Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846))
+ITEM: r1-judge-match cap=$25.00 admission=warn committed=$0.00 left=$25.00 run=- leases=0 open=-
+  words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)." by GSTA-2 (Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846))
+exit 0 (log/b3.txt)
+
+$ $R/bin/gstack-evals noloss judge-packet --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --arm $W/r1/raw/gsta167-14pr/C --arm $W/r1/raw/gsta167-14pr/none-opus --arm $W/r1/raw/gsta167-14pr/gstack-opus --seed 20261031 --out $W/r1/match --key $W/r1/match-key.json
+judge-packet: batch 2f103154974fa484e87426cb8ee2b43e72faeadf62a58788f0b4869b0b7923c1, 14 packets, 630 findings from 3 arms; the key is outside the packets
+exit 0 (log/b4.txt)
+
+$ $R/bin/gstack-evals noloss judge-run --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --packets $W/r1/match --key $W/r1/match-key.json --arm $W/r1/raw/gsta167-14pr/C --arm $W/r1/raw/gsta167-14pr/none-opus --arm $W/r1/raw/gsta167-14pr/gstack-opus --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $REC --item r1-judge-match --out $W/r1/judge-match --dry-run
+worst case: primary $20.951772 on 14 packets; second up to $11.419701 and third up to $10.476054 if they read every packet; $42.847527 in all, $85.695054 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+item r1-judge-match: cap $25.00, $0.00 committed, $25.00 left; the worst case $42.847527 does not fit, and asked again $85.695054 does not fit. The cap stops the run wherever it falls.
+exit 0 (log/b5.txt)
+
+## Phase b2
+start 2026-11-01T19:21:59Z
+end 2026-11-01T19:25:01Z
+RIG_UNPROVEN: noloss judge-run: line item r1-judge-match leased without admission: no admission record at $REC/items/r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item r1-judge-match on the machine that will spend (docs/rig.md)
+judge-run: batch 2f103154974fa484e87426cb8ee2b43e72faeadf62a58788f0b4869b0b7923c1, 33 requests; primary answered 14 packets, second 14, third 5; 0 unjudged; files in $W/r1/judge-match
+next: gstack-evals noloss judge-join --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --key $W/r1/match-key.json --reply $W/r1/judge-match/primary.json --second $W/r1/judge-match/second.json --third $W/r1/judge-match/third.json --arm $W/r1/raw/gsta167-14pr/C --arm $W/r1/raw/gsta167-14pr/none-opus --arm $W/r1/raw/gsta167-14pr/gstack-opus --out $W/r1/judge-match/joined
+exit 0
+
+## Phase c1
+
+$ sh -c jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $W/r1/judge-match/run.json
+{"state":"finished","unjudged":0,"lease":null}
+exit 0 (log/c1.txt)
+
+$ $R/bin/gstack-evals ledger status --ledger $W/ledger.sqlite --ledger-record $REC
+RECORD: $REC (--ledger-record)
+LEDGER: $W/ledger.sqlite (--ledger)
+ITEM: r1-judge-adjudicate cap=$15.00 admission=warn committed=$0.00 left=$15.00 run=- leases=0 open=-
+  words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)." by GSTA-2 (Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846))
+ITEM: r1-judge-match cap=$25.00 admission=warn committed=$2.42631 left=$22.57369 run=judge-48f64a649449 leases=1 open=-
+  words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)." by GSTA-2 (Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846))
+exit 0 (log/c2.txt)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --key $W/r1/match-key.json --reply $W/r1/judge-match/primary.json --second $W/r1/judge-match/second.json --third $W/r1/judge-match/third.json --arm $W/r1/raw/gsta167-14pr/C --arm $W/r1/raw/gsta167-14pr/none-opus --arm $W/r1/raw/gsta167-14pr/gstack-opus --out $W/r1/judge-match/joined
+judge-join: batch 2f103154974fa484e87426cb8ee2b43e72faeadf62a58788f0b4869b0b7923c1, wrote judgments for C, none-opus, gstack-opus under $W/r1/judge-match/joined; second judge on 29 blockers (kappa 0.9132), third read on 5. Ingest each arm with noloss ingest.
+exit 0 (log/c3.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1/judge-match/joined/C --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/judged
+ingest published: arm C (live, judged, 2 passes) at $W/r1/judged/gsta167-14pr/C
+exit 0 (log/c4.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1/judge-match/joined/none-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/judged
+ingest published: arm none-opus (live, judged, 2 passes) at $W/r1/judged/gsta167-14pr/none-opus
+exit 0 (log/c5.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1/judge-match/joined/gstack-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/judged
+ingest published: arm gstack-opus (live, judged, 2 passes) at $W/r1/judged/gsta167-14pr/gstack-opus
+exit 0 (log/c6.txt)
+
+$ $R/bin/gstack-evals noloss judge-packet --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --arm $W/r1/judged/gsta167-14pr/C --arm $W/r1/judged/gsta167-14pr/none-opus --arm $W/r1/judged/gsta167-14pr/gstack-opus --seed 20261031 --out $W/r1/adj --key $W/r1/adj-key.json --adjudicate
+judge-packet: batch a95044bdd0d1d0e5bae79aeb2ec1fbad248255966573e05c8345bc3883bcbe4f, 13 packets, 211 findings from 3 arms; the key is outside the packets
+exit 0 (log/c7.txt)
+
+$ $R/bin/gstack-evals noloss judge-run --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --packets $W/r1/adj --key $W/r1/adj-key.json --arm $W/r1/judged/gsta167-14pr/C --arm $W/r1/judged/gsta167-14pr/none-opus --arm $W/r1/judged/gsta167-14pr/gstack-opus --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $REC --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --item r1-judge-adjudicate --out $W/r1/judge-adj --dry-run
+worst case: primary $29.597064 on 13 packets; second up to $21.742608 and third up to $14.798688 if they read every packet; $66.13836 in all, $132.27672 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+item r1-judge-adjudicate: cap $15.00, $0.00 committed, $15.00 left; the worst case $66.13836 does not fit, and asked again $132.27672 does not fit. The cap stops the run wherever it falls.
+exit 0 (log/c8.txt)
+
+## Phase c2
+start 2026-11-01T19:25:35Z
+end 2026-11-01T19:31:01Z
+RIG_UNPROVEN: noloss judge-run: line item r1-judge-adjudicate leased without admission: no admission record at $REC/items/r1-judge-adjudicate/admission-0001.json for slot 1; run gstack-evals rig admit --item r1-judge-adjudicate on the machine that will spend (docs/rig.md)
+unverifiable not-defect rulings, arm C: 30, 1.0714 per PR cluster per pass (2 passes, 14 PR clusters)
+unverifiable not-defect rulings, arm none-opus: 0, 0.0000 per PR cluster per pass (2 passes, 14 PR clusters)
+unverifiable not-defect rulings, arm gstack-opus: 0, 0.0000 per PR cluster per pass (2 passes, 14 PR clusters)
+judge-run: batch a95044bdd0d1d0e5bae79aeb2ec1fbad248255966573e05c8345bc3883bcbe4f, 35 requests; primary answered 13 packets, second 13, third 9; 0 unjudged; files in $W/r1/judge-adj
+next: gstack-evals noloss judge-join --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --key $W/r1/adj-key.json --reply $W/r1/judge-adj/primary.json --second $W/r1/judge-adj/second.json --third $W/r1/judge-adj/third.json --arm $W/r1/judged/gsta167-14pr/C --arm $W/r1/judged/gsta167-14pr/none-opus --arm $W/r1/judged/gsta167-14pr/gstack-opus --out $W/r1/judge-adj/joined
+exit 0
+
+## Phase d
+
+$ sh -c jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $W/r1/judge-adj/run.json
+{"state":"finished","unjudged":0,"lease":null}
+exit 0 (log/d1.txt)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --key $W/r1/adj-key.json --reply $W/r1/judge-adj/primary.json --second $W/r1/judge-adj/second.json --third $W/r1/judge-adj/third.json --arm $W/r1/judged/gsta167-14pr/C --arm $W/r1/judged/gsta167-14pr/none-opus --arm $W/r1/judged/gsta167-14pr/gstack-opus --out $W/r1/judge-adj/joined
+judge-join: batch a95044bdd0d1d0e5bae79aeb2ec1fbad248255966573e05c8345bc3883bcbe4f, wrote adjudication.tsv for C, none-opus, gstack-opus under $W/r1/judge-adj/joined; second judge on 108 blockers (kappa 0.6149), third read on 19. Ingest each arm with noloss ingest.
+exit 0 (log/d2.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1/judge-adj/joined/C --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final
+ingest published: arm C (live, judged, 2 passes) at $W/r1/final/gsta167-14pr/C
+exit 0 (log/d3.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1/judge-adj/joined/none-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final
+ingest published: arm none-opus (live, judged, 2 passes) at $W/r1/final/gsta167-14pr/none-opus
+exit 0 (log/d4.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r1/judge-adj/joined/gstack-opus --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final
+ingest published: arm gstack-opus (live, judged, 2 passes) at $W/r1/final/gsta167-14pr/gstack-opus
+exit 0 (log/d5.txt)
+
+$ $R/bin/gstack-evals ledger status --ledger $W/ledger.sqlite --ledger-record $REC
+RECORD: $REC (--ledger-record)
+LEDGER: $W/ledger.sqlite (--ledger)
+ITEM: r1-judge-adjudicate cap=$15.00 admission=warn committed=$5.761417 left=$9.238583 run=judge-fed8817be92a leases=1 open=-
+  words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)." by GSTA-2 (Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846))
+ITEM: r1-judge-match cap=$25.00 admission=warn committed=$2.42631 left=$22.57369 run=judge-48f64a649449 leases=1 open=-
+  words: "R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)." by GSTA-2 (Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846))
+exit 0 (log/d6.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final --prereg $W/bin/comparisons.r1.json --variant C --reference none-opus --out $W/r1/score-C-vs-none.json
+C vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R1 reuses it as the smallest lead that sends R2 forward): non-inferior within 10 points (NO_LOSS). Blocking recall 67.2% vs 10.3%, delta 56.9 points [95% CI 40.5, 72.2]; 2 losses, 23 gains on 29 blockers in 14 PRs (11 discordant). p non-inferior 0.000061 (Holm 0.00018 over 3), p loss 1.000 (minimum reachable 0.00049).
+size rule: below, an arm as good as the reference gets NO_LOSS in 42.7% of 2000 simulations (spread wide, recall 0.103, seed 20261031, no-loss alpha 0.05/3, Holm's strictest step).
+false blockers per PR: C 2.71, none-opus 0.00, difference +2.71 [95% CI +1.46, +4.18] on 14 PRs; two-sided p 0.00024 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 12 units metered in both (upper-bound): C 28.8M tokens per unit, 19.8M tokens per blocker found; none-opus 0.9M tokens per unit, 4.4M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: below the size rule: power 0.4265 is under 0.8; suite gsta167-14pr is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | C | none-opus | difference | unadjudicated (C / none-opus) |
+|---|---|---|---|---|
+| garrytan/gstack#3516 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3524 | 3.5 | 0 | 3.5 | 0 / 0 |
+| garrytan/gstack#3526 | 1.5 | 0 | 1.5 | 0 / 0 |
+| garrytan/gstack#3527 | 8.5 | 0 | 8.5 | 0 / 0 |
+| garrytan/gstack#3534 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3540 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3545 | 1.5 | 0 | 1.5 | 0 / 0 |
+| garrytan/gstack#3564 | 1.5 | 0 | 1.5 | 0 / 0 |
+| garrytan/gstack#3567 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3573 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 6.5 | 0 | 6.5 | 0 / 0 |
+| garrytan/gstack#3593 | 7 | 0 | 7 | 0 / 0 |
+| garrytan/gstack#3596 | 3 | 0 | 3 | 0 / 0 |
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+NOLOSS_UNDERPOWERED C-vs-none: NO_LOSS below the size rule (power 0.4265); it is not a no-loss claim. Check it with --power-sims or the prereg's --power.
+exit 2 (log/d7.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final --prereg $W/bin/comparisons.r1.json --variant C --reference gstack-opus --out $W/r1/score-C-vs-gstack.json
+C vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R1 reuses it as the smallest lead that sends R2 forward): non-inferior within 10 points (NO_LOSS). Blocking recall 67.2% vs 13.8%, delta 53.4 points [95% CI 39.6, 64.7]; 1 losses, 22 gains on 29 blockers in 14 PRs (12 discordant). p non-inferior 0.00030 (Holm 0.00061 over 3), p loss 1.000 (minimum reachable 0.00024).
+size rule: below, an arm as good as the reference gets NO_LOSS in 36.6% of 2000 simulations (spread wide, recall 0.138, seed 20261031, no-loss alpha 0.05/3, Holm's strictest step).
+false blockers per PR: C 2.71, gstack-opus 0.00, difference +2.71 [95% CI +1.46, +4.18] on 14 PRs; two-sided p 0.00024 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 12 units metered in both (upper-bound): C 28.8M tokens per unit, 19.8M tokens per blocker found; gstack-opus 1.7M tokens per unit, 5.7M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: below the size rule: power 0.3655 is under 0.8; suite gsta167-14pr is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | C | gstack-opus | difference | unadjudicated (C / gstack-opus) |
+|---|---|---|---|---|
+| garrytan/gstack#3516 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3524 | 3.5 | 0 | 3.5 | 0 / 0 |
+| garrytan/gstack#3526 | 1.5 | 0 | 1.5 | 0 / 0 |
+| garrytan/gstack#3527 | 8.5 | 0 | 8.5 | 0 / 0 |
+| garrytan/gstack#3534 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3540 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3545 | 1.5 | 0 | 1.5 | 0 / 0 |
+| garrytan/gstack#3564 | 1.5 | 0 | 1.5 | 0 / 0 |
+| garrytan/gstack#3567 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3573 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 6.5 | 0 | 6.5 | 0 / 0 |
+| garrytan/gstack#3593 | 7 | 0 | 7 | 0 / 0 |
+| garrytan/gstack#3596 | 3 | 0 | 3 | 0 / 0 |
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+NOLOSS_UNDERPOWERED C-vs-gstack: NO_LOSS below the size rule (power 0.3655); it is not a no-loss claim. Check it with --power-sims or the prereg's --power.
+exit 2 (log/d8.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final --prereg $W/bin/comparisons.r1.json --variant gstack-opus --reference none-opus --out $W/r1/score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R1 reuses it as the smallest lead that sends R2 forward): non-inferior within 10 points (NO_LOSS). Blocking recall 13.8% vs 10.3%, delta 3.5 points [95% CI -9.6, 16.7]; 3 losses, 5 gains on 29 blockers in 14 PRs (8 discordant). p non-inferior 0.038 (Holm 0.038 over 3), p loss 0.781 (minimum reachable 0.0039).
+size rule: below, an arm as good as the reference gets NO_LOSS in 42.7% of 2000 simulations (spread wide, recall 0.103, seed 20261031, no-loss alpha 0.05/3, Holm's strictest step).
+false blockers per PR: gstack-opus 0.00, none-opus 0.00, difference 0.00 [95% CI 0.00, 0.00] on 14 PRs; two-sided p 1.000 (minimum reachable n/a); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 14 units metered in both (exact): gstack-opus 1.6M tokens per unit, 5.6M tokens per blocker found; none-opus 0.9M tokens per unit, 4.1M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: below the size rule: power 0.4265 is under 0.8; suite gsta167-14pr is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | gstack-opus | none-opus | difference | unadjudicated (gstack-opus / none-opus) |
+|---|---|---|---|---|
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3524 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3526 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3527 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3534 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3540 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3545 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3564 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3567 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3573 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3593 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3596 | 0 | 0 | 0 | 0 / 0 |
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+NOLOSS_UNDERPOWERED gstack-vs-none: NO_LOSS below the size rule (power 0.4265); it is not a no-loss claim. Check it with --power-sims or the prereg's --power.
+exit 2 (log/d9.txt)
+
+$ $R/bin/gstack-evals noloss secondary --suite $R/lanes/review-noloss/suites/gsta167-14pr.json --root $W/r1/final --variant C --reference none-opus --seed 20261031
+noloss secondary: C vs none-opus on gsta167-14pr (sha256 20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789), seed 20261031
+recall, C: blocking 19.5/29 = 0.6724 [0.5469, 0.7973]; at any severity 23.5/29 = 0.8103 [0.7, 0.9091]; 0 judgments with coverage incomplete
+recall, none-opus: blocking 3/29 = 0.1034 [0.0313, 0.2083]; at any severity 8.5/29 = 0.2931 [0.1852, 0.4231]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 4.3214, reference 0.1786 (121 and 5 in all, 14 PRs); difference 4.1429 [2.1786, 6.5714], exact two-sided sign-flip p 0.000244 (min p 0.000244140625)
+idea-card wins: 13 of 29 blocking blockers (found by C in every pass and by none-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 7.0283, 95th percentile 11; above the null: yes
+  won: 3593 B2
+  won: 3596 B1
+  won: 3516 B1
+  won: 3526 B1
+  won: 3526 B2
+  won: 3526 B3
+  won: 3527 B3
+  won: 3534 B1
+  won: 3534 B3
+  won: 3540 B1
+  won: 3564 B1
+  won: 3567 B1
+  won: 3567 B2
+exit 0 (log/d10.txt)
+
+$ python3 $W/bin/r1-decide.py $W/r1/score-C-vs-none.json $W/r1src/C $W/r1/final/gsta167-14pr $R/lanes/review-noloss/suites/gsta167-14pr.json
+exposure: Review Army specialists ran in 28 of 28 PR-passes, the adversarial pass in 28, both in 28 (0 rows or findings name no PR-pass of the suite)
+gate: pass (both in at least 26 of 28 PR-passes)
+volume: C 8.8 blocking findings per unit-pass
+volume: none-opus 0.4 blocking findings per unit-pass
+volume: gstack-opus 0.6 blocking findings per unit-pass
+delta: C 67.2% vs none-opus 10.3% blocking recall, +56.9 points [95% CI +40.5, +72.2], 29 blockers in 14 PRs
+decision: R2 runs. Arm C's lead survives blind judging by at least the lane's 10-point margin.
+exit 0 (log/d11.txt)
+
+## Descriptive readings beside the frozen ones (not frozen, decide nothing)
+
+$ noloss secondary (e1-secondary-gstack-vs-none)
+noloss secondary: gstack-opus vs none-opus on gsta167-14pr (sha256 20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789), seed 20261031
+recall, gstack-opus: blocking 4/29 = 0.1379 [0.0588, 0.25]; at any severity 9.5/29 = 0.3276 [0.2162, 0.4808]; 0 judgments with coverage incomplete
+recall, none-opus: blocking 3/29 = 0.1034 [0.0313, 0.2083]; at any severity 8.5/29 = 0.2931 [0.1852, 0.4231]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.3214, reference 0.1786 (9 and 5 in all, 14 PRs); difference 0.1429 [-0.1786, 0.5714], exact two-sided sign-flip p 0.75 (min p 0.0625)
+idea-card wins: 1 of 29 blocking blockers (found by gstack-opus in every pass and by none-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 0.9992, 95th percentile 2; above the null: no
+  won: 3564 B1
+
+$ noloss secondary (e2-secondary-C-vs-gstack)
+noloss secondary: C vs gstack-opus on gsta167-14pr (sha256 20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789), seed 20261031
+recall, C: blocking 19.5/29 = 0.6724 [0.5469, 0.7973]; at any severity 23.5/29 = 0.8103 [0.7, 0.9091]; 0 judgments with coverage incomplete
+recall, gstack-opus: blocking 4/29 = 0.1379 [0.0588, 0.25]; at any severity 9.5/29 = 0.3276 [0.2162, 0.4808]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 4.3214, reference 0.3214 (121 and 9 in all, 14 PRs); difference 4 [2.2143, 6.1071], exact two-sided sign-flip p 0.000244 (min p 0.000244140625)
+idea-card wins: 10 of 29 blocking blockers (found by C in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 5.0182, 95th percentile 8; above the null: yes
+  won: 3593 B2
+  won: 3596 B1
+  won: 3526 B1
+  won: 3526 B2
+  won: 3527 B3
+  won: 3534 B1
+  won: 3534 B3
+  won: 3540 B1
+  won: 3567 B1
+  won: 3578 B1

@@ -498,6 +498,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         if (!existsSync(join(home, RENDER_DIR, s, "SKILL.md"))) continue;
         const served = join(home, SKILL_DIRS.claude, s);
         if (!lstatSync(served, { throwIfNoEntry: false })?.isDirectory()) throw new InstallError("E_IMAGE_BUILD", "installing " + label + ": the render holds skill " + s + ", which has no served folder ~/" + SKILL_DIRS.claude + "/" + s);
+        for (const p of [served, join(home, RENDER_DIR, s)]) if (relative(realpathSync(home), realpathSync(p)).split("/")[0] === "..") throw new InstallError("E_IMAGE_BUILD", "installing " + label + ": ~/" + relative(home, p) + " resolves outside the install tree through a symlink, so the render is not served from it");
         for (const entry of ["SKILL.md", "sections"]) {
           if (!existsSync(join(home, RENDER_DIR, s, entry))) continue;
           rmSync(join(served, entry), { recursive: true, force: true });
@@ -564,19 +565,18 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         const command = arm.install[o.host] ?? (kind ? kind.install[o.host] : stackInstall(o.host));
         if (!command) throw new InstallError("E_USAGE", "arm " + arm.name + ": " + kind!.name + " has no installer for " + o.host + "; it installs on " + Object.keys(kind!.install).join(" and "));
         if (arm.render && (o.host !== "claude" || kind)) throw new InstallError("E_USAGE", "arm " + arm.name + ": a render serves a gstack stack on claude only");
-        const run = arm.render ? command + " && bin/gstack-modules render --host claude --loadout full" + (arm.render === "unattended" ? " --session-kind unattended" : "") + " --out-dir \"$HOME/" + RENDER_DIR + "\"" : command;
+        const run = arm.render ? command + "; bin/gstack-modules render --host claude --loadout full" + (arm.render === "unattended" ? " --session-kind unattended" : "") + " --out-dir \"$HOME/" + RENDER_DIR + "\"" : command;
         const t = extract(arm.stack);
         const full = install(arm.stack, undefined, run, arm.stack.repo + "@" + arm.stack.sha.slice(0, 12) + (arm.stack.path ? ":" + arm.stack.path : ""), arm.render);
         let render: Record<string, unknown> | null = null;
         if (arm.render) {
-          const lockFile = join(full.dir, RENDER_DIR, "loadout.lock.json");
-          const lockBytes = existsSync(lockFile) ? readFileSync(lockFile) : null;
+          const lockRel = resolveIn(full.dir, RENDER_DIR + "/loadout.lock.json");
+          const lockBytes = isFile(full.dir, lockRel) ? readFileSync(join(full.dir, lockRel)) : null;
           const lock = lockBytes ? (JSON.parse(lockBytes.toString("utf8")) as { session_kind?: unknown; spec?: unknown; spec_sha256?: unknown; gstack_version?: unknown; files?: unknown[]; total_bytes?: unknown }) : null;
           if (lock?.session_kind !== arm.render) throw new InstallError("E_IMAGE_BUILD", "arm " + arm.name + ": ~/" + RENDER_DIR + "/loadout.lock.json " + (lock ? "carries session_kind " + JSON.stringify(lock.session_kind ?? null) : "is missing") + ", not the requested " + arm.render);
           for (const s of ["review", "investigate"]) {
-            const servedMd = join(full.dir, skillsDir, s, "SKILL.md");
-            const renderedMd = join(full.dir, RENDER_DIR, s, "SKILL.md");
-            const start = existsSync(servedMd) && existsSync(renderedMd) && realpathSync(servedMd) === realpathSync(renderedMd) ? readFileSync(servedMd, "utf8").split("\n").find((l) => l.includes("gstack-skill-start --skill")) : undefined;
+            const servedMd = resolveIn(full.dir, skillsDir + "/" + s + "/SKILL.md");
+            const start = isFile(full.dir, servedMd) && servedMd === resolveIn(full.dir, RENDER_DIR + "/" + s + "/SKILL.md") ? readFileSync(join(full.dir, servedMd), "utf8").split("\n").find((l) => l.includes("gstack-skill-start --skill")) : undefined;
             if (start === undefined || start.includes("--render unattended") !== (arm.render === "unattended")) throw new InstallError("E_IMAGE_BUILD", "arm " + arm.name + ": the served ~/" + skillsDir + "/" + s + "/SKILL.md " + (start === undefined ? "is not the render's or has no gstack-skill-start line" : "start line " + JSON.stringify(start.trim()) + (arm.render === "unattended" ? " lacks" : " carries") + " --render unattended in an " + arm.render + " render"));
           }
           render = { session_kind: lock.session_kind, spec: lock.spec, spec_sha256: lock.spec_sha256, gstack_version: lock.gstack_version, files: lock.files?.length ?? null, total_bytes: lock.total_bytes, lock_sha256: sha(lockBytes!) };

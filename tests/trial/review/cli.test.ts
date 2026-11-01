@@ -25,6 +25,8 @@ describe("review-units arguments (keyless)", () => {
     expect((await run([...base(out), "--arms", "none", "--bogus"])).err).toMatch(/^E_USAGE .*unknown argument/);
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", "claude-opus-5-5", "--out", out, "--arms", "none"])).err).toMatch(/^E_USAGE .*no --source for garrytan\/gstack/);
     expect((await run([...base(out), "--arms", "none", "placebo"])).err).toMatch(/^E_USAGE .*--arms takes none/);
+    writeFileSync(out + "-prefix.txt", "/other:review Run the full procedure.");
+    expect((await run([...base(out), "--arms", "none", GSTACK, "--told-prefix", "gstack=" + out + "-prefix.txt", "--dry-run"])).err).toMatch(/^E_USAGE .*--told-prefix gstack opens with \/other:review, but the arm's told command opens with \/review/);
     expect((await run([...base(out), "--arms", GSTACK.replace(/^gstack/, "g".repeat(30)), "--dry-run"])).err).toMatch(/^E_USAGE .*arm id "g{30}-opus"/);
     const policy = await Bun.file(new URL("../../../policy/models.json", import.meta.url)).json();
     policy.models["vendor-b/particle-1"] = policy.models["particle-ai/particle-1"];
