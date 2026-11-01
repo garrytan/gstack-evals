@@ -25,7 +25,7 @@ free_ports() {
   local p pid
   for p in "$@"; do
     for _ in $(seq 1 20); do
-      pid=$(ss -ltnpH "sport = :$p" | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)
+      pid=$(ss -ltnpH "sport = :$p" | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)
       [ -z "$pid" ] && break
       kill -9 $pid 2>/dev/null || true; sleep 0.5
     done
