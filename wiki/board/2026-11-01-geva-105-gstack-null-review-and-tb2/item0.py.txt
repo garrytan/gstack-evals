@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Item 0 reanalysis of stacks round 1 TB2 (GEVA-105, GST-822). Keyless: reads trial files, calls no model, prints no transcript text.
+
+usage: python3 item0.py <filtered-root> <tasks.json>
+  <filtered-root>  the filtered copy that filter.py builds (one folder per batch, <batch>/pulled/jobs/*/<trial>/)
+  <tasks.json>     quick/laneb/tasks/tasks.json at the tag laneb-stacks-1-runner (the public leaderboard's per-task frontier_rate and TB2's difficulty label)
+"""
+import glob, json, os, random, statistics as st, sys, itertools, math
+
+SEED = 20261031
+B = 10000
+root, tasks_path = sys.argv[1], sys.argv[2]
+meta = {}
+tj = json.load(open(tasks_path))
+for k in ("main", "reserves", "extension"):
+    for e in tj.get(k, []):
+        meta[e["task_id"]] = dict(frontier=(e.get("published") or {}).get("frontier_rate"), difficulty=e.get("difficulty"), limit=e.get("agent_timeout_sec"))
+
+rows = []
+for cf in sorted(glob.glob(os.path.join(root, "*", "pulled", "jobs", "*", "*", "config.json"))):
+    d = os.path.dirname(cf)
+    batch = cf[len(root):].strip("/").split("/")[0]
+    c = json.load(open(cf)); kw = c["agent"]["kwargs"]
+    res = json.load(open(os.path.join(d, "result.json"))) if os.path.exists(os.path.join(d, "result.json")) else {}
+    rw = ((res.get("verifier_result") or {}).get("rewards") or {}).get("reward")
+    exc = json.dumps(res.get("exception_info") or "")
+    tools_t, edits_t, last_t, result_t, bg, bg_started, turns = [], [], 0.0, None, 0, 0, 0
+    sm = os.path.join(d, "agent", "sdk-messages.jsonl")
+    if os.path.exists(sm):
+        for line in open(sm):
+            try: o = json.loads(line)
+            except ValueError: continue
+            t = o.get("t") or 0.0
+            last_t = max(last_t, t)
+            if o.get("type") == "ResultMessage": result_t = t; turns += 1
+            if o.get("type") == "TaskStartedMessage": bg += 1; bg_started += 1
+            if o.get("type") == "TaskNotificationMessage": bg -= 1
+            for bl in (o.get("content") or []) if isinstance(o.get("content"), list) else []:
+                if not isinstance(bl, dict): continue
+                if o.get("type") == "AssistantMessage" and "name" in bl and "input" in bl:
+                    tools_t.append((t, bl["name"]))
+                    if bl["name"] in ("Write", "Edit", "NotebookEdit"): edits_t.append(t)
+    rep = "r1" if batch.startswith("r1") else ("r2" if batch.startswith("r2") else "r3")
+    rows.append(dict(model=kw["upstream_model"], arm=kw["arm"], task=os.path.basename(c["task"]["path"]), rep=rep,
+                     passed=1 if (rw is not None and rw >= 1) else 0, reward=rw, timeout="AgentTimeoutError" in exc,
+                     tools=len(tools_t), last_tool=(tools_t[-1][0] if tools_t else None), last_edit=(edits_t[-1] if edits_t else None),
+                     last_t=last_t, result_t=result_t, bg_left=max(bg, 0), bg_started=bg_started, turns=turns))
+
+print("trials", len(rows))
+models = ["claude-opus-5-5", "claude-haiku-5-5", "particle-1"]
+for m in models:
+    for a in ("none", "gstack"):
+        v = [r for r in rows if r["model"] == m and r["arm"] == a]
+        print(f"  {m} {a}: {sum(r['passed'] for r in v)}/{len(v)} passed, {sum(r['timeout'] for r in v)} agent timeouts")
+
+REPS = ["r1", "r2", "r3"]
+
+def vectors(m, a):
+    out = {}
+    for r in rows:
+        if r["model"] == m and r["arm"] == a: out.setdefault(r["task"], {})[r["rep"]] = r["passed"]
+    return {t: [v.get(x) for x in REPS] for t, v in out.items()}
+
+def stat(nv, gv, keep, tasks):
+    """Sum and count of (gstack - none) over included (task, replicate) pairs; keep(t, i, n_vec) decides inclusion."""
+    per = {}
+    for t in tasks:
+        d = [gv[t][i] - nv[t][i] for i in range(3) if nv[t][i] is not None and gv[t][i] is not None and keep(t, i, nv[t])]
+        per[t] = (sum(d), len(d), sum(nv[t][i] for i in range(3) if keep(t, i, nv[t])), sum(gv[t][i] for i in range(3) if keep(t, i, nv[t])))
+    return per
+
+def swap_test(nv, gv, keep, tasks, obs):
+    """Permutation test: swap whole-task arm labels and recompute the stratum each time, so selection that uses the none arm is redrawn too."""
+    cand = [t for t in tasks if nv[t] != gv[t]]
+    def value(swapped):
+        a = {t: (gv[t] if t in swapped else nv[t]) for t in tasks}; b = {t: (nv[t] if t in swapped else gv[t]) for t in tasks}
+        per = stat(a, b, keep, tasks); c = sum(v[1] for v in per.values())
+        return sum(v[0] for v in per.values()) / c if c else 0.0
+    if len(cand) <= 16:
+        draws = [value({t for t, bit in zip(cand, bits) if bit}) for bits in itertools.product((0, 1), repeat=len(cand))]
+        kind = f"exact over {len(draws)} assignments"
+    else:
+        rng = random.Random(SEED)
+        draws = [value({t for t in cand if rng.random() < 0.5}) for _ in range(20000)]
+        kind = "20,000 random assignments"
+    return sum(1 for v in draws if abs(v) >= abs(obs) - 1e-12) / len(draws), kind
+
+def contrast(label, nv, gv, keep, tasks):
+    per = stat(nv, gv, keep, tasks)
+    T = [t for t in tasks if per[t][1]]
+    if not T:
+        print(f"  {label}: no tasks"); return
+    sums = [per[t][0] for t in T]; counts = [per[t][1] for t in T]
+    N = sum(counts); est = sum(sums) / N
+    n_none = sum(per[t][2] for t in T); n_g = sum(per[t][3] for t in T)
+    rng = random.Random(SEED); boots = []
+    for _ in range(B):
+        idx = [rng.randrange(len(T)) for _ in T]
+        boots.append(sum(sums[i] for i in idx) / sum(counts[i] for i in idx))
+    boots.sort(); lo, hi = boots[int(0.025 * B)], boots[int(0.975 * B) - 1]
+    k = len(T)
+    se = math.sqrt(k / (k - 1) * sum((s - est * c) ** 2 for s, c in zip(sums, counts))) / N if k > 1 else float("nan")
+    p, kind = swap_test(nv, gv, keep, tasks, est)
+    nz = sum(1 for x in sums if x != 0)
+    print(f"  {label}: {k} tasks, {N} paired trials; none {100*n_none/N:.1f}%, gstack {100*n_g/N:.1f}%; gstack - none {100*est:+.1f} pp [95% CI {100*lo:+.1f}, {100*hi:+.1f}]; {nz} tasks differ; swap-test p {p:.3f} ({kind}); MDD80 {280*se:.1f} pp (normal approximation, cluster-robust SE)")
+
+for m in models:
+    nv, gv = vectors(m, "none"), vectors(m, "gstack")
+    tasks = sorted(set(nv) & set(gv))
+    print(f"\n== {m}: gstack - none by difficulty stratum (paired by task and replicate)")
+    others = lambda nvec, i: sum(nvec[x] for x in range(3) if x != i and nvec[x] is not None)
+    contrast("all tasks", nv, gv, lambda t, i, v: True, tasks)
+    contrast("A. cross-fit hard (none passed fewer than 2 of the other 2 replicates)", nv, gv, lambda t, i, v: others(v, i) < 2, tasks)
+    contrast("A. cross-fit easy (none passed both other replicates)", nv, gv, lambda t, i, v: others(v, i) == 2, tasks)
+    contrast("B. in-sample hard (none 0 to 2 of 3; biased upward, descriptive)", nv, gv, lambda t, i, v: sum(v) < 3, tasks)
+    contrast("B. in-sample in-band (none 1 or 2 of 3; biased, descriptive)", nv, gv, lambda t, i, v: 0 < sum(v) < 3, tasks)
+    med = st.median(meta[t]["frontier"] for t in tasks)
+    contrast(f"C. leaderboard hard (published frontier_rate below the median {med:.3f})", nv, gv, lambda t, i, v: meta[t]["frontier"] < med, tasks)
+    contrast(f"C. leaderboard easy (frontier_rate at or above {med:.3f})", nv, gv, lambda t, i, v: meta[t]["frontier"] >= med, tasks)
+    contrast("D. TB2 label hard", nv, gv, lambda t, i, v: meta[t]["difficulty"] == "hard", tasks)
+    contrast("D. TB2 label easy or medium", nv, gv, lambda t, i, v: meta[t]["difficulty"] != "hard", tasks)
+
+print("\n== Opus gstack agent timeouts (each task's own agent limit from tasks.json), with the same task's other trials")
+m = "claude-opus-5-5"
+for r in sorted([r for r in rows if r["model"] == m and r["arm"] == "gstack" and r["timeout"]], key=lambda r: (r["task"], r["rep"])):
+    le = "none by Write or Edit" if r["last_edit"] is None else f"min {r['last_edit']/60:.1f}"
+    ended = "never (cut off mid-turn)" if r["result_t"] is None or r["result_t"] < r["last_t"] - 1 else f"min {r['result_t']/60:.1f} (final turn {r['turns']})"
+    print(f"  {r['task']} {r['rep']}: limit {meta[r['task']]['limit']/60:.1f} min; reward {r['reward']}; model ended its turn at {ended}; background tasks still running at the end {r['bg_left']}; {r['tools']} tool calls; last file edit {le}; last tool call at min {(r['last_tool'] or 0)/60:.1f}")
+    for a in ("none", "gstack"):
+        o = [x for x in rows if x["model"] == m and x["arm"] == a and x["task"] == r["task"] and not (x is r)]
+        print(f"      {a} other trials on this task: " + ", ".join(f"{x['rep']} pass {x['passed']} last SDK event min {x['last_t']/60:.1f}{' TIMEOUT' if x['timeout'] else ''}" for x in sorted(o, key=lambda x: x['rep'])))
+to_tasks = sorted({r["task"] for r in rows if r["model"] == m and r["arm"] == "gstack" and r["timeout"]})
+for a in ("none", "gstack"):
+    v = [r for r in rows if r["model"] == m and r["arm"] == a]
+    w = [r["last_t"] / 60 for r in v]
+    wt = [r["last_t"] / 60 for r in v if r["task"] in to_tasks]
+    print(f"  {a}: trials that started a background task {sum(1 for r in v if r['bg_started'])}/{len(v)}; on the timeout tasks {sum(1 for r in v if r['bg_started'] and r['task'] in to_tasks)}/{len(wt)}")
+    print(f"  {a}: median session length {st.median(w):.1f} min over {len(v)} trials; on the {len(to_tasks)} timeout tasks {st.median(wt):.1f} min over {len(wt)} trials, passes {sum(r['passed'] for r in v if r['task'] in to_tasks)}/{len(wt)}")

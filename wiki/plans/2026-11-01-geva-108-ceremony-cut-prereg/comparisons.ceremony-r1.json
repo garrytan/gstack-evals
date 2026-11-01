@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "suite": "stacks-r1",
+  "decision_rule": "Preregistered in wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg (sections 5 and 6). Each blocking blocker's value is the share of an arm's passes that FOUND it; PR clusters are the units of the test. Primary: variant-vs-control alone in the LOSS family, one-sided at null zero, exact sign-flip over PR clusters, LOSS when p is below 0.05 (the post's section 6 then Holm-adjusts it with the two TB2 LOSS tests). NO_LOSS needs the margin-shifted test at 10 points and the 80% size rule; at this size it is expected to exit 2 with NOLOSS_UNDERPOWERED, which is never a claim. Otherwise NOT_DISTINGUISHED. False blockers: per-PR counts averaged over passes, paired by PR, exact two-sided sign-flip, smallest drop that counts 0.5 per PR. An arm that stopped or has blockers recorded with coverage incomplete gets no verdict. The other comparisons are secondary and descriptive.",
+  "seed": 20261101,
+  "draws": 10000,
+  "loss_family": {
+    "order": [
+      "variant-vs-control"
+    ],
+    "null": "zero",
+    "reason": "The ceremony cut is the one change under test, so the review LOSS family holds one test: is the unattended render worse than the full render at all."
+  },
+  "comparisons": [
+    {
+      "id": "variant-vs-control",
+      "variant": "variant-opus",
+      "reference": "control-opus",
+      "margin_points": 10,
+      "margin_reason": "The review no-loss lane's margin (stacks round 1 plan, section 7), kept so the scorer and size rule run unchanged. Control sits near 10% blocking recall, so this margin can only bound a loss; section 5 says so.",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "Primary. The ceremony cut, both arms on Claude Code's preset system prompt."
+    }
+  ]
+}
