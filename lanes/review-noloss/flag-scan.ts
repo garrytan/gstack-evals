@@ -3,16 +3,26 @@
 // transcript of a review-units out dir and flags each stack-arm unit-pass that touched, in that arm's own install roots,
 // a file the keyless contamination audit lists for that unit, or searched there for the unit's PR number or fix commit.
 // Rules, applied to every tool call of the main agent and its subagents, whatever the call's result:
-// - Paths. A call's paths are Read file_path, NotebookRead notebook_path, Grep path, Glob path joined with a pattern that
-//   has no wildcard, the SKILL.md a Skill call loads, and every word of a Bash command after ~, $HOME and ${HOME}
-//   expand to the session home, with relative words resolved against an earlier cd in the same command. The arm's told
+// - Paths. A call's paths are Read file_path, NotebookRead notebook_path, Grep path, LS path, Glob path joined with its
+//   pattern, the SKILL.md a Skill call loads, and every word of a Bash command after ~, $HOME and ${HOME} expand to the
+//   session home, with relative words resolved against an earlier cd in the same command. A bare cd goes to the session
+//   home. A command after a cd also touches the directory it runs in, except that a listing naming a path lists only that
+//   path. A word holding *, ? or [...] is a shell glob: * and
+//   ? match within one path segment, ** across segments, so it touches every audited file it matches. The arm's told
 //   command loads its skill's SKILL.md at session start, so that counts as a read in every pass.
 // - read: a path that maps to a file the audit lists for the unit (diff-path rows, and the file of mention rows).
 // - recursive: a Grep call, or a Bash grep -r, rgrep, rg, ag, ack, git grep or diff -r, whose path is a directory
-//   holding such a file. A listing (ls, Glob with a wildcard) shows names, not bytes, and flags only by naming the file.
-// - search: a call with any path in the roots whose Grep pattern or Bash words hold the unit's PR number as a whole
-//   number, or 7 or more leading hex characters of a fix commit of one of the unit's blockers.
+//   holding such a file at any depth, an ancestor of an install root included.
+// - list: a listing that shows such a file's name. ls and LS list a directory's entries, so they flag a file directly in
+//   it, except ls -d, which lists only the directory itself; ls -R, find and tree list every file below their path, an ancestor of an install root or / included, narrowed only by
+//   find's one -name test and find -maxdepth when find runs no action (-exec, -execdir, -ok, -okdir or ,), and tree -L; a Glob, or a
+//   listing that names the file itself, flags each file it matches.
+// - search: a call with any path in the roots, or a recursive call from an ancestor of a root, whose Grep pattern or
+//   Bash words hold the unit's PR number as a whole number, or 7 or more leading hex characters of a fix commit of one
+//   of the unit's blockers.
 // - no-transcript: a stack-arm session directory without transcript.ndjson cannot be read, so it is flagged.
+// A catalog problem, or a blocker whose case is in none of the suite's catalogs, fails the scan, since the search rule
+// reads each blocker's fix commit from its case.
 // Roots under the session home: gstack ~/.local/share/gstack and ~/.claude/skills (a path under ~/.claude/skills/<name>/
 // maps to <name>/ of gstack's tree, ~/.claude/skills/gstack/ to its root), pstack ~/.local/share/pstack, tstack
 // ~/.claude/skills and ~/.claude/agents. The none arm has no roots. Audit rows name gstack only, so pstack and tstack can
@@ -30,6 +40,9 @@ export const SESSION_HOME = "/home/agent";
 export const ROOTS: Record<string, string[]> = { gstack: [".local/share/gstack", ".claude/skills"], pstack: [".local/share/pstack"], tstack: [".claude/skills", ".claude/agents"] };
 const RECURSIVE = new Set(["rg", "ag", "ack", "rgrep"]);
 const GREPS = new Set(["grep", "egrep", "fgrep", "zgrep"]);
+const LISTINGS = new Set(["ls", "find", "tree"]);
+/** The options of a listing whose value is the next word, not an operand. */
+const VALUED: Record<string, string[]> = { ls: ["-I", "-w", "-T", "--ignore", "--hide", "--width", "--tabsize"], tree: ["-L", "-I", "-P", "-o", "-H", "-T", "--filelimit", "--charset"] };
 export const FLAG_COLUMNS = ["unit", "arm", "model", "pass", "rule", "tool", "call", "path", "audit_path"];
 
 export interface Flag {
@@ -37,21 +50,112 @@ export interface Flag {
   arm: string;
   model: string;
   pass: number;
-  rule: "read" | "recursive" | "search" | "no-transcript";
+  rule: "read" | "recursive" | "list" | "search" | "no-transcript";
   tool: string;
   call: string;
   path: string;
   audit_path: string;
 }
 
-interface Touch {
+export interface Touch {
+  /** An absolute session path, or a shell glob over them. */
   path: string;
-  recursive: boolean;
+  /** What the call reaches: the path alone, the entries of the directory at the path, or every file below it. */
+  reach: "path" | "entries" | "tree";
+  /** The call shows names, not bytes. */
+  list: boolean;
+  /** A tree reach shows only files whose name matches this glob (find -name). */
+  name?: string;
+  /** A tree reach goes at most this many levels below the path (find -maxdepth, tree -L). */
+  depth?: number;
 }
 
 const fail = (message: string): never => {
   throw new ScoreError("E_USAGE", "noloss flag-scan: " + message);
 };
+
+/** One step of a shell glob: a literal character, ? (one character within a path segment), a [...] class, * (any run
+ * within a segment), ** (any run across segments), ** then a slash (whole segments) or a {a,b} choice. */
+type Step = { lit: string } | { one: true } | { cls: RegExp } | { star: "*" | "**" | "**/" } | { alt: Step[][] };
+
+const charClass = (source: string): RegExp | null => {
+  try {
+    return new RegExp("^(?:" + source + ")$");
+  } catch {
+    return null;
+  }
+};
+
+/** A shell glob as steps: [...] is a class (a literal [ when the regex engine rejects it), {a,b} is a choice, and a run of
+ * stars is one step. */
+export function globSteps(glob: string): Step[] {
+  const steps: Step[] = [];
+  const star = (kind: "*" | "**" | "**/") => {
+    const last = steps.at(-1);
+    if (!last || !("star" in last)) steps.push({ star: kind });
+    else if (last.star === "**" || kind === "**") last.star = "**";
+    else if (last.star !== kind) steps.push({ star: kind });
+  };
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i]!;
+    const close = c === "[" ? glob.indexOf("]", i + 2) : c === "{" ? glob.indexOf("}", i + 1) : -1;
+    const cls = c === "[" && close > 0 ? charClass("[" + glob.slice(i + 1, close).replace(/^!/, "^").replace(/\\/g, "\\\\") + "]") : null;
+    if (c === "*" && glob[i + 1] === "*") {
+      const slash = glob[i + 2] === "/";
+      star(slash ? "**/" : "**");
+      i += slash ? 2 : 1;
+    } else if (c === "*") star("*");
+    else if (c === "?") steps.push({ one: true });
+    else if (cls) {
+      steps.push({ cls });
+      i = close;
+    } else if (c === "{" && close > 0 && glob.slice(i + 1, close).includes(",")) {
+      steps.push({ alt: glob.slice(i + 1, close).split(",").map(globSteps) });
+      i = close;
+    } else steps.push({ lit: c });
+  }
+  return steps;
+}
+
+/** The positions in s where a match of steps can end, given where it can start. Each step costs one walk over s, so no
+ * glob can make a match backtrack. */
+function ends(steps: Step[], s: string, from: Uint8Array): Uint8Array {
+  let at = from;
+  for (const step of steps) {
+    const next = new Uint8Array(s.length + 1);
+    if ("alt" in step) for (const alt of step.alt) ends(alt, s, at).forEach((v, q) => (next[q] |= v));
+    else if ("star" in step && step.star === "**/") {
+      let seen = 0;
+      for (let q = 0; q <= s.length; q++) {
+        if (q > 0 && s[q - 1] === "/") {
+          next[q] = at[q]! | seen;
+          seen = 0;
+        } else {
+          next[q] = at[q]!;
+          if (q > 0) seen |= next[q - 1]!;
+        }
+      }
+    } else if ("star" in step) {
+      let open = 0;
+      for (let q = 0; q <= s.length; q++) {
+        if (step.star === "*" && q > 0 && s[q - 1] === "/") open = 0;
+        open |= at[q]!;
+        next[q] = open;
+      }
+    } else for (let q = 0; q < s.length; q++) if (at[q] && ("lit" in step ? s[q] === step.lit : "cls" in step ? step.cls.test(s[q]!) : s[q] !== "/")) next[q + 1] = 1;
+    if (!next.includes(1)) return next;
+    at = next;
+  }
+  return at;
+}
+
+const start = (s: string) => {
+  const at = new Uint8Array(s.length + 1);
+  at[0] = 1;
+  return at;
+};
+
+const globMatch = (steps: Step[], s: string) => ends(steps, s, start(s))[s.length] === 1;
 
 const expand = (word: string, home: string) => word.replace(/^~(?=\/|$)/, home).replace(/^\$\{HOME\}|^\$HOME(?![A-Za-z0-9_])/, home);
 
@@ -67,21 +171,60 @@ export function treePath(arm: string, path: string, home = SESSION_HOME): string
   return null;
 }
 
+/**
+ * The session paths of an audited file: under each of the arm's roots, and for gstack also under ~/.claude/skills/gstack/.
+ * A file at the tree's top level has no path directly in ~/.claude/skills, which maps only <name>/ directories.
+ */
+const sessionPaths = (arm: string, file: string, home: string) =>
+  (ROOTS[arm] ?? [])
+    .flatMap((r) => (arm === "gstack" && r === ".claude/skills" ? [home + "/" + r + "/gstack/" + file, ...(file.includes("/") ? [home + "/" + r + "/" + file] : [])] : [home + "/" + r + "/" + file]))
+    .filter((p) => treePath(arm, p, home) === file);
+
+/** Whether a touch reaches into one of the arm's roots: a path at or under a root, or a recursive call from above one. */
+export function inRoots(arm: string, t: Touch, home = SESSION_HOME): boolean {
+  const segs = t.path === "/" ? [""] : t.path.split("/");
+  return (ROOTS[arm] ?? []).some((r) => {
+    const root = (home + "/" + r).split("/");
+    for (let i = 0; i < root.length; i++) {
+      if (i >= segs.length) return t.reach === "tree";
+      if (segs[i]!.includes("**")) return true;
+      if (!globMatch(globSteps(segs[i]!), root[i]!)) return false;
+    }
+    return true;
+  });
+}
+
+/** The rule a touch fires on a session path, or null: read or list on the path itself, list on an entry, recursive or list below. */
+export function touchRule(t: Touch): (path: string) => Flag["rule"] | null {
+  const steps = globSteps(t.path);
+  const name = t.name === undefined ? null : globSteps(t.name);
+  return (path) => {
+    const at = ends(steps, path, start(path));
+    if (at[path.length]) return t.list ? "list" : "read";
+    const under = t.path === "/" ? start(path) : at;
+    for (let p = 0; p < path.length - 1; p++) {
+      if (!under[p] || path[p] !== "/") continue;
+      const rest = path.slice(p + 1);
+      if (t.reach === "entries" && !rest.includes("/")) return "list";
+      if (t.reach === "tree" && (t.depth === undefined || rest.split("/").length <= t.depth) && (!name || globMatch(name, posix.basename(path)))) return t.list ? "list" : "recursive";
+    }
+    return null;
+  };
+}
+
 const skillFile = (skill: string, home: string) => (skill.includes(":") ? home + "/.local/share/" + skill.split(":")[0] + "/skills/" + skill.split(":").pop() + "/SKILL.md" : home + "/.claude/skills/" + skill + "/SKILL.md");
 
 /** What one tool call touches, and the words a search rule reads, from its name and input. */
 export function touches(tool: string, input: Record<string, unknown>, cwd: string, home = SESSION_HOME): { paths: Touch[]; words: string[] } {
-  const abs = (p: string, from: string) => posix.normalize(posix.isAbsolute(expand(p, home)) ? expand(p, home) : posix.join(from, expand(p, home)));
+  const abs = (p: string, from: string) => posix.normalize(posix.isAbsolute(expand(p, home)) ? expand(p, home) : posix.join(from, expand(p, home))).replace(/(.)\/+$/, "$1");
   const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : null);
-  if (tool === "Read" && str("file_path")) return { paths: [{ path: abs(str("file_path")!, cwd), recursive: false }], words: [] };
-  if (tool === "NotebookRead" && str("notebook_path")) return { paths: [{ path: abs(str("notebook_path")!, cwd), recursive: false }], words: [] };
-  if (tool === "Grep") return { paths: [{ path: abs(str("path") ?? ".", cwd), recursive: true }], words: [str("pattern") ?? "", str("glob") ?? ""] };
-  if (tool === "Glob") {
-    const at = abs(str("path") ?? ".", cwd);
-    const pattern = str("pattern") ?? "";
-    return { paths: [{ path: at, recursive: false }, ...(/[*?[{]/.test(pattern) ? [] : [{ path: abs(pattern, at), recursive: false }])], words: [pattern] };
-  }
-  if (tool === "Skill" && str("skill")) return { paths: [{ path: skillFile(str("skill")!, home), recursive: false }], words: [] };
+  const at = (path: string, reach: Touch["reach"] = "path", list = false): Touch[] => [{ path, reach, list }];
+  if (tool === "Read" && str("file_path")) return { paths: at(abs(str("file_path")!, cwd)), words: [] };
+  if (tool === "NotebookRead" && str("notebook_path")) return { paths: at(abs(str("notebook_path")!, cwd)), words: [] };
+  if (tool === "Grep") return { paths: at(abs(str("path") ?? ".", cwd), "tree"), words: [str("pattern") ?? "", str("glob") ?? ""] };
+  if (tool === "LS" && str("path")) return { paths: at(abs(str("path")!, cwd), "entries", true), words: [] };
+  if (tool === "Glob") return { paths: at(abs(str("pattern") ?? "", abs(str("path") ?? ".", cwd)), "path", true), words: [str("pattern") ?? ""] };
+  if (tool === "Skill" && str("skill")) return { paths: at(skillFile(str("skill")!, home)), words: [] };
   if (tool !== "Bash" || !str("command")) return { paths: [], words: [] };
   const paths: Touch[] = [];
   const words: string[] = [];
@@ -89,18 +232,34 @@ export function touches(tool: string, input: Record<string, unknown>, cwd: strin
   for (const argv of shellCommands(str("command")!)) {
     const name = posix.basename(argv[0] ?? "");
     if (name === "cd") {
-      if (argv[1]) here = abs(argv[1], here);
+      here = argv[1] ? abs(argv[1], here) : home;
       continue;
     }
     const flags = argv.filter((w) => w.startsWith("-"));
-    const recursive = RECURSIVE.has(name) || (GREPS.has(name) && flags.some((f) => /^-[A-Za-z]*[rR]/.test(f) || f === "--recursive" || f === "--dereference-recursive")) || (name === "git" && argv.includes("grep")) || (name === "diff" && flags.some((f) => /^-[A-Za-z]*r/.test(f) || f === "--recursive"));
+    const list = LISTINGS.has(name);
+    const after = (flag: string) => (argv.indexOf(flag) > 0 ? argv[argv.indexOf(flag) + 1] : undefined);
+    const pattern = after("-name");
+    const tests = argv.filter((w) => /^-i?(name|path|regex|wholename)$/.test(w) || w === "-o" || w === "-or" || w === "!" || w === "-not");
+    const depth = Number(name === "find" ? after("-maxdepth") : name === "tree" ? after("-L") : undefined);
+    const filter: Pick<Touch, "name" | "depth"> = argv.some((w) => /^-(exec|execdir|ok|okdir)$/.test(w) || w === ",") ? {} : { ...(name === "find" && pattern !== undefined && tests.length === 1 && tests[0] === "-name" ? { name: pattern } : {}), ...(Number.isInteger(depth) && depth >= 0 ? { depth } : {}) };
+    const touch = (path: string, r: Touch["reach"]): Touch => ({ path, reach: r, list, ...(r === "tree" ? filter : {}) });
+    const recursive = RECURSIVE.has(name) || (GREPS.has(name) && flags.some((f) => /^-[A-Za-z]*[rR]/.test(f) || f === "--recursive" || f === "--dereference-recursive")) || (name === "git" && argv.includes("grep")) || (name === "diff" && flags.some((f) => /^-[A-Za-z]*r/.test(f) || f === "--recursive")) || name === "find" || name === "tree" || (name === "ls" && flags.some((f) => /^-[A-Za-z]*R/.test(f) || f === "--recursive"));
+    const directoryOnly = name === "ls" && flags.some((f) => /^-[A-Za-z]*d/.test(f) || f === "--directory");
+    const reach = directoryOnly ? "path" : recursive ? "tree" : list ? "entries" : "path";
     for (const w of argv.slice(1)) {
       words.push(w);
       const v = w.startsWith("--") && w.includes("=") ? w.slice(w.indexOf("=") + 1) : w;
       if (!v || v.startsWith("-") || /^[a-z]+:\/\//i.test(v)) continue;
-      if (v.includes("/") || v.startsWith("~") || v.startsWith("$HOME") || v.startsWith("${HOME}") || here !== cwd) paths.push({ path: abs(v, here), recursive });
+      if (v.includes("/") || v.startsWith("~") || v.startsWith("$HOME") || v.startsWith("${HOME}") || here !== cwd) paths.push(touch(abs(v, here), reach));
     }
-    if (here !== cwd) paths.push({ path: here, recursive });
+    const operand = (i: number) => {
+      const w = argv[i]!;
+      if (w.startsWith("-") || w === "<" || w === ">" || argv[i - 1] === "<" || argv[i - 1] === ">") return false;
+      if (/^\d+$/.test(w) && (argv[i + 1] === "<" || argv[i + 1] === ">")) return false;
+      return !(VALUED[name] ?? []).includes(argv[i - 1]!);
+    };
+    const named = name === "find" ? !!argv[1] && operand(1) : argv.some((_, i) => i > 0 && operand(i));
+    if (here !== cwd) paths.push(touch(here, list && named ? "path" : reach));
   }
   return { paths, words };
 }
@@ -143,7 +302,9 @@ export function flagScan(o: { suite: Suite; run: string; audit: string; home?: s
     if (!audit.has(k)) audit.set(k, new Set());
     audit.get(k)!.add(cells.rule === "mention" ? cells.path!.replace(/:\d+$/, "") : cells.path!);
   }
-  const cases = suiteCases(o.suite).cases;
+  const { cases, problems } = suiteCases(o.suite);
+  const missing = o.suite.units.flatMap((u) => u.blockers.filter((b) => !cases.has(b.case)).map((b) => u.id + " " + b.id + " (case " + b.case + ")"));
+  if (problems.length || missing.length) throw new ScoreError("E_NOLOSS_SUITE", "noloss flag-scan: the search rule reads each blocker's fix commit from its case, so the scan needs every case to load:\n" + [...problems, ...missing.map((m) => m + " is in none of " + o.suite.catalogs.join(", "))].join("\n"));
   const flags: Flag[] = [];
   const sessions: Record<string, number> = {};
   const runs = join(o.run, "runs");
@@ -152,8 +313,8 @@ export function flagScan(o: { suite: Suite; run: string; audit: string; home?: s
       if (!ROOTS[arm]) continue;
       for (const u of listed) {
         const unit = unitOf(u.id, "units.json");
-        const files = audit.get(unit.id + " " + arm) ?? new Set<string>();
-        const fixes = unit.blockers.map((b) => cases.get(b.case)).map((c) => (c && !isPlanCase(c) ? c.fix.commit : undefined)).filter((s): s is string => typeof s === "string").map((s) => s.toLowerCase());
+        const files = [...(audit.get(unit.id + " " + arm) ?? [])].map((f) => ({ file: f, paths: sessionPaths(arm, f, home) }));
+        const fixes = unit.blockers.map((b) => cases.get(b.case)).map((c) => (c && !isPlanCase(c) ? c.fix?.commit : undefined)).filter((s): s is string => typeof s === "string").map((s) => s.toLowerCase());
         const prWord = new RegExp("(?<![0-9])" + unit.pr + "(?![0-9])");
         const dir = join(runs, model, arm, u.task);
         for (const p of existsSync(dir) ? readdirSync(dir).filter((x) => /^p\d+$/.test(x)).sort() : []) {
@@ -169,17 +330,19 @@ export function flagScan(o: { suite: Suite; run: string; audit: string; home?: s
           const calls = [...(told ? [{ id: "told", tool: "Skill", input: { skill: arm === "pstack" ? "pstack:" + told : told } as Record<string, unknown> }] : []), ...transcriptCalls(readFileSync(file, "utf8"))];
           for (const call of calls) {
             const { paths, words } = touches(call.tool, call.input, "/work/" + u.task, home);
-            const inRoots = paths.map((x) => ({ ...x, tree: treePath(arm, x.path, home) })).filter((x) => x.tree !== null);
-            for (const x of inRoots) {
-              if (files.has(x.tree!)) flag("read", call.tool, call.id, x.path, x.tree!);
-              else if (x.recursive) for (const f of files) if (x.tree === "" || f.startsWith(x.tree + "/")) {
-                flag("recursive", call.tool, call.id, x.path, f);
+            for (const t of paths) {
+              const rule = touchRule(t);
+              for (const f of files) {
+                const r = f.paths.map(rule).find((x) => x !== null);
+                if (!r) continue;
+                flag(r, call.tool, call.id, t.path, f.file);
                 break;
               }
             }
-            if (!inRoots.length) continue;
+            const reached = paths.find((t) => inRoots(arm, t, home));
+            if (!reached) continue;
             const hit = words.find((w) => prWord.test(w) || (w.toLowerCase().match(/[0-9a-f]{7,40}/g) ?? []).some((h) => fixes.some((f) => f.startsWith(h))));
-            if (hit !== undefined) flag("search", call.tool, call.id, inRoots[0]!.path, hit);
+            if (hit !== undefined) flag("search", call.tool, call.id, reached.path, hit);
           }
         }
       }

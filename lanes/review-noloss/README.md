@@ -25,17 +25,19 @@ gstack-evals noloss suite --check [--suite <id|path>] [--prereg <file>]
 gstack-evals noloss suite --from-catalog <dir>... --id <id> --released <YYYY-MM-DD> [--with <suite>] [--out <path>] [--stratum <stratum>]...
 gstack-evals noloss suite --stub --suite <path> --sealed-root <dir> --custody <text> [--out <path>]
 gstack-evals noloss ingest <arm dir> --suite <id|path> [--check] [--root <dir>] [--digest-only <finding id>|all]... [--replace <reason>]
-gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--false-blocker-drop <n>] [--json] [--expect <outcomes>]
+gstack-evals noloss score --suite <id> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>) [--power-sims <n>] [--false-blocker-drop <n>] [--false-alarm-gate <n>] [--json] [--expect <outcomes>]
 gstack-evals noloss export [--check]
-gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>]
+gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <points>... [--loss <points>] [--alpha <a>] [--dependence <share>]
 gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
 gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] [--unjudged <file>] --arm <dir>... --out <dir>
 gstack-evals noloss judge-run --suite <id> --packets <dir> --key <file> --arm <dir>... --brief <file> --primary <provider/model> --second <provider/model> --third <provider/model> --item <ledger item> --out <dir> [--source <owner/repo>=<clone>]... [--dry-run]
-gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge>]
+gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge> | --first-k <k>]
 gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
 gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
 ```
 
+A sealed suite's `--out` for `derive` and `flag-scan` must sit outside the repo. `secondary` counts judgments with coverage incomplete as
+misses, and refuses (E_NOLOSS_BLIND) an arm that mixes labelled and blind judgments or a pair judged one each way.
 `gstack-evals noloss --help` has the details. Every refusal starts with its reason code (E_NOLOSS_SUITE, E_NOLOSS_ARM,
 E_NOLOSS_JUDGMENT, E_NOLOSS_COST, E_NOLOSS_BLIND, E_NOLOSS_STALE) and names the file, row and field. `score` exits 0 on
 NO_LOSS with the size rule met, 1 on LOSS and 2 otherwise. E_NOLOSS_ADJUDICATION and E_NOLOSS_EXPECT are refusals too.
@@ -142,8 +144,10 @@ A decoy's one case is its bait, deserved INFORMATIONAL, so it counts only toward
 
 A sealed suite never sits in this repo whole. Its suite file and catalogs live under a sealed root: any absolute
 directory outside this checkout, given to every command with `--sealed-root <dir>`; one inside the checkout, or a
-symlink into it, is refused. The repo holds the stub `suite --stub` prints: id, kind, counts by blocker kind and group,
-the suite's sha256 and the sha256 over its catalogs' case files, and a custody line that starts "procedural custody".
+symlink into it, is refused, and every sealed output path is checked with its symlinks resolved. The repo holds the stub
+`suite --stub` prints: id, kind, counts by blocker kind and group, the suite's sha256 and the sha256 over its catalogs'
+case files, and a custody line that starts "procedural custody". The stub is refused when its id, title, purpose,
+custody or group names name a sealed unit, cluster, repo, commit or case.
 A stub loads only with a sealed root whose suite and catalogs match its digests and counts. Decrypting a panel into a
 sealed root happens outside the scorer. `export --publish-sealed-table` writes a sealed suite's table into the repo
 only when it names no sealed unit, cluster, commit or case.
@@ -152,8 +156,10 @@ Plan judge packets show each finding's section, claim, evidence and fix, mask se
 PLAN_HEADING_WORDS of gstack's plan reviews, and carry the unit's tree at its head from `--source`, whose plan.md must
 hash to every case's plan digest. `score --false-alarm-gate <n>` (or a comparison's `false_alarm_gate`) reads
 must-fix false alarms on decoys only: a LOSS whose reference raises more than n extra per decoy, interval included,
-warns FALSE_ALARM_GATE_FAIL and its claim may not be made. `derive --first-k <k>` is the volume-matched reading, and
-`power --alpha` and `--dependence` give power at a Holm step with the flaws of one plan moving together.
+warns FALSE_ALARM_GATE_FAIL and its claim may not be made. With `--prereg`, a `--false-alarm-gate` that is not the
+comparison's preregistered gate scores it post hoc. `derive --first-k <k>` is the volume-matched reading; it refuses a
+transcribed arm, which has no findings to cut. `power --alpha` and `--dependence` give power at a Holm step with the
+flaws of one plan moving together.
 
 ## Legacy arms
 
@@ -190,7 +196,8 @@ and at most 16,000 output tokens. The primary reads every packet; the second and
 blockers or findings judge-join will ask them for (the same `judgeSets` code), and their reply files keep only those.
 The runner writes each reply's batch, judge, file and digest itself. An answer judge-join would refuse is asked again
 once, and a second refusal goes to unjudged.json, which `judge-join --unjudged` turns into coverage incomplete rows (or
-no adjudication row). `impact` and `verifiable` go to impact.tsv and verifiable.tsv, never into a reply. Adjudication
+no adjudication row). `impact` and `verifiable` go to impact.tsv and verifiable.tsv, never into a reply, and each row carries the sha256 of the finding it rated; `derive` refuses a rating whose finding changed. Adjudication
 packets go out with an evidence sheet built from each finding's masked evidence and the unit head's code in a `--source`
-clone, and the run writes unverifiable.tsv for the frozen sensitivity count. `--dry-run` prints each request's worst
-case and spends nothing. A ledger item binds to one run, so the matching and adjudication batches need an item each.
+clone, and the run writes unverifiable.tsv for the frozen sensitivity count. The proxy retries a 429 or 5xx within a budget of 3 sends in 900 s; past it, or on a
+transport error, the run stops. `--dry-run` prints each request's worst case at 3 sends and the item's cap beside the
+total, and spends nothing. A ledger item binds to one run, so the matching and adjudication batches need an item each.

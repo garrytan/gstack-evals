@@ -123,6 +123,8 @@ const wholeWord = (s: string, flags = "i") => new RegExp("(?<![A-Za-z0-9_])" + e
 const fileName = (suite: Suite, u: Unit) => "packets/" + unitRef(suite, u).replace(/\//g, "__") + ".json";
 export const batchDigest = (k: Pick<JudgeKey, "kind" | "suite" | "arms" | "seed" | "mapping_sha256" | "packets">) => sha256(JSON.stringify({ version: JUDGE_VERSION, ...(k.kind ? { kind: k.kind } : {}), suite: k.suite, arms: k.arms, seed: k.seed, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
 const inside = (child: string, dir: string) => resolve(child) === resolve(dir) || resolve(child).startsWith(resolve(dir) + sep);
+/** A finding's digest: the sha256 of its findings line as JSON.stringify writes its fields, so a rating stays bound to the text it rated. */
+export const findingSha256 = (fields: Record<string, unknown>) => sha256(JSON.stringify(fields));
 
 /** Texts a packet must never carry: arm ids and labels (3 or more characters), "arm <id>", model ids, and reader names with a hyphen or digit. */
 export function leakRules(arms: LoadedArm[]): Array<{ rule: string; re: RegExp }> {

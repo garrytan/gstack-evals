@@ -11,8 +11,8 @@
 // reads the stub, then <sealed root>/suites/<id>.json, checks both digests and the counts, and resolves the suite's
 // catalogs against the sealed root. Decrypting a panel into the sealed root happens outside the scorer.
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isPlanCase, loadCatalog, type CatalogCase, type PlanStratum } from "../review-replay/catalog/catalog.ts";
 import { canonical } from "../../src/trial/cache.ts";
 
@@ -216,11 +216,9 @@ export function setSealedRoot(dir: string | null): void {
 /** A sealed root is any absolute path to a directory outside this checkout, symlinks resolved; one inside it is refused. */
 export function checkSealedRoot(dir: string, repoRoot = REPO_ROOT): string {
   if (!isAbsolute(dir)) throw new SuiteError("--sealed-root " + dir + " is not an absolute path");
-  const inside = "--sealed-root " + dir + " is inside the repo; sealed suites and catalogs stay outside this checkout";
-  if (insideRepo(dir, repoRoot)) throw new SuiteError(inside);
-  if (!existsSync(dir)) throw new SuiteError("--sealed-root " + dir + " does not exist");
-  const real = realpathSync(dir);
-  if (insideRepo(real, realpathSync(repoRoot))) throw new SuiteError(inside + " (it resolves to " + real + ")");
+  const real = existsSync(dir) ? realpathSync(dir) : null;
+  if (insideRepo(dir, repoRoot)) throw new SuiteError("--sealed-root " + dir + " is inside the repo; sealed suites and catalogs stay outside this checkout" + (real !== null && real !== dir ? " (it resolves to " + real + ")" : ""));
+  if (real === null) throw new SuiteError("--sealed-root " + dir + " does not exist");
   return real;
 }
 
@@ -286,9 +284,10 @@ export function catalogsDigest(suite: Suite, root: string): string {
 export function suiteStub(suite: Suite, text: string, root: string, custody: string): SuiteStub {
   if (!suite.sealed) throw new SuiteError("suite " + suite.id + " is not sealed, so it needs no stub; commit it whole");
   if (!custody.startsWith(PROCEDURAL_CUSTODY)) throw new SuiteError("--custody must start \"" + PROCEDURAL_CUSTODY + "\", such as \"" + PROCEDURAL_CUSTODY + ": an age-encrypted bundle, key held apart\"");
-  const leaks = sealedLeaks(suite, suite.title + "\n" + suite.purpose + "\n" + custody);
-  if (leaks.length) throw new SuiteError("the stub would publish what the seal hides in the suite's title, purpose or custody: " + leaks.join(", ") + "; reword them in the sealed suite");
-  return { schema_version: 1, id: suite.id, title: suite.title, kind: suite.kind, sealed: true, stub: true, purpose: suite.purpose, sha256: sha256(text), catalogs_sha256: catalogsDigest(suite, root), counts: stubCounts(suite), custody };
+  const stub: SuiteStub = { schema_version: 1, id: suite.id, title: suite.title, kind: suite.kind, sealed: true, stub: true, purpose: suite.purpose, sha256: sha256(text), catalogs_sha256: catalogsDigest(suite, root), counts: stubCounts(suite), custody };
+  const leaks = sealedLeaks(suite, [stub.id, stub.title, stub.purpose, stub.custody, ...Object.keys(stub.counts.groups)].join("\n"));
+  if (leaks.length) throw new SuiteError("the stub would publish what the seal hides in the suite's id, title, purpose, custody or group names: " + leaks.join(", ") + "; reword them in the sealed suite");
+  return stub;
 }
 
 /**
@@ -389,10 +388,38 @@ export function sealedLeaks(suite: Suite, text: string): string[] {
   return [...words].filter((w) => text.includes(w)).sort();
 }
 
-/** True when dir resolves inside the repo tree. */
+/**
+ * A path with its symlinks resolved. A dangling link is followed to its target, as a write would follow it; past 40 hops
+ * (a loop) the result is null, which insideRepo counts as inside. Any other missing path is the realpath of its nearest
+ * existing ancestor, then the rest of the path.
+ */
+const realPath = (p: string, hops = 0): string | null => {
+  try {
+    return realpathSync(p);
+  } catch {
+    if (dirname(p) === p) return p;
+    const parent = realPath(dirname(p), hops);
+    if (parent === null) return null;
+    let target: string;
+    try {
+      target = readlinkSync(p);
+    } catch {
+      return join(parent, basename(p));
+    }
+    return hops >= 40 ? null : realPath(resolve(parent, target), hops + 1);
+  }
+};
+
+/** True when dir is inside the repo tree, as written or with symlinks resolved on both sides. */
 export function insideRepo(dir: string, repoRoot = REPO_ROOT): boolean {
-  const rel = relative(resolve(repoRoot), resolve(dir));
-  return rel === "" || (!isAbsolute(rel) && rel.split(sep)[0] !== "..");
+  const within = (d: string, root: string) => {
+    const rel = relative(root, d);
+    return rel === "" || (!isAbsolute(rel) && rel.split(sep)[0] !== "..");
+  };
+  const abs = (p: string) => (isAbsolute(p) ? p : process.cwd() + sep + p);
+  const real = realPath(abs(dir));
+  const root = realPath(abs(repoRoot));
+  return within(resolve(dir), resolve(repoRoot)) || real === null || root === null || within(real, root);
 }
 
 /**
