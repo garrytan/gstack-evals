@@ -1,8 +1,8 @@
 {
   "arm": "gstack-render-unattended",
   "claude_code": "2.1.312",
-  "tar_gz_sha256": "750f0a8e1939eb07973418fcd7fc9ab5f9f7b4149d4a302267d2a72c58ce9125",
-  "gstack_sha": "10d41ed398f8c9714187b77e604e43de0ea1a6bf",
+  "tar_gz_sha256": "7acffd2433a8b522b34ed59f7c945721b044739d2ec068b6bf66fbc0a5453307",
+  "gstack_sha": "142757b107edeffff7c78453490c4d2786996fa7",
   "update_check": "false",
   "render_dir": "/root/.claude/gstack-render",
   "render_session_kind": "unattended",
@@ -10,24 +10,24 @@
   "render_spec_sha256": "1ef47edd7703d536bd486655e9a718bad71c6cf4900e97daca25edae99e0ab48",
   "render_gstack_version": "1.92.37.0",
   "render_files": "203",
-  "render_total_bytes": "3720050",
-  "render_lock_sha256": "7107942e9489897b3b797a18c3ceab0a5d00cfd657b68ecc4c559d0a8b8d2d83",
+  "render_total_bytes": "3745145",
+  "render_lock_sha256": "7feacb7f7ec488aff7f81bad42cb493920e7b662838ef3c8429b332c1e391ea7",
   "tar": {
     "file": "gstack-render-unattended.tar",
-    "bytes": 1362391040,
-    "sha256": "01a1a634f81644de001795d74884e22f2cfb51a09deff2261a3a0f173c8e4930"
+    "bytes": 1362452480,
+    "sha256": "b30c40855a5e3dc0362b36e983fcdf1aafc3b235b4e84a15a4432c8deb531367"
   },
   "tree": {
     "files": 14124,
     "symlinks": 8,
     "dirs": 1796,
-    "bytes": 1348738001,
-    "digest": "9af4c519eac20e3ad27775a09f699520941cea86ace8301e394123094662687f"
+    "bytes": 1348796369,
+    "digest": "31ed582e44a62e3c11502d70a5b36dc4b5b07e1e18e8a19c05a3ef54703860f4"
   },
   "skills": {
     "count": 65,
-    "tree_digest": "0e511ea5ae50a5e231a71aa6984030dd59a3db7d71f91089422ff06647266dc7",
-    "skill_md_digest": "81a7f79339ecd009256c63ae4efa3bab25487c3b57d9741abfd6dd76a6ab44b0",
+    "tree_digest": "018539421bc15b0572c376c1c3eacba636f3aed2c8b722adafbd713355c90be3",
+    "skill_md_digest": "add6d71b853f5e4970961ec843b3a37543a1bed52327385dddbb52f0ebbabed8",
     "names": [
       "_gstack-command",
       "autoplan",

@@ -614,8 +614,8 @@ eac4a918e6c850a7c6aa28e76c5dc5c88e01737ff037b27533959d9aeb0a5a7a	1531	755	file	.
 e82e5ec114a71bbf18f10893994477ff6500aed88640de4b45534021d0aede7f	1897	755	file	.claude/skills/gstack-upgrade/migrations/v1.91.65.0.sh
 39fb695d7b1345eaaffe3fdf62cb4f45c0daa27fcb54230e08eb40338ef1aeb9	171	644	file	.claude/skills/gstack/.env.example
 -	0	755	dir	.claude/skills/gstack/.git
-22bd35e3e8d2ffeda005bccad5bd4114fa66cdb6409890c38734f96c55600f30	124	644	file	.claude/skills/gstack/.git/FETCH_HEAD
-dd574767f276a51ec0feb6074c10acb476c925ba3dc9714d68b42c72f45661d5	41	644	file	.claude/skills/gstack/.git/HEAD
+049b84ab1d77a3b4cc19dfbfbf58d12c808e88f0344feb11e3a8c4ef7b02f14c	124	644	file	.claude/skills/gstack/.git/FETCH_HEAD
+724348b835220fdb8ecb791f147ac724915fc3d3e16354f63d39c574aa11423f	41	644	file	.claude/skills/gstack/.git/HEAD
 cfe7ba1238c9a78be7535d7c63bcaf5a4d5011d46b07c9b45d3bbf7d6c312dfe	92	644	file	.claude/skills/gstack/.git/config
 85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee	73	644	file	.claude/skills/gstack/.git/description
 -	0	755	dir	.claude/skills/gstack/.git/hooks
@@ -633,19 +633,19 @@ e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619	1492	755	file	.
 a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f	2783	755	file	.claude/skills/gstack/.git/hooks/push-to-checkout.sample
 44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92	2308	755	file	.claude/skills/gstack/.git/hooks/sendemail-validate.sample
 8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106	3650	755	file	.claude/skills/gstack/.git/hooks/update.sample
-4a814dee27f4d4d8ce52be021882664368963e243a4e5b7b8bd4b7ecd3059d30	494048	644	file	.claude/skills/gstack/.git/index
+0cfcdce54440605ea4ca4ce1a7931920e23688bfa0097c41018692c090c27d3b	494056	644	file	.claude/skills/gstack/.git/index
 -	0	755	dir	.claude/skills/gstack/.git/info
 6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1	240	644	file	.claude/skills/gstack/.git/info/exclude
 -	0	755	dir	.claude/skills/gstack/.git/objects
 -	0	755	dir	.claude/skills/gstack/.git/objects/info
 -	0	755	dir	.claude/skills/gstack/.git/objects/pack
-c46d961cf6275c300e75ee2e32971de60757fa5cfa4ecffa8bbc8dcc0fc8dfb7	138160	444	file	.claude/skills/gstack/.git/objects/pack/pack-e8552ed10052e9af0f39d174efc3960bbff6dbf1.idx
-3be68064e4ce14401086a284de62b9762a7ab4b31fc10ab67960e98080ead6e4	24717498	444	file	.claude/skills/gstack/.git/objects/pack/pack-e8552ed10052e9af0f39d174efc3960bbff6dbf1.pack
-b7d22534ad9443d39ef2aa89a64b28e39cb504e2388335d8c474540877a133e3	19636	444	file	.claude/skills/gstack/.git/objects/pack/pack-e8552ed10052e9af0f39d174efc3960bbff6dbf1.rev
+1709e34b51edc3013ddddc97a232140a447c1d8fcfc475cd1a6e82287fd46c0e	138160	444	file	.claude/skills/gstack/.git/objects/pack/pack-971f3e360daa1ff14ebaf83e90ee59366f87273b.idx
+5efb0d297443c08542a092483c046ba348d36c00f49172e79f574cc7b36601b9	24721584	444	file	.claude/skills/gstack/.git/objects/pack/pack-971f3e360daa1ff14ebaf83e90ee59366f87273b.pack
+d40e3d87a6cc0317df9918802d87092a8eb2097873320f1fadb2ac08ea4aaaaa	19636	444	file	.claude/skills/gstack/.git/objects/pack/pack-971f3e360daa1ff14ebaf83e90ee59366f87273b.rev
 -	0	755	dir	.claude/skills/gstack/.git/refs
 -	0	755	dir	.claude/skills/gstack/.git/refs/heads
 -	0	755	dir	.claude/skills/gstack/.git/refs/tags
-dd574767f276a51ec0feb6074c10acb476c925ba3dc9714d68b42c72f45661d5	41	644	file	.claude/skills/gstack/.git/shallow
+724348b835220fdb8ecb791f147ac724915fc3d3e16354f63d39c574aa11423f	41	644	file	.claude/skills/gstack/.git/shallow
 567003404288f77e2d1cfa258107b27aac294f5c50922b60da94547c2321bd55	2587	644	file	.claude/skills/gstack/.gitattributes
 -	0	755	dir	.claude/skills/gstack/.github
 -	0	755	dir	.claude/skills/gstack/.github/ISSUE_TEMPLATE
@@ -716,7 +716,7 @@ e9ff5ef175ef1083e2e8352bf760cf9d284b511c9e3989cf91402a8323249339	570	644	file	.c
 93eb1428a9a579f71c0e24f677de3d96bc831e23cf8d2a036992e70a91de474a	106146	644	file	.claude/skills/gstack/BROWSER.md
 d04e2efb8032d48a2a8860859cc53a2fc54d861bd728b2df9e8002d5b4cc8294	2407772	644	file	.claude/skills/gstack/CHANGELOG.md
 11e29a19ae8915200305accc7e9f92cad223eaf95c47eb7a43217badb731fe5d	34777	644	file	.claude/skills/gstack/CLAUDE.md
-b0d92154e5e8cce960ff95b494232fc99270196ef5273a18a8becf9a9e287f28	79428	644	file	.claude/skills/gstack/CONTRIBUTING.md
+a21b8c2616a5ba938371984f3cb2a4c5317dc6988a78c8e2b8e54a8355a5b993	79525	644	file	.claude/skills/gstack/CONTRIBUTING.md
 c61b54adaba6615e6670f10ecbdd428f85a9d17bfca55d77e68aca77fa4e63e6	6246	644	file	.claude/skills/gstack/DESIGN.md
 cd654e53061c9beaa2b470b22af7795f98072181a691d90158f77cac4551cf24	15448	644	file	.claude/skills/gstack/ETHOS.md
 e56fbb5b3d95756f3fa1cfefa24732ec79f18ece1ad08a4e79e00df57e8b198c	1066	644	file	.claude/skills/gstack/LICENSE
@@ -772,7 +772,7 @@ a708331422b97c88fbe072686b72f63cb479d3d382f94bcd2431d76c6398a9e2	520	644	file	.c
 6ff8468621fec5f82359882505fc5c14d26f2168e961b61b7f560955c9b28784	3746	644	file	.claude/skills/gstack/benchmark/sections/vet-the-number.md
 e2abde312c47ba7de50ffc213a9f2eeb6bca9beee84a818c715380e16e04aa50	3625	644	file	.claude/skills/gstack/benchmark/sections/vet-the-number.md.tmpl
 -	0	755	dir	.claude/skills/gstack/bin
-1fc3637eca8bca9e127d2d3e8b9b5c51e35b16ecc8a345b6332e3b4899f0f264	188	600	file	.claude/skills/gstack/bin/.gstack-cso-build-result
+9f97c3cb3064b48fa5cc2895e11d9056ac0d234563c36382a470f907c4e6b531	188	600	file	.claude/skills/gstack/bin/.gstack-cso-build-result
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	0	600	file	.claude/skills/gstack/bin/.gstack-cso-build.log
 aa17372d224254fe4374751139edee033d9afbb1c0d75fab5c3021ed3e70b2f4	65	600	file	.claude/skills/gstack/bin/.gstack-cso-generation
 7463f93a1fd61c3838d0322d5f131c178d03c5376425b77d286a2931d9cb428c	7084	755	file	.claude/skills/gstack/bin/dev-setup
@@ -941,7 +941,7 @@ e3d646b15e72d1048808246cf8a0ac45ddf87b2e34769dbc5cbd75b6c28791ca	34624	755	file	
 baff220420738d641aaadb0aeed24e109c256413a70ce3ed9a0789c2ad1eb75e	446	755	file	.claude/skills/gstack/bin/gstack-ship-release
 0132fc0b3d42f5f805121f00b879b8f5f5f485f2d08dad63127c7665fbf4b2f6	1978	755	file	.claude/skills/gstack/bin/gstack-skill-bill
 674df5a28eb1078575c92182ccc4a667ae1ecbeee942881296fd9a26a2ebe4c0	4626	755	file	.claude/skills/gstack/bin/gstack-skill-end
-0aab0c8ffa6f645116971f4e83a9dd54dd904cb29416a78981efa0ea751fd6b0	49539	755	file	.claude/skills/gstack/bin/gstack-skill-start
+6df3e63d9316ad2094400e298aafc0ba98655c4ce3ab2433d47024ee35af7b04	49717	755	file	.claude/skills/gstack/bin/gstack-skill-start
 31812e1e00c3a7098db12bfeb3525cf1b1516e5a0df122364bb2a3a691942198	55558	755	file	.claude/skills/gstack/bin/gstack-slug
 c6453a090c6d5709b5c4345eff532569a93332edd23ee750a9514a353d9d80bb	2861	755	file	.claude/skills/gstack/bin/gstack-specialist-stats
 550caed0e5ec632e45ae8434df691f4e81a12ae524346181900bdfde2adffc28	7121	755	file	.claude/skills/gstack/bin/gstack-state-matrix
@@ -973,7 +973,7 @@ b8384a68c84ff7cce502bf1c1fcf8f9e0aa88565010f67747dfc277215e757d2	814	755	file	.c
 fd1dfe7583ec977635fccec3050136446563f02afbc28f279a8600efc905b850	1260	755	file	.claude/skills/gstack/browse/bin/remote-slug
 -	0	700	dir	.claude/skills/gstack/browse/dist
 37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1	9	600	file	.claude/skills/gstack/browse/dist/.build-complete
-dd574767f276a51ec0feb6074c10acb476c925ba3dc9714d68b42c72f45661d5	41	600	file	.claude/skills/gstack/browse/dist/.version
+724348b835220fdb8ecb791f147ac724915fc3d3e16354f63d39c574aa11423f	41	600	file	.claude/skills/gstack/browse/dist/.version
 b1ad8487a5f4f6e403ba1b2d66afca792f4f43ad4dbd0086356e40cf2014cf02	109226160	755	file	.claude/skills/gstack/browse/dist/browse
 7fd623d013956b9878425ff1a03f84914758a364b0bacc720162460b23bff0f5	11324	600	file	.claude/skills/gstack/browse/dist/bun-polyfill.cjs
 78408c93fa72a9890f8cc7439bf8e2ca3581e125a9f6857a8005ed3360fa40ea	109123760	755	file	.claude/skills/gstack/browse/dist/find-browse
@@ -1360,7 +1360,7 @@ f3dfed24accce14ad5d59a88f2f7f6aa21dc1b3b86416375b39268282807dfa3	4739	644	file	.
 554249500e58d94b5a9085663893635a79eb2bf70279e01a91335216086c4aca	4996	644	file	.claude/skills/gstack/careful/bin/mask-commit-message.awk
 -	0	755	dir	.claude/skills/gstack/changelog.d
 32ade95a9a5d2ca1e61f49008a7d416372c19df182e3c10392d9ed86fc08b607	558	644	file	.claude/skills/gstack/changelog.d/README.md
-bfa59f80518825e8040ecdb696ce8b8c5e3ad4ce69fc3344a5c91c3f227623e4	1827	644	file	.claude/skills/gstack/changelog.d/gst-825-unattended-render.md
+d57c0a4083279940dd7b05bd1cc2761b44a3fed97179dbdc57086fd46ac62815	1938	644	file	.claude/skills/gstack/changelog.d/garrytan-gst-825-unattended-render.md
 -	0	755	dir	.claude/skills/gstack/claude-code
 17db2c496e692019f449d5944ac0422858dec2a41e8b321e5d5cd94ae8b898fa	14362	644	file	.claude/skills/gstack/claude-code/SKILL.md.tmpl
 -	0	755	dir	.claude/skills/gstack/codex
@@ -1461,7 +1461,7 @@ db00be4d927e48ebeff614f761a8d118b294c527fab4596bf48b54a7296503fd	4711	644	file	.
 307ff8f1e96ce64ef89b1adaa7545da02507883950d227c63d3d2b4e91a8a98b	779	644	file	.claude/skills/gstack/design-shotgun/sections/manifest.json
 3eeee274045c6af4a3a4a88895944a348e3f8613232f44e04875fd1318861705	22396	644	file	.claude/skills/gstack/design-shotgun/sections/preamble.md
 -	0	700	dir	.claude/skills/gstack/design/dist
-dd574767f276a51ec0feb6074c10acb476c925ba3dc9714d68b42c72f45661d5	41	600	file	.claude/skills/gstack/design/dist/.version
+724348b835220fdb8ecb791f147ac724915fc3d3e16354f63d39c574aa11423f	41	600	file	.claude/skills/gstack/design/dist/.version
 1844f44dd5de4f83a9dba618d7aa19c83f7ce73ad6312d6c3686ccbab93753ef	109340848	755	file	.claude/skills/gstack/design/dist/design
 daadd319838e1ca257ebf2001d9293d12f1f33f7a789b8303a1e314985f7b3de	5547	644	file	.claude/skills/gstack/design/prototype.ts
 -	0	755	dir	.claude/skills/gstack/design/scripts
@@ -1639,7 +1639,7 @@ e712fb11ee400c0c46530c918e2c114faa2251ded15b56581c836905fdce2fff	6393	644	file	.
 e6b0cdf51d049ac5da5dc0839881ab173b993ac3207154723a3ed37a5aa305f3	63425	644	file	.claude/skills/gstack/docs/images/github-2013.png
 b7aee8baedc4cefdf2928ab726474f93e370a6f84e2eeb1e1b30f3d55bae07fe	60481	644	file	.claude/skills/gstack/docs/images/github-2026.png
 1cd7757faac023f4683f2ea307cd7ce7022862c2cd004af6cfc2e3a510489b00	5467	644	file	.claude/skills/gstack/docs/install.md
-5ffd62dbf64a045e46a7a72cc3ae47c706faf27584ecc1753b2d3dc9228b3acc	6081	644	file	.claude/skills/gstack/docs/loadouts.md
+07415ef7e0bb9418684a8cd80c91682be6951220df37a11bafd372d3055d4738	6313	644	file	.claude/skills/gstack/docs/loadouts.md
 28ede928d2475d2d6344b2f0b335bc2b9c34afd2c9b8c6d12ade5e74619ddf18	14146	644	file	.claude/skills/gstack/docs/memorable-workflow-memory.md
 106eb046dbd7faee251ec1072b2ace37af16de2728ea53966e7a1eac1252a05e	19688	644	file	.claude/skills/gstack/docs/model-policy.md
 2b9f7510651dd895224ed85e6f1502250c96232c07ad2067b1e9281701025d8a	82211	644	file	.claude/skills/gstack/docs/pregate.md
@@ -1662,9 +1662,9 @@ d33e870a9a8aae6958ddb2e2e0c3c4b4ee8e96357e423274ae1f8d64831615b0	14539	644	file	
 cfc2e9c1ec87bde995cfd7d45e807aadfe6fe6ada8a7a0c5f88ec2702f1d4658	17038	644	file	.claude/skills/gstack/docs/test-audit-2026-10.md
 a8adb84d2f417bc38a3e09b13a2efb53e1cde31c827590b827193b8755bc313a	10464	644	file	.claude/skills/gstack/docs/test-value-bar.md
 ebf62af0920d4fd6fb36c35866509723d335d0c03491ba8db88fd6fefd4bca42	4680	644	file	.claude/skills/gstack/docs/triage.md
-d0bdf41a7b996dfdac600a0745a57d6887f69c2d897d4f113d8bf9d9553a5e4c	316482	644	file	.claude/skills/gstack/docs/troubleshooting.md
+d20de6b01cf59725712009e654839037c2d34cd60f1d541ddf82d6b9388094e8	316604	644	file	.claude/skills/gstack/docs/troubleshooting.md
 eb2bc26ed7adb83c88c73c3d505764c91e9a38d84b83a3fe3f63c998b7c5dce9	6816	644	file	.claude/skills/gstack/docs/tutorial-document-generate.md
-8b86a7429cdc6eb2018403f14934e4c52d350b9df82a8647f36b1af6fcfcfcc3	47360	644	file	.claude/skills/gstack/docs/unattended.md
+926d93f3b9c448cf91ff215ffa85226f6f972d67522ac992bc1fead442b1c7fd	47774	644	file	.claude/skills/gstack/docs/unattended.md
 7f020ceacf64a374e45755e59117b0de2eb3a41f412a6548df25532ebdf7693b	3956	644	file	.claude/skills/gstack/docs/uninstall.md
 46cbede3d5f999499a567d7e3b34d3423c129610cc42f2d1a9bcfb3b9e85f738	1194	644	file	.claude/skills/gstack/docs/voice-input.md
 2e3dbeae0e8e3ddcea0ccec06f17cb4e902d98721d6d8d41da0f548113a0d2d7	14839	644	file	.claude/skills/gstack/docs/why-gstack.md
@@ -2245,7 +2245,7 @@ bc957ca6bee02792566a1a028d105e02e247c6e77cf057061674273da77b200e	1067	644	file	.
 7378d92b5142de4f05ff3b40b4766116194a3c0bea43e12cf8a44416baf356c9	19914	644	file	.claude/skills/gstack/make-pdf/SKILL.md
 7d48f5b025e1f2b7bedcd9d7bcd33e62e2c852ae1b13f42f18a47e4e35343cb1	10267	644	file	.claude/skills/gstack/make-pdf/SKILL.md.tmpl
 -	0	700	dir	.claude/skills/gstack/make-pdf/dist
-dd574767f276a51ec0feb6074c10acb476c925ba3dc9714d68b42c72f45661d5	41	600	file	.claude/skills/gstack/make-pdf/dist/.version
+724348b835220fdb8ecb791f147ac724915fc3d3e16354f63d39c574aa11423f	41	600	file	.claude/skills/gstack/make-pdf/dist/.version
 afc64108ed1b5446d568a6974b40216f97be7589048653ecfc48ce1e0601a3ca	111442096	755	file	.claude/skills/gstack/make-pdf/dist/pdf
 -	0	755	dir	.claude/skills/gstack/make-pdf/src
 6735d843d2a44494f906c01edca819e1798af9876e0e10b05afa634d6d651688	3927	644	file	.claude/skills/gstack/make-pdf/src/asideClient.ts
@@ -12366,7 +12366,7 @@ f630340fd58ce0e1b8d833fac5d5f284f4cedb970fe113343733e14f5c4c8678	5905	644	file	.
 a6189ad50eb90dd7a7a15447fd51a1cd77a907207686790f8f347162e3af7bf2	5785	644	file	.claude/skills/gstack/retro/sections/report-format.md.tmpl
 -	0	755	dir	.claude/skills/gstack/review
 664b49289604a2c24cb31de79690971c5b953538dd8fa9e134ced7b03f9f1071	58900	644	file	.claude/skills/gstack/review/SKILL.md
-fd79813650c483c2d2d87a126135e9e5b4910e478d0f580aac371e353c68a9cc	26672	644	file	.claude/skills/gstack/review/SKILL.md.tmpl
+a483c0a3c13b687d8e1f4fbef8a9238dcfd5d882760a8c5651d8580bb29bee7c	26833	644	file	.claude/skills/gstack/review/SKILL.md.tmpl
 0c281a3f57bad6f43b04bb5d74854654e9f305d93c8a03b950e9c47d9d706371	1655	644	file	.claude/skills/gstack/review/TODOS-format.md
 607788afeb2c83f2dff1dccd58d212616ec72393d28cda2fa18690c1a83df699	22417	644	file	.claude/skills/gstack/review/checklist.md
 b9205f88313cc64902c0b13e9685722ab8138d3dcc58916154f47274abda7d83	14492	644	file	.claude/skills/gstack/review/design-checklist.md
@@ -12455,7 +12455,7 @@ a9e4e637ea5882a8b19d9eac31b218c698e432b10f8574f47f16a935757a4ec7	7036	644	file	.
 d29ab99ece15dab239761d7087e391ee27a559655f27bdc5c29737cfcbc79100	1292	644	file	.claude/skills/gstack/scripts/gen-doctor-components.ts
 58940021c98149cdb331dee6848f33a3101f525828e6d69b06d658daa6db409a	9849	644	file	.claude/skills/gstack/scripts/gen-llms-txt.ts
 caf7e8996f7c07c07e760159ab77169423e7072eaa894fede8a24da375c13675	2098	644	file	.claude/skills/gstack/scripts/gen-ship-goldens.ts
-854b9bd48825e5f8a6ce7461872daba478bd145b84e0dc6c55255b67e45d3bc0	61780	644	file	.claude/skills/gstack/scripts/gen-skill-docs.ts
+753ec54347fb7a4cb4d92f7c2e9ee0311d25c933e4778c50020233f5dd8f6d29	62240	644	file	.claude/skills/gstack/scripts/gen-skill-docs.ts
 e18aae7a32b38f8edec8f3641241ab8f52083c80b9173473f76a1f3ad39d18a8	14292	644	file	.claude/skills/gstack/scripts/gstack-schema-pack.ts
 1762f2b55a4406cfaabfe1e654d9ed15bc643534073634b73858f323234fae96	13163	644	file	.claude/skills/gstack/scripts/harness-version.json
 456e2980adbb7928de523744314c6c9afb045b03d2ec4bbb319bb8adf0723973	3474	644	file	.claude/skills/gstack/scripts/host-config-export.ts
@@ -12498,7 +12498,7 @@ fa448c663e01ac315e868d09a57133d3d43051b20aed0e46691a4a0e80f25cb2	25465	644	file	
 3e9532015d4dfae2ba3be86e7a82cb29fc92bbf001a77d9197cfb292bb1a190d	12021	644	file	.claude/skills/gstack/scripts/replay-pr-selection.ts
 fcf08e68eb249d0a6cc706aa38bfd2c1f235ef725bea86aac834dcb99a5f0905	11523	644	file	.claude/skills/gstack/scripts/resolve-codex-generation-model.ts
 -	0	755	dir	.claude/skills/gstack/scripts/resolvers
-e7c792d5b0317638ed20d989cf186c4585823518e5d1de9bb4906972d686ea51	25321	644	file	.claude/skills/gstack/scripts/resolvers/aside.ts
+f565e891ab04e1507e583d6dfe5a29e466b9a105abc5a629e1b50c7185a9716f	25371	644	file	.claude/skills/gstack/scripts/resolvers/aside.ts
 f03a72ca3fd657fe52d1f31c1f2539081600ad0eaa6ff75810af7f937176f021	7766	644	file	.claude/skills/gstack/scripts/resolvers/autoplan-driver.ts
 5e0f6254499d3ab36336e4da84d6a8f0297254720bc26c06bc1757100aee95fe	13500	644	file	.claude/skills/gstack/scripts/resolvers/browse.ts
 6a29cffb90b87eee4c646bb12580ef682d84cbebdc958b81794c688ee4ca9684	6721	644	file	.claude/skills/gstack/scripts/resolvers/composition.ts
@@ -12562,7 +12562,7 @@ d781cbbe809fea2502b03eb08bdc4ba7721f4633e607b266750df13a718296e1	8132	644	file	.
 8911770e56c896b3a248bdd635d449af834bcb3e7e7b6d484b7084d941f32a70	7373	644	file	.claude/skills/gstack/scripts/resolvers/third-party-actions.ts
 32bd47a92ce9df80c0873e01d139c00ef3b281c5344eb368dcc77470536f8ade	4814	644	file	.claude/skills/gstack/scripts/resolvers/transcripts.ts
 3258cc30022291cae2905e6494676565badaf4ca9f32f60bb301f3e0cd821806	6510	644	file	.claude/skills/gstack/scripts/resolvers/types.ts
-7405b9a940407af7d5ed45a9432d0598ccf271f53c110676b38213338768a574	3242	644	file	.claude/skills/gstack/scripts/resolvers/unattended.ts
+de3a3af0c45c0c0c33050909c73469f29c2482e3a99e8456dc058a4bc7807108	4104	644	file	.claude/skills/gstack/scripts/resolvers/unattended.ts
 2bd7ea2ca456ef19cfc30542a901603d9c996396f862c979df69b5ccf99a35b9	19711	644	file	.claude/skills/gstack/scripts/resolvers/utility.ts
 98bd5c31e13f6211db1c22b7b41582abd1f92d81d00bcccc470fb627bf5fb379	2429	644	file	.claude/skills/gstack/scripts/resolvers/voice-triggers.ts
 96865c9d7a0545ac495356c29fc35f26c55064f4316df30909130c57e128d172	3000	644	file	.claude/skills/gstack/scripts/retired-command.ts
@@ -15017,7 +15017,7 @@ f0aabfb12075218cefee6ce793e24835d018554846f62edeabce7445c1b3b881	6271	644	file	.
 608aec418a6bee95ee89c6673e12d0e03bb7ce20ed04f6d0d0ee7b63f98e24d7	30522	644	file	.claude/skills/gstack/test/qa-browser-deadline-evidence.test.ts
 6de92440117881214648447536604bbe2e9e4ba956f14d148fbe0eb81e0c629d	21453	644	file	.claude/skills/gstack/test/qa-browser-preservation.test.ts
 27603682303a0b4bcd0eb4ad3deadb757a428d3932990b344e0d1548c7ad9d38	3594	644	file	.claude/skills/gstack/test/qa-bugs-fixture.test.ts
-c47023d3f38b812185b86b0e833c8fe999bef8c2d7b6acac7e31eed72504fcf6	21322	644	file	.claude/skills/gstack/test/qa-caller-authority.test.ts
+b669538722302cbc57c75970d1194e4836c13f9901942fd997c1d3ab1016fe19	21417	644	file	.claude/skills/gstack/test/qa-caller-authority.test.ts
 2e82eba579226866b61618eaaf1e52f6f5a94dbcb38143b1e8c55ed2434abdd2	6702	644	file	.claude/skills/gstack/test/qa-caller-freshness-order.test.ts
 1fe78c65b0753f3c13828e52439af83241549b20f67beb5b159e9370584554ca	11638	644	file	.claude/skills/gstack/test/qa-caller-report-observer.test.ts
 34cb74b12cd298ed0f6d61a8f95db85591befe6140f274534b8493be5af786fc	13954	644	file	.claude/skills/gstack/test/qa-caller-review-plan.test.ts
@@ -15147,7 +15147,7 @@ d897e2ea78286e89ecddc047a5bee63563778f292a0356ad345e16753a122660	40100	644	file	
 24fa36a90d85805d75530b9eb56718b9505409db22ec6748851cce47552e291b	5223	644	file	.claude/skills/gstack/test/section-manifest-consistency.test.ts
 7beac1a476a568b29e8c85d4364bf33ba7155f595e25c368ba970ba948887bae	10629	644	file	.claude/skills/gstack/test/security-dashboard-fallback.test.ts
 d04be3f6fe203ec621249b9be7b95550441e973babc0704bd04a817166747ea7	7076	644	file	.claude/skills/gstack/test/session-kind-marker.test.ts
-226521ae09017941cf8f053f78bda2e41a6f3b9549280eb3590c507ede29eb56	15051	644	file	.claude/skills/gstack/test/session-kind-render.test.ts
+9bfde77b4006dc1a6c45a546a5414105fd8408d4358591a5e195fc012bb5e196	16769	644	file	.claude/skills/gstack/test/session-kind-render.test.ts
 0ed1eb1ac41dbf89154da1b9b1a7d39acf89fbd4ffdd34216f5df2a591d850f9	11977	644	file	.claude/skills/gstack/test/session-runner-browse-errors.test.ts
 7aa888ac7cd3806d465cbbd7ba3ffd07786850a1dfcbb2b77c4b72682f6b07a5	5384	644	file	.claude/skills/gstack/test/session-runner-groupkill.test.ts
 9a6549c68244d95b041ba1e6bf99888a5ec0c5f5f0d14741896c4e811ace8480	7034	644	file	.claude/skills/gstack/test/session-runner-startup-grace.test.ts

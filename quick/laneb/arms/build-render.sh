@@ -8,7 +8,7 @@
 # Check the result with check-render.sh. Needs docker with buildx, bun, git and network at build time.
 set -euo pipefail
 
-GSTACK_SHA=10d41ed398f8c9714187b77e604e43de0ea1a6bf
+GSTACK_SHA=142757b107edeffff7c78453490c4d2786996fa7
 GSTACK_REPO=${GSTACK_REPO:-https://github.com/garrytan/gstack.git}
 CLAUDE_CODE_VERSION=2.1.312
 

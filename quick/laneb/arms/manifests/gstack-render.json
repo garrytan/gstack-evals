@@ -1,8 +1,8 @@
 {
   "arm": "gstack-render",
   "claude_code": "2.1.312",
-  "tar_gz_sha256": "658eb26a4f7db694263fb13db96af943aaf120f0ffd8735f1ff20d7e98e6f865",
-  "gstack_sha": "10d41ed398f8c9714187b77e604e43de0ea1a6bf",
+  "tar_gz_sha256": "369a016930074976388d32928269c873cbbc2ea378cebcb0ccaaa4767c5ca207",
+  "gstack_sha": "142757b107edeffff7c78453490c4d2786996fa7",
   "update_check": "false",
   "render_dir": "/root/.claude/gstack-render",
   "render_session_kind": "interactive",
@@ -14,19 +14,19 @@
   "render_lock_sha256": "9422761588b7c251f2a7183ede45e41597d40458f4c51a2ce36aa33a82252fb6",
   "tar": {
     "file": "gstack-render.tar",
-    "bytes": 1362995200,
-    "sha256": "423b3de7fd4d10e6a24cc629428d51993444dd36a1c174f33aa0580ec73567be"
+    "bytes": 1363005440,
+    "sha256": "dbf4f78486265744cedf5961681ca3b60cb98f1c3d94d7eb0546f253e8cbef2d"
   },
   "tree": {
     "files": 14124,
     "symlinks": 8,
     "dirs": 1796,
-    "bytes": 1349336662,
-    "digest": "c860cd190db46da79c2fb78ca3ce65d446dc11c459695ba6b5d4277bddbd70a3"
+    "bytes": 1349345256,
+    "digest": "48d05182d3e61c047d08c788c5cf3921b62d2183a546619b758d3b01cddba4bb"
   },
   "skills": {
     "count": 65,
-    "tree_digest": "bf66620cdcfd38b4460ff29a057922f94e7783c120d29918800057b04b9d7685",
+    "tree_digest": "6bbe32be46e2027790c83c712eac549383097cd0b4365ab74062ce71303b9418",
     "skill_md_digest": "55ad194b4850fa5041b42e4af3d2e9e9c51edfa956b7d530dfb64a967ebebf95",
     "names": [
       "_gstack-command",
