@@ -19,7 +19,7 @@ links:
 source: "Plan reviewed by gstack /autoplan run autoplan-20261031235625 (reviewed v1 snapshot sha256 effcac0077cf10ba262f490c2f6824621bd6dbd985f507a92775286a3e08893b; approved v3 sha256 aa21bb0a6da43875460d1988ee55b4a306652c187444a0bcef8707c38c1a976c), approved at gate_rev 1 with Garry's reply 'Do it', relayed by the Captain (GEVA-2), and at gate_rev 3 by the Captain (GSTA-2). The Implementation plan section is v3: the reviewed v1 with the gate's changes and the carry check's fixes. review-record.md is the run's public export with em dashes replaced by hyphens."
 attachments:
   - 07a1c7bb46305f18f94574d24ab123ecf20adfccfae9e22fb52af0ea792554ce  power.md
-  - 84e9d330409b03f8e711bd4428401fc8ab0c9d7e68b71a90387dd712ba70a21a  probe.md
+  - 84e9d330409b03f8e711bd4428401fc8ab0c9d7e68b71a90387dd712ba70a21a  mining-yield-probe.md
   - fb0aa495260ebedae489b347333878fb0ebb91e7aa94e86d1ec3ff60eb1954c3  review-record.md
 ---
 # Real-world outcome lane: does gstack's ship loop change what ships on real repo work?
@@ -73,6 +73,7 @@ This section was written after the gate and was not reviewed. The review left Hi
 
 **Medium and Low, settled the same way**
 
+- The mining-yield probe is attached as mining-yield-probe.md, not probe.md as section 2 says, because gstack's pregate refuses added files whose names start with "probe" (its scratch-name rule). The file is otherwise as described (GEVA-87 /ship, PREGATE_STRAYS).
 - The smallest worthwhile effect comes from the metered extra cost of /ship and a stated cost of a shipped defect; the prereg says whether 7 points resolves the break-even (ceo-native F6).
 - If holding a cap would push the MDD above the size Garry chose, the lane returns to Garry with the cost-to-MDD curve instead of cutting trials. This replaces section 10's automatic cut (ceo-native F7).
 - Claims say "against bare Claude Code with bundled skills off", and a Claude Code default arm is proposed for R2 or beside R1b (ceo-native F8).
@@ -400,4 +401,4 @@ The lane is ready for P0 when B1, B2 and B4 to B6 are merged with keyless tests,
 
 ## Review record
 
-The run's public export is attached as review-record.md, with em dashes replaced by hyphens. power.md holds the keyless power and screening simulations, scripts and outputs. probe.md holds the keyless mining-yield probe, script and output. The full public artifact set (findings, decisions, consensus tables) validated with gstack-artifact on the authoring machine; only the review record is committed here.
+The run's public export is attached as review-record.md, with em dashes replaced by hyphens. power.md holds the keyless power and screening simulations, scripts and outputs. mining-yield-probe.md holds the keyless mining-yield probe, script and output. The full public artifact set (findings, decisions, consensus tables) validated with gstack-artifact on the authoring machine; only the review record is committed here.
