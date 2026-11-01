@@ -24,6 +24,12 @@ git init -q "$OUT/gstack-render-src"
 git -C "$OUT/gstack-render-src" fetch -q --depth 1 "$GSTACK_REPO" "$GSTACK_SHA"
 git -C "$OUT/gstack-render-src" checkout -q FETCH_HEAD
 test "$(git -C "$OUT/gstack-render-src" rev-parse HEAD)" = "$GSTACK_SHA"
+# A fetched pack's bytes drift with the server (stacks-2's pack did not rebuild byte for byte), so the arm keeps .git
+# but repacks it single-threaded, which is byte-stable for the same objects and git version, and drops FETCH_HEAD,
+# which names the fetch URL. The Dockerfile already drops the reflog and rebuilds the index without stat data.
+git -C "$OUT/gstack-render-src" -c pack.threads=1 repack -a -d -f -q
+rm -f "$OUT/gstack-render-src/.git/FETCH_HEAD"
+PACK_GIT=$(git --version | cut -d' ' -f3)
 
 for kind in interactive unattended; do
   arm=gstack-render
@@ -42,7 +48,7 @@ for kind in interactive unattended; do
   test "$(jq -r .session_kind "$lock")" = "$kind"
   (cd "$LANEB" && bun arms/tree.ts manifest --arm "$arm" --tree "$OUT/trees/$arm" --tar "$OUT/$arm.tar" --out "$HERE/manifests" \
     --meta claude_code="$CLAUDE_CODE_VERSION" --meta tar_gz_sha256="$(sha256sum "$OUT/$arm.tar.gz" | cut -d' ' -f1)" \
-    --meta gstack_sha="$GSTACK_SHA" --meta update_check=false --meta render_dir=/root/.claude/gstack-render \
+    --meta gstack_sha="$GSTACK_SHA" --meta pack_git="$PACK_GIT" --meta update_check=false --meta render_dir=/root/.claude/gstack-render \
     --meta render_session_kind="$(jq -r .session_kind "$lock")" --meta render_spec="$(jq -r .spec "$lock")" \
     --meta render_spec_sha256="$(jq -r .spec_sha256 "$lock")" --meta render_gstack_version="$(jq -r .gstack_version "$lock")" \
     --meta render_files="$(jq '.files | length' "$lock")" --meta render_total_bytes="$(jq .total_bytes "$lock")" \
