@@ -1,0 +1,67 @@
+// Run T's T1 MDD by simulation, with task-level variance (GEVA-121, #118 round 1, Captain decision B2).
+// Input: #109's particle-1 outcomes per TB2 task (37 tasks x 3 replicates) for arms none and placebo.
+// Usage: cp mdd-sim.ts.txt mdd-sim.ts && bun mdd-sim.ts mdd-sim-input.json 1000 1000 3,4,5,6,7,8 (sims, bootstrap resamples, replicate counts)
+type Task = { none: number[]; placebo: number[] };
+const input: Record<string, Task> = JSON.parse(await Bun.file(process.argv[2]).text());
+const SIMS = Number(process.argv[3] ?? 1000), BOOT = Number(process.argv[4] ?? 1000), SEED = 20261101;
+let s = SEED >>> 0;
+const rnd = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const tasks = Object.keys(input).sort();
+const T = tasks.length;
+const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+const variance = (a: number[]) => { const m = mean(a); return a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1); };
+const pn = tasks.map((t) => mean(input[t].none)), pp = tasks.map((t) => mean(input[t].placebo));
+const n = input[tasks[0]].none.length;
+const ub = (p: number) => (p * (1 - p) * n) / (n - 1);
+const lev = tasks.map((_, i) => (pn[i] + pp[i]) / 2), dif = tasks.map((_, i) => pp[i] - pn[i]);
+const wsum = tasks.map((_, i) => ub(pn[i]) + ub(pp[i]));
+const varD = variance(dif), varA = variance(lev);
+const sig2D = Math.max(0, varD - mean(wsum) / n), sig2A = Math.max(0, varA - mean(wsum) / (4 * n));
+const W = mean(wsum);
+const lamD = Math.sqrt(sig2D / varD), lamA = Math.sqrt(sig2A / varA);
+const aBar = mean(lev), dBar = mean(dif);
+const clip = (x: number) => Math.min(1, Math.max(0, x));
+const truth = (delta: number) => {
+  const a = lev.map((x) => aBar + lamA * (x - aBar)), r = dif.map((x) => lamD * (x - dBar));
+  const at = (sh: number) => { const P = a.map((x, i) => clip(x - (r[i] + sh) / 2)), Q = a.map((x, i) => clip(x + (r[i] + sh) / 2)); return { P, Q, m: mean(Q.map((q, i) => q - P[i])) }; };
+  let lo = -1, hi = 1;
+  for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2; if (at(mid).m < delta) lo = mid; else hi = mid; }
+  return at((lo + hi) / 2);
+};
+const pct = (a: Float64Array, q: number) => { const b = Array.from(a).sort((x, y) => x - y); const h = (b.length - 1) * q, l = Math.floor(h); return b[l] + (b[Math.min(l + 1, b.length - 1)] - b[l]) * (h - l); };
+const power = (delta: number, r: number, resampleTasks: boolean) => {
+  const { P, Q } = truth(delta);
+  let hits = 0;
+  const d = new Float64Array(T), bm = new Float64Array(BOOT);
+  for (let k = 0; k < SIMS; k++) {
+    for (let i = 0; i < T; i++) {
+      const j = resampleTasks ? Math.floor(rnd() * T) : i;
+      let a = 0, b = 0;
+      for (let x = 0; x < r; x++) { if (rnd() < P[j]) a++; if (rnd() < Q[j]) b++; }
+      d[i] = (b - a) / r;
+    }
+    for (let x = 0; x < BOOT; x++) { let m = 0; for (let i = 0; i < T; i++) m += d[Math.floor(rnd() * T)]; bm[x] = m / T; }
+    if (pct(bm, 0.975) < 0) hits++;
+  }
+  return hits / SIMS;
+};
+const mdd = (r: number, resampleTasks: boolean) => {
+  let prev = { delta: 0, pw: 0 };
+  for (let delta = -0.04; delta >= -0.2; delta -= 0.0025) {
+    const pw = power(delta, r, resampleTasks);
+    if (pw >= 0.8) return { mdd: -(prev.delta + ((0.8 - prev.pw) * (delta - prev.delta)) / (pw - prev.pw)) * 100, at10: power(-0.1, r, resampleTasks) };
+    prev = { delta, pw };
+  }
+  return { mdd: NaN, at10: power(-0.1, r, resampleTasks) };
+};
+const pts = (x: number) => (x * 100).toFixed(2);
+console.log(`input: ${T} tasks x ${n} replicates; none ${tasks.reduce((x, t) => x + input[t].none.reduce((p, q) => p + q, 0), 0)}/${T * n}, placebo ${tasks.reduce((x, t) => x + input[t].placebo.reduce((p, q) => p + q, 0), 0)}/${T * n}; placebo minus none ${pts(dBar)} points`);
+console.log(`variance of per-task differences ${(varD * 1e4).toFixed(1)} points^2 = between-task effect ${(sig2D * 1e4).toFixed(1)} + within-task sampling ${(W / n * 1e4).toFixed(1)} (W = ${(W * 1e4).toFixed(1)} per replicate)`);
+console.log(`seed ${SEED}, ${SIMS} simulated datasets x ${BOOT} bootstrap resamples per effect size, effect grid 0.25 points, T1 confirmed when the 95% percentile interval's upper end is below 0`);
+console.log("| r | MDD replicate-only 2.8 x 4.08 x sqrt(3/r) | MDD analytic with task variance | MDD simulated, tasks fixed | power at -10, tasks fixed | MDD simulated, tasks resampled |");
+console.log("|---|---|---|---|---|---|");
+for (const r of (process.argv[5] ?? "3,5,6,7,8").split(",").map(Number)) {
+  const an = 2.8016 * Math.sqrt((sig2D + W / r) / T) * 100;
+  const f = mdd(r, false), g = mdd(r, true);
+  console.log(`| ${r} | ${(2.8016 * 4.08 * Math.sqrt(3 / r)).toFixed(1)} | ${an.toFixed(1)} | ${f.mdd.toFixed(1)} | ${(f.at10 * 100).toFixed(1)}% | ${g.mdd.toFixed(1)} |`);
+}

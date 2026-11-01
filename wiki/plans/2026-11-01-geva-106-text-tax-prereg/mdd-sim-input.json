@@ -1,0 +1,446 @@
+{
+ "break-filter-js-from-html": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "cancel-async-tasks": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "chess-best-move": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "cobol-modernization": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "code-from-image": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "configure-git-webserver": {
+  "none": [
+   0,
+   1,
+   1
+  ],
+  "placebo": [
+   0,
+   1,
+   0
+  ]
+ },
+ "constraints-scheduling": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "custom-memory-heap-crash": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "db-wal-recovery": {
+  "none": [
+   1,
+   0,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   0
+  ]
+ },
+ "dna-insert": {
+  "none": [
+   0,
+   0,
+   0
+  ],
+  "placebo": [
+   1,
+   0,
+   1
+  ]
+ },
+ "extract-elf": {
+  "none": [
+   1,
+   1,
+   0
+  ],
+  "placebo": [
+   0,
+   0,
+   0
+  ]
+ },
+ "feal-differential-cryptanalysis": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "filter-js-from-html": {
+  "none": [
+   0,
+   0,
+   0
+  ],
+  "placebo": [
+   0,
+   0,
+   0
+  ]
+ },
+ "fix-code-vulnerability": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "fix-git": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "git-leak-recovery": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "git-multibranch": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "headless-terminal": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "kv-store-grpc": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "large-scale-text-editing": {
+  "none": [
+   1,
+   1,
+   0
+  ],
+  "placebo": [
+   0,
+   0,
+   0
+  ]
+ },
+ "log-summary-date-ranges": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "mailman": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   0
+  ]
+ },
+ "model-extraction-relu-logits": {
+  "none": [
+   1,
+   0,
+   0
+  ],
+  "placebo": [
+   0,
+   1,
+   0
+  ]
+ },
+ "openssl-selfsigned-cert": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "overfull-hbox": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "password-recovery": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "polyglot-c-py": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   0,
+   0,
+   1
+  ]
+ },
+ "polyglot-rust-c": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   0
+  ]
+ },
+ "pypi-server": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "pytorch-model-cli": {
+  "none": [
+   0,
+   0,
+   0
+  ],
+  "placebo": [
+   0,
+   0,
+   0
+  ]
+ },
+ "pytorch-model-recovery": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "query-optimize": {
+  "none": [
+   0,
+   1,
+   0
+  ],
+  "placebo": [
+   1,
+   0,
+   0
+  ]
+ },
+ "sanitize-git-repo": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   0,
+   0,
+   1
+  ]
+ },
+ "sparql-university": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "torch-pipeline-parallelism": {
+  "none": [
+   0,
+   1,
+   0
+  ],
+  "placebo": [
+   0,
+   0,
+   0
+  ]
+ },
+ "torch-tensor-parallelism": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   1,
+   1
+  ]
+ },
+ "tune-mjcf": {
+  "none": [
+   1,
+   1,
+   1
+  ],
+  "placebo": [
+   1,
+   0,
+   1
+  ]
+ }
+}
