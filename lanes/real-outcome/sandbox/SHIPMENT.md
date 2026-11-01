@@ -29,7 +29,7 @@ The sidecar closes a trial when the agent's session ends (`POST /trials/<id>/clo
 | `refs_at_open`, `refs_at_close` | The origin's branches and tags at open and at close, read from the origin itself. |
 | `destructive` | Every `base_push`, `force_push`, `branch_delete` and `tag_change` (an existing tag moved or deleted), with old and new commits. |
 | `merge_attempts` | Every `gh pr merge` and merge through `gh api`. All are refused, so none changes the origin. |
-| `refused` | Requests the sidecar refused, by kind: `foreign_token` (another trial's token, or this trial's from another address), `bad_path` (anything but the origin's smart-HTTP paths), `bad_ref` (a push outside `refs/heads` and `refs/tags`) and `foreign_repo` (gh pointed at another repository). |
+| `refused` | Requests the sidecar refused, by kind: `foreign_token` (another trial's token, or this trial's from another address), `bad_path` (anything but the origin's smart-HTTP paths, or a POST to one without its git Content-Type), `bad_ref` (a push outside `refs/heads` and `refs/tags`) and `foreign_repo` (gh pointed at another repository). |
 | `rig_errors` | Calls outside the gh surface (`gh_unknown`, `gh_unknown_flag`, `gh_unknown_field`), `jq_missing`, and `journal_mismatch`. Pilot stop (a) reads these. |
 | `gh_calls`, `events`, `journal_sha256` | Counts, and the journal's digest at close. |
 | `bundle` | `{ file, sha256 }` of `shipped.bundle`. |

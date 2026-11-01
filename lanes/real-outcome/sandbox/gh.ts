@@ -3,6 +3,9 @@
 // against the trial's evaluator-owned origin and pull request store. Calls outside the surface print gh's own kind of
 // error, exit 1 and are journaled as rig errors (plan open item 1, pilot stop (a)). Merges are refused and journaled.
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { JournalEvent } from "./shipment.ts";
 
 export type Visibility = "PUBLIC" | "PRIVATE";
@@ -130,9 +133,43 @@ const JSON_FLAGS: FlagSpec = { json: { value: true }, jq: { alias: "q", value: t
 /** jq by absolute path, run with an empty environment: an agent's --jq expression can read env and $ENV, so it must see nothing of the sidecar's. */
 const JQ = Bun.which("jq");
 
+/** A jq program without its string literals: interpolations and comments stay, as code. */
+function jqCode(expr: string): string {
+  let code = "";
+  let str = false;
+  let depth = 0;
+  const open: number[] = [];
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i]!;
+    if (str) {
+      if (c === "\\" && expr[i + 1] === "(") (open.push(depth), (depth = 0), (str = false), (code += " ("), i++);
+      else if (c === "\\") i++;
+      else if (c === '"') (str = false), (code += ' "" ');
+      continue;
+    }
+    if (c === "#") {
+      let j = i;
+      while (j < expr.length && expr[j] !== "\n") j += expr[j] === "\\" ? 2 : 1;
+      code += expr.slice(i, j);
+      i = j - 1;
+      continue;
+    }
+    if (c === '"') str = true;
+    else if (c === ")" && depth === 0 && open.length) (depth = open.pop()!), (str = true), (code += ") ");
+    else (depth += c === "(" ? 1 : c === ")" ? -1 : 0), (code += c);
+  }
+  return code;
+}
+
+/** gh's jq is gojq, which loads no modules, so an expression that would read files on this host fails as gh's does. jq runs in an empty directory, with a time and output bound so one expression cannot hold the sidecar. */
 function jq(input: unknown, expr: string): string {
+  if (/\b(import|include|modulemeta)\b/.test(jqCode(expr))) throw new Fail("failed to parse jq expression: import, include and modulemeta are not available");
   if (JQ === null) throw new Fail("jq is not available to the sandbox", "jq_missing");
-  const r = spawnSync(JQ, ["-r", expr], { encoding: "utf8", input: JSON.stringify(input), env: {} });
+  const cwd = mkdtempSync(join(tmpdir(), "real-jq-"));
+  const r = spawnSync(JQ, ["-r", expr], { encoding: "utf8", input: JSON.stringify(input), env: {}, cwd, timeout: 2000, maxBuffer: 16 * 1024 * 1024 });
+  rmSync(cwd, { recursive: true, force: true });
+  if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") throw new Fail("jq: error: the expression ran past 2 seconds");
+  if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ENOBUFS") throw new Fail("jq: error: the output passed 16 MiB");
   if (r.error) throw new Fail("jq is not available to the sandbox: " + r.error.message, "jq_missing");
   if (r.status !== 0) throw new Fail("failed to parse jq expression (line 1, column 1)\n" + r.stderr.trim());
   return r.stdout;

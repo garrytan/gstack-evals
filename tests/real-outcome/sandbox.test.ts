@@ -243,7 +243,7 @@ describe("what shipped: the fake agent's outcomes (open item 1)", () => {
       expect(JSON.parse(t.gh("pr view 1 --json updatedAt").out).updatedAt > before).toBe(true);
       expect([comment, (await t.close()).record]).toMatchObject([comment, { status: "pr", selected_pr: 1, shipped_head: a }]);
     }
-  });
+  }, 30_000);
 
   test("a deleted head branch keeps its last recorded head, and the delete is destructive", async () => {
     const t = await trial();
@@ -319,6 +319,46 @@ describe("integrity: forging, bypassing and touching another trial (open item 1)
     expect(process.env.REAL_HOST_SENTINEL).toBeUndefined();
     expect((await t.close()).record.rig_errors).toEqual([]);
   });
+
+  test("a --jq expression cannot load files: import and include fail like gh's, and a string that says include still works", async () => {
+    const t = await trial();
+    t.commit("a");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title A --body a");
+    const secret = join(tmp, "secret-" + t.id);
+    writeFileSync(secret + ".json", JSON.stringify({ leak: SENTINEL }));
+    writeFileSync(secret + ".jq", "def leak: " + JSON.stringify(SENTINEL) + ";\n");
+    for (const call of [`pr view 1 --json number -q 'import "${secret}" as $p {search: "/"}; $p'`, `pr view 1 --json number -q 'include "${secret}" {search: "/"}; leak'`, `api user -q '# "\nimport "${secret}" as $p {search: "/"}; $p'`, `api user -q '"\\(1)" | modulemeta'`]) {
+      const r = t.gh(call);
+      expect([call, r.code, r.out + r.err]).toEqual([call, 1, expect.not.stringContaining(SENTINEL)]);
+      expect([call, r.err]).toEqual([call, expect.stringContaining("not available")]);
+    }
+    expect(t.gh(`pr view 1 --json title -q '.title | contains("include") or contains("A")'`).out).toBe("true\n");
+    expect((await t.close()).record.rig_errors).toEqual([]);
+  });
+
+  test("a runaway --jq expression fails like a gh error within seconds, and the sidecar keeps serving", async () => {
+    const t = await trial();
+    t.commit("a");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title A --body a");
+    const started = Date.now();
+    for (const expr of ["repeat(.)", "until(false; .)"]) expect([expr, t.gh("pr view 1 --json number -q '" + expr + "'").code]).toEqual([expr, 1]);
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(t.gh("pr view 1 --json number -q .number").out).toBe("1\n");
+    expect((await t.close()).record.rig_errors).toEqual([]);
+  }, 30_000);
+
+  test("a smart-HTTP POST with the wrong Content-Type is refused before git runs, and the sidecar stays up", async () => {
+    const t = await trial();
+    const r = await fetch(t.opened.body.agent_url + "/git/origin.git/git-receive-pack", { method: "POST", headers: { authorization: "Bearer " + t.token, "content-type": "text/plain" }, body: "0".repeat(256 * 1024) });
+    expect(r.status).toBe(415);
+    await Bun.sleep(3000);
+    expect((await fetch(sc.controlUrl + "/healthz")).status).toBe(200);
+    expect((await fetch(t.opened.body.agent_url + "/healthz")).status).toBe(200);
+    const { record } = await t.close();
+    expect(record.refused).toEqual([expect.objectContaining({ kind: "bad_path", detail: expect.stringContaining("text/plain") })]);
+  }, 30_000);
 
   test("one trial cannot touch another: another trial's token from this trial's address is refused and journaled here", async () => {
     const a = await trial({ agent_ip: "127.0.0.1" });

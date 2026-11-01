@@ -256,11 +256,16 @@ export class Sidecar {
       await this.locked(t, () => !t.closed && this.journal(t, { type: "refused", kind: "bad_path", detail: req.method + " " + path.slice(0, 200) }));
       return new Response("not found\n", { status: 404 });
     }
+    const type = req.headers.get("content-type") ?? "";
+    if (req.method === "POST" && type !== "application/x-" + m[1].slice(1) + "-request") {
+      await this.locked(t, () => !t.closed && this.journal(t, { type: "refused", kind: "bad_path", detail: "POST " + path.slice(0, 200) + " with Content-Type " + type.slice(0, 100) }));
+      return new Response("unsupported content type\n", { status: 415 });
+    }
     const body = req.method === "POST" ? Buffer.from(await req.arrayBuffer()) : Buffer.alloc(0);
     const env: Record<string, string> = {
       PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_PROJECT_ROOT: t.dir, GIT_HTTP_EXPORT_ALL: "1", PATH_INFO: path.slice("/git".length), REQUEST_METHOD: req.method, QUERY_STRING: url.search.slice(1),
-      CONTENT_TYPE: req.headers.get("content-type") ?? "", REMOTE_USER: "agent", REMOTE_ADDR: ip,
+      CONTENT_TYPE: type, REMOTE_USER: "agent", REMOTE_ADDR: ip,
     };
     if (req.method === "POST") env.CONTENT_LENGTH = String(body.length);
     if (req.headers.get("content-encoding")) env.HTTP_CONTENT_ENCODING = req.headers.get("content-encoding")!;
@@ -271,6 +276,8 @@ export class Sidecar {
         const out: Buffer[] = [];
         child.stdout.on("data", (c: Buffer) => out.push(c));
         child.stderr.on("data", () => undefined);
+        child.stdin.on("error", () => undefined);
+        child.stdout.on("error", () => undefined);
         child.on("error", fail);
         child.on("close", () => done(Buffer.concat(out)));
         child.stdin.end(body);
