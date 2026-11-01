@@ -29,8 +29,9 @@
 //   cell, as does any other API error the CLI gives up on: a provider failure is no outcome to count, before or after the
 //   session's first model output. The wall-clock limit is a timeout. The CLI's process ending on its own while the agent's
 //   session still answers is an arm failure (harness_crash), and so is an error result after model output (before any,
-//   it is a missing cell, UPSTREAM). A CLI that exits 0 with no signal and no result message before the SDK's error is
-//   infra, never a crash: a normal finish delivers a result, so that exit means the link broke. Any other failure is
+//   it is a missing cell, UPSTREAM). While the turn's result is still awaited and the adapter has not ended
+//   the session, a stream that ends, or a CLI that exits 0 with no signal before the SDK's error, is infra, never a
+//   crash: a normal finish delivers a result, so that end means the link broke. Any other failure is
 //   infra, never the arm's: the evaluator's
 //   own code (the transcript or init write, the user simulator, the persona), the SDK's link to a CLI that still runs (a
 //   reset or a broken pipe), or the machine (a spawn that fails, a session that no longer answers once the CLI ends). An
@@ -237,6 +238,8 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let textOutput = false;
       let exitCode: number | null = null;
       let exitSignal: string | null = null;
+      let awaitingResult = true;
+      let ended = false;
       let cli: ChildProcess | null = null;
       let agentTurns = 0;
       let usage: TokenUsage | null = null;
@@ -346,6 +349,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 }
               }
             } else if (m.type === "result") {
+              awaitingResult = false;
               agentTurns += m.num_turns ?? 0;
               usage = tokens(m.usage) ?? usage;
               if (stop) break;
@@ -355,8 +359,11 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               }
               const next = m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" };
               turnText = "";
-              if ("reply" in next) inbox.push(userMessage(next.reply));
-              else {
+              if ("reply" in next) {
+                inbox.push(userMessage(next.reply));
+                awaitingResult = true;
+              } else {
+                ended = true;
                 inbox.close();
                 break;
               }
@@ -366,11 +373,15 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             break;
           }
         }
+        if (!stop && !ended && awaitingResult) {
+          stop = INFRA;
+          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code " + exitCode + ", signal " + exitSignal + ")\n");
+        }
       } catch (error) {
         if (!stop) {
           const child = cli as ChildProcess | null;
           const died = child !== null && (child.exitCode !== null || child.signalCode !== null);
-          const linkBroke = exitCode === 0 && exitSignal === null && !messages.some((m) => m.type === "result");
+          const linkBroke = exitCode === 0 && exitSignal === null && awaitingResult;
           stop = died && !linkBroke && answers(session) ? { kind: "arm_failure", failure: "harness_crash" } : INFRA;
           appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (stop === INFRA ? "infra failure, not the arm's: " : "") + String((error as Error)?.message ?? error) + "\n");
         }

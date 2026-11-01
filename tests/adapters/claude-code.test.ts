@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -279,4 +281,23 @@ describe.skipIf(!HAS_CLAUDE_CLI)("a settings hook that denies AskUserQuestion, o
     expect(outcome.termination).toEqual({ kind: "missing", code: "E_APPROVAL_BYPASS" });
     expect(JSON.stringify(h.upstream.map((u) => u.body.messages ?? []))).toContain("The user chose Approach A.");
   }, 180_000);
+});
+
+// Value: protects=the Captain's R1 ruling (#106 /ship): on the pinned Agent SDK, a CLI that exits 0 mid-turn ends the stream with no error and no result, which is infra (E_INFRA_FAILURE), in turn 1 and after a first result; fails_when=the stream's end reads as completed and scores a miss; why_new=#106 /ship pass 2 red team R1; seam=the driver's loop end and awaitingResult, the real SDK's ProcessTransport; no_claim=a real Claude Code CLI or Docker
+describe("the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless)", () => {
+  const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
+  for (const [mode, turns] of [["turn1", 0], ["turn2", 1]] as const) {
+    test("an exit 0 with the turn's result still awaited is E_INFRA_FAILURE (" + mode + ")", async () => {
+      const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
+      const session = {
+        exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
+        spawn: (argv: string[], env: Record<string, string>) => spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", STUB_MODE: mode }, stdio: ["pipe", "pipe", "pipe"] }),
+        stop: () => {},
+      };
+      const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, freeform: async () => ({ text: "Go with your recommendation." }), entry: { user: { persona: "p" } } as never });
+      const outcome = await driver.run(session as never, { id: "t", prompt: "Review the plan." }, 20_000);
+      expect([outcome.termination, outcome.model_output, outcome.exit_code, outcome.signal, outcome.turns.length]).toEqual([{ kind: "missing", code: "E_INFRA_FAILURE" }, true, 0, null, turns]);
+      expect(readFileSync(join(out, "cli-stderr.log"), "utf8")).toContain("adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code 0, signal null)\n");
+    }, 30_000);
+  }
 });
