@@ -1,0 +1,71 @@
+import json, os, shutil, sys
+# Filtered copy of TB2 grid job folders (GEVA-89 takeover, GST-726). Leaves out every crack-7z-hash and
+# adaptive-rejection-sampler trial and lists each with its spend; with --drop-pstack-bg it also leaves out pstack
+# trials that ended with a background task still running (ops.py's test). It copies; the originals are never edited.
+# Usage: filter.py [--drop-pstack-bg] <runs dir> <destination> <batch>...
+DROP = ("crack-7z-hash", "adaptive-rejection-sampler", "largest-eigenval")
+argv = sys.argv[1:]
+drop_bg = "--drop-pstack-bg" in argv
+argv = [a for a in argv if a != "--drop-pstack-bg"]
+runs, dst, batches = argv[0], argv[1], argv[2:]
+
+def bg_running(p):
+    started = notified = 0
+    mp = os.path.join(p, "agent/sdk-messages.jsonl")
+    if os.path.exists(mp):
+        for line in open(mp):
+            try:
+                ty = json.loads(line).get("type")
+            except Exception:
+                continue
+            if ty == "TaskStartedMessage":
+                started += 1
+            elif ty == "TaskNotificationMessage":
+                notified += 1
+    return started > notified
+
+left, kept = [], 0
+for b in batches:
+    run = os.path.join(runs, b)
+    sess = {}
+    for line in open(os.path.join(run, "pulled/out/proxy-sessions.jsonl")):
+        s = json.loads(line)
+        t = s["trial"].removesuffix("__env")
+        sess[t] = sess.get(t, 0) + s["spent_micros"] / 1e6
+    os.makedirs(os.path.join(dst, b, "pulled/jobs"))
+    os.symlink(os.path.join(run, "pulled/out"), os.path.join(dst, b, "pulled/out"))
+    jd = os.path.join(run, "pulled/jobs")
+    for job in sorted(os.listdir(jd)):
+        src = os.path.join(jd, job)
+        if job.endswith("-oracle") or not os.path.isdir(src):
+            continue
+        tgt = os.path.join(dst, b, "pulled/jobs", job)
+        os.makedirs(tgt)
+        for d in sorted(os.listdir(src)):
+            p = os.path.join(src, d)
+            if not os.path.isdir(p):
+                shutil.copy2(p, tgt)
+                continue
+            kw = json.load(open(os.path.join(p, "config.json")))["agent"]["kwargs"]
+            why = None
+            if d.split("__")[0] in DROP:
+                why = "dropped task"
+            elif drop_bg and kw["arm"] == "pstack" and bg_running(p):
+                why = "pstack trial ended with a background task running"
+            if why:
+                left.append((b, job, d, kw["upstream_model"], kw["arm"], round(sess.get(d, 0), 6), why))
+                continue
+            shutil.copytree(p, os.path.join(tgt, d), symlinks=True)
+            kept += 1
+print("trials copied:", kept)
+print("trials left out:", len(left), "spend_usd", round(sum(x[5] for x in left), 6))
+by = {}
+for x in left:
+    k = (x[6], x[2].split("__")[0], x[3])
+    n, s = by.get(k, (0, 0.0))
+    by[k] = (n + 1, s + x[5])
+for (why, task, model), (n, s) in sorted(by.items()):
+    print("  subtotal", task, model, "trials", n, "spend_usd", round(s, 6), "(" + why + ")")
+print("batch job trial model arm spend_usd reason")
+for x in left:
+    print(*x)

@@ -1,0 +1,53 @@
+{
+ "models": [
+  "claude-opus-5-5",
+  "claude-haiku-5-5",
+  "particle-1"
+ ],
+ "reference": "claude-opus-5-5",
+ "jobs": [
+  "<work>/post/filtered/r1-haiku/pulled/jobs/stacks-tb2-r1-haiku",
+  "<work>/post/filtered/r1-opus/pulled/jobs/stacks-tb2-r1-opus",
+  "<work>/post/filtered/r1-particle-b/pulled/jobs/stacks-tb2-r1-particle-b",
+  "<work>/post/filtered/r2x-haiku/pulled/jobs/stacks-tb2-r2x-haiku",
+  "<work>/post/filtered/r2x-opus-b/pulled/jobs/stacks-tb2-r2x-opus-b",
+  "<work>/post/filtered/r2x-particle/pulled/jobs/stacks-tb2-r2x-particle",
+  "<work>/post/filtered/r3-haiku/pulled/jobs/stacks-tb2-r3-haiku",
+  "<work>/post/filtered/r3-opus/pulled/jobs/stacks-tb2-r3-opus",
+  "<work>/post/filtered/r3-particle/pulled/jobs/stacks-tb2-r3-particle"
+ ],
+ "sessions": [
+  "<work>/runs/r1-opus/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r1-haiku/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r1-particle-b/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r2x-opus-b/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r2x-haiku/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r2x-particle/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r3-opus/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r3-haiku/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/r3-particle/pulled/out/proxy-sessions.jsonl"
+ ],
+ "subsets": {
+  "original_20": [
+   "filter-js-from-html",
+   "dna-insert",
+   "model-extraction-relu-logits",
+   "chess-best-move",
+   "torch-tensor-parallelism",
+   "db-wal-recovery",
+   "polyglot-rust-c",
+   "break-filter-js-from-html",
+   "overfull-hbox",
+   "extract-elf",
+   "torch-pipeline-parallelism",
+   "polyglot-c-py",
+   "query-optimize",
+   "tune-mjcf",
+   "configure-git-webserver",
+   "mailman",
+   "pytorch-model-cli",
+   "cancel-async-tasks",
+   "sanitize-git-repo"
+  ]
+ }
+}

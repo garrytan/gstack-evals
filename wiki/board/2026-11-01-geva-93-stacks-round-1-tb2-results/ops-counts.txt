@@ -1,0 +1,15 @@
+model arm trials with_reward no_reward_after_response infrastructure agent_timeout verifier_timeout ended_with_bg_task_running trials_with_bg_agent_call settled_usd
+claude-opus-5-5 none 111 111 0 0 0 0 0 0 16.1174
+claude-opus-5-5 pstack 111 111 0 0 2 0 1 0 25.6247
+claude-opus-5-5 gstack 111 111 0 0 6 0 5 0 30.5044
+claude-haiku-5-5 placebo 111 111 0 0 3 0 3 0 1.4945
+claude-haiku-5-5 none 111 111 0 0 3 0 3 0 0.9845
+claude-haiku-5-5 pstack 111 111 0 0 5 0 5 0 1.2644
+claude-haiku-5-5 gstack 111 110 1 0 2 0 2 0 1.503
+claude-haiku-5-5 pstack-placebo 111 111 0 0 3 0 3 0 1.2881
+particle-1 none 111 111 0 0 6 0 5 0 8.0388
+particle-1 placebo 111 111 0 0 2 0 2 0 9.7648
+particle-1 pstack 111 110 1 0 4 0 5 2 10.4485
+particle-1 gstack 111 111 0 0 4 0 3 0 9.0121
+particle-1 pstack-placebo 111 111 0 0 2 0 1 0 7.5371
+crack-7z-hash trials left out of the analysis: 0 spend 0

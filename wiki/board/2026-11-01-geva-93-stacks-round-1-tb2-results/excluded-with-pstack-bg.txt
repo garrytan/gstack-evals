@@ -1,0 +1,74 @@
+trials copied: 1432
+trials left out: 55 spend_usd 9.017783
+  subtotal adaptive-rejection-sampler claude-haiku-5-5 trials 5 spend_usd 0.196263 (dropped task)
+  subtotal adaptive-rejection-sampler claude-opus-5-5 trials 3 spend_usd 1.987742 (dropped task)
+  subtotal adaptive-rejection-sampler particle-1 trials 5 spend_usd 0.992517 (dropped task)
+  subtotal crack-7z-hash claude-haiku-5-5 trials 5 spend_usd 0.054928 (dropped task)
+  subtotal crack-7z-hash claude-opus-5-5 trials 3 spend_usd 0.287617 (dropped task)
+  subtotal largest-eigenval claude-haiku-5-5 trials 10 spend_usd 0.135768 (dropped task)
+  subtotal largest-eigenval claude-opus-5-5 trials 3 spend_usd 0.822118 (dropped task)
+  subtotal largest-eigenval particle-1 trials 10 spend_usd 3.337657 (dropped task)
+  subtotal mailman claude-haiku-5-5 trials 3 spend_usd 0.125169 (pstack trial ended with a background task running)
+  subtotal mailman particle-1 trials 1 spend_usd 0.244094 (pstack trial ended with a background task running)
+  subtotal openssl-selfsigned-cert particle-1 trials 1 spend_usd 0.035446 (pstack trial ended with a background task running)
+  subtotal overfull-hbox particle-1 trials 1 spend_usd 0.078703 (pstack trial ended with a background task running)
+  subtotal query-optimize claude-haiku-5-5 trials 2 spend_usd 0.027645 (pstack trial ended with a background task running)
+  subtotal query-optimize claude-opus-5-5 trials 1 spend_usd 0.261324 (pstack trial ended with a background task running)
+  subtotal torch-pipeline-parallelism particle-1 trials 1 spend_usd 0.209554 (pstack trial ended with a background task running)
+  subtotal tune-mjcf particle-1 trials 1 spend_usd 0.221238 (pstack trial ended with a background task running)
+batch job trial model arm spend_usd reason
+r1-opus stacks-tb2-r1-opus adaptive-rejection-sampler__YFchjUc claude-opus-5-5 pstack 0.537351 dropped task
+r1-opus stacks-tb2-r1-opus adaptive-rejection-sampler__enXYfEK claude-opus-5-5 none 0.606435 dropped task
+r1-opus stacks-tb2-r1-opus adaptive-rejection-sampler__o3G9aDW claude-opus-5-5 gstack 0.843956 dropped task
+r1-opus stacks-tb2-r1-opus crack-7z-hash__RjdEC5e claude-opus-5-5 none 0.035092 dropped task
+r1-opus stacks-tb2-r1-opus crack-7z-hash__vxXqcyK claude-opus-5-5 gstack 0.097043 dropped task
+r1-opus stacks-tb2-r1-opus crack-7z-hash__zpoNUxw claude-opus-5-5 pstack 0.155482 dropped task
+r1-opus stacks-tb2-r1-opus largest-eigenval__PqW7kmX claude-opus-5-5 none 0.182815 dropped task
+r1-opus stacks-tb2-r1-opus largest-eigenval__QQWPBxU claude-opus-5-5 pstack 0.319567 dropped task
+r1-opus stacks-tb2-r1-opus largest-eigenval__YvtfXo2 claude-opus-5-5 gstack 0.319736 dropped task
+r1-haiku stacks-tb2-r1-haiku adaptive-rejection-sampler__E862YFf claude-haiku-5-5 placebo 0.035605 dropped task
+r1-haiku stacks-tb2-r1-haiku adaptive-rejection-sampler__L7DK3Z6 claude-haiku-5-5 none 0.033372 dropped task
+r1-haiku stacks-tb2-r1-haiku adaptive-rejection-sampler__YbCbLpi claude-haiku-5-5 gstack 0.040032 dropped task
+r1-haiku stacks-tb2-r1-haiku adaptive-rejection-sampler__ZNDVJKR claude-haiku-5-5 pstack 0.03661 dropped task
+r1-haiku stacks-tb2-r1-haiku adaptive-rejection-sampler__j654xxQ claude-haiku-5-5 pstack-placebo 0.050644 dropped task
+r1-haiku stacks-tb2-r1-haiku crack-7z-hash__2kdVkBW claude-haiku-5-5 gstack 0.019789 dropped task
+r1-haiku stacks-tb2-r1-haiku crack-7z-hash__G3GtmVw claude-haiku-5-5 placebo 0.007949 dropped task
+r1-haiku stacks-tb2-r1-haiku crack-7z-hash__ckLeDhW claude-haiku-5-5 pstack-placebo 0.008458 dropped task
+r1-haiku stacks-tb2-r1-haiku crack-7z-hash__deuqY5A claude-haiku-5-5 pstack 0.013631 dropped task
+r1-haiku stacks-tb2-r1-haiku crack-7z-hash__zLiKAjb claude-haiku-5-5 none 0.005101 dropped task
+r1-haiku stacks-tb2-r1-haiku largest-eigenval__9izouQ6 claude-haiku-5-5 gstack 0.013593 dropped task
+r1-haiku stacks-tb2-r1-haiku largest-eigenval__NTo5so7 claude-haiku-5-5 placebo 0.007702 dropped task
+r1-haiku stacks-tb2-r1-haiku largest-eigenval__c9ZMXex claude-haiku-5-5 pstack-placebo 0.060084 dropped task
+r1-haiku stacks-tb2-r1-haiku largest-eigenval__ygRQdVH claude-haiku-5-5 none 0.003742 dropped task
+r1-haiku stacks-tb2-r1-haiku largest-eigenval__yxVR2ZB claude-haiku-5-5 pstack 0.011175 dropped task
+r1-haiku stacks-tb2-r1-haiku mailman__5AWgtkr claude-haiku-5-5 pstack 0.032604 pstack trial ended with a background task running
+r1-haiku stacks-tb2-r1-haiku query-optimize__SEpaBrP claude-haiku-5-5 pstack 0.017062 pstack trial ended with a background task running
+r1-particle-b stacks-tb2-r1-particle-b adaptive-rejection-sampler__7DdSZAd particle-1 gstack 0.232264 dropped task
+r1-particle-b stacks-tb2-r1-particle-b adaptive-rejection-sampler__8TNVY3L particle-1 pstack 0.246712 dropped task
+r1-particle-b stacks-tb2-r1-particle-b adaptive-rejection-sampler__93HyeA3 particle-1 pstack-placebo 0.270112 dropped task
+r1-particle-b stacks-tb2-r1-particle-b adaptive-rejection-sampler__F2SaRKr particle-1 none 0.102759 dropped task
+r1-particle-b stacks-tb2-r1-particle-b adaptive-rejection-sampler__uwJpRa4 particle-1 placebo 0.14067 dropped task
+r1-particle-b stacks-tb2-r1-particle-b largest-eigenval__DNsKcqL particle-1 pstack 0.155669 dropped task
+r1-particle-b stacks-tb2-r1-particle-b largest-eigenval__DQxifq5 particle-1 pstack-placebo 0.344787 dropped task
+r1-particle-b stacks-tb2-r1-particle-b largest-eigenval__ZdfpHeb particle-1 none 0.371534 dropped task
+r1-particle-b stacks-tb2-r1-particle-b largest-eigenval__f5pzJEU particle-1 placebo 0.372651 dropped task
+r1-particle-b stacks-tb2-r1-particle-b largest-eigenval__wmrmjAm particle-1 gstack 0.375116 dropped task
+r1-particle-b stacks-tb2-r1-particle-b openssl-selfsigned-cert__xT9dJp7 particle-1 pstack 0.035446 pstack trial ended with a background task running
+r1-particle-b stacks-tb2-r1-particle-b overfull-hbox__Y5mjhW2 particle-1 pstack 0.078703 pstack trial ended with a background task running
+r2x-haiku stacks-tb2-r2x-haiku largest-eigenval__EKguJcm claude-haiku-5-5 placebo 0.006856 dropped task
+r2x-haiku stacks-tb2-r2x-haiku largest-eigenval__KAkz9sf claude-haiku-5-5 none 0.006611 dropped task
+r2x-haiku stacks-tb2-r2x-haiku largest-eigenval__LtXsZ8J claude-haiku-5-5 pstack-placebo 0.006011 dropped task
+r2x-haiku stacks-tb2-r2x-haiku largest-eigenval__srSmxb2 claude-haiku-5-5 pstack 0.011793 dropped task
+r2x-haiku stacks-tb2-r2x-haiku largest-eigenval__thhRxK8 claude-haiku-5-5 gstack 0.008201 dropped task
+r2x-haiku stacks-tb2-r2x-haiku mailman__73w7tKg claude-haiku-5-5 pstack 0.069878 pstack trial ended with a background task running
+r2x-particle stacks-tb2-r2x-particle largest-eigenval__7rwxAtw particle-1 none 0.386313 dropped task
+r2x-particle stacks-tb2-r2x-particle largest-eigenval__LzWEWt8 particle-1 pstack 0.372219 dropped task
+r2x-particle stacks-tb2-r2x-particle largest-eigenval__ZF8tizi particle-1 pstack-placebo 0.228023 dropped task
+r2x-particle stacks-tb2-r2x-particle largest-eigenval__gVAR5SS particle-1 placebo 0.377541 dropped task
+r2x-particle stacks-tb2-r2x-particle largest-eigenval__q5Anfb2 particle-1 gstack 0.353804 dropped task
+r2x-particle stacks-tb2-r2x-particle mailman__ABJhv7g particle-1 pstack 0.244094 pstack trial ended with a background task running
+r3-opus stacks-tb2-r3-opus query-optimize__CFt8enq claude-opus-5-5 pstack 0.261324 pstack trial ended with a background task running
+r3-haiku stacks-tb2-r3-haiku mailman__MGhjfrQ claude-haiku-5-5 pstack 0.022687 pstack trial ended with a background task running
+r3-haiku stacks-tb2-r3-haiku query-optimize__tthhj6b claude-haiku-5-5 pstack 0.010583 pstack trial ended with a background task running
+r3-particle stacks-tb2-r3-particle torch-pipeline-parallelism__etRfQUa particle-1 pstack 0.209554 pstack trial ended with a background task running
+r3-particle stacks-tb2-r3-particle tune-mjcf__Z8m6Qvv particle-1 pstack 0.221238 pstack trial ended with a background task running
