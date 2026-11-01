@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Draws chart.svg for the gstack null finding (GEVA-105). No dependencies.
+Numbers: the frozen scorer outputs (stacks-tb2-output.txt and the review primary line, both reproduced byte for byte),
+MDDs and spend ratios from finding-numbers-output.txt."""
+ROWS = [
+    ("TB2, Opus 5.5", 3, -3, 9, 9.1, "81.1%", "1.89x"),
+    ("TB2, Haiku 5.5", 1, -7, 9, 11.7, "75.7%", "1.53x"),
+    ("TB2, particle-1", -5, -14, 1, 10.6, "82.9%", "1.12x"),
+    ("Review, Opus 5.5 (blocking recall)", 2.4, -6.4, 11.1, 12.6, "7.1%", "1.47x"),
+]
+W, H, L, R, TOP, ROWH = 900, 360, 300, 170, 70, 55
+lo, hi = -20, 20
+x = lambda v: L + (v - lo) / (hi - lo) * (W - L - R)
+out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="Helvetica, Arial, sans-serif" font-size="14">',
+       '<rect width="100%" height="100%" fill="white"/>',
+       '<text x="20" y="28" font-size="17" font-weight="bold">gstack minus no gstack, points, with 95% intervals</text>',
+       f'<text x="20" y="50" fill="#555">Dot: estimate. Bar: 95% interval. Tick: smallest gain the test could see (80% power).</text>',
+       f'<text x="{W-R+10}" y="{TOP-8}" fill="#555">none / cost</text>']
+for v in range(lo, hi + 1, 5):
+    out.append(f'<line x1="{x(v):.1f}" y1="{TOP}" x2="{x(v):.1f}" y2="{TOP+ROWH*len(ROWS)}" stroke="{"#222" if v == 0 else "#ddd"}" stroke-width="{1.5 if v == 0 else 1}"/>')
+    out.append(f'<text x="{x(v):.1f}" y="{TOP+ROWH*len(ROWS)+20}" text-anchor="middle" fill="#555">{v:+d}</text>'.replace("+0", "0"))
+for i, (name, est, a, b, mdd, ctrl, ratio) in enumerate(ROWS):
+    y = TOP + ROWH * i + ROWH / 2
+    out.append(f'<text x="20" y="{y+5:.1f}">{name}</text>')
+    out.append(f'<line x1="{x(a):.1f}" y1="{y:.1f}" x2="{x(b):.1f}" y2="{y:.1f}" stroke="#1f4e79" stroke-width="3"/>')
+    out.append(f'<circle cx="{x(est):.1f}" cy="{y:.1f}" r="6" fill="#1f4e79"/>')
+    out.append(f'<line x1="{x(mdd):.1f}" y1="{y-12:.1f}" x2="{x(mdd):.1f}" y2="{y+12:.1f}" stroke="#c0504d" stroke-width="2" stroke-dasharray="3,2"/>')
+    out.append(f'<text x="{W-R+10}" y="{y+5:.1f}">{ctrl} / {ratio}</text>')
+out.append(f'<text x="20" y="{H-12}" fill="#555">Exploratory, stacks round 1 (gstack-evals #108, #109). none: the no-gstack pass rate or recall. cost: gstack spend over none spend.</text>')
+out.append("</svg>")
+open("chart.svg", "w").write("\n".join(out) + "\n")
