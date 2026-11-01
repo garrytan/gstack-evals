@@ -56,7 +56,7 @@ function units(argv: string[], label: string, show_ = 30) {
   return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 const draw = (...parts: unknown[]) => parseInt(createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 8), 16) / 0x100000000;
-const RATE: Record<string, [number, number]> = { [id("none", OPUS)]: [0.3, 0.1], [id("gstack", OPUS)]: [0.65, 0.15], [id("lens", OPUS)]: [0.35, 0.1], [id("none", P1)]: [0.15, 0.05], [id("gstack", P1)]: [0.4, 0.1], [id("placebo", P1)]: [0.15, 0.05], [id("none", FABLE)]: [0.35, 0.1], [id("gstack", FABLE)]: [0.6, 0.15], [id("flagall", OPUS)]: [1, 1] };
+const RATE: Record<string, [number, number]> = { [id("none", OPUS)]: [0.3, 0.1], [id("gstack", OPUS)]: [0.65, 0.15], [id("lens", OPUS)]: [0.35, 0.1], [id("none", P1)]: [0.15, 0.05], [id("gstack", P1)]: [0.4, 0.1], [id("placebo", P1)]: [0.15, 0.05], [id("none", FABLE)]: [0.35, 0.1], [id("gstack", FABLE)]: [0.6, 0.15], [id("flagall", OPUS)]: [1, 1], [id("flagbait", OPUS)]: [1, 1] };
 const isDecoy = (u: any) => u.blockers.every((b: any) => b.counts === "over-blocking");
 const save = (name: string, value: unknown) => {
   const p = join(OUT, name);
@@ -177,7 +177,7 @@ u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "--models", OPUS,
 check("review-units refuses a sealed run whose --out is inside the repo", u.code !== 0 && /inside the repo/.test(u.err));
 
 say("\n## 3. Headline: synthetic arms through blind judging and adjudication");
-const cells = [id("none", OPUS), id("gstack", OPUS), id("lens", OPUS), id("none", P1), id("gstack", P1), id("placebo", P1), id("flagall", OPUS)];
+const cells = [id("none", OPUS), id("gstack", OPUS), id("lens", OPUS), id("none", P1), id("gstack", P1), id("placebo", P1), id("flagall", OPUS), id("flagbait", OPUS)];
 const firstSeeded = headline.suite.units.filter((x: any) => !isDecoy(x)).slice(0, 3).map((x: any) => x.id);
 const diag = { [id("gstack", OPUS)]: [firstSeeded[0] + " pass 2: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing", firstSeeded[1] + " pass 3: incomplete, the session ended timeout; scored as finding nothing"], [id("lens", OPUS)]: [firstSeeded[2] + " pass 1: missing; scored as finding nothing"] };
 const H = await judged("headline", headline.suite, "planrev-ceo-r1a", cells, 3, true, diag);
@@ -205,10 +205,20 @@ await score("full secondary file without particle-1 arms", SECONDARY, id("none",
 const so = await score("Opus-only secondary file", SECOPUS, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: opusRoot });
 check("Opus-only file is a family of 1", /of 1 in the declared LOSS family/.test(so.out));
 
-say("\n## 7. False-alarm gate: a flag-everything arm");
-const gate = save("gate.json", { ...JSON.parse(readFileSync(PRIMARY, "utf8")), comparisons: [{ id: "none-opus-vs-flagall-opus", variant: id("none", OPUS), reference: id("flagall", OPUS), margin_points: 10, margin_reason: "dry run", post_hoc: false, frozen_bar: null, false_alarm_gate: { margin_per_decoy: 1 } }], loss_family: { order: ["none-opus-vs-flagall-opus"], null: "zero", reason: "dry run only" } });
-const g = await score("flag-everything arm", gate, id("none", OPUS), id("flagall", OPUS), "FALSE_ALARM_GATE_FAIL", { root: H.root });
-check("gate fails on 12 decoys", /FAIL/.test(g.out) && /on 12 decoys/.test(g.out));
+say("\n## 7. False-alarm gate at the frozen margin: a flag-everything arm and a flag-every-bait arm");
+const gated = ["comparisons.primary.json", "comparisons.secondary.json", "comparisons.secondary-opus.json", "comparisons.fable.json"].flatMap((f) => JSON.parse(readFileSync(join(POST, f), "utf8")).comparisons);
+check("every primary, secondary and Fable comparison carries false_alarm_gate margin_per_decoy 0.5 (" + gated.length + " comparisons)", gated.length === 8 && gated.every((c: any) => JSON.stringify(c.false_alarm_gate) === JSON.stringify({ margin_per_decoy: 0.5 })));
+const FROZEN_GATE = JSON.parse(readFileSync(PRIMARY, "utf8")).comparisons[0].false_alarm_gate;
+const decoyClusters = (s: any) => { const d = s.units.filter(isDecoy); return d.length + " decoys in " + new Set(d.map((u: any) => u.cluster)).size + " clusters"; };
+say("headline: " + decoyClusters(headline.suite) + "; Fable subset: " + decoyClusters(suites[3]));
+check("each decoy is its own cluster, as gate-size.ts.txt assumes (headline 12 in 12, Fable 6 in 6)", decoyClusters(headline.suite) === "12 decoys in 12 clusters" && decoyClusters(suites[3]) === "6 decoys in 6 clusters");
+const gateFile = (name: string, ref: string, gate: unknown) => save(name, { ...JSON.parse(readFileSync(PRIMARY, "utf8")), comparisons: [{ id: "none-opus-vs-" + ref, variant: id("none", OPUS), reference: ref, margin_points: 10, margin_reason: "dry run", post_hoc: false, frozen_bar: null, false_alarm_gate: gate }], loss_family: { order: ["none-opus-vs-" + ref], null: "zero", reason: "dry run only" } });
+const g = await score("flag-everything arm (every bait, every flaw, 3 more must-fix findings per decoy per pass)", gateFile("gate-flagall.json", id("flagall", OPUS), FROZEN_GATE), id("none", OPUS), id("flagall", OPUS), "FALSE_ALARM_GATE_FAIL", { root: H.root });
+check("flag-everything: the gate fails on 12 decoys at margin 0.5", /margin 0\.5 per decoy/.test(g.out) && /: FAIL\./.test(g.out) && /on 12 decoys/.test(g.out));
+const fb = await score("flag-every-bait arm (every bait and every flaw must-fix, no other false alarm)", gateFile("gate-flagbait.json", id("flagbait", OPUS), FROZEN_GATE), id("none", OPUS), id("flagbait", OPUS), "FALSE_ALARM_GATE_FAIL", { root: H.root });
+check("flag-every-bait: the gate fails on 12 decoys at margin 0.5", /margin 0\.5 per decoy/.test(fb.out) && /: FAIL\./.test(fb.out) && /on 12 decoys/.test(fb.out));
+const fb1 = await score("the same flag-every-bait arm at the old margin 1 (the hole #110's Step 11 found)", gateFile("gate-flagbait-margin-1.json", id("flagbait", OPUS), { margin_per_decoy: 1 }), id("none", OPUS), id("flagbait", OPUS), "LOSS", { root: H.root });
+check("at margin 1 the flag-every-bait arm passes the gate, which margin 0.5 closes", /margin 1 per decoy/.test(fb1.out) && /: PASS\./.test(fb1.out));
 
 say("\n## 8. Volume-matched reading (first 2 must-fix findings per unit-pass)");
 const k2 = await derive("first-k 2", "planrev-ceo-r1a-k2", PRIMARY, H.root, ["--first-k", "2"]);
@@ -249,7 +259,7 @@ for (const m of ["greenfield", "added-capability", "fix"]) {
 }
 
 say("\n## 13. Real-neutral stratum, alone");
-const realCells = cells.filter((c) => !c.startsWith("flagall"));
+const realCells = cells.filter((c) => !c.startsWith("flag"));
 const R = await judged("real-neutral", suites[2], realPath, realCells, 3, false);
 await score("real-neutral, descriptive", join(POST, "comparisons.real-neutral.json"), id("none", OPUS), id("gstack", OPUS), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED,LOSS", { suite: realPath, root: R.root });
 
@@ -277,6 +287,7 @@ say("\n## 15. Fable 5.1 subset, exploratory");
 const F = await judged("fable", suites[3], fablePath, [id("none", FABLE), id("gstack", FABLE)], 1, true);
 const fr = await score("Fable none vs gstack", fableFile, id("none", FABLE), id("gstack", FABLE), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: fablePath, root: F.root });
 check("Fable subset reads 24 flaws in 12 plans and 6 decoys", /on 24 blockers in 12 PRs/.test(fr.out) && /on 6 decoys/.test(fr.out));
+say("The Fable subset makes no claim, whatever its scorer prints (section 4): the lines above are a reading.");
 
 say("\n## 16. Power at the panel's shape");
 const pw = await cli("power on the headline suite", ["power", "--suite", "planrev-ceo-r1a", "--passes", "3", "--recall", "0.35", "--margin", "10", "--loss", "20", "--alpha", "0.025", "--dependence", "0.3", "--sims", "2000", ...S], { show: 8 });
@@ -339,9 +350,15 @@ say("\n## 18. Receipts and run paths");
 const { insideRepo } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
 const RUNROOT = join(process.env.HOME ?? "", ".capy", "work", "planning-r1a");
 check("R1a's frozen --out root and receipts sink (~/.capy/work/planning-r1a) sit outside the repo", !insideRepo(RUNROOT) && !insideRepo(join(RUNROOT, "receipts")));
+const { stateRoot } = await import(join(scorer, "src/trial/image.ts"));
+const HOME = process.env.HOME ?? "";
+const retained = join(stateRoot({}, HOME), "retained");
+say("review-units keeps unit trees under <stateRoot>/retained/trees: on this machine, with XDG_STATE_HOME unset, " + retained.replace(HOME, "~"));
+check("<stateRoot> is ~/.capy/work/gstack-evals on Capy, $XDG_STATE_HOME/gstack-evals when set, as the cleanup rule says", retained === join(HOME, ".capy", "work", "gstack-evals", "retained") && stateRoot({ XDG_STATE_HOME: "/x" }, HOME) === join("/x", "gstack-evals"));
+check("<stateRoot>/retained sits outside the repo and outside the run root, so the cleanup rule seals it apart from the run dir", !insideRepo(retained) && !retained.startsWith(RUNROOT + "/"));
 
 say("\n## 19. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink");
-const TS = ["tests/trial/review/plan-scoring.test.ts", "tests/adapters/claude-code.test.ts"];
+const TS = ["tests/trial/review/plan-scoring.test.ts", "tests/adapters/claude-code.test.ts", "tests/trial/review/run.test.ts"];
 const tr = spawnSync("bun", ["test", ...TS], { cwd: scorer, encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
 const tout = (tr.stdout ?? "") + "\n" + (tr.stderr ?? "");
 say("$ bun test " + TS.join(" ") + " (keys unset)");
@@ -374,7 +391,51 @@ for (const [label, name] of [
   ["a hard-linked file in the sink is refused", "a hard-linked file in the sink refuses the copy"],
   ["a symlinked directory in the sink is refused", "a symlinked directory in the sink refuses the copy"],
   ["a dangling symlink above the sink is refused", "a dangling symlink above the sink is refused"],
+  ["--resume reuses every journaled session, a gap included, and spends nothing (section 10's resume rule)", "findings, cost, voice, resume and a changed key"],
 ] as const) check("case: " + label, passed(name));
+
+say("\n## 20. Resume procedure: refill-gaps.ts on a synthetic gap (section 10)");
+const { planScore, readReviewJournal } = await import(join(scorer, "src/trial/review/run.ts"));
+const RGS = join(OUT, "refill-gaps.ts"), GA = id("gstack", OPUS);
+cpSync(join(POST, "refill-gaps.ts.txt"), RGS);
+const entry = (unit: string, kind: string, modelOutput: boolean, parse: unknown) => JSON.stringify({ cell: { model: OPUS, arm: "gstack", unit, pass: 1 }, key: {}, meter_id: "synthetic-" + unit, record: { termination: { kind }, model_output: modelOutput }, parse, cost: null });
+const FIND = entry("synthetic/unit-1", "completed", true, { kind: "findings", findings: [] });
+const MISS = entry("synthetic/unit-2", "timeout", true, { kind: "incomplete", reason: "the session ended timeout" });
+const GAP = entry("synthetic/unit-3", "timeout", false, { kind: "incomplete", reason: "the session ended timeout" });
+check("the synthetic sessions score findings, miss and gap by the pinned planScore", [FIND, MISS, GAP].map((l) => planScore(JSON.parse(l))).join(",") === "findings,miss,gap");
+const runOf = (unit: string) => join("runs", OPUS, "gstack", "task-" + unit.split("-").pop(), "p1");
+const resumeDir = (name: string, gaps: string[]) => {
+  const d = join(OUT, "resume", name);
+  mkdirSync(join(d, "arms", GA), { recursive: true });
+  writeFileSync(join(d, "units.json"), JSON.stringify({ schema_version: 1, units: [1, 2, 3].map((n) => ({ id: "synthetic/unit-" + n, task: "task-" + n })) }) + "\n");
+  for (const n of [1, 2, 3]) {
+    mkdirSync(join(d, runOf("synthetic/unit-" + n)), { recursive: true });
+    writeFileSync(join(d, runOf("synthetic/unit-" + n), "record.json"), "synthetic session " + n + "\n");
+  }
+  writeFileSync(join(d, "cells.ndjson"), [FIND, MISS, GAP].map((l) => l + "\n").join(""));
+  writeFileSync(join(d, "arms", GA, "arm.json"), JSON.stringify({ id: GA, status: "stopped", coverage_gaps: gaps, diagnostics: ["synthetic/unit-2 pass 1: incomplete, the session ended timeout; scored as finding nothing"] }, null, 2) + "\n");
+  return d;
+};
+const refill = (d: string, label: string) => {
+  const r = spawnSync("bun", [RGS, scorer, d], { encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
+  say("$ bun $OUT/refill-gaps.ts $SCORER " + d);
+  say("  exit " + r.status + "  (" + label + ")");
+  for (const l of ((r.stdout ?? "") + "\n" + (r.stderr ?? "")).split("\n").filter((l) => l.trim())) say("    " + l);
+  return r;
+};
+const rd = resumeDir("gap", ["synthetic/unit-3 pass 1: incomplete, the session ended timeout before any model output"]);
+const rr = refill(rd, "a findings session, a miss and a gap; arm.json names the gap");
+check("refill-gaps exits 0 and counts 1 refilled session for the arm", rr.status === 0 && new RegExp("^refilled " + GA + " 1, ", "m").test(rr.stdout));
+check("the gap's raw run directory is copied to refilled-gaps/ before the resume deletes it, and no other session's is", readFileSync(join(rd, "refilled-gaps", runOf("synthetic/unit-3"), "record.json"), "utf8") === "synthetic session 3\n" && !existsSync(join(rd, "refilled-gaps", runOf("synthetic/unit-1"))) && !existsSync(join(rd, "refilled-gaps", runOf("synthetic/unit-2"))));
+check("refilled-gaps.ndjson holds the gap's line alone, byte for byte", readFileSync(join(rd, "refilled-gaps.ndjson"), "utf8") === GAP + "\n");
+check("cells.ndjson keeps the findings and miss lines, byte for byte, and nothing else", readFileSync(join(rd, "cells.ndjson"), "utf8") === FIND + "\n" + MISS + "\n");
+const kept = [...readReviewJournal(rd).values()].map((e: any) => e.cell.unit).sort().join(",");
+check("the journal --resume reads keeps the findings and the miss and drops the gap, so the one resume reruns the gap alone", kept === "synthetic/unit-1,synthetic/unit-2");
+const again = refill(rd, "a second use on the same out dir");
+check("a second use refuses (one resume per run) and changes nothing", again.status === 2 && readFileSync(join(rd, "cells.ndjson"), "utf8") === FIND + "\n" + MISS + "\n" && readFileSync(join(rd, "refilled-gaps.ndjson"), "utf8") === GAP + "\n");
+const md = resumeDir("miss", ["synthetic/unit-2 pass 1: incomplete, the session ended timeout"]);
+const mr = refill(md, "arm.json names a miss as a gap");
+check("a named session that is a miss is refused, and nothing moves", mr.status === 2 && !existsSync(join(md, "refilled-gaps.ndjson")) && !existsSync(join(md, "refilled-gaps")) && readFileSync(join(md, "cells.ndjson"), "utf8") === [FIND, MISS, GAP].map((l) => l + "\n").join(""));
 
 say("\n## Leak check");
 const text = lines.join("\n");

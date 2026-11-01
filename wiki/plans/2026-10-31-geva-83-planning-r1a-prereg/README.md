@@ -2,7 +2,7 @@
 id: 2026-10-31-geva-83-planning-r1a-prereg
 kind: plan
 title: "Planning R1a preregistration: gstack's CEO plan review against no gstack on the sealed CEO panel"
-summary: "Freezes R1a before any paid call: arms (none required and primary), the run suites and stub, both Holm families, the false-alarm gate, judges, pilot stops, power, a $2,800 cap and the dry run."
+summary: "Freezes R1a before any paid call: arms (none primary), suites, Holm families, a 0.5 false-alarm gate, judges, pilot stops, power, a $2,800 cap with a $95 judge reserve, resume and the dry run."
 author: GEVA-83
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -22,19 +22,22 @@ links:
 attachments:
   - 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367  any-severity.json
   - 2634ebc8468af3f6b3307cf8715f027166a8c55fa34e59ef01be49fb299b31e8  build.sh.txt
-  - 5ca0068b088297e615a29c8a4667b958952fc49a98d9161e6f790a6ef99b9e67  comparisons.fable.json
-  - 9d5ac46292c7579a666b0c6a00f08a9e603409f8a7c436c034f1af4ba094e7e8  comparisons.primary.json
-  - af86671913b46fdd2dd23f45190252f98e1168ff2d308bdee59776f17ade948d  comparisons.real-neutral.json
-  - 22b4d37bbbe62535071d6db23946811d0d22ee16a6122ff3d6e9e03236212216  comparisons.secondary-opus.json
-  - 4fe8dd0f822665d83cd621249797ca74a1762008eeb54481f9c0f0e24f582466  comparisons.secondary.json
+  - 7efc17228292f17a25f08a2039f68e0b1148843bdb66700f1decda988c636360  comparisons.fable.json
+  - 39df60057f75efe0ad6a21623781894c5cb2d467b6776277037f5dbfe327afbd  comparisons.primary.json
+  - 4fffa2b3b604794eaace96bdad34deecbc4c3d4f64a51665039581e0ecd99ca1  comparisons.real-neutral.json
+  - 25d7f666ac52dfaedec7aec125804e4dd3aacf1ba33278ed6abda8b33e8b7240  comparisons.secondary-opus.json
+  - c5b4b260c8d21f1bbc0552d7858a20a1076a847f0dd512451d11e2ce6f3d3ce8  comparisons.secondary.json
   - 0d1170e5da6521f688a73efc2f37404c127b99b09f0de537a7c03a0d90eb2a12  convert.py.txt
-  - f33686bb1fba70372cddeb2a0456b5f30c3d2e4829f2a94f012f6352b656eb29  dryrun.ts.txt
-  - 18831d522b8783c07166bc14b519655a5b16a8228c08c729f85c22e8f56771be  dryrun.txt
+  - 154dfe4f9ab8fa823a17e832a16d128efb943db2e63d3d52d58c78a676eead16  dryrun.ts.txt
+  - fe963d42f4dbc513dcaac6185029f8c793c3287372bf3f779939c754854f9a03  dryrun.txt
   - 36a7008358b9a1f1ec8bff454c5ca4221cd04a92e4b07220e902d0557178bda5  fable-subset.tsv
+  - a63af263d57f11e653b6da12b6afb06a7dc7c3ba6f3e7d4982ef96d468f55aa9  gate-size.ts.txt
+  - fd77e60b79fbc93c29057f227dce9736e98720d6034d0609256c0ac87a109e49  gate-size.txt
   - 64e35c81c8bfdb038a7c21652ffaeaed8e3683d4e67ecc87638703a00d73fc06  judge-brief.md
   - e3bfc99132b2eca114d42663d99dfa3ca4f46384865e5c9bc16d7d7ae19bb001  policy.json
   - 55120380543c39a8521c40b8ed7eaa4816f9c5ca76179e358a61158e5b853b44  power-grid.txt
   - 1c51b933a24ebc990ecb782a375d17c15d97d0b968502670fd2d1c81e1db29a9  readings.py.txt
+  - 150efbf71b69714e14a0da4b3b7102c82ce5984677219a424230fb66b9be8688  refill-gaps.ts.txt
 ---
 
 # Planning R1a preregistration: CEO plan review against no gstack
@@ -52,7 +55,7 @@ It pins the scorer and harness at main e305ed0, the merge of #100 (0239f14), #10
 - **Not distinguished** otherwise, with the power table's minimum detectable difference.
 - **Ceiling.** If none-opus's must-fix recall on the headline panel is above 0.85, the round reports a ceiling and makes no claim; the lens goes to the harder-panel track.
 - **Secondary family** (particle-1 none vs gstack, Opus none vs lens, particle-1 none vs placebo): the same rule inside its own Holm family. A lens result that matches gstack's says the skill's name carries the effect, which sends the skill to the cut track.
-- **Fable 5.1 rung** (section 2): exploratory, reported with its interval, never a claim.
+- **Fable 5.1 rung** (section 2): exploratory, reported with its interval, never a claim, whatever its scorer prints (section 4).
 - **Not claimed:** anything on the 4 pilot units (section 8); NO_LOSS or non-inferiority at this size; that gstack writes better plans in general or helps finish tasks (R1b); anything about flaws outside the panel's two taxonomies. Seeded flaws are not natural flaws. The two real-neutral units are the check on that, and they are reported alone.
 
 ## 2. Arms, models and pins
@@ -101,9 +104,39 @@ Scoring is `noloss score` at the pin: a flaw's value is the share of an arm's pa
 - **Primary family**, [comparisons.primary.json](comparisons.primary.json): none-opus vs gstack-opus (LOSS means gstack catches more) and gstack-opus vs none-opus (LOSS means gstack catches fewer). Holm over 2.
 - **Secondary family**, [comparisons.secondary.json](comparisons.secondary.json): none-particle-1 vs gstack-particle-1, none-opus vs lens-opus, none-particle-1 vs placebo-particle-1. Holm over 3.
 - **After the frozen particle-1 rung drop** (pilot stop c), [comparisons.secondary-opus.json](comparisons.secondary-opus.json): none-opus vs lens-opus alone. Both secondary files are frozen now because the drop changes the family size and can move a verdict.
-- **Fable**, [comparisons.fable.json](comparisons.fable.json): none-fable vs gstack-fable in both directions on planrev-ceo-r1a-fable, Holm over 2. A comparisons file scores one suite, so the Fable subset cannot share the secondary file's Holm step; it is read alone, as exploratory, and the scorer's "claim may be made" line is not read as a claim.
+- **Fable**, [comparisons.fable.json](comparisons.fable.json): none-fable vs gstack-fable in both directions on planrev-ceo-r1a-fable, Holm over 2. A comparisons file scores one suite, so the Fable subset cannot share the secondary file's Holm step; it is read alone, as exploratory. **The Fable subset makes no claim, whatever its scorer prints** (GSTA-2, 2026-11-01): a "claim may be made" line, a LOSS or a gate PASS there is a reading, never a claim.
 - **Real-neutral**, [comparisons.real-neutral.json](comparisons.real-neutral.json): the primary and secondary pairs on planrev-ceo-r1a-real, descriptive, no family; R1a reports each arm's outcome on each of the two flaws.
-- **The false-alarm gate** (open item 7). Every primary, secondary and Fable comparison carries `false_alarm_gate: {margin_per_decoy: 1}`. The gate reads must-fix false alarms on decoys only (a bait flagged must-fix, or a must-fix finding there ruled not-defect), paired by decoy. A LOSS whose reference's excess per decoy has a 95% interval reaching past 1 prints FALSE_ALARM_GATE_FAIL, and its claim may not be made. The headline gate reads all 12 decoys.
+- **The false-alarm gate** (open item 7). Every primary, secondary and Fable comparison carries `false_alarm_gate: {margin_per_decoy: 0.5}`. The gate reads must-fix false alarms on decoys only (a bait flagged must-fix, or a must-fix finding there ruled not-defect), paired by decoy. A LOSS whose reference's excess per decoy has a 95% interval reaching past 0.5 prints FALSE_ALARM_GATE_FAIL, and its claim may not be made. The headline gate reads all 12 decoys.
+  - **Why 0.5, not 1** (GSTA-2, 2026-11-01). Each decoy holds one bait. At margin 1, an arm that flagged every bait must-fix and raised no other false alarm had an excess of at most 1 on every decoy, so it passed (#110's /ship, Step 11). At 0.5 it fails. The dry run checks it at both margins.
+  - **How often an honest arm passes.** [gate-size.txt](gate-size.txt), from [gate-size.ts.txt](gate-size.ts.txt), runs the pinned scorer's interval and the gate's own rule on simulated readings in which the reference's decoy false alarms match none's. On the headline's 12 decoys at 3 passes, such an arm passes every time when its only false alarms are flagged baits, at any bait rate. It passes at least 80% of the time while its other must-fix findings ruled not-defect stay at or under about 0.5 per decoy per pass (Poisson) or 0.25 (overdispersed), and only 40% to 63% of the time at 1 such finding per decoy per pass. So a noisy arm can lose a true "catches more" claim to the gate. gate-size.txt measures only how often an honest arm passes, not how often an arm with real excess false alarms does. On the Fable subset's 6 decoys at 1 pass an honest arm passes far less often, between 19% and 95%; that reading makes no claim either way. The share of honest readings that pass, as a range over bait rates 0.1, 0.3 and 0.5 (2,000 readings per cell):
+
+  Headline suite (primary, secondary and secondary-opus files), 12 decoys at 3 passes:
+
+  | Other must-fix findings ruled not-defect, per decoy per pass | Poisson, margin 0.5 | Overdispersed, margin 0.5 | Poisson, margin 1 | Overdispersed, margin 1 |
+  |---|---|---|---|---|
+  | 0 (flagged baits only) | 100% | 100% | 100% | 100% |
+  | 0.1 | 98 to 100% | 98 to 99% | 100% | 100% |
+  | 0.25 | 92 to 97% | 87 to 90% | 100% | 100% |
+  | 0.5 | 78 to 83% | 65 to 71% | 100% | 96 to 97% |
+  | 0.75 | 69 to 72% | 50 to 53% | 99% | 88 to 91% |
+  | 1 | 59 to 63% | 41 to 43% | 96 to 97% | 78 to 81% |
+  | 1.5 | 47 to 50% | 29 to 31% | 92% | 62 to 64% |
+  | 2 | 41 to 44% | 22% | 84 to 85% | 48 to 50% |
+
+  Fable subset, 6 decoys at 1 pass:
+
+  | Other must-fix findings ruled not-defect, per decoy per pass | Poisson, margin 0.5 | Overdispersed, margin 0.5 | Poisson, margin 1 | Overdispersed, margin 1 |
+  |---|---|---|---|---|
+  | 0 (flagged baits only) | 75 to 95% | 75 to 95% | 100% | 100% |
+  | 0.1 | 60 to 80% | 61 to 80% | 94 to 97% | 94 to 96% |
+  | 0.25 | 50 to 61% | 49 to 61% | 85 to 90% | 83 to 86% |
+  | 0.5 | 39 to 43% | 37 to 42% | 73 to 76% | 66 to 70% |
+  | 0.75 | 32 to 37% | 30 to 35% | 64 to 68% | 55 to 58% |
+  | 1 | 29 to 34% | 27 to 28% | 58 to 61% | 48 to 50% |
+  | 1.5 | 25 to 27% | 19 to 22% | 48 to 50% | 36 to 40% |
+  | 2 | 21 to 23% | 19 to 20% | 41 to 42% | 32 to 33% |
+
+  Pilot read (e) in section 8 sends the round back to the Captain when the pilot's noise is above 0.25, the highest rate at which an honest arm still passes at least 80% of the time here under both models (GSTA-2, 2026-11-01).
 - **Size rule** (judging decision 3, GEVA-81's recommendation, taken). score's size rule and the exported power table ignore --alpha and --dependence. No code change: no NO_LOSS claim is made, so the size rule gates nothing, and power admission is the grid in section 7.
 
 ## 5. Secondary and sensitivity readings
@@ -121,7 +154,7 @@ All are reported, none is a claim. Each runs through the pinned scorer as the dr
   - Infra is never the arm's miss. A provider API error, an evaluator error, a user-simulator failure, docker exec's own exits 125, 126 and 127, an ECONNRESET followed by exit 1 after the SDK closes stdin (teardown), and a machine that stops answering are coverage gaps.
   - An evaluator stall is credited to the session, timed with performance.now, capped at 10% of the session timeout and recorded as credited_stall_ms. A stall just before a persona pause is credited. A timeout reached only past that cap is infra.
   - A completed session with model output but no text turn scores as a miss, because the plan parser reads reviews only from text turns. The results count these misses per arm.
-  - A coverage gap stops the arm with E_COVERAGE_GAP, and review-units exits 2. The run procedure reads exit 2 as a stopped arm, records it, and never reruns it as a crashed run.
+  - A coverage gap stops the arm with E_COVERAGE_GAP, and review-units exits 2. The run procedure reads exit 2 as a stopped arm, records it, and never reruns it as a crashed run. Its gaps may be refilled only by the one resume section 10 allows.
   - Each session record keeps the agent CLI's own `exit_code` and `signal` (null for both when the harness's own abort or teardown killed it). The exit-137 count below reads exit_code 137 or signal SIGKILL from them.
   - The dry run runs the pinned harness's own keyless tests of these cases (tests/trial/review/plan-scoring.test.ts and tests/adapters/claude-code.test.ts). The sensitivity reading drops every unit any arm's diagnostics name, for every arm, and rescoring the primary family on it must agree in sign.
 - **Host memory kills** (#106's /ship, GST-742). The driver cannot tell a host OOM kill of one arm's CLI (exit 137, container still alive) from the arm's own crash, so after model output the frozen scoring counts it as that arm's miss. R1a reports exit-137 sessions per arm. If there are any, it also gives the primary family without them, as a sensitivity reading beside the frozen scoring and never in its place: every unit that holds an exit-137 session is dropped for every arm (`derive --drop-file`, the path the missing-cells reading uses), and the primary pair is rescored on the rest.
@@ -158,9 +191,10 @@ Read before any full-run session:
 - (b) User-simulator fallback above 10% of replies: the rec user needs repair.
 - (c) particle-1 tool-use failure on more than 20% of its cells: the frozen rung drop, scored with comparisons.secondary-opus.json.
 - (d) The metered cost per session re-projects the run. A projection over the cap shrinks the run in this order, each step an amendment, until it fits: the Fable rung, then the extension decoys D07 to D12, then the lens cell. The primary pair never shrinks. Or the Captain raises the cap.
+- (e) Decoy noise for the false-alarm gate (GSTA-2, 2026-11-01). The pilot has no decoys, so its plans stand in: each Opus and particle-1 cell's must-fix findings ruled not-defect by blind adjudication, per pilot plan per pass. If any cell's rate is above 0.25, an honest arm could pass the gate under 80% of the time (section 4, gate-size.txt), so the round returns to the Captain before any full-run session. A pilot rate comes from 4 plans at 1 pass, so it can understate the full-run rate.
 - Exit-137 sessions per arm (GST-742): any in the pilot halves `--parallel` for the full run (section 10).
 - Each gstack session reached its review output (open item 3), and each gstack session's mode is in modes.tsv (open item 6).
-- **Timeout.** Pilot sessions run with --timeout 3600. The full run's timeout is twice the longest completed pilot session in any Opus or Fable cell, rounded up to 300 seconds, at least 1800 and at most 3600.
+- **Timeout** (GSTA-2, 2026-11-01). Pilot sessions run with --timeout 3600. The full run's timeout is twice the longest pilot session in any cell (Opus, particle-1 and Fable), rounded up to 300 seconds, at least 1800 and at most 3600. If any pilot session times out, the full run uses 3600. A timeout after model output scores as a miss (section 5), so a timeout set too short would turn slow sessions into misses.
 - The power rerun (section 7).
 - Any change the pilot drives merges as an amended prereg before full-run sessions.
 
@@ -179,6 +213,7 @@ Re-projected at gstack's $5 reservation per Opus session (GST-538 item 2), the r
 
 - **Cap: $2,800** ($2,000 for the Opus and particle-1 design plus up to $800 for the Fable rung, GST-659), under R42's $5,000 per thread. The Captain records it under approvals/ when this post merges. About $3,400 if gstack-auto joins.
 - The worst case at the rig's allowances ($7.04 Opus, $0.192 particle-1, $17.60 Fable per session) is about $3,335 before judges, the sum of the four review-units dry runs, so the ledger cap binds first. A cap stop ends the run incomplete, and it is never retried to change a verdict.
+- **Judge reserve** (GSTA-2, 2026-11-01). Because that worst case is above the cap, a cap stop could otherwise land during judging. So the session phase stops at **$2,705**: the **$2,800** cap minus the **$95 judge envelope** (the judges' row above). Every review-units command, pilot and full run alike, passes `--spend-cap` set to $2,705 minus the line item's committed spend so far (`gstack-evals ledger status --item planning-r1a`). review-units starts a round only when that round's worst case at the allowance fits under its `--spend-cap`, so sessions never take the item past $2,705, and judging and adjudication always have their $95. If gstack-auto joins, the session phase stops at its cap minus the same envelope.
 - $600, the plan's figure, buys about 84 Opus sessions after the pilot, particle-1 and judges (GEVA-81's handoff). One Opus cell is 114 sessions, so $600 cannot buy the panel at $5 a session.
 
 ## 10. Run rules
@@ -193,7 +228,8 @@ Re-projected at gstack's $5 reservation per Opus session (GST-538 item 2), the r
   - Particle AI's own privacy policy (effective 2026-08-25, read 2026-10-31) says standard synchronous inference keeps no data by default, prompts and outputs are not used for training without an opt-in, and it is hosted in the US.
   - DeepSeek V4.1 Flash is not an R1a model. Its max_price equals its listed price, so any rise would refuse its calls; the dry run reports it for GST-637.
 - **Route per session** (#101's /ship, adversarial finding 2). The session key holds no route. So each R1a run writes route.json into its out dir: the routing object the scorer at the pin sends for each OpenRouter model. The results join it to every session in cells.ndjson. Every R1a session runs at the pinned scorer sha, a resume at another sha is not allowed, and a session from one is not scored.
-- **Receipts** (#101's /ship, red-team finding 2 and adversarial finding 4). review-units refuses a sealed run whose `--out` is inside the repo. Since #106 (GST-737), a sealed suite, or an unsealed one that reads catalogs under the sealed root, also refuses a receipts sink (GSTACK_EVALS_RECEIPTS) inside the repo with E_USAGE before any session; the dry run runs the pinned harness's own tests for both. #107 adds that the sink refuses symlinks, a dangling parent and any target with more than one hard link, and that every noloss writer refuses in-repo output when the suite reads the sealed root. Beside that check, R1a keeps a procedural rule: `--out` root and any receipts sink (GSTACK_EVALS_RECEIPTS) sit under ~/.capy/work/planning-r1a, outside the repo and every drive. After the run, the run dir is sealed with age to the panel's recipient, beside the panel bundle, and its plaintext deleted.
+- **Resume** (GSTA-2, 2026-11-01). Each review-units run may take one `--resume`, at the same scorer sha, to refill its coverage gaps and the cells that never ran because the controller or its machine stopped (never cells a cap stop left, section 9). It never reruns a miss or a session with findings. At the pin, `--resume` reuses every session cells.ndjson journals, gaps included, and runs only cells with no line there (the pinned test "findings, cost, voice, resume and a changed key" in tests/trial/review/run.test.ts, which the dry run runs). So before that one resume, the run runs [refill-gaps.ts.txt](refill-gaps.ts.txt) (`bun refill-gaps.ts <scorer> <out dir>`). It moves the lines of the sessions the arms' `coverage_gaps` name, and only those, from cells.ndjson to refilled-gaps.ndjson in the out dir, and keeps every miss and findings line. Because the resume deletes a rerun cell's raw run directory first (src/trial/review/run.ts:318), the script copies each such directory to refilled-gaps/ in the out dir before it moves anything. It refuses, and changes nothing, on a second use, on a note that matches no journal line or more than one, on a named session that the pinned planScore does not score as a gap, and on a named session whose run directory is missing. A run that printed CAP_STOP takes no resume. The results report, per arm, the count of refilled sessions and their first attempts' metered spend from refilled-gaps.ndjson, since the resume drops that spend from cost.tsv. A refilled session scores like any other, and a gap left after the resume leaves its arm stopped. The dry run runs the script on a synthetic gap (GSTA-2, 2026-11-01).
+- **Receipts** (#101's /ship, red-team finding 2 and adversarial finding 4). review-units refuses a sealed run whose `--out` is inside the repo. Since #106 (GST-737), a sealed suite, or an unsealed one that reads catalogs under the sealed root, also refuses a receipts sink (GSTACK_EVALS_RECEIPTS) inside the repo with E_USAGE before any session; the dry run runs the pinned harness's own tests for both. #107 adds that the sink refuses symlinks, a dangling parent and any target with more than one hard link, and that every noloss writer refuses in-repo output when the suite reads the sealed root. Beside that check, R1a keeps a procedural rule: `--out` root and any receipts sink (GSTACK_EVALS_RECEIPTS) sit under ~/.capy/work/planning-r1a, outside the repo and every drive. After the run, the run dir and the retained unit trees review-units writes under the state root (`<stateRoot>/retained`, which holds `retained/trees/`: ~/.capy/work/gstack-evals/retained on Capy, or $XDG_STATE_HOME/gstack-evals/retained when that is set) are sealed with age to the panel's recipient, beside the panel bundle, and their plaintext is deleted and checked gone with `test ! -e` (GSTA-2, 2026-11-01). At e305ed0 review-units keeps every unit tree there on every run, outside the run dir (src/trial/review/cli.ts:261, src/trial/image.ts:264). The run machine starts with no `<stateRoot>/retained`, checked with `test ! -e` before the first session, so the sealed copy holds only R1a's trees. Sealing and deletion happen after the run's one resume, if any, and never before it, because a resume rebuilds and re-retains any tree it lacks.
 - Panel material is decrypted outside every checkout at run time, and every opening is logged in CUSTODY.md.
 
 ## 11. Planned amendments
@@ -216,4 +252,4 @@ Re-projected at gstack's $5 reservation per Opus session (GST-538 item 2), the r
 
 ## 13. Dry run
 
-[dryrun.txt](dryrun.txt) is the keyless dry run at the pin, through the pinned scorer, on the real suites with synthetic arms; [dryrun.ts.txt](dryrun.ts.txt) is its script. It checks 151 things and all pass: the stub and every suite load, and the stub refuses without the sealed root; the frozen review-units commands plan 648, 36, 32 and 36 sessions, and gstack-auto is refused; synthetic arms go through blind judging and adjudication on the real plan trees; both families print their Holm steps (of 2, of 3); the gate passes the real-shaped arms and fails a flag-everything arm on 12 decoys; Fable is refused under the default policy and under any ledger item but planning-r1a; a sealed run with an in-repo `--out` is refused; the particle-1 drop refuses the full secondary file and scores the Opus-only one as a family of 1; first-k 2, any severity, missing cells, a stopped arm, by-source (24 flaws each) and by-mode (16 flaws in 8 plans each) readings run; the real-neutral and Fable suites score; no pilot unit sits in a scored suite, no comparisons file names the pilot suite, score refuses the pilot suite under each of the 5 frozen files, and the pilot stop (a) reading comes from `noloss secondary` with no verdict or claim; power counts 24 clusters and 48 flaws; particle-1's route keeps an endpoint under the data policy and max_price (section 10), and route.json is written; the frozen run paths sit outside the repo; and every test in the pinned tests/trial/review/plan-scoring.test.ts and tests/adapters/claude-code.test.ts passes, with each outcome case in section 5 and each receipts-sink refusal checked by name. The transcript drops every line that names a unit, and its last check confirms no unit head or base prefix appears in it. Scripts are kept as .txt so nothing runs them from the wiki.
+[dryrun.txt](dryrun.txt) is the keyless dry run at the pin, through the pinned scorer, on the real suites with synthetic arms; [dryrun.ts.txt](dryrun.ts.txt) is its script. GEVA-96 reran it on 2026-11-01 at 12:55 UTC after the rebuild that #110's /ship Step 11 asked for, opening the run bundle under custody (CUSTODY.md logs the opening and the deletion of the plaintext). It checks 170 things and all pass: the stub and every suite load, and the stub refuses without the sealed root; the frozen review-units commands plan 648, 36, 32 and 36 sessions, and gstack-auto is refused; synthetic arms go through blind judging and adjudication on the real plan trees; both families print their Holm steps (of 2, of 3); every primary, secondary and Fable comparison carries the gate at margin 0.5, and each decoy is its own cluster, as gate-size.ts.txt assumes; the gate passes the real-shaped arms and, on 12 decoys, fails a flag-everything arm and a flag-every-bait arm with no other false alarm, which passes at the old margin 1; Fable is refused under the default policy and under any ledger item but planning-r1a; a sealed run with an in-repo `--out` is refused; the particle-1 drop refuses the full secondary file and scores the Opus-only one as a family of 1; first-k 2, any severity, missing cells, a stopped arm, by-source (24 flaws each) and by-mode (16 flaws in 8 plans each) readings run; the real-neutral and Fable suites score; no pilot unit sits in a scored suite, no comparisons file names the pilot suite, score refuses the pilot suite under each of the 5 frozen files, and the pilot stop (a) reading comes from `noloss secondary` with no verdict or claim; power counts 24 clusters and 48 flaws; particle-1's route keeps an endpoint under the data policy and max_price (section 10), and route.json is written; the Fable reading prints its no-claim line; the frozen run paths sit outside the repo, and `<stateRoot>/retained` resolves where the cleanup rule says, outside the run root; every test in the pinned tests/trial/review/plan-scoring.test.ts, tests/adapters/claude-code.test.ts and tests/trial/review/run.test.ts passes (71 tests), with each outcome case in section 5, each receipts-sink refusal and the resume's reuse of a journaled gap checked by name; and refill-gaps.ts, on a synthetic findings session, miss and gap, moves the gap's line alone, copies its run directory, keeps the other two lines byte for byte, and refuses a second use and a miss named as a gap. The transcript drops every line that names a unit, and its last check confirms no unit head or base prefix appears in it. Scripts are kept as .txt so nothing runs them from the wiki.
