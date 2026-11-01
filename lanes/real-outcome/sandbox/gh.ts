@@ -301,13 +301,15 @@ function prCmd(ctx: GhContext, sub: string, args: string[], req: GhRequest): str
       return "title:\t" + pr.title + "\nstate:\t" + (pr.draft ? "DRAFT" : pr.state) + "\nauthor:\t" + LOGIN + "\nlabels:\t" + pr.labels.join(", ") + "\nnumber:\t" + pr.number + "\nurl:\t" + j.url + "\nadditions:\t" + j.additions + "\ndeletions:\t" + j.deletions + "\n--\n" + pr.body + "\n";
     }
     case "list": {
-      const p = parse(args, { ...R, ...JSON_FLAGS, head: { alias: "H", value: true }, base: { alias: "B", value: true }, state: { alias: "s", value: true }, limit: { alias: "L", value: true }, search: { alias: "S", value: true }, label: { alias: "l", value: true }, author: { alias: "A", value: true }, draft: { alias: "d", value: false }, web: { alias: "w", value: false } });
+      const p = parse(args, { ...R, ...JSON_FLAGS, head: { alias: "H", value: true }, base: { alias: "B", value: true }, state: { alias: "s", value: true }, limit: { alias: "L", value: true }, search: { alias: "S", value: true }, label: { alias: "l", value: true }, assignee: { alias: "a", value: true }, author: { alias: "A", value: true }, draft: { alias: "d", value: false }, web: { alias: "w", value: false } });
       checkRepo(ctx, p);
+      for (const f of ["search", "label", "assignee"]) if (p.flags.has(f)) throw new Fail("--" + f + " is not available in this sandbox", "gh_unknown_flag");
       checkFields(p, prFields);
       const state = (one(p, "state") ?? "open").toLowerCase();
       if (!["open", "closed", "merged", "all"].includes(state)) throw new Fail("invalid argument " + JSON.stringify(state) + " for \"-s, --state\" flag");
-      const search = one(p, "search");
-      const list = [...ctx.prs].reverse().filter((x) => (state === "all" || (state === "open" ? x.state === "OPEN" : state === "closed" ? x.state === "CLOSED" : false)) && (one(p, "head") === undefined || x.head === one(p, "head")) && (one(p, "base") === undefined || x.base === one(p, "base")) && (!p.flags.has("draft") || x.draft) && (search === undefined || state !== "merged")).slice(0, Number(one(p, "limit") ?? 30));
+      const author = one(p, "author");
+      const mine = author === undefined || author === "@me" || author === LOGIN;
+      const list = [...ctx.prs].reverse().filter((x) => mine && (state === "all" || (state === "open" ? x.state === "OPEN" : state === "closed" ? x.state === "CLOSED" : false)) && (one(p, "head") === undefined || x.head === one(p, "head")) && (one(p, "base") === undefined || x.base === one(p, "base")) && (!p.flags.has("draft") || x.draft)).slice(0, Number(one(p, "limit") ?? 30));
       if (p.flags.has("json") || p.flags.has("jq")) return emit(p, list.map((x) => prJson(ctx, x)), prFields);
       if (!list.length) return "";
       return list.map((x) => [x.number, x.title, x.head, x.draft ? "DRAFT" : x.state, x.createdAt].join("\t")).join("\n") + "\n";
@@ -439,15 +441,31 @@ function apiCmd(ctx: GhContext, args: string[]): string {
   const p = parse(args, { method: { alias: "X", value: true }, field: { alias: "F", value: true }, "raw-field": { alias: "f", value: true }, header: { alias: "H", value: true }, jq: { alias: "q", value: true }, silent: { value: false }, paginate: { value: false }, input: { value: true }, include: { alias: "i", value: false }, hostname: { value: true }, "cache": { value: true }, slurp: { value: false } });
   const method = (one(p, "method") ?? (p.flags.has("field") || p.flags.has("raw-field") || p.flags.has("input") ? "POST" : "GET")).toUpperCase();
   const [owner, name] = ctx.repo.split("/");
-  const path = (p.pos[0] ?? "").replace(/^\//, "").replaceAll("{owner}", owner!).replaceAll("{repo}", name!).split("?")[0]!;
+  const target = (p.pos[0] ?? "").replace(/^\//, "").replaceAll("{owner}", owner!).replaceAll("{repo}", name!);
+  const path = target.split("?")[0]!;
   const fields: Record<string, string> = {};
   for (const f of [...(p.flags.get("field") ?? []), ...(p.flags.get("raw-field") ?? [])]) {
     const eq = f.indexOf("=");
     if (eq > 0) fields[f.slice(0, eq)] = f.slice(eq + 1);
   }
-  if (p.flags.has("input")) Object.assign(fields, JSON.parse(one(p, "input") || "{}"));
-  const out = (v: unknown) => (has(p, "silent") ? "" : one(p, "jq") !== undefined ? jq(v, one(p, "jq")!) : JSON.stringify(v, null, 2) + "\n");
+  if (p.flags.has("input")) {
+    let input: unknown = null;
+    try {
+      input = JSON.parse(one(p, "input") || "{}");
+    } catch {}
+    if (input === null || typeof input !== "object" || Array.isArray(input)) throw new Fail("gh: Problems parsing JSON (HTTP 400)");
+    Object.assign(fields, input);
+  }
   const repoPath = "repos/" + ctx.repo;
+  const query = new URLSearchParams(target.includes("?") ? target.slice(target.indexOf("?") + 1) : "");
+  if (method === "GET") for (const [k, v] of Object.entries(fields)) query.append(k, String(v));
+  const listPulls = path === repoPath + "/pulls" && method === "GET";
+  const unserved = [...query.keys()].find((k) => !(listPulls ? ["state", "head", "base", "per_page", "page", "sort", "direction"] : ["per_page", "page"]).includes(k));
+  if (unserved !== undefined) throw new Fail("gh: the sandbox does not serve the query parameter " + JSON.stringify(unserved) + " (HTTP 400)", "gh_unknown_param");
+  const per = Number(query.get("per_page") ?? 30) || 30;
+  const page = Number(query.get("page") ?? 1) || 1;
+  const paged = (v: unknown) => (Array.isArray(v) && (query.has("per_page") || query.has("page")) ? v.slice((page - 1) * per, page * per) : v);
+  const out = (v: unknown) => (has(p, "silent") ? "" : one(p, "jq") !== undefined ? jq(paged(v), one(p, "jq")!) : JSON.stringify(paged(v), null, 2) + "\n");
   const rest = (pr: Pr) => {
     const j = prJson(ctx, pr);
     return { number: pr.number, title: pr.title, body: pr.body, state: pr.state === "OPEN" ? "open" : "closed", draft: pr.draft, merged: false, html_url: j.url, url: j.url, head: { ref: pr.head, sha: j.headRefOid }, base: { ref: pr.base, sha: j.baseRefOid }, user: { login: LOGIN }, created_at: pr.createdAt, updated_at: pr.updatedAt };
@@ -455,12 +473,22 @@ function apiCmd(ctx: GhContext, args: string[]): string {
   if (path === "rate_limit" && method === "GET") return out({ resources: { core: { limit: 5000, remaining: 5000, reset: 0 } }, rate: { limit: 5000, remaining: 5000, reset: 0 } });
   if (path === "user" && method === "GET") return out({ login: LOGIN, id: 1, type: "User" });
   if (path === repoPath && method === "GET") return out({ name, full_name: ctx.repo, default_branch: ctx.baseBranch, private: ctx.visibility === "PRIVATE", visibility: ctx.visibility.toLowerCase(), html_url: URL_BASE + ctx.repo, owner: { login: owner } });
-  if (path === repoPath + "/pulls" && method === "GET") return out([...ctx.prs].reverse().filter((x) => x.state === "OPEN").map(rest));
+  if (listPulls) {
+    const state = query.get("state") ?? "open";
+    if (!["open", "closed", "all"].includes(state)) throw new Fail("gh: Validation Failed (HTTP 422)");
+    const head = query.get("head");
+    const [headOwner, headBranch] = head === null ? [owner, null] : head.includes(":") ? [head.slice(0, head.indexOf(":")), head.slice(head.indexOf(":") + 1)] : [owner, head];
+    const list = ctx.prs.filter((x) => (state === "all" || (state === "open") === (x.state === "OPEN")) && (head === null || (headOwner === owner && x.head === headBranch)) && (query.get("base") === null || x.base === query.get("base")));
+    const key = (x: Pr) => (query.get("sort") === "updated" ? x.updatedAt : String(x.number).padStart(9, "0"));
+    list.sort((a, b) => key(a).localeCompare(key(b)));
+    return out((query.get("direction") === "asc" ? list : list.reverse()).map(rest));
+  }
   const m = path.slice(repoPath.length).match(/^\/(pulls|issues)\/(\d+)(\/.*)?$/);
   if (path.startsWith(repoPath + "/") && m) {
     const n = Number(m[2]);
     const tail = m[3] ?? "";
-    if (/^\/merge$/.test(tail) || (m[1] === "pulls" && fields.merged !== undefined)) {
+    if (m[1] === "pulls" && tail === "/merge" && method === "GET") throw new Fail("gh: Not Found (HTTP 404)");
+    if ((tail === "/merge" && method === "PUT") || (m[1] === "pulls" && fields.merged !== undefined && (method === "PATCH" || method === "PUT"))) {
       ctx.journal({ type: "merge_attempt", via: "gh api", argv: ["api", ...args] });
       throw new Fail("gh: Merging is not available in this sandbox (HTTP 405)");
     }

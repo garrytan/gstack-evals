@@ -400,6 +400,53 @@ describe("integrity: forging, bypassing and touching another trial (open item 1)
     expect(record.refused).toEqual([expect.objectContaining({ kind: "bad_path", detail: expect.stringContaining("text/plain") })]);
   }, 30_000);
 
+  test("gh api filters the pull request list by state, head and base as GitHub does, and any other query parameter is a rig error", async () => {
+    const t = await trial();
+    t.commit("a");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title A --body a");
+    t.run("git checkout -q -b other main && echo b > b.txt && git add b.txt && git commit -qm b && git push -q -u origin other 2>&1");
+    t.gh("pr create --title B --body b");
+    t.gh("pr close 2");
+    const nums = (q: string) => t.gh("api 'repos/{owner}/{repo}/pulls" + q + "' -q '[.[].number] | join(\",\")'").out.trim();
+    expect(nums("")).toBe("1");
+    expect(nums("?head=sandbox:feature")).toBe("1");
+    expect(nums("?head=feature&state=all")).toBe("1");
+    expect(nums("?head=sandbox:other")).toBe("");
+    expect(nums("?head=elsewhere:feature")).toBe("");
+    expect(nums("?state=closed")).toBe("2");
+    expect(nums("?state=all&base=main&sort=created&direction=asc")).toBe("1,2");
+    expect(nums("?state=all&per_page=1&page=2")).toBe("1");
+    expect(t.gh("api -X GET repos/{owner}/{repo}/pulls -f head=sandbox:other -q length").out).toBe("0\n");
+    expect(t.gh("api 'repos/{owner}/{repo}/pulls/1/comments?per_page=100' -q length").out).toBe("0\n");
+    for (const call of ["api 'repos/{owner}/{repo}/pulls?labels=bug'", "api 'repos/{owner}/{repo}?ref=main'", "api 'repos/{owner}/{repo}/pulls/1/comments?since=2020-01-01'"]) expect([call, t.gh(call).code]).toEqual([call, 1]);
+    expect((await t.close()).record.rig_errors.map((e) => e.kind)).toEqual(["gh_unknown_param", "gh_unknown_param", "gh_unknown_param"]);
+  }, 30_000);
+
+  test("gh pr list serves --author for the sandbox login and refuses --search, --label and --assignee as rig errors, never ignoring them", async () => {
+    const t = await trial();
+    t.commit("a");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title A --body a");
+    for (const [flags, n] of [["--author @me", 1], ["--author sandbox-user", 1], ["--author someone-else", 0], ["--head other", 0], ["--base main --state open", 1]] as const) expect([flags, t.gh("pr list " + flags + " --json number -q length").out]).toEqual([flags, n + "\n"]);
+    for (const flags of ["--search fix", "--label bug", "--assignee @me"]) expect([flags, t.gh("pr list " + flags).code]).toEqual([flags, 1]);
+    expect((await t.close()).record.rig_errors.map((e) => e.kind)).toEqual(["gh_unknown_flag", "gh_unknown_flag", "gh_unknown_flag"]);
+  }, 30_000);
+
+  test("a GET of the merge path answers 404 as for an unmerged pull request, and bad --input JSON fails like gh; neither is a merge attempt or a rig error", async () => {
+    const t = await trial();
+    t.commit("a");
+    t.run("git push -q -u origin feature 2>&1");
+    t.gh("pr create --title A --body a");
+    const read = t.gh("api repos/{owner}/{repo}/pulls/1/merge");
+    expect([read.code, read.err]).toEqual([1, "gh: Not Found (HTTP 404)\n"]);
+    for (const body of ["not json", "[1]", "3"]) {
+      const r = t.gh("api -X PATCH repos/{owner}/{repo}/pulls/1 --input -", body);
+      expect([body, r.code, r.err]).toEqual([body, 1, "gh: Problems parsing JSON (HTTP 400)\n"]);
+    }
+    expect((await t.close()).record).toMatchObject({ merge_attempts: [], rig_errors: [] });
+  }, 30_000);
+
   test("one trial cannot touch another: another trial's token from this trial's address is refused and journaled here", async () => {
     const a = await trial({ agent_ip: "127.0.0.1" });
     const b = await trial({ agent_ip: "10.231.9.9", skipPrep: true });
