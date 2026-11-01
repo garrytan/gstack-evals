@@ -106,6 +106,74 @@ def test_only_the_closing_question_is_checked_for_ship_words():
     assert [e["source"] for e in events if e["event"] == "prose"] == ["fallback", "build_turn_ship_question"], events
 
 
+def test_a_build_turn_recommendation_to_ship_is_never_approved():
+    u = user()
+    u.start("build")
+    for text in (
+        "I recommend pushing this and opening a PR. Want me to?",
+        "I recommend pushing this branch and opening a PR.\n\nWant me to go ahead?",
+        "Next step: git push.\nShould I go ahead?",
+        "I'd suggest we open a pull request now.\n\nShall I?",
+        "I recommend we ship it.\n\nOK to proceed?",
+        "I can merge this into main.\n\nDo you want me to do that?",
+    ):
+        assert u.prose(text) is None, text
+    events = [json.loads(line) for line in u.log_path.read_text().splitlines()]
+    assert [e["source"] for e in events if e["event"] == "prose"] == ["build_turn_ship_question"] * 6, events
+    u.start("ship")
+    assert u.prose("I recommend pushing this branch and opening a PR.\n\nWant me to go ahead?") == PERSONA["fallback"]
+
+
+def test_a_build_turn_recommendation_that_does_not_ship_gets_the_fallback():
+    u = user()
+    u.start("build")
+    assert u.prose("I recommend adding a test for X. Should I?") == PERSONA["fallback"]
+    assert u.prose("I recommend adding a test for X.\n\nShould I?") == PERSONA["fallback"]
+    assert u.counts["build"]["prose"] == 2 and u.counts["build"]["prose_unanswered"] == 0, u.counts
+
+
+def test_background_progress_keeps_the_wait_open_and_silence_expires_it():
+    import asyncio
+    import time
+
+    class SystemMessage:
+        def __init__(self, subtype, **data):
+            self.subtype, self.data = subtype, {"subtype": subtype, **data}
+
+    class ResultMessage:
+        subtype, is_error = "success", False
+
+    class Client:
+        async def query(self, text):
+            pass
+
+    async def drive(progress_sec):
+        q = asyncio.Queue()
+        agent = types.SimpleNamespace(limits={"quiet_sec": 0.2, "bg_wait_sec": 0.6})
+
+        async def feed():
+            q.put_nowait(("message", SystemMessage("task_started", task_id="bg1")))
+            q.put_nowait(("message", ResultMessage()))
+            await asyncio.sleep(0.4)
+            stop = time.time() + progress_sec
+            while time.time() < stop:
+                q.put_nowait(("message", SystemMessage("task_progress", task_id="bg1")))
+                await asyncio.sleep(0.1)
+            if progress_sec:
+                q.put_nowait(("message", SystemMessage("task_notification", task_id="bg1", status="completed")))
+
+        feeder = asyncio.ensure_future(feed())
+        t0 = time.time()
+        end = await ra.RealAgent._drive(agent, Client(), q, user(), "ship", "/ship", t0 + 10, lambda m, p: None)
+        feeder.cancel()
+        return end, time.time() - t0
+
+    end, took = asyncio.run(drive(1.5))
+    assert end["end"] == "quiet" and end["active_tasks"] == [] and took >= 1.9, (end, took)
+    end, took = asyncio.run(drive(0))
+    assert end["end"] == "bg_wait_expired" and end["active_tasks"] == ["bg1"] and took < 2, (end, took)
+
+
 def test_a_stale_question_before_a_tool_call_gets_no_reply():
     import asyncio
     import time

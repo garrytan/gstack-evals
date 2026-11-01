@@ -40,7 +40,7 @@ describe.skipIf(!HAS_SDK)("the two-turn agent on the real pinned Agent SDK, with
     const out = r.stdout + r.stderr;
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(9);
+    expect(out.match(/^PASS /gm)?.length).toBe(12);
     expect(r.status).toBe(0);
   }, 300_000);
 });

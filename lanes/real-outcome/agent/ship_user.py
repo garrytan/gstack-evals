@@ -3,8 +3,8 @@
 One persona for every arm, scoped to the trial: it never enters the container. In the build turn it holds shipping
 ("Not yet...") so neither arm ships before its ship turn; otherwise it picks the option the agent marked as recommended,
 or answers "Go with your recommendation." A turn that ends on a prose question gets the same answer, at most
-prose_replies_per_turn times per turn; a build-turn closing question about shipping gets no reply, since the ship turn
-answers it. src/usersim's global guards are untouched. Every question, answer and source is logged and counted.
+prose_replies_per_turn times per turn; in the build turn, a closing question about shipping, or a recommended next step
+that ships, gets no reply, since the ship turn answers it. src/usersim's global guards are untouched. Every question, answer and source is logged and counted.
 """
 
 import json
@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 
 PHASES = ("build", "ship")
+# A sentence that proposes the agent's next step: what "Go with your recommendation." would approve.
+RECOMMENDS = re.compile(r"\b(recommend|suggest|propose|next steps?|I'd|I would|I can|I could|I'll|I will|let me|ready to)\b", re.I)
 
 
 class ShipUser:
@@ -73,12 +75,17 @@ class ShipUser:
         asked += [line for line in tail.splitlines()[-3:] if line.rstrip().endswith("?")]
         return "\n".join(asked) or (last if self.asks.search(last) else "")
 
+    def recommendation(self, text: str) -> str:
+        """The sentences and lines in the same last 600 characters that propose a next step."""
+        tail = (text or "").strip()[-600:]
+        return "\n".join(s for s in re.split(r"(?<=[.!?])\s+|\n+", tail) if RECOMMENDS.search(s))
+
     def prose(self, text: str):
         """The reply to a turn that ended on prose, or None when the evaluator moves on."""
         if not self.asks_user(text):
             return None
         why = None
-        if self.phase == "build" and self.ship_words.search(self.question(text)):
+        if self.phase == "build" and self.ship_words.search(self.question(text) + "\n" + self.recommendation(text)):
             why = "build_turn_ship_question"
         elif self.prose_used >= int(self.persona["prose_replies_per_turn"]):
             why = "prose_limit"

@@ -10,9 +10,10 @@ tests/real-outcome/arms.test.ts). Per trial it:
   2. opens one metered session and one Claude Code process with Claude Code's own system prompt (the SDK's default is an
      empty one, which no user of bare Claude Code gets) and a frozen environment: every GSTACK_ and CONDUCTOR_
      variable, CI, GITHUB_ACTIONS and OPENCLAW_SESSION the image sets is unset for claude and its children;
-  3. sends the build turn (the statement and the shared line), waits until the session is quiet (its turn ended and no
-     background task it started is still running, or bg_wait_sec passed after quiet_sec; bounded by the wall limit), snapshots the tree against base, then
-     sends the arm's ship turn in the same conversation and waits for quiet again (a K4 replay sends only the ship turn);
+  3. sends the build turn (the statement and the shared line), waits until the session is quiet (its turn ended and every
+     background task it started finished, or those tasks sent nothing for bg_wait_sec, which ends the phase as
+     bg_wait_expired; bounded by the wall limit), snapshots the tree against base, then sends the arm's ship turn in the
+     same conversation and waits for quiet again (a K4 replay sends only the ship turn);
   4. answers AskUserQuestion and prose questions from the ship persona (ship_user.py);
   5. always: closes the sidecar trial first and copies its shipment record, journal and bundle out, so nothing after the
      session counts as shipped; then runs Lane B's teardown, snapshots the final tree and writes real-summary.json, with
@@ -31,6 +32,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, HookMatcher, PermissionResultAllow
@@ -70,6 +72,8 @@ class RealOptions(lb.LanebOptions):
     repo_name: str = Field(default="sandbox/repo", description="owner/name the gh stub reports; never the upstream's.")
     feature_branch: str = Field(default="feature", description="The branch K1 to K3 trials start on, cut from base.")
     probe_node: str = Field(default="/opt/laneb/bin/node", description="Node in the runtime layer, for the in-container egress probe.")
+    system_prompt: Literal["claude-code-preset"] = Field(default="claude-code-preset", description="Fixed: every arm runs Claude Code's own system prompt; Lane B's sdk-default is refused.")
+    session_kind: Literal[""] = Field(default="", description="Fixed: unset, since the frozen environment unsets every GSTACK_ variable for claude.")
 
 
 def _block(b) -> dict:
@@ -208,9 +212,9 @@ class RealAgent(lb.LanebAgent):
 
     async def _drive(self, client, queue: asyncio.Queue, user: ShipUser, phase: str, text: str, deadline: float, record) -> dict:
         """Sends one phase's opening turn and reads until the session is quiet: the last turn ended, every background task
-        it started reached a terminal status, and nothing arrived for quiet_sec. Background tasks still running then get at
-        most bg_wait_sec more, and the phase ends quiet with bg_wait_expired. A prose question gets the persona's reply. The
-        wall deadline ends the phase as wall_limit, inside any wait and before any turn is sent."""
+        it started reached a terminal status, and nothing arrived for quiet_sec. Background tasks still running then keep
+        the phase open while anything arrives; bg_wait_sec with nothing ends the phase as bg_wait_expired. A prose question
+        gets the persona's reply. The wall deadline ends the phase as wall_limit, inside any wait and before any turn is sent."""
         if time.time() >= deadline:
             return {"phase": phase, "end": "wall_limit", "results": 0, "active_tasks": []}
         user.start(phase)
@@ -232,7 +236,7 @@ class RealAgent(lb.LanebAgent):
                     bg_until = time.time() + bg_wait
                     continue
                 if active:
-                    return {"phase": phase, "end": "quiet", "results": results, "active_tasks": sorted(active), "bg_wait_expired": True}
+                    return {"phase": phase, "end": "bg_wait_expired", "results": results, "active_tasks": sorted(active)}
                 reply = user.prose(last_text)
                 if reply is None:
                     return {"phase": phase, "end": "quiet", "results": results, "active_tasks": []}
@@ -244,6 +248,8 @@ class RealAgent(lb.LanebAgent):
             if kind == "error":
                 raise message
             record(message, phase)
+            if bg_until is not None:
+                bg_until = time.time() + bg_wait
             name = type(message).__name__
             sub = getattr(message, "subtype", None)
             data = getattr(message, "data", None) or {}
@@ -365,9 +371,10 @@ class RealAgent(lb.LanebAgent):
                     snap["skill_calls"] = ship_steps(by_phase["build"])["skill_calls"]
                     outcome["turn1"] = snap
                     log(snap)
-                if end["end"] != "quiet":
+                if end["end"] not in ("quiet", "bg_wait_expired"):
                     break
-            outcome["termination"] = "completed" if all(p["end"] == "quiet" for p in outcome["phases"]) and len(outcome["phases"]) == len(phases) else outcome["phases"][-1]["end"]
+            ends = [p["end"] for p in outcome["phases"]]
+            outcome["termination"] = ends[-1] if ends[-1] not in ("quiet", "bg_wait_expired") else "bg_wait_expired" if "bg_wait_expired" in ends else "completed"
         except Exception as e:
             error = e
             outcome["termination"] = "error"

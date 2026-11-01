@@ -160,6 +160,28 @@ elif SCENARIO == "updated_killed":
     next_user()
     text("Nothing to ship.")
     result()
+elif SCENARIO == "bg_progress":
+    bash("npm run review", background=True)
+    system("task_started", task_id="bg1", description="review agents", tool_use_id="x", task_type="local_agent")
+    text("Started the review agents in the background.")
+    result()
+    log("build_result")
+    time.sleep(1.5)
+    for _ in range(8):
+        system("task_progress", task_id="bg1", description="review agents", usage={"total_tokens": 1, "tool_uses": 1, "duration_ms": 1}, tool_use_id="x", last_tool_name="Read")
+        time.sleep(0.4)
+    system("task_notification", task_id="bg1", status="completed", output_file="/tmp/bg1.out", summary="review done")
+    log("task_done")
+elif SCENARIO == "ship_bg_silent":
+    text("Implemented mul.")
+    result()
+    next_user()
+    bash("npm run checks", background=True)
+    system("task_started", task_id="bg3", description="checks", tool_use_id="x", task_type="local_agent")
+    system("task_progress", task_id="bg3", description="checks", usage={"total_tokens": 1, "tool_uses": 1, "duration_ms": 1}, tool_use_id="x")
+    text("Running the checks in the background.")
+    result()
+    log("ship_result")
 elif SCENARIO == "turn_never_ends":
     text("Working.")
     next_user()

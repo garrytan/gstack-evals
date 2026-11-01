@@ -184,8 +184,28 @@ def test_a_task_that_never_ends_gets_bg_wait_sec_then_the_ship_turn():
     users_t = [e["t"] for e in c.events if e["event"] == "user"]
     check(c.users() == [STATEMENT + "\n\n" + ARMS["build_suffix"], ARMS["arms"]["none"]["turn2"]], c.users())
     check(users_t[1] - users_t[0] >= 2.5, "the ship turn waited quiet_sec, then bg_wait_sec, for the task")
-    check(s["phases"][0]["end"] == "quiet" and s["phases"][0]["active_tasks"] == ["bg1"] and s["phases"][0].get("bg_wait_expired") is True, s["phases"])
-    check(s["termination"] == "completed", s["termination"])
+    check([p["end"] for p in s["phases"]] == ["bg_wait_expired", "quiet"] and s["phases"][0]["active_tasks"] == ["bg1"], s["phases"])
+    check(s["termination"] == "bg_wait_expired", s["termination"])
+
+
+def test_background_progress_keeps_the_wait_open_past_bg_wait_sec():
+    c = Case("bg-progress", scenario="bg_progress", bg_wait=2).run()
+    s = c.summary
+    check(c.users() == [STATEMENT + "\n\n" + ARMS["build_suffix"], ARMS["arms"]["none"]["turn2"]], c.users())
+    check(c.at("task_done") - c.at("build_result") >= 4, "the task sent progress past quiet_sec plus bg_wait_sec")
+    sent = [e["ts"] for e in map(json.loads, (c.evdir / "usersim-events.jsonl").read_text().splitlines()) if e["event"] == "phase" and e["phase"] == "ship"]
+    check(sent[0] > c.at("task_done"), "the ship turn went out only after the task ended, while its progress arrived")
+    check(s["phases"][0] == {"phase": "build", "end": "quiet", "results": 1, "active_tasks": []}, s["phases"])
+    check(s["termination"] == "completed" and [p["end"] for p in s["phases"]] == ["quiet", "quiet"], s["phases"])
+
+
+def test_a_silent_background_task_ends_the_ship_phase_as_bg_wait_expired():
+    c = Case("ship-bg-silent", scenario="ship_bg_silent", bg_wait=2).run()
+    s = c.summary
+    check([p["end"] for p in s["phases"]] == ["quiet", "bg_wait_expired"] and s["phases"][1]["active_tasks"] == ["bg3"], s["phases"])
+    check(s["termination"] == "bg_wait_expired" and c.context.metadata["real_outcome"]["termination"] == "bg_wait_expired", s["termination"])
+    record = json.loads((c.evdir / "shipment.json").read_text())
+    check(record["close_reason"] == "bg_wait_expired" and record["status"] == "none", (record["close_reason"], record["status"]))
 
 
 def test_a_turn_that_never_ends_hits_the_wall_and_nothing_ships():
@@ -214,6 +234,19 @@ def test_a_task_killed_through_task_updated_counts_as_ended():
     users_t = [e["t"] for e in c.events if e["event"] == "user"]
     check(len(users_t) == 2 and users_t[1] > c.at("task_done"), c.users())
     check(c.summary["termination"] == "completed", c.summary["phases"])
+
+
+def test_the_system_prompt_is_claude_codes_own_and_no_option_changes_it():
+    kw = dict(logs_dir=TMP / "options", model_name="anthropic/claude-opus-5-5", base_url="http://127.0.0.1:9", task_json="unused", arm="none", arm_tar="unused", upstream_model="claude-opus-5-5")
+    a = ra.RealAgent(**kw)
+    check((a.options.system_prompt, a.options.session_kind) == ("claude-code-preset", ""), (a.options.system_prompt, a.options.session_kind))
+    for bad in ({"system_prompt": "sdk-default"}, {"session_kind": "unattended"}):
+        try:
+            ra.RealAgent(**kw, **bad)
+        except ValueError as e:
+            check(f"{next(iter(bad))}: Input should be" in str(e), str(e))
+            continue
+        raise AssertionError(f"{bad} was accepted")
 
 
 def test_k4_sends_only_the_replay_turn_per_arm():
