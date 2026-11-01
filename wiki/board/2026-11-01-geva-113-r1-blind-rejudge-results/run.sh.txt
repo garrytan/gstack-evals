@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# R1 real run (GEVA-113, under the GEVA-101 prereg, #112, section 2). This file joins the six phase scripts that ran on
+# 2026-11-01, in order, with their machine paths replaced by the variables below. Each command is the one that ran.
+# Phases A, B1, C1 and D are keyless; B2 and C2 are the two paid judge-run batches.
+# Usage: R=<gstack-evals at 715f837> D=<the prereg bundle at f0b81c0> ARMC=<org drive handoffs/GSTA-167/arm-C>
+#   REV=<GEVA-89 archive judge dir> SCRUB=<dir with scrub.ts, scrub2.ts and r1-scrub3.ts> GSRC=<gstack clone>
+#   GBSRC=<gbrain clone> REC=<ledger approval record dir> GSTACK_LAUNCH_FILE=<gstack launch file, for gstack-approvals>
+#   bash run.sh <empty work dir>
+set -u
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+export R
+RAW=$REV/raw/stacks-r1
+LED=$W/ledger.sqlite
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+G="$R/bin/gstack-evals noloss"
+L="$R/bin/gstack-evals ledger"
+S1=$R/lanes/review-noloss/suites/gsta167-14pr.json
+SID=gsta167-14pr
+X=$W/r1
+ARMS="C none-opus gstack-opus"
+COMP=$W/bin/comparisons.r1.json
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+WORDS="R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)."
+SRC="Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-113 (GST-846)"
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*"; "$@" > "$W/log/$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/$n.txt" | head -30; echo "exit $c (log/$n.txt)"; }
+keyless() { ( unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY; "$@" ); }
+. "$GSTACK_LAUNCH_FILE"
+mkdir -p "$W/log" "$W/bin"
+for f in "$D"/*.txt; do b=$(basename "$f" .txt); case "$b" in *.ts|*.py|*.sh) cp "$f" "$W/bin/$b";; esac; done
+cp "$D"/*.json "$W/bin/"
+for f in scrub.ts scrub2.ts r1-scrub3.ts; do cp "$SCRUB/$f" "$W/bin/$f"; done
+
+# Phase A (keyless): pins, scrub digests, source arms, scrub, publication scan, blinding, ingest, procedure gate.
+keyless step . git -C "$R" log -1 --format='rig %H %s'
+keyless step . sh -c "git -C $R status --porcelain | wc -l"
+keyless step . sh -c "cd $D && sha256sum blind.py.txt comparisons.r1.json items.ts.txt judge-fake.ts.txt r1-arms.py.txt r1-decide.py.txt r1-exposure.py.txt r1-scrub.sh.txt"
+keyless step 'OK|FAILED' sh -c "cd $W/bin && printf '%s  %s\\n' c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e scrub.ts cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237 scrub2.ts 3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886 r1-scrub3.ts | sha256sum -c"
+sh -c "cd $W/bin && printf '%s  %s\\n' c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e scrub.ts cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237 scrub2.ts 3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886 r1-scrub3.ts | sha256sum -c --status" || { echo "E_R1_SCRUB a scrub script differs from its pinned digest; stopping before any scrub runs"; exit 1; }
+keyless step '^(arm|suite|E_)' python3 "$W/bin/r1-arms.py" "$ARMC" "$RAW" "$R" "$W/r1src"
+keyless step '^(scan|left)' bash "$W/bin/r1-scrub.sh" "$W/r1src/C" "$W/bin/scrub.ts" "$W/bin/scrub2.ts" "$W/bin/r1-scrub3.ts"
+for a in $ARMS; do keyless step 'E_|check|pass|scan' $G ingest "$W/r1src/$a" --suite "$S1" --check; done
+keyless step '^(reader|C:|none|gstack|E_)' python3 "$W/bin/blind.py" "$S1" "$W/r1src/C" "$W/r1src/none-opus" "$W/r1src/gstack-opus"
+for a in $ARMS; do keyless step 'ingested|published|E_' $G ingest "$W/r1src/$a" --suite "$S1" --root "$X/raw"; done
+keyless step . sh -c "cd $W/r1src/C && python3 -c \"import csv,sys; r=[x for x in csv.DictReader(open('cost.tsv'),delimiter='\\t')]; print('arm C cost rows', len(r))\""
+keyless step '^(exposure|gate|E_)' python3 "$W/bin/r1-exposure.py" "$S1" "$W/r1src/C"
+
+# Phase B1 (keyless): ledger items at their caps, matching packets, judge-run's worst case.
+keyless step . $L init --item r1-judge-match --cap 25 --admission warn --words "$WORDS" --by GSTA-2 --source "$SRC" --branch geva-113-r1-results --ledger "$LED" --ledger-record "$REC"
+keyless step . $L init --item r1-judge-adjudicate --cap 15 --admission warn --words "$WORDS" --by GSTA-2 --source "$SRC" --branch geva-113-r1-results --ledger "$LED" --ledger-record "$REC"
+keyless step . $L status --ledger "$LED" --ledger-record "$REC"
+keyless step 'packet|E_' $G judge-packet --suite "$S1" $(arms $X/raw/$SID $ARMS) --seed 20261031 --out "$X/match" --key "$X/match-key.json"
+J="--suite $S1 --packets $X/match --key $X/match-key.json $(arms $X/raw/$SID $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $LED --record $REC"
+keyless step '^(worst case|item )|E_' $G judge-run $J --item r1-judge-match --out "$X/judge-match" --dry-run
+
+# Phase B2 (paid): the matching batch on r1-judge-match.
+step . $G judge-run $J --item r1-judge-match --out "$X/judge-match" --concurrency 4
+
+# Phase C1 (keyless): join and ingest the matching batch, adjudication packets, judge-run's worst case.
+keyless step 'lease|state|E_' sh -c "jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $X/judge-match/run.json"
+keyless step . $L status --ledger "$LED" --ledger-record "$REC"
+keyless step 'judge-join|E_' $G judge-join --suite "$S1" --key "$X/match-key.json" --reply "$X/judge-match/primary.json" --second "$X/judge-match/second.json" --third "$X/judge-match/third.json" $(arms $X/raw/$SID $ARMS) --out "$X/judge-match/joined"
+for a in $ARMS; do keyless step 'published|E_' $G ingest "$X/judge-match/joined/$a" --suite "$S1" --root "$X/judged"; done
+keyless step 'packet|E_' $G judge-packet --suite "$S1" $(arms $X/judged/$SID $ARMS) --seed 20261031 --out "$X/adj" --key "$X/adj-key.json" --adjudicate
+A="--suite $S1 --packets $X/adj --key $X/adj-key.json $(arms $X/judged/$SID $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $LED --record $REC --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC"
+keyless step '^(worst case|item )|E_' $G judge-run $A --item r1-judge-adjudicate --out "$X/judge-adj" --dry-run
+
+# Phase C2 (paid): the adjudication batch on r1-judge-adjudicate.
+step . $G judge-run $A --item r1-judge-adjudicate --out "$X/judge-adj" --concurrency 4
+
+# Phase D (keyless): join and ingest the adjudication batch, the ledger, the scores, the secondary and the decision.
+keyless step 'lease|state|E_' sh -c "jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $X/judge-adj/run.json"
+keyless step 'judge-join|E_' $G judge-join --suite "$S1" --key "$X/adj-key.json" --reply "$X/judge-adj/primary.json" --second "$X/judge-adj/second.json" --third "$X/judge-adj/third.json" $(arms $X/judged/$SID $ARMS) --out "$X/judge-adj/joined"
+for a in $ARMS; do keyless step 'published|E_' $G ingest "$X/judge-adj/joined/$a" --suite "$S1" --root "$X/final"; done
+keyless step . $L status --ledger "$LED" --ledger-record "$REC"
+for id in C-vs-none C-vs-gstack gstack-vs-none; do
+  v=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .variant' "$COMP"); r=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .reference' "$COMP")
+  keyless step . $G score --suite "$S1" --root "$X/final" --prereg "$COMP" --variant $v --reference $r --out "$X/score-$id.json"
+done
+keyless step . $G secondary --suite "$S1" --root "$X/final" --variant C --reference none-opus --seed 20261031
+keyless step . python3 "$W/bin/r1-decide.py" "$X/score-C-vs-none.json" "$W/r1src/C" "$X/final/$SID" "$S1"
+
+# Descriptive readings beside the frozen ones (not frozen, decide nothing): per-arm recall for gstack-opus.
+keyless step . $G secondary --suite "$S1" --root "$X/final" --variant gstack-opus --reference none-opus --seed 20261031
+keyless step . $G secondary --suite "$S1" --root "$X/final" --variant C --reference gstack-opus --seed 20261031

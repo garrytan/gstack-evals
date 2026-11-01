@@ -1,0 +1,242 @@
+pr	scope	input	output	cache_read	cache_write	reasoning	total_tokens	usd	wall_seconds	meter_source	covers	pass
+3593	all	unavailable	unavailable	unavailable	unavailable	unavailable	38586565	unavailable		root-counter-delta		1
+3593	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	62	root-counter-delta		1
+3593	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	85	root-counter-delta		1
+3593	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	85	root-counter-delta		1
+3593	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	108	root-counter-delta		1
+3593	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	109	root-counter-delta		1
+3593	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	150	root-counter-delta		1
+3593	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	273	root-counter-delta		1
+3593	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	335	root-counter-delta		1
+3593	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	42	root-counter-delta		1
+3593	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	261	root-counter-delta		1
+3596	all	unavailable	unavailable	unavailable	unavailable	unavailable	39644751	unavailable		root-counter-delta		1
+3596	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	56	root-counter-delta		1
+3596	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	56	root-counter-delta		1
+3596	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	56	root-counter-delta		1
+3596	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	57	root-counter-delta		1
+3596	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	57	root-counter-delta		1
+3596	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	104	root-counter-delta		1
+3596	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	71	root-counter-delta		1
+3596	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	295	root-counter-delta		1
+3596	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	64	root-counter-delta		1
+3596	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	282	root-counter-delta		1
+3516	all	unavailable	unavailable	unavailable	unavailable	unavailable	45079325	unavailable		root-counter-delta		1
+3516	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	39	root-counter-delta		1
+3516	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	64	root-counter-delta		1
+3516	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	65	root-counter-delta		1
+3516	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	66	root-counter-delta		1
+3516	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	87	root-counter-delta		1
+3516	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	111	root-counter-delta		1
+3516	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	163	root-counter-delta		1
+3516	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	304	root-counter-delta		1
+3516	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	61	root-counter-delta		1
+3516	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	143	root-counter-delta		1
+3524	all	unavailable	unavailable	unavailable	unavailable	unavailable	28014337	unavailable		root-counter-delta		1
+3524	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3524	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3524	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	83	root-counter-delta		1
+3524	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	103	root-counter-delta		1
+3524	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	123	root-counter-delta		1
+3524	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	124	root-counter-delta		1
+3524	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	124	root-counter-delta		1
+3524	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	325	root-counter-delta		1
+3524	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3524	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	223	root-counter-delta		1
+3526	all	unavailable	unavailable	unavailable	unavailable	unavailable	27643922	unavailable		root-counter-delta		1
+3526	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	44	root-counter-delta		1
+3526	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	64	root-counter-delta		1
+3526	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	85	root-counter-delta		1
+3526	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	85	root-counter-delta		1
+3526	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	85	root-counter-delta		1
+3526	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	128	root-counter-delta		1
+3526	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	127	root-counter-delta		1
+3526	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	272	root-counter-delta		1
+3526	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3526	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	206	root-counter-delta		1
+3527	all	unavailable	unavailable	unavailable	unavailable	unavailable	40366509	unavailable		root-counter-delta		1
+3527	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	76	root-counter-delta		1
+3527	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	77	root-counter-delta		1
+3527	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	105	root-counter-delta		1
+3527	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	106	root-counter-delta		1
+3527	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	158	root-counter-delta		1
+3527	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	228	root-counter-delta		1
+3527	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	236	root-counter-delta		1
+3527	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	295	root-counter-delta		1
+3527	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	45	root-counter-delta		1
+3527	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	258	root-counter-delta		1
+3534	all	unavailable	unavailable	unavailable	unavailable	unavailable	26606442	unavailable		root-counter-delta		1
+3534	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	33	root-counter-delta		1
+3534	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	33	root-counter-delta		1
+3534	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	58	root-counter-delta		1
+3534	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	57	root-counter-delta		1
+3534	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	58	root-counter-delta		1
+3534	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	81	root-counter-delta		1
+3534	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	71	root-counter-delta		1
+3534	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	183	root-counter-delta		1
+3534	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	43	root-counter-delta		1
+3534	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	199	root-counter-delta		1
+3540	all	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		root-counter-delta		1
+3545	all	unavailable	unavailable	unavailable	unavailable	unavailable	2652274	unavailable		root-counter-delta		1
+3545	reader:batched	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	82	root-counter-delta		1
+3545	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	205	root-counter-delta		1
+3545	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	63	root-counter-delta		1
+3564	all	unavailable	unavailable	unavailable	unavailable	unavailable	20259383	unavailable		root-counter-delta		1
+3564	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3564	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3564	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	61	root-counter-delta		1
+3564	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	81	root-counter-delta		1
+3564	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	101	root-counter-delta		1
+3564	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	121	root-counter-delta		1
+3564	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	142	root-counter-delta		1
+3564	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	384	root-counter-delta		1
+3564	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	62	root-counter-delta		1
+3564	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	390	root-counter-delta		1
+3567	all	unavailable	unavailable	unavailable	unavailable	unavailable	30550956	unavailable		root-counter-delta		1
+3567	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	43	root-counter-delta		1
+3567	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	65	root-counter-delta		1
+3567	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	86	root-counter-delta		1
+3567	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	107	root-counter-delta		1
+3567	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	107	root-counter-delta		1
+3567	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	228	root-counter-delta		1
+3567	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	249	root-counter-delta		1
+3567	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	390	root-counter-delta		1
+3567	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	40	root-counter-delta		1
+3567	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	325	root-counter-delta		1
+3573	all	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		root-counter-delta		1
+3578	all	unavailable	unavailable	unavailable	unavailable	unavailable	11707673	unavailable		root-counter-delta		1
+3578	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	32	root-counter-delta		1
+3578	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	32	root-counter-delta		1
+3578	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	55	root-counter-delta		1
+3578	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	54	root-counter-delta		1
+3578	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	134	root-counter-delta		1
+3578	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	190	root-counter-delta		1
+3578	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	40	root-counter-delta		1
+3583	all	unavailable	unavailable	unavailable	unavailable	unavailable	19164037	unavailable		root-counter-delta		1
+3583	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3583	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	85	root-counter-delta		1
+3583	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	86	root-counter-delta		1
+3583	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	86	root-counter-delta		1
+3583	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	107	root-counter-delta		1
+3583	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	150	root-counter-delta		1
+3583	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	236	root-counter-delta		1
+3583	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	296	root-counter-delta		1
+3583	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	41	root-counter-delta		1
+3583	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	294	root-counter-delta		1
+3593	all	unavailable	unavailable	unavailable	unavailable	unavailable	40533737	unavailable		root-counter-delta		2
+3593	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	53	root-counter-delta		2
+3593	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	54	root-counter-delta		2
+3593	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	102	root-counter-delta		2
+3593	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	127	root-counter-delta		2
+3593	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	149	root-counter-delta		2
+3593	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	149	root-counter-delta		2
+3593	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	233	root-counter-delta		2
+3593	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	276	root-counter-delta		2
+3593	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	290	root-counter-delta		2
+3593	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	62	root-counter-delta		2
+3596	all	unavailable	unavailable	unavailable	unavailable	unavailable	34774591	unavailable		root-counter-delta		2
+3596	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	240	root-counter-delta		2
+3596	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	42	root-counter-delta		2
+3516	all	unavailable	unavailable	unavailable	unavailable	unavailable	28271937	unavailable		root-counter-delta		2
+3516	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	42	root-counter-delta		2
+3516	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	42	root-counter-delta		2
+3516	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	42	root-counter-delta		2
+3516	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	42	root-counter-delta		2
+3516	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	106	root-counter-delta		2
+3516	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	127	root-counter-delta		2
+3516	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	253	root-counter-delta		2
+3516	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	432	root-counter-delta		2
+3516	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	166	root-counter-delta		2
+3516	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	66	root-counter-delta		2
+3524	all	unavailable	unavailable	unavailable	unavailable	unavailable	20653907	unavailable		root-counter-delta		2
+3524	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	48	root-counter-delta		2
+3524	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	70	root-counter-delta		2
+3524	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	69	root-counter-delta		2
+3524	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	92	root-counter-delta		2
+3524	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	92	root-counter-delta		2
+3524	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	113	root-counter-delta		2
+3524	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	218	root-counter-delta		2
+3524	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	238	root-counter-delta		2
+3524	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	274	root-counter-delta		2
+3524	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	59	root-counter-delta		2
+3526	all	unavailable	unavailable	unavailable	unavailable	unavailable	17124680	unavailable		root-counter-delta		2
+3526	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	52	root-counter-delta		2
+3526	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	59	root-counter-delta		2
+3526	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	58	root-counter-delta		2
+3526	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	101	root-counter-delta		2
+3526	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	95	root-counter-delta		2
+3526	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	148	root-counter-delta		2
+3526	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	233	root-counter-delta		2
+3526	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	316	root-counter-delta		2
+3526	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	205	root-counter-delta		2
+3526	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	47	root-counter-delta		2
+3527	all	unavailable	unavailable	unavailable	unavailable	unavailable	25477246	unavailable		root-counter-delta		2
+3527	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	74	root-counter-delta		2
+3527	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	125	root-counter-delta		2
+3527	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	128	root-counter-delta		2
+3527	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	173	root-counter-delta		2
+3527	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	201	root-counter-delta		2
+3527	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	248	root-counter-delta		2
+3527	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	267	root-counter-delta		2
+3527	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	312	root-counter-delta		2
+3527	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	290	root-counter-delta		2
+3527	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	49	root-counter-delta		2
+3534	all	unavailable	unavailable	unavailable	unavailable	unavailable	22655564	unavailable		root-counter-delta		2
+3534	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	26	root-counter-delta		2
+3534	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	51	root-counter-delta		2
+3534	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	81	root-counter-delta		2
+3534	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	71	root-counter-delta		2
+3534	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	131	root-counter-delta		2
+3534	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	129	root-counter-delta		2
+3534	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	242	root-counter-delta		2
+3534	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	650	root-counter-delta		2
+3534	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	213	root-counter-delta		2
+3534	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	45	root-counter-delta		2
+3540	all	unavailable	unavailable	unavailable	unavailable	unavailable	31566327	unavailable		root-counter-delta		2
+3540	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	48	root-counter-delta		2
+3540	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	118	root-counter-delta		2
+3540	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	115	root-counter-delta		2
+3540	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	163	root-counter-delta		2
+3540	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	295	root-counter-delta		2
+3540	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	133	root-counter-delta		2
+3540	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	62	root-counter-delta		2
+3545	all	unavailable	unavailable	unavailable	unavailable	unavailable	10768564	unavailable		root-counter-delta		2
+3545	reader:batched	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	160	root-counter-delta		2
+3545	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	226	root-counter-delta		2
+3545	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	47	root-counter-delta		2
+3564	all	unavailable	unavailable	unavailable	unavailable	unavailable	44593633	unavailable		root-counter-delta		2
+3564	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	252	root-counter-delta		2
+3564	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	71	root-counter-delta		2
+3567	all	unavailable	unavailable	unavailable	unavailable	unavailable	47303900	unavailable		root-counter-delta		2
+3567	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	45	root-counter-delta		2
+3567	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	90	root-counter-delta		2
+3567	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	90	root-counter-delta		2
+3567	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	110	root-counter-delta		2
+3567	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	133	root-counter-delta		2
+3567	reader:simplification	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	153	root-counter-delta		2
+3567	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	219	root-counter-delta		2
+3567	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	345	root-counter-delta		2
+3567	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	307	root-counter-delta		2
+3567	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	71	root-counter-delta		2
+3573	all	unavailable	unavailable	unavailable	unavailable	unavailable	26407603	unavailable		root-counter-delta		2
+3573	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	44	root-counter-delta		2
+3573	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	44	root-counter-delta		2
+3573	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	67	root-counter-delta		2
+3573	reader:security	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	67	root-counter-delta		2
+3573	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	89	root-counter-delta		2
+3573	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	200	root-counter-delta		2
+3573	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	238	root-counter-delta		2
+3573	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	149	root-counter-delta		2
+3573	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	52	root-counter-delta		2
+3578	all	unavailable	unavailable	unavailable	unavailable	unavailable	10634832	unavailable		root-counter-delta		2
+3578	reader:maintainability	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	52	root-counter-delta		2
+3578	reader:performance	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	55	root-counter-delta		2
+3578	reader:state-machines	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	82	root-counter-delta		2
+3578	reader:outside-voice	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	75	root-counter-delta		2
+3578	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	128	root-counter-delta		2
+3578	reader:testing	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	218	root-counter-delta		2
+3578	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	76	root-counter-delta		2
+3583	all	unavailable	unavailable	unavailable	unavailable	unavailable	58984608	unavailable		root-counter-delta		2
+3583	reader:adversarial-native	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	495	root-counter-delta		2
+3583	reader:red-team	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	540	root-counter-delta		2
+3583	reader:normalizer	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	64	root-counter-delta		2

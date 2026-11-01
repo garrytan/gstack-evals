@@ -1,0 +1,59 @@
+pr	blocker_id	outcome	matched_finding	raw_severity	mapped_severity	judge	saw_label	note	pass
+3593	B1	D	p1-5	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		1
+3593	B1	D	p2-3	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		2
+3593	B2	M				anthropic/claude-opus-5-5	no		1
+3593	B2	M				anthropic/claude-opus-5-5	no		2
+3596	B1	D	p1-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		1
+3596	B1	D	p2-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		2
+3596	B2	D	p1-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	1
+3596	B2	M				anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	2
+3516	B1	F	p1-1	CRITICAL	CRITICAL	anthropic/claude-opus-5-5	no		1
+3516	B1	D	p2-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		2
+3516	B2	M				anthropic/claude-opus-5-5	no		1
+3516	B2	M				anthropic/claude-opus-5-5	no		2
+3524	B1	M				anthropic/claude-opus-5-5	no		1
+3524	B1	M				anthropic/claude-opus-5-5	no		2
+3526	B1	M				anthropic/claude-opus-5-5	no		1
+3526	B1	M				anthropic/claude-opus-5-5	no		2
+3526	B2	M				anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	1
+3526	B2	M				anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	2
+3526	B3	M				anthropic/claude-opus-5-5	no		1
+3526	B3	F	p2-1	CRITICAL	CRITICAL	anthropic/claude-opus-5-5	no		2
+3526	B4	D	p1-2	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		1
+3526	B4	M				anthropic/claude-opus-5-5	no		2
+3527	B1	M				anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	1
+3527	B1	D	p2-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	2
+3527	B2	M				anthropic/claude-opus-5-5	no		1
+3527	B2	M				anthropic/claude-opus-5-5	no		2
+3527	B3	M				anthropic/claude-opus-5-5	no		1
+3527	B3	M				anthropic/claude-opus-5-5	no		2
+3527	B4	M				anthropic/claude-opus-5-5	no		1
+3527	B4	M				anthropic/claude-opus-5-5	no		2
+3534	B1	M				anthropic/claude-opus-5-5	no		1
+3534	B1	D	p2-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		2
+3534	B2	M				anthropic/claude-opus-5-5	no		1
+3534	B2	M				anthropic/claude-opus-5-5	no		2
+3534	B3	M				anthropic/claude-opus-5-5	no		1
+3534	B3	M				anthropic/claude-opus-5-5	no		2
+3534	B4	M				anthropic/claude-opus-5-5	no		1
+3534	B4	M				anthropic/claude-opus-5-5	no		2
+3540	B1	M				anthropic/claude-opus-5-5	no		1
+3540	B1	D	p2-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		2
+3545	B1	F	p1-1	CRITICAL	CRITICAL	anthropic/claude-opus-5-5	no		1
+3545	B1	M				anthropic/claude-opus-5-5	no		2
+3564	B1	F	p1-1	CRITICAL	CRITICAL	anthropic/claude-opus-5-5	no		1
+3564	B1	F	p2-1	CRITICAL	CRITICAL	anthropic/claude-opus-5-5	no		2
+3567	B1	M				anthropic/claude-opus-5-5	no		1
+3567	B1	M				anthropic/claude-opus-5-5	no		2
+3567	B2	M				anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	1
+3567	B2	F	p2-1	CRITICAL	CRITICAL	anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	2
+3567	B3	M				anthropic/claude-opus-5-5	no		1
+3567	B3	M				anthropic/claude-opus-5-5	no		2
+3573	B1	F	p1-1	CRITICAL	CRITICAL	anthropic/claude-opus-5-5	no		1
+3573	B1	D	p2-1	INFORMATIONAL	INFORMATIONAL	anthropic/claude-opus-5-5	no		2
+3578	B1	M				anthropic/claude-opus-5-5	no		1
+3578	B1	M				anthropic/claude-opus-5-5	no		2
+3583	B1	M				anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	1
+3583	B1	F	p2-1	CRITICAL	CRITICAL	anthropic/claude-sonnet-5-5 (third read)	no	the primary and second judges differed; the third read decides	2
+3583	B2	M				anthropic/claude-opus-5-5	no		1
+3583	B2	M				anthropic/claude-opus-5-5	no		2

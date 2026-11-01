@@ -1,0 +1,53 @@
+{
+  "contract_version": 1,
+  "id": "none-opus",
+  "label": "none on claude-opus-5-5",
+  "suite": "gsta167-14pr",
+  "suite_sha256": "20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789",
+  "date": "2026-11-01",
+  "passes": 2,
+  "provenance": "live",
+  "status": "complete",
+  "models": [
+    {
+      "role": "driver",
+      "model": "claude-opus-5-5"
+    }
+  ],
+  "run_by": "review-units-20261101T023540Z-8520",
+  "severity_map": {
+    "default": {
+      "BLOCKER": "CRITICAL",
+      "BLOCKING": "CRITICAL",
+      "HIGH": "CRITICAL",
+      "P0": "CRITICAL",
+      "MEDIUM": "INFORMATIONAL",
+      "LOW": "INFORMATIONAL",
+      "NIT": "INFORMATIONAL",
+      "INFO": "INFORMATIONAL",
+      "blocker": "CRITICAL",
+      "blocking": "CRITICAL",
+      "high": "CRITICAL",
+      "p0": "CRITICAL",
+      "medium": "INFORMATIONAL",
+      "low": "INFORMATIONAL",
+      "nit": "INFORMATIONAL",
+      "info": "INFORMATIONAL",
+      "MAJOR": "CRITICAL",
+      "major": "CRITICAL",
+      "MINOR": "INFORMATIONAL",
+      "minor": "INFORMATIONAL"
+    }
+  },
+  "told": {
+    "arm": "none",
+    "prefix": "",
+    "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+  },
+  "parser_sha256": "584c81bcc40202798713cec9647c3a45c282373b379196e8fee413caa7ddb959",
+  "arm_provenance": {
+    "kind": "bare"
+  },
+  "cell_tree_sha256": "bare:none",
+  "notes": "R1 (GEVA-101): #108's raw arm cut to the 14 gsta167-14pr units, which are byte-identical to stacks-r1's groups a and b."
+}

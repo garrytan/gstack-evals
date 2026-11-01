@@ -1,0 +1,31 @@
+{
+  "contract_version": 1,
+  "suite": "gsta167-14pr",
+  "suite_sha256": "20f10feac5c28fab15a912c9f44dc123c239da9ac32d84f9ec7beee8e970a789",
+  "arm": "gstack-opus",
+  "state": "judged",
+  "provenance": "live",
+  "source_sha256": {
+    "adjudication.tsv": "99a279c99604179219422cca9b218915307757333bbd32c7667384a7a0643d11",
+    "arm.json": "243d2f3dde1c425ff7c07bef76f363055e9a41fe991d49e477a1c7a9908ef72a",
+    "cost.tsv": "6f6e665e0efd67450dc183c4c91d5a37f5eb3ba77705c872456973352a6aecc3",
+    "findings/garrytan__gstack#3516@ee73419c3295.jsonl": "f864d7430390a288178911f08a447f18a1f8757e5b9c45c3d9dc9309f868d055",
+    "findings/garrytan__gstack#3524@205ea0e2e82f.jsonl": "bdb75edd11618d6289822748c2a124aa283d33af95fbca3210fa9d6822de9ee9",
+    "findings/garrytan__gstack#3526@808dead70e32.jsonl": "5b72562b4de25165f42e06f6b87ab43c8ad741e5d80597870ccaf4a8f713d3cd",
+    "findings/garrytan__gstack#3527@2684974602c1.jsonl": "4be14cf33c441d2aa10a3bc8551ef64402ccdd4a4871c87706ae7a3c4233178e",
+    "findings/garrytan__gstack#3534@a76620148c19.jsonl": "6c433c8d16f07eceaf462439da33b2d9ba73874cf71118561d4f888d8a61ae88",
+    "findings/garrytan__gstack#3540@115355a38bd6.jsonl": "dc9aa1eae712cf77e39889dbde865df7b0ef296efc7fba1596003fe333d7334f",
+    "findings/garrytan__gstack#3545@d4f0ea3c314f.jsonl": "72e582880fc59488c7a8e501a60afb0cacecd9e1d9252e9fe5136c760ed00416",
+    "findings/garrytan__gstack#3564@e97b8573502b.jsonl": "d55acf8e579873a36b3f2eea66abacfd7882e1b43589b56939bb2c1e9aea5af6",
+    "findings/garrytan__gstack#3567@2b42ec597e03.jsonl": "0b2dd94bb07ed838cbc83b2c0f1a890d876fa6e4a9e7558f8c27267e8ba2400b",
+    "findings/garrytan__gstack#3573@f3a130c760f8.jsonl": "86cfd370b9bc7f6da08f0af4231dfc4df47cea4e6e01ba62fcc9ad563ddc386c",
+    "findings/garrytan__gstack#3578@0ff98dba1fdd.jsonl": "d5c363e16c8c77bb4af404e3c883dfec4121bdaeb6eed5cbec8a095509dccd48",
+    "findings/garrytan__gstack#3583@f5bcdf71a765.jsonl": "de995ea017b08f99cdfb329f4f1600cfc18267d28bf4a2558fae0052fef976e2",
+    "findings/garrytan__gstack#3593@89156431975e.jsonl": "d4b17f80b6a488fb8101d7c18e6770f9472a28b05a9a03c1f69b514d6e7e1543",
+    "findings/garrytan__gstack#3596@0be7c3d44339.jsonl": "e453cc15b40639123e91a1887b184a9c1f1f32ea3733b93a350e45d54e087032",
+    "judgments.tsv": "808ff49b035e25050bdee454dc367785a4243e2068fd64bed0bbc43c0266adc7"
+  },
+  "tree_sha256": "c43320755180bab4f13f0dde7d2ba1706521a2a6d1de0b4df7f4c9b72bf9a9fe",
+  "digest_only": [],
+  "replaced": null
+}

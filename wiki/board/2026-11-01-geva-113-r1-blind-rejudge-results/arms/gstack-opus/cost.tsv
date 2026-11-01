@@ -1,0 +1,57 @@
+pr	scope	pass	total_tokens	input_tokens	output_tokens	cache_read_tokens	cache_write_tokens	reasoning_tokens	usd	wall_seconds	meter_source	requests	refused	unknown_calls
+garrytan/gstack#3593@89156431975e	all	1	1630539	30	12604	1508704	109201	0	1.099954	201.5	proxy-journal	15	0	0
+garrytan/gstack#3593@89156431975e	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3593@89156431975e	all	2	1300180	28	10325	1191459	98368	0	0.936751	170.7	proxy-journal	14	0	0
+garrytan/gstack#3593@89156431975e	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3596@0be7c3d44339	all	1	1609210	36	9568	1511447	88159	0	0.934596	188.8	proxy-journal	18	0	0
+garrytan/gstack#3596@0be7c3d44339	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3596@0be7c3d44339	all	2	1395227	32	8914	1303683	82598	0	0.852143	136.2	proxy-journal	16	0	0
+garrytan/gstack#3596@0be7c3d44339	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3516@ee73419c3295	all	1	1711364	34	8599	1605249	97482	0	0.980584	176	proxy-journal	17	0	0
+garrytan/gstack#3516@ee73419c3295	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3516@ee73419c3295	all	2	1667128	34	7487	1565781	93826	0	0.932167	144.6	proxy-journal	17	0	0
+garrytan/gstack#3516@ee73419c3295	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3524@205ea0e2e82f	all	1	2347074	46	13014	2233753	100261	0	1.208528	222.8	proxy-journal	23	0	0
+garrytan/gstack#3524@205ea0e2e82f	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3524@205ea0e2e82f	all	2	1393473	30	9567	1294346	89530	0	0.897984	195.4	proxy-journal	15	0	0
+garrytan/gstack#3524@205ea0e2e82f	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3526@808dead70e32	all	1	1733143	32	15083	1607114	110914	0	1.177788	434.8	proxy-journal	16	0	0
+garrytan/gstack#3526@808dead70e32	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3526@808dead70e32	all	2	1239336	26	11170	1135949	92191	0	0.911654	282	proxy-journal	13	0	0
+garrytan/gstack#3526@808dead70e32	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3527@2684974602c1	all	1	1484881	26	10490	1356432	117933	0	1.070860	173.7	proxy-journal	13	0	0
+garrytan/gstack#3527@2684974602c1	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3527@2684974602c1	all	2	2674870	42	13557	2533604	127667	0	1.416371	254.3	proxy-journal	21	0	0
+garrytan/gstack#3527@2684974602c1	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3534@a76620148c19	all	1	752547	20	8400	677750	66377	0	0.635521	119.3	proxy-journal	10	0	0
+garrytan/gstack#3534@a76620148c19	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3534@a76620148c19	all	2	1025557	26	9529	944187	71815	0	0.738602	129.1	proxy-journal	13	0	0
+garrytan/gstack#3534@a76620148c19	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3540@115355a38bd6	all	1	1445641	36	9802	1364653	71150	0	0.824873	246.7	proxy-journal	18	0	0
+garrytan/gstack#3540@115355a38bd6	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3540@115355a38bd6	all	2	1607645	40	8943	1528819	69843	0	0.834008	202	proxy-journal	20	0	0
+garrytan/gstack#3540@115355a38bd6	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3545@d4f0ea3c314f	all	1	746485	20	7469	675281	63715	0	0.603094	156.1	proxy-journal	10	0	0
+garrytan/gstack#3545@d4f0ea3c314f	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3545@d4f0ea3c314f	all	2	807326	22	7645	737819	61840	0	0.609757	129.7	proxy-journal	11	0	0
+garrytan/gstack#3545@d4f0ea3c314f	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3564@e97b8573502b	all	1	2597641	48	16635	2467864	113094	0	1.391944	288.2	proxy-journal	24	0	0
+garrytan/gstack#3564@e97b8573502b	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3564@e97b8573502b	all	2	2505513	50	16619	2389619	99225	0	1.306640	256.8	proxy-journal	25	0	0
+garrytan/gstack#3564@e97b8573502b	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3567@2b42ec597e03	all	1	2210070	38	11388	2077755	120889	0	1.247918	183.4	proxy-journal	19	0	0
+garrytan/gstack#3567@2b42ec597e03	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3567@2b42ec597e03	all	2	3276498	54	15519	3131265	129660	0	1.585161	248.5	proxy-journal	27	0	0
+garrytan/gstack#3567@2b42ec597e03	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3573@f3a130c760f8	all	1	672336	18	5558	601134	65626	0	0.559592	84.8	proxy-journal	9	0	0
+garrytan/gstack#3573@f3a130c760f8	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3573@f3a130c760f8	all	2	807066	22	6339	738026	62679	0	0.587874	141.3	proxy-journal	11	0	0
+garrytan/gstack#3573@f3a130c760f8	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3578@0ff98dba1fdd	all	1	323395	10	3988	270370	49027	0	0.379011	111.9	proxy-journal	5	0	0
+garrytan/gstack#3578@0ff98dba1fdd	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3578@0ff98dba1fdd	all	2	607612	18	6106	548605	52883	0	0.496331	151.2	proxy-journal	9	0	0
+garrytan/gstack#3578@0ff98dba1fdd	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3583@f5bcdf71a765	all	1	3605572	62	16463	3363066	225981	0	2.132038	975.1	proxy-journal	31	0	0
+garrytan/gstack#3583@f5bcdf71a765	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3583@f5bcdf71a765	all	2	1299180	26	11100	1180107	107947	0	0.997865	204.4	proxy-journal	13	0	0
+garrytan/gstack#3583@f5bcdf71a765	voice	2	0	0	0	0	0	0	0.000000		proxy-journal	0		0
