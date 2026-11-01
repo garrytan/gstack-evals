@@ -277,6 +277,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const voice = rig.cells?.[arm.name]?.[model]?.codex?.model;
     if (voice) throw new Error("E_USAGE: plan units run no second model, but arm " + arm.name + "'s cell on " + model + " keeps the voice " + voice + "; build the rig's cells without voices");
   }
+  if (plan && o.arms.some((a) => a.told === "placebo") && o.arms.some((a) => a.name === "gstack" && a.toldPrefix !== undefined)) throw new Error("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
   for (const arm of plan ? o.arms : []) {
     const refused = arm.toldPrefix === undefined ? null : planPrefixProblem(arm.told as PlanArm, plan!.lens, arm.toldPrefix);
     if (refused) throw new Error("E_USAGE: arm " + arm.name + ": --told-prefix: " + refused);

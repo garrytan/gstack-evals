@@ -107,6 +107,7 @@ describe("GEVA-115: the forced arm in the run loop, through the pinned Agent SDK
     const input = { host: "claude", suite: { id: "s", sha256: null }, units: [], arms: [], models: [OPUS], passes: 1, parallel: 1, timeoutS: 120, cap: 0, runId: "r", out: durable(), date: "2026-11-01", policy, keyBase: { image_digest: null, recipe: "t", host_version: null, adapter_sha256: "t", isolation: "process" }, journal: null, plan: { lens: "ceo" }, env: {} } as ReviewRunInput;
     for (const told of ["none", "lens", "placebo", "gstack-auto"] as const) await expect(runReviewUnits({ ...input, arms: [{ name: told, told, toldPrefix: FORCED }] }, rig)).rejects.toThrow("E_USAGE: arm " + told + ": --told-prefix: plan arm " + told + " takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does");
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: "/review " + ASK }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix must be one line that opens with /plan-ceo-review");
+    await expect(runReviewUnits({ ...input, arms: [{ name: "gstack", told: "gstack", toldPrefix: FORCED }, { name: "placebo", told: "placebo" }] }, rig)).rejects.toThrow("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
     expect(bound).toBe(0);
   });
 });
