@@ -1,0 +1,26 @@
+{
+  "run": "D",
+  "models": [
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+    "particle-1",
+    "gpt-6.1-sol"
+  ],
+  "setting": "claude-code-preset",
+  "contrast": {
+    "setting": "sdk-default",
+    "models": [
+      "claude-opus-5-5",
+      "claude-haiku-5-5"
+    ]
+  },
+  "d2": "pooled",
+  "d3": "pooled",
+  "mdd": {
+    "d2_per_model": "24.0 to 27.9",
+    "d2_pooled": "4.5 to 7.9",
+    "d3_per_model": "20.9 to 26.4",
+    "d3_pooled": "10.7 to 15.3"
+  }
+}

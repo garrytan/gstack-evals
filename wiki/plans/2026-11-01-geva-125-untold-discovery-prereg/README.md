@@ -19,6 +19,7 @@ links:
   - GST-821
 attachments:
   - 94b6d363fa149a7e14472a40b68bab7a8c78b7849cf418eb973a8731b476cc75  dryrun.txt
+  - 71aacc056e80e9b041d46bd100cd57b0e0f5297c79684885d144edd53daf4e56  analysis-config.json
 ---
 
 # Preregistration: untold skill discovery (Run D, agenda item 2)
@@ -126,6 +127,8 @@ From each trial's `agent/sdk-messages.jsonl` (the runner's record of every SDK m
 All intervals are 95% percentile intervals from a task-clustered bootstrap: 10,000 resamples of tasks with replacement, seed 20261101. A cell's rate is the mean over tasks of the per-task rate over that cell's trials. A contrast pairs by task over the tasks both cells share. p values are two-sided Monte Carlo sign-flip tests on per-task differences, 100,000 draws, seed 20261101. A pooled contrast takes, for each task, the mean over the models in it of that task's difference, then bootstraps and tests those per-task means, which gives each model equal weight.
 
 The primary readings are on the preset cells. Section 11 sets which tests are primary.
+
+The attached analysis-config.json freezes the analysis keys that carry these choices: `run` D, the five models, `setting` claude-code-preset, the sdk-default `contrast` on Opus 5.5 and Haiku 5.5, `d2` and `d3` pooled, and the MDD ranges from section 11 that the analysis prints. At run time the operator adds only `jobs`, `sessions`, `dropped_tasks`, `listing_check` and `arm_tars`. Any other change to the file is a deviation, and the results post reports it.
 
 **D1, the shipped-description open rate (an estimate per model).** gstack and placebo pooled, preset cells, eligible trials. If no trial opened, D1 reports 0 with the exact one-sided 95% upper bound 1 - 0.05^(1/T), where T is the number of tasks with at least one eligible pooled trial (7.8% for T = 37). The claim "model M opened an untold gstack skill in X% of eligible trials" needs D1's interval to exclude 0; otherwise "fewer than U% (95% upper bound)", with U the interval's upper end or the exact bound.
 
@@ -247,6 +250,8 @@ The preset's system field differs between cells only by the dry run's work folde
 
 **What the dry run did not drive.** Harbor's local smoke stalls on the dry-run machine before its agent opens a proxy session (GEVA-106's finding), so step b drives the pinned SDK and CLI directly with the agent's options instead of through Harbor. The Harbor path is the stacks-3 tag's; #109 ran 1,443 trials on it, and the per-arm system prompt reaches the agent through the same kwargs GEVA-109 tested against the real SDK. The route check (section 8) is Run D's first run through Harbor on the paid path, under the preset. The fake upstream answers every request with one short text reply, so the dry run shows what reaches the model, not what a model does with it.
 
+**The frozen analysis config.** The dry run's synthetic analysis used the test fixtures' configs. After it, a check at the runner tag ran `analysis/discovery-tax.ts` on the synthetic factor run with its `d2`, `d3` and `mdd` keys taken from analysis-config.json. It printed D2 and D3 as pooled primary tests, per-model rows as exploratory, and each MDD as the range written here (for example "MDD 4.5 to 7.9 points" on pooled D2).
+
 ## 11. Power and admission
 
 **Simulation inputs.** `analysis/mdd-sim.ts` at the runner tag; 37 tasks; per-trial opens are Bernoulli; 1,000 simulated datasets per power value, each with 1,000 bootstrap resamples and 1,000 sign-flip draws; seed 20261101; 80% power; a bisection to 0.001 on the effect cell's per-trial open probability. Every claim needs the 95% task-clustered interval to exclude 0, and a test also needs its p below its alpha: D2 per model at Holm's first step across five models (0.01), D3 per model at Holm's first step across two (0.025), each pooled test at 0.05. The baseline (shipped, or sdk-default) rate is 0 or 2%. Opens are uniform over tasks, or confined to the same random 30% of tasks (11 of 37) on every model for the cell that carries the effect. Pooled designs put the effect on every model, or on 2 of the 5. The MDD is in points of the reading itself: the per-model difference, or the pooled mean difference.
@@ -295,7 +300,7 @@ The 20-point margin stays: it is the smallest lift on one model the plan treats 
 ## 12. What each outcome means for gstack
 
 - **Pooled D2 raised.** Saying when to use a skill gets it opened: gstack should rewrite its skill descriptions that way. The exploratory per-model rows say on which models to look first.
-- **Pooled D2 not raised, D1 near 0 under both descriptions.** No evidence that saying when to use a skill gets untold skills opened on these models. The test cannot rule out a lift smaller than its MDD (4.5 to 7.9 points), so the results post reports the interval and does not claim the effect is absent. Untold use may need another route, such as hooks (agenda item 1).
+- **Pooled D2 not raised, D1 near 0 under both descriptions.** No evidence that saying when to use a skill gets untold skills opened on these models. The test cannot rule out a lift smaller than its MDD (4.5 to 7.9 points when every model moves, or 10.7 to 15.9 points on each affected model when 2 of 5 move), so the results post reports the interval and does not claim the effect is absent. Untold use may need another route, such as hooks (agenda item 1).
 - **Pooled D3 raised.** Claude Code's own system prompt makes skills more discoverable; later untold runs should use it, and earlier stub-prompt readings understate discovery. **D3 flat:** no evidence that the stub prompt was why earlier untold runs saw no opens. The test cannot rule out a prompt effect smaller than its MDD (10.7 to 15.3 points), so the results post reports the interval and does not claim the effect is absent.
 - Compliance and benefit after an open are reported but cannot carry a verdict at these counts.
 
