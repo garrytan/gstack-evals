@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
@@ -300,4 +300,218 @@ describe("the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless
       expect(readFileSync(join(out, "cli-stderr.log"), "utf8")).toContain("adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code 0, signal null)\n");
     }, 30_000);
   }
+});
+
+// The failure rule's holes from #106's /ship, each driven through the real pinned Agent SDK against the stub CLI, keyless.
+// The session spawns the stub for the CLI and the real `true` for the adapter's liveness probe, and counts both.
+describe("GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless)", () => {
+  const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
+  const INFRA = { kind: "missing", code: "E_INFRA_FAILURE" } as const;
+  const stubRun = async (stub: Record<string, string>, o: { timeoutMs?: number; reset?: true; missing?: true; stderrDir?: true; stall?: number; clockStep?: number; persona?: number; stallOn?: { text: string; ms: number }; stderrError?: true } = {}) => {
+    const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
+    if (o.stderrDir) mkdirSync(join(out, "cli-stderr.log"));
+    const calls = { exec: 0, probe: 0 };
+    const session = {
+      exec: () => {
+        calls.exec++;
+        return { exitCode: 0, timedOut: false, stdout: "", stderr: "" };
+      },
+      spawn: (argv: string[], env: Record<string, string>) => {
+        if (argv[0] === "true") {
+          calls.probe++;
+          return spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] });
+        }
+        const child = o.missing ? spawn(join(out, "no-such-cli"), [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", ...stub }, stdio: ["pipe", "pipe", "pipe"] });
+        if (o.reset) child.stdout!.once("data", () => setTimeout(() => child.stdout!.destroy(Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })), 50));
+        if (o.stderrError) child.stderr!.once("data", () => setTimeout(() => child.stderr!.destroy(new Error("synthetic stderr read error")), 20));
+        const { stallOn } = o;
+        let stalledOnce = false;
+        if (stallOn) child.stdout!.on("data", (chunk) => {
+          if (stalledOnce || !String(chunk).includes(stallOn.text)) return;
+          stalledOnce = true;
+          spawnSync("sleep", [String(stallOn.ms / 1000)]);
+        });
+        return child;
+      },
+      stop: () => {},
+    };
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, freeform: async () => {
+      if (o.persona) await new Promise((r) => setTimeout(r, o.persona));
+      return { text: "Go with your recommendation." };
+    }, entry: { user: { persona: "p" } } as never });
+    const run = driver.run(session as never, { id: "t", prompt: "Review the plan." }, o.timeoutMs ?? 10_000);
+    const { stall, clockStep } = o;
+    if (stall) setTimeout(() => spawnSync("sleep", [String(stall / 1000)]), 100);
+    const wall = Date.now;
+    if (clockStep) setTimeout(() => (Date.now = () => wall() + clockStep), 100);
+    const outcome = await Promise.race([run, new Promise<"hung">((r) => setTimeout(() => r("hung"), 15_000))]);
+    Date.now = wall;
+    const log = () => {
+      try {
+        return readFileSync(join(out, "cli-stderr.log"), "utf8");
+      } catch {
+        return null;
+      }
+    };
+    return { outcome, calls, log };
+  };
+  const content = (blocks: unknown[], extra: Record<string, string> = {}) => ({ STUB_MODE: "content", STUB_CONTENT: JSON.stringify(blocks), ...extra });
+  const scored = (o: Awaited<ReturnType<typeof stubRun>>["outcome"]) => (o === "hung" ? o : { termination: o.termination, model_output: o.model_output, exit_code: o.exit_code });
+
+  // Value: protects=rule 2 (OV5): a text or thinking block with nothing in it is no model output, so a session that completes after it is a gap, not a miss; fails_when=an empty or whitespace text block, or an empty unsigned thinking block (which the pinned CLI passes through), sets model_output; why_new=#106 /ship fix-check 2 outside voice OV5; seam=the driver's producedOutput on the real SDK's messages; no_claim=a real provider's empty response
+  test("OV5: empty text, whitespace text and empty thinking are no model output", async () => {
+    for (const blocks of [[{ type: "text", text: "" }], [{ type: "text", text: " \n" }], [{ type: "thinking", thinking: "" }]]) {
+      const r = await stubRun(content(blocks, { STUB_OUTPUT_TOKENS: "0" }));
+      expect([blocks, scored(r.outcome)]).toEqual([blocks, { termination: { kind: "completed" }, model_output: false, exit_code: null }]);
+    }
+  }, 60_000);
+
+  // Value: protects=rule 2 (adversarial 3): redacted thinking is thinking with something in it, so it is model output like a thinking block; fails_when=a session whose model produced only redacted thinking reads as no output and stops the arm; why_new=#106 /ship Step 11 adversarial 3; seam=producedOutput; no_claim=none beyond protects
+  test("adversarial 3: redacted thinking, like thinking, is model output", async () => {
+    for (const blocks of [[{ type: "redacted_thinking", data: "ENCRYPTED" }], [{ type: "thinking", thinking: "Read the plan first.", signature: "sig" }]]) {
+      const r = await stubRun(content(blocks));
+      expect([blocks, scored(r.outcome)]).toEqual([blocks, { termination: { kind: "completed" }, model_output: true, exit_code: null }]);
+    }
+  }, 60_000);
+
+  // Value: protects=rule 4 (#106 Step 11 outside voice 2): a reset on the link to a running CLI is infra, though the SDK then closes the CLI's stdin and the CLI exits 1; fails_when=the exit that follows the SDK's own teardown reads as the CLI crashing on its own, harness_crash and a miss; why_new=#106 /ship Step 11 outside voice 2; seam=the driver's exit listener and catch, the real SDK's Query cleanup; no_claim=a real Claude Code CLI or docker exec
+  test("outside voice 2: a reset, then a nonzero exit once the SDK closes stdin, is infra", async () => {
+    const r = await stubRun({ STUB_MODE: "exit", STUB_EXIT: "1", STUB_ON_EOF: "1" }, { reset: true });
+    expect(scored(r.outcome)).toEqual({ termination: INFRA, model_output: true, exit_code: null });
+    expect(r.log()).toContain("adapter: infra failure, not the arm's: read ECONNRESET\n");
+  }, 30_000);
+
+  // Value: protects=rule 1 and adversarial 5: the CLI exiting 1 on its own after model output stays the arm's crash, and the liveness probe runs as a spawned process, never the session's synchronous exec; fails_when=the crash reads as infra, or the probe blocks the event loop through exec; why_new=#106 /ship Step 11 adversarial 5, outside voice 1; seam=answers(); no_claim=a real docker daemon
+  test("control: a CLI that exits 1 on its own is the arm's crash, probed without exec", async () => {
+    const r = await stubRun({ STUB_MODE: "exit", STUB_EXIT: "1" });
+    expect(scored(r.outcome)).toEqual({ termination: { kind: "arm_failure", failure: "harness_crash" }, model_output: true, exit_code: 1 });
+    expect(r.calls).toEqual({ exec: 0, probe: 1 });
+  }, 30_000);
+
+  // Value: protects=rule 4 (adversarial 2): docker exec's own exit codes 125, 126 and 127 name the launcher (the daemon, a CLI that cannot run or is missing), so they are infra; fails_when=they read as the CLI's crash, harness_crash and a miss; why_new=#106 /ship Step 11 adversarial 2; seam=LAUNCHER_EXITS in the driver's catch; no_claim=a real docker exec
+  test("adversarial 2: an exit of 125, 126 or 127 is the launcher's, so infra", async () => {
+    for (const code of ["125", "126", "127"]) {
+      const r = await stubRun({ STUB_MODE: "exit", STUB_EXIT: code });
+      expect([code, scored(r.outcome)]).toEqual([code, { termination: INFRA, model_output: true, exit_code: Number(code) }]);
+    }
+  }, 60_000);
+
+  // Value: protects=rule 4 (OV4): a log the adapter cannot write (cli-stderr.log is a directory) never escapes the child's error handler, so a CLI that cannot spawn still settles as infra; fails_when=an unhandled EISDIR leaves driver.run unresolved; why_new=#106 /ship fix-check 2 outside voice OV4; seam=the driver's best-effort log; no_claim=a full disk
+  test("OV4: an unwritable cli-stderr.log never hangs a session whose CLI cannot spawn", async () => {
+    const r = await stubRun({}, { missing: true, stderrDir: true, timeoutMs: 1_500 });
+    expect(scored(r.outcome)).toEqual({ termination: INFRA, model_output: false, exit_code: null });
+  }, 30_000);
+
+  // Value: protects=rule 4 and the adapter's records: the CLI's stderr lands in cli-stderr.log (the SDK reads none from a process it did not spawn), and a stderr log that cannot be written is the evaluator's failure, infra, not an uncaught error; fails_when=cli-stderr.log never holds the CLI's stderr, or a failed append throws out of the stream handler; why_new=GST-748 audit; seam=the driver's stderr drain; no_claim=a real Claude Code CLI's stderr
+  test("the CLI's stderr is recorded, and an unwritable stderr log is infra", async () => {
+    const ok = await stubRun(content([{ type: "text", text: "Done." }], { STUB_STDERR: "WARN-FROM-STUB\n", STUB_DELAY: "200" }));
+    expect(scored(ok.outcome)).toEqual({ termination: { kind: "completed" }, model_output: true, exit_code: null });
+    expect(ok.log()).toContain("WARN-FROM-STUB\n");
+    const bad = await stubRun(content([{ type: "text", text: "Done." }], { STUB_STDERR: "WARN-FROM-STUB\n", STUB_DELAY: "200" }), { stderrDir: true });
+    expect(scored(bad.outcome)).toEqual({ termination: INFRA, model_output: true, exit_code: null });
+  }, 30_000);
+
+  // Value: protects=rule 4 (#107 /ship outside voice OV2): a read error on the CLI's stderr stream is the evaluator's failure, infra, never an uncaught exception that ends every session in the process; fails_when=cli.stderr has no error listener
+  test("OV2: a read error on the CLI's stderr stream is infra, never an uncaught exception", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_STDERR: "WARN-FROM-STUB\n", STUB_DELAY: "300" }), { stderrError: true });
+    expect(r.outcome === "hung" ? r.outcome : r.outcome.termination).toEqual(INFRA);
+  }, 30_000);
+
+  // Value: protects=rule 4 (adversarial 5, outside voice 1, B1): the evaluator's own event loop stalling (another session's synchronous docker step) never times the arm out: a CLI that answers at 300 ms under a 600 ms limit, while the loop stalls 700 ms, past the 60 ms credit cap, ends as infra (E_INFRA_FAILURE), never the arm's timeout; fails_when=the timer fires first after the stall and the healthy session scores a timeout, a miss; why_new=#106 /ship Step 11 outside voice 1, #107 /ship B1; seam=the driver's stall-compensated clock; no_claim=a real docker step
+  // gstack-timing-ok: the stall and the delays are the repro; the assertion is on the outcome, never on elapsed time
+  test("outside voice 1: an evaluator stall never times out a session that answered in time", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_DELAY: "300" }), { timeoutMs: 600, stall: 700 });
+    expect(r.outcome === "hung" ? r.outcome : [r.outcome.termination, r.outcome.credited_stall_ms]).toEqual([INFRA, 60]);
+  }, 30_000);
+
+  // Value: protects=rule 2 as amended by GSTA-2 (2026-11-01, #107 /ship red team RT2): a thinking block with a non-empty signature is model output whatever the display mode, and an empty unsigned one is not; fails_when=producedOutput reads only the thinking text, so a Claude 5 model's omitted or "updates" thinking scores a gap; why_new=#107 /ship red team RT2; seam=producedOutput on the real SDK's messages; no_claim=a real provider's signature
+  test("A1: a signed empty thinking block is model output, an unsigned empty one is not", async () => {
+    const signed = await stubRun(content([{ type: "thinking", thinking: "", signature: "EosnCkYICxIMMb3LzNrMu" }], { STUB_OUTPUT_TOKENS: "120" }));
+    expect(scored(signed.outcome)).toEqual({ termination: { kind: "completed" }, model_output: true, exit_code: null });
+    const unsigned = await stubRun(content([{ type: "thinking", thinking: "", signature: "" }], { STUB_OUTPUT_TOKENS: "0" }));
+    expect(scored(unsigned.outcome)).toEqual({ termination: { kind: "completed" }, model_output: false, exit_code: null });
+  }, 30_000);
+
+  // Value: protects=rule 1 under amended rule 2 (#107 /ship red team RT2): a session whose only output is a signed empty thinking block and that then times out is the arm's timeout after model output, a miss, never a gap that stops the arm; fails_when=the signed block is not model output, so the timeout reads as before any output; why_new=#107 /ship red team RT2; seam=producedOutput and the session clock; no_claim=planScore itself, which plan-scoring.test.ts covers for a timeout after model output
+  test("A1: a signed empty thinking block, then a timeout, is a timeout after model output (a miss)", async () => {
+    const r = await stubRun(content([{ type: "thinking", thinking: "", signature: "EosnCkYICxIMMb3LzNrMu" }], { STUB_OUTPUT_TOKENS: "120", STUB_HANG: "1" }), { timeoutMs: 1_500 });
+    expect(scored(r.outcome)).toEqual({ termination: { kind: "timeout" }, model_output: true, exit_code: null });
+  }, 30_000);
+
+  // Value: protects=B1 (GSTA-2 ruling on #107 /ship red team RT4): a stall within the cap, a tenth of the timeout, is credited to the session and recorded as credited_stall_ms, so an audit can see it; fails_when=the credit is not recorded; why_new=#107 /ship red team RT4; seam=the driver's stall-compensated clock; no_claim=a real docker step
+  // gstack-timing-ok: the stall and the delays are the repro; the assertions are on the outcome and the recorded credit
+  test("B1: a stall within the cap is credited and recorded", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_DELAY: "1500" }), { timeoutMs: 8_000, stall: 700 });
+    if (r.outcome === "hung") throw new Error("the session hung");
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.credited_stall_ms).toBeGreaterThan(0);
+    expect(r.outcome.credited_stall_ms).toBeLessThan(800);
+  }, 30_000);
+
+  // Value: protects=B1 and rule 4 (GSTA-2 ruling on #107 /ship red team RT4): once the stall credit reaches its cap, a timeout is the evaluator's, infra (E_INFRA_FAILURE), never the arm's timeout, and the credit stops at the cap; fails_when=the credit is uncapped, or a timeout past the cap scores as the arm's; why_new=#107 /ship red team RT4; seam=the driver's stall-compensated clock; no_claim=a real docker step
+  // gstack-timing-ok: the stall and the delays are the repro; the assertions are on the outcome and the recorded credit
+  test("B1: a stall past the cap, then a timeout, is E_INFRA_FAILURE", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_DELAY: "5000" }), { timeoutMs: 2_000, stall: 1_000 });
+    if (r.outcome === "hung") throw new Error("the session hung");
+    expect([r.outcome.termination, r.outcome.credited_stall_ms]).toEqual([INFRA, 200]);
+    expect(r.log()).toContain("adapter: infra failure, not the arm's: the evaluator's event loop stalled past");
+  }, 30_000);
+
+  // Value: protects=B1 (GSTA-2 ruling on #107 /ship red team RT4): the session clock reads performance.now, so a wall-clock step either way neither extends nor shortens a session; fails_when=the clock reads Date.now and a backward step lets a late answer complete; why_new=#107 /ship red team RT4; seam=the driver's session clock; no_claim=a real NTP step
+  // gstack-timing-ok: the step and the delays are the repro; the assertions are on the outcome and the recorded credit
+  test("B1: a wall-clock step has no effect on the session clock", async () => {
+    for (const clockStep of [-3_000, 3_000]) {
+      const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_DELAY: "1500" }), { timeoutMs: 600, clockStep });
+      if (r.outcome === "hung") throw new Error("the session hung");
+      expect([clockStep, r.outcome.termination, r.outcome.credited_stall_ms]).toEqual([clockStep, { kind: "timeout" }, 0]);
+    }
+  }, 30_000);
+
+  // Value: protects=B1 (#107 /ship pass 2 red team 1): an evaluator stall that ends just as the CLI's question arrives is measured before the persona's pause starts, so it is credited and never charged to the arm; fails_when=the pause starts first and the next tick drops the stall, so a session that answered in time can time out, a miss; why_new=#107 /ship pass 2 red team 1, ruled by GSTA-2; seam=the driver's stall-compensated clock and the persona pause, on the real SDK; no_claim=a real docker step
+  // gstack-timing-ok: the stall and the persona's latency are the repro; the assertions are on the outcome and the recorded credit
+  test("B1: a stall just before a persona pause is credited, not charged to the arm", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Shall I proceed with the plan?" }], { STUB_DELAY: "300", STUB_CONTENT_LATER: JSON.stringify([{ type: "text", text: "Done." }]) }), { timeoutMs: 20_000, persona: 300, stallOn: { text: '"type":"result"', ms: 1_200 } });
+    if (r.outcome === "hung") throw new Error("the session hung");
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.credited_stall_ms).toBeGreaterThan(500);
+  }, 60_000);
+
+  // Value: protects=rule 1 and B1: with no stall, a CLI that answers past the limit is the arm's own timeout and nothing is credited; fails_when=the clock credits time it did not lose, or the timeout reads as infra; why_new=#107 /ship red team RT4; seam=the driver's session clock; no_claim=none beyond protects
+  // gstack-timing-ok: the delay is the repro; the assertion is on the outcome and the recorded credit
+  test("B1: with no stall, a CLI that answers past the limit is the arm's timeout", async () => {
+    const r = await stubRun(content([{ type: "text", text: "Done." }], { STUB_DELAY: "1500" }), { timeoutMs: 600 });
+    if (r.outcome === "hung") throw new Error("the session hung");
+    expect([r.outcome.termination, r.outcome.credited_stall_ms]).toEqual([{ kind: "timeout" }, 0]);
+  }, 30_000);
+});
+
+// What the pinned Claude Code CLI itself emits for these responses, keyless, behind the metering proxy and a fake upstream.
+describe.skipIf(!HAS_CLAUDE_CLI)("GST-748: model output on the real pinned CLI (keyless)", () => {
+  const cliRun = async (script: Script, stop?: (turn: { users: string[]; results: Map<string, unknown> }) => string | undefined) => {
+    const h = harness(script, stop ? { stop } : {});
+    open.push(h);
+    const binding = h.bind(MODEL);
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, skill: null, out: join(h.dir, "host"), query: query as never });
+    const outcome = await driver.run(h.session(join(h.dir, "work", "t"), join(h.dir, "home"), driver.env!), { id: "t", prompt: "Review the plan." }, 120_000);
+    return { termination: outcome.termination, model_output: outcome.model_output, turns: outcome.turns };
+  };
+
+  // Value: protects=rule 2 on the real CLI (OV5, adversarial 3): the pinned CLI passes an empty thinking block through, which is no model output, and a redacted thinking block, which is; fails_when=empty thinking scores a miss, or redacted thinking a gap; why_new=#106 /ship OV5 and Step 11 adversarial 3; seam=the CLI's stream-json output and producedOutput; no_claim=a real provider
+  test("empty thinking is no model output, redacted thinking is", async () => {
+    expect(await cliRun(() => [{ type: "thinking", thinking: "" }])).toEqual({ termination: { kind: "completed" }, model_output: false, turns: [] });
+    expect(await cliRun(() => [{ type: "redacted_thinking", data: "ENCRYPTED" }])).toEqual({ termination: { kind: "completed" }, model_output: true, turns: [] });
+  }, 180_000);
+
+  // Value: protects=rule 2 as amended by GSTA-2 on the real CLI (#107 /ship red team RT2): the pinned CLI asks for thinking with display "updates", so a Claude 5 model's reasoning arrives as a thinking block with empty text and a signature, which is model output; an unsigned empty block is not; fails_when=producedOutput reads only the thinking text; why_new=#107 /ship red team RT2; seam=the CLI's stream-json output and producedOutput; no_claim=a real provider's signature
+  test("A1: a signed empty thinking block is model output on the real CLI, an unsigned one is not", async () => {
+    expect(await cliRun(() => [{ type: "thinking", thinking: "", signature: "EosnCkYICxIMMb3LzNrMu" }])).toEqual({ termination: { kind: "completed" }, model_output: true, turns: [] });
+    expect(await cliRun(() => [{ type: "thinking", thinking: "" }])).toEqual({ termination: { kind: "completed" }, model_output: false, turns: [] });
+  }, 180_000);
+
+  // Value: protects=rule 2 (adversarial 3, investigate): a response cut at max_tokens reaches the driver as an ordinary assistant message with its text, never only as a max_output_tokens error, so it counts as model output; fails_when=the pinned CLI moves the truncated text onto an error message the driver skips; why_new=#106 /ship Step 11 adversarial 3; seam=the pinned CLI's max_tokens recovery; no_claim=a real provider's truncation
+  test("a response cut at max_tokens is model output on an ordinary message", async () => {
+    let calls = 0;
+    const r = await cliRun(() => [{ type: "text", text: ++calls === 1 ? "Partial review of the pl" : "Done." }], () => (calls === 1 ? "max_tokens" : undefined));
+    expect(r).toEqual({ termination: { kind: "completed" }, model_output: true, turns: ["Partial review of the pl", "Done."] });
+  }, 180_000);
 });

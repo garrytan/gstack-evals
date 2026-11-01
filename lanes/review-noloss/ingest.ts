@@ -7,7 +7,7 @@ import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, wr
 import { join } from "node:path";
 import { ARM_ID, ContractError, parseArm, type Arm, type Problem } from "./contract.ts";
 import { scanText } from "./scan.ts";
-import { insideRepo, LANE_DIR, sha256, type Suite } from "./suite.ts";
+import { holdsSealed, insideRepo, LANE_DIR, sealedAs, sha256, type Suite } from "./suite.ts";
 
 export const ARMS_ROOT = join(LANE_DIR, "arms");
 const TOP = new Set(["arm.json", "judgments.tsv", "cost.tsv", "adjudication.tsv", "findings"]);
@@ -141,7 +141,7 @@ function readTree(dir: string): Map<string, Buffer> {
  */
 export function publish(p: Prepared, suite: Suite, root: string, replace: string | null): { dest: string; status: "published" | "unchanged" | "replaced" } {
   if (!ARM_ID.test(p.arm.arm.id)) fail("arm.json id", "not a safe directory name", "use letters, digits, _ and -");
-  if (suite.sealed && insideRepo(root)) fail("--root", "suite " + suite.id + " is sealed, and " + root + " is inside the repo", "pass --root <dir> outside the repo; commit only counts and digests");
+  if (holdsSealed(suite) && insideRepo(root)) fail("--root", "suite " + suite.id + " " + sealedAs(suite) + ", and " + root + " is inside the repo", "pass --root <dir> outside the repo; commit only counts and digests");
   const parent = join(root, suite.id);
   const dest = join(parent, p.arm.arm.id);
   let existing: Map<string, Buffer> | null = null;
@@ -183,7 +183,7 @@ export function publish(p: Prepared, suite: Suite, root: string, replace: string
  * record holds. A sealed suite's arms are never read from inside the repo.
  */
 export function readIngested(dir: string, suite: Suite, suiteSha256: string): { arm: Arm; files: Map<string, Buffer>; treeSha256: string } {
-  if (suite.sealed && insideRepo(dir)) fail(dir, "suite " + suite.id + " is sealed, and its arms are inside the repo", "keep sealed arms under a --root outside the repo");
+  if (holdsSealed(suite) && insideRepo(dir)) fail(dir, "suite " + suite.id + " " + sealedAs(suite) + ", and its arms are inside the repo", "keep sealed arms under a --root outside the repo");
   let record: { tree_sha256?: string; suite_sha256?: string };
   try {
     record = JSON.parse(readFileSync(join(dir, INGEST_RECORD), "utf8"));

@@ -30,7 +30,7 @@ import type { Ruling } from "./contract.ts";
 import { readArmDir } from "./ingest.ts";
 import { fieldText, findingSha256, judgeSets, leakRules, loadKey, packetAnswers, packetMask, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
 import { ScoreError } from "./score.ts";
-import { insideRepo, loadSuite, sha256, unitRef } from "./suite.ts";
+import { holdsSealed, insideRepo, loadSuite, sealedAs, sha256, unitRef } from "./suite.ts";
 
 const MAX_OUTPUT_TOKENS = 16000;
 /** Per request: at most 3 sends, the first included, and no new send once 900 s have passed since the first began. */
@@ -134,7 +134,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   if (inside(out, packetsDir)) usage("--out " + out + " is inside --packets " + packetsDir + "; write the replies beside the packets, never among them");
   if (inside(keyPath, packetsDir)) blind("--key " + keyPath + " is inside --packets " + packetsDir + "; the key maps opaque ids back to arms and must never travel with the packets");
   if (existsSync(out) && readdirSync(out).length) usage("--out " + out + " is not empty; give each judge run a new directory");
-  if (suite.sealed && insideRepo(out)) blind("suite " + suite.id + " is sealed, so its judge run must be written outside the repo");
+  if (holdsSealed(suite) && insideRepo(out)) blind("suite " + suite.id + " " + sealedAs(suite) + ", so its judge run must be written outside the repo");
   const armDirs = (flags.get("--arm") ?? []).map((d) => resolve(d));
   const arms = armDirs.map((d) => readArmDir(d, suite, loadedSuite.sha256));
   const key = loadKey({ suite, suiteSha256: loadedSuite.sha256, key: keyPath, arms });

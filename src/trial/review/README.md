@@ -94,8 +94,8 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
   `diagnostics`, and so is a pass that, after the model produced output, timed out, ended by the arm's own CLI failing,
   or completed with no text turn. arm.json counts per arm, as `completed_without_text`, every miss whose session
   completed with no text from the main agent (no turn, or only AskUserQuestion questions, which parse as missing), so
-  an arm that answers only through files shows. Model output is the session record's `model_output`, any assistant text, thinking
-  or tool call the driver saw, never its turns, which hold main-agent text only. A session that ended any other way (a
+  an arm that answers only through files shows. Model output is the session record's `model_output`: any non-empty assistant text or
+  thinking, a thinking block with a non-empty signature, or a tool call the driver saw, never its turns, which hold main-agent text only. A session that ended any other way (a
   timeout, a CLI failure or a completed session before any model output, a provider failure, an infra incident, an infra
   failure (E_INFRA_FAILURE: the evaluator's own code, the link to the CLI or the machine, at any point), rejected
   credentials or an unknown send) is a coverage gap that stops the arm, as are a cell not run and a cap stop; a stopped

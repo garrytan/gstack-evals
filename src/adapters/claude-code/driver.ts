@@ -16,33 +16,45 @@
 //   reason) ends the cell as a missing cell, E_APPROVAL_BYPASS, unless it was a cap stop: no route answers a question
 //   without the simulator.
 // - The session's clock stops while the persona's free-form source answers, from the first pending answer until the last
-//   one returns, so usersim latency never times the arm out.
+//   one returns, so usersim latency never times the arm out. A stall that ends as the pause starts is credited first.
 // - A question the sidecar does not answer goes to the persona's free-form source when the run passes one
 //   (src/usersim/persona.ts); a source that cannot answer ends the cell with its termination.
 // - After each turn whose last text ends in a question, the simulator's reply goes in as the next user message; the
 //   session ends when it has none.
 // - The adapter writes the evaluator's records beside the trial, never into the work dir: every SDK message
 //   (transcript.ndjson), the init message's tools, skills and versions (init.json), calls[] (calls.json), the user
-//   simulator's event log (usersim.ndjson) and the CLI's stderr (cli-stderr.log).
+//   simulator's event log (usersim.ndjson) and the CLI's stderr (cli-stderr.log), which the adapter drains itself, since
+//   the SDK reads no stderr from a process it did not spawn.
 // - A proxy refusal reaches the session as an API error whose text carries the refusal's code: CAP_STOP stops the cell
 //   as a cap stop, E_KEY_REJECTED as rejected credentials, and E_KEY_MISSING, E_SLOT_DENIED, E_ALLOWANCE or UPSTREAM leave a missing
 //   cell, as does any other API error the CLI gives up on: a provider failure is no outcome to count, before or after the
 //   session's first model output. The wall-clock limit is a timeout. The CLI's process ending on its own while the agent's
 //   session still answers is an arm failure (harness_crash), and so is an error result after model output (before any,
-//   it is a missing cell, UPSTREAM). While the turn's result is still awaited and the adapter has not ended
-//   the session, a stream that ends, or a CLI that exits 0 with no signal before the SDK's error, is infra, never a
-//   crash: a normal finish delivers a result, so that end means the link broke. Any other failure is
-//   infra, never the arm's: the evaluator's
-//   own code (the transcript or init write, the user simulator, the persona), the SDK's link to a CLI that still runs (a
-//   reset or a broken pipe), or the machine (a spawn that fails, a session that no longer answers once the CLI ends). An
-//   infra failure leaves a missing cell, E_INFRA_FAILURE. Once a timeout or an arm failure is recorded, an error from the
-//   adapter's own abort or teardown (a kill that hits a docker exec already gone, a child error after the abort) does not
-//   replace it; cli-stderr.log names it as teardown after that stop.
+//   it is a missing cell, UPSTREAM). The CLI exits on its own only when it exits before the adapter's abort and before the
+//   SDK closes its input; an exit after either is teardown. While the turn's result is still awaited and the adapter has
+//   not ended the session, a stream that ends is infra, never a crash: a normal finish delivers a result, so that end
+//   means the link broke. A CLI that exits 0 with no signal is never a crash either, nor is an exit with docker exec's own
+//   125, 126 or 127 (LAUNCHER_EXITS), which name the launcher. Any other failure is infra, never the arm's: the
+//   evaluator's own code (the transcript, init, stderr or calls write, the user simulator, the persona), the SDK's link to
+//   a CLI that still runs (a reset or a broken pipe, and the exit that follows when the SDK closes the CLI's input), or
+//   the machine (a spawn that fails, a session that no longer answers once the CLI ends). An infra failure leaves a
+//   missing cell, E_INFRA_FAILURE; the adapter's logging is best effort, so a log it cannot write never hangs or throws.
+//   Once a timeout or an arm failure is recorded, an error from the adapter's own abort or teardown (a kill that hits a
+//   docker exec already gone, a child error after the abort) does not replace it; cli-stderr.log names it as teardown
+//   after that stop.
+// - The session's clock reads performance.now, so a wall-clock step never moves it, and runs only while the evaluator's
+//   event loop does: a stall between its 250 ms ticks (another session's synchronous docker step, say) moves the
+//   deadline by the stall, up to a tenth of the session's timeout in all, and the outcome's credited_stall_ms records the
+//   credit. Once the credit reaches that cap, a timeout is infra (E_INFRA_FAILURE), never the arm's. The liveness probe
+//   after a crash runs as a spawned process, so it never stalls other sessions.
 // - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
-//   with text, thinking or a tool call. Scorers read it instead of turns, which hold main-agent text only. text_output
-//   says whether the main agent wrote any text, apart from the AskUserQuestion questions turns also hold. exit_code and
-//   signal record the CLI's own exit; both are null when it did not exit on its own (the adapter's abort or teardown
-//   killed it, or it never ended).
+//   with text or thinking that holds more than whitespace, a thinking block with a non-empty signature (the API's proof
+//   that the model reasoned, whatever the display mode; rule 2 as GSTA-2 amended it), redacted thinking with data, or a
+//   tool call. Scorers
+//   read it instead of turns, which hold main-agent text only. text_output says whether the main agent wrote any text,
+//   apart from the AskUserQuestion questions turns also hold. exit_code and signal record the CLI's own exit; both are
+//   null when it did not exit on its own (the adapter's abort or teardown, or the SDK closing its input, ended it, or it
+//   never ended).
 // - CLAUDE_CODE_MAX_OUTPUT_TOKENS holds each request to the proxy's per-call output cap, which Claude Code's default
 //   (128k) passes. CLAUDE_CODE_MAX_RETRIES=0 leaves retries to the proxy, which journals and charges every paid attempt
 //   under its own budget, so the CLI never multiplies them or waits out its backoff on a refusal.
@@ -196,14 +208,50 @@ export function refusalTermination(refusal: ReasonCode): Termination {
 /** A session that failed for no reason of the arm's: the evaluator, the link to the CLI or the machine. */
 const INFRA: Termination = { kind: "missing", code: "E_INFRA_FAILURE" };
 
-/** Whether the agent's session still runs a command; one that does not after the CLI ended means the machine failed. */
-const answers = (session: AgentSession): boolean => {
-  try {
-    return session.exec("true", 30_000).exitCode === 0;
-  } catch {
-    return false;
-  }
-};
+/** Exit codes a launcher gives for its own failure (docker exec: 125 the daemon, 126 not runnable, 127 not found), never the CLI's. */
+export const LAUNCHER_EXITS: ReadonlySet<number> = new Set([125, 126, 127]);
+
+/**
+ * Whether the agent's session still runs a command, asked through a spawned process so the event loop, and every other
+ * session's clock, never waits on it; one that does not answer after the CLI ended means the machine failed.
+ */
+const answers = (session: AgentSession): Promise<boolean> =>
+  new Promise((done) => {
+    let probe: ChildProcess;
+    try {
+      probe = session.spawn(["true"]);
+    } catch {
+      return done(false);
+    }
+    const timer = setTimeout(() => {
+      probe.kill("SIGKILL");
+      done(false);
+    }, 30_000);
+    probe.once("error", () => {
+      clearTimeout(timer);
+      done(false);
+    });
+    probe.once("exit", (code) => {
+      clearTimeout(timer);
+      done(code === 0);
+    });
+    probe.stdin?.end();
+  });
+
+/**
+ * Whether an assistant block is model output (rule 2 as GSTA-2 amended it, 2026-11-01): text or thinking with something in
+ * it, a thinking block with a non-empty signature (the API's proof that the model reasoned, whatever the display mode),
+ * redacted thinking with data, or a tool call.
+ */
+export const producedOutput = (b: SdkMessage): boolean =>
+  b.type === "tool_use" ||
+  (b.type === "text" && typeof b.text === "string" && b.text.trim() !== "") ||
+  (b.type === "thinking" && ((typeof b.thinking === "string" && b.thinking.trim() !== "") || (typeof b.signature === "string" && b.signature !== ""))) ||
+  (b.type === "redacted_thinking" && typeof b.data === "string" && b.data !== "");
+
+/** The session clock's tick; a gap between ticks past TICK_MS + STALL_MS is the evaluator's event loop stalling, not the arm's time. The clock credits stalls back up to a tenth of the session's timeout. */
+const TICK_MS = 250;
+const STALL_MS = 250;
 
 const tokens = (u: Record<string, any> | undefined): TokenUsage | null =>
   u ? { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, reasoning: 0, cache_read: u.cache_read_input_tokens ?? 0, cache_write: u.cache_creation_input_tokens ?? 0 } : null;
@@ -214,16 +262,29 @@ export interface ClaudeCodeDriver extends AgentDriver {
 }
 
 export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
+  const stderrLog = join(o.out, "cli-stderr.log");
+  const log = (line: string) => {
+    try {
+      appendFileSync(stderrLog, line);
+    } catch {
+      return;
+    }
+  };
+  const without = (termination: Termination): AgentOutcome => ({ turns: [], termination, model_output: false, text_output: false, exit_code: null, signal: null, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null });
   const driver: ClaudeCodeDriver = {
     sim: null,
     env: claudeCodeEnv(o),
     async run(session: AgentSession, task: ContractTask, timeoutMs: number): Promise<AgentOutcome> {
-      mkdirSync(o.out, { recursive: true });
+      try {
+        mkdirSync(o.out, { recursive: true });
+      } catch {
+        return without(INFRA);
+      }
       if (o.codex) {
         const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
-          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
-          return { turns: [], termination: { kind: "missing", code: "E_CODEX_CONFIG" }, model_output: false, text_output: false, exit_code: null, signal: null, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null };
+          log("adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
+          return without({ kind: "missing", code: "E_CODEX_CONFIG" });
         }
       }
       const transcript = join(o.out, "transcript.ndjson");
@@ -240,7 +301,6 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let exitSignal: string | null = null;
       let awaitingResult = true;
       let ended = false;
-      let cli: ChildProcess | null = null;
       let agentTurns = 0;
       let usage: TokenUsage | null = null;
       const end = (t: Termination) => {
@@ -251,25 +311,57 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const infra = (error: unknown) => {
         const before = stop;
         end(INFRA);
-        appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (before ? "after the " + before.kind + " stop, teardown: " : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
+        log("adapter: " + (before ? "after the " + before.kind + " stop, teardown: " : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
       };
-      let deadline = Date.now() + timeoutMs;
-      let timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs);
+      const cap = timeoutMs / 10;
+      let credited = 0;
+      let full = false;
+      let deadline = performance.now() + timeoutMs;
+      let last = performance.now();
+      let settled = false;
       let pauses = 0;
       let paused = 0;
+      const stalled = (): number => {
+        const now = performance.now();
+        const gap = now - last - TICK_MS;
+        if (pauses === 0 && gap > STALL_MS) {
+          if (gap >= cap - credited) {
+            deadline += cap - credited;
+            credited = cap;
+            full = true;
+          } else {
+            deadline += gap;
+            credited += gap;
+          }
+        }
+        last = now;
+        return now;
+      };
+      const expire = () => {
+        if (settled) return;
+        const now = stalled();
+        if (now < deadline) timer = setTimeout(expire, deadline - now);
+        else if (full) infra(new Error("the evaluator's event loop stalled past the session's stall credit of " + cap + " ms, a tenth of its timeout, so the timeout is not the arm's"));
+        else end({ kind: "timeout" });
+      };
+      let timer = setTimeout(expire, timeoutMs);
+      const watch = setInterval(stalled, TICK_MS);
       const persona = o.freeform;
       const freeform = persona && (async (text: string, question: string) => {
-        if (pauses++ === 0) {
+        if (pauses === 0) {
+          stalled();
           clearTimeout(timer);
-          paused = Date.now();
+          paused = performance.now();
         }
+        pauses++;
         let a: Awaited<ReturnType<typeof persona>>;
         try {
           a = await persona(text, question);
         } finally {
           if (--pauses === 0) {
-            deadline += Date.now() - paused;
-            timer = setTimeout(() => end({ kind: "timeout" }), Math.max(0, deadline - Date.now()));
+            deadline += performance.now() - paused;
+            last = performance.now();
+            timer = setTimeout(expire, Math.max(0, deadline - performance.now()));
           }
         }
         if ("text" in a) return a.text;
@@ -310,8 +402,8 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             abortController: abort,
             canUseTool,
             hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
-            stderr: (d: string) => appendFileSync(join(o.out, "cli-stderr.log"), d),
             spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
+              let cli: ChildProcess;
               try {
                 cli = session.spawn([CLAUDE_BIN, ...s.args], Object.fromEntries(SDK_ENV.flatMap((k) => (s.env[k] ? [[k, s.env[k]!]] : []))));
               } catch (error) {
@@ -319,8 +411,16 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 throw error;
               }
               cli.on("error", infra);
+              cli.stderr?.on("error", infra);
+              cli.stderr?.on("data", (d: Buffer) => {
+                try {
+                  appendFileSync(stderrLog, d);
+                } catch (error) {
+                  infra(error);
+                }
+              });
               cli.on("exit", (code, signal) => {
-                if (abort.signal.aborted) return;
+                if (abort.signal.aborted || cli.stdin?.writableEnded) return;
                 exitCode = code;
                 exitSignal = signal;
               });
@@ -342,7 +442,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 else if (m.error === "authentication_failed") end({ kind: "credentials_rejected" });
                 else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
               } else {
-                if ((m.message?.content ?? []).some((b: SdkMessage) => b.type === "text" || b.type === "thinking" || b.type === "tool_use")) modelOutput = true;
+                if ((m.message?.content ?? []).some(producedOutput)) modelOutput = true;
                 if (!m.parent_tool_use_id && text.trim()) {
                   turnText = text;
                   textOutput = true;
@@ -375,25 +475,32 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         }
         if (!stop && !ended && awaitingResult) {
           stop = INFRA;
-          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code " + exitCode + ", signal " + exitSignal + ")\n");
+          log("adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code " + exitCode + ", signal " + exitSignal + ")\n");
         }
       } catch (error) {
+        settled = true;
+        clearTimeout(timer);
         if (!stop) {
-          const child = cli as ChildProcess | null;
-          const died = child !== null && (child.exitCode !== null || child.signalCode !== null);
-          const linkBroke = exitCode === 0 && exitSignal === null && awaitingResult;
-          stop = died && !linkBroke && answers(session) ? { kind: "arm_failure", failure: "harness_crash" } : INFRA;
-          appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (stop === INFRA ? "infra failure, not the arm's: " : "") + String((error as Error)?.message ?? error) + "\n");
+          const crashed = (exitCode !== null && exitCode !== 0 && !LAUNCHER_EXITS.has(exitCode)) || exitSignal !== null;
+          const verdict: Termination = crashed && (await answers(session)) ? { kind: "arm_failure", failure: "harness_crash" } : INFRA;
+          stop ??= verdict;
+          log("adapter: " + (verdict === INFRA ? "infra failure, not the arm's: " : "") + String((error as Error)?.message ?? error) + "\n");
         }
       } finally {
+        settled = true;
         clearTimeout(timer);
+        clearInterval(watch);
         inbox.close();
         if (!abort.signal.aborted) abort.abort();
       }
       if (unapprovedAsks(messages, approved, hooked).length && (stop as Termination | null)?.kind !== "cap_stop") stop = { kind: "missing", code: "E_APPROVAL_BYPASS" };
       const { turns, calls, outputs } = parseClaudeCode(messages);
       const use = skillUse(calls, o.skill, outputs);
-      writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files, missing_question: missingQuestion }, null, 2) + "\n");
+      try {
+        writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files, missing_question: missingQuestion }, null, 2) + "\n");
+      } catch (error) {
+        infra(error);
+      }
       const size = (f: string) => {
         try {
           return o.skill?.dir ? statSync(join(o.skill.dir, f)).size : 0;
@@ -408,6 +515,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         text_output: textOutput,
         exit_code: exitCode,
         signal: exitSignal,
+        credited_stall_ms: Math.round(credited),
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

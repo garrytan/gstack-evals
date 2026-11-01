@@ -115,6 +115,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CELL_RULE](#e_cell_rule) | 2 | U10 |
 | [E_CODEX_CONFIG](#e_codex_config) | 2 | U10 |
 | [E_INFRA_FAILURE](#e_infra_failure) | 2 | U10 |
+| [E_COVERAGE_GAP](#e_coverage_gap) | 2 | U10 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
 
@@ -772,9 +773,17 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_INFRA_FAILURE
 
-A Claude Code session ended on an infra failure, not on anything the arm did: the evaluator's own code (the transcript or init write, the user simulator, the persona), the SDK's link to the CLI (a reset or a broken pipe while the CLI still ran, or a CLI that exited 0, or a stream that ended, while the turn's result was still awaited), or the machine (the CLI could not be spawned, or the agent's session stopped answering once the CLI ended). The cell is missing, never a miss or an arm failure; in a review run it is a coverage gap that stops its arm, so that arm gets no verdict, and under skill-eval --host claude it is a missing cell under the prereg's missing-cell rule, never a fail against the arm. An error from the adapter's own abort or teardown after a recorded timeout or arm failure does not replace it; the adapter line names it as teardown.
+A Claude Code session ended on an infra failure, not on anything the arm did: the evaluator's own code (the transcript, init or stderr write, the user simulator, the persona, the session records), the SDK's link to the CLI (a reset or a broken pipe while the CLI still ran, a CLI that exited 0, a CLI that exited only after the SDK closed its input, or a stream that ended while the turn's result was still awaited), or the machine (the CLI could not be spawned, its launcher failed with docker exec's own 125, 126 or 127, or the agent's session stopped answering once the CLI ended). The cell is missing, never a miss or an arm failure; in a review run it is a coverage gap that stops its arm, so that arm gets no verdict and review-units exits 2 (E_COVERAGE_GAP), and under skill-eval --host claude it is a missing cell under the prereg's missing-cell rule, never a fail against the arm. An error from the adapter's own abort or teardown after a recorded timeout or arm failure does not replace it; the adapter line names it as teardown.
 
 Fix: Read the adapter line in the trial's host/cli-stderr.log, which names what failed, and fix the evaluator or the machine before a counted run. Start a new run for the arm's verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_COVERAGE_GAP
+
+A review-units arm stopped with a coverage gap, so it gets no verdict, and the run exits 2 once every arm is written. A gap is a session that ended on an infra failure (E_INFRA_FAILURE), a provider failure, a refusal or a cap stop; a plan session that timed out, crashed or completed before any model output; or a code unit's malformed or incomplete pass. The arm's arm.json has status stopped and lists each gap under coverage_gaps; an arm with no gap completes as usual.
+
+Fix: Read the arm's coverage_gaps in arm.json and each named session's host/cli-stderr.log, fix the cause, and start a new run for that arm's verdict. Never rerun a gap inside the same run to change a verdict.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
 

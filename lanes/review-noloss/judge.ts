@@ -28,7 +28,7 @@ import { seededRandom } from "../../src/runner/stats/paired.ts";
 import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, RULINGS, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
 import { ScoreError } from "./score.ts";
 import { isPlanCase } from "../review-replay/catalog/catalog.ts";
-import { insideRepo, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
+import { holdsSealed, insideRepo, sealedAs, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
 
 export const JUDGE_VERSION = 1;
 export const SECOND_SAMPLE = 0.2;
@@ -180,7 +180,7 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   const adjudicate = o.adjudicate === true;
   const plan = suite.kind === "plan";
   if (plan) for (const repo of new Set(suite.units.map((u) => u.repo))) if (!o.sources?.has(repo)) blind("suite " + suite.id + " is a plan suite, so its packets carry each unit's tree; pass --source " + repo + "=<clone>");
-  if (suite.sealed && (insideRepo(o.out) || insideRepo(o.key))) blind("suite " + suite.id + " is sealed, so its packets and key must be written outside the repo");
+  if (holdsSealed(suite) && (insideRepo(o.out) || insideRepo(o.key))) blind("suite " + suite.id + " " + sealedAs(suite) + ", so its packets and key must be written outside the repo");
   if (inside(o.key, o.out)) blind("--key " + o.key + " is inside --out " + o.out + "; the key maps opaque ids back to arms and must never travel with the packets");
   if (existsSync(o.key)) blind("--key " + o.key + " already exists; give each batch a new key path");
   if (existsSync(o.out) && readdirSync(o.out).length) blind("--out " + o.out + " is not empty; write each batch to a new directory");
@@ -535,7 +535,7 @@ function adjudicationJoin(o: JoinInput, key: JudgeKey, unjudged: ReturnType<type
  */
 export function judgeJoin(o: JoinInput): JoinResult {
   const { suite } = o;
-  if (suite.sealed && insideRepo(o.out)) blind("suite " + suite.id + " is sealed, so judged arms must be written outside the repo");
+  if (holdsSealed(suite) && insideRepo(o.out)) blind("suite " + suite.id + " " + sealedAs(suite) + ", so judged arms must be written outside the repo");
   const key = loadKey(o);
   const unjudged = o.unjudged ? readUnjudged(o.unjudged, key) : null;
   if (key.kind === "adjudicate") return adjudicationJoin(o, key, unjudged);

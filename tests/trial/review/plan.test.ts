@@ -305,6 +305,11 @@ describe("review-units --plan arguments (keyless)", () => {
     const pub = planPanel(scratch("plan-cli-pub-"), { seeded: 1 }, { visibility: "public" });
     expect((await run(["--suite", pub.suitePath, "--sealed-root", pub.sealedRoot, "--units", "all", "--models", OPUS, "--out", inRepo, "--source", PANEL_REPO + "=" + pub.clone, "--base-branch", PANEL_REPO + "=main", "--plan", "ceo", "--arms", "none", "--dry-run"])).err).toMatch(/^E_USAGE .*suite \S+ reads catalogs under the sealed root, and --out .* is inside the repo/);
     expect(existsSync(inRepo)).toBe(false);
+    for (const [suiteArgs, why] of [[["--suite", panel.stubPath, "--sealed-root", panel.sealedRoot], "is sealed"], [["--suite", pub.suitePath, "--sealed-root", pub.sealedRoot], "reads catalogs under the sealed root"]] as const) {
+      const io = collect();
+      const code = await main([...suiteArgs, ...base.slice(4).map((a) => (a === panel.clone ? (why === "is sealed" ? panel.clone : pub.clone) : a)), "--plan", "ceo", "--arms", "none", "--dry-run"], io, { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: join(REPO_ROOT, "receipts") });
+      expect([code, io.text().err]).toEqual([2, expect.stringMatching(new RegExp("^E_USAGE .*suite \\S+ " + why + ", and the receipts sink " + join(REPO_ROOT, "receipts") + " \\(GSTACK_EVALS_RECEIPTS\\) is inside the repo"))]);
+    }
     expect(CUSTODY).toMatch(/^procedural custody/);
   });
 });

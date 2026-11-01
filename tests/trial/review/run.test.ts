@@ -114,7 +114,8 @@ describe("review units in the run loop (keyless)", () => {
     const input: ReviewRunInput = { host: "claude", suite: { id: "review-test", sha256: null }, units: [prepared], arms: [{ name: "none", told: "none" }, { name: "gstack", told: "gstack" }], models: [OPUS, HAIKU], passes: 1, parallel: 2, timeoutS: 120, cap: 50_000_000, runId: "review-run", out, date: "2026-10-30", policy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: join(h.dir, "journal.ndjson"), env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } };
     try {
       const first = await runReviewUnits(input, rig);
-      expect(first.stops).toEqual([]);
+      const gapStop = [{ code: "E_COVERAGE_GAP" as const, message: expect.stringMatching(new RegExp("^arm none-opus stopped with 1 coverage gap, so it gets no verdict: " + unit.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " pass 1: malformed, ")) }];
+      expect(first.stops).toEqual(gapStop);
       expect(first.spent).toBeGreaterThan(0);
       expect(prompts.filter((p) => p.startsWith("/review Review the changes on this branch against the base branch main")).length).toBe(2);
       expect(first.outcomes).toEqual({ "none-opus": { findings: 0, empty: 0, missing: 0, malformed: 1, incomplete: 0, not_run: 0 }, "none-haiku": { findings: 0, empty: 0, missing: 1, malformed: 0, incomplete: 0, not_run: 0 }, "gstack-opus": { findings: 1, empty: 0, missing: 0, malformed: 0, incomplete: 0, not_run: 0 }, "gstack-haiku": { findings: 0, empty: 1, missing: 0, malformed: 0, incomplete: 0, not_run: 0 } });
@@ -153,7 +154,7 @@ describe("review units in the run loop (keyless)", () => {
       mkdirSync(join(out, "arms", "none-particle-ai-particle-1"), { recursive: true });
       const again = await runReviewUnits({ ...input, reuse: readReviewJournal(out), env: {} }, rig);
       expect(existsSync(join(out, "arms", "none-particle-ai-particle-1"))).toBe(false);
-      expect(again.stops).toEqual([]);
+      expect(again.stops).toEqual(gapStop);
       expect(again.spent).toBe(0);
       expect(h.upstream.length).toBe(calls);
       expect(readFileSync(join(out, "arms", "gstack-opus", file), "utf8").trim().split("\n").length).toBe(2);
