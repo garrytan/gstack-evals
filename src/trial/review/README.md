@@ -77,7 +77,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   preset, which brings Claude Code's own system guidance. arm_provenance.system_prompt in arm.json and system_prompt in
   each session's init.json record it.
 - `--told-prefix <arm>=<file>`, repeatable. On code units the file's one line replaces the arm's told command (for
-  example R2's full-procedure /review line); its command must name the arm's skill. The template and TOLD_SHA256 stay
+  example R2's full-procedure /review line); it must open with the arm's own command. The template and TOLD_SHA256 stay
   the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
   command (/plan-ceo-review), and the arm's line becomes that line, a space and "Review this plan for problems.".
   none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo runs,

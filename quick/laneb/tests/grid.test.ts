@@ -32,7 +32,7 @@ describe("grid", () => {
     expect(job.agents[1].kwargs).toMatchObject({ arm: "gstack", system_prompt: "claude-code-preset", session_kind: "unattended" });
     expect(JSON.stringify(jobConfig(spec))).toBe(JSON.stringify(jobConfig({ ...spec, arms: [{ ...spec.arms[0], ...armSpec("none") }] })));
     expect(armSpec("none:system_prompt=sdk-default")).toEqual({ name: "none", system_prompt: "sdk-default" });
-    for (const bad of ["gstack:system_prompt=claude_code", "gstack:session_kind=", "gstack:session_kind=interactive", "gstack:model=x", "gstack:system_prompt", "gstack:session_kind=unattended:session_kind=unattended"]) {
+    for (const bad of ["gstack:system_prompt=claude_code", "gstack:session_kind=", "gstack:session_kind=interactive", "gstack:model=x", "gstack:system_prompt", "gstack:session_kind=unattended:session_kind=unattended", "gstack:constructor=x", "gstack:toString=x", "gstack:__proto__=x"]) {
       expect(() => armSpec(bad)).toThrow("E_USAGE");
     }
   });

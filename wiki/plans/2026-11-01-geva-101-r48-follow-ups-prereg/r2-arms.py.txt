@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+# R2 dry-run fixtures (GEVA-101 prereg, section 3). R2's arms don't exist until the R2 build merges, so the dry run stands
+# in for them: gstack-full is #108's raw gstack-opus arm and none-r2 its raw none-opus arm (GEVA-89 archive), each cut to
+# pass 1 on the 19 stacks-r1-out19 units and re-pointed at that suite. gstack-full's cost.tsv gets the reader rows the
+# R2 build must record: in scenario "pass" every PR-pass ran the batched specialist reader and adversarial-native; in
+# scenario "fail" adversarial-native is missing from 7 of 19, so the procedure gate must fail. Both arms also get one
+# CRITICAL fixture finding on each blocking blocker's first path, so the fake judge's rates decide who found it.
+# Usage: python3 r2-arms.py <GEVA-89 judge/raw/stacks-r1> <stacks-r1-out19.json> <out dir> <pass|fail>
+import hashlib, json, os, sys
+
+raw, suite_path, out, scen = sys.argv[1:5]
+suite = json.load(open(suite_path))
+sha = hashlib.sha256(open(suite_path, "rb").read()).hexdigest()
+units = [u["id"] for u in suite["units"]]
+by_unit = {u["id"]: u.get("blockers") or [] for u in suite["units"]}
+if os.path.exists(out):
+    sys.exit("E_R2_OUT " + out + " exists")
+for src_id, dst_id in (("gstack-opus", "gstack-full"), ("none-opus", "none-r2")):
+    src, dst = os.path.join(raw, src_id), os.path.join(out, dst_id)
+    os.makedirs(os.path.join(dst, "findings"))
+    arm = json.load(open(os.path.join(src, "arm.json")))
+    arm.update(id=dst_id, label=dst_id + " (dry-run fixture)", suite=suite["id"], suite_sha256=sha, passes=1)
+    arm.pop("parse_outcomes", None)
+    arm["notes"] = "Dry-run fixture for R2 (GEVA-101): #108's raw " + src_id + ", pass 1 on the 19 stacks-r1-out19 units. Not a measurement."
+    json.dump(arm, open(os.path.join(dst, "arm.json"), "w"), indent=2)
+    n = 0
+    for u in units:
+        name = u.replace("/", "__") + ".jsonl"
+        keep = [l for l in open(os.path.join(src, "findings", name)).read().splitlines() if l.strip() and json.loads(l)["pass"] == 1]
+        for b in by_unit[u]:
+            if b.get("counts") == "blocking":
+                keep.append(json.dumps({"severity": "CRITICAL", "path": b["paths"][0], "line": b.get("line") or 1, "summary": "Dry-run fixture finding on this unit's blocker " + b["id"] + "; not a review finding.", "pass": 1, "id": "fx-" + b["id"], "evidence": "fixture"}))
+        open(os.path.join(dst, "findings", name), "w").write("".join(l + "\n" for l in keep))
+        n += len(keep)
+    rows = open(os.path.join(src, "cost.tsv")).read().splitlines()
+    head = rows[0].split("\t")
+    pr, ps = head.index("pr"), head.index("pass")
+    keep = [r for r in rows[1:] if r.split("\t")[ps] == "1" and (r.split("\t")[pr] in units or r.split("\t")[pr].replace("__", "/") in units)]
+    readers = 0
+    if dst_id == "gstack-full":
+        prs = sorted({r.split("\t")[pr] for r in keep})
+        for i, p in enumerate(prs):
+            for name in ("batched", "adversarial-native"):
+                if name == "adversarial-native" and scen == "fail" and i < 7:
+                    continue
+                vals = {"pr": p, "pass": "1", "scope": "reader:" + name, "meter_source": "estimate", "covers": "", "wall_seconds": ""}
+                keep.append("\t".join(vals.get(h, "unavailable") for h in head))
+                readers += 1
+    open(os.path.join(dst, "cost.tsv"), "w").write("\n".join([rows[0]] + keep) + "\n")
+    print("arm %s: %d findings on %d units, %d cost rows (%d reader rows, scenario %s)" % (dst_id, n, len(units), len(keep), readers, scen))

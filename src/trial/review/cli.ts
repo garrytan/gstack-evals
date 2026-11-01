@@ -48,7 +48,7 @@ export const REVIEW_UNITS_HELP = [
   "outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
-  "--told-prefix gives a code arm's told command the text of a file (one line; its command names the same skill) in place",
+  "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command) in place",
   "of the frozen one. With --plan only a gstack arm takes one: the file's line opens with the lens's command, and the arm's",
   "line becomes that line, a space and \"" + PLAN_ASK + "\". --render serves a gstack stack arm from",
   "its own gstack-modules render of that session kind. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
@@ -204,7 +204,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (prefix !== undefined) {
       if (told === "none") throw new Usage("arm " + a.name + " runs no told command, so it takes no --told-prefix");
       if (!/^\/\S+( [^\n]*)?$/.test(prefix)) throw new Usage("--told-prefix " + a.name + ": the prefix must be one line that opens with the arm's command, such as " + JSON.stringify(TOLD_PREFIX[told]));
-      if (toldSkill(told, prefix) !== toldSkill(told)) throw new Usage("--told-prefix " + a.name + " names skill " + toldSkill(told, prefix) + ", but the arm's told command names " + toldSkill(told));
+      if (prefix.split(" ")[0] !== TOLD_PREFIX[told].split(" ")[0]) throw new Usage("--told-prefix " + a.name + " opens with " + prefix.split(" ")[0] + ", but the arm's told command opens with " + TOLD_PREFIX[told].split(" ")[0]);
     }
     return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
