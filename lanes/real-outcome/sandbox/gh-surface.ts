@@ -5,8 +5,11 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-/** The shapes gh.ts serves. pr merge is served as a refusal; api serves the REST paths listed in gh.ts. */
-export const SERVED: readonly string[] = ["auth status", "repo view", "pr create", "pr view", "pr list", "pr edit", "pr ready", "pr close", "pr reopen", "pr comment", "pr diff", "pr checks", "pr merge", "issue create", "issue list", "issue view", "issue comment", "api", "run list", "run view", "workflow run"];
+/** The shapes gh.ts serves. pr merge is served as a refusal; gh api is classified by its path (SERVED_API). */
+export const SERVED: readonly string[] = ["auth status", "repo view", "pr create", "pr view", "pr list", "pr edit", "pr ready", "pr close", "pr reopen", "pr comment", "pr diff", "pr checks", "pr merge", "issue create", "issue list", "issue view", "issue comment", "run list", "run view", "workflow run"];
+/** The REST paths apiCmd in gh.ts serves, with any owner, repo, number or ref, shell variables included. graphql and every other path are unserved. */
+const SERVED_API = /^(rate_limit|user|repos\/(?:\$\{?\w+\}?|[^/\s]+\/[^/\s]+)(\/pulls|\/(pulls|issues)\/[^/\s]+(\/merge|\/reviews|\/requested_reviewers|\/comments|\/comments\/[^/\s]+\/replies)?|\/commits\/[^/\s]+(\/check-runs|\/status|\/statuses)?)?)$/;
+const API_PATH = /(?:^|[\s"'`,[(])\/?(graphql|rate_limit|user|repos\/[^\s"'`,\])?]+)/;
 
 const GROUPS = "pr|repo|api|auth|issue|run|release|workflow|search|label|secret|gist|browse|status|cache|extension|project|ruleset|attestation";
 const TEXT = new RegExp("\\bgh (" + GROUPS + ")\\b(?: (--?[a-z]|[a-z][a-z-]*\\b))?", "g");
@@ -37,11 +40,12 @@ export function ghSurface(tree: string): SurfaceRow[] {
     for (const re of [TEXT, ARRAY]) {
       for (const m of text.matchAll(re)) {
         const sub = m[2] && !m[2].startsWith("-") ? m[2] : "";
-        const shape = m[1] === "api" ? "api" : (m[1] + " " + sub).trim();
+        const path = m[1] === "api" ? text.slice(m.index! + m[0].indexOf("api") + 3).split(re === TEXT ? "\n" : "]")[0]!.match(API_PATH)?.[1] : undefined;
+        const shape = m[1] === "api" ? ("api " + (path ?? "")).trim() : (m[1] + " " + sub).trim();
         if (!seen.has(shape)) seen.set(shape, new Set());
         seen.get(shape)!.add(rel);
       }
     }
   }
-  return [...seen].map(([shape, files]) => ({ shape, served: SERVED.includes(shape), files: [...files].sort() })).sort((a, b) => a.shape.localeCompare(b.shape));
+  return [...seen].map(([shape, files]) => ({ shape, served: shape === "api" || shape.startsWith("api ") ? SERVED_API.test(shape.slice(4)) : SERVED.includes(shape), files: [...files].sort() })).sort((a, b) => a.shape.localeCompare(b.shape));
 }
