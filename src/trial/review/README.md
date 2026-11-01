@@ -81,9 +81,9 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
   command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
   for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
-  BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix, since without one
-  it would repeat the gstack arm. none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm
-  named gstack when placebo runs, since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
+  BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
+  one). none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo
+  runs, since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
   and an arm without one keeps today's prompt and block.
 - `--render <arm>=interactive|unattended`, repeatable, on a gstack stack arm. The install runs gstack's setup, renders
   the full loadout into ~/.claude/gstack-render, serves each rendered skill's SKILL.md and sections from it, and checks

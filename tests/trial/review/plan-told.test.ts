@@ -129,7 +129,7 @@ describe("GEVA-115: the forced arm in the run loop, through the pinned Agent SDK
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: "/review " + ASK }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix must be one line that opens with /plan-ceo-review");
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: FORCED + " " }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix must not start or end with whitespace");
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: "/plan-ceo-review" }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix adds nothing after /plan-ceo-review");
-    await expect(runReviewUnits({ ...input, arms: [{ name: "gstack", told: "gstack" }, { name: "gstack-forced", told: "gstack" }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced runs plan arm gstack with no --told-prefix, so it would repeat the gstack arm; a gstack-<suffix> arm needs a told prefix");
+    await expect(runReviewUnits({ ...input, arms: [{ name: "gstack", told: "gstack" }, { name: "gstack-forced", told: "gstack" }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced runs plan arm gstack with no --told-prefix; a gstack-<suffix> plan arm needs a told prefix");
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack", told: "gstack", toldPrefix: FORCED }, { name: "placebo", told: "placebo" }] }, rig)).rejects.toThrow("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
     expect(bound).toBe(0);
   });
@@ -162,7 +162,7 @@ describe("GEVA-115: review-units --plan --told-prefix (keyless)", () => {
       expect([bad, r.code, r.err.split("\n")[0]]).toEqual([bad, 2, "E_USAGE review-units: --told-prefix gstack-forced: " + why]);
     }
     const lone = await run([...base, "--arms", "gstack=" + ref, "gstack-forced=" + ref]);
-    expect([lone.code, lone.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: arm gstack-forced runs plan arm gstack with no --told-prefix, so it would repeat the gstack arm; a gstack-<suffix> arm needs a told prefix"]);
+    expect([lone.code, lone.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: arm gstack-forced runs plan arm gstack with no --told-prefix; a gstack-<suffix> plan arm needs a told prefix"]);
     const mirrored = await run([...base, "--arms", "gstack=" + ref, "placebo", "--told-prefix", "gstack=" + forced]);
     expect([mirrored.code, mirrored.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm"]);
     const dry = await run([...base, "--arms", "none", "gstack=" + ref, "gstack-forced=" + ref, "placebo", "--told-prefix", "gstack-forced=" + forced]);

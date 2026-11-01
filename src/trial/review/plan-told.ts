@@ -3,8 +3,8 @@
 // Only a gstack plan arm takes a told prefix: one line that opens with the lens's command. The arm's line becomes that
 // line, a space and PLAN_ASK, and the prompt still ends with TOLD_PLAN_TEMPLATE. An arm without a prefix gets plan.ts's
 // line and prompt byte for byte. A prefix must add words after the command, must not hold the ask, and has no edge
-// whitespace or control characters, and each refusal names its cause. A gstack-<suffix> arm with no prefix is refused,
-// since it would rerun the gstack arm. This lives outside plan.ts because plan.ts's own bytes are PLAN_PARSER_SHA256, the plan
+// whitespace or control characters, and each refusal names its cause. A gstack-<suffix> arm exists to carry a prefix, so
+// one with no prefix is refused. This lives outside plan.ts because plan.ts's own bytes are PLAN_PARSER_SHA256, the plan
 // session key's verifier, so a plan run with no prefix keeps today's session keys and parser digest.
 import type { ArmSpec } from "../../types.ts";
 import { PLAN_ASK, PLAN_LENSES, planArmLine, planArmOf, planPrompt, TOLD_PLAN_TEMPLATE, type PlanArm, type PlanLens } from "./plan.ts";
@@ -27,8 +27,8 @@ export function planPrefixProblem(arm: PlanArm, lens: PlanLens, prefix: string):
   return null;
 }
 
-/** Why a plan arm with no told prefix cannot run, or null when it can: a gstack-<suffix> arm with none would rerun the gstack arm. */
-export const planNoPrefixProblem = (name: string, arm: PlanArm, prefix?: string): string | null => (prefix === undefined && arm === "gstack" && name !== "gstack" ? "arm " + name + " runs plan arm gstack with no --told-prefix, so it would repeat the gstack arm; a gstack-<suffix> arm needs a told prefix" : null);
+/** Why a plan arm with no told prefix cannot run, or null when it can: a gstack-<suffix> arm exists to carry a told prefix. */
+export const planNoPrefixProblem = (name: string, arm: PlanArm, prefix?: string): string | null => (prefix === undefined && arm === "gstack" && name !== "gstack" ? "arm " + name + " runs plan arm gstack with no --told-prefix; a gstack-<suffix> plan arm needs a told prefix" : null);
 
 /** The arm's line: the prefix and PLAN_ASK when the arm has a prefix, planArmLine's otherwise. */
 export const planToldLine = (arm: PlanArm, lens: PlanLens, prefix?: string): string => (prefix === undefined ? planArmLine(arm, lens) : prefix + " " + PLAN_ASK);
