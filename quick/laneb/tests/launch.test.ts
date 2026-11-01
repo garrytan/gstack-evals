@@ -108,6 +108,45 @@ describe("launch.sh without an interrupt", () => {
   }, 60_000);
 });
 
+describe("launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS)", () => {
+  const vmRows = (r: ReturnType<typeof rig>) => readRows(r.ledgerPath).filter((x) => x.id === "p-vm");
+
+  test("the VM's hours are reserved before it starts and settled at metered hours once it is down", async () => {
+    const r = rig({ finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "4" });
+    const { code, events } = await runToEnd(r);
+    const rows = readRows(r.ledgerPath);
+    const reserve = rows.findIndex((x) => x.kind === "reserve" && x.id === "p-vm");
+    const settle = rows.findIndex((x) => x.kind === "settle" && x.id === "p-vm");
+    expect(rows[reserve]).toMatchObject({ usd_micros: toMicros(8) });
+    expect(settle).toBeGreaterThan(rows.findIndex((x) => x.kind === "settle" && x.id === "p-s-1"));
+    expect(rows[settle].usd_micros).toBeGreaterThanOrEqual(0);
+    expect(rows[settle].usd_micros).toBeLessThan(toMicros(0.1));
+    expect(events).toContain("down vm-1");
+    expect(new Ledger(r.ledgerPath, "laneb-quick").status().openIds).toEqual([]);
+    expect(code).toBe(0);
+  }, 60_000);
+
+  test("a VM reserve the ledger refuses is a cap stop: exit 9 and no VM", async () => {
+    const r = rig({ finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "5" });
+    const { code, stderr, events } = await runToEnd(r);
+    expect(stderr).toContain("no VM started (cap stop)");
+    expect(events.some((e) => e.startsWith("up"))).toBe(false);
+    expect(vmRows(r).filter((x) => x.kind === "reserve" || x.kind === "settle")).toEqual([]);
+    expect(code).toBe(9);
+  }, 60_000);
+
+  test("a kept VM leaves its reserve open at the full amount and says how to settle it", async () => {
+    const r = rig({ failPull: true, finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "4" });
+    const { code, stderr } = await runToEnd(r);
+    expect(stderr).toContain("The VM reserve p-vm stays open");
+    expect(vmRows(r).map((x) => x.kind)).toEqual(["reserve"]);
+    expect(code).toBe(7);
+  }, 60_000);
+});
+
 describe("launch.sh on interrupt", () => {
   test("not_started x interrupt: an interrupt before the batch starts exits 130, writes no STOP and destroys the VM", async () => {
     const r = rig({ slowBootstrap: true });
