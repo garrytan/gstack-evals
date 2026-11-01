@@ -1,0 +1,105 @@
+## Pins
+
+$ git -C $R log -1 --format=rig %H %s
+rig 715f837c353700344785e2ae2c721e8195d616cd Stacks round 1 step 5a fixes: judge-run retries, flag-scan rules, impact binding, secondary guards (GST-517) (#97)
+exit 0 (log/1.txt)
+
+$ sh -c git -C $R status --porcelain | wc -l
+0
+exit 0 (log/2.txt)
+
+$ sh -c cd $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg && sha256sum stacks-r1.json comparisons.stacks-r1.json && cd $D && sha256sum comparisons.stacks-r1.nopstack.json
+4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d  stacks-r1.json
+a880a3acdd5337005aeb6fed965b9e3f0721b7d487f512d7875dccb6e83034b6  comparisons.stacks-r1.json
+ae5db7f83061d8613d98f6ac6cc603f67aa0256f4296a3f28fea9627ceeb5fc7  comparisons.stacks-r1.nopstack.json
+exit 0 (log/3.txt)
+
+$ jq -c {comparisons: [.comparisons[].id], order: .loss_family.order, seed, draws, null: .loss_family.null} $D/comparisons.stacks-r1.nopstack.json
+{"comparisons":["tstack-vs-gstack","gstack-vs-tstack","gstack-vs-none","tstack-vs-none","gstack-vs-none-particle"],"order":["tstack-vs-gstack","gstack-vs-tstack"],"seed":20261031,"draws":10000,"null":"zero"}
+exit 0 (log/4.txt)
+
+## The five non-pstack arms, copied from the dry run's judged arms
+
+$ sh -c ls $W/arms/stacks-r1 && for a in none-opus gstack-opus tstack-opus none-particle-1 gstack-particle-1; do diff -r $SRC/stacks-r1/$a $W/arms/stacks-r1/$a || exit 1; done && echo copies match
+gstack-opus
+gstack-particle-1
+none-opus
+none-particle-1
+tstack-opus
+copies match
+exit 0 (log/5.txt)
+
+## #95's file names the dropped arms, so score refuses it on these five
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant gstack-opus --reference none-opus
+E_NOLOSS_ARM arm pstack-opus is not ingested for suite stacks-r1
+E_NOLOSS_ARM context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_NOLOSS_ARM fix: Each line names the file, row and field and how to fix that row. Fix the source arm (ingest never edits it) and run ingest --check again. For a scan hit in a finding, --digest-only <id> publishes only its digest; to replace a published arm, pass --replace with the reason.
+E_NOLOSS_ARM docs: docs/errors.md#e_noloss_arm
+exit 2 (log/6.txt)
+
+## Every comparison of the new file (tstack-opus is stopped in the fixtures, so its three read as no verdict)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/arms --prereg $D/comparisons.stacks-r1.nopstack.json --variant tstack-opus --reference gstack-opus --out $W/arms/../score-tstack-vs-gstack.json
+verdict: none
+(Holm n/a over 5) (Holm n/a, step 1 of 2 in the declared LOSS family)
+exit 2 (log/7.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/arms --prereg $D/comparisons.stacks-r1.nopstack.json --variant gstack-opus --reference tstack-opus --out $W/arms/../score-gstack-vs-tstack.json
+verdict: none
+(Holm n/a over 5) (Holm n/a, step 2 of 2 in the declared LOSS family)
+exit 2 (log/8.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/arms --prereg $D/comparisons.stacks-r1.nopstack.json --variant gstack-opus --reference none-opus --out $W/arms/../score-gstack-vs-none.json
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+(Holm 0.0 over 5)
+exit 2 (log/9.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/arms --prereg $D/comparisons.stacks-r1.nopstack.json --variant tstack-opus --reference none-opus --out $W/arms/../score-tstack-vs-none.json
+verdict: none
+(Holm n/a over 5)
+exit 2 (log/10.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/arms --prereg $D/comparisons.stacks-r1.nopstack.json --variant gstack-particle-1 --reference none-particle-1 --out $W/arms/../score-gstack-vs-none-particle.json
+verdict: NOT_DISTINGUISHED
+(Holm 0.543 over 5)
+exit 2 (log/11.txt)
+
+## A derived reading on the new file: the complete case, then every comparison on it
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $D/comparisons.stacks-r1.nopstack.json --root $W/arms --id stacks-r1-nopstack-complete --out $W/complete --drop-gaps
+derive stacks-r1-nopstack-complete: drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
+suite $W/complete/stacks-r1-nopstack-complete.json sha256 617844a1b0cdd4f15ab180e428d9edc8be28907b33131dc046035a54bd87d7f9: 32 units, 38 blocking blockers on 25 PRs; 1 units dropped (garrytan/gstack#3527@2684974602c1)
+arm gstack-opus: complete, 1 cost rows dropped, tree d413bdffa76b04743e618614de20947c4da8335f63a56ecb468c1ba0f1695706
+arm gstack-particle-1: complete, 1 cost rows dropped, tree e3e162d9f4da8065ef38bc177c99c901396059451226ba1a4b8ee51036ec6e83
+arm none-opus: complete, 1 cost rows dropped, tree 0ad270f8281efdad2f13a88d331442ed3e0798cd191556f457bd19b845d7a46a
+arm none-particle-1: complete, 1 cost rows dropped, tree f1800eb5df5b5162c827ccb663bb326b9380a78e90c9a2959eb065c739bd0b4b
+arm tstack-opus: stopped -> complete, 1 cost rows dropped, tree 008ca219fc332b6de33d620952b9f222abd3b05f5b01f51d77cbe29315358673
+exit 0 (log/12.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/complete/stacks-r1-nopstack-complete.json --root $W/complete/arms --prereg $W/complete/comparisons.stacks-r1-nopstack-complete.json --variant tstack-opus --reference gstack-opus --out $W/complete/arms/../score-tstack-vs-gstack.json
+verdict: NOT_DISTINGUISHED
+(Holm 0.692 over 5) (Holm 0.111, step 1 of 2 in the declared LOSS family)
+exit 2 (log/13.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/complete/stacks-r1-nopstack-complete.json --root $W/complete/arms --prereg $W/complete/comparisons.stacks-r1-nopstack-complete.json --variant gstack-opus --reference tstack-opus --out $W/complete/arms/../score-gstack-vs-tstack.json
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+(Holm 0.010 over 5) (Holm 0.976, step 2 of 2 in the declared LOSS family)
+exit 2 (log/14.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/complete/stacks-r1-nopstack-complete.json --root $W/complete/arms --prereg $W/complete/comparisons.stacks-r1-nopstack-complete.json --variant gstack-opus --reference none-opus --out $W/complete/arms/../score-gstack-vs-none.json
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+(Holm 0.0 over 5)
+exit 2 (log/15.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/complete/stacks-r1-nopstack-complete.json --root $W/complete/arms --prereg $W/complete/comparisons.stacks-r1-nopstack-complete.json --variant tstack-opus --reference none-opus --out $W/complete/arms/../score-tstack-vs-none.json
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+(Holm 0.0054 over 5)
+exit 2 (log/16.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/complete/stacks-r1-nopstack-complete.json --root $W/complete/arms --prereg $W/complete/comparisons.stacks-r1-nopstack-complete.json --variant gstack-particle-1 --reference none-particle-1 --out $W/complete/arms/../score-gstack-vs-none-particle.json
+verdict: NOT_DISTINGUISHED
+(Holm 0.493 over 5)
+exit 2 (log/17.txt)
+
+checks done: 17 steps
