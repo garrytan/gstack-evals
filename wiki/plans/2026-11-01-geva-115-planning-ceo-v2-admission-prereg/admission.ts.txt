@@ -1,0 +1,121 @@
+// admission.ts: the CEO panel v2 admission pilot's frozen decision (prereg sections 5 and 6). Reads the pilot's
+// review-units out dir (cells.ndjson through the pinned planScore), the judged arms' judgments.tsv, the run bundle's
+// map.json and exposure.py's JSON, runs the pinned power simulator, and prints the panel disposition, the procedure
+// disposition, the flags and the exposure rates. Prints counts and rates only, never unit ids or text. GEVA-115.
+//   bun admission.ts --scorer <checkout> --pin <sha> --suite <admission suite> --sealed-root <dir> --out <pilot out>
+//     --judged <dir of judged arms> --map <map.json> --exposure <exposure.json> [--model claude-opus-5-5] [--units 8]
+//     [--passes 2] [--cap-stop yes] [--json <file>]
+// judgments.tsv names a blocker by its unit and suite blocker id (B1, B2); the pinned suite maps each to its catalog case,
+// and map.json gives the case's stratum.
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const args = new Map<string, string>();
+for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i]!, process.argv[i + 1]!);
+const need = (k: string) => {
+  const v = args.get(k);
+  if (!v) { console.error("E_USAGE admission.ts: missing " + k); process.exit(5); }
+  return v;
+};
+const scorer = need("--scorer"), pin = need("--pin"), suitePath = need("--suite"), sealedRoot = need("--sealed-root"), out = need("--out"), judged = need("--judged"), mapFile = need("--map"), expFile = need("--exposure");
+const model = args.get("--model") ?? "claude-opus-5-5";
+const nUnits = Number(args.get("--units") ?? 8), passes = Number(args.get("--passes") ?? 2);
+const ARMS = { none: "none", gstack: "gstack", forced: "gstack-forced" } as const;
+const git = (...a: string[]) => spawnSync("git", ["-C", scorer, ...a], { encoding: "utf8" }).stdout.trim();
+if (git("rev-parse", "HEAD") !== pin || git("status", "--porcelain", "--untracked-files=no") !== "") { console.error("E_PIN admission.ts: the scorer checkout is not at " + pin + " with no tracked change"); process.exit(5); }
+const { readReviewJournal, planScore, armId } = await import(join(scorer, "src/trial/review/run.ts"));
+const { loadSuite, unitRef } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const suite = loadSuite(suitePath, { sealedRoot }).suite;
+
+// 1. Sessions, through the pinned planScore.
+const journal: Map<string, any> = readReviewJournal(out);
+const cells: Record<string, { findings: number; miss: number; gap: number; not_run: number }> = {};
+const map = JSON.parse(readFileSync(mapFile, "utf8"));
+const admUnits = map.units.filter((u: any) => u.admission);
+if (admUnits.length !== nUnits) { console.error("E_INPUT admission.ts: map.json names " + admUnits.length + " admission units, not " + nUnits); process.exit(5); }
+if (suite.units.length !== nUnits) { console.error("E_INPUT admission.ts: the suite holds " + suite.units.length + " units, not " + nUnits); process.exit(5); }
+for (const arm of Object.values(ARMS)) {
+  const c = (cells[arm] = { findings: 0, miss: 0, gap: 0, not_run: 0 });
+  const mine = [...journal.values()].filter((e) => e.cell.model === model && e.cell.arm === arm);
+  for (const e of mine) c[planScore(e) as "findings" | "miss" | "gap"]++;
+  c.not_run = nUnits * passes - mine.length;
+}
+// 2. Judgments.
+const caseOf = new Map<string, string>();
+for (const u of suite.units) for (const b of u.blockers) caseOf.set(unitRef(suite, u) + " " + b.id, b.case);
+type Row = { pr: string; blocker: string; pass: number; outcome: string; coverage: string };
+const readJ = (arm: string): Row[] | null => {
+  const f = join(judged, armId(arm, model), "judgments.tsv");
+  if (!existsSync(f)) return null;
+  const [head, ...rows] = readFileSync(f, "utf8").split("\n").filter((l) => l.trim());
+  const h = head!.split("\t");
+  return rows.map((l) => {
+    const c = l.split("\t"); const g = (k: string) => c[h.indexOf(k)] ?? "";
+    return { pr: g("pr"), blocker: caseOf.get(g("pr") + " " + g("blocker_id")) ?? "?" + g("pr") + " " + g("blocker_id"), pass: Number(g("pass") || 1), outcome: g("outcome"), coverage: g("coverage") || "complete" };
+  });
+};
+const caseKind = new Map<string, string>();
+for (const u of admUnits) for (const c of u.cases) caseKind.set(c, u.kind);
+const items = [...caseKind.keys()];
+if (items.length !== caseOf.size || items.some((i) => ![...caseOf.values()].includes(i))) { console.error("E_INPUT admission.ts: map.json's admission cases are not the suite's blockers"); process.exit(5); }
+const J = Object.fromEntries(Object.values(ARMS).map((a) => [a, readJ(a)]));
+const share = (rows: Row[], id: string, hit: (o: string) => boolean) => rows.filter((r) => r.blocker === id && hit(r.outcome)).length / passes;
+const recall = (rows: Row[], ids: string[], hit: (o: string) => boolean) => (ids.length ? ids.reduce((s, id) => s + share(rows, id, hit), 0) / ids.length : NaN);
+const F = (o: string) => o === "F", FD = (o: string) => o === "F" || o === "D";
+const round = (x: number, d = 3) => Math.round(x * 10 ** d) / 10 ** d;
+// 3. Exposure.
+const exp = JSON.parse(readFileSync(expFile, "utf8"));
+// 4. Power, through the pinned simulator.
+const power = (clusters: number[], rate: number, dep: number): number | null => {
+  if (!(rate > 0 && rate < 1)) return null;
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k)));
+  const r = spawnSync(join(scorer, "bin/gstack-evals"), ["noloss", "power", "--clusters", clusters.join(","), "--passes", "3", "--margin", "10", "--loss", "20", "--recall", String(round(rate, 4)), "--alpha", "0.025", "--dependence", String(dep), "--sims", "2000", "--seed", "1", "--json"], { encoding: "utf8", cwd: scorer, env });
+  if (r.status !== 0) return null;
+  const d = JSON.parse(r.stdout); return (d.rows?.[0] ?? d.row).loss;
+};
+const HEADLINE = [...Array(12).fill(2), ...Array(12).fill(1)], H_ONLY = Array(12).fill(2), PU_ONLY = Array(12).fill(1);
+
+const noRead: string[] = [];
+const n = cells[ARMS.none]!;
+if (n.findings !== nUnits * passes) noRead.push("none has " + (n.gap + n.not_run) + " gap or unrun sessions and " + n.miss + " sessions with no parsed findings block (" + n.findings + " of " + nUnits * passes + " have findings)");
+const jn = J[ARMS.none];
+if (!jn) noRead.push("none has no judgments.tsv");
+const complete = (rows: Row[]) => items.every((i) => Array.from({ length: passes }, (_, p) => rows.filter((r) => r.blocker === i && r.pass === p + 1)).every((x) => x.length === 1 && x[0]!.coverage === "complete")) && rows.length === items.length * passes;
+for (const [a, rows] of Object.entries(J)) if (rows && !complete(rows)) noRead.push(a + " has judgments with coverage incomplete (a row missing, extra or not complete)");
+if (exp.system_prompt_check !== "PASS") noRead.push("the system-prompt check failed");
+if (args.get("--cap-stop") === "yes") noRead.push("the run hit a cap stop");
+
+const R = jn ? recall(jn, items, F) : NaN, RA = jn ? recall(jn, items, FD) : NaN;
+const byKind = (k: string) => items.filter((i) => caseKind.get(i) === k);
+const strat = Object.fromEntries(Object.values(ARMS).map((a) => [a, J[a] ? Object.fromEntries(["hard", "premise", "ambition"].map((k) => [k, round(recall(J[a]!, byKind(k), F))])) : null]));
+const allRec = Object.fromEntries(Object.values(ARMS).map((a) => [a, J[a] ? { must_fix: round(recall(J[a]!, items, F)), any_severity: round(recall(J[a]!, items, FD)) } : null]));
+const dead = items.filter((i) => Object.values(J).every((rows) => !rows || share(rows, i, FD) === 0)).length;
+const pw = { "0": power(HEADLINE, R + 0.2, 0), "0.3": power(HEADLINE, R + 0.2, 0.3), "0.6": power(HEADLINE, R + 0.2, 0.6) };
+const rH = jn ? recall(jn, byKind("hard"), F) : NaN, rPU = jn ? recall(jn, [...byKind("premise"), ...byKind("ambition")], F) : NaN;
+const stratumPower = { h_only: power(H_ONLY, rH + 0.2, 0.3), pu_only: power(PU_ONLY, rPU + 0.2, 0.3) };
+
+let panel: string;
+if (noRead.length) panel = "NO READ";
+else if (R > 0.6) panel = "NOT ADMITTED, ceiling";
+else if (R < 0.2) panel = "NOT ADMITTED, floor";
+else if (pw["0.3"] === null || pw["0.3"] < 0.8) panel = "NOT ADMITTED, power";
+else panel = "ADMIT";
+const flags: string[] = [];
+if (RA > 0.6) flags.push("F1 severity-limited (none any-severity recall " + round(RA) + ")");
+if (dead >= 4) flags.push("F2 dead items (" + dead + " of " + items.length + " matched by no session at any severity)");
+const sN = strat[ARMS.none] as Record<string, number> | null;
+if (sN) for (const [k, v] of Object.entries(sN)) if (v === 0 || v === 1 || (k === "hard" && v > 0.85)) flags.push("F3 stratum " + k + " at " + v);
+const f = cells[ARMS.forced]!;
+const procedure = f.gap + f.not_run > 0 ? "NO READ" : exp.procedure;
+const ex = exp.arms;
+const line = "Panel: " + panel + " (none R = " + round(R) + ", any severity " + round(RA) + ", Power " + (pw["0.3"] === null ? "n/a" : round(pw["0.3"], 3)) + "; flags " + (flags.length ? flags.join("; ") : "none") + "). " +
+  "Procedure: " + procedure + " (gstack-forced ran it " + ex[ARMS.forced]?.ran + "/" + nUnits * passes + ", exposed " + ex[ARMS.forced]?.exposed + "/" + nUnits * passes + "; gstack exposed " + ex[ARMS.gstack]?.exposed + "/" + nUnits * passes + ", ran " + ex[ARMS.gstack]?.ran + "). " +
+  "System prompt: " + exp.system_prompt_check + " (claude-code-preset " + Object.values(ex).reduce((s: number, v: any) => s + v.preset, 0) + "/" + Object.keys(ex).length * nUnits * passes + ", none first-request floor " + ex[ARMS.none]?.above_floor + "/" + nUnits * passes + ").";
+const result = { panel, procedure, flags, no_read: noRead, R: round(R), any_severity: round(RA), power: pw, stratum_power: stratumPower, recall: allRec, stratum_recall: strat, dead_items: dead, items: items.length, sessions: cells, line };
+console.log(line);
+if (noRead.length) console.log("NO READ because: " + noRead.join("; "));
+console.log("recall per arm (must-fix / any severity): " + Object.entries(allRec).map(([a, v]) => a + " " + (v ? v.must_fix + " / " + v.any_severity : "n/a")).join(", "));
+console.log("recall per stratum, descriptive (hard, premise, ambition): " + Object.entries(strat).map(([a, v]) => a + " " + (v ? [v.hard, v.premise, v.ambition].join(", ") : "n/a")).join("; "));
+console.log("headline gain power at dependence 0 / 0.3 / 0.6: " + [pw["0"], pw["0.3"], pw["0.6"]].map((x) => (x === null ? "n/a" : round(x, 3))).join(" / ") + "; a gain inside H only: " + stratumPower.h_only + ", inside P and U only: " + stratumPower.pu_only);
+if (args.get("--json")) writeFileSync(args.get("--json")!, JSON.stringify(result, null, 2) + "\n");

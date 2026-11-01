@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+# convert-v2.py <panel dir> <run dir>: converts CEO panel v2 (seal.py's ceo-panel-v2/, extracted) into the admission
+# pilot's run material: the seeded admission draw (prereg section 2.2), plan cases in the one catalog schema under
+# <run>/sealed-root/catalog/{admission,headline}/, one combined source clone (panel/plans, a branch per unit number), and
+# map.json. Unit numbers are a permutation drawn from OS randomness; the map lives only in the run bundle. Prints counts
+# and digests only, never plan, context or key text, and never the unit-to-number map. GEVA-115.
+import hashlib, itertools, json, os, random, re, shutil, subprocess, sys, tempfile
+panel, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
+REPO = "panel/plans"
+DRAW_SEED = 20261102
+sha = lambda b: hashlib.sha256(b).hexdigest()
+def git(d, *a):
+    r = subprocess.run(["git", "-C", d, *a], capture_output=True)
+    if r.returncode: raise SystemExit("git " + a[0] + " failed in a unit clone")
+    return r.stdout
+os.makedirs(out)
+man = json.load(open(os.path.join(panel, "manifest.json")))
+units = {u["unit"]: u for u in man["units"]}
+assert len(units) == 44, len(units)
+verdicts = {}
+for a in man["audit"]:
+    for v in json.load(open(os.path.join(panel, "audit", a["file"]))):
+        verdicts[v["unit"]] = (a["file"], v["verdict"])
+assert all(verdicts.get(u, (None, None))[1] == "pass" for u in units), "every unit needs an audit pass"
+
+# The admission draw: one hard unit per author, then 2 premise and 2 ambition units from four different authors.
+rng = random.Random(DRAW_SEED)
+authors = sorted({u["author"] for u in units.values()})
+assert authors == ["K", "L", "M", "N"]
+of = lambda kind, a: sorted(i for i, u in units.items() if u["kind"] == kind and u["author"] == a)
+admission = [rng.choice(of("hard", a)) for a in authors]
+combos = []
+for pa in itertools.combinations(authors, 2):
+    ua = tuple(a for a in authors if a not in pa)
+    for p in itertools.product(*[of("premise", a) for a in pa]):
+        for q in itertools.product(*[of("ambition", a) for a in ua]):
+            combos.append(p + q)
+pick = rng.choice(sorted(combos))
+admission += list(pick)
+assert len(admission) == 8 and len({units[i]["author"] for i in admission[4:]}) == 4
+
+nums = list(range(1, len(units) + 1)); random.SystemRandom().shuffle(nums)
+src = os.path.join(out, "work-source"); subprocess.run(["git", "init", "-q", "-b", "main", src], check=True)
+for d in ("admission", "headline"): os.makedirs(os.path.join(out, "sealed-root", "catalog", d))
+checks = dict(head=0, base=0, two_commits=0, plan_only=0, plan_digest=0, key_digest=0, bundle_digest=0)
+tmp = tempfile.mkdtemp(dir=out)
+FLAW_CLASS = {"H-X": "right-thing-badly", "H-F": "wrong-thing", "H-T": "right-thing-badly", "P-premise": "wrong-thing", "P-size": "wrong-thing", "P-alt": "wrong-thing", "U": "wrong-thing"}
+STRATUM = {"hard": "seeded", "premise": "home-field", "ambition": "home-field", "decoy": "decoy"}
+MODE = {"greenfield": "greenfield", "added": "added-capability", "fix": "fix"}
+def cause_text(i):
+    k, c = i["item_kind"], i["cause"].strip()
+    if k == "H-X": return "A conflict between two places (" + i["plan_section"].lstrip("#").strip() + " and " + " and ".join(p.lstrip("#").strip() for p in i["other_places"]) + "). " + c
+    if k == "H-F": return "A false fact. " + c
+    if k == "H-T": return "A hidden commitment. " + c
+    lead = "A decision (replace an approach rather than tune it). " if k == "U" else "A decision. "
+    return lead + "The plan decides: " + i["decision"].strip() + " It should become: " + i["should_become"].strip() + " Why: " + c
+mapping, ncases = [], 0
+for uid, pr in zip(sorted(units), nums):
+    u = units[uid]; udir = os.path.join(panel, "units", uid)
+    bundle = os.path.join(udir, "repo.bundle"); keyb = open(os.path.join(udir, "key.json"), "rb").read()
+    checks["key_digest"] += sha(keyb) == u["key_sha256"]
+    checks["bundle_digest"] += sha(open(bundle, "rb").read()) == u["bundle_sha256"]
+    c = os.path.join(tmp, uid)
+    subprocess.run(["git", "clone", "-q", bundle, c], check=True, capture_output=True)
+    head = git(c, "rev-parse", "HEAD").decode().strip(); base = git(c, "rev-parse", "HEAD~1").decode().strip()
+    checks["head"] += head == u["head"]; checks["base"] += base == u["base"]
+    checks["two_commits"] += git(c, "rev-list", "--count", "HEAD").decode().strip() == "2"
+    checks["plan_only"] += git(c, "diff", "--name-only", base, head).decode().split() == ["plan.md"]
+    plan = git(c, "show", head + ":plan.md"); checks["plan_digest"] += sha(plan) == u["plan_sha256"]
+    lines = plan.decode().split("\n")
+    def heading_line(section):
+        want = section.strip().lstrip("#").strip()
+        hits = [n + 1 for n, l in enumerate(lines) if re.match(r"^#{1,6}\s", l) and l.lstrip("#").strip() == want]
+        if not hits: raise SystemExit("no heading for a keyed section in one unit")
+        return hits[0]
+    if subprocess.run(["git", "-C", src, "fetch", "-q", "--no-tags", bundle, "HEAD:refs/heads/unit-" + str(pr)], capture_output=True).returncode: raise SystemExit("fetch into the source clone failed")
+    key = json.loads(keyb); kind = key["kind"]; adm = uid in admission
+    assert kind == u["kind"]
+    af = verdicts[uid][0]
+    entries = []
+    if kind == "decoy":
+        b = key["bait"]
+        entries.append(dict(section=b["plan_section"], cause="A deliberate choice the context justifies. " + b["choice"].strip() + " " + b["why_not_a_flaw"].strip(),
+                            summary="bait resembling " + b["resembles"], source="CEO panel v2 bait " + b["resembles"], flaw_class="bait", deserved="INFORMATIONAL",
+                            basis="Decoy bait: a choice the unit's context justifies, so a must-fix finding on it is a false alarm.",
+                            evidence=[j["path"] + ": " + j["what"] for j in b["justification"]], ref="bait"))
+    else:
+        for i in key["items"]:
+            entries.append(dict(section=i["plan_section"], cause=cause_text(i), summary=i["item_kind"], source="CEO panel v2 kind " + i["item_kind"],
+                                flaw_class=FLAW_CLASS[i["item_kind"]], deserved="CRITICAL",
+                                basis="Panel key deserved severity " + i["deserved_severity"] + "; Critical and High are must-fix under the plan told prompt.",
+                                evidence=[e["path"] + ": " + e["what"] for e in i["evidence"]], ref=i["id"]))
+    ids = []
+    for k2, e in enumerate(entries, 1):
+        cid = "v2-" + str(pr) + "-" + str(k2); ids.append(cid)
+        case = {"schema_version": 1, "kind": "plan", "id": cid, "visibility": "sealed", "repo": REPO, "pr": pr, "reviewed_head": head, "merge_base": base,
+                "plan": {"digest": u["plan_sha256"], "lens": "ceo", "stratum": "pilot" if adm else STRATUM[kind], "source": e["source"], "plan_type": MODE[key["mode"]], "flaw_class": e["flaw_class"]},
+                "defect": {"file": "plan.md", "line": heading_line(e["section"]), "section": e["section"].strip().lstrip("#").strip(), "cause": e["cause"], "summary": e["summary"]},
+                "severity": {"deserved": e["deserved"], "basis": e["basis"]},
+                "receipt": {"source": "ceo-panel-v2 units/" + uid + "/key.json (sha256 " + u["key_sha256"] + "), " + e["ref"], "evidence": e["evidence"]},
+                "answer_key_audit": {"by": "GEVA-115 auditor, anthropic/claude-opus-5-5 without gstack (audit/" + af + ")", "at": "2026-11-01", "verdict": "confirmed", "notes": "Panel audit verdict pass."},
+                "credit": "CEO panel v2 (GEVA-115, GST-848): written blind to gstack by openai/gpt-6.1-sol, audited by anthropic/claude-opus-5-5 without gstack"}
+        with open(os.path.join(out, "sealed-root", "catalog", "admission" if adm else "headline", cid + ".json"), "w") as fh: fh.write(json.dumps(case, indent=2) + "\n")
+        ncases += 1
+    mapping.append(dict(unit=uid, author=u["author"], kind=kind, mode=key["mode"], admission=adm, pr=pr, head=head, base=base, cases=ids,
+                        item_kinds=[x["item_kind"] for x in key.get("items", [])] or [key["bait"]["resembles"]]))
+shutil.rmtree(tmp)
+os.makedirs(os.path.join(out, "source"))
+subprocess.run(["git", "-C", src, "bundle", "create", "-q", os.path.join(out, "source", "plans.bundle"), "--all"], check=True, capture_output=True)
+shutil.rmtree(src)
+mapping.sort(key=lambda m: m["pr"])
+with open(os.path.join(out, "map.json"), "w") as fh: fh.write(json.dumps({"repo": REPO, "panel": man["name"], "draw_seed": DRAW_SEED, "units": mapping}, indent=2) + "\n")
+from collections import Counter
+adm_rows = [m for m in mapping if m["admission"]]
+print("units", len(mapping), "cases", ncases, "checks", json.dumps(checks))
+print("admission units", len(adm_rows), "by kind", dict(Counter(m["kind"] for m in adm_rows)), "items", sum(len(m["cases"]) for m in adm_rows), "authors of hard", len({m["author"] for m in adm_rows if m["kind"] == "hard"}))
+for d in ("admission", "headline"): print("catalog", d, len(os.listdir(os.path.join(out, "sealed-root", "catalog", d))), "cases")

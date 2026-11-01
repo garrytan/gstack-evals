@@ -1,0 +1,58 @@
+# Frozen echo-term list for CEO panel v2 authoring and audit.
+# Source: panel v1's list (headings of gstack plan-ceo-review and autoplan's Phase 1 at 1.91.379.0) plus headings new in
+# gstack 1.92.37.0 (1ea8692), and the panel's own stratum words. Case-insensitive whole phrase.
+# "any:" terms are flagged anywhere in a unit tree; "heading:" terms only in a markdown heading.
+any: premise
+any: existing code leverage
+any: dream state
+any: platonic
+any: 10x
+any: mode selection
+any: scope expansion
+any: selective expansion
+any: hold scope
+any: scope reduction
+any: expansion framing
+any: temporal interrogation
+any: nuclear scope
+any: prime directive
+any: landscape check
+any: taste calibration
+any: retrospective check
+any: search before building
+any: what already exists
+any: not in scope
+any: boil the ocean
+any: error & rescue
+any: error and rescue
+any: rescue map
+any: failure modes registry
+any: long-term trajectory
+any: outside voice
+any: review readiness
+any: accepted scope
+any: reviewer concerns
+any: mega plan
+any: ceo plan
+any: ceo review
+any: strategy & scope
+any: strategy and scope
+any: system audit
+any: spec review loop
+any: decision ledger
+any: approval readiness
+any: review sections
+any: founder mode
+any: scope trap
+any: under-ambition
+any: underambitious
+any: decoy
+any: bait
+any: flaw
+any: gotcha
+heading: alternatives
+heading: vision
+heading: scope decisions
+heading: deferred
+heading: trajectory
+heading: completeness

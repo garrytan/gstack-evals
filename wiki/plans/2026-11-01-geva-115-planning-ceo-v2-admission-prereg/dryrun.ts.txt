@@ -1,0 +1,584 @@
+// CEO panel v2 admission pilot: keyless dry run (GEVA-115, GST-848). Drives every frozen rule of the preregistration
+// through the pinned scorer, keyless, with synthetic arms, judges and sessions:
+//   bun dryrun.ts <scorer> <pin> <forced on|off> <sealed root> <source clone> <map.json> <post dir> <scratch> <gstack checkout> [<r1a pilot out>|-]
+// <forced> says whether the pin carries GEVA-117's forced plan arm (--told-prefix with --plan on a gstack-<suffix> arm).
+// Off, the frozen command runs as two arms (none, gstack) and every forced-arm check prints SKIP; on, all of them run.
+// Every finding, judgment, session and ruling here is synthetic, except the R1a pilot transcripts the exposure hook reads
+// when given (held under custody). The ledger checks run on a temporary approval record and local ledger under the
+// scratch dir, with the approvals mirror stubbed. The transcript keeps each step's command (paths shortened), exit code
+// and summary lines, drops every line that names a unit, and ends with a leak check over every unit head, base and line.
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const argv0 = process.argv.slice(2);
+if (argv0.length < 9 || !["on", "off"].includes(argv0[2]!)) {
+  console.error("E_USAGE dryrun.ts: bun dryrun.ts <scorer> <pin> <forced on|off> <sealed root> <source clone> <map.json> <post dir> <scratch> <gstack checkout> [<r1a pilot out>|-]");
+  process.exit(5);
+}
+const [scorer, SR, SRC, MAP, POST, OUT, GDIR] = [0, 3, 4, 5, 6, 7, 8].map((i) => resolve(argv0[i]!)) as [string, string, string, string, string, string, string];
+const PIN = argv0[1]!, FORCED_ON = argv0[2] === "on";
+const R1A = argv0[9] && argv0[9] !== "-" ? resolve(argv0[9]) : null;
+const HOME = process.env.HOME ?? "";
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+
+const lines: string[] = [];
+let failures = 0, passes = 0;
+const skipped: string[] = [];
+const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(MAP, "$MAP").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER").replaceAll(GDIR, "$GSTACK").replaceAll(HOME || "\0", "~");
+const UNIT = /panel\/plans#\d+|plans-\d+-[0-9a-f]{8}|@[0-9a-f]{12}\b|\bv2-\d+-\d+\b/;
+const say = (t: string) => lines.push(scrub(t));
+const check = (label: string, ok: boolean) => {
+  ok ? passes++ : failures++;
+  say((ok ? "PASS " : "FAIL ") + label);
+};
+const skip = (label: string) => {
+  skipped.push(label);
+  say("SKIP " + label + " (the forced arm is off at this pin)");
+};
+const show = (text: string, max = 40) => {
+  for (const l of text.split("\n").filter((l) => l.trim() && !UNIT.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).slice(0, max)) say("    " + l);
+};
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const run = (cmd: string[], cwd = scorer, env: Record<string, string> = KEYLESS) => spawnSync(cmd[0]!, cmd.slice(1), { encoding: "utf8", cwd, env, maxBuffer: 1 << 28 });
+const git = (...a: string[]) => run(["git", "-C", scorer, ...a]).stdout.trim();
+const dollars = (micros: number) => "$" + (micros / 1e6).toFixed(2);
+
+const { nolossCli } = await import(join(scorer, "lanes/review-noloss/cli.ts"));
+const { loadSuite } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const { writePlanArm } = await import(join(scorer, "tests/noloss/plan-panel.ts"));
+const { armId } = await import(join(scorer, "src/trial/review/run.ts"));
+const S = ["--sealed-root", SR];
+const OPUS = "claude-opus-5-5";
+const ADM = join(SR, "suites/planrev-ceo-v2-admission.json"), HL = join(SR, "suites/planrev-ceo-v2.json");
+const FORCED = join(POST, "forced-line.txt");
+const RUNOUT = join(HOME, ".capy/work/planning-v2/admission");
+const GSTACK = run(["git", "-C", GDIR, "rev-parse", "HEAD"]).stdout.trim();
+const gshow = (path: string) => run(["git", "-C", GDIR, "show", GSTACK + ":" + path]).stdout;
+
+async function cli(label: string, argv: string[], o: { show?: number } = {}) {
+  const out: string[] = [], err: string[] = [];
+  const code = await nolossCli(argv, { out: (t: string) => out.push(t), err: (t: string) => err.push(t) });
+  say("$ noloss " + argv.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+  say("  exit " + code + "  (" + label + ")");
+  if (o.show !== 0) show(out.join("\n") + "\n" + err.join("\n").split("\n").filter((l) => /^E_[A-Z_]+ /.test(l)).join("\n"), o.show ?? 6);
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+function units(argv: string[], label: string, n = 14) {
+  const r = run([join(scorer, "bin/gstack-evals"), "review-units", ...argv]);
+  say("$ review-units " + argv.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" ").replaceAll(GSTACK, "<gstack>"));
+  say("  exit " + r.status + "  (" + label + ")");
+  show(((r.stdout ?? "") + "\n" + (r.stderr ?? "").split("\n").filter((l) => /^E_[A-Z_]+ /.test(l)).join("\n")).replaceAll(GSTACK, "<gstack>"), n);
+  return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
+
+say("# CEO panel v2 admission pilot: keyless dry run, " + new Date().toISOString());
+say("scorer pin " + PIN + "; forced arm " + (FORCED_ON ? "on" : "off") + "; gstack " + GSTACK + " (" + gshow("VERSION").trim() + ")");
+for (const f of ["forced-line.txt", "judge-brief.md", "admission.ts", "exposure.py", "gen-synth.py", "seal.py", "convert-v2.py", "build-v2.sh", "dryrun.ts"]) if (existsSync(join(POST, f))) say("post " + f + " sha256 " + sha(readFileSync(join(POST, f))));
+
+// 1. Pin, panel and suites.
+say("\n## 1. Pin, panel and suites");
+check("the scorer checkout is at the pin " + PIN + " with no tracked change", git("rev-parse", "HEAD") === PIN && git("status", "--porcelain", "--untracked-files=no") === "");
+const hasForced = existsSync(join(scorer, "src/trial/review/plan-told.ts"));
+const cliSrc = readFileSync(join(scorer, "src/trial/review/cli.ts"), "utf8");
+check("the forced-arm flag matches the pin: " + (FORCED_ON ? "plan-told.ts is present, so --told-prefix runs with --plan on a gstack plan arm" : "the pin has no plan-told.ts and refuses --told-prefix with --plan"), FORCED_ON ? hasForced : !hasForced && cliSrc.includes('"--told-prefix runs on code units, not with --plan"'));
+const hostCli = JSON.parse(readFileSync(join(scorer, "docker/host-cli.json"), "utf8"));
+check("the pin's Claude Code CLI is 2.1.314 (docker/host-cli.json), the version GEVA-109 measured the preset on", hostCli.claude === "2.1.314");
+check("every scorer command here runs with ANTHROPIC_API_KEY, OPENAI_API_KEY and OPENROUTER_API_KEY removed", !Object.keys(KEYLESS).some((k) => /^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k)));
+const forced = readFileSync(FORCED, "utf8").replace(/\n$/, "");
+say("forced line sha256 " + sha(forced) + ": " + forced);
+check("the forced line is one line that opens with /plan-ceo-review and names no review mode", !/[\r\n]/.test(forced) && forced.startsWith("/plan-ceo-review ") && !/SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION/.test(forced));
+const skill = gshow("plan-ceo-review/SKILL.md"), sections = gshow("plan-ceo-review/sections/review-sections.md");
+const step0 = skill.split("\n").filter((l) => /^## Step 0\b/.test(l));
+check("the pinned SKILL.md has two Step 0 headings and the second is the one the forced line names (" + step0.map((l) => JSON.stringify(l.slice(3))).join(", ") + ")", step0.length === 2 && step0[1] === "## Step 0: Nuclear Scope Challenge + Mode Selection" && forced.includes("Step 0 (Nuclear Scope Challenge + Mode Selection)"));
+const secHeads = sections.split("\n").filter((l) => /^### Section \d+:/.test(l));
+check("the pinned sections/review-sections.md has Review Sections 1 to 11 in order (" + sections.split("\n").length + " lines)", secHeads.map((l) => Number(/Section (\d+)/.exec(l)![1])).join(",") === "1,2,3,4,5,6,7,8,9,10,11");
+const titleOnly = secHeads.slice(0, 10).map((l) => "## " + l.replace(/^### Section \d+:\s*/, ""));
+const finder = run(["python3", "-c", "import sys, json; sys.path.insert(0, sys.argv[1]); import exposure; print(json.dumps([exposure.section_of(l) for l in json.loads(sys.argv[2])]))", POST, JSON.stringify([...secHeads.slice(0, 10), ...titleOnly])]);
+check("exposure.py finds each of the pinned file's Sections 1 to 10 by its number and by its title words alone (" + (finder.stdout.trim() || finder.stderr.trim().split("\n").pop()) + ")", JSON.stringify(JSON.parse(finder.stdout || "null")) === JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+const adm = loadSuite(ADM, { sealedRoot: SR }).suite, hl = loadSuite(HL, { sealedRoot: SR }).suite;
+const isDecoy = (u: any) => u.blockers.every((b: any) => b.counts === "over-blocking");
+const count = (s: any, f: (b: any) => boolean) => s.units.reduce((n: number, u: any) => n + u.blockers.filter(f).length, 0);
+check("the admission suite loads with the sealed root: 8 units, 12 blockers, every one must-fix (blocking)", adm.units.length === 8 && count(adm, () => true) === 12 && count(adm, (b) => b.counts === "blocking") === 12);
+const keyed = hl.units.filter((u: any) => !isDecoy(u));
+check("the headline suite loads: 36 units, 24 keyed with 36 must-fix blockers, 12 decoys each with its over-blocking bait", hl.units.length === 36 && keyed.length === 24 && keyed.every((u: any) => u.blockers.every((b: any) => b.counts === "blocking")) && count({ units: keyed }, () => true) === 36 && hl.units.filter(isDecoy).length === 12 && count({ units: hl.units.filter(isDecoy) }, () => true) === 12);
+const shas = new Set<string>([...adm.units, ...hl.units].flatMap((u: any) => [u.head, u.base]));
+check("no unit is in both suites (by head and by PR number)", !adm.units.some((u: any) => hl.units.some((h: any) => h.head === u.head || h.pr === u.pr)));
+for (const [p, name] of [[ADM, "admission"], [HL, "headline"]] as const) {
+  check("noloss suite --check passes on the " + name + " suite with the sealed root", (await cli(name + " suite", ["suite", "--check", "--suite", p, ...S], { show: 2 })).code === 0);
+  const bare = await cli(name + " suite without the sealed root", ["suite", "--check", "--suite", p], { show: 2 });
+  check("the " + name + " suite refuses without the sealed root", bare.code !== 0);
+}
+say("suite sha256: admission " + sha(readFileSync(ADM)) + ", headline " + sha(readFileSync(HL)));
+const map = JSON.parse(readFileSync(MAP, "utf8"));
+const admRows = map.units.filter((m: any) => m.admission);
+const kinds = (k: string) => admRows.filter((m: any) => m.kind === k);
+const authors = (rows: any[]) => new Set(rows.map((m: any) => m.author)).size;
+say("admission draw: " + ["hard", "premise", "ambition"].map((k) => kinds(k).length + " " + k).join(", ") + "; " + admRows.reduce((n: number, m: any) => n + m.cases.length, 0) + " items");
+check("the draw (seed " + map.draw_seed + ") took 4 hard units from 4 authors, then 2 premise and 2 ambition units from 4 different authors", map.draw_seed === 20261102 && kinds("hard").length === 4 && authors(kinds("hard")) === 4 && kinds("premise").length === 2 && kinds("ambition").length === 2 && authors([...kinds("premise"), ...kinds("ambition")]) === 4);
+const suiteCases = adm.units.flatMap((u: any) => u.blockers.map((b: any) => b.case)).sort();
+check("map.json's admission cases are exactly the admission suite's blockers, and its PR numbers are the suite's", JSON.stringify(admRows.flatMap((m: any) => m.cases).sort()) === JSON.stringify(suiteCases) && JSON.stringify(admRows.map((m: any) => m.pr).sort()) === JSON.stringify(adm.units.map((u: any) => u.pr).sort()));
+
+// 2. The frozen command.
+say("\n## 2. The frozen command (review-units --dry-run)");
+const GS = "garrytan/gstack@" + GSTACK;
+const ARMS = FORCED_ON ? ["none", "gstack", "gstack-forced"] : ["none", "gstack"];
+const spec = (a: string) => (a.startsWith("gstack") ? a + "=" + GS : a);
+const MAX_TURNS_FROZEN = 60;
+const PIN_MAX_TURNS = Number((readFileSync(join(scorer, "src/adapters/claude-code/driver.ts"), "utf8").match(/export const MAX_TURNS = (\d+);/) ?? [])[1]);
+check("every arm runs the driver's default turn cap: the pin's MAX_TURNS is 60, and the frozen command passes no --max-turns (the Captain's ruling: 100 only on a pin with GEVA-122's termination-kind fix)", MAX_TURNS_FROZEN === 60 && PIN_MAX_TURNS === 60);
+const base = (arms: string[], extra: string[] = [], out = RUNOUT) => ["--suite", ADM, "--arms", ...arms.map(spec), "--models", OPUS, "--passes", "2", "--sealed-root", SR, "--plan", "ceo", "--units", "all", "--source", "panel/plans=" + SRC, "--base-branch", "panel/plans=main", ...arms.flatMap((a) => ["--system-prompt", a + "=claude-code-preset"]), ...extra, ...(MAX_TURNS_FROZEN === 60 ? [] : ["--max-turns", String(MAX_TURNS_FROZEN)]), "--parallel", "3", "--timeout", "3600", "--item", "planning-v2-admission", "--spend-cap", "100", "--out", out, "--dry-run"];
+const PREFIX = FORCED_ON ? ["--told-prefix", "gstack-forced=" + FORCED] : [];
+const sessions = 8 * 2 * ARMS.length;
+const dry = units(base(ARMS, PREFIX), "the frozen pilot command" + (FORCED_ON ? "" : ", two arms while the forced arm is off"));
+const armsLine = dry.out.split("\n").find((l) => l.startsWith("arms: ")) ?? "";
+check("the frozen command plans " + sessions + " sessions (8 units x 2 passes x " + ARMS.length + " arms) with every arm on claude-code-preset, " + MAX_TURNS_FROZEN + " turns (the pin's MAX_TURNS is " + PIN_MAX_TURNS + "), spend cap $100 and out " + RUNOUT.replace(HOME, "~"), dry.code === 0 && new RegExp("sessions " + sessions + "\\b").test(dry.out) && (armsLine.match(/system prompt claude-code-preset/g) ?? []).length === ARMS.length && (MAX_TURNS_FROZEN === PIN_MAX_TURNS ? !/max turns \d+/.test(dry.out) : new RegExp("max turns " + MAX_TURNS_FROZEN + "\\b").test(dry.out)) && /spend cap \$100\.00/.test(dry.out) && dry.out.includes("out " + RUNOUT));
+check("none runs \"Review this plan for problems.\" and gstack \"/plan-ceo-review Review this plan for problems.\"", armsLine.includes('none ("Review this plan for problems."') && armsLine.includes('gstack ("/plan-ceo-review Review this plan for problems."'));
+if (FORCED_ON) check("gstack-forced runs the forced line, a space and \"Review this plan for problems.\"", armsLine.includes("gstack-forced (" + JSON.stringify(forced + " Review this plan for problems.")));
+if (FORCED_ON) {
+  const gstackLine = (armsLine.match(/gstack \(("[^"]*")/) ?? [])[1];
+  const suffixArms = ARMS.filter((x) => /^gstack-/.test(x) && x !== "gstack-auto");
+  const prefixed = new Set(PREFIX.filter((_, i) => i % 2 === 1).map((v) => v.split("=")[0]));
+  check("every gstack-<suffix> arm in the frozen command carries its own --told-prefix (" + suffixArms.join(", ") + "), so none runs as a silent second copy of gstack (#123 Step 11 finding 2)", suffixArms.length > 0 && suffixArms.every((x) => prefixed.has(x)));
+  check("the forced prefix is not a no-op: it adds text after /plan-ceo-review, does not contain the ask the harness appends, has no leading or trailing whitespace, and its arm line differs from the gstack arm's (#123 Step 11 findings 1 and 4)", forced.slice("/plan-ceo-review".length).trim().length > 0 && !forced.includes("Review this plan for problems.") && forced === forced.trim() && gstackLine !== undefined && JSON.parse(gstackLine) === "/plan-ceo-review Review this plan for problems." && JSON.parse(gstackLine) !== forced + " Review this plan for problems.");
+  const fold = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, "");
+  check("GST-885 guard, #126 Step 11 finding 1: the forced prefix holds no variant of the ask with case, punctuation and whitespace folded", !fold(forced).includes(fold("Review this plan for problems.")));
+  check("GST-885 guard, #126 Step 11 finding 3: the forced prefix holds no control or invisible format character (Unicode Cc or Cf: bidi, zero-width, BOM)", !/[\p{Cc}\p{Cf}]/u.test(forced));
+  check("GST-885 guard, #126 Step 11 finding 2: the frozen command has exactly one gstack-<suffix> arm, so no condition runs twice (" + suffixArms.join(", ") + ")", suffixArms.length === 1 && new Set(PREFIX.filter((_, k) => k % 2 === 1)).size === PREFIX.length / 2);
+}
+else skip("gstack-forced runs the forced line in the frozen command");
+const worstPrinted = /worst case at the allowance: \$([\d,.]+)/.exec(dry.out)?.[1];
+let u = units(base(ARMS, PREFIX, join(scorer, "runs/v2-dry")), "a sealed run with --out inside the repo", 2);
+check("review-units refuses a sealed run whose --out is inside the repo", u.code !== 0 && /inside the repo/.test(u.err));
+u = units(base(["none", "gstack-auto"]), "the gstack-auto placeholder", 2);
+check("gstack-auto is refused until GST-537 sets its release", u.code !== 0 && /GST-537/.test(u.err));
+writeFileSync(join(OUT, "other-skill.txt"), "/plan-eng-review Run this skill's full procedure before you answer.\n");
+writeFileSync(join(OUT, "two-lines.txt"), forced + "\nThen say more.\n");
+if (FORCED_ON) {
+  const refusals: Array<[string, string[], string[], RegExp]> = [
+    ["a told prefix on the none arm", ARMS, ["--told-prefix", "none=" + FORCED], /plan arm none takes no told prefix/],
+    ["a told prefix on the lens arm", ["none", "gstack", "lens"], ["--told-prefix", "lens=" + FORCED], /plan arm lens takes no told prefix/],
+    ["a told prefix on the placebo arm", ["none", "gstack", "placebo"], ["--told-prefix", "placebo=" + FORCED], /plan arm placebo takes no told prefix/],
+    ["a told prefix on gstack-auto", ["none", "gstack-auto"], ["--told-prefix", "gstack-auto=" + FORCED], /plan arm gstack-auto takes no told prefix/],
+    ["a told prefix on gstack while placebo runs the default gstack line", ["none", "gstack", "placebo"], ["--told-prefix", "gstack=" + FORCED], /placebo arm runs the gstack arm's default line/],
+    ["a told prefix that names another skill", ARMS, ["--told-prefix", "gstack-forced=" + join(OUT, "other-skill.txt")], /must be one line that opens with \/plan-ceo-review/],
+    ["a told prefix of two lines", ARMS, ["--told-prefix", "gstack-forced=" + join(OUT, "two-lines.txt")], /must be one line that opens with \/plan-ceo-review|line feed/],
+  ];
+  const GUARDS = readFileSync(join(scorer, "src/trial/review/plan-told.ts"), "utf8").includes("planNoPrefixProblem");
+  check("the pin carries #126's forced-arm guards (no-op prefix, unprefixed gstack-<suffix> arm, edge whitespace), as the Captain requires of this prereg's pin", GUARDS);
+  if (GUARDS) {
+    writeFileSync(join(OUT, "noop.txt"), "/plan-ceo-review\n");
+    writeFileSync(join(OUT, "ask.txt"), "/plan-ceo-review Run the full procedure. Review this plan for problems.\n");
+    writeFileSync(join(OUT, "trailing.txt"), forced + " \n");
+    refusals.push(
+      ["a gstack-<suffix> arm with no told prefix", ARMS, [], /needs a told prefix/],
+      ["a no-op prefix (the command alone)", ARMS, ["--told-prefix", "gstack-forced=" + join(OUT, "noop.txt")], /adds nothing after \/plan-ceo-review/],
+      ["a prefix that repeats the ask", ARMS, ["--told-prefix", "gstack-forced=" + join(OUT, "ask.txt")], /send the ask twice/],
+      ["a prefix with a trailing space", ARMS, ["--told-prefix", "gstack-forced=" + join(OUT, "trailing.txt")], /must not start or end with whitespace/],
+    );
+  }
+  for (const [label, arms, extra, re] of refusals) {
+    u = units(base(arms, extra), label, 2);
+    check("review-units refuses " + label + " (E_USAGE)", u.code !== 0 && /^E_USAGE /m.test(u.err) && re.test(u.err));
+  }
+  const t = run(["bun", "test", "tests/trial/review/plan-told.test.ts"]);
+  const tail = ((t.stdout ?? "") + (t.stderr ?? "")).split("\n").filter((l) => /^\s*\d+ (pass|fail)\b|^Ran /.test(l));
+  say("$ bun test tests/trial/review/plan-told.test.ts\n  exit " + t.status + "\n" + tail.map((l) => "    " + l.trim()).join("\n"));
+  check("the pin's own forced-arm tests pass (told block records prefix and prefix_sha256; refusals for none, lens, placebo and gstack-auto)", t.status === 0);
+} else {
+  u = units(base(["none", "gstack"], ["--told-prefix", "gstack=" + FORCED]), "a told prefix with --plan at this pin", 2);
+  check("this pin refuses --told-prefix with --plan, which is why the forced arm is off", u.code !== 0 && /runs on code units, not with --plan/.test(u.err));
+  u = units(base(["none", "gstack", "gstack-forced"]), "a gstack-forced arm at this pin", 2);
+  check("this pin refuses a gstack-forced plan arm", u.code !== 0 && /plan units run none, lens, placebo/.test(u.err));
+  for (const l of ["review-units refuses a told prefix on the none arm", "review-units refuses a told prefix on the lens, placebo and gstack-auto arms", "review-units refuses a told prefix on gstack while placebo runs", "review-units refuses a told prefix that names another skill", "review-units refuses a told prefix of two lines", "the pin's own forced-arm tests pass (told block records prefix and prefix_sha256)"]) skip(l);
+}
+
+// 3. Start rule and caps.
+say("\n## 3. Start rule and caps (README section 9)");
+const { loadPolicy, DEFAULT_POLICY } = await import(join(scorer, "src/skill-eval/cli/policy.ts"));
+const { allowanceMicros, SESSION_ALLOWANCE } = await import(join(scorer, "src/skill-eval/cli/dry-run.ts"));
+const allowance = allowanceMicros({ policy: loadPolicy(DEFAULT_POLICY) }, OPUS, SESSION_ALLOWANCE) as number;
+const runSrc = readFileSync(join(scorer, "src/trial/review/run.ts"), "utf8");
+check("review-units admits a round only when its worst case at the allowance fits under the cap, and a round is one unit-pass with every arm at --parallel 3 (run.ts)", runSrc.includes("const per = Math.max(1, Math.floor(o.parallel / Math.max(1, o.arms.length)));") && runSrc.includes("if (o.cap !== null && spent + worst > o.cap) {"));
+const ROUNDS = 16, ARMS3 = 3, CAP = 100_000_000, NONE = 170_000, GST = 300_000, FGUESS = 2_500_000;
+const roundWorst = ARMS3 * allowance;
+say("allowance under the default policy for " + OPUS + ": " + SESSION_ALLOWANCE.input / 1000 + "k input + " + SESSION_ALLOWANCE.output / 1000 + "k output tokens = " + dollars(allowance) + " a session; a round of 3 sessions needs " + dollars(roundWorst) + " in hand; the 48-session worst case is " + dollars(48 * allowance));
+check("the per-session allowance is $7.04 and the 3-session round worst case $21.12, as plan section 7 states (fill README {{ALLOWANCE}} and {{ROUND}} with these)", allowance === 7_040_000 && roundWorst === 21_120_000);
+check("the dry run's printed worst case is its sessions at that allowance ($" + worstPrinted + ")", worstPrinted === (sessions * allowance / 1e6).toFixed(2));
+const proj = ROUNDS * (NONE + GST + FGUESS);
+const readme = existsSync(join(POST, "README.md")) ? readFileSync(join(POST, "README.md"), "utf8") : "";
+check("the run item's projection is 16 none at $0.17, 16 gstack at $0.30 and 16 forced at $2.50 = " + dollars(proj) + ", as README section 9's table prints it", proj === 47_520_000 && readme.includes("| $47.52 | $100 |"));
+const excess = roundWorst - (NONE + GST + FGUESS);
+check("the projection plus its costliest round's excess (" + dollars(excess) + ") fits under the $100 item: " + dollars(proj + excess), proj + excess <= CAP);
+const breakEven = (CAP - roundWorst) / (ROUNDS - 1) - NONE - GST;
+const lastRound = (f: number) => (ROUNDS - 1) * (NONE + GST + f) + roundWorst <= CAP;
+const claimed = Number(/averages up to \$([\d.]+) a session/.exec(readme)?.[1] ?? NaN) * 1e6;
+const cent = Math.floor(breakEven / 1e4) * 1e4;
+say("break-even: the 16th round starts while 15 rounds' spend is at most $100 less " + dollars(roundWorst) + " = " + dollars(CAP - roundWorst) + ", so gstack-forced may average up to (" + dollars(CAP - roundWorst) + " / 15) - $0.47 = $" + (breakEven / 1e6).toFixed(4) + " a session; the 16th round then spends at most " + dollars(ROUNDS * (NONE + GST + breakEven)) + ", under the cap. README says about " + dollars(claimed));
+check("README section 9's break-even (" + dollars(claimed) + ") does not overstate the exact one: a forced average of " + dollars(cent) + " finishes the run and " + dollars(cent + 1e4) + " stops it before the last round", claimed <= breakEven && lastRound(claimed) && lastRound(cent) && !lastRound(cent + 1e4));
+check("the cap is the $100 run item plus the $20 judge envelope = $120", readme.includes("| **Total** | | **about $54** | **$120** |"));
+
+// 4. Ledger.
+say("\n## 4. The ledger: the run item and each judge item on a temporary record");
+const { ledgerCli } = await import(join(scorer, "src/runner/ledger/cli.ts"));
+const { openLease, settleLease, ledgerStatus } = await import(join(scorer, "src/runner/ledger/ledger.ts"));
+const { openLocalLedger } = await import(join(scorer, "src/runner/ledger/local.ts"));
+const { ledgerPath } = await import(join(scorer, "src/runner/ledger/paths.ts"));
+const { rigAdmission } = await import(join(scorer, "src/rig/admission.ts"));
+const { newRunId } = await import(join(scorer, "src/skill-eval/cli/call.ts"));
+const LDIR = join(OUT, "ledger"), REC = join(LDIR, "record");
+mkdirSync(LDIR, { recursive: true });
+writeFileSync(join(LDIR, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+const lenv = { ...KEYLESS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LDIR, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LDIR, "approvals-stub") };
+say("A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. Every item uses --admission warn, as R1a's did: a required admission needs a rig admit record per item slot, written within 24 hours on the machine that spends, for this exact checkout tree (a green rig.yml push run plus the R5 and R6 probes for review-units; a green ci.yml push run plus the replay tests for each judge-run call). Nobody has admitted the pin's tree, so each lease warns RIG_UNPROVEN and opens, and the logged pin check before every review-units and judge-run call (README section 10) stands in for admission.");
+const ledger = async (label: string, args: string[]) => {
+  const o: string[] = [], e: string[] = [];
+  const code = await ledgerCli(args, { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, lenv);
+  say("$ ledger " + args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+  say("  exit " + code + "  (" + label + ")");
+  show([...o, ...e].join("\n"), 12);
+  return { code, out: o.join("\n"), err: e.join("\n") };
+};
+const runHostSrc = readFileSync(join(scorer, "src/skill-eval/cli/run-host.ts"), "utf8"), judgeRunSrc = readFileSync(join(scorer, "lanes/review-noloss/judge-run.ts"), "utf8");
+check("the leases here are the pinned entry points' own calls: review-units mints its run id with newRunId(\"review-units\") and hands --spend-cap to the rig as cap, which leases openLease(..., { item, run_id, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: \"trial\" }) }); judge-run mints \"judge-\" and 6 random bytes and leases openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: \"direct\" }) })", cliSrc.includes('const runId = prior?.run_id ?? newRunId("review-units");') && cliSrc.includes('const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap,') && runHostSrc.includes('openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) })') && judgeRunSrc.includes('const runId = "judge-" + randomBytes(6).toString("hex");') && judgeRunSrc.includes('openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: "direct" }) })'));
+const APPROVE = ["--admission", "warn", "--words", "dry run only", "--by", "dryrun.ts", "--source", "CEO panel v2 admission pilot keyless dry run"];
+const RUN_ITEM = "planning-v2-admission";
+check("line item " + RUN_ITEM + " records its cap of $100", (await ledger("record " + RUN_ITEM, ["init", "--item", RUN_ITEM, "--cap", "100", ...APPROVE])).code === 0);
+const local = openLocalLedger(ledgerPath(undefined, lenv));
+const itemState = (item: string) => ledgerStatus(REC, item)[0];
+const warned: string[] = [];
+let calls = 0;
+const spend = async (lease: { lease_id: string; run_id: string }, model: string, micros: number) => {
+  calls++;
+  const r = await local.reserve({ idempotency_key: "dry-" + calls, lease_id: lease.lease_id, cell: { run_id: lease.run_id, arm: "none", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + calls }, max_micros: micros });
+  if (!r.ok) throw new Error(r.code + " " + r.message);
+  const s = await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+  if (!s.ok) throw new Error(s.code + " " + s.message);
+};
+const leaseFor = (item: string, run_id: string, proof: "trial" | "direct", amount?: number) => openLease(REC, local, { item, run_id, ...(amount === undefined ? {} : { amount_micros: amount }), requireAdmission: rigAdmission({ proof }), warn: (code: string) => warned.push(code) });
+const codeOf = (f: () => unknown) => {
+  try {
+    f();
+    return "leased";
+  } catch (e) {
+    return (e as { code?: string }).code ?? String(e);
+  }
+};
+const s0 = itemState(RUN_ITEM);
+const spendCap = s0.cap_micros - s0.committed_micros;
+const runId = newRunId("review-units");
+const lease = leaseFor(RUN_ITEM, runId, "trial", spendCap);
+await spend(lease, OPUS, NONE);
+const closed = settleLease(REC, local, lease.lease_id);
+say("the pilot: run id " + runId + ", minted as review-units mints it, leases " + RUN_ITEM + " for " + dollars(spendCap) + " (its --spend-cap) with the rig's own openLease call; one synthetic none session meters " + dollars(NONE) + "; settled at " + dollars(closed.spent_micros) + " spent");
+check("the run binds " + RUN_ITEM + " to its run id, leases the whole $100 and commits only the metered spend", spendCap === CAP && itemState(RUN_ITEM).run_id === runId && itemState(RUN_ITEM).committed_micros === NONE && !itemState(RUN_ITEM).open_lease);
+check("the warn-mode lease warned RIG_UNPROVEN and opened", warned.length === 1 && warned[0] === "RIG_UNPROVEN");
+const second = codeOf(() => leaseFor(RUN_ITEM, newRunId("review-units"), "trial"));
+say("a second review-units run on " + RUN_ITEM + ": " + second);
+check("the run item refuses a second run id with E_ITEM_BOUND, so a rerun needs a new item by amendment (README section 4, no resume)", second === "E_ITEM_BOUND");
+const ENVELOPE = 20_000_000;
+let judgeSpent = 0;
+const judgeCaps: number[] = [];
+for (const [item, cost] of [["planning-v2-judge-match", 3_000_000], ["planning-v2-judge-second", 1_500_000], ["planning-v2-judge-third", 400_000], ["planning-v2-judge-adjudicate", 1_100_000]] as const) {
+  const cap = ENVELOPE - judgeSpent;
+  judgeCaps.push(cap);
+  await ledger("record " + item + " at $20 less the settled spend of every earlier judge item", ["init", "--item", item, "--cap", String(cap / 1e6), ...APPROVE]);
+  const jid = "judge-" + randomBytes(6).toString("hex");
+  const before = warned.length;
+  const jl = leaseFor(item, jid, "direct");
+  const jw = warned.slice(before);
+  await spend(jl, "gpt-6.1-sol", cost);
+  const jc = settleLease(REC, local, jl.lease_id);
+  say(item + ": judge-run's run id " + jid + " leases all the item has left; one synthetic call meters " + dollars(cost) + "; settled at " + dollars(jc.spent_micros));
+  const again = codeOf(() => leaseFor(item, "judge-" + randomBytes(6).toString("hex"), "direct"));
+  check(item + " refuses a second judge-run call with " + again + ", and its warn-mode lease warned RIG_UNPROVEN and opened", again === "E_ITEM_BOUND" && jw.length === 1 && jw[0] === "RIG_UNPROVEN");
+  judgeSpent += itemState(item).committed_micros;
+}
+check("judge items recorded in turn at $20 less the settled spend of every earlier one never pass the envelope (" + judgeCaps.map(dollars).join(", then ") + "; " + dollars(judgeSpent) + " spent)", judgeCaps.join(",") === [20e6, 17e6, 15.5e6, 15.1e6].join(",") && judgeSpent <= ENVELOPE);
+await ledger("every line item on the temporary record", ["status"]);
+local.close();
+
+// 5. Judging on synthetic arms.
+say("\n## 5. Judging on synthetic arms: blind packets, three judges, adjudication, ingest");
+const draw = (...parts: unknown[]) => parseInt(sha(parts.join("|")).slice(0, 8), 16) / 0x100000000;
+const ids = Object.fromEntries(ARMS.map((a) => [a, armId(a, OPUS)])) as Record<string, string>;
+const RATE: Record<string, number> = { none: 0.4, gstack: 0.5, "gstack-forced": 0.7 };
+const J = join(OUT, "judge"), raw = join(J, "raw"), rawRoot = join(J, "raw-root"), judgedDir = join(J, "judged"), adjDir = join(J, "adjudicated"), root = join(J, "arms");
+const armDir = (r: string, a: string) => join(r, adm.id, ids[a]!);
+for (const a of ARMS) {
+  writePlanArm(join(raw, ids[a]!), adm, { id: ids[a], passes: 2, raw: true, noise: 0, outcome: (uu: any, b: any, pass: number) => (draw(a, uu.pr, pass, b.id) < RATE[a]! ? "F" : draw(a, uu.pr, pass, b.id, "d") < 0.3 ? "D" : "M") });
+  check("raw arm " + a + " (must-fix rate " + RATE[a] + ") ingests", (await nolossCli(["ingest", join(raw, ids[a]!), "--suite", ADM, "--root", rawRoot, ...S], { out: () => {}, err: () => {} })) === 0);
+}
+const save = (name: string, v: unknown) => {
+  const p = join(J, name);
+  writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
+  return p;
+};
+let waited = 0;
+const joinReplies = async (name: string, keyPath: string, packets: string, arms: string[], outDir: string, item: "blockers" | "findings") => {
+  const key = JSON.parse(readFileSync(keyPath, "utf8"));
+  const all = key.packets.map((p: any) => {
+    const pk = JSON.parse(readFileSync(join(packets, p.file), "utf8"));
+    const items = item === "blockers" ? pk.blockers.map((b: any) => ({ id: b.id, matches: pk.findings.filter((f: any) => f.line === b.line).map((f: any) => f.id) })) : pk.findings.map((f: any) => ({ id: f.id, ruling: "not-defect" }));
+    return { p, items };
+  });
+  const body = (judge: string, only?: Set<string>, flip = false) => ({ batch: key.batch, judge, packets: all.map(({ p, items }: any) => ({ file: p.file, sha256: p.sha256, [item]: items.filter((x: any) => !only || only.has(p.file + " " + x.id)).map((x: any) => (flip && item === "blockers" && x.matches.length && draw(judge, p.file, x.id) < 0.3 ? { ...x, matches: [] } : x)) })).filter((p: any) => p[item].length) });
+  const named = (text: string) => new Set([...text.matchAll(/(packets\/\S+\.json) ([BF]\d+)/g)].map((m) => m[1] + " " + m[2]));
+  const args = ["judge-join", "--suite", ADM, "--key", keyPath, "--out", outDir, ...arms.flatMap((a) => ["--arm", a]), ...S];
+  const replies = ["--reply", save(name + "-primary.json", body("openai/gpt-6.1-sol"))];
+  let r = await cli(name + ": judge-join, primary", [...args, ...replies], { show: 2 });
+  for (const [flag, judge, flip] of [["--second", "anthropic/claude-opus-5-5", true], ["--third", "anthropic/claude-sonnet-5-5", false]] as const) {
+    if (r.code === 0) break;
+    const want = named(r.err);
+    waited++;
+    say("  judge-join waits for " + flag.slice(2) + " reads on " + want.size + " blockers");
+    replies.push(flag, save(name + flag + ".json", body(judge, want, flip)));
+    r = await cli(name + ": judge-join with " + flag, [...args, ...replies], { show: 2 });
+  }
+  return r;
+};
+const packets = join(J, "packets"), keyPath = join(J, "key.json");
+const p = await cli("blind matching packets over every arm, seed 20261102", ["judge-packet", "--suite", ADM, ...ARMS.flatMap((a) => ["--arm", armDir(rawRoot, a)]), "--seed", "20261102", "--out", packets, "--key", keyPath, "--source", "panel/plans=" + SRC, ...S], { show: 3 });
+check("judge-packet builds the blind matching packets", p.code === 0);
+const brief = readFileSync(join(POST, "judge-brief.md"), "utf8");
+check("judge brief v2 names seed 20261102 for packets and 20261103 for adjudication", /20261102/.test(brief) && /20261103/.test(brief));
+const jj = await joinReplies("match", keyPath, packets, ARMS.map((a) => armDir(rawRoot, a)), judgedDir, "blockers");
+check("judge-join writes judgments for every arm at once, after the second and third reads it asks for (" + waited + " waits)", jj.code === 0 && waited >= 1);
+const adjPackets = join(J, "adj-packets"), adjKey = join(J, "adj-key.json");
+const ap = await cli("blind adjudication packets, seed 20261103", ["judge-packet", "--suite", ADM, ...ARMS.flatMap((a) => ["--arm", join(judgedDir, ids[a]!)]), "--seed", "20261103", "--out", adjPackets, "--key", adjKey, "--adjudicate", "--source", "panel/plans=" + SRC, ...S], { show: 3 });
+check("adjudication packets build, or there is nothing to adjudicate", ap.code === 0 || /nothing to adjudicate/.test(ap.err));
+let from = judgedDir;
+if (existsSync(adjKey)) {
+  check("adjudication judge-join exit 0", (await joinReplies("adjudicate", adjKey, adjPackets, ARMS.map((a) => join(judgedDir, ids[a]!)), adjDir, "findings")).code === 0);
+  from = adjDir;
+} else say("  no must-fix finding is left unmatched, so there is no adjudication batch");
+for (const a of ARMS) check("judged arm " + a + " ingests", (await nolossCli(["ingest", join(from, ids[a]!), "--suite", ADM, "--root", root, ...S], { out: () => {}, err: () => {} })) === 0);
+
+// 6. Admission.
+say("\n## 6. Admission: R from noloss secondary, and admission.ts on synthetic cases");
+const sec = await cli("secondary: none's must-fix recall with its interval", ["secondary", "--suite", ADM, "--variant", ids.none!, "--reference", ids.gstack!, "--seed", "20261102", "--root", root, "--json", ...S], { show: 0 });
+const secJ = JSON.parse(sec.out);
+const Rsec = secJ.recall[0].blocking;
+say("  none: must-fix " + Rsec.found + "/" + Rsec.n + " = " + Rsec.recall + " [" + (Rsec.ci95 ?? []).join(", ") + "]; any severity " + secJ.recall[0].any_severity.recall + "; " + secJ.recall[0].incomplete + " incomplete");
+check("noloss secondary reads none's must-fix recall over the 12 items, each the share of its 2 passes", sec.code === 0 && secJ.recall[0].arm === ids.none && Rsec.n === 12);
+const ADMDIR = join(OUT, "admission");
+const caseKind = new Map<string, string>(admRows.flatMap((m: any) => m.cases.map((c: string) => [c, m.kind])));
+const slots = adm.units.flatMap((uu: any) => uu.blockers.map((b: any) => ({ u: uu, b, kind: caseKind.get(b.case)! })));
+const nth = (k: string, uu: any, b: any) => slots.filter((s: any) => s.kind === k).findIndex((s: any) => s.u === uu && s.b === b);
+type Pat = { hard: number; premise: number; ambition: number; dSlots?: number; dead?: number };
+const isDead = (pt: Pat, b: any, uu: any) => !!pt.dead && caseKind.get(b.case) === "hard" && nth("hard", uu, b) < pt.dead;
+const outcomeOf = (pt: Pat) => (uu: any, b: any, pass: number) => {
+  const k = caseKind.get(b.case)!;
+  if (isDead(pt, b, uu)) return "M";
+  const slot = nth(k, uu, b) * 2 + (pass - 1) - (k === "hard" && pt.dead ? pt.dead * 2 : 0);
+  const f = (pt as any)[k] as number;
+  return slot < f ? "F" : pt.dSlots && slot - f < pt.dSlots ? "D" : "M";
+};
+const expStub = (o: { sp?: string; procedure?: string } = {}) => ({ arms: Object.fromEntries(["none", "gstack", "gstack-forced"].map((a) => [a, { preset: 16, above_floor: a === "none" ? 16 : 0, exposed: a === "gstack" ? 3 : 16, ran: a === "gstack" ? 0 : 15 }])), system_prompt_check: o.sp ?? "PASS", procedure: o.procedure ?? "READY" });
+async function admission(label: string, o: { judged?: string; pat?: Pat; cells?: (arm: string, uu: any, pass: number) => string; exp?: object; extra?: string[]; edit?: (file: string) => void }) {
+  const d = join(ADMDIR, label.replace(/[^a-z0-9]+/gi, "-").toLowerCase());
+  mkdirSync(join(d, "out"), { recursive: true });
+  let judged = o.judged;
+  if (!judged) {
+    judged = join(d, "judged");
+    for (const a of ["none", "gstack", "gstack-forced"]) {
+      const out = a === "none" ? outcomeOf(o.pat!) : a === "gstack" ? (uu: any, b: any) => (isDead(o.pat!, b, uu) ? "M" : "D") : (uu: any, b: any) => (isDead(o.pat!, b, uu) ? "M" : "F");
+      writePlanArm(join(judged, armId(a, OPUS)), adm, { id: armId(a, OPUS), passes: 2, raw: false, noise: 0, outcome: out });
+    }
+    o.edit?.(join(judged, armId("none", OPUS), "judgments.tsv"));
+  }
+  const cells: string[] = [];
+  for (const a of ["none", "gstack", "gstack-forced"])
+    for (const [k, uu] of adm.units.entries())
+      for (const pass of [1, 2]) {
+        const kind = o.cells?.(a, uu, pass) ?? "findings";
+        if (kind === "unrun") continue;
+        cells.push(JSON.stringify({ cell: { model: OPUS, arm: a, unit: "unit-" + k, pass }, record: { termination: { kind: kind === "gap" ? "infra_failure" : "completed" }, model_output: kind !== "gap" }, parse: { kind: kind === "gap" ? "incomplete" : kind === "miss" ? "malformed" : "findings" } }));
+      }
+  writeFileSync(join(d, "out", "cells.ndjson"), cells.join("\n") + "\n");
+  writeFileSync(join(d, "exposure.json"), JSON.stringify(o.exp ?? expStub()));
+  const r = run(["bun", join(POST, "admission.ts"), "--scorer", scorer, "--pin", PIN, "--suite", ADM, "--sealed-root", SR, "--out", join(d, "out"), "--judged", judged, "--map", MAP, "--exposure", join(d, "exposure.json"), "--json", join(d, "result.json"), ...(o.extra ?? [])]);
+  say("$ bun admission.ts ... (" + label + ")\n  exit " + r.status);
+  show((r.stdout ?? "") + (r.stderr ?? ""), 5);
+  return r.status === 0 ? JSON.parse(readFileSync(join(d, "result.json"), "utf8")) : { panel: "ERROR", flags: [], no_read: [], line: r.stderr };
+}
+const pipe = await admission("the judged arms from section 5", { judged: from, exp: expStub(FORCED_ON ? {} : { procedure: "NOT RUN" }), cells: (a) => (a === "gstack-forced" && !FORCED_ON ? "unrun" : "findings") });
+check("admission.ts's R equals noloss secondary's must-fix recall for none (" + pipe.R + " and " + Rsec.recall + "), and its any-severity reading equals secondary's", Math.abs(pipe.R - Rsec.recall) < 0.001 && Math.abs(pipe.any_severity - secJ.recall[0].any_severity.recall) < 0.001);
+const cases: Array<[string, any, string, RegExp | null, number]> = [
+  ["ADMIT at R = 10/24 (0.417)", { pat: { hard: 6, premise: 2, ambition: 2, dSlots: 1 } }, "ADMIT", null, 10 / 24],
+  ["the band's lower edge, R = 5/24 (0.208), admits", { pat: { hard: 3, premise: 1, ambition: 1 } }, "ADMIT", null, 5 / 24],
+  ["floor, R = 4/24 (0.167)", { pat: { hard: 2, premise: 1, ambition: 1 } }, "NOT ADMITTED, floor", null, 4 / 24],
+  ["the band's upper edge, R = 14/24 (0.583), admits", { pat: { hard: 10, premise: 2, ambition: 2 } }, "ADMIT", null, 14 / 24],
+  ["ceiling, R = 15/24 (0.625); F1 fires too, since any-severity recall is at least R", { pat: { hard: 11, premise: 2, ambition: 2 } }, "NOT ADMITTED, ceiling", /^F1 /, 15 / 24],
+  ["F1: any-severity 16/24 (Medium findings) above 0.6 with R = 8/24", { pat: { hard: 4, premise: 2, ambition: 2, dSlots: 4 } }, "ADMIT", /^F1 /, 8 / 24],
+  ["F2: 4 hard items matched by no session at any severity", { pat: { hard: 4, premise: 2, ambition: 2, dead: 4 } }, "ADMIT", /^F2 dead items \(4 of 12/, 8 / 24],
+  ["F3: H recall 14/16 above 0.85, P and U at 0", { pat: { hard: 14, premise: 0, ambition: 0 } }, "ADMIT", /^F3 stratum hard at 0\.875/, 14 / 24],
+  ["F3: premise recall 1", { pat: { hard: 4, premise: 4, ambition: 1 } }, "ADMIT", /^F3 stratum premise at 1$/, 9 / 24],
+];
+for (const [label, o, panel, flag, R] of cases) {
+  const r = await admission(label, o);
+  check("admission.ts: " + label + " -> " + panel + (flag ? " with that flag" : ", no flag") + " (got " + r.panel + "; flags " + (r.flags.join("; ") || "none") + ")", r.panel === panel && (flag ? r.flags.some((f: string) => flag.test(f)) : r.flags.length === 0) && Math.abs(r.R - R) < 0.001);
+}
+const BAND = { pat: { hard: 6, premise: 2, ambition: 2 } };
+const noRead: Array<[string, any, RegExp]> = [
+  ["a gap in a none session", { ...BAND, cells: (a: string, uu: any, pass: number) => (a === "none" && uu === adm.units[0] && pass === 2 ? "gap" : "findings") }, /none has 1 gap/],
+  ["a none session with no parsed plan-findings block", { ...BAND, cells: (a: string, uu: any, pass: number) => (a === "none" && uu === adm.units[1] && pass === 1 ? "miss" : "findings") }, /1 sessions with no parsed findings block/],
+  ["a none judgment with coverage incomplete", { ...BAND, edit: (f: string) => { const l = readFileSync(f, "utf8").split("\n"); l[3] = l[3]!.replace(/\tcomplete$/, "\tincomplete"); writeFileSync(f, l.join("\n")); } }, /none has judgments with coverage incomplete/],
+  ["a none judgment row missing", { ...BAND, edit: (f: string) => { const l = readFileSync(f, "utf8").split("\n"); l.splice(5, 1); writeFileSync(f, l.join("\n")); } }, /none has judgments with coverage incomplete/],
+  ["the system-prompt check failed", { ...BAND, exp: expStub({ sp: "FAIL" }) }, /system-prompt check failed/],
+  ["a cap stop", { ...BAND, extra: ["--cap-stop", "yes"] }, /cap stop/],
+];
+for (const [label, o, re] of noRead) {
+  const r = await admission("NO READ: " + label, o);
+  check("admission.ts: " + label + " -> NO READ", r.panel === "NO READ" && r.no_read.some((x: string) => re.test(x)));
+}
+let r6 = await admission("procedure from exposure: FIX-METHOD", { ...BAND, exp: expStub({ procedure: "FIX-METHOD" }) });
+check("the procedure disposition prints beside the panel's: ADMIT with FIX-METHOD", r6.panel === "ADMIT" && r6.procedure === "FIX-METHOD" && /^Panel: ADMIT .*Procedure: FIX-METHOD .*System prompt: PASS/.test(r6.line));
+r6 = await admission("a gap in a gstack-forced session", { ...BAND, cells: (a: string, uu: any, pass: number) => (a === "gstack-forced" && uu === adm.units[2] && pass === 1 ? "gap" : "findings") });
+check("a gap in a gstack-forced session voids only the procedure read: panel ADMIT, procedure NO READ", r6.panel === "ADMIT" && r6.procedure === "NO READ");
+const HEADLINE = [...Array(12).fill(2), ...Array(12).fill(1)].join(","), H_ONLY = Array(12).fill(2).join(","), PU_ONLY = Array(12).fill(1).join(",");
+const powerAt = (clusters: string, recall: number, dep: number) => {
+  const r = run([join(scorer, "bin/gstack-evals"), "noloss", "power", "--clusters", clusters, "--passes", "3", "--margin", "10", "--loss", "20", "--recall", String(Math.round(recall * 1e4) / 1e4), "--alpha", "0.025", "--dependence", String(dep), "--sims", "2000", "--seed", "1", "--json"]);
+  return JSON.parse(r.stdout).rows[0].loss as number;
+};
+const a10 = JSON.parse(readFileSync(join(ADMDIR, "admit-at-r-10-24-0-417-", "result.json"), "utf8"));
+const gain = powerAt(HEADLINE, 10 / 24 + 0.2, 0.3), lossDir = powerAt(HEADLINE, 10 / 24, 0.3);
+say("power at R = 10/24: gain direction (--recall R + 0.20 --loss 20) " + gain + "; the loss direction (--recall R) would read " + lossDir);
+check("admission.ts's power is the gain direction, --recall R + 0.20 --loss 20 at dependence 0.3 (" + a10.power["0.3"] + ")", a10.power["0.3"] === gain && gain !== lossDir);
+const grid = /\| Power \| ([^\n]+) \|\n/.exec(readme)?.[1]?.split(" | ").map((c) => c.replace("%", "").split(" / ").map(Number)) ?? [];
+const gridNow = [0.2, 0.3, 0.4, 0.5, 0.6].map((R) => [0, 0.3, 0.6].map((d) => Math.round(100 * powerAt(HEADLINE, R + 0.2, d))));
+say("headline gain power, R 0.2 to 0.6, dependence 0 / 0.3 / 0.6: " + gridNow.map((r) => r.join(" / ") + "%").join("; "));
+check("README section 8's power grid matches the pinned simulator, cell by cell", JSON.stringify(grid) === JSON.stringify(gridNow));
+const hOnly = [0.2, 0.3, 0.4, 0.5, 0.6].map((R) => Math.round(100 * powerAt(H_ONLY, R + 0.2, 0.3))), puOnly = [0.2, 0.3, 0.4, 0.5, 0.6].map((R) => Math.round(100 * powerAt(PU_ONLY, R + 0.2, 0.3)));
+say("a gain inside H only (12 plans of 2): " + hOnly.join(", ") + "%; inside P and U only (12 single-item plans): " + puOnly.join(", ") + "%");
+check("README's stratum-only rows (59% to 67% for H, 27% to 33% for P and U) match the simulator's range over R 0.2 to 0.6", Math.min(...hOnly) === 59 && Math.max(...hOnly) === 67 && Math.min(...puOnly) === 27 && Math.max(...puOnly) === 33);
+check("the sign-flip floor: 2^-5 = 0.031 is above alpha 0.025 and 2^-6 = 0.016 is below, so a gain in fewer than 6 plans cannot reach it", 2 ** -5 > 0.025 && 2 ** -6 < 0.025);
+const band = Array.from({ length: 10 }, (_, i) => (i + 5) / 24).map((R) => ({ R, p: powerAt(HEADLINE, R + 0.2, 0.3) }));
+const low = band.reduce((a, b) => (b.p < a.p ? b : a));
+say("lowest headline power over every R the pilot can read inside the band (5/24 to 14/24): " + low.p + " at R = " + low.R.toFixed(3));
+if (low.p < 0.8) {
+  const k = Math.round(low.R * 24);
+  const r = await admission("NOT ADMITTED, power at R = " + k + "/24", { pat: { hard: k - 4, premise: 2, ambition: 2 } });
+  check("admission.ts: R = " + k + "/24 in the band with power " + low.p + " -> NOT ADMITTED, power", r.panel === "NOT ADMITTED, power");
+} else check("NOT ADMITTED, power is not reachable on this design: every readable R in the band has power of at least 0.80 (lowest " + low.p + "), as the README says", low.p >= 0.8);
+
+// 7. Exposure.
+say("\n## 7. Exposure and the system-prompt check (exposure.py on synthetic transcripts)");
+const EXP = join(OUT, "exposure");
+const SEC_FILE = "/srv/rec/.claude/skills/gstack/plan-ceo-review/sections/review-sections.md";
+const body = (n: number) => ("Finding for this section, number " + n + ", with the plan's own facts. ").repeat(4);
+const sectionsText = (order: number[], withBody = true) => order.map((n) => secHeads[n - 1]!.replace(/^### /, "## ") + "\n\n" + (withBody ? body(n) + "\n" : "")).join("\n");
+type Ev = ["use", string, string, object] | ["res", string, string, boolean?] | ["text", string];
+function session(dir: string, events: Ev[], o: { sp?: string | null; first?: number } = {}) {
+  mkdirSync(join(dir, "host"), { recursive: true });
+  let k = 0;
+  const usage = () => (k === 1 ? { usage: { input_tokens: 3, cache_creation_input_tokens: (o.first ?? 22270) - 3, cache_read_input_tokens: 0 } } : {});
+  const msgs: object[] = events.map((e) => {
+    if (e[0] === "use") return { type: "assistant", message: { id: "msg_" + ++k, content: [{ type: "tool_use", id: e[1], name: e[2], input: e[3] }], ...usage() } };
+    if (e[0] === "res") return { type: "user", message: { content: [{ type: "tool_result", tool_use_id: e[1], is_error: !!e[3], content: [{ type: "text", text: e[2] }] }] } };
+    return { type: "assistant", message: { id: "msg_" + ++k, content: [{ type: "text", text: e[1] }], ...usage() } };
+  });
+  msgs.push({ type: "result", subtype: "success" });
+  writeFileSync(join(dir, "host", "transcript.ndjson"), msgs.map((m) => JSON.stringify(m)).join("\n") + "\n");
+  if (o.sp !== null) writeFileSync(join(dir, "host", "init.json"), JSON.stringify({ model: OPUS, claude_code_version: "2.1.314", system_prompt: o.sp ?? "claude-code-preset" }));
+}
+const BIG = "x".repeat(4000), ALL10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const readOk = (path = SEC_FILE, text = BIG, err = false): Ev[] => [["use", "t1", "Read", { file_path: path }], ["res", "t1", text, err]];
+const bash = (command: string): Ev[] => [["use", "t1", "Bash", { command }], ["res", "t1", BIG]];
+const M = ["text", "Step 0 done. Mode: HOLD SCOPE."] as Ev;
+const want = (read: boolean, mode: boolean, exposed: boolean, ran: boolean) => ({ read, mode, exposed, ran });
+const fixtures: Array<[string, string, Ev[], ReturnType<typeof want>]> = [
+  ["a full forced procedure", "gstack-forced", [M, ...readOk(), ["text", sectionsText(ALL10)]], want(true, true, true, true)],
+  ["a failed Read of the sections file", "gstack-forced", [M, ...readOk(SEC_FILE, "File does not exist. " + BIG, true), ["text", sectionsText(ALL10)]], want(false, true, false, false)],
+  ["a Read that returns under 1,000 characters", "gstack-forced", [M, ...readOk(SEC_FILE, "x".repeat(900)), ["text", sectionsText(ALL10)]], want(false, true, false, false)],
+  ["a Read of plan-eng-review's review-sections.md", "gstack-forced", [M, ...readOk("/srv/rec/.claude/skills/gstack/plan-eng-review/sections/review-sections.md"), ["text", sectionsText(ALL10)]], want(false, true, false, false)],
+  ["a relative-path cat that never names plan-ceo-review", "gstack-forced", [M, ...bash("cat sections/review-sections.md"), ["text", sectionsText(ALL10)]], want(false, true, false, false)],
+  ["a cd into plan-ceo-review, then a relative cat", "gstack-forced", [M, ...bash("cd ~/.claude/skills/gstack/plan-ceo-review && cat sections/review-sections.md"), ["text", sectionsText(ALL10)]], want(true, true, true, true)],
+  ["a cat of plan-eng-review's file from inside plan-ceo-review", "gstack-forced", [M, ...bash("cd ~/.claude/skills/gstack/plan-ceo-review && cat ../plan-eng-review/sections/review-sections.md"), ["text", sectionsText(ALL10)]], want(false, true, false, false)],
+  ["a quoted list of all four modes", "gstack-forced", [["text", "The modes are SCOPE EXPANSION, SELECTIVE EXPANSION, HOLD SCOPE and SCOPE REDUCTION."], ...readOk(), ["text", sectionsText(ALL10)]], want(true, false, false, false)],
+  ["section headings with no text under them", "gstack-forced", [M, ...readOk(), ["text", sectionsText(ALL10, false) + "\nNo issues."]], want(true, true, true, false)],
+  ["sections in reverse order", "gstack-forced", [M, ...readOk(), ["text", sectionsText([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])]], want(true, true, true, false)],
+  ["sections 4 and 5 swapped (9 still in order)", "gstack-forced", [M, ...readOk(), ["text", sectionsText([1, 2, 3, 5, 4, 6, 7, 8, 9, 10])]], want(true, true, true, true)],
+  ["only 8 sections written", "gstack-forced", [M, ...readOk(), ["text", sectionsText([1, 2, 3, 4, 5, 6, 7, 8])]], want(true, true, true, false)],
+  ["sections written before the Read", "gstack-forced", [["text", "Mode: HOLD SCOPE.\n" + sectionsText(ALL10)], ...readOk(), ["text", "Done."]], want(true, true, true, false)],
+  ["a mode only in modes.tsv (the handoff line)", "gstack-forced", [...readOk(), ["text", sectionsText(ALL10)]], want(true, true, true, true)],
+  ["an untold gstack session that loads the skill and reads nothing", "gstack", [["use", "t1", "Skill", { skill: "plan-ceo-review" }], ["res", "t1", BIG], ["text", "Findings follow."]], want(false, false, false, false)],
+  ["a none session", "none", [["text", "Review of the plan. Findings follow."]], want(false, false, false, false)],
+];
+const F_OUT = join(EXP, "fixtures"), tasks: string[] = [];
+fixtures.forEach(([, arm, ev], i) => {
+  tasks.push("plans-" + (i + 1) + "-abcdef01");
+  session(join(F_OUT, "runs", OPUS, arm, tasks[i]!, "p1"), ev);
+});
+const tsvIdx = fixtures.findIndex((f) => f[0].startsWith("a mode only in modes.tsv")) + 1;
+writeFileSync(join(F_OUT, "modes.tsv"), ["arm_id\tarm\tmodel\tunit\tpass\tmode", "gstack-forced-opus\tgstack-forced\t" + OPUS + "\tpanel/plans#" + tsvIdx + "@abcdef012345\t1\tHOLD SCOPE", "none-opus\tnone\t" + OPUS + "\tpanel/plans#" + fixtures.length + "@abcdef012345\t1\tunstated"].join("\n") + "\n");
+const expo = (out: string, arms: string, per: number, tsv?: string, model = OPUS) => {
+  const r = run(["python3", join(POST, "exposure.py"), "--out", out, "--model", model, "--arms", arms, "--sessions-per-arm", String(per), "--json", ...(tsv ? ["--tsv", tsv] : [])]);
+  if (r.status !== 0) say("  exposure.py exit " + r.status + ": " + (r.stderr ?? "").trim().split("\n").pop());
+  return r.status === 0 ? JSON.parse(r.stdout) : null;
+};
+const fx = expo(F_OUT, "none,gstack,gstack-forced", 1, join(EXP, "fixtures.tsv"));
+const rows = existsSync(join(EXP, "fixtures.tsv")) ? readFileSync(join(EXP, "fixtures.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")) : [];
+fixtures.forEach(([label, arm, , w], i) => {
+  const row = rows.find((r) => r[0] === arm && r[1] === tasks[i]);
+  const got = row ? want(row[3] === "True", row[4] === "True" || row[5] === "True", row[6] === "True", row[8] === "True") : null;
+  const fmt = (x: any) => (x ? "read " + x.read + ", mode " + x.mode + ", exposed " + x.exposed + ", ran " + x.ran : "no row");
+  check("exposure.py, " + label + " (" + arm + "): " + fmt(w) + (row ? " (" + row[7] + " sections counted)" : ""), JSON.stringify(got) === JSON.stringify(w));
+});
+check("a mode named only by the pin's handoff line (modes.tsv) counts, keyed by arm, PR number and pass", rows.find((r) => r[1] === tasks[tsvIdx - 1])?.[5] === "True");
+const proc = (label: string, n: number, ran: number) => {
+  const d = join(EXP, "proc-" + label);
+  for (let i = 1; i <= n; i++) session(join(d, "runs", OPUS, "gstack-forced", "plans-" + i + "-abcdef01", "p1"), [M, ...readOk(), ["text", sectionsText(ALL10, i <= ran)]]);
+  return expo(d, "gstack-forced", 16)?.procedure;
+};
+check("procedure disposition: 15 of 16 forced sessions ran it -> READY", proc("ready", 16, 15) === "READY");
+check("procedure disposition: 14 of 16 -> FIX-METHOD", proc("fix", 16, 14) === "FIX-METHOD");
+check("procedure disposition: 15 transcripts of 16 scheduled -> NO READ", proc("gap", 15, 15) === "NO READ");
+const sp = (label: string, o: Record<string, { sp?: string | null; first?: number }> = {}) => {
+  const d = join(EXP, "sp-" + label.replace(/\W+/g, "-"));
+  for (const a of ["none", "gstack"]) for (const i of [1, 2]) session(join(d, "runs", OPUS, a, "plans-" + i + "-abcdef01", "p1"), [["text", "Findings."]], o[a + i] ?? {});
+  const r = expo(d, "none,gstack", 2);
+  say("  " + label + ": none first-request tokens min " + r?.arms.none.first_tokens_min + ", preset " + (r?.arms.none.preset + r?.arms.gstack.preset) + "/4 -> " + r?.system_prompt_check);
+  return r?.system_prompt_check;
+};
+check("system-prompt check: preset recorded on every session and none's first request at 22,270 tokens (stub median plus the preset's 1,926) -> PASS", sp("preset") === "PASS");
+check("system-prompt check: a none session's first request at 20,345 tokens (R1a's stub-prompt median), below 21,300 -> FAIL", sp("below floor", { none2: { first: 20345 } }) === "FAIL");
+check("system-prompt check: a none session exactly at 21,300 -> PASS (the floor is inclusive)", sp("at floor", { none1: { first: 21300 } }) === "PASS");
+check("system-prompt check: one session's init.json records sdk-default -> FAIL", sp("sdk default", { gstack1: { sp: "sdk-default" } }) === "FAIL");
+check("system-prompt check: a session with no init.json -> FAIL", sp("no init", { gstack2: { sp: null } }) === "FAIL");
+check("exposure.py's JSON reports per-arm counts only, no task or unit names", !!fx && fx.arms["gstack-forced"].transcripts === fixtures.length - 2 && !JSON.stringify(fx).includes("plans-"));
+if (R1A) {
+  say("R1a pilot transcripts (under custody): " + R1A.replace(HOME, "~"));
+  const opus = expo(R1A, "none,gstack", 4, undefined, OPUS), fable = expo(R1A, "none,gstack", 4, undefined, "claude-fable-5-1");
+  say("  gstack-opus read " + opus?.arms.gstack.read + "/4, exposed " + opus?.arms.gstack.exposed + "; gstack-fable read " + fable?.arms.gstack.read + "/4, exposed " + fable?.arms.gstack.exposed + "; none-opus first-request tokens median " + opus?.arms.none.first_tokens_median + ", at or above 21,300: " + opus?.arms.none.above_floor + "/" + opus?.arms.none.transcripts);
+  check("R1a's real pilot: gstack-opus read the sections file in 0 of 4 sessions and gstack-fable in 2 of 4 (#114)", opus?.arms.gstack.read === 0 && fable?.arms.gstack.read === 2);
+  check("R1a's real none-opus sessions under the stub prompt all fall below the 21,300 floor", opus?.arms.none.transcripts === 4 && opus?.arms.none.above_floor === 0);
+} else say("SKIP the R1a pilot transcripts: no directory given (GEVA-115 runs that part under custody)");
+
+// 8. Leak check.
+say("\n## 8. Leak check");
+const text = lines.join("\n");
+const hex = [...new Set(text.match(/\b[0-9a-f]{7,40}\b/g) ?? [])];
+const leakedSha = hex.filter((h) => [...shas].some((s) => s.startsWith(h)));
+const unitLines = new Set<string>();
+for (const uu of [...adm.units, ...hl.units]) {
+  const files = run(["git", "-C", SRC, "ls-tree", "-r", "--name-only", uu.head]).stdout.trim().split("\n").filter(Boolean);
+  for (const f of files) for (const l of run(["git", "-C", SRC, "show", uu.head + ":" + f]).stdout.split("\n")) if (l.trim().length >= 24) unitLines.add(l.trim());
+}
+const catalogText: string[] = [];
+for (const d of ["admission", "headline"]) for (const f of readdirSync(join(SR, "catalog", d))) {
+  const c = JSON.parse(readFileSync(join(SR, "catalog", d, f), "utf8"));
+  catalogText.push(c.defect.cause, ...(c.receipt.evidence ?? []));
+}
+check("no unit head or base, or a 7+ hex prefix of one, appears in this transcript", leakedSha.length === 0);
+check("no unit reference (PR number, task id, unit id or case id) appears in this transcript", !UNIT.test(text));
+check("no line of any unit file (" + unitLines.size + " distinct lines of 24+ characters from " + (adm.units.length + hl.units.length) + " units) appears in this transcript", unitLines.size > 0 && ![...unitLines].some((l) => text.includes(l)));
+check("no catalog cause or evidence line appears in this transcript", !catalogText.some((c) => c.length >= 24 && text.includes(c)));
+say("\n" + (failures ? failures + " FAILED" : "all checks passed") + ": PASS " + passes + ", FAIL " + failures + ", SKIP " + skipped.length);
+if (skipped.length) say("skipped for want of the forced arm: " + skipped.join("; "));
+writeFileSync(join(OUT, "transcript.txt"), lines.join("\n") + "\n");
+console.log(lines.join("\n"));
+process.exit(failures ? 1 : 0);

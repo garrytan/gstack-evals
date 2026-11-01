@@ -1,0 +1,406 @@
+# CEO panel v2 admission pilot: keyless dry run, 2026-11-01T23:11:23.025Z
+scorer pin a5633c6205b735989c9fbe082092947dec9c2f19; forced arm on; gstack 1ea86923a86129d1f32828b36acfe6f91f17c8e6 (1.92.37.0)
+post forced-line.txt sha256 d4f56ad49c82e6b8ca9a2ec05b24a641c45e9d158e11c9de65420008b66d4e43
+post judge-brief.md sha256 cd0a42d036d2b05e44eadadc7211a25937134a42856b30f44dad03af55e34285
+post admission.ts sha256 14a0bda3b5aa97bfef9e1a485d55cc21c52985b7728664a6f9ca7abb8bc829b6
+post exposure.py sha256 07d5e78d256066a27133c43c85cb5700aa821670fb4633975a825d280c6a9998
+post gen-synth.py sha256 e2a30bc669fba27b92f476e687abc6590310c9aa48e237c43ece976b5d8fe84c
+post seal.py sha256 e2a10b6284deacbc33aedf35d0177f3877f0ac9140256d8a6f4dee28c7887959
+post convert-v2.py sha256 939f8f59c42fd95a4f36145a4d976e3bc01dff4eb9954431ad582177d2de07d2
+post build-v2.sh sha256 dfbf30ce43665862f126113f9dff27b89edaa9280b1184c2c87f25d4f2a32014
+post dryrun.ts sha256 6cc9ce6c029653ab960dc1ae771ea60d3124ebc2c0bd2f47c52201ad1e54cb94
+
+## 1. Pin, panel and suites
+PASS the scorer checkout is at the pin a5633c6205b735989c9fbe082092947dec9c2f19 with no tracked change
+PASS the forced-arm flag matches the pin: plan-told.ts is present, so --told-prefix runs with --plan on a gstack plan arm
+PASS the pin's Claude Code CLI is 2.1.314 (docker/host-cli.json), the version GEVA-109 measured the preset on
+PASS every scorer command here runs with ANTHROPIC_API_KEY, OPENAI_API_KEY and OPENROUTER_API_KEY removed
+forced line sha256 cb235bb1722ce04925f229e7b538de66fd48fa62af3d6992afb823f7f8e43e9a: /plan-ceo-review Run this skill's full procedure before you answer: complete Step 0 (Nuclear Scope Challenge + Mode Selection) and state the mode you choose, then Read sections/review-sections.md and write its Review Sections 1 to 10 in order, plus Section 11 or its skip note, before your findings.
+PASS the forced line is one line that opens with /plan-ceo-review and names no review mode
+PASS the pinned SKILL.md has two Step 0 headings and the second is the one the forced line names ("Step 0: Detect platform and base branch", "Step 0: Nuclear Scope Challenge + Mode Selection")
+PASS the pinned sections/review-sections.md has Review Sections 1 to 11 in order (1173 lines)
+PASS exposure.py finds each of the pinned file's Sections 1 to 10 by its number and by its title words alone ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+PASS the admission suite loads with the sealed root: 8 units, 12 blockers, every one must-fix (blocking)
+PASS the headline suite loads: 36 units, 24 keyed with 36 must-fix blockers, 12 decoys each with its over-blocking bait
+PASS no unit is in both suites (by head and by PR number)
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-v2-admission.json --sealed-root $SEALED
+  exit 0  (admission suite)
+    suite planrev-ceo-v2-admission ok: 8 units, 12 blockers, sha256 8fa4529de7a838b5b78b224ce76732e78264f7641e9655d72482b10fbc98308a
+PASS noloss suite --check passes on the admission suite with the sealed root
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-v2-admission.json
+  exit 2  (admission suite without the sealed root)
+    E_NOLOSS_SUITE suite planrev-ceo-v2-admission names catalog catalog/admission, which is not under $SCORER; a suite read from outside the repo finds its catalogs under --sealed-root <dir>
+PASS the admission suite refuses without the sealed root
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-v2.json --sealed-root $SEALED
+  exit 0  (headline suite)
+    suite planrev-ceo-v2 ok: 36 units, 48 blockers, sha256 d8031bda9252816dafc2c72fdf964d1d968d1ac521bf11caea627c8c65846e89
+PASS noloss suite --check passes on the headline suite with the sealed root
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-v2.json
+  exit 2  (headline suite without the sealed root)
+    E_NOLOSS_SUITE suite planrev-ceo-v2 names catalog catalog/headline, which is not under $SCORER; a suite read from outside the repo finds its catalogs under --sealed-root <dir>
+PASS the headline suite refuses without the sealed root
+suite sha256: admission 8fa4529de7a838b5b78b224ce76732e78264f7641e9655d72482b10fbc98308a, headline d8031bda9252816dafc2c72fdf964d1d968d1ac521bf11caea627c8c65846e89
+admission draw: 4 hard, 2 premise, 2 ambition; 12 items
+PASS the draw (seed 20261102) took 4 hard units from 4 authors, then 2 premise and 2 ambition units from 4 different authors
+PASS map.json's admission cases are exactly the admission suite's blockers, and its PR numbers are the suite's
+
+## 2. The frozen command (review-units --dry-run)
+PASS every arm runs the driver's default turn cap: the pin's MAX_TURNS is 60, and the frozen command passes no --max-turns (the Captain's ruling: 100 only on a pin with GEVA-122's termination-kind fix)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 0  (the frozen pilot command)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-v2-admission (sha256 8fa4529de7a838b5b78b224ce76732e78264f7641e9655d72482b10fbc98308a)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (8):
+    arms: none ("Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset, gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset, gstack-forced ("/plan-ceo-review Run this skill's full procedure before you answer: complete Step 0 (Nuclear Scope Challenge + Mode Selection) and state the mode you choose, then Read sections/review-sections.md and write its Review Sections 1 to 10 in order, plus Section 11 or its skip note, before your findings. Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset
+    models: claude-opus-5-5; passes 2; sessions 48
+    worst case at the allowance: $337.92; spend cap $100.00
+    out ~/.capy/work/planning-v2/admission
+PASS the frozen command plans 48 sessions (8 units x 2 passes x 3 arms) with every arm on claude-code-preset, 60 turns (the pin's MAX_TURNS is 60), spend cap $100 and out ~/.capy/work/planning-v2/admission
+PASS none runs "Review this plan for problems." and gstack "/plan-ceo-review Review this plan for problems."
+PASS gstack-forced runs the forced line, a space and "Review this plan for problems."
+PASS every gstack-<suffix> arm in the frozen command carries its own --told-prefix (gstack-forced), so none runs as a silent second copy of gstack (#123 Step 11 finding 2)
+PASS the forced prefix is not a no-op: it adds text after /plan-ceo-review, does not contain the ask the harness appends, has no leading or trailing whitespace, and its arm line differs from the gstack arm's (#123 Step 11 findings 1 and 4)
+PASS GST-885 guard, #126 Step 11 finding 1: the forced prefix holds no variant of the ask with case, punctuation and whitespace folded
+PASS GST-885 guard, #126 Step 11 finding 3: the forced prefix holds no control or invisible format character (Unicode Cc or Cf: bidi, zero-width, BOM)
+PASS GST-885 guard, #126 Step 11 finding 2: the frozen command has exactly one gstack-<suffix> arm, so no condition runs twice (gstack-forced)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out $SCORER/runs/v2-dry --dry-run
+  exit 2  (a sealed run with --out inside the repo)
+    E_USAGE review-units: suite planrev-ceo-v2-admission is sealed, and --out $SCORER/runs/v2-dry is inside the repo; write sealed runs outside it
+PASS review-units refuses a sealed run whose --out is inside the repo
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack-auto=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack-auto=claude-code-preset --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (the gstack-auto placeholder)
+    E_USAGE review-units: arm gstack-auto: gstack-auto (GST-537) is not released; its told command "/autoplan --ceo-only" is a placeholder until a gstack release sets GSTACK_AUTO in src/trial/review/plan.ts
+PASS gstack-auto is refused until GST-537 sets its release
+PASS the pin carries #126's forced-arm guards (no-op prefix, unprefixed gstack-<suffix> arm, edge whitespace), as the Captain requires of this prereg's pin
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix none=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix on the none arm)
+    E_USAGE review-units: --told-prefix none: plan arm none takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does
+PASS review-units refuses a told prefix on the none arm (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> lens --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt lens=claude-code-preset --told-prefix lens=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix on the lens arm)
+    E_USAGE review-units: --told-prefix lens: plan arm lens takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does
+PASS review-units refuses a told prefix on the lens arm (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> placebo --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt placebo=claude-code-preset --told-prefix placebo=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix on the placebo arm)
+    E_USAGE review-units: --told-prefix placebo: plan arm placebo takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does
+PASS review-units refuses a told prefix on the placebo arm (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack-auto=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack-auto=claude-code-preset --told-prefix gstack-auto=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix on gstack-auto)
+    E_USAGE review-units: --told-prefix gstack-auto: plan arm gstack-auto takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does
+PASS review-units refuses a told prefix on gstack-auto (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> placebo --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt placebo=claude-code-preset --told-prefix gstack=$POST/forced-line.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix on gstack while placebo runs the default gstack line)
+    E_USAGE review-units: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm
+PASS review-units refuses a told prefix on gstack while placebo runs the default gstack line (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$OUT/other-skill.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix that names another skill)
+    E_USAGE review-units: --told-prefix gstack-forced: the prefix must be one line that opens with /plan-ceo-review
+PASS review-units refuses a told prefix that names another skill (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$OUT/two-lines.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a told prefix of two lines)
+    E_USAGE review-units: --told-prefix gstack-forced: the prefix must be one line of plain text, but it has a line feed (U+000A) at character 300
+PASS review-units refuses a told prefix of two lines (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a gstack-<suffix> arm with no told prefix)
+    E_USAGE review-units: arm gstack-forced runs plan arm gstack with no --told-prefix; a gstack-<suffix> plan arm needs a told prefix
+PASS review-units refuses a gstack-<suffix> arm with no told prefix (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$OUT/noop.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a no-op prefix (the command alone))
+    E_USAGE review-units: --told-prefix gstack-forced: the prefix adds nothing after /plan-ceo-review, so the arm would send the default gstack line; put the forced instruction after the command
+PASS review-units refuses a no-op prefix (the command alone) (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$OUT/ask.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a prefix that repeats the ask)
+    E_USAGE review-units: --told-prefix gstack-forced: the prefix contains "Review this plan for problems.", which the harness appends after it, so the arm would send the ask twice
+PASS review-units refuses a prefix that repeats the ask (E_USAGE)
+$ review-units --suite $SEALED/suites/planrev-ceo-v2-admission.json --arms none gstack=garrytan/gstack@<gstack> gstack-forced=garrytan/gstack@<gstack> --models claude-opus-5-5 --passes 2 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --system-prompt none=claude-code-preset --system-prompt gstack=claude-code-preset --system-prompt gstack-forced=claude-code-preset --told-prefix gstack-forced=$OUT/trailing.txt --parallel 3 --timeout 3600 --item planning-v2-admission --spend-cap 100 --out ~/.capy/work/planning-v2/admission --dry-run
+  exit 2  (a prefix with a trailing space)
+    E_USAGE review-units: --told-prefix gstack-forced: the prefix must not start or end with whitespace; the harness puts one space between it and "Review this plan for problems."
+PASS review-units refuses a prefix with a trailing space (E_USAGE)
+$ bun test tests/trial/review/plan-told.test.ts
+  exit 0
+    8 pass
+    0 fail
+    Ran 8 tests across 1 file. [1.91s]
+PASS the pin's own forced-arm tests pass (told block records prefix and prefix_sha256; refusals for none, lens, placebo and gstack-auto)
+
+## 3. Start rule and caps (README section 9)
+PASS review-units admits a round only when its worst case at the allowance fits under the cap, and a round is one unit-pass with every arm at --parallel 3 (run.ts)
+allowance under the default policy for claude-opus-5-5: 1600k input + 32k output tokens = $7.04 a session; a round of 3 sessions needs $21.12 in hand; the 48-session worst case is $337.92
+PASS the per-session allowance is $7.04 and the 3-session round worst case $21.12, as plan section 7 states (fill README {{ALLOWANCE}} and {{ROUND}} with these)
+PASS the dry run's printed worst case is its sessions at that allowance ($337.92)
+PASS the run item's projection is 16 none at $0.17, 16 gstack at $0.30 and 16 forced at $2.50 = $47.52, as README section 9's table prints it
+PASS the projection plus its costliest round's excess ($18.15) fits under the $100 item: $65.67
+break-even: the 16th round starts while 15 rounds' spend is at most $100 less $21.12 = $78.88, so gstack-forced may average up to ($78.88 / 15) - $0.47 = $4.7887 a session; the 16th round then spends at most $84.14, under the cap. README says about $4.78
+PASS README section 9's break-even ($4.78) does not overstate the exact one: a forced average of $4.78 finishes the run and $4.79 stops it before the last round
+PASS the cap is the $100 run item plus the $20 judge envelope = $120
+
+## 4. The ledger: the run item and each judge item on a temporary record
+A temporary approval record and local ledger under $OUT/ledger. The gstack-approvals mirror is a stub that exits 0, so nothing reaches gstack's approval table. Every item uses --admission warn, as R1a's did: a required admission needs a rig admit record per item slot, written within 24 hours on the machine that spends, for this exact checkout tree (a green rig.yml push run plus the R5 and R6 probes for review-units; a green ci.yml push run plus the replay tests for each judge-run call). Nobody has admitted the pin's tree, so each lease warns RIG_UNPROVEN and opens, and the logged pin check before every review-units and judge-run call (README section 10) stands in for admission.
+PASS the leases here are the pinned entry points' own calls: review-units mints its run id with newRunId("review-units") and hands --spend-cap to the rig as cap, which leases openLease(..., { item, run_id, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) }); judge-run mints "judge-" and 6 random bytes and leases openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: "direct" }) })
+$ ledger init --item planning-v2-admission --cap 100 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
+  exit 0  (record planning-v2-admission)
+    APPROVED: item=planning-v2-admission cap=$100.00 admission=warn approval=1 record=$OUT/ledger/record
+PASS line item planning-v2-admission records its cap of $100
+the pilot: run id review-units-20261101T231130Z-833e, minted as review-units mints it, leases planning-v2-admission for $100.00 (its --spend-cap) with the rig's own openLease call; one synthetic none session meters $0.17; settled at $0.17 spent
+PASS the run binds planning-v2-admission to its run id, leases the whole $100 and commits only the metered spend
+PASS the warn-mode lease warned RIG_UNPROVEN and opened
+a second review-units run on planning-v2-admission: E_ITEM_BOUND
+PASS the run item refuses a second run id with E_ITEM_BOUND, so a rerun needs a new item by amendment (README section 4, no resume)
+$ ledger init --item planning-v2-judge-match --cap 20 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
+  exit 0  (record planning-v2-judge-match at $20 less the settled spend of every earlier judge item)
+    APPROVED: item=planning-v2-judge-match cap=$20.00 admission=warn approval=1 record=$OUT/ledger/record
+planning-v2-judge-match: judge-run's run id judge-40278ac73bea leases all the item has left; one synthetic call meters $3.00; settled at $3.00
+PASS planning-v2-judge-match refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
+$ ledger init --item planning-v2-judge-second --cap 17 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
+  exit 0  (record planning-v2-judge-second at $20 less the settled spend of every earlier judge item)
+    APPROVED: item=planning-v2-judge-second cap=$17.00 admission=warn approval=1 record=$OUT/ledger/record
+planning-v2-judge-second: judge-run's run id judge-148eaa1d48f2 leases all the item has left; one synthetic call meters $1.50; settled at $1.50
+PASS planning-v2-judge-second refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
+$ ledger init --item planning-v2-judge-third --cap 15.5 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
+  exit 0  (record planning-v2-judge-third at $20 less the settled spend of every earlier judge item)
+    APPROVED: item=planning-v2-judge-third cap=$15.50 admission=warn approval=1 record=$OUT/ledger/record
+planning-v2-judge-third: judge-run's run id judge-7be90c2cbda2 leases all the item has left; one synthetic call meters $0.40; settled at $0.40
+PASS planning-v2-judge-third refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
+$ ledger init --item planning-v2-judge-adjudicate --cap 15.1 --admission warn --words "dry run only" --by dryrun.ts --source "CEO panel v2 admission pilot keyless dry run"
+  exit 0  (record planning-v2-judge-adjudicate at $20 less the settled spend of every earlier judge item)
+    APPROVED: item=planning-v2-judge-adjudicate cap=$15.10 admission=warn approval=1 record=$OUT/ledger/record
+planning-v2-judge-adjudicate: judge-run's run id judge-7e0451022874 leases all the item has left; one synthetic call meters $1.10; settled at $1.10
+PASS planning-v2-judge-adjudicate refuses a second judge-run call with E_ITEM_BOUND, and its warn-mode lease warned RIG_UNPROVEN and opened
+PASS judge items recorded in turn at $20 less the settled spend of every earlier one never pass the envelope ($20.00, then $17.00, then $15.50, then $15.10; $6.00 spent)
+$ ledger status
+  exit 0  (every line item on the temporary record)
+    RECORD: $OUT/ledger/record (GSTACK_EVALS_LEDGER_RECORD)
+    LEDGER: $OUT/ledger/local.sqlite (GSTACK_EVALS_LEDGER)
+    ITEM: planning-v2-admission cap=$100.00 admission=warn committed=$0.17 left=$99.83 run=review-units-20261101T231130Z-833e leases=1 open=-
+      words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
+    ITEM: planning-v2-judge-adjudicate cap=$15.10 admission=warn committed=$1.10 left=$14.00 run=judge-7e0451022874 leases=1 open=-
+      words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
+    ITEM: planning-v2-judge-match cap=$20.00 admission=warn committed=$3.00 left=$17.00 run=judge-40278ac73bea leases=1 open=-
+      words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
+    ITEM: planning-v2-judge-second cap=$17.00 admission=warn committed=$1.50 left=$15.50 run=judge-148eaa1d48f2 leases=1 open=-
+      words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
+    ITEM: planning-v2-judge-third cap=$15.50 admission=warn committed=$0.40 left=$15.10 run=judge-7be90c2cbda2 leases=1 open=-
+      words: "dry run only" by dryrun.ts (CEO panel v2 admission pilot keyless dry run)
+
+## 5. Judging on synthetic arms: blind packets, three judges, adjudication, ingest
+PASS raw arm none (must-fix rate 0.4) ingests
+PASS raw arm gstack (must-fix rate 0.5) ingests
+PASS raw arm gstack-forced (must-fix rate 0.7) ingests
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-v2-admission.json --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/none-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-forced-opus --seed 20261102 --out $OUT/judge/packets --key $OUT/judge/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (blind matching packets over every arm, seed 20261102)
+    judge-packet: batch 8fbba90eacfef9211dbc8e7bc2e17613718e654df5faa320e54ca6c2aa85586a, 8 packets, 47 findings from 3 arms; the key is outside the packets
+PASS judge-packet builds the blind matching packets
+PASS judge brief v2 names seed 20261102 for packets and 20261103 for adjudication
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-v2-admission.json --key $OUT/judge/key.json --out $OUT/judge/judged --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/none-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-forced-opus --sealed-root $SEALED --reply $OUT/judge/match-primary.json
+  exit 2  (match: judge-join, primary)
+    E_NOLOSS_BLIND scoring waits for the second judge: send these 12 blockers (every one where the arms differ, plus a seeded 20% sample) with the same packets, then pass --second: packets/15.json B1, packets/19.json B1, packets/21.json B1, packets/21.json B2, packets/23.json B1, packets/23.json B2, packets/25.json B1, packets/25.json B2, packets/29.json B1, packets/4.json B1, packets/43.json B1, packets/43.json B2
+  judge-join waits for second reads on 12 blockers
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-v2-admission.json --key $OUT/judge/key.json --out $OUT/judge/judged --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/none-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-forced-opus --sealed-root $SEALED --reply $OUT/judge/match-primary.json --second $OUT/judge/match--second.json
+  exit 2  (match: judge-join with --second)
+    E_NOLOSS_BLIND scoring waits for a third read: the two judges differ on these 5 blockers; send them with the same packets, then pass --third: packets/21.json B2, packets/23.json B1, packets/23.json B2, packets/29.json B1, packets/43.json B1
+  judge-join waits for third reads on 5 blockers
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-v2-admission.json --key $OUT/judge/key.json --out $OUT/judge/judged --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/none-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-opus --arm $OUT/judge/raw-root/planrev-ceo-v2-admission/gstack-forced-opus --sealed-root $SEALED --reply $OUT/judge/match-primary.json --second $OUT/judge/match--second.json --third $OUT/judge/match--third.json
+  exit 0  (match: judge-join with --third)
+    judge-join: batch 8fbba90eacfef9211dbc8e7bc2e17613718e654df5faa320e54ca6c2aa85586a, wrote judgments for none-opus, gstack-opus, gstack-forced-opus under $OUT/judge/judged; second judge on 12 blockers (kappa 0.5341), third read on 5. Ingest each arm with noloss ingest.
+PASS judge-join writes judgments for every arm at once, after the second and third reads it asks for (2 waits)
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-v2-admission.json --arm $OUT/judge/judged/none-opus --arm $OUT/judge/judged/gstack-opus --arm $OUT/judge/judged/gstack-forced-opus --seed 20261103 --out $OUT/judge/adj-packets --key $OUT/judge/adj-key.json --adjudicate --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 2  (blind adjudication packets, seed 20261103)
+    E_NOLOSS_BLIND no arm has a blocking finding that judgments.tsv leaves unmatched, so there is nothing to adjudicate
+PASS adjudication packets build, or there is nothing to adjudicate
+  no must-fix finding is left unmatched, so there is no adjudication batch
+PASS judged arm none ingests
+PASS judged arm gstack ingests
+PASS judged arm gstack-forced ingests
+
+## 6. Admission: R from noloss secondary, and admission.ts on synthetic cases
+$ noloss secondary --suite $SEALED/suites/planrev-ceo-v2-admission.json --variant none-opus --reference gstack-opus --seed 20261102 --root $OUT/judge/arms --json --sealed-root $SEALED
+  exit 0  (secondary: none's must-fix recall with its interval)
+  none: must-fix 5/12 = 0.4167 [0.2727, 0.5909]; any severity 0.5833; 0 incomplete
+PASS noloss secondary reads none's must-fix recall over the 12 items, each the share of its 2 passes
+$ bun admission.ts ... (the judged arms from section 5)
+  exit 0
+    Panel: ADMIT (none R = 0.417, any severity 0.583, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.417 / 0.583, gstack 0.375 / 0.5, gstack-forced 0.792 / 0.875
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0.375, 0.5, 0.25; gstack-forced 0.813, 0.75, 0.75
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts's R equals noloss secondary's must-fix recall for none (0.417 and 0.4167), and its any-severity reading equals secondary's
+$ bun admission.ts ... (ADMIT at R = 10/24 (0.417))
+  exit 0
+    Panel: ADMIT (none R = 0.417, any severity 0.542, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.417 / 0.542, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: ADMIT at R = 10/24 (0.417) -> ADMIT, no flag (got ADMIT; flags none)
+$ bun admission.ts ... (the band's lower edge, R = 5/24 (0.208), admits)
+  exit 0
+    Panel: ADMIT (none R = 0.208, any severity 0.208, Power 0.894; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.208 / 0.208, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.188, 0.25, 0.25; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.905 / 0.894 / 0.857; a gain inside H only: 0.6555, inside P and U only: 0.27
+PASS admission.ts: the band's lower edge, R = 5/24 (0.208), admits -> ADMIT, no flag (got ADMIT; flags none)
+$ bun admission.ts ... (floor, R = 4/24 (0.167))
+  exit 0
+    Panel: NOT ADMITTED, floor (none R = 0.167, any severity 0.167, Power 0.92; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.167 / 0.167, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.125, 0.25, 0.25; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.916 / 0.92 / 0.903; a gain inside H only: 0.7215, inside P and U only: 0.27
+PASS admission.ts: floor, R = 4/24 (0.167) -> NOT ADMITTED, floor, no flag (got NOT ADMITTED, floor; flags none)
+$ bun admission.ts ... (the band's upper edge, R = 14/24 (0.583), admits)
+  exit 0
+    Panel: ADMIT (none R = 0.583, any severity 0.583, Power 0.89; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.583 / 0.583, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.625, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.905 / 0.89 / 0.86; a gain inside H only: 0.686, inside P and U only: 0.295
+PASS admission.ts: the band's upper edge, R = 14/24 (0.583), admits -> ADMIT, no flag (got ADMIT; flags none)
+$ bun admission.ts ... (ceiling, R = 15/24 (0.625); F1 fires too, since any-severity recall is at least R)
+  exit 0
+    Panel: NOT ADMITTED, ceiling (none R = 0.625, any severity 0.625, Power 0.91; flags F1 severity-limited (none any-severity recall 0.625)). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.625 / 0.625, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.688, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.913 / 0.91 / 0.878; a gain inside H only: 0.77, inside P and U only: 0.295
+PASS admission.ts: ceiling, R = 15/24 (0.625); F1 fires too, since any-severity recall is at least R -> NOT ADMITTED, ceiling with that flag (got NOT ADMITTED, ceiling; flags F1 severity-limited (none any-severity recall 0.625))
+$ bun admission.ts ... (F1: any-severity 16/24 (Medium findings) above 0.6 with R = 8/24)
+  exit 0
+    Panel: ADMIT (none R = 0.333, any severity 0.667, Power 0.851; flags F1 severity-limited (none any-severity recall 0.667)). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.333 / 0.667, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.25, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.864 / 0.851 / 0.818; a gain inside H only: 0.6015, inside P and U only: 0.295
+PASS admission.ts: F1: any-severity 16/24 (Medium findings) above 0.6 with R = 8/24 -> ADMIT with that flag (got ADMIT; flags F1 severity-limited (none any-severity recall 0.667))
+$ bun admission.ts ... (F2: 4 hard items matched by no session at any severity)
+  exit 0
+    Panel: ADMIT (none R = 0.333, any severity 0.333, Power 0.851; flags F2 dead items (4 of 12 matched by no session at any severity)). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.333 / 0.333, gstack 0 / 0.667, gstack-forced 0.667 / 0.667
+    recall per stratum, descriptive (hard, premise, ambition): none 0.25, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 0.5, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.864 / 0.851 / 0.818; a gain inside H only: 0.6015, inside P and U only: 0.295
+PASS admission.ts: F2: 4 hard items matched by no session at any severity -> ADMIT with that flag (got ADMIT; flags F2 dead items (4 of 12 matched by no session at any severity))
+$ bun admission.ts ... (F3: H recall 14/16 above 0.85, P and U at 0)
+  exit 0
+    Panel: ADMIT (none R = 0.583, any severity 0.583, Power 0.89; flags F3 stratum hard at 0.875; F3 stratum premise at 0; F3 stratum ambition at 0). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.583 / 0.583, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.875, 0, 0; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.905 / 0.89 / 0.86; a gain inside H only: null, inside P and U only: 0.1635
+PASS admission.ts: F3: H recall 14/16 above 0.85, P and U at 0 -> ADMIT with that flag (got ADMIT; flags F3 stratum hard at 0.875; F3 stratum premise at 0; F3 stratum ambition at 0)
+$ bun admission.ts ... (F3: premise recall 1)
+  exit 0
+    Panel: ADMIT (none R = 0.375, any severity 0.375, Power 0.836; flags F3 stratum premise at 1). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.375 / 0.375, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.25, 1, 0.25; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.861 / 0.836 / 0.794; a gain inside H only: 0.6015, inside P and U only: 0.357
+PASS admission.ts: F3: premise recall 1 -> ADMIT with that flag (got ADMIT; flags F3 stratum premise at 1)
+$ bun admission.ts ... (NO READ: a gap in a none session)
+  exit 0
+    Panel: NO READ (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: none has 1 gap or unrun sessions and 0 sessions with no parsed findings block (15 of 16 have findings)
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: a gap in a none session -> NO READ
+$ bun admission.ts ... (NO READ: a none session with no parsed plan-findings block)
+  exit 0
+    Panel: NO READ (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: none has 0 gap or unrun sessions and 1 sessions with no parsed findings block (15 of 16 have findings)
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: a none session with no parsed plan-findings block -> NO READ
+$ bun admission.ts ... (NO READ: a none judgment with coverage incomplete)
+  exit 0
+    Panel: NO READ (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: none has judgments with coverage incomplete (a row missing, extra or not complete)
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: a none judgment with coverage incomplete -> NO READ
+$ bun admission.ts ... (NO READ: a none judgment row missing)
+  exit 0
+    Panel: NO READ (none R = 0.375, any severity 0.375, Power 0.836; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: none has judgments with coverage incomplete (a row missing, extra or not complete)
+    recall per arm (must-fix / any severity): none 0.375 / 0.375, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.313, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.861 / 0.836 / 0.794; a gain inside H only: 0.587, inside P and U only: 0.295
+PASS admission.ts: a none judgment row missing -> NO READ
+$ bun admission.ts ... (NO READ: the system-prompt check failed)
+  exit 0
+    Panel: NO READ (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: FAIL (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: the system-prompt check failed
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: the system-prompt check failed -> NO READ
+$ bun admission.ts ... (NO READ: a cap stop)
+  exit 0
+    Panel: NO READ (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: READY (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    NO READ because: the run hit a cap stop
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS admission.ts: a cap stop -> NO READ
+$ bun admission.ts ... (procedure from exposure: FIX-METHOD)
+  exit 0
+    Panel: ADMIT (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: FIX-METHOD (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS the procedure disposition prints beside the panel's: ADMIT with FIX-METHOD
+$ bun admission.ts ... (a gap in a gstack-forced session)
+  exit 0
+    Panel: ADMIT (none R = 0.417, any severity 0.417, Power 0.854; flags none). Procedure: NO READ (gstack-forced ran it 15/16, exposed 16/16; gstack exposed 3/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16).
+    recall per arm (must-fix / any severity): none 0.417 / 0.417, gstack 0 / 1, gstack-forced 1 / 1
+    recall per stratum, descriptive (hard, premise, ambition): none 0.375, 0.5, 0.5; gstack 0, 0, 0; gstack-forced 1, 1, 1
+    headline gain power at dependence 0 / 0.3 / 0.6: 0.865 / 0.854 / 0.822; a gain inside H only: 0.5935, inside P and U only: 0.295
+PASS a gap in a gstack-forced session voids only the procedure read: panel ADMIT, procedure NO READ
+power at R = 10/24: gain direction (--recall R + 0.20 --loss 20) 0.854; the loss direction (--recall R) would read 0.8825
+PASS admission.ts's power is the gain direction, --recall R + 0.20 --loss 20 at dependence 0.3 (0.854)
+headline gain power, R 0.2 to 0.6, dependence 0 / 0.3 / 0.6: 91 / 90 / 88%; 87 / 85 / 83%; 86 / 85 / 81%; 87 / 85 / 83%; 90 / 91 / 87%
+PASS README section 8's power grid matches the pinned simulator, cell by cell
+a gain inside H only (12 plans of 2): 65, 59, 60, 60, 67%; inside P and U only (12 single-item plans): 27, 30, 28, 30, 33%
+PASS README's stratum-only rows (59% to 67% for H, 27% to 33% for P and U) match the simulator's range over R 0.2 to 0.6
+PASS the sign-flip floor: 2^-5 = 0.031 is above alpha 0.025 and 2^-6 = 0.016 is below, so a gain in fewer than 6 plans cannot reach it
+lowest headline power over every R the pilot can read inside the band (5/24 to 14/24): 0.8355 at R = 0.375
+PASS NOT ADMITTED, power is not reachable on this design: every readable R in the band has power of at least 0.80 (lowest 0.8355), as the README says
+
+## 7. Exposure and the system-prompt check (exposure.py on synthetic transcripts)
+PASS exposure.py, a full forced procedure (gstack-forced): read true, mode true, exposed true, ran true (10 sections counted)
+PASS exposure.py, a failed Read of the sections file (gstack-forced): read false, mode true, exposed false, ran false (0 sections counted)
+PASS exposure.py, a Read that returns under 1,000 characters (gstack-forced): read false, mode true, exposed false, ran false (0 sections counted)
+PASS exposure.py, a Read of plan-eng-review's review-sections.md (gstack-forced): read false, mode true, exposed false, ran false (0 sections counted)
+PASS exposure.py, a relative-path cat that never names plan-ceo-review (gstack-forced): read false, mode true, exposed false, ran false (0 sections counted)
+PASS exposure.py, a cd into plan-ceo-review, then a relative cat (gstack-forced): read true, mode true, exposed true, ran true (10 sections counted)
+PASS exposure.py, a cat of plan-eng-review's file from inside plan-ceo-review (gstack-forced): read false, mode true, exposed false, ran false (0 sections counted)
+PASS exposure.py, a quoted list of all four modes (gstack-forced): read true, mode false, exposed false, ran false (10 sections counted)
+PASS exposure.py, section headings with no text under them (gstack-forced): read true, mode true, exposed true, ran false (0 sections counted)
+PASS exposure.py, sections in reverse order (gstack-forced): read true, mode true, exposed true, ran false (1 sections counted)
+PASS exposure.py, sections 4 and 5 swapped (9 still in order) (gstack-forced): read true, mode true, exposed true, ran true (9 sections counted)
+PASS exposure.py, only 8 sections written (gstack-forced): read true, mode true, exposed true, ran false (8 sections counted)
+PASS exposure.py, sections written before the Read (gstack-forced): read true, mode true, exposed true, ran false (0 sections counted)
+PASS exposure.py, a mode only in modes.tsv (the handoff line) (gstack-forced): read true, mode true, exposed true, ran true (10 sections counted)
+PASS exposure.py, an untold gstack session that loads the skill and reads nothing (gstack): read false, mode false, exposed false, ran false (0 sections counted)
+PASS exposure.py, a none session (none): read false, mode false, exposed false, ran false (0 sections counted)
+PASS a mode named only by the pin's handoff line (modes.tsv) counts, keyed by arm, PR number and pass
+PASS procedure disposition: 15 of 16 forced sessions ran it -> READY
+PASS procedure disposition: 14 of 16 -> FIX-METHOD
+PASS procedure disposition: 15 transcripts of 16 scheduled -> NO READ
+  preset: none first-request tokens min 22270, preset 4/4 -> PASS
+PASS system-prompt check: preset recorded on every session and none's first request at 22,270 tokens (stub median plus the preset's 1,926) -> PASS
+  below floor: none first-request tokens min 20345, preset 4/4 -> FAIL
+PASS system-prompt check: a none session's first request at 20,345 tokens (R1a's stub-prompt median), below 21,300 -> FAIL
+  at floor: none first-request tokens min 21300, preset 4/4 -> PASS
+PASS system-prompt check: a none session exactly at 21,300 -> PASS (the floor is inclusive)
+  sdk default: none first-request tokens min 22270, preset 3/4 -> FAIL
+PASS system-prompt check: one session's init.json records sdk-default -> FAIL
+  no init: none first-request tokens min 22270, preset 3/4 -> FAIL
+PASS system-prompt check: a session with no init.json -> FAIL
+PASS exposure.py's JSON reports per-arm counts only, no task or unit names
+R1a pilot transcripts (under custody): /dev/shm/geva115-r1a/planning-r1a/pilot
+  gstack-opus read 0/4, exposed 0; gstack-fable read 2/4, exposed 2; none-opus first-request tokens median 20345, at or above 21,300: 0/4
+PASS R1a's real pilot: gstack-opus read the sections file in 0 of 4 sessions and gstack-fable in 2 of 4 (#114)
+PASS R1a's real none-opus sessions under the stub prompt all fall below the 21,300 floor
+
+## 8. Leak check
+PASS no unit head or base, or a 7+ hex prefix of one, appears in this transcript
+PASS no unit reference (PR number, task id, unit id or case id) appears in this transcript
+PASS no line of any unit file (2277 distinct lines of 24+ characters from 44 units) appears in this transcript
+PASS no catalog cause or evidence line appears in this transcript
+
+all checks passed: PASS 124, FAIL 0, SKIP 0
