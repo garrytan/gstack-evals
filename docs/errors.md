@@ -772,7 +772,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_INFRA_FAILURE
 
-A Claude Code session ended on an infra failure, not on anything the arm did: the evaluator's own code (the transcript or init write, the user simulator, the persona), the SDK's link to a CLI that was still running (a reset or a broken pipe), or the machine (the CLI could not be spawned, or the agent's session stopped answering once the CLI ended). The cell is missing, never a miss or an arm failure; in a review run it is a coverage gap that stops its arm, so that arm gets no verdict.
+A Claude Code session ended on an infra failure, not on anything the arm did: the evaluator's own code (the transcript or init write, the user simulator, the persona), the SDK's link to a CLI that was still running (a reset or a broken pipe), or the machine (the CLI could not be spawned, or the agent's session stopped answering once the CLI ended). The cell is missing, never a miss or an arm failure; in a review run it is a coverage gap that stops its arm, so that arm gets no verdict, and under skill-eval --host claude it is a missing cell under the prereg's missing-cell rule, never a fail against the arm. An error from the adapter's own abort or teardown after a recorded timeout or arm failure does not replace it; the adapter line names it as teardown.
 
 Fix: Read the adapter line in the trial's host/cli-stderr.log, which names what failed, and fix the evaluator or the machine before a counted run. Start a new run for the arm's verdict.
 

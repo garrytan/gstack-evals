@@ -50,7 +50,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 |---|---|---|
 | `--arms` | required | The arms, in the grammar above. |
 | `--tasks` | required | The contract tasks file, usually `test/fixtures/skill-evals/<skill>/tasks.json`. |
-| `--host` | required | claude runs every task; codex runs non-interactive tasks only (E_INTERACTIVE_HOST names the others). |
+| `--host` | required | claude runs every task; codex runs non-interactive tasks only (E_INTERACTIVE_HOST names the others). On claude, an evaluator, machine or SDK-link failure leaves a missing cell (E_INFRA_FAILURE), scored under the prereg's missing-cell rule, not a harness_crash fail against the arm. |
 | `--model` | required | Models under test, comma-separated, one verdict each. The policy must allow each as a subject. |
 | `--trials` | 3 | Trials per task in each arm. |
 | `--spend-cap` | required to spend | The run's dollar limit. It must be at most the line item's approved cap and at least one arm-balanced round. |
