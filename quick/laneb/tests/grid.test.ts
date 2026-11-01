@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { jobConfig, RETRY_ON } from "../runner/grid.ts";
+import { armSpec, jobConfig, RETRY_ON } from "../runner/grid.ts";
 import { tb2TaskToml, TB2_AGENT_HOSTS } from "../runner/materialize.ts";
 
 describe("grid", () => {
@@ -24,6 +24,18 @@ describe("grid", () => {
     models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }],
     arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }],
   };
+
+  test("an arm's system prompt and session kind reach its kwargs only when set", () => {
+    const job = jobConfig({ ...spec, arms: [armSpec("none"), armSpec("gstack:system_prompt=claude-code-preset:session_kind=unattended")].map((a) => ({ ...a, tar: `/run/arms/${a.name}.tar`, sha256: "a" })) });
+    expect(job.agents[0].kwargs).not.toHaveProperty("system_prompt");
+    expect(job.agents[0].kwargs).not.toHaveProperty("session_kind");
+    expect(job.agents[1].kwargs).toMatchObject({ arm: "gstack", system_prompt: "claude-code-preset", session_kind: "unattended" });
+    expect(JSON.stringify(jobConfig(spec))).toBe(JSON.stringify(jobConfig({ ...spec, arms: [{ ...spec.arms[0], ...armSpec("none") }] })));
+    expect(armSpec("none:system_prompt=sdk-default")).toEqual({ name: "none", system_prompt: "sdk-default" });
+    for (const bad of ["gstack:system_prompt=claude_code", "gstack:session_kind=", "gstack:session_kind=interactive", "gstack:model=x", "gstack:system_prompt", "gstack:session_kind=unattended:session_kind=unattended", "gstack:constructor=x", "gstack:toString=x", "gstack:__proto__=x"]) {
+      expect(() => armSpec(bad)).toThrow("E_USAGE");
+    }
+  });
 
   // Harbor f3a5a92 (trial/queue.py): with include_exceptions set, only those types are rerun, after the trial dir is deleted.
   test("Harbor reruns only failures that come before any model response", () => {

@@ -11,7 +11,10 @@ import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
 import { ARM_ID, armId, modelTag, readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
+import { TOLD_SHA256, TOLD_TEMPLATE } from "../../../src/trial/review/told.ts";
 import { buildUnitRepo, unitTaskId } from "../../../src/trial/review/unit.ts";
+import { createHash } from "node:crypto";
+import type { HostDriverOptions } from "../../../src/adapters/host.ts";
 import { harness, localSandbox } from "../../adapters/harness.ts";
 import { sourceRepo } from "./helpers.ts";
 
@@ -112,6 +115,7 @@ describe("review units in the run loop (keyless)", () => {
     const out = durable();
     const sink = durable();
     const input: ReviewRunInput = { host: "claude", suite: { id: "review-test", sha256: null }, units: [prepared], arms: [{ name: "none", told: "none" }, { name: "gstack", told: "gstack" }], models: [OPUS, HAIKU], passes: 1, parallel: 2, timeoutS: 120, cap: 50_000_000, runId: "review-run", out, date: "2026-10-30", policy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: join(h.dir, "journal.ndjson"), env: { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink } };
+    writeFileSync(join(out, "run.json"), JSON.stringify({ run_id: input.runId, max_turns: 60, session_kind: null }) + "\n");
     try {
       const first = await runReviewUnits(input, rig);
       const gapStop = [{ code: "E_COVERAGE_GAP" as const, message: expect.stringMatching(new RegExp("^arm none-opus stopped with 1 coverage gap, so it gets no verdict: " + unit.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " pass 1: malformed, ")) }];
@@ -149,6 +153,7 @@ describe("review units in the run loop (keyless)", () => {
       expect(JSON.parse(readFileSync(join(out, "arms", "gstack-opus", "arm.json"), "utf8"))).toMatchObject({ id: "gstack-opus", passes: 1, status: "complete", models: [{ role: "driver", model: OPUS }, { role: "voice", model: "gpt-6.1-sol" }], cell_tree_sha256: "gstack-opus" });
       expect(existsSync(join(sink, "arms", "gstack-opus", "cost.tsv"))).toBe(true);
       expect(existsSync(join(sink, "cells.ndjson"))).toBe(true);
+      expect(readFileSync(join(sink, "run.json"), "utf8")).toBe(readFileSync(join(out, "run.json"), "utf8"));
 
       const calls = h.upstream.length;
       mkdirSync(join(out, "arms", "none-particle-ai-particle-1"), { recursive: true });
@@ -172,5 +177,55 @@ describe("review units in the run loop (keyless)", () => {
     } finally {
       h.proxy.stop();
     }
+  }, 120_000);
+});
+
+// Value: protects=GEVA-109's per-arm settings in the run loop: an arm's told prefix override reaches its prompt and arm.json's told block with its sha256, an arm without one keeps today's told block and prompt byte for byte, and the system prompt, turn cap and session kind reach the driver and arm.json; fails_when=an override leaks into another arm, the default told block changes, or a setting never reaches the driver; why_new=GEVA-108 and R2; seam=runReviewUnits' taskOf, session and arm.json
+describe("GEVA-109: per-arm told prefix and system prompt in the run loop (keyless)", () => {
+  test("the override arm records its prefix and digest; the default arm is unchanged", async () => {
+    const R2 = "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed.";
+    const h = harness(() => [{ type: "text", text: "ok" }]);
+    roots.push(h.dir);
+    const s = sourceRepo();
+    const unit = { id: "garrytan/gstack#7@" + s.head.slice(0, 12), repo: "garrytan/gstack", pr: 7, head: s.head, base: s.base };
+    const repoDir = join(mkdtempSync(join(tmpdir(), "gse-rununit-")), "repo");
+    roots.push(repoDir);
+    const repo = buildUnitRepo({ unit, source: s.root, dest: repoDir });
+    const prepared: PreparedUnit = { unit, task: unitTaskId(unit), base_branch: repo.base_branch, merge_base: repo.merge_base, tree: repoDir, tree_sha256: dirTreeSha256(repoDir), instructions: repo.instructions };
+    const seen: { arm: string; prompt: string; o: HostDriverOptions }[] = [];
+    const slots = new Map<string, string>();
+    const rig: HostRig = {
+      baseUrl: h.baseUrl, network: null, imageDigest: null,
+      bind: async (request) => {
+        const b = h.proxy.bind(request);
+        slots.set(b.slot, request.cell.arm);
+        return b;
+      },
+      finalize: (m) => h.proxy.finalize(m),
+      arms: { gstack: { tree_sha256: "gstack-tree", skill: null, gstack: null, plugins: [] }, r2: { tree_sha256: "gstack-tree", skill: null, gstack: null, plugins: [] } },
+      sandbox: () => localSandbox(() => {}),
+      judgeSandbox: () => localSandbox(() => {}),
+      egress: () => ({ open: false, detail: "test rig" }),
+      close: async () => ({ committed: 0, unknown: 0, lease_id: null }),
+      recovery: null,
+      driver: (o) => ({
+        async run(_session, task): Promise<AgentOutcome> {
+          seen.push({ arm: slots.get(o.proxy.slot)!, prompt: task.prompt, o });
+          return { turns: [fixture("gstack.md")], termination: { kind: "completed" }, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: 1, loaded_bytes: null };
+        },
+      }),
+    };
+    const out = durable();
+    const input: ReviewRunInput = { host: "claude", suite: { id: "review-test", sha256: null }, units: [prepared], arms: [{ name: "gstack", told: "gstack" }, { name: "r2", told: "gstack", toldPrefix: R2, systemPrompt: "claude-code-preset" }], models: [OPUS], passes: 1, parallel: 1, timeoutS: 120, cap: 50_000_000, runId: "review-geva109", out, date: "2026-11-01", policy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: null, maxTurns: 80, sessionKind: "unattended", env: {} };
+    await runReviewUnits(input, rig);
+    const by = (arm: string) => seen.find((x) => x.arm === arm)!;
+    const text = TOLD_TEMPLATE.replaceAll("{base}", "main");
+    expect([by("gstack").prompt, by("r2").prompt]).toEqual(["/review " + text, R2 + " " + text]);
+    expect([by("gstack").o.systemPrompt, by("r2").o.systemPrompt, by("r2").o.maxTurns, by("gstack").o.sessionKind]).toEqual([undefined, "claude-code-preset", 80, "unattended"]);
+    const arm = (id: string) => JSON.parse(readFileSync(join(out, "arms", id, "arm.json"), "utf8"));
+    expect(arm("gstack-opus").told).toEqual({ arm: "gstack", prefix: "/review", template_sha256: TOLD_SHA256 });
+    expect(JSON.stringify(arm("gstack-opus").told)).toBe(JSON.stringify({ arm: "gstack", prefix: "/review", template_sha256: TOLD_SHA256 }));
+    expect(arm("r2-opus").told).toEqual({ arm: "gstack", prefix: R2, prefix_sha256: createHash("sha256").update(R2).digest("hex"), template_sha256: TOLD_SHA256 });
+    expect([arm("gstack-opus").arm_provenance.system_prompt, arm("r2-opus").arm_provenance.system_prompt]).toEqual(["sdk-default", "claude-code-preset"]);
   }, 120_000);
 });

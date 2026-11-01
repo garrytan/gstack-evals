@@ -7,6 +7,10 @@
 //   provider (anthropic, or openrouter through OpenRouter's Anthropic-compatible /v1/messages route), and
 //   ANTHROPIC_AUTH_TOKEN carries the slot's per-session bearer. Every model variable names the cell's model, and bundled
 //   skills, updates, telemetry and nonessential traffic are off (CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm).
+// - The system prompt is the Agent SDK's default unless the options ask for Claude Code's: systemPrompt sdk-default
+//   passes no systemPrompt option at all, and claude-code-preset passes the SDK's claude_code preset. init.json records
+//   which one ran (system_prompt). A session takes at most maxTurns model turns, MAX_TURNS unless the run sets another.
+//   sessionKind unattended adds GSTACK_SESSION_KIND=unattended to the agent env; unset, the adapter sets no session kind.
 // - canUseTool answers AskUserQuestion from the user simulator (src/usersim/sim.ts) and allows every other tool. An
 //   AskUserQuestion in a task that declared no user replies ends the trial as a missing cell, E_USER_TURNS_MISSING,
 //   naming the question. WebSearch and WebFetch are disallowed: they reach outside the trial network's lock.
@@ -89,6 +93,9 @@ export const CLAUDE_BIN = "claude";
 /** The most model turns a session may take. */
 export const MAX_TURNS = 60;
 
+export const SYSTEM_PROMPTS = ["sdk-default", "claude-code-preset"] as const;
+export type SystemPrompt = (typeof SYSTEM_PROMPTS)[number];
+
 export const DISALLOWED_TOOLS = ["WebSearch", "WebFetch"];
 
 /** Proxy refusal codes the adapter maps to a termination when an API error names them. */
@@ -105,7 +112,12 @@ export interface ClaudeCodeOptions {
   skill: (SkillRef & { dir: string | null }) | null;
   /** The trial's evaluator-side directory for the adapter's records. */
   out: string;
+  /** The most model turns the session may take; MAX_TURNS when unset. */
   maxTurns?: number;
+  /** The session's system prompt; sdk-default when unset. */
+  systemPrompt?: SystemPrompt;
+  /** GSTACK_SESSION_KIND for the agent env; unset, the adapter sets none. */
+  sessionKind?: "unattended";
   /** The persona's free-form answers, evaluator side; absent, an unanswered question gets the simulator's fallback. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** The Agent SDK's query function; tests pass the real one or a stand-in. */
@@ -121,7 +133,7 @@ type SdkMessage = Record<string, any>;
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
-export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex">): Record<string, string> {
+export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind">): Record<string, string> {
   return {
     ...(o.codex ? { OPENAI_API_KEY: o.proxy.token } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
@@ -138,6 +150,7 @@ export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | 
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     DISABLE_AUTOUPDATER: "1",
     DISABLE_TELEMETRY: "1",
+    ...(o.sessionKind ? { GSTACK_SESSION_KIND: o.sessionKind } : {}),
   };
 }
 
@@ -398,6 +411,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             permissionMode: "default",
             settingSources: ["user", "project", "local"],
             disallowedTools: DISALLOWED_TOOLS,
+            ...(o.systemPrompt === "claude-code-preset" ? { systemPrompt: { type: "preset", preset: "claude_code" } } : {}),
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
             abortController: abort,
             canUseTool,
@@ -433,7 +447,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             messages.push(m);
             appendFileSync(transcript, JSON.stringify(m) + "\n");
             if (m.type === "system" && m.subtype === "init") {
-              writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, tools: m.tools, skills: m.skills, cwd: m.cwd }, null, 2) + "\n");
+              writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, tools: m.tools, skills: m.skills, cwd: m.cwd, system_prompt: o.systemPrompt ?? "sdk-default" }, null, 2) + "\n");
             } else if (m.type === "assistant") {
               const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
               if (m.error || m.is_api_error_message) {

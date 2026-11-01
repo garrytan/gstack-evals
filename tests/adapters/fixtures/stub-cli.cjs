@@ -5,10 +5,12 @@
 // after the user message (no result with STUB_HANG=1, so the turn never ends; STUB_CONTENT_LATER, when set, answers every
 // user message after the first). STUB_MODE=exit exits with STUB_EXIT after the tool_use: STUB_DELAY ms later, or with
 // STUB_ON_EOF=1 only once its stdin closes. STUB_STDERR is written to stderr STUB_STDERR_TIMES times (default once) on each
-// user message.
+// user message. STUB_RECORD, when set, names a file the stub appends its argv and every control request to, one JSON
+// line each.
 const rl = require("readline").createInterface({ input: process.stdin });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const env = process.env;
+if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify({ argv: process.argv.slice(2) }) + "\n");
 const usage = { input_tokens: 1, output_tokens: Number(env.STUB_OUTPUT_TOKENS ?? 1) };
 const assistant = (id, content, stop) => ({ type: "assistant", message: { id, type: "message", role: "assistant", model: "stub", content, stop_reason: stop, usage }, parent_tool_use_id: null, session_id: "s", uuid: "a" + id });
 const result = (n, text) => ({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: text, session_id: "s", duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage, uuid: "r" + n });
@@ -22,6 +24,7 @@ rl.on("line", (line) => {
     return;
   }
   if (m.type === "control_request") {
+    if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify(m) + "\n");
     out({ type: "control_response", response: { subtype: "success", request_id: m.request_id, response: { commands: [], models: [], account: {}, output_style: "default", available_output_styles: [] } } });
     return;
   }
