@@ -59,11 +59,31 @@ describe("GEVA-115: the forced gstack plan arm's line (keyless)", () => {
 
   // Value: protects=GEVA-115 spec items 2 and 3: only a gstack plan arm takes a prefix, it is one line opening with /plan-ceo-review, and the arm's line becomes it plus the plan ask; fails_when=none, lens, placebo or gstack-auto accept a prefix, a prefix names another command or spans lines, or the line or prompt is built another way; seam=planPrefixProblem, planToldLine, planToldPrompt
   test("only a gstack plan arm takes a prefix, which opens with the lens's command and replaces the command in its line", () => {
-    expect([planPrefixProblem("gstack", "ceo", FORCED), planPrefixProblem("gstack", "ceo", "/plan-ceo-review")]).toEqual([null, null]);
+    expect(planPrefixProblem("gstack", "ceo", FORCED)).toBeNull();
     for (const arm of ["none", "lens", "placebo", "gstack-auto"] as const) expect(planPrefixProblem(arm, "ceo", FORCED)).toBe("plan arm " + arm + " takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does");
-    for (const bad of ["/review Look hard.", "/plan-ceo-reviewer Look hard.", "Look hard. /plan-ceo-review", "/plan-ceo-review Look.\nThen look again.", "/plan-ceo-review Look.\r", ""]) expect([bad, planPrefixProblem("gstack", "ceo", bad)]).toEqual([bad, "the prefix must be one line that opens with /plan-ceo-review"]);
+    for (const bad of ["/review Look hard.", "/plan-ceo-reviewer Look hard.", "Look hard. /plan-ceo-review", ""]) expect([bad, planPrefixProblem("gstack", "ceo", bad)]).toEqual([bad, "the prefix must be one line that opens with /plan-ceo-review"]);
     expect(planToldLine("gstack", "ceo", FORCED)).toBe(FORCED + " " + ASK);
     expect(planToldPrompt("gstack", "ceo", FORCED)).toBe(FORCED + " " + ASK + "\n\n" + TOLD_PLAN_TEMPLATE);
+  });
+
+  // Value: protects=#123 /ship Step 11 findings 1 and 4: a prefix that adds nothing, repeats the ask, has edge whitespace or holds a control character is refused, and each refusal names its cause; fails_when=the bare command or a prefix holding the ask passes (the arm equals gstack or sends the ask twice), a trailing space gives a double space before the ask, or a CR, tab, BOM or line feed is refused without naming it; seam=planPrefixProblem
+  test("a prefix that adds nothing, repeats the ask, has edge whitespace or holds a control character is refused by name", () => {
+    const refuse = (prefix: string) => planPrefixProblem("gstack", "ceo", prefix);
+    expect(refuse("/plan-ceo-review")).toBe("the prefix adds nothing after /plan-ceo-review, so the arm would send the default gstack line; put the forced instruction after the command");
+    for (const twice of ["/plan-ceo-review " + ASK, "/plan-ceo-review Look hard. " + ASK, "/plan-ceo-review " + ASK + " Look hard.", "/plan-ceo-review review this plan for problems."]) expect([twice, refuse(twice)]).toEqual([twice, "the prefix contains " + JSON.stringify(ASK) + ", which the harness appends after it, so the arm would send the ask twice"]);
+    for (const edge of [FORCED + " ", " " + FORCED, "/plan-ceo-review ", FORCED + "\u00a0"]) expect([edge, refuse(edge)]).toEqual([edge, "the prefix must not start or end with whitespace; the harness puts one space between it and " + JSON.stringify(ASK)]);
+    expect(refuse(FORCED + "\r")).toBe("the prefix must be one line of plain text, but it has a carriage return (U+000D) at character " + (FORCED.length + 1));
+    expect(refuse("/plan-ceo-review Look.\nThen look again.")).toBe("the prefix must be one line of plain text, but it has a line feed (U+000A) at character 23");
+    expect(refuse("/plan-ceo-review\tLook.")).toBe("the prefix must be one line of plain text, but it has a tab (U+0009) at character 17");
+    expect(refuse("\ufeff" + FORCED)).toBe("the prefix must be one line of plain text, but it has a byte order mark (U+FEFF) at character 1");
+    expect(refuse("/plan-ceo-review Look\u0000.")).toBe("the prefix must be one line of plain text, but it has a control character (U+0000) at character 22");
+  });
+
+  // Value: protects=GEVA-115's prereg forced line is still accepted and sends the prompt it sent at e5ff264 (#123's head); fails_when=a new guard refuses it or its prompt moves by a byte; seam=planPrefixProblem, planToldPrompt
+  test("GEVA-115's prereg forced line is accepted and sends the prompt it sent at e5ff264", () => {
+    const prereg = "/plan-ceo-review Run this skill's full procedure before you answer: complete Step 0 (Nuclear Scope Challenge + Mode Selection) and state the mode you choose, then Read sections/review-sections.md and write its Review Sections 1 to 10 in order, plus Section 11 or its skip note, before your findings.";
+    expect(planPrefixProblem("gstack", "ceo", prereg)).toBeNull();
+    expect(sha256(planToldPrompt("gstack", "ceo", prereg))).toBe("d45b910ae3b72927ea7db69ddabd20ee1bb54ad3eaf78324a763bfc74ab45392");
   });
 
   // Value: protects=GEVA-115 spec item 4: with no prefix every plan arm's prompt is today's byte for byte, the template and parser digests stay R1a's, so frozen preregs replay unchanged and default plan sessions keep their keys; fails_when=any arm's default prompt moves by a byte, or plan.ts (the parser digest's source) changes; why_new=the cut line: a default plan arm must send what it sends today; seam=planToldPrompt, plan.ts
@@ -101,19 +121,22 @@ describe("GEVA-115: the forced arm in the run loop, through the pinned Agent SDK
   }, 120_000);
 
   // Value: protects=runReviewUnits itself refuses a prefix on none, lens, placebo and gstack-auto, and a malformed one on a gstack arm, with E_USAGE before any binding; fails_when=a caller other than the CLI gets a prefixed prompt onto a non-gstack plan arm; seam=runReviewUnits
-  test("the run loop refuses a prefix on any other plan arm, and a malformed one, before any binding", async () => {
+  test("the run loop refuses a prefix on any other plan arm, a malformed one, and a gstack-<suffix> arm with none, before any binding", async () => {
     let bound = 0;
     const rig = { arms: {}, bind: async () => { bound++; throw new Error("bound"); } } as unknown as HostRig;
     const input = { host: "claude", suite: { id: "s", sha256: null }, units: [], arms: [], models: [OPUS], passes: 1, parallel: 1, timeoutS: 120, cap: 0, runId: "r", out: durable(), date: "2026-11-01", policy, keyBase: { image_digest: null, recipe: "t", host_version: null, adapter_sha256: "t", isolation: "process" }, journal: null, plan: { lens: "ceo" }, env: {} } as ReviewRunInput;
     for (const told of ["none", "lens", "placebo", "gstack-auto"] as const) await expect(runReviewUnits({ ...input, arms: [{ name: told, told, toldPrefix: FORCED }] }, rig)).rejects.toThrow("E_USAGE: arm " + told + ": --told-prefix: plan arm " + told + " takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does");
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: "/review " + ASK }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix must be one line that opens with /plan-ceo-review");
+    await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: FORCED + " " }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix must not start or end with whitespace");
+    await expect(runReviewUnits({ ...input, arms: [{ name: "gstack-forced", told: "gstack", toldPrefix: "/plan-ceo-review" }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced: --told-prefix: the prefix adds nothing after /plan-ceo-review");
+    await expect(runReviewUnits({ ...input, arms: [{ name: "gstack", told: "gstack" }, { name: "gstack-forced", told: "gstack" }] }, rig)).rejects.toThrow("E_USAGE: arm gstack-forced runs plan arm gstack with no --told-prefix; a gstack-<suffix> plan arm needs a told prefix");
     await expect(runReviewUnits({ ...input, arms: [{ name: "gstack", told: "gstack", toldPrefix: FORCED }, { name: "placebo", told: "placebo" }] }, rig)).rejects.toThrow("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
     expect(bound).toBe(0);
   });
 });
 
 describe("GEVA-115: review-units --plan --told-prefix (keyless)", () => {
-  // Value: protects=the CLI admits a forced gstack-<suffix> arm beside gstack and shows both lines in the dry run, and refuses a prefix on none, lens, placebo and gstack-auto, a malformed prefix, and a prefix on the gstack arm placebo mirrors, all with E_USAGE before anything is built; fails_when=any of those regress, or the old blanket refusal returns; why_new=GEVA-115; seam=main
+  // Value: protects=the CLI admits a forced gstack-<suffix> arm beside gstack and shows both lines in the dry run, and refuses a prefix on none, lens, placebo and gstack-auto, a malformed, no-op or ask-repeating prefix (naming a control character or edge whitespace), a gstack-<suffix> arm with no prefix, and a prefix on the gstack arm placebo mirrors, all with E_USAGE before anything is built; fails_when=any of those regress, or the old blanket refusal returns; why_new=GEVA-115; seam=main
   test("refusals and the dry run", async () => {
     const panel = planPanel(scratch("plan-told-cli-"), { seeded: 1 });
     const dir = scratch("plan-told-prefix-");
@@ -134,10 +157,12 @@ describe("GEVA-115: review-units --plan --told-prefix (keyless)", () => {
       const r = await run([...base, "--arms", ...arms, "--told-prefix", arm + "=" + forced]);
       expect([arm, r.code, r.err.split("\n")[0]]).toEqual([arm, 2, "E_USAGE review-units: --told-prefix " + arm + ": plan arm " + arm + " takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does"]);
     }
-    for (const bad of ["/review " + ASK + "\n", "/plan-ceo-review Look.\nThen look again.\n"]) {
+    for (const [bad, why] of [["/review " + ASK + "\n", "the prefix must be one line that opens with /plan-ceo-review"], ["/plan-ceo-review Look.\nThen look again.\n", "the prefix must be one line of plain text, but it has a line feed (U+000A) at character 23"], [FORCED + "\r\n", "the prefix must be one line of plain text, but it has a carriage return (U+000D) at character " + (FORCED.length + 1)], [FORCED + " \n", "the prefix must not start or end with whitespace; the harness puts one space between it and " + JSON.stringify(ASK)], ["/plan-ceo-review\n", "the prefix adds nothing after /plan-ceo-review, so the arm would send the default gstack line; put the forced instruction after the command"], ["/plan-ceo-review " + ASK + "\n", "the prefix contains " + JSON.stringify(ASK) + ", which the harness appends after it, so the arm would send the ask twice"]] as const) {
       const r = await run([...base, "--arms", "gstack-forced=" + ref, "--told-prefix", "gstack-forced=" + file("bad.txt", bad)]);
-      expect([r.code, r.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: --told-prefix gstack-forced: the prefix must be one line that opens with /plan-ceo-review"]);
+      expect([bad, r.code, r.err.split("\n")[0]]).toEqual([bad, 2, "E_USAGE review-units: --told-prefix gstack-forced: " + why]);
     }
+    const lone = await run([...base, "--arms", "gstack=" + ref, "gstack-forced=" + ref]);
+    expect([lone.code, lone.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: arm gstack-forced runs plan arm gstack with no --told-prefix; a gstack-<suffix> plan arm needs a told prefix"]);
     const mirrored = await run([...base, "--arms", "gstack=" + ref, "placebo", "--told-prefix", "gstack=" + forced]);
     expect([mirrored.code, mirrored.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm"]);
     const dry = await run([...base, "--arms", "none", "gstack=" + ref, "gstack-forced=" + ref, "placebo", "--told-prefix", "gstack-forced=" + forced]);
