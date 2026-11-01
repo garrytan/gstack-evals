@@ -1,0 +1,64 @@
+trials 1443
+  claude-opus-5-5 none: 90/111 passed, 0 agent timeouts
+  claude-opus-5-5 gstack: 93/111 passed, 6 agent timeouts
+  claude-haiku-5-5 none: 84/111 passed, 3 agent timeouts
+  claude-haiku-5-5 gstack: 85/111 passed, 2 agent timeouts
+  particle-1 none: 92/111 passed, 6 agent timeouts
+  particle-1 gstack: 86/111 passed, 4 agent timeouts
+
+== claude-opus-5-5: gstack - none by difficulty stratum (paired by task and replicate)
+  all tasks: 37 tasks, 111 paired trials; none 81.1%, gstack 83.8%; gstack - none +2.7 pp [95% CI -3.6, +9.0]; 7 tasks differ; sign-flip p 0.594 (smallest reachable 0.016); MDD80 9.1 pp
+  A. cross-fit hard (none passed fewer than 2 of the other 2 replicates): 9 tasks, 25 paired trials; none 24.0%, gstack 36.0%; gstack - none +12.0 pp [95% CI -8.0, +34.6]; 3 tasks differ; sign-flip p 0.500 (smallest reachable 0.250); MDD80 31.1 pp
+  A. cross-fit easy (none passed both other replicates): 30 tasks, 86 paired trials; none 97.7%, gstack 97.7%; gstack - none +0.0 pp [95% CI -4.5, +4.9]; 4 tasks differ; sign-flip p 1.000 (smallest reachable 0.125); MDD80 14.0 pp
+  B. in-sample hard (none 0 to 2 of 3; biased upward, shown for comparison): 9 tasks, 27 paired trials; none 22.2%, gstack 40.7%; gstack - none +18.5 pp [95% CI +0.0, +40.7]; 5 tasks differ; sign-flip p 0.250 (smallest reachable 0.062); MDD80 31.5 pp
+  B. in-sample in-band (none 1 or 2 of 3; biased, shown for comparison): 4 tasks, 12 paired trials; none 50.0%, gstack 75.0%; gstack - none +25.0 pp [95% CI -16.7, +58.3]; 4 tasks differ; sign-flip p 0.500 (smallest reachable 0.125); MDD80 58.7 pp
+  C. leaderboard hard (published frontier_rate below the median 0.884): 16 tasks, 48 paired trials; none 56.2%, gstack 62.5%; gstack - none +6.2 pp [95% CI -8.3, +20.8]; 7 tasks differ; sign-flip p 0.594 (smallest reachable 0.016); MDD80 21.2 pp
+  C. leaderboard easy (frontier_rate at or above 0.884): 21 tasks, 63 paired trials; none 100.0%, gstack 100.0%; gstack - none +0.0 pp [95% CI +0.0, +0.0]; 0 tasks differ; sign-flip p 1.000 (smallest reachable 1.000); MDD80 0.0 pp
+  D. TB2 label hard: 10 tasks, 30 paired trials; none 73.3%, gstack 86.7%; gstack - none +13.3 pp [95% CI +0.0, +33.3]; 2 tasks differ; sign-flip p 0.500 (smallest reachable 0.500); MDD80 24.9 pp
+  D. TB2 label easy or medium: 27 tasks, 81 paired trials; none 84.0%, gstack 82.7%; gstack - none -1.2 pp [95% CI -6.2, +3.7]; 5 tasks differ; sign-flip p 1.000 (smallest reachable 0.062); MDD80 7.8 pp
+
+== claude-haiku-5-5: gstack - none by difficulty stratum (paired by task and replicate)
+  all tasks: 37 tasks, 111 paired trials; none 75.7%, gstack 76.6%; gstack - none +0.9 pp [95% CI -7.2, +9.0]; 9 tasks differ; sign-flip p 1.000 (smallest reachable 0.004); MDD80 11.7 pp
+  A. cross-fit hard (none passed fewer than 2 of the other 2 replicates): 12 tasks, 33 paired trials; none 27.3%, gstack 30.3%; gstack - none +3.0 pp [95% CI -28.1, +29.4]; 8 tasks differ; sign-flip p 1.000 (smallest reachable 0.008); MDD80 47.4 pp
+  A. cross-fit easy (none passed both other replicates): 28 tasks, 78 paired trials; none 96.2%, gstack 96.2%; gstack - none +0.0 pp [95% CI -3.8, +4.1]; 2 tasks differ; sign-flip p 1.000 (smallest reachable 0.500); MDD80 10.7 pp
+  B. in-sample hard (none 0 to 2 of 3; biased upward, shown for comparison): 12 tasks, 36 paired trials; none 25.0%, gstack 30.6%; gstack - none +5.6 pp [95% CI -19.4, +30.6]; 8 tasks differ; sign-flip p 0.828 (smallest reachable 0.008); MDD80 36.0 pp
+  B. in-sample in-band (none 1 or 2 of 3; biased, shown for comparison): 6 tasks, 18 paired trials; none 50.0%, gstack 44.4%; gstack - none -5.6 pp [95% CI -44.4, +33.3]; 6 tasks differ; sign-flip p 1.000 (smallest reachable 0.031); MDD80 65.6 pp
+  C. leaderboard hard (published frontier_rate below the median 0.884): 16 tasks, 48 paired trials; none 54.2%, gstack 54.2%; gstack - none +0.0 pp [95% CI -16.7, +16.7]; 7 tasks differ; sign-flip p 1.000 (smallest reachable 0.016); MDD80 24.1 pp
+  C. leaderboard easy (frontier_rate at or above 0.884): 21 tasks, 63 paired trials; none 92.1%, gstack 93.7%; gstack - none +1.6 pp [95% CI -4.8, +9.5]; 2 tasks differ; sign-flip p 1.000 (smallest reachable 0.500); MDD80 10.1 pp
+  D. TB2 label hard: 10 tasks, 30 paired trials; none 63.3%, gstack 66.7%; gstack - none +3.3 pp [95% CI -13.3, +23.3]; 4 tasks differ; sign-flip p 1.000 (smallest reachable 0.125); MDD80 25.8 pp
+  D. TB2 label easy or medium: 27 tasks, 81 paired trials; none 80.2%, gstack 80.2%; gstack - none +0.0 pp [95% CI -8.6, +9.9]; 5 tasks differ; sign-flip p 1.000 (smallest reachable 0.062); MDD80 13.2 pp
+
+== particle-1: gstack - none by difficulty stratum (paired by task and replicate)
+  all tasks: 37 tasks, 111 paired trials; none 82.9%, gstack 77.5%; gstack - none -5.4 pp [95% CI -13.5, +0.9]; 7 tasks differ; sign-flip p 0.266 (smallest reachable 0.016); MDD80 10.6 pp
+  A. cross-fit hard (none passed fewer than 2 of the other 2 replicates): 10 tasks, 26 paired trials; none 42.3%, gstack 34.6%; gstack - none -7.7 pp [95% CI -29.2, +7.4]; 3 tasks differ; sign-flip p 0.750 (smallest reachable 0.250); MDD80 32.7 pp
+  A. cross-fit easy (none passed both other replicates): 31 tasks, 85 paired trials; none 95.3%, gstack 90.6%; gstack - none -4.7 pp [95% CI -13.8, +2.5]; 6 tasks differ; sign-flip p 0.500 (smallest reachable 0.031); MDD80 16.8 pp
+  B. in-sample hard (none 0 to 2 of 3; biased upward, shown for comparison): 10 tasks, 30 paired trials; none 36.7%, gstack 36.7%; gstack - none +0.0 pp [95% CI -16.7, +13.3]; 3 tasks differ; sign-flip p 1.000 (smallest reachable 0.250); MDD80 24.1 pp
+  B. in-sample in-band (none 1 or 2 of 3; biased, shown for comparison): 7 tasks, 21 paired trials; none 52.4%, gstack 47.6%; gstack - none -4.8 pp [95% CI -28.6, +14.3]; 2 tasks differ; sign-flip p 1.000 (smallest reachable 0.500); MDD80 31.7 pp
+  C. leaderboard hard (published frontier_rate below the median 0.884): 16 tasks, 48 paired trials; none 66.7%, gstack 62.5%; gstack - none -4.2 pp [95% CI -16.7, +6.2]; 5 tasks differ; sign-flip p 0.750 (smallest reachable 0.062); MDD80 16.8 pp
+  C. leaderboard easy (frontier_rate at or above 0.884): 21 tasks, 63 paired trials; none 95.2%, gstack 88.9%; gstack - none -6.3 pp [95% CI -17.5, +0.0]; 2 tasks differ; sign-flip p 0.500 (smallest reachable 0.500); MDD80 13.8 pp
+  D. TB2 label hard: 10 tasks, 30 paired trials; none 83.3%, gstack 73.3%; gstack - none -10.0 pp [95% CI -26.7, +0.0]; 2 tasks differ; sign-flip p 0.500 (smallest reachable 0.500); MDD80 19.9 pp
+  D. TB2 label easy or medium: 27 tasks, 81 paired trials; none 82.7%, gstack 79.0%; gstack - none -3.7 pp [95% CI -13.6, +3.7]; 5 tasks differ; sign-flip p 0.688 (smallest reachable 0.062); MDD80 12.5 pp
+
+== Opus gstack agent timeouts (each task's own agent limit from tasks.json), with the same task's other trials
+  model-extraction-relu-logits r1: limit 15.0 min; reward 0.0; model ended its turn at min 3.0 (final turn 1); background tasks still running at the end 1; 5 tool calls; last file edit min 0.5; last tool call at min 2.8
+      none other trials on this task: r1 pass 0 last SDK event min 1.1, r2 pass 0 last SDK event min 1.5, r3 pass 0 last SDK event min 0.5
+      gstack other trials on this task: r2 pass 1 last SDK event min 1.0, r3 pass 1 last SDK event min 2.9
+  overfull-hbox r1: limit 12.5 min; reward 1.0; model ended its turn at min 10.0 (final turn 2); background tasks still running at the end 1; 10 tool calls; last file edit none by Write or Edit; last tool call at min 9.9
+      none other trials on this task: r1 pass 1 last SDK event min 2.4, r2 pass 1 last SDK event min 1.7, r3 pass 1 last SDK event min 0.7
+      gstack other trials on this task: r2 pass 1 last SDK event min 9.1, r3 pass 0 last SDK event min 9.6 TIMEOUT
+  overfull-hbox r3: limit 12.5 min; reward 0.0; model ended its turn at min 9.6 (final turn 8); background tasks still running at the end 1; 9 tool calls; last file edit none by Write or Edit; last tool call at min 9.5
+      none other trials on this task: r1 pass 1 last SDK event min 2.4, r2 pass 1 last SDK event min 1.7, r3 pass 1 last SDK event min 0.7
+      gstack other trials on this task: r1 pass 1 last SDK event min 10.0 TIMEOUT, r2 pass 1 last SDK event min 9.1
+  query-optimize r1: limit 15.0 min; reward 1.0; model ended its turn at min 5.3 (final turn 1); background tasks still running at the end 1; 7 tool calls; last file edit none by Write or Edit; last tool call at min 2.6
+      none other trials on this task: r1 pass 0 last SDK event min 6.3, r2 pass 1 last SDK event min 5.4, r3 pass 1 last SDK event min 3.1
+      gstack other trials on this task: r2 pass 1 last SDK event min 3.0, r3 pass 1 last SDK event min 4.7
+  torch-pipeline-parallelism r1: limit 15.0 min; reward 1.0; model ended its turn at never (cut off mid-turn); background tasks still running at the end 1; 19 tool calls; last file edit min 14.1; last tool call at min 14.2
+      none other trials on this task: r1 pass 1 last SDK event min 0.7, r2 pass 1 last SDK event min 0.8, r3 pass 1 last SDK event min 0.9
+      gstack other trials on this task: r2 pass 1 last SDK event min 1.3, r3 pass 1 last SDK event min 15.0 TIMEOUT
+  torch-pipeline-parallelism r3: limit 15.0 min; reward 1.0; model ended its turn at never (cut off mid-turn); background tasks still running at the end 0; 17 tool calls; last file edit min 2.8; last tool call at min 14.7
+      none other trials on this task: r1 pass 1 last SDK event min 0.7, r2 pass 1 last SDK event min 0.8, r3 pass 1 last SDK event min 0.9
+      gstack other trials on this task: r1 pass 1 last SDK event min 14.2 TIMEOUT, r2 pass 1 last SDK event min 1.3
+  none: trials that started a background task 51/111; on the timeout tasks 8/12
+  none: median session length 0.6 min over 111 trials; on the 4 timeout tasks 1.3 min over 12 trials, passes 8/12
+  gstack: trials that started a background task 54/111; on the timeout tasks 10/12
+  gstack: median session length 0.7 min over 111 trials; on the 4 timeout tasks 5.0 min over 12 trials, passes 10/12
