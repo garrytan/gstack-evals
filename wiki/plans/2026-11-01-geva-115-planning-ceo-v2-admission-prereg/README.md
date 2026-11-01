@@ -261,6 +261,7 @@ A ceiling on H with room on P or U, or the reverse, is reported as such, with th
 - Seeded flaws are not natural flaws. One model family (GPT) wrote the panel and the primary judge shares it; the auditors, the second judge and this author share the arms' family.
 - P and U are home field for /plan-ceo-review by design (its Step 0 targets premise and scope), so a later headline must report recall per stratum and never pool a home-field win into a general claim.
 - The forced arm measures the procedure when told to run it. It has no matched "forced words without the skill" control; a later headline could add one.
+- R54 names GPT-6.1 Sol as a frontier model under test. This pilot leaves it out: review-units at the pin runs every arm in Claude Code and accepts only a model with an anthropic or openrouter route in the policy (src/trial/review/cli.ts), and Sol's route in the default policy is openai.
 
 ## 13. Before freezing: the attack record
 
