@@ -28,7 +28,7 @@ import { DEFAULT_POLICY, loadPolicy, modelProblem, providerOf } from "../../src/
 import type { NolossIo } from "./cli.ts";
 import type { Ruling } from "./contract.ts";
 import { readArmDir } from "./ingest.ts";
-import { findingSha256, judgeSets, leakRules, loadKey, masker, packetAnswers, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
+import { findingSha256, judgeSets, leakRules, loadKey, packetAnswers, packetMask, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
 import { ScoreError } from "./score.ts";
 import { insideRepo, loadSuite, sha256, unitRef } from "./suite.ts";
 
@@ -170,7 +170,7 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   const sheets = new Map<string, string>();
   if (adjudicate) {
     const sources = new Map((flags.get("--source") ?? []).map((s) => (s.indexOf("=") > 0 ? [s.slice(0, s.indexOf("=")), resolve(s.slice(s.indexOf("=") + 1))] : usage("--source takes <owner/repo>=<clone>, not " + JSON.stringify(s)))));
-    const mask = masker(arms);
+    const mask = packetMask(suite, arms);
     const leaks = leakRules(arms);
     const problems: string[] = [];
     for (const p of packets) {

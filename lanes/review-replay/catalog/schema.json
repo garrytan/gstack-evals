@@ -1,195 +1,261 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/garrytan/gstack-evals/blob/main/lanes/review-replay/catalog/schema.json",
-  "$comment": "Version 1. One case per file, named <id>.json. loadCatalog in catalog.ts also checks what a schema cannot: unique ids, file names, no sealed case in the repo tree, and no decoy whose audit found a defect.",
+  "$comment": "Version 1. One case per file, named <id>.json. A case is a review case (no kind, or kind review) or a plan case (kind plan). loadCatalog in catalog.ts also checks what a schema cannot: unique ids, file names, no sealed case in the repo tree, and no decoy whose audit found a defect.",
   "title": "Review replay case",
-  "description": "A historical defect a gstack reviewer role caught or missed, with the range to replay, the answer key, its decoys and its provenance.",
+  "description": "A historical defect a gstack reviewer role caught or missed (a review case), or a flaw a plan review should catch (a plan case), with the answer key and its provenance.",
   "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "id",
-    "visibility",
-    "repo",
-    "pr",
-    "reviewed_head",
-    "merge_base",
-    "diff_range",
-    "roles",
-    "defect",
-    "severity",
-    "fix",
-    "decoys",
-    "receipt",
-    "answer_key_audit",
-    "shelf_life",
-    "credit"
-  ],
-  "properties": {
-    "schema_version": { "const": 1 },
-    "id": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9-]*$",
-      "description": "Unique across the catalog; also the file name without .json."
-    },
-    "visibility": { "enum": ["public", "sealed"], "description": "sealed cases live only in the sealed store, never in this repo." },
-    "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
-    "pr": { "type": "integer", "minimum": 1, "description": "The PR whose review the case replays." },
-    "reviewed_head": { "$ref": "#/$defs/sha", "description": "The head the historical reviewer read." },
-    "merge_base": { "$ref": "#/$defs/sha", "description": "The PR's merge base or fork point at that head." },
-    "diff_range": {
+  "if": { "properties": { "kind": { "const": "plan" } }, "required": ["kind"] },
+  "then": { "$ref": "#/$defs/plan_case" },
+  "else": { "$ref": "#/$defs/review_case" },
+  "$defs": {
+    "review_case": {
+      "description": "A historical defect a gstack reviewer role caught or missed, with the range to replay, the answer key, its decoys and its provenance.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["from", "to"],
-      "description": "The range the replayed reviewer reads: git diff from..to.",
-      "properties": { "from": { "$ref": "#/$defs/sha" }, "to": { "$ref": "#/$defs/sha" }, "note": { "$ref": "#/$defs/text" } }
-    },
-    "roles": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "description": "The reviewer roles the case replays. A specialist names its checklist, gstack's review/specialists/<checklist>.md.",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["role"],
-        "properties": {
-          "role": { "enum": ["specialist", "red-team", "fix-check"] },
-          "checklist": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+      "required": [
+        "schema_version",
+        "id",
+        "visibility",
+        "repo",
+        "pr",
+        "reviewed_head",
+        "merge_base",
+        "diff_range",
+        "roles",
+        "defect",
+        "severity",
+        "fix",
+        "decoys",
+        "receipt",
+        "answer_key_audit",
+        "shelf_life",
+        "credit"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "review", "description": "Optional: a case with no kind is a review case." },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Unique across the catalog; also the file name without .json."
         },
-        "if": { "properties": { "role": { "const": "specialist" } } },
-        "then": { "required": ["role", "checklist"] }
-      }
-    },
-    "defect": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["file", "line", "summary"],
-      "description": "The answer key. A catch names this file and this defect.",
-      "properties": {
-        "file": { "$ref": "#/$defs/text" },
-        "line": { "type": "integer", "minimum": 1 },
-        "summary": { "$ref": "#/$defs/text" }
-      }
-    },
-    "severity": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["deserved", "basis", "in_history"],
-      "description": "Scored apart from detection. deserved uses gstack's floor: CRITICAL fails a test, breaks production, or loses data or secrets. null means the evidence does not settle it, and basis says why.",
-      "properties": {
-        "deserved": { "enum": ["CRITICAL", "INFORMATIONAL", null] },
-        "basis": { "$ref": "#/$defs/text" },
-        "in_history": {
+        "visibility": { "enum": ["public", "sealed"], "description": "sealed cases live only in the sealed store, never in this repo." },
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "pr": { "type": "integer", "minimum": 1, "description": "The PR whose review the case replays." },
+        "reviewed_head": { "$ref": "#/$defs/sha", "description": "The head the historical reviewer read." },
+        "merge_base": { "$ref": "#/$defs/sha", "description": "The PR's merge base or fork point at that head." },
+        "diff_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "description": "The range the replayed reviewer reads: git diff from..to.",
+          "properties": { "from": { "$ref": "#/$defs/sha" }, "to": { "$ref": "#/$defs/sha" }, "note": { "$ref": "#/$defs/text" } }
+        },
+        "roles": {
           "type": "array",
           "minItems": 1,
+          "uniqueItems": true,
+          "description": "The reviewer roles the case replays. A specialist names its checklist, gstack's review/specialists/<checklist>.md.",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["by", "rated"],
-            "properties": { "by": { "$ref": "#/$defs/text" }, "rated": { "$ref": "#/$defs/text" } }
+            "required": ["role"],
+            "properties": {
+              "role": { "enum": ["specialist", "red-team", "fix-check"] },
+              "checklist": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+            },
+            "if": { "properties": { "role": { "const": "specialist" } } },
+            "then": { "required": ["role", "checklist"] }
           }
-        }
-      }
-    },
-    "fix": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["commit", "pr"],
-      "properties": { "commit": { "$ref": "#/$defs/sha" }, "pr": { "type": "integer", "minimum": 1 } }
-    },
-    "decoys": {
-      "type": "array",
-      "minItems": 1,
-      "description": "The fix commit on the same range, plus clean PRs. A decoy is scorable as clean only when its audit's verdict is clean.",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["kind", "repo", "pr", "range", "audit"],
-        "properties": {
-          "kind": { "enum": ["fix-commit", "clean-pr"] },
-          "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
-          "pr": { "type": "integer", "minimum": 1 },
-          "range": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["from", "to"],
-            "properties": { "from": { "$ref": "#/$defs/sha" }, "to": { "$ref": "#/$defs/sha" } }
-          },
-          "audit": {
-            "description": "null: nobody has audited it, so it is never scored as clean. holds-defect: it is not a decoy; make it a defect case.",
-            "oneOf": [
-              { "type": "null" },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["later_fix_checked", "later_fix", "verdict", "by", "at", "method"],
-                "properties": {
-                  "later_fix_checked": { "const": true },
-                  "later_fix": {
-                    "description": "A later commit or PR that fixed something in the decoy's code, or null when the search found none.",
-                    "oneOf": [
-                      { "type": "null" },
-                      {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": ["ref", "fixed"],
-                        "properties": { "ref": { "$ref": "#/$defs/text" }, "fixed": { "$ref": "#/$defs/text" } }
-                      }
-                    ]
-                  },
-                  "verdict": { "enum": ["clean", "holds-defect"] },
-                  "by": { "$ref": "#/$defs/text" },
-                  "at": { "$ref": "#/$defs/date" },
-                  "method": { "$ref": "#/$defs/text" }
-                }
-              }
-            ]
-          }
-        }
-      }
-    },
-    "receipt": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["source", "evidence"],
-      "description": "Where the case came from and the lines that establish it.",
-      "properties": {
-        "source": { "$ref": "#/$defs/text" },
-        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
-      }
-    },
-    "answer_key_audit": {
-      "description": "null until U14 audits the answer key.",
-      "oneOf": [
-        { "type": "null" },
-        {
+        },
+        "defect": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["by", "at", "verdict", "notes"],
+          "required": ["file", "line", "summary"],
+          "description": "The answer key. A catch names this file and this defect.",
           "properties": {
-            "by": { "$ref": "#/$defs/text" },
-            "at": { "$ref": "#/$defs/date" },
-            "verdict": { "enum": ["confirmed", "rejected"] },
-            "notes": { "$ref": "#/$defs/text" }
+            "file": { "$ref": "#/$defs/text" },
+            "line": { "type": "integer", "minimum": 1 },
+            "summary": { "$ref": "#/$defs/text" }
           }
-        }
-      ]
-    },
-    "shelf_life": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["first_appeared", "source", "short"],
-      "description": "A short-shelf-life case counts only for models released before the fix PR first appeared.",
-      "properties": {
-        "first_appeared": { "$ref": "#/$defs/date" },
-        "source": { "$ref": "#/$defs/text" },
-        "short": { "type": "boolean" }
+        },
+        "severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["deserved", "basis", "in_history"],
+          "description": "Scored apart from detection. deserved uses gstack's floor: CRITICAL fails a test, breaks production, or loses data or secrets. null means the evidence does not settle it, and basis says why.",
+          "properties": {
+            "deserved": { "enum": ["CRITICAL", "INFORMATIONAL", null] },
+            "basis": { "$ref": "#/$defs/text" },
+            "in_history": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["by", "rated"],
+                "properties": { "by": { "$ref": "#/$defs/text" }, "rated": { "$ref": "#/$defs/text" } }
+              }
+            }
+          }
+        },
+        "fix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "pr"],
+          "properties": { "commit": { "$ref": "#/$defs/sha" }, "pr": { "type": "integer", "minimum": 1 } }
+        },
+        "decoys": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The fix commit on the same range, plus clean PRs. A decoy is scorable as clean only when its audit's verdict is clean.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "repo", "pr", "range", "audit"],
+            "properties": {
+              "kind": { "enum": ["fix-commit", "clean-pr"] },
+              "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+              "pr": { "type": "integer", "minimum": 1 },
+              "range": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to"],
+                "properties": { "from": { "$ref": "#/$defs/sha" }, "to": { "$ref": "#/$defs/sha" } }
+              },
+              "audit": {
+                "description": "null: nobody has audited it, so it is never scored as clean. holds-defect: it is not a decoy; make it a defect case.",
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["later_fix_checked", "later_fix", "verdict", "by", "at", "method"],
+                    "properties": {
+                      "later_fix_checked": { "const": true },
+                      "later_fix": {
+                        "description": "A later commit or PR that fixed something in the decoy's code, or null when the search found none.",
+                        "oneOf": [
+                          { "type": "null" },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["ref", "fixed"],
+                            "properties": { "ref": { "$ref": "#/$defs/text" }, "fixed": { "$ref": "#/$defs/text" } }
+                          }
+                        ]
+                      },
+                      "verdict": { "enum": ["clean", "holds-defect"] },
+                      "by": { "$ref": "#/$defs/text" },
+                      "at": { "$ref": "#/$defs/date" },
+                      "method": { "$ref": "#/$defs/text" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "evidence"],
+          "description": "Where the case came from and the lines that establish it.",
+          "properties": {
+            "source": { "$ref": "#/$defs/text" },
+            "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
+          }
+        },
+        "answer_key_audit": {
+          "description": "null until U14 audits the answer key.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["by", "at", "verdict", "notes"],
+              "properties": {
+                "by": { "$ref": "#/$defs/text" },
+                "at": { "$ref": "#/$defs/date" },
+                "verdict": { "enum": ["confirmed", "rejected"] },
+                "notes": { "$ref": "#/$defs/text" }
+              }
+            }
+          ]
+        },
+        "shelf_life": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["first_appeared", "source", "short"],
+          "description": "A short-shelf-life case counts only for models released before the fix PR first appeared.",
+          "properties": {
+            "first_appeared": { "$ref": "#/$defs/date" },
+            "source": { "$ref": "#/$defs/text" },
+            "short": { "type": "boolean" }
+          }
+        },
+        "credit": { "$ref": "#/$defs/text" }
       }
     },
-    "credit": { "$ref": "#/$defs/text" }
-  },
-  "$defs": {
+    "plan_case": {
+      "description": "A plan flaw a plan review should catch. The unit is a small repository whose head commit adds plan.md; the answer key names the flaw's cause and the plan section it sits under. A sealed panel keeps its cases in the sealed store, never in this repo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "id", "visibility", "repo", "pr", "reviewed_head", "merge_base", "plan", "defect", "severity", "receipt", "answer_key_audit", "credit"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "plan" },
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "Unique across the catalog; also the file name without .json." },
+        "visibility": { "enum": ["public", "sealed"], "description": "sealed cases live only in the sealed store, never in this repo." },
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "The panel repository that holds the unit." },
+        "pr": { "type": "integer", "minimum": 1, "description": "The unit's number in the panel repository." },
+        "reviewed_head": { "$ref": "#/$defs/sha", "description": "The unit head: the commit that adds plan.md." },
+        "merge_base": { "$ref": "#/$defs/sha", "description": "The unit base: the commit before plan.md, holding context/ and any src/." },
+        "plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["digest", "lens", "stratum", "source", "plan_type", "flaw_class"],
+          "description": "What the plan is and where the flaw came from.",
+          "properties": {
+            "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 of plan.md at reviewed_head. Judging reads the plan as it was before any session." },
+            "lens": { "enum": ["ceo", "devex", "design", "eng"] },
+            "stratum": { "enum": ["seeded", "real-neutral", "home-field", "decoy", "pilot"], "description": "seeded and real-neutral feed the headline, each also read alone; home-field is reported alone; decoy feeds only the false-alarm reading; pilot is never scored." },
+            "source": { "$ref": "#/$defs/text", "description": "The taxonomy that seeded the flaw, or the public post a real-neutral flaw restates. Recall is reported per source." },
+            "plan_type": { "enum": ["greenfield", "added-capability", "fix"], "description": "The panel balances these, and recall is read by the review mode each tends to select." },
+            "flaw_class": { "enum": ["wrong-thing", "right-thing-badly", "bait"], "description": "bait: a decoy's choice that its context justifies and a careless reviewer may flag. A bait's deserved severity is INFORMATIONAL." }
+          }
+        },
+        "defect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "line", "section", "cause", "summary"],
+          "description": "The answer key. A catch names the same cause in the same plan section; the line may move.",
+          "properties": {
+            "file": { "const": "plan.md" },
+            "line": { "type": "integer", "minimum": 1 },
+            "section": { "$ref": "#/$defs/text", "description": "The stable section identity: the plan heading the flaw sits under, as written." },
+            "cause": { "$ref": "#/$defs/text", "description": "What is wrong, and why it changes what gets built." },
+            "summary": { "$ref": "#/$defs/text" }
+          }
+        },
+        "severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["deserved", "basis"],
+          "description": "deserved CRITICAL counts toward must-fix recall, INFORMATIONAL (a decoy's bait) toward false alarms, null toward detection only.",
+          "properties": { "deserved": { "enum": ["CRITICAL", "INFORMATIONAL", null] }, "basis": { "$ref": "#/$defs/text" } }
+        },
+        "receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "evidence"],
+          "properties": { "source": { "$ref": "#/$defs/text" }, "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } } }
+        },
+        "answer_key_audit": { "$ref": "#/$defs/review_case/properties/answer_key_audit" },
+        "credit": { "$ref": "#/$defs/text" }
+      }
+    },
     "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
     "text": { "type": "string", "minLength": 1 }

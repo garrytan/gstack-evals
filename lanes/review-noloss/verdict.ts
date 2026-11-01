@@ -6,14 +6,14 @@ import { ScoreError, type ScoreRecord } from "./score.ts";
 import type { Verdict } from "./stats.ts";
 
 /** The tokens --expect accepts besides a refusal's reason code. */
-export const OUTCOMES = ["LOSS", "NOT_DISTINGUISHED", "NO_LOSS", "NOLOSS_UNDERPOWERED", "NO_VERDICT"];
+export const OUTCOMES = ["LOSS", "NOT_DISTINGUISHED", "NO_LOSS", "NOLOSS_UNDERPOWERED", "NO_VERDICT", "FALSE_ALARM_GATE_FAIL"];
 
 export interface ScoreReading {
   kind: "verdict" | "no_verdict" | "refusal";
   verdict: Verdict | null;
   /** NO_LOSS with the size rule met: the only outcome that is a no-loss claim. */
   claim: boolean;
-  /** LOSS, NOT_DISTINGUISHED or NOLOSS_UNDERPOWERED for a verdict, the first reason code of a refusal, else null. */
+  /** LOSS (or FALSE_ALARM_GATE_FAIL for a LOSS whose false-alarm gate did not pass), NOT_DISTINGUISHED or NOLOSS_UNDERPOWERED for a verdict, the first reason code of a refusal, else null. */
   code: string | null;
   /** What --expect matches: the code, NO_LOSS for a claim, NO_VERDICT for no verdict. */
   key: string;
@@ -56,6 +56,6 @@ export function readScoreRun(run: { exit: number; stdout: string; stderr: string
   const claim = verdict === "NO_LOSS" && !underpowered;
   const exit = verdict === "LOSS" ? 1 : claim ? 0 : 2;
   if (run.exit !== exit) unreadable("verdict " + (verdict ?? "none") + (underpowered ? " NOLOSS_UNDERPOWERED" : "") + " exits " + exit + ", not " + run.exit);
-  const code = verdict === "NO_LOSS" ? (underpowered ? "NOLOSS_UNDERPOWERED" : null) : verdict;
+  const code = verdict === "NO_LOSS" ? (underpowered ? "NOLOSS_UNDERPOWERED" : null) : verdict === "LOSS" && warnings.includes("FALSE_ALARM_GATE_FAIL") ? "FALSE_ALARM_GATE_FAIL" : verdict;
   return { kind: verdict === null ? "no_verdict" : "verdict", verdict, claim, code, key: code ?? (claim ? "NO_LOSS" : "NO_VERDICT") };
 }

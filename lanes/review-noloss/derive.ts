@@ -10,6 +10,9 @@
 // gap that names no unit is never cleared. The derived suite gets its own id and digest, each derived arm
 // is published through ingest under <out>/arms/<id>/, and the comparisons file is copied with its suite set to that id,
 // so score --suite <out>/<id>.json --root <out>/arms --prereg <out>/comparisons.<id>.json runs as written.
+// --first-k (planning lane, open item 7) is the volume-matched reading: in each unit-pass, every arm keeps its first k
+// must-fix findings in the order it wrote them, and each later must-fix finding is relabelled VOLUME-CUT, which maps to
+// INFORMATIONAL, so a blocker only a cut finding matched is downgraded and the cut findings leave the false-blocker count.
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { mapSeverity, parseTsv, rawLabel, type ArmJson, type Mapped } from "./contract.ts";
@@ -22,6 +25,8 @@ import { insideRepo, loadSuite, resolveUnit, sha256, type Suite, type Unit } fro
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 /** The labels an impact re-map writes, and the severity each maps to. */
 export const IMPACT_MAP = { "IMPACT-BLOCKING": "CRITICAL", "IMPACT-NONBLOCKING": "INFORMATIONAL", "IMPACT-UNRATED": "INFORMATIONAL" } as const;
+/** The label --first-k gives each must-fix finding past the k-th in its unit-pass; it maps to INFORMATIONAL. */
+export const VOLUME_CUT = "VOLUME-CUT";
 type SeverityMap = NonNullable<ArmJson["severity_map"]>;
 
 export interface DeriveOptions {
@@ -36,6 +41,8 @@ export interface DeriveOptions {
   detectionOnly?: string[];
   severityMap?: string | null;
   impact?: { tsv: string; key: string; judge: string } | null;
+  /** Keep each unit-pass's first k must-fix findings as must-fix (the volume-matched reading). */
+  firstK?: number | null;
 }
 
 export interface DeriveResult {
@@ -81,7 +88,8 @@ export function derive(o: DeriveOptions): DeriveResult {
   if (o.id === suite.id) usage("--id must differ from the base suite's id " + suite.id);
   const comp = loadComparisons(resolve(o.comparisons));
   if (comp.file.suite !== suite.id) usage("--comparisons is for suite " + comp.file.suite + ", not " + suite.id);
-  if (o.severityMap && o.impact) usage("give --severity-map or --impact, not both");
+  if ([o.severityMap, o.impact, o.firstK].filter((x) => x !== undefined && x !== null).length > 1) usage("give one of --severity-map, --impact and --first-k");
+  if (o.firstK !== undefined && o.firstK !== null && !(Number.isSafeInteger(o.firstK) && o.firstK >= 1)) usage("--first-k is a whole number from 1");
   const out = resolve(o.out);
   if (suite.sealed && insideRepo(out)) usage("suite " + suite.id + " is sealed, and --out " + out + " is inside the repo; derive sealed readings outside it");
   if (existsSync(out) && readdirSync(out).length) usage("--out " + o.out + " is not empty; derive each reading into a new directory");
@@ -89,6 +97,8 @@ export function derive(o: DeriveOptions): DeriveResult {
   const names = existsSync(dir) ? readdirSync(dir).filter((n) => !n.startsWith(".") && lstatSync(join(dir, n)).isDirectory()).sort() : [];
   if (!names.length) usage("no arm is ingested for suite " + suite.id + " under " + o.root);
   const arms = names.map((n) => readIngested(join(dir, n), suite, base.sha256));
+  const transcribed = arms.filter((a) => a.arm.provenance === "transcribed").map((a) => a.arm.arm.id);
+  if (o.firstK && transcribed.length) usage("--first-k cuts each arm's findings, and " + (transcribed.length > 1 ? "arms " : "arm ") + transcribed.join(", ") + (transcribed.length > 1 ? " are" : " is") + " transcribed, with no findings to cut; derive the volume-matched reading from a --root that holds live arms only");
   const unitOf = (ref: string, where: string): Unit => {
     const r = resolveUnit(suite, ref);
     return r.unit ?? usage(where + ": " + r.problem);
@@ -129,6 +139,7 @@ export function derive(o: DeriveOptions): DeriveResult {
     detection.add(u.id + " " + b!.id);
   }
   if (detection.size) operations.push("count " + [...detection].join(", ") + " as detection-only");
+  if (o.firstK) operations.push("keep each unit-pass's first " + o.firstK + " must-fix findings as must-fix and relabel the rest " + VOLUME_CUT + " (volume-matched)");
 
   let maps: Record<string, SeverityMap> | null = null;
   if (o.severityMap) {
@@ -197,7 +208,7 @@ export function derive(o: DeriveOptions): DeriveResult {
     const id = arm.arm.id;
     const keep = (ref: string) => !dropped.has(unitOf(ref, "arm " + id).id);
     const a = JSON.parse(files.get("arm.json")!.toString("utf8")) as ArmJson;
-    const remap = mapFor(id);
+    const remap = o.firstK ? { ...(a.severity_map ?? {}), default: { ...(a.severity_map?.default ?? {}), [VOLUME_CUT]: "INFORMATIONAL" as const } } : mapFor(id);
     const next = new Map<string, Buffer>();
     const findings = new Map<string, Line[]>();
     for (const [name, bytes] of files) {
@@ -206,13 +217,21 @@ export function derive(o: DeriveOptions): DeriveResult {
       if (dropped.has(u.id)) continue;
       const list = findingLines(bytes);
       findings.set(u.id, list);
-      if (!impact) {
+      if (!impact && !o.firstK) {
         next.set(name, bytes);
         continue;
       }
+      const kept = new Map<number, number>();
       for (const f of list) {
+        let label: string | null = null;
+        if (impact) label = impact.get(u.id + "\0" + id + "\0" + f.pass + "\0" + f.id) ?? "IMPACT-UNRATED";
+        else if (mapSeverity(a, rawLabel(f.fields), readerOf(f.fields)) === "CRITICAL") {
+          kept.set(f.pass, (kept.get(f.pass) ?? 0) + 1);
+          if (kept.get(f.pass)! > o.firstK!) label = VOLUME_CUT;
+        }
+        if (label === null) continue;
         if (typeof f.fields.label === "string") f.fields.label_before_derive = f.fields.label;
-        f.fields.label = impact.get(u.id + "\0" + id + "\0" + f.pass + "\0" + f.id) ?? "IMPACT-UNRATED";
+        f.fields.label = label;
       }
       next.set(name, Buffer.from(list.map((f) => JSON.stringify(f.fields) + "\n").join("")));
     }

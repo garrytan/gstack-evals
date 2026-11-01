@@ -19,20 +19,31 @@ import { powerTable, renderPowerTable, spreadValue, suiteClusters } from "./powe
 import { ideaWins, labelledJudging, newBlockers } from "./secondary.ts";
 import { armMetrics, DEFAULT_DRAWS, DEFAULT_SEED, falseBlockerTable, renderRecord, scoreComparisons, ScoreError, type Comparison, type LossFamily } from "./score.ts";
 import { OUTCOMES, readScoreRun, verdictLine } from "./verdict.ts";
-import { blockerCount, checkSuite, insideRepo, loadSuite, SuiteError, suiteFromCatalog } from "./suite.ts";
+import type { PlanStratum } from "../review-replay/catalog/catalog.ts";
+import { blockerCount, checkSealedRoot, checkSuite, insideRepo, loadSuite, sealedLeaks, setSealedRoot, SuiteError, suiteFromCatalog, suiteStub } from "./suite.ts";
 
 export const HELP = `Usage: gstack-evals noloss <command> [options]
 
 Scores review variants on the blockers a reference review catches. No command calls a model.
 
+Every command takes --sealed-root <dir>: an absolute directory outside the repo holding a sealed suite
+(suites/<id>.json) and its catalogs. A sealed suite's stub in lanes/review-noloss/suites/ holds counts and digests
+only, and loads only with --sealed-root, where its digests and counts must hold.
+
   suite --check [--suite <id|path>] [--prereg <file>]
       Check a suite: every blocker's case loads with a confirmed answer-key audit and matches its unit's range,
       file and line. --prereg checks each recorded freeze digest on its byte prefix. Default suite: gsta167-14pr.
   suite --from-catalog <dir> [--from-catalog <dir>]... --id <id> --released <YYYY-MM-DD> [--with <suite>] [--out <path>]
+        [--stratum <stratum>]...
       Build a suite from catalog dirs: one unit and one blocker per case with a confirmed audit. --released is the
       newest release date among the arm's models (from its prereg); short-shelf-life cases whose fix appeared on or
       before it are listed as ineligible. --with merges into a suite and skips the cases it already names.
-      Prints the suite JSON, or writes it to --out.
+      Plan cases build a plan suite: one unit per plan, its group the plan's stratum; --stratum picks the strata
+      (default every stratum but pilot). With --sealed-root, the catalog dirs resolve against it. A sealed suite is
+      never written inside the repo. Prints the suite JSON, or writes it to --out.
+  suite --stub --suite <path> --sealed-root <dir> --custody <text> [--out <path>]
+      Print the stub to commit for a sealed suite held under the sealed root: id, kind, counts by blocker kind and
+      group, the suite's sha256 and the sha256 over its catalogs' case files. The suite must pass suite --check.
   ingest <arm dir> --suite <id|path> [--check] [--root <dir>] [--digest-only <finding id>|all]... [--replace <reason>]
       Validate an arm against contract v1 (lanes/review-noloss/arm.schema.json), scan it, and publish it to
       <root>/<suite>/<arm id>/ (root: lanes/review-noloss/arms). --check validates and scans and writes nothing.
@@ -41,7 +52,7 @@ Scores review variants on the blockers a reference review catches. No command ca
 
   score --suite <id|path> --variant <id> --reference <id> (--margin <points> --margin-reason <text> | --prereg <file>)
         [--frozen-bar <round>] [--reference-repeat <id>] [--power <share> --power-source <text> | --power-sims <n> [--spread <s>]]
-        [--false-blocker-drop <n>] [--root <dir>] [--seed <n>] [--draws <n>] [--json] [--out <file>] [--expect <outcome>[,<outcome>]...]
+        [--false-blocker-drop <n>] [--false-alarm-gate <n>] [--root <dir>] [--seed <n>] [--draws <n>] [--json] [--out <file>] [--expect <outcome>[,<outcome>]...]
       Compare a variant with a reference on blocking recall, paired by blocker, with PRs as clusters. A margin and its
       reason are required; there is no default. --margin names a post hoc comparison; --prereg reads the comparison
       with this variant and reference from a comparisons file (lanes/review-noloss/comparisons/<suite>.json), with its
@@ -52,6 +63,10 @@ Scores review variants on the blockers a reference review catches. No command ca
       A comparisons file's loss_family Holm-adjusts its comparisons' LOSS p in the declared order under its null, and
       LOSS is decided on the adjusted p. The false-blocker reading pairs false blockers per pass by PR (exact two-sided
       sign-flip, PR-clustered interval, per-PR table); --false-blocker-drop is the smallest per-PR drop that counts.
+      --false-alarm-gate (or a comparison's false_alarm_gate) reads must-fix false alarms on decoy units only (units
+      whose every blocker is a bait) and gates the reference: a LOSS whose reference's excess false alarms per decoy has
+      a 95% interval reaching past the margin warns FALSE_ALARM_GATE_FAIL, and its claim may not be made. With --prereg,
+      a --false-alarm-gate that is not the comparison's preregistered gate scores the comparison post hoc.
       The text output ends with "verdict: <LOSS|NOT_DISTINGUISHED|NO_LOSS|none> [NOLOSS_UNDERPOWERED]". --expect reads
       the run from that line (or the JSON record) and the first reason code, and exits 0 only when the outcome is one
       it lists: LOSS, NOT_DISTINGUISHED, NO_LOSS (a claim), NOLOSS_UNDERPOWERED, NO_VERDICT or a reason code such as
@@ -62,26 +77,33 @@ Scores review variants on the blockers a reference review catches. No command ca
       --check recomputes the table and fails with E_NOLOSS_STALE when the file differs; it writes nothing.
       Default comparisons: lanes/review-noloss/comparisons/gsta167-14pr.json.
   power (--suite <id|path> [--from-catalog <dir>... --released <YYYY-MM-DD>] [--extra-prs <n>] | --clusters <n,n,...>)
-        --passes <n> --recall <share> --margin <points>... [--loss <points>] [--spread <s>] [--sims <n>] [--seed <n>] [--json]
+        --passes <n> --recall <share> --margin <points>... [--loss <points>] [--spread <s>] [--sims <n>] [--seed <n>]
+        [--alpha <a>] [--dependence <share>] [--json]
       Simulate the decision rule at a suite's PR cluster sizes: the share of runs in which an arm as good as the
       reference gets NO_LOSS at each margin, the false NO_LOSS rate when the variant is worse by the first margin, and
       with --loss the share of LOSS for that loss. --spread is wide (beta concentration 2, the plan's), narrow (8) or a
-      number. Defaults: --sims 2000, --seed 1, --spread wide.
-  judge-packet --suite <id|path> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
+      number. --alpha sets both tests' alpha (a Holm family's strictest step is 0.05 over its size); --dependence is
+      the share of a blocker's detection-rate concentration its PR cluster shares (the flaws of one plan move together).
+      Defaults: --sims 2000, --seed 1, --spread wide, --alpha 0.05, --dependence 0.
+  judge-packet --suite <id|path> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate] [--source <owner/repo>=<clone>]...
       --adjudicate packs only the blocking findings judgments.tsv leaves unmatched, with each unit's known informational
       case; judge-join on that key writes adjudication.tsv (defect, not-defect or known-informational per finding).
       Build blinded judge packets, one per unit, from arm directories with findings (ingested or source): every arm's
       findings pooled in a seeded shuffle under opaque ids, with path, line and text only, severity words masked. A
       text naming an arm id or label, "arm <id>", a model id or a hyphenated reader is refused. --key, which maps ids
-      back to arms, must sit outside --out.
+      back to arms, must sit outside --out. A plan suite's packets show each finding's section, claim, evidence and fix,
+      with gstack's plan review heading words stripped, give each blocker its section, line and cause, and carry the
+      unit's tree at its head from the --source clone, whose plan.md must hash to every case's plan digest.
   derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit ref>]... [--drop-file <tsv>]
-        [--drop-gaps] [--detection-only <unit ref>:<blocker>]... [--severity-map <file> | --impact <impact.tsv> --key <file> --impact-judge <judge>]
+        [--drop-gaps] [--detection-only <unit ref>:<blocker>]... [--severity-map <file> | --impact <impact.tsv> --key <file> --impact-judge <judge> | --first-k <k>]
       Re-derive a suite and every arm ingested on it for a secondary or sensitivity reading, so score runs on it unchanged:
       drop units for every arm alike (named, listed in a TSV's unit column, or every unit with a coverage gap or a judgment
       with coverage incomplete), count blockers as detection-only, or re-map severity (a map per arm id or arm name, or one
       judge's impact ratings from judge-run's impact.tsv with the matching batch's key; a rating whose finding_sha256 no
-      longer matches the arm's finding is refused). Findings, matches and rulings never change: a re-map recomputes
-      outcomes from the judges' matches. A sealed suite's --out must sit outside the repo. A stopped arm whose every coverage gap is dropped, and
+      longer matches the arm's finding is refused), or keep each unit-pass's first k must-fix findings as must-fix
+      (--first-k, the volume-matched reading, which refuses a transcribed arm: it has no findings to cut). Findings,
+      matches and rulings never change: a re-map recomputes outcomes from the judges' matches. A sealed suite's --out must
+      sit outside the repo. A stopped arm whose every coverage gap is dropped, and
       that left no session unrun, is complete in the derived suite. Writes <out>/<id>.json, <out>/arms/<id>/<arm>/ (ingested),
       <out>/comparisons.<id>.json (the comparisons file with its suite set to <id>) and <out>/derive.json.
   flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
@@ -124,7 +146,7 @@ Scores review variants on the blockers a reference review catches. No command ca
 Exit codes. Verification reads the verdict line and the first reason code, never exit 2 alone. score: 0 NO_LOSS with the size rule met, 1 LOSS, 2 otherwise (NOT_DISTINGUISHED, a NO_LOSS below or
 without the size rule, which warns NOLOSS_UNDERPOWERED, no verdict, or a refusal). Other commands: 0 on success, 2 on
 any refusal. Reason codes: E_NOLOSS_SUITE, E_NOLOSS_ARM, E_NOLOSS_JUDGMENT, E_NOLOSS_COST, E_NOLOSS_BLIND,
-E_NOLOSS_STALE, E_NOLOSS_ADJUDICATION, E_NOLOSS_EXPECT, LOSS, NOT_DISTINGUISHED, NOLOSS_UNDERPOWERED (docs/errors.md).`;
+E_NOLOSS_STALE, E_NOLOSS_ADJUDICATION, E_NOLOSS_EXPECT, LOSS, NOT_DISTINGUISHED, NOLOSS_UNDERPOWERED, FALSE_ALARM_GATE_FAIL (docs/errors.md).`;
 
 export interface NolossIo {
   out: (text: string) => void;
@@ -170,16 +192,33 @@ function report(io: NolossIo, code: ReasonCode, operation: string, message: stri
   return 2;
 }
 
-function suiteCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--check": "bool", "--suite": "value", "--prereg": "value", "--from-catalog": "repeat", "--id": "value", "--released": "value", "--with": "value", "--out": "value" });
+const STRATA: readonly PlanStratum[] = ["seeded", "real-neutral", "home-field", "decoy", "pilot"];
+
+function suiteCmd(argv: string[], io: NolossIo, sealedRoot: string | null): number {
+  const { flags, positional } = parseFlags(argv, { "--check": "bool", "--suite": "value", "--prereg": "value", "--from-catalog": "repeat", "--id": "value", "--released": "value", "--with": "value", "--out": "value", "--stratum": "repeat", "--stub": "bool", "--custody": "value" });
   if (positional.length) throw new Usage("noloss suite takes no positional arguments");
+  if (flags.has("--stub")) {
+    const path = flags.get("--suite")?.[0] ?? (() => { throw new Usage("suite --stub needs --suite <path>, the sealed suite under the sealed root"); })();
+    if (sealedRoot === null) throw new Usage("suite --stub needs --sealed-root <dir>");
+    const custody = flags.get("--custody")?.[0] ?? (() => { throw new Usage("suite --stub needs --custody <text>: how the sealed copy is held"); })();
+    const loaded = loadSuite(path);
+    const problems = checkSuite(loaded.suite);
+    if (problems.length) throw new SuiteError(problems.join("\n"));
+    const text = JSON.stringify(suiteStub(loaded.suite, readFileSync(loaded.path, "utf8"), sealedRoot, custody), null, 2) + "\n";
+    const out = flags.get("--out")?.[0];
+    if (out) writeFileSync(out, text);
+    else io.out(text.trimEnd());
+    return 0;
+  }
   if (flags.has("--from-catalog")) {
     const id = flags.get("--id")?.[0] ?? (() => { throw new Usage("suite --from-catalog needs --id"); })();
     const released = flags.get("--released")?.[0] ?? null;
     const base = flags.get("--with")?.[0];
-    const suite = suiteFromCatalog({ id, catalogs: flags.get("--from-catalog")!, released, base: base ? loadSuite(base).suite : undefined });
+    const strata = flags.get("--stratum")?.map((x) => (STRATA.includes(x as PlanStratum) ? (x as PlanStratum) : (() => { throw new Usage("--stratum is one of " + STRATA.join(", ") + ", not " + JSON.stringify(x)); })()));
+    const suite = suiteFromCatalog({ id, catalogs: flags.get("--from-catalog")!, released, base: base ? loadSuite(base).suite : undefined, ...(sealedRoot && !base ? { root: sealedRoot } : {}), ...(strata ? { strata } : {}) });
     const text = JSON.stringify(suite, null, 2) + "\n";
     const out = flags.get("--out")?.[0];
+    if (out && suite.sealed && insideRepo(resolve(out))) throw new Usage("suite " + id + " is sealed, and --out " + out + " is inside the repo; write it under the sealed root and commit its stub (suite --stub)");
     if (out) writeFileSync(out, text);
     else io.out(text.trimEnd());
     io.err("suite " + id + ": " + suite.units.length + " units, " + new Set(suite.units.map((u) => u.cluster)).size + " clusters, " + blockerCount(suite, "blocking") + " blocking, " + blockerCount(suite, "over-blocking") + " over-blocking, " + blockerCount(suite, "detection") + " detection-only, " + suite.ineligible.length + " ineligible");
@@ -225,14 +264,14 @@ const int = (n: number) => Number.isSafeInteger(n) && n >= 0;
 const points = (n: number) => n >= 0 && Math.abs(n * 10 - Math.round(n * 10)) < 1e-9;
 
 function scoreCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--variant": "value", "--reference": "value", "--margin": "value", "--margin-reason": "value", "--prereg": "value", "--frozen-bar": "value", "--reference-repeat": "value", "--power": "value", "--power-source": "value", "--power-sims": "value", "--spread": "value", "--root": "value", "--seed": "value", "--draws": "value", "--json": "bool", "--out": "value", "--false-blocker-drop": "value" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--variant": "value", "--reference": "value", "--margin": "value", "--margin-reason": "value", "--prereg": "value", "--frozen-bar": "value", "--reference-repeat": "value", "--power": "value", "--power-source": "value", "--power-sims": "value", "--spread": "value", "--root": "value", "--seed": "value", "--draws": "value", "--json": "bool", "--out": "value", "--false-blocker-drop": "value", "--false-alarm-gate": "value" });
   if (positional.length) throw new Usage("noloss score takes no positional arguments");
   const need = (name: string): string => {
     const v = flags.get(name)?.[0];
     if (v === undefined) throw new Usage("noloss score needs " + name);
     return v;
   };
-  const { suite, sha256 } = loadSuite(need("--suite"));
+  const { suite, sha256, stub } = loadSuite(need("--suite"));
   const variant = need("--variant");
   const reference = need("--reference");
   let c: Comparison;
@@ -260,6 +299,10 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   if (flags.has("--power")) c = { ...c, size_rule: { power: num(flags, "--power", null, (n) => n >= 0 && n <= 1, "a share from 0 to 1"), source: need("--power-source") } };
   if (flags.has("--power-sims")) c = { ...c, size_rule: { power_sims: num(flags, "--power-sims", null, (n) => int(n) && n > 0, "a positive integer"), spread: flags.get("--spread")?.[0] ?? "wide" } };
   if (flags.has("--false-blocker-drop")) c = { ...c, false_blocker_drop: num(flags, "--false-blocker-drop", null, (n) => Number.isFinite(n) && n >= 0, "a non-negative number of false blockers per PR") };
+  if (flags.has("--false-alarm-gate")) {
+    const margin = num(flags, "--false-alarm-gate", null, (n) => Number.isFinite(n) && n >= 0, "a non-negative number of must-fix false alarms per decoy");
+    c = { ...c, false_alarm_gate: { margin_per_decoy: margin }, post_hoc: c.post_hoc || c.false_alarm_gate?.margin_per_decoy !== margin };
+  }
   seed = num(flags, "--seed", seed, int, "a non-negative integer");
   draws = num(flags, "--draws", draws, (n) => int(n) && n >= 1000, "an integer of at least 1000");
   const out = flags.get("--out")?.[0];
@@ -268,18 +311,24 @@ function scoreCmd(argv: string[], io: NolossIo): number {
   const rec = scoreComparisons(suite, sha256, arms, family.length ? family.map((x) => (x.id === c.id ? c : x)) : [c], { seed, draws, lossFamily }).find((x) => x.id === c.id)!;
   const json = JSON.stringify(rec, null, 2);
   if (out) writeFileSync(out, json + "\n");
-  io.out(flags.has("--json") ? json : [...renderRecord(rec), ...falseBlockerTable(rec), verdictLine(rec)].join("\n"));
-  for (const w of rec.warnings) io.err(w + " " + rec.id + ": NO_LOSS " + (rec.size_rule.met === null ? "with the size rule unchecked" : "below the size rule (power " + rec.size_rule.power + ")") + "; it is not a no-loss claim. Check it with --power-sims or the prereg's --power.");
+  io.out(flags.has("--json") ? json : [...(stub ? ["sealed suite " + suite.id + ", read through its stub " + stub.sha256.slice(0, 12) + " under " + stub.custody + "."] : []), ...renderRecord(rec), ...falseBlockerTable(rec), verdictLine(rec)].join("\n"));
+  for (const w of rec.warnings.filter((x) => x === "FALSE_ALARM_GATE_FAIL")) io.err(w + " " + rec.id + ": LOSS, but the false-alarm gate is " + (rec.false_alarm_gate?.result ?? "not read") + ", so the claim that " + rec.reference.id + " catches more of these blockers may not be made.");
+  for (const w of rec.warnings.filter((x) => x !== "FALSE_ALARM_GATE_FAIL")) io.err(w + " " + rec.id + ": NO_LOSS " + (rec.size_rule.met === null ? "with the size rule unchecked" : "below the size rule (power " + rec.size_rule.power + ")") + "; it is not a no-loss claim. Check it with --power-sims or the prereg's --power.");
   return rec.exit;
 }
 
 function exportCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--comparisons": "value", "--root": "value", "--table": "value", "--check": "bool" });
+  const { flags, positional } = parseFlags(argv, { "--comparisons": "value", "--root": "value", "--table": "value", "--check": "bool", "--publish-sealed-table": "bool" });
   if (positional.length) throw new Usage("noloss export takes no positional arguments");
   const table = resolve(flags.get("--table")?.[0] ?? TABLE_PATH);
-  const t = buildExport({ comparisons: resolve(flags.get("--comparisons")?.[0] ?? join(COMPARISONS_DIR, "gsta167-14pr.json")), root: resolve(flags.get("--root")?.[0] ?? ARMS_ROOT) });
-  if (t.suite.sealed && insideRepo(table)) throw new ScoreError("E_NOLOSS_SUITE", "suite " + t.suite.id + " is sealed, and --table " + table + " is inside the repo; write sealed tables outside it");
+  const comparisons = resolve(flags.get("--comparisons")?.[0] ?? join(COMPARISONS_DIR, "gsta167-14pr.json"));
+  const t = buildExport({ comparisons, root: resolve(flags.get("--root")?.[0] ?? ARMS_ROOT) });
   const text = tableText(t);
+  if (t.suite.sealed && insideRepo(table)) {
+    if (!flags.has("--publish-sealed-table")) throw new ScoreError("E_NOLOSS_SUITE", "suite " + t.suite.id + " is sealed, and --table " + table + " is inside the repo; write sealed tables outside it, or pass --publish-sealed-table to publish one that names no sealed unit, cluster, commit or case");
+    const leaks = sealedLeaks(loadSuite(loadComparisons(comparisons).file.suite).suite, text);
+    if (leaks.length) throw new ScoreError("E_NOLOSS_SUITE", "the table of sealed suite " + t.suite.id + " names what the seal hides, so it is not published: " + leaks.slice(0, 5).join(", ") + (leaks.length > 5 ? " and " + (leaks.length - 5) + " more" : ""));
+  }
   if (flags.has("--check")) {
     let committed: string | null;
     try {
@@ -299,7 +348,7 @@ function exportCmd(argv: string[], io: NolossIo): number {
 }
 
 function powerCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--from-catalog": "repeat", "--released": "value", "--extra-prs": "value", "--clusters": "value", "--passes": "value", "--recall": "value", "--margin": "repeat", "--loss": "value", "--spread": "value", "--sims": "value", "--seed": "value", "--json": "bool" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--from-catalog": "repeat", "--released": "value", "--extra-prs": "value", "--clusters": "value", "--passes": "value", "--recall": "value", "--margin": "repeat", "--loss": "value", "--spread": "value", "--sims": "value", "--seed": "value", "--alpha": "value", "--dependence": "value", "--json": "bool" });
   if (positional.length) throw new Usage("noloss power takes no positional arguments");
   if (flags.has("--suite") === flags.has("--clusters")) throw new Usage("noloss power needs one of --suite or --clusters");
   let clusters: number[];
@@ -321,19 +370,20 @@ function powerCmd(argv: string[], io: NolossIo): number {
   if (!margins.length) throw new Usage("noloss power needs at least one --margin <points>; there is no default margin");
   const passes = num(flags, "--passes", null, (n) => int(n) && n > 0, "passes per arm, a positive integer");
   const spread = flags.get("--spread")?.[0] ?? "wide";
-  const o = { recall: num(flags, "--recall", null, (n) => n > 0 && n < 1, "the reference's blocking recall, a share strictly between 0 and 1"), spread: spreadValue(spread), margins, loss_points: flags.has("--loss") ? num(flags, "--loss", null, (n) => n > 0, "a loss in points") : null, sims: num(flags, "--sims", 2000, (n) => int(n) && n > 0, "a positive integer"), seed: num(flags, "--seed", 1, int, "a non-negative integer") };
+  const o = { recall: num(flags, "--recall", null, (n) => n > 0 && n < 1, "the reference's blocking recall, a share strictly between 0 and 1"), spread: spreadValue(spread), margins, loss_points: flags.has("--loss") ? num(flags, "--loss", null, (n) => n > 0, "a loss in points") : null, sims: num(flags, "--sims", 2000, (n) => int(n) && n > 0, "a positive integer"), seed: num(flags, "--seed", 1, int, "a non-negative integer"), alpha: num(flags, "--alpha", 0.05, (n) => n > 0 && n < 1, "a share strictly between 0 and 1"), dependence: num(flags, "--dependence", 0, (n) => n >= 0 && n <= 1, "a share from 0 to 1") };
   const rows = powerTable([{ label, clusters, passes }], o);
   io.out(flags.has("--json") ? JSON.stringify({ inputs: { ...o, spread, clusters }, rows }, null, 2) : renderPowerTable(rows, margins, o.loss_points).join("\n"));
   return 0;
 }
 
 function judgePacketCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--arm": "repeat", "--seed": "value", "--out": "value", "--key": "value", "--adjudicate": "bool" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--arm": "repeat", "--seed": "value", "--out": "value", "--key": "value", "--adjudicate": "bool", "--source": "repeat" });
   if (positional.length) throw new Usage("noloss judge-packet takes arms with --arm <dir>");
   for (const f of ["--suite", "--out", "--key", "--seed"]) if (!flags.has(f)) throw new Usage("noloss judge-packet needs " + f);
   const { suite, sha256 } = loadSuite(flags.get("--suite")![0]!);
   const arms = (flags.get("--arm") ?? []).map((d) => readArmDir(resolve(d), suite, sha256));
-  const r = judgePacket({ suite, suiteSha256: sha256, arms, seed: num(flags, "--seed", null, int, "a non-negative integer"), out: resolve(flags.get("--out")![0]!), key: resolve(flags.get("--key")![0]!), adjudicate: flags.has("--adjudicate") });
+  const sources = new Map((flags.get("--source") ?? []).map((s) => (s.indexOf("=") > 0 ? [s.slice(0, s.indexOf("=")), resolve(s.slice(s.indexOf("=") + 1))] as const : (() => { throw new Usage("--source takes <owner/repo>=<clone>, not " + JSON.stringify(s)); })())));
+  const r = judgePacket({ suite, suiteSha256: sha256, arms, seed: num(flags, "--seed", null, int, "a non-negative integer"), out: resolve(flags.get("--out")![0]!), key: resolve(flags.get("--key")![0]!), adjudicate: flags.has("--adjudicate"), sources });
   io.out("judge-packet: batch " + r.batch + ", " + r.packets + " packets, " + r.findings + " findings from " + arms.length + " arms; the key is outside the packets");
   return 0;
 }
@@ -351,12 +401,12 @@ function judgeJoinCmd(argv: string[], io: NolossIo): number {
 }
 
 function deriveCmd(argv: string[], io: NolossIo): number {
-  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--comparisons": "value", "--root": "value", "--id": "value", "--out": "value", "--drop": "repeat", "--drop-file": "value", "--drop-gaps": "bool", "--detection-only": "repeat", "--severity-map": "value", "--impact": "value", "--key": "value", "--impact-judge": "value" });
+  const { flags, positional } = parseFlags(argv, { "--suite": "value", "--comparisons": "value", "--root": "value", "--id": "value", "--out": "value", "--drop": "repeat", "--drop-file": "value", "--drop-gaps": "bool", "--detection-only": "repeat", "--severity-map": "value", "--impact": "value", "--key": "value", "--impact-judge": "value", "--first-k": "value" });
   if (positional.length) throw new Usage("noloss derive takes no positional arguments");
   for (const f of ["--suite", "--comparisons", "--id", "--out"]) if (!flags.has(f)) throw new Usage("noloss derive needs " + f);
   const impact = flags.get("--impact")?.[0];
   if (impact && (!flags.has("--key") || !flags.has("--impact-judge"))) throw new Usage("--impact needs --key <matching batch key> and --impact-judge <judge>");
-  const r = derive({ suite: flags.get("--suite")![0]!, comparisons: flags.get("--comparisons")![0]!, root: flags.get("--root")?.[0] ?? ARMS_ROOT, id: flags.get("--id")![0]!, out: flags.get("--out")![0]!, drop: flags.get("--drop") ?? [], dropFile: flags.get("--drop-file")?.[0] ?? null, dropGaps: flags.has("--drop-gaps"), detectionOnly: flags.get("--detection-only") ?? [], severityMap: flags.get("--severity-map")?.[0] ?? null, impact: impact ? { tsv: impact, key: flags.get("--key")![0]!, judge: flags.get("--impact-judge")![0]! } : null });
+  const r = derive({ suite: flags.get("--suite")![0]!, comparisons: flags.get("--comparisons")![0]!, root: flags.get("--root")?.[0] ?? ARMS_ROOT, id: flags.get("--id")![0]!, out: flags.get("--out")![0]!, drop: flags.get("--drop") ?? [], dropFile: flags.get("--drop-file")?.[0] ?? null, dropGaps: flags.has("--drop-gaps"), detectionOnly: flags.get("--detection-only") ?? [], severityMap: flags.get("--severity-map")?.[0] ?? null, impact: impact ? { tsv: impact, key: flags.get("--key")![0]!, judge: flags.get("--impact-judge")![0]! } : null, firstK: flags.has("--first-k") ? num(flags, "--first-k", null, (n) => int(n) && n >= 1, "a whole number from 1") : null });
   io.out("derive " + r.suite.id + ": " + r.operations.join("; "));
   io.out("suite " + r.suite.path + " sha256 " + r.suite.sha256 + ": " + r.suite.units + " units, " + r.suite.blocking + " blocking blockers on " + r.suite.clusters + " PRs; " + r.dropped.length + " units dropped" + (r.dropped.length ? " (" + r.dropped.map((d) => d.unit).join(", ") + ")" : ""));
   io.out("comparisons " + r.comparisons.path + " sha256 " + r.comparisons.sha256);
@@ -426,7 +476,7 @@ function secondaryCmd(argv: string[], io: NolossIo): number {
 }
 
 /** score --expect: runs score, reads its outcome from the verdict line or record and the first reason code, and checks it. */
-async function expectScore(rest: string[], io: NolossIo): Promise<number> {
+async function expectScore(rest: string[], io: NolossIo, sealed: string[]): Promise<number> {
   const i = rest.indexOf("--expect");
   const list = rest[i + 1];
   if (list === undefined || list.startsWith("--") || rest.indexOf("--expect", i + 1) !== -1) throw new Usage("--expect needs one comma-separated list of outcomes");
@@ -435,7 +485,7 @@ async function expectScore(rest: string[], io: NolossIo): Promise<number> {
   if (!keys.length || bad.length) throw new Usage("--expect takes " + OUTCOMES.join(", ") + " or reason codes such as E_NOLOSS_ARM, not " + JSON.stringify(bad.join(",") || list));
   const out: string[] = [];
   const err: string[] = [];
-  const exit = await nolossCli(["score", ...rest.slice(0, i), ...rest.slice(i + 2)], { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const exit = await nolossCli(["score", ...rest.slice(0, i), ...rest.slice(i + 2), ...sealed], { out: (t) => out.push(t), err: (t) => err.push(t) });
   out.forEach((t) => io.out(t));
   err.forEach((t) => io.err(t));
   const reading = readScoreRun({ exit, stdout: out.join("\n"), stderr: err.join("\n") });
@@ -444,14 +494,20 @@ async function expectScore(rest: string[], io: NolossIo): Promise<number> {
 }
 
 export async function nolossCli(argv: string[], io: NolossIo): Promise<number> {
-  const [cmd, ...rest] = argv;
-  if (cmd === undefined || cmd === "--help" || cmd === "-h" || rest.includes("--help") || rest.includes("-h")) {
+  const [cmd, ...args] = argv;
+  if (cmd === undefined || cmd === "--help" || cmd === "-h" || args.includes("--help") || args.includes("-h")) {
     io.out(HELP);
     return cmd === undefined ? 2 : 0;
   }
+  const at = args.indexOf("--sealed-root");
+  const rest = at < 0 ? args : [...args.slice(0, at), ...args.slice(at + 2)];
   try {
-    if (cmd === "score" && rest.includes("--expect")) return await expectScore(rest, io);
-    if (cmd === "suite") return suiteCmd(rest, io);
+    if (at >= 0 && (args[at + 1] === undefined || args[at + 1]!.startsWith("--"))) throw new Usage("--sealed-root needs a directory");
+    if (rest.includes("--sealed-root")) throw new Usage("--sealed-root is given twice");
+    const sealedRoot = at < 0 ? null : checkSealedRoot(args[at + 1]!);
+    setSealedRoot(sealedRoot);
+    if (cmd === "score" && rest.includes("--expect")) return await expectScore(rest, io, sealedRoot === null ? [] : ["--sealed-root", sealedRoot]);
+    if (cmd === "suite") return suiteCmd(rest, io, sealedRoot);
     if (cmd === "ingest") return ingestCmd(rest, io);
     if (cmd === "score") return scoreCmd(rest, io);
     if (cmd === "export") return exportCmd(rest, io);
@@ -479,6 +535,8 @@ export async function nolossCli(argv: string[], io: NolossIo): Promise<number> {
       trace = undefined;
     }
     return report(io, "E_INTERNAL", "noloss " + cmd, "unexpected failure in lanes/review-noloss: " + (error instanceof Error ? error.message : String(error)) + "; this is a defect, not your input. File an issue with these lines and the trace file.", { correlation_id: id, trace });
+  } finally {
+    setSealedRoot(null);
   }
 }
 

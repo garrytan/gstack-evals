@@ -14,16 +14,74 @@
 // judge-run (judge-run.ts) sends the packets to the judges and computes the same sets with judgeSets; judge-join
 // --unjudged takes its record of packets a judge's reply was refused twice for: those blockers are written with coverage
 // incomplete, those findings get no adjudication row, and both leave the second and third sets.
+//
+// A plan suite's packets (planning lane plan 2026-10-31-geva-79-planning-lane-plan, B6 and open items 8 and 11) carry
+// each finding's section, claim, evidence and fix only, with severity words masked and a frozen list of gstack plan
+// review heading words stripped, so a judge cannot tell a gstack review by its headings. Each blocker gives its section,
+// line and cause, and the packet holds the unit's tree at its head (plan.md and its context, as they were before any
+// session) from a --source clone, bound by the head and tree ids and by the plan's sha256, which must equal every
+// case's plan digest. The judging rule matches on the cause, with the section as evidence.
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
 import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, RULINGS, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
 import { ScoreError } from "./score.ts";
+import { isPlanCase } from "../review-replay/catalog/catalog.ts";
 import { insideRepo, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
 
 export const JUDGE_VERSION = 1;
 export const SECOND_SAMPLE = 0.2;
 const SEVERITY_WORDS = ["CRITICAL", "INFORMATIONAL", "HIGH", "MEDIUM", "LOW", "BLOCKER", "BLOCKING", "FIXABLE", "INVESTIGATE", "NIT", "MAJOR", "MINOR", "SEVERE", "P0", "P1", "P2", "P3"];
+
+/**
+ * Heading words of gstack's plan reviews (plan-ceo-review at v1.91.379.0: its SKILL.md and its sections), stripped from
+ * plan packets as [heading] so a judge cannot tell which arm used the skill by the review's headings. Frozen: the
+ * preregistration pins PLAN_HEADING_WORDS_SHA256, and batch.json carries it.
+ */
+export const PLAN_HEADING_WORDS: readonly string[] = [
+  "Nuclear Scope Challenge", "Mode Selection", "Premise Challenge", "Existing Code Leverage", "Dream State Mapping", "Dream state delta", "Dream State",
+  "Expansion Framing", "Mode-Specific Analysis", "Persist CEO Plan", "CEO Plan", "Temporal Interrogation", "10x Check", "Platonic Ideal", "Scope Decisions",
+  "Accepted Scope", "Deferred to TODOS.md", "Reviewer Concerns", "Spec Review Loop", "Error & Rescue Map", "Error & Rescue Registry", "Failure Modes Registry",
+  "Security & Threat Model", "Data Flow & Interaction Edge Cases", "Observability & Debuggability Review", "Deployment & Rollout Review", "Long-Term Trajectory Review",
+  "NOT in scope", "What already exists", "Scope Expansion Decisions", "Stale Diagram Audit", "Implementation Tasks", "Completion Summary", "Unresolved Decisions",
+  "Plan File Review Report", "GSTACK REVIEW REPORT", "Review Readiness Dashboard", "Taste Calibration", "Landscape Check", "Retrospective Check", "Prime Directives",
+  "PRE-REVIEW SYSTEM AUDIT", "SCOPE EXPANSION", "SELECTIVE EXPANSION", "HOLD SCOPE", "SCOPE REDUCTION", "Boil the Ocean", "Outside Voice", "gstack",
+  "/plan-ceo-review", "/plan-eng-review", "/plan-design-review", "/plan-devex-review", "/autoplan", "/office-hours", "plan-ceo-review",
+];
+export const PLAN_HEADING_WORDS_SHA256 = sha256(JSON.stringify(PLAN_HEADING_WORDS));
+
+/** A plan unit's tree at its head, as judges read it: every file's text, bound by the head and tree ids and the plan's sha256. */
+export interface PlanMaterial {
+  head: string;
+  tree: string;
+  plan_sha256: string;
+  files: Array<{ path: string; text: string }>;
+}
+
+/** Bytes of unit tree a plan packet may carry; a bigger unit is refused, since a judge could not read it whole. */
+export const PLAN_MATERIAL_CAP = 512 * 1024;
+
+const gitOut = (clone: string, args: string[]): Buffer | null => {
+  const r = spawnSync("git", ["-C", clone, ...args], { maxBuffer: 64 * 1024 * 1024, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
+  return r.status === 0 ? r.stdout : null;
+};
+
+/** The unit tree at head from a clone: plan.md and every other file as text. */
+export function planMaterial(clone: string, head: string): PlanMaterial {
+  const tree = gitOut(clone, ["rev-parse", head + "^{tree}"])?.toString("utf8").trim();
+  if (!tree) blind("the --source clone " + clone + " does not hold head " + head + "; the plan packet needs the unit tree at its head");
+  const paths = (gitOut(clone, ["ls-tree", "-r", "-z", "--name-only", head]) ?? Buffer.alloc(0)).toString("utf8").split("\0").filter(Boolean).sort();
+  if (!paths.includes("plan.md")) blind("head " + head + " in " + clone + " has no plan.md");
+  let bytes = 0;
+  const files = paths.map((path) => {
+    const body = gitOut(clone, ["show", head + ":" + path]) ?? blind("cannot read " + path + " at head " + head + " in " + clone + " (a blob too big to read, or a broken object), so the plan packet would not carry the unit tree as it is");
+    bytes += body.length;
+    return { path, text: body.includes(0) ? "[binary file, " + body.length + " bytes]" : body.toString("utf8") };
+  });
+  if (bytes > PLAN_MATERIAL_CAP) blind("the unit tree at " + head + " is " + bytes + " bytes, over the plan packet's " + PLAN_MATERIAL_CAP);
+  return { head, tree: tree!, plan_sha256: sha256(gitOut(clone, ["show", head + ":plan.md"])!), files };
+}
 
 const blind = (message: string): never => {
   throw new ScoreError("E_NOLOSS_BLIND", message);
@@ -89,6 +147,14 @@ export function masker(arms: LoadedArm[]): (text: string) => string {
   return (text) => res.reduce((t, re) => t.replace(re, "[severity]"), text);
 }
 
+/** The mask packets and evidence sheets share: severity words, and on a plan suite gstack's heading words as [heading]. */
+export function packetMask(suite: Suite, arms: LoadedArm[]): (text: string) => string {
+  const severityMask = masker(arms);
+  if (suite.kind !== "plan") return severityMask;
+  const headings = [...PLAN_HEADING_WORDS].sort((a, b) => b.length - a.length).map((w) => wholeWord(w, "gi"));
+  return (text) => headings.reduce((t, re) => t.replace(re, "[heading]"), severityMask(text));
+}
+
 function shuffle<T>(items: T[], rng: () => number): T[] {
   const a = [...items];
   for (let i = a.length - 1; i > 0; i--) {
@@ -102,9 +168,11 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
  * Writes one packet per unit and batch.json under out, and the key file at key, which must sit outside out. With
  * adjudicate, a packet holds only the blocking findings judgments.tsv leaves unmatched, and units with none get no packet.
  */
-export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: LoadedArm[]; seed: number; out: string; key: string; adjudicate?: boolean }): { batch: string; packets: number; findings: number } {
+export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: LoadedArm[]; seed: number; out: string; key: string; adjudicate?: boolean; sources?: ReadonlyMap<string, string> }): { batch: string; packets: number; findings: number } {
   const { suite, arms } = o;
   const adjudicate = o.adjudicate === true;
+  const plan = suite.kind === "plan";
+  if (plan) for (const repo of new Set(suite.units.map((u) => u.repo))) if (!o.sources?.has(repo)) blind("suite " + suite.id + " is a plan suite, so its packets carry each unit's tree; pass --source " + repo + "=<clone>");
   if (suite.sealed && (insideRepo(o.out) || insideRepo(o.key))) blind("suite " + suite.id + " is sealed, so its packets and key must be written outside the repo");
   if (inside(o.key, o.out)) blind("--key " + o.key + " is inside --out " + o.out + "; the key maps opaque ids back to arms and must never travel with the packets");
   if (existsSync(o.key)) blind("--key " + o.key + " already exists; give each batch a new key path");
@@ -117,12 +185,12 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   const unmatched = new Map(arms.map((a) => [a.arm.arm.id, adjudicate ? matchedBlockers(a.arm.judgments!) : null]));
   const pick = (a: LoadedArm, u: Unit) => (a.arm.findings!.get(u.id) ?? []).filter((f) => !adjudicate || (mapSeverity(a.arm.arm, f.raw, f.reader) === "CRITICAL" && !unmatched.get(a.arm.arm.id)!.has(f)));
   const rng = seededRandom(o.seed);
-  const mask = masker(arms);
+  const mask = packetMask(suite, arms);
   const leaks = leakRules(arms);
   const cases = suiteCases(suite).cases;
   const problems: string[] = [];
   const entries: KeyEntry[] = [];
-  const bodies: Array<{ file: string; unit: Unit; findings: Array<{ id: string; path: string | null; line: number | null; text: string }> }> = [];
+  const bodies: Array<{ file: string; unit: Unit; findings: Array<Record<string, unknown> & { id: string }> }> = [];
   for (const u of suite.units) {
     const file = fileName(suite, u);
     const pooled = shuffle(
@@ -134,6 +202,11 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
     const findings = pooled.map(({ arm, f }, i) => {
       const opaque = "F" + String(i + 1).padStart(width, "0");
       entries.push({ packet: file, opaque, arm, pass: f.pass, finding: f.id });
+      if (plan) {
+        const shown = { section: mask(typeof f.fields.section === "string" ? f.fields.section : ""), claim: mask(f.summary), evidence: mask(typeof f.fields.evidence === "string" ? f.fields.evidence : ""), fix: mask(f.fix) };
+        for (const { rule, re } of leaks) if (Object.values(shown).some((t) => re.test(t))) problems.push(unitRef(suite, u) + ", arm " + arm + ", finding " + JSON.stringify(f.id) + ": its text names " + rule);
+        return { id: opaque, line: f.line, ...shown };
+      }
       const text = mask(f.summary + (f.fix ? "\nFix: " + f.fix : ""));
       for (const { rule, re } of leaks) if (re.test(text) || (f.path && re.test(f.path))) problems.push(unitRef(suite, u) + ", arm " + arm + ", finding " + JSON.stringify(f.id) + ": its text names " + rule);
       return { id: opaque, path: f.path, line: f.line, text };
@@ -149,10 +222,21 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   const packets: JudgeKey["packets"] = [];
   for (const b of bodies) {
     const unit = { repo: b.unit.repo, pr: b.unit.pr, head: b.unit.head, base: b.unit.base };
-    const known = (x: Unit["blockers"][number]) => ({ id: x.id, paths: x.paths, file: x.file, line: x.line, cause: cases.get(x.case)?.defect.summary ?? "" });
+    const known = (x: Unit["blockers"][number]) => {
+      const c = cases.get(x.case);
+      return c && isPlanCase(c) ? { id: x.id, section: c.defect.section, line: x.line, cause: c.defect.cause } : { id: x.id, paths: x.paths, file: x.file, line: x.line, cause: c?.defect.summary ?? "" };
+    };
+    let material: PlanMaterial | null = null;
+    if (plan) {
+      material = planMaterial(o.sources!.get(b.unit.repo)!, b.unit.head);
+      for (const x of b.unit.blockers) {
+        const c = cases.get(x.case);
+        if (c && isPlanCase(c) && c.plan.digest !== material.plan_sha256) blind(unitRef(suite, b.unit) + " " + x.id + ": plan.md at head " + b.unit.head.slice(0, 12) + " hashes to " + material.plan_sha256 + ", not case " + x.case + "'s plan digest " + c.plan.digest);
+      }
+    }
     const packet = adjudicate
-      ? { version: JUDGE_VERSION, kind: "adjudicate", suite: head.suite.id, unit, known_informational: b.unit.blockers.filter((x) => x.counts === "over-blocking").map(known), findings: b.findings }
-      : { version: JUDGE_VERSION, suite: head.suite.id, unit, blockers: b.unit.blockers.map(known), findings: b.findings };
+      ? { version: JUDGE_VERSION, kind: "adjudicate", suite: head.suite.id, unit, ...(material ? { material } : {}), known_informational: b.unit.blockers.filter((x) => x.counts === "over-blocking").map(known), findings: b.findings }
+      : { version: JUDGE_VERSION, suite: head.suite.id, unit, ...(material ? { material } : {}), blockers: b.unit.blockers.map(known), findings: b.findings };
     const bytes = Buffer.from(JSON.stringify(packet, null, 2) + "\n");
     writeFileSync(join(staging, b.file), bytes);
     packets.push({ file: b.file, unit: b.unit.id, sha256: sha256(bytes) });
@@ -167,7 +251,7 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
     );
   else writeFileSync(
     join(staging, "batch.json"),
-    JSON.stringify({ version: JUDGE_VERSION, batch, suite: head.suite, judging_rule: suite.judging_rule, packets, adjudication: "A second judge answers every blocker where the arms' outcomes differ plus a seeded " + SECOND_SAMPLE * 100 + "% sample of the rest; a third read answers every blocker where the two judges differ. judge-join names each set.", reply_format: reply, reply_rules: "One JSON reply per judge: batch, judge, and for each packet its file, its sha256 and every blocker you answer with the ids of the findings that name the same defect (an empty list when none does). Judge the defect, not the severity: severity is applied mechanically." }, null, 2) + "\n",
+    JSON.stringify({ version: JUDGE_VERSION, batch, suite: head.suite, judging_rule: suite.judging_rule, ...(plan ? { heading_words_sha256: PLAN_HEADING_WORDS_SHA256, materials: "Each packet's material is the unit's tree at its head: plan.md and its context as they were before any session. Match on the cause, with the section as evidence." } : {}), packets, adjudication: "A second judge answers every blocker where the arms' outcomes differ plus a seeded " + SECOND_SAMPLE * 100 + "% sample of the rest; a third read answers every blocker where the two judges differ. judge-join names each set.", reply_format: reply, reply_rules: "One JSON reply per judge: batch, judge, and for each packet its file, its sha256 and every blocker you answer with the ids of the findings that name the same defect (an empty list when none does). Judge the defect, not the severity: severity is applied mechanically." }, null, 2) + "\n",
   );
   writeFileSync(o.key, JSON.stringify({ version: JUDGE_VERSION, batch, ...head, packets, entries } satisfies JudgeKey, null, 2) + "\n", { mode: 0o600 });
   mkdirSync(resolve(o.out, ".."), { recursive: true });

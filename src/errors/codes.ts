@@ -908,6 +908,12 @@ export const CODES = {
     fix: "Check the size rule with --power-sims (or the prereg's --power), and buy more PRs or passes until it reaches 80% before stating the claim.",
     owner: "U13",
   },
+  FALSE_ALARM_GATE_FAIL: {
+    exit: null,
+    meaning: "A review no-loss comparison reached LOSS, so its reference caught more blockers, but the comparison's decoy-only false-alarm gate did not pass: the reference's excess must-fix false alarms per decoy has a 95% interval reaching past the preregistered margin, or the reading is incomplete. The verdict prints with this warning and exits 1, and the claim that the reference catches more may not be made.",
+    fix: "Report the LOSS with its false-alarm reading and no claim. Adjudicate any unadjudicated must-fix finding on the decoys; never widen the margin after the run.",
+    owner: "U13",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

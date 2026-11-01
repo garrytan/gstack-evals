@@ -1,15 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readArmDir, snapshot } from "../../lanes/review-noloss/ingest.ts";
 import { findingSha256 } from "../../lanes/review-noloss/judge.ts";
 import { JUDGE_RETRY, judgeRunCmd } from "../../lanes/review-noloss/judge-run.ts";
 import { ScoreError } from "../../lanes/review-noloss/score.ts";
-import { loadSuite, REPO_ROOT, sha256, unitId } from "../../lanes/review-noloss/suite.ts";
+import { loadSuite, REPO_ROOT, setSealedRoot, sha256, unitId } from "../../lanes/review-noloss/suite.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { cleanup, editArm, run, tmp, writeArm } from "./helpers.ts";
+import { planPanel, writePlanArm } from "./plan-panel.ts";
 
 afterAll(cleanup);
 const KEYS = { ANTHROPIC_API_KEY: "fake-anthropic-value-for-judge-run-tests", OPENAI_API_KEY: "fake-openai-value-for-judge-run-tests", OPENROUTER_API_KEY: "fake-openrouter-value-for-judge-run-tests" };
@@ -352,5 +353,35 @@ describe("judge-run on an adjudication batch", () => {
     const none = await judgeRun(args("leaky", [alpha, leaky], out), upstream(sent, () => ""));
     expect(none.err).toMatch(/^E_USAGE no --source clone for garrytan\/gstack, which unit garrytan\/gstack#3593@\w+ needs at head \w+/);
     expect([sent.length, existsSync(out)]).toEqual([0, false]);
+  });
+});
+
+describe("judge-run on a plan adjudication batch", () => {
+  test("the evidence sheet strips gstack's heading words as the plan packet does", async () => {
+    const dir = tmp("noloss-judge-run-plan-");
+    const panel = planPanel(dir, { seeded: 1, decoy: 1 });
+    const S = ["--sealed-root", panel.sealedRoot];
+    const text = (u: { pr: number }) => ({ section: "Scope", claim: "Synthetic finding on unit " + u.pr + ".", evidence: "The Premise Challenge reads context/goals.md; see the GSTACK REVIEW REPORT.", fix: "Synthetic." });
+    const src = writePlanArm(join(dir, "src", "noisy"), panel.suite, { id: "noisy", passes: 1, outcome: () => "M", noise: 1, text });
+    expect((await run(["ingest", src, "--suite", panel.stubPath, "--root", join(dir, "arms"), ...S])).code).toBe(0);
+    const arm = join(dir, "arms", panel.suite.id, "noisy");
+    const packets = join(dir, "packets");
+    const keyPath = join(dir, "key.json");
+    expect((await run(["judge-packet", "--suite", panel.stubPath, "--arm", arm, "--seed", "7", "--out", packets, "--key", keyPath, "--adjudicate", "--source", "example/plan-panel=" + panel.clone, ...S])).code).toBe(0);
+    const record = join(dir, "record");
+    recordApproval(record, { action: "init", item: "judge", cap_micros: 100_000_000, quotes: [QUOTE], admission: "warn" });
+    const out = join(dir, "run");
+    const ruled = (_model: string, file: string, packet: any) => JSON.stringify({ packets: [{ file, findings: packet.findings.map((f: any) => ({ id: f.id, ruling: "not-defect" })), verifiable: Object.fromEntries(packet.findings.map((f: any) => [f.id, true])) }] });
+    setSealedRoot(panel.sealedRoot);
+    try {
+      const r = await judgeRun(["--suite", panel.stubPath, "--packets", packets, "--key", keyPath, "--arm", arm, "--brief", BRIEF, "--primary", OPUS, "--second", SOL, "--third", SONNET, "--item", "judge", "--out", out, "--ledger", join(dir, "ledger.sqlite"), "--record", record, "--source", "example/plan-panel=" + panel.clone], upstream([], ruled));
+      expect(r.code).toBe(0);
+    } finally {
+      setSealedRoot(null);
+    }
+    const sheets = readdirSync(join(out, "sheets"));
+    expect(sheets.length).toBe(1);
+    const sheet = JSON.parse(readFileSync(join(out, "sheets", sheets[0]!), "utf8"));
+    expect(sheet.findings.map((f: { evidence: string }) => f.evidence)).toEqual(["The [heading] reads context/goals.md; see the [heading]."]);
   });
 });
