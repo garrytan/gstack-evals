@@ -127,6 +127,27 @@ describe("launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS
     expect(code).toBe(0);
   }, 60_000);
 
+  test("each next block is reserved before the current one runs out, and a refused block stops the batch as a cap stop", async () => {
+    // Blocks of 3.6 s at $3.6 on a $10 cap with $1 open: block 2 fits ($8.2 open), block 3 ($11.8) is refused.
+    const r = rig({});
+    Object.assign(r.env, { VM_USD_PER_HOUR: "3600", VM_RESERVE_HOURS: "0.001", VM_EXTEND_POLL_SEC: "0.2" });
+    const { code, stderr, events } = await runToEnd(r);
+    expect(readFileSync(join(r.run, "vm-cap-stop"), "utf8")).toContain("refused VM block 3 (p-vm-3");
+    expect(stderr).toContain("the ledger refused VM block 3 for laneb-quick; stopping the batch (cap stop)");
+    expect(events).toContain("ssh vm-1 touch work/run/STOP");
+    expect(events.indexOf("down vm-1")).toBeGreaterThan(events.indexOf("batch ended"));
+    const rows = vmRows(r).concat(readRows(r.ledgerPath).filter((x) => String(x.id).startsWith("p-vm-")));
+    expect(rows.filter((x) => x.kind === "reserve").map((x) => [x.id, x.usd_micros])).toEqual([["p-vm", toMicros(3.6)], ["p-vm-2", toMicros(3.6)]]);
+    const settles = rows.filter((x) => x.kind === "settle");
+    expect(settles.map((x) => x.id)).toEqual(["p-vm", "p-vm-2"]);
+    expect(settles[0]!.usd_micros).toBe(toMicros(3.6));
+    const vmUsd = settles.reduce((a, x) => a + x.usd_micros, 0) / 1e6;
+    expect(vmUsd).toBeGreaterThan(4);
+    expect(vmUsd).toBeLessThan(12);
+    expect(new Ledger(r.ledgerPath, "laneb-quick").status().openIds).toEqual([]);
+    expect(code).toBe(130);
+  }, 60_000);
+
   test("a VM reserve the ledger refuses is a cap stop: exit 9 and no VM", async () => {
     const r = rig({ finish: 0 });
     Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "5" });

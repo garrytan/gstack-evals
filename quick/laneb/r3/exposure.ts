@@ -40,10 +40,14 @@ export function agentText(lines: string[]): string {
   return texts.join("\n") + "\n" + result;
 }
 
+// A trial directory whose config.json names the Lane B agent is a trial: with no readable result.json it has no reward,
+// so it is infra. A directory with no readable config.json can't be attributed and gives null; the screen counts its
+// task as missing.
 export function loadR3Trial(dir: string, sessions: Map<string, SessionRow[]>, proxy: ProxyConfig): R3Trial | null {
-  const result = readJson(join(dir, "result.json"));
   const config = readJson(join(dir, "config.json"));
-  if (!result || !config || config.agent?.name !== "laneb-claude-code") return null;
+  if (!config || config.agent?.name !== "laneb-claude-code") return null;
+  const resultJson = readJson(join(dir, "result.json"));
+  const result = resultJson ?? {};
   const kwargs = config.agent.kwargs ?? {};
   const task = String(config.task?.path ?? result.task_name ?? "").split("/").filter(Boolean).at(-1) ?? "?";
   const trial = String(result.trial_name ?? dir.split("/").filter(Boolean).at(-1));
@@ -62,7 +66,8 @@ export function loadR3Trial(dir: string, sessions: Map<string, SessionRow[]>, pr
   const agentTimeout = exc === "AgentTimeoutError";
   let outcome: R3Trial["outcome"] = "infra";
   let reason: string;
-  if (reward === null) reason = exc ? `${exc}: ${String(result.exception_info?.exception_message ?? "").slice(0, 160)}` : "no verifier reward";
+  if (!resultJson) reason = "no result.json";
+  else if (reward === null) reason = exc ? `${exc}: ${String(result.exception_info?.exception_message ?? "").slice(0, 160)}` : "no verifier reward";
   else if (!modelResponded) reason = `no model response reached the agent${exc ? ` (${exc})` : ""}, reward ${reward} not graded`;
   else {
     outcome = reward >= 1 ? "pass" : "fail";

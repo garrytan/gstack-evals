@@ -149,6 +149,7 @@ describe("R3 ledger", () => {
     approve(path);
     const cli = (...args: string[]) => Bun.spawnSync([process.execPath, join(laneb, "runner/ledger.ts"), ...args, "--path", path, "--item", "r3a-screen"]);
     expect(cli("reserve", "--id", "r3a-screen/vm", "--usd", "30", "--detail", "VM hours").exitCode).toBe(0);
+    expect(cli("reserve", "--id", "r3a-screen/vm", "--usd", "30").exitCode).toBe(3);
     const L = new Ledger(path, "r3a-screen");
     let n = 0;
     for (; ; n++) {
@@ -179,7 +180,7 @@ describe("R3 ledger", () => {
   });
 });
 
-type T = { task: string; arm?: string; model?: string; reward?: number | null; ok?: number | null; spent?: number; told?: string; cmdNames?: string[]; lines?: unknown[]; exc?: string };
+type T = { task: string; arm?: string; model?: string; reward?: number | null; ok?: number | null; spent?: number; told?: string; cmdNames?: string[]; lines?: unknown[]; exc?: string; noResult?: boolean; noConfig?: boolean };
 // One Harbor trial directory plus its proxy session row, as the agent and proxy write them.
 function writeTrial(jobs: string, sessions: string, t: T, i: number) {
   const name = t.task.slice(0, 20) + "__" + i;
@@ -187,9 +188,9 @@ function writeTrial(jobs: string, sessions: string, t: T, i: number) {
   mkdirSync(join(d, "evaluator"), { recursive: true });
   mkdirSync(join(d, "agent"), { recursive: true });
   const kwargs = { arm: t.arm ?? "none", upstream_model: t.model ?? "claude-opus-5-5", ...(t.told ? { told_skill: t.told } : {}) };
-  writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/vm/run/tasks/" + t.task }, agent: { name: "laneb-claude-code", kwargs } }));
+  if (!t.noConfig) writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/vm/run/tasks/" + t.task }, agent: { name: "laneb-claude-code", kwargs } }));
   const reward = t.reward === undefined ? 0 : t.reward;
-  writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, verifier_result: reward === null ? null : { rewards: { reward } }, exception_info: t.exc ? { exception_type: t.exc, exception_message: "x" } : null }));
+  if (!t.noResult) writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, verifier_result: reward === null ? null : { rewards: { reward } }, exception_info: t.exc ? { exception_type: t.exc, exception_message: "x" } : null }));
   writeFileSync(join(d, "evaluator/sdk-messages.jsonl"), (t.lines ?? [{ type: "AssistantMessage", content: [{ text: "Fixed the bug." }] }]).map((l) => JSON.stringify(l)).join("\n") + "\n");
   if (t.ok !== null) appendFileSync(sessions, JSON.stringify({ id: "s" + i, trial: name + "__env", model: kwargs.upstream_model, spent_micros: toMicros(t.spent ?? 0.5), ok_responses: t.ok ?? 3, requests: 4, refused: 0, refused_budget: 0, opened_at: "2026-11-01T00:00:0" + (i % 10) + "Z", closed_at: "2026-11-01T01:00:00Z", cmd_expanded: (t.cmdNames ?? []).length > 0, cmd_names: t.cmdNames ?? [] }) + "\n");
 }
@@ -224,15 +225,18 @@ describe("R3 procedure gate and classification", () => {
   });
 
   test("graded needs a reward and a model response; anything else is infra (GSTA-2 ruling)", () => {
-    const [fail, noResponse, fallback, noReward, capped, pass] = load([
+    const [fail, noResponse, fallback, noReward, capped, pass, noResult] = load([
       { task: "a", reward: 0 },
       { task: "b", reward: 0, ok: 0 },
       { task: "c", reward: 1, ok: null },
       { task: "d", reward: null },
       { task: "e", reward: 0, ok: null, lines: [], exc: "LedgerCapStop" },
       { task: "f", reward: 1, model: "particle-1", spent: 0.12 },
+      { task: "g", noResult: true },
+      { task: "h", noConfig: true },
     ]);
-    expect([fail, noResponse, fallback, noReward, capped, pass].map((t) => t!.outcome)).toEqual(["fail", "infra", "pass", "infra", "infra", "pass"]);
+    expect([fail, noResponse, fallback, noReward, capped, pass, noResult].map((t) => t!.outcome)).toEqual(["fail", "infra", "pass", "infra", "infra", "pass", "infra"]);
+    expect(noResult).toMatchObject({ task: "g", reason: "no result.json", reward: null });
     expect(noResponse!.reason).toContain("no model response reached the agent");
     expect(fallback).toMatchObject({ model_responded: true, cost_usd: null, attempts: 0 });
     expect(capped).toMatchObject({ cap_stop: true, model_responded: false });
@@ -277,15 +281,20 @@ describe("R3 screen and admission", () => {
     expect(fix.lines[1]).toContain("STOP (FIX-METHOD)");
   });
 
-  function work(opts: { capStop?: "status" | "trial" | "vm" } = {}) {
+  // A prepared and pulled R3a work dir: one none trial per band task (the first 35 fail) and one told trial per pilot task.
+  function work(opts: { capStop?: "status" | "trial" | "vm" | "vm-block"; edit?: (parts: Record<string, T[]>) => void } = {}) {
     const w = tmp("r3-work-");
     const ledger = join(w, "r3a-screen.jsonl");
     approve(ledger);
+    const band = bandIds();
+    const pilotIds = pilotTasks(band);
+    writeFileSync(join(w, "plan.json"), JSON.stringify({ item: "r3a-screen", pilot_tasks: pilotIds }));
     const parts: Record<string, T[]> = {
-      screen: [...Array.from({ length: 35 }, (_, i) => ({ task: "f" + i, reward: 0 })), ...Array.from({ length: 5 }, (_, i) => ({ task: "p" + i, reward: 1 }))],
-      pilot: Array.from({ length: 10 }, (_, i) => ({ task: "f" + i, arm: "gstack", told: "investigate", cmdNames: ["investigate"], lines: [text("Phase 1")] })),
+      screen: band.map((task, i) => ({ task, reward: i < 35 ? 0 : 1 })),
+      pilot: pilotIds.map((task) => ({ task, arm: "gstack", told: "investigate", cmdNames: ["investigate"], lines: [text("Phase 1")] })),
     };
-    if (opts.capStop === "trial") parts.screen!.push({ task: "z", reward: 0, ok: null, lines: [], exc: "LedgerCapStop" });
+    if (opts.capStop === "trial") parts.screen![92] = { task: band[92]!, reward: 0, ok: null, lines: [], exc: "LedgerCapStop" };
+    opts.edit?.(parts);
     for (const [name, trials] of Object.entries(parts)) {
       const dir = join(w, name);
       mkdirSync(join(dir, "pulled/out"), { recursive: true });
@@ -295,6 +304,7 @@ describe("R3 screen and admission", () => {
       writeFileSync(join(w, name + ".launch-exit"), name === "screen" && opts.capStop === "vm" ? "9\n" : "0\n");
     }
     if (opts.capStop === "status") writeFileSync(join(w, "screen/pulled/out/cap-stop.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for t__1 at x" }));
+    if (opts.capStop === "vm-block") writeFileSync(join(w, "screen/vm-cap-stop"), "the ledger refused VM block 3 (r3a-screen/vm-3, $4.000000) for r3a-screen\n");
     const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "analyze", w], { env: { ...process.env, LEDGER: ledger } });
     return { w, code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
   }
@@ -303,19 +313,64 @@ describe("R3 screen and admission", () => {
     const r = work();
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("r3a-screen: 40 screen trials, 10 pilot trials, settled $0.00 of $150, open reserves 0");
-    expect(r.out).toContain("admission: 35 of 40 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials");
+    expect(r.out).toContain("r3a-screen: 93 screen trials, 10 pilot trials, settled $0.00 of $150, open reserves 0");
+    expect(r.out).toContain("admission: 35 of 93 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials");
     expect(r.out).toContain("R3b start: 35 tasks; measured cost per trial none $0.50, told $0.50; projection r3b-opus $105, r3b-particle $47");
     expect(readFileSync(join(r.w, "admitted.txt"), "utf8").trim().split("\n")).toHaveLength(35);
     const rec = JSON.parse(readFileSync(join(r.w, "record.json"), "utf8"));
     expect(rec.pilot).toMatchObject({ graded: 10, exposed: 10, body_loaded: 10, investigate_opened: 10, procedure_shown: 10 });
     expect(rec.measured_cost_per_trial_usd).toMatchObject({ none: 0.5, told: 0.5 });
     const exported = readFileSync(join(r.w, "trials.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-    expect(exported).toHaveLength(50);
+    expect(exported).toHaveLength(103);
     expect(exported.filter((t) => t.part === "pilot").every((t) => t.exposed && t.route === "anthropic")).toBe(true);
   });
 
-  for (const capStop of ["status", "trial", "vm"] as const) {
+  test("a trial with no result.json is infra, and admission counts it as one", () => {
+    const r = work({ edit: (p) => { p.screen![92]!.noResult = true; } });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("admission: 35 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra)");
+  });
+
+  const gaps: [string, (p: Record<string, T[]>) => void, string][] = [
+    ["a planned task with no trial", (p) => { p.screen!.pop(); }, "screen: 1 of 93 planned tasks have no trial"],
+    ["a trial directory that can't be attributed", (p) => { p.pilot![3]!.noConfig = true; }, "pilot: 1 of 10 planned tasks have no trial"],
+    ["a second trial for a task", (p) => { p.screen!.push({ ...p.screen![0]! }); }, "screen: 1 tasks with more than one trial"],
+    ["a trial outside the band", (p) => { p.screen!.push({ task: "astropy__astropy-00000", reward: 0 }); }, "screen: 1 trials outside the plan"],
+    ["a screen trial in the wrong arm", (p) => { p.screen![5] = { ...p.screen![5]!, arm: "gstack", told: "investigate" }; }, "screen: 1 trials outside the plan"],
+  ];
+  for (const [what, edit, reason] of gaps) {
+    test(`${what} makes R3a incomplete and admits nothing`, () => {
+      const r = work({ edit });
+      expect(r.code).toBe(4);
+      expect(r.out).toContain(`R3 outcome: none (incomplete: ${reason}`);
+      expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+    });
+  }
+
+  test("run binds the item before its first spend: a second run, from this work dir or another, is refused", () => {
+    const w = tmp("r3-bindrun-");
+    const ledger = join(w, "r3a-screen.jsonl");
+    approve(ledger);
+    const prep = (name: string) => {
+      mkdirSync(join(w, name, "screen"), { recursive: true });
+      writeFileSync(join(w, name, "plan.json"), "{}");
+      return join(w, name);
+    };
+    const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "1", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", LEDGER_PORT: String(20000 + Math.floor(Math.random() * 20000)), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+    const run = (d: string) => Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", d], { env });
+    run(prep("a"));
+    expect(readFileSync(join(w, "a", "screen.launch-exit"), "utf8").trim()).toBe("1");
+    expect(readRows(ledger).filter((x) => x.id === "r3a-screen/vm").map((x) => x.kind)).toEqual(["reserve", "settle"]);
+    for (const d of [join(w, "a"), prep("b")]) {
+      const again = run(d);
+      expect(again.exitCode).toBe(1);
+      expect(again.stderr.toString()).toContain("r3a-screen is already bound to a run");
+    }
+    expect(existsSync(join(w, "b", "screen.launch-exit"))).toBe(false);
+    expect(readRows(ledger).filter((x) => x.kind === "reserve")).toHaveLength(1);
+  });
+
+  for (const capStop of ["status", "trial", "vm", "vm-block"] as const) {
     test("a cap refusal (" + capStop + ") makes R3a incomplete and admits nothing", () => {
       const r = work({ capStop });
       expect(r.code).toBe(4);

@@ -6,8 +6,10 @@
 //   bun quick/laneb/r3/screen.ts analyze <work dir>   env LEDGER; reads the pulled results
 // R3a is one none trial on Opus 5.5 for each of the 93 tasks and one told trial on each of 10 tasks drawn with seed
 // 20261101, every arm on claude-code-preset (GSTA-2 ruling). Both batches and their VM hours settle to item r3a-screen.
-// The item serves one run: prepare refuses a ledger that already holds a reserve or settle. A cap refusal (a VM reserve,
-// a session reserve or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing.
+// The item serves one run: prepare refuses a ledger that already holds a reserve or settle, and run binds the item before
+// its first spend by creating <LEDGER>.bound, so any later run is refused. A cap refusal (a VM block, a session reserve
+// or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing. So does a part whose
+// trials are not one per planned task: a planned task with no trial, a second trial for a task, or a stray trial.
 // Exit codes, as r3-dry.ts: 0 admission passed (R3b waits for Garry's caps), 4 incomplete, 5 saturation, 6 pilot
 // FIX-METHOD; 2 usage, 1 any other error.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -56,6 +58,21 @@ export function bindCheck(ledgerPath: string) {
   if (approval.usd_micros !== CAP_USD * 1_000_000) throw new Error(`${ledgerPath}: ${ITEM}'s cap is $${fromMicros(approval.usd_micros)}, not the prereg's $${CAP_USD}`);
   const used = rows.filter((r) => r.kind === "reserve" || r.kind === "settle");
   if (used.length) throw new Error(`${ledgerPath}: ${ITEM} already holds ${used.length} reserve or settle rows; an item serves one run (prereg section 5)`);
+}
+
+// R3a's plan is one trial per planned task on Opus 5.5 in the part's arm. A trial outside the plan, a second trial for a
+// task, or a planned task with no trial leaves the part incomplete. A trial with no reward is still a trial (infra).
+export function coverage(trials: R3Trial[], tasks: string[], arm: string): string | null {
+  const planned = new Set(tasks);
+  const stray = trials.filter((t) => !planned.has(t.task) || t.arm !== arm || t.model !== OPUS);
+  if (stray.length) return `${stray.length} trials outside the plan (${stray.slice(0, 3).map((t) => t.trial).join(", ")})`;
+  const seen = new Map<string, number>();
+  for (const t of trials) seen.set(t.task, (seen.get(t.task) ?? 0) + 1);
+  const twice = [...seen].filter(([, n]) => n > 1).map(([task]) => task);
+  if (twice.length) return `${twice.length} tasks with more than one trial (${twice.slice(0, 3).join(", ")})`;
+  const missing = tasks.filter((t) => !seen.has(t));
+  if (missing.length) return `${missing.length} of ${tasks.length} planned tasks have no trial (${missing.slice(0, 3).join(", ")})`;
+  return null;
 }
 
 export type Admission = { lines: string[]; exit: 0 | 5 | 6; admitted: string[]; r3bTasks: string[]; record: Record<string, unknown> };
@@ -118,20 +135,31 @@ function prepare(work: string) {
 function run(work: string) {
   const ledger = process.env.LEDGER ?? "";
   if (!process.env.VM_USD_PER_HOUR) throw new Error("E_USAGE set VM_USD_PER_HOUR so the VM hours settle to r3a-screen");
+  if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
+  const bound = ledger + ".bound";
+  try {
+    writeFileSync(bound, JSON.stringify({ item: ITEM, work, at: new Date().toISOString() }) + "\n", { flag: "wx" });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    throw new Error(`${ITEM} is already bound to a run (${readFileSync(bound, "utf8").trim()}); an item serves one run (prereg section 5)`);
+  }
+  bindCheck(ledger);
   for (const part of PARTS) {
     const dir = join(work, part.name);
     const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(CAP_USD)], { ...process.env, LEDGER: ledger, ITEM, VM_RESERVE_HOURS: process.env.VM_RESERVE_HOURS ?? "4" });
     writeFileSync(join(work, `${part.name}.launch-exit`), `${rc}\n`);
-    if (rc !== 0 || existsSync(join(dir, "pulled/out/cap-stop.json"))) { console.log(`${part.name}: launch exited ${rc}; the run stops here`); return; }
+    if (rc !== 0 || existsSync(join(dir, "pulled/out/cap-stop.json")) || existsSync(join(dir, "vm-cap-stop"))) { console.log(`${part.name}: launch exited ${rc}; the run stops here`); return; }
   }
 }
 
-// Why a part is incomplete, or null. A cap refusal anywhere, a launch that didn't exit 0, or a part with no pulled results.
-function stopReason(work: string, part: (typeof PARTS)[number], trials: R3Trial[]): string | null {
+// Why a part is incomplete, or null. A cap refusal anywhere, a launch that didn't exit 0, a part with no pulled results,
+// or trials that are not one per planned task.
+function stopReason(work: string, part: (typeof PARTS)[number], trials: R3Trial[], tasks: string[]): string | null {
   const dir = join(work, part.name);
   const exitFile = join(work, `${part.name}.launch-exit`);
   const rc = existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null;
   if (rc === 9) return `${ITEM} refused ${part.name}'s VM reserve`;
+  if (existsSync(join(dir, "vm-cap-stop"))) return `${part.name}: ${readFileSync(join(dir, "vm-cap-stop"), "utf8").trim()}`;
   const status = [join(dir, "pulled/out/cap-stop.json"), join(dir, "pulled/out/proxy-status-end.json")].map((p) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null)).find((s) => s?.cap_stop);
   if (status) return `${part.name}: ${status.cap_stop}`;
   const capped = trials.find((t) => t.cap_stop);
@@ -139,16 +167,22 @@ function stopReason(work: string, part: (typeof PARTS)[number], trials: R3Trial[
   if (rc === null) return `${part.name} was never launched`;
   if (rc !== 0) return `${part.name}'s launch exited ${rc}`;
   if (!existsSync(join(dir, "pulled/jobs"))) return `${part.name} has no pulled results`;
-  return null;
+  const gap = coverage(trials, tasks, part.arm.split(":")[0]!);
+  return gap ? `${part.name}: ${gap}` : null;
 }
 
 function analyze(work: string): number {
   const ledger = process.env.LEDGER ?? "";
+  if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  const band = bandIds();
+  if (JSON.stringify(plan.pilot_tasks) !== JSON.stringify(pilotTasks(band))) throw new Error(`${work}/plan.json's pilot tasks are not the seed ${PILOT.seed} draw`);
+  const planned: Record<string, string[]> = { screen: band, pilot: plan.pilot_tasks };
   const parts = PARTS.map((part) => {
     const dir = join(work, part.name);
     const sessions = join(dir, "pulled/out/proxy-sessions.jsonl");
     const trials = existsSync(join(dir, "pulled/jobs")) ? loadR3Jobs(join(dir, "pulled/jobs"), existsSync(sessions) ? readSessionRows([sessions]) : [], JSON.parse(readFileSync(join(dir, "proxy.json"), "utf8"))) : [];
-    return { part, trials, stop: stopReason(work, part, trials) };
+    return { part, trials, stop: stopReason(work, part, trials, planned[part.name]!) };
   });
   const [screen, pilot] = parts.map((p) => p.trials) as [R3Trial[], R3Trial[]];
   writeFileSync(join(work, "trials.jsonl"), parts.flatMap((p) => p.trials.map((t) => JSON.stringify({ part: p.part.name, ...t }))).join("\n") + "\n");
