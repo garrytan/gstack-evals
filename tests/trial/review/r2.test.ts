@@ -27,7 +27,7 @@ import { sourceRepo } from "./helpers.ts";
 
 const OPUS = "claude-opus-5-5";
 const STUB = join(REPO_ROOT, "tests", "adapters", "fixtures", "stub-cli.cjs");
-const MAP_FILE = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-1ea86923a861.json");
+const MAP_FILE = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
 const GATE = join(REPO_ROOT, "wiki", "plans", "2026-11-01-geva-101-r48-follow-ups-prereg", "r1-exposure.py.txt");
 const R2_PREFIX = "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed.";
 const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;

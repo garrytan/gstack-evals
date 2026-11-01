@@ -118,8 +118,8 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
   writes it, and the pass number), its total_tokens is the sum of its subagents' task_notification usage (unavailable
   when one never reported), its meter_source is reader-counter, and every other column is unavailable or blank
   (READER_ROW in readers.ts). arm.json names the map in reader_map_sha256. A run without a map writes no reader rows.
-- reader-maps/gstack-1ea86923a861.json is the map for garrytan/gstack at 1ea86923a86129d1f32828b36acfe6f91f17c8e6
-  (v1.92.37.0): Step 4.5's ten Review Army checklists and Step 4.8's Claude adversarial subagent.
+- reader-maps/gstack-77fe28c39796.json is the map for garrytan/gstack at 77fe28c39796cf5573e3d0836b83b2ee436a8f12
+  (v1.92.39.0): Step 4.5's ten Review Army checklists and Step 4.8's Claude adversarial subagent.
 - **R2's two runs** (section 5): none-r2 runs alone on its own out dir with `--item r2a-grid --spend-cap 25`, and
   gstack-full alone with `--item r2b-grid --spend-cap 325`. The first lease binds each item to its run, so a second run
   on either is refused (E_ITEM_BOUND). The R2 amendment pins the exact commands.

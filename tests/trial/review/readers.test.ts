@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { REPO_ROOT } from "../../../src/cli.ts";
 import { loadReaderMap, READER_SCOPE, readerOf, readerUsage, type ReaderMap } from "../../../src/trial/review/readers.ts";
 
-const MAP_FILE = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-1ea86923a861.json");
+const MAP_FILE = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
 const loaded = loadReaderMap(MAP_FILE) as { map: ReaderMap; sha256: string };
 const map = loaded.map;
 
@@ -27,10 +27,10 @@ describe("reader map and reader names (keyless)", () => {
     expect(readerOf("Read review/specialists/targeted.md", map)).toBe("other");
   });
 
-  // Value: protects=the map pinned to gstack 1ea86923a861: it loads, names the full commit and the ten Review Army checklists, and a malformed map is refused; fails_when=the committed map drifts from /review's names or a map may claim batched, adversarial-native or other for a checklist; why_new=R2 build (GEVA-122); seam=loadReaderMap
+  // Value: protects=the map pinned to gstack 77fe28c39796: it loads, names the full commit and the ten Review Army checklists, and a malformed map is refused; fails_when=the committed map drifts from /review's names or a map may claim batched, adversarial-native or other for a checklist; why_new=R2 build (GEVA-122); seam=loadReaderMap
   test("the committed map loads and malformed maps are refused", () => {
     expect(loaded.sha256).toBe(createHash("sha256").update(readFileSync(MAP_FILE)).digest("hex"));
-    expect(map.gstack).toEqual({ repo: "garrytan/gstack", sha: "1ea86923a86129d1f32828b36acfe6f91f17c8e6" });
+    expect(map.gstack).toEqual({ repo: "garrytan/gstack", sha: "77fe28c39796cf5573e3d0836b83b2ee436a8f12" });
     expect(Object.values(map.checklists).sort()).toEqual(["api-contract", "data-migration", "design", "maintainability", "performance", "red-team", "security", "simplification", "state-machines", "testing"]);
     const dir = mkdtempSync(join(tmpdir(), "gse-readers-"));
     const bad = (m: unknown) => {

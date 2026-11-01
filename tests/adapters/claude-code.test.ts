@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 const MODEL = "claude-haiku-5-5";
-const READER_MAP = join(import.meta.dir, "..", "..", "src", "trial", "review", "reader-maps", "gstack-1ea86923a861.json");
+const READER_MAP = join(import.meta.dir, "..", "..", "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
 
 async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void; options?: Pick<ClaudeCodeOptions, "systemPrompt" | "maxTurns" | "capStops"> } = {}) {
   const h = harness(script, { ...(o.capMicros === undefined ? {} : { capMicros: o.capMicros }), ...(o.env ? { env: o.env } : {}) });

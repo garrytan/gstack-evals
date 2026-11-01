@@ -55,7 +55,7 @@ export const REVIEW_UNITS_HELP = [
   "--allowance caps each session's spend in dollars (default: 1.6M input and 32k output tokens at the model's price). A run whose",
   "--max-turns or --allowance is off its default records a code session that either cap ends as turn_cap or allowance_stop, a",
   "coverage gap. --reader-map writes each code session's readers (the subagents it launched, named through a map pinned to",
-  "one gstack commit, such as src/trial/review/reader-maps/gstack-1ea86923a861.json) to cost.tsv as reader:<name> rows;",
+  "one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json) to cost.tsv as reader:<name> rows;",
   "every gstack arm must run the map's commit. run.json records the allowance and the map when they are set.",
 ].join("\n");
 
