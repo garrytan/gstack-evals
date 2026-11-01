@@ -3,7 +3,7 @@
 One persona for every arm, scoped to the trial: it never enters the container. In the build turn it holds shipping
 ("Not yet...") so neither arm ships before its ship turn; otherwise it picks the option the agent marked as recommended,
 or answers "Go with your recommendation." A turn that ends on a prose question gets the same answer, at most
-prose_replies_per_turn times per turn; a build-turn prose question about shipping gets no reply, since the ship turn
+prose_replies_per_turn times per turn; a build-turn closing question about shipping gets no reply, since the ship turn
 answers it. src/usersim's global guards are untouched. Every question, answer and source is logged and counted.
 """
 
@@ -64,12 +64,21 @@ class ShipUser:
         last = tail.split("\n\n")[-1]
         return bool(re.search(r"\?\s*$", tail)) or any(line.rstrip().endswith("?") for line in tail.splitlines()[-3:]) or bool(self.asks.search(last))
 
+    def question(self, text: str) -> str:
+        """The closing question asks_user fires on: the last paragraph's sentences that end in "?" and any of the last three
+        lines that ends in one, or the whole last paragraph when only the asks pattern matched."""
+        tail = (text or "").strip()[-600:]
+        last = tail.split("\n\n")[-1]
+        asked = [s for s in re.split(r"(?<=[.!?])\s+", last) if s.rstrip().endswith("?")]
+        asked += [line for line in tail.splitlines()[-3:] if line.rstrip().endswith("?")]
+        return "\n".join(asked) or (last if self.asks.search(last) else "")
+
     def prose(self, text: str):
         """The reply to a turn that ended on prose, or None when the evaluator moves on."""
         if not self.asks_user(text):
             return None
         why = None
-        if self.phase == "build" and self.ship_words.search((text or "")[-600:]):
+        if self.phase == "build" and self.ship_words.search(self.question(text)):
             why = "build_turn_ship_question"
         elif self.prose_used >= int(self.persona["prose_replies_per_turn"]):
             why = "prose_limit"

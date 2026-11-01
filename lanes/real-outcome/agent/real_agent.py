@@ -262,9 +262,10 @@ class RealAgent(lb.LanebAgent):
                 active.discard(data.get("task_id"))
             elif name in ("AssistantMessage", "UserMessage", "StreamEvent"):
                 turn_open, bg_until = True, None
-                texts = [getattr(b, "text", "") for b in getattr(message, "content", []) or [] if type(b).__name__ == "TextBlock"]
-                if name == "AssistantMessage" and texts:
-                    last_text = "\n".join(texts)
+                if name == "AssistantMessage":
+                    last_text = "\n".join(getattr(b, "text", "") for b in getattr(message, "content", []) or [] if type(b).__name__ == "TextBlock")
+                elif name == "UserMessage":
+                    last_text = ""
 
     async def run(self, instruction: str, environment, context) -> None:
         evdir = self._evaluator_dir()

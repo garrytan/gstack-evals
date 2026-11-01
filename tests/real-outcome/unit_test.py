@@ -97,6 +97,53 @@ def test_prose_questions_get_the_fallback_up_to_the_limit():
     assert u.prose("Should I open the PR as a draft?") == PERSONA["fallback"]
 
 
+def test_only_the_closing_question_is_checked_for_ship_words():
+    u = user()
+    u.start("build")
+    assert u.prose("I checked the base commit and left changes uncommitted.\n\nShould I also support streaming input?") == PERSONA["fallback"]
+    assert u.prose("Should I commit and push this now?") is None
+    events = [json.loads(line) for line in u.log_path.read_text().splitlines()]
+    assert [e["source"] for e in events if e["event"] == "prose"] == ["fallback", "build_turn_ship_question"], events
+
+
+def test_a_stale_question_before_a_tool_call_gets_no_reply():
+    import asyncio
+    import time
+
+    class TextBlock:
+        def __init__(self, text):
+            self.text = text
+
+    class ToolUseBlock:
+        pass
+
+    class AssistantMessage:
+        def __init__(self, *content):
+            self.content = list(content)
+
+    class UserMessage:
+        content = []
+
+    class ResultMessage:
+        subtype, is_error = "success", False
+
+    class Client:
+        sent = []
+
+        async def query(self, text):
+            self.sent.append(text)
+
+    async def go():
+        q = asyncio.Queue()
+        for m in (AssistantMessage(TextBlock("Should I also add docs?")), AssistantMessage(ToolUseBlock()), UserMessage(), ResultMessage()):
+            q.put_nowait(("message", m))
+        agent = types.SimpleNamespace(limits={"quiet_sec": 0.2, "bg_wait_sec": 1})
+        return await ra.RealAgent._drive(agent, Client(), q, user(), "build", "Build it.", time.time() + 3, lambda m, p: None)
+
+    end = asyncio.run(go())
+    assert end["end"] == "quiet" and Client.sent == ["Build it."], (end, Client.sent)
+
+
 def test_ship_steps_reads_tool_calls_and_their_errors():
     msgs = [
         {"content": [{"type": "tool_use", "id": "1", "name": "Skill", "input": {"skill": "ship"}}]},
