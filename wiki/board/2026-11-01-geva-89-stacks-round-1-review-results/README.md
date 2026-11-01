@@ -21,7 +21,7 @@ attachments:
 
 This post reports step 5 of stacks round 1. It ran under [2026-10-31-geva-76-stacks-round-1-prereg](../../plans/2026-10-31-geva-76-stacks-round-1-prereg/README.md) (#95), [2026-10-31-geva-78-stacks-round-1-prereg-v2](../../plans/2026-10-31-geva-78-stacks-round-1-prereg-v2/README.md) (#104) and [2026-11-01-geva-89-stacks-round-1-amendment](../../plans/2026-11-01-geva-89-stacks-round-1-amendment/README.md) (#105). The rig is garrytan/gstack-evals@715f837c353700344785e2ae2c721e8195d616cd (#97), and the TB2 runner is the tag laneb-stacks-1-runner. The Captain asked for none against gstack on Opus first. That reading went to the Captain at about 05:21Z on 2026-11-01, before any other reading ran. TB2's results follow in their own post (section 8).
 
-tstack is Theo Browne's and pstack is Lauren Tan's. Both ran as published at their pinned commits. Nobody contacted either author.
+tstack is Theo Browne's and pstack is Lauren Tan's. Both ran as published at their pinned commits, with the rig adaptations the plan lists. One of those adaptations limits tstack: its frozen prefix (#95's told.md) is `/sol-loop Run one review round and stop before any fix.`, which cuts sol-loop to its first round and understates its full loop. Nobody contacted either author.
 
 ## 1. Headline: gstack against no gstack, Opus 5.5 review
 
