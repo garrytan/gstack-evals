@@ -17,6 +17,9 @@ links:
   - GST-821
 attachments:
   - 4fc2ed0c08cc7b6e96686f79c8101efb03b95f0012b15c20609331b3eb634f69  dryrun.txt
+  - 92b67d03fce0343c217213b7572f54d87b32d4db2771b6f2702f34d59c72a6da  mdd-sim.ts.txt
+  - 88c2b8fc2eb22732d3346a2973af6d8ad85fa14ead7ced1e26af19fa08b42b8b  mdd-sim-input.json
+  - 68e102c0e957e2ed26adceb7b771be35215f7e288e4c6ae9025bd2497328d435  mdd-sim.txt
 ---
 
 # Preregistration: does told skill text tax cheap models?
@@ -83,7 +86,7 @@ All intervals are 95% percentile intervals from a task-clustered bootstrap: 10,0
 
 **T1, the replication (one test, alpha 0.05).** particle-1, placebo minus none. The verdict comes from the interval: **confirmed** if its upper end is below 0; **reversed** if its lower end is above 0; **not confirmed** otherwise. Separately, **smaller than the lead** if the lower end is above -10, which rules out a tax the size #109 saw.
 
-**T2, the length effect (family: particle-1, Haiku, DeepSeek; Holm).** placebo minus placebo-short on each model. The claim "longer told text cost model M passes" needs T2's Holm-adjusted p below 0.05 and an interval whose upper end is below 0. The reverse claim mirrors it.
+**T2, the length effect (family: particle-1, Haiku, DeepSeek; Holm).** placebo minus placebo-short on each model. The claim "longer told text cost model M passes" needs T2's Holm-adjusted p below 0.05 and an interval whose upper end is below 0. The reverse claim mirrors it. The family stays at these three models whatever happens: a model that the start rule refuses, that fails the route check, or whose told cells are under the 95% body-load gate enters Holm with p = 1.
 
 **Secondary readings, no claims.** placebo minus none on Haiku and DeepSeek; placebo-short minus none on all three; the same contrasts pooled across the three models with equal weight per model; per arm, session-cap stops (count and rate), agent timeouts, median requests per trial, first-request prompt tokens, and cost per trial and per success; the retried-trial sensitivity (section 7).
 
@@ -118,6 +121,8 @@ A trial's arm, model and task come from its Harbor config, never from its direct
 
 **Ledger.** One ledger item, `texttax-r1`, in its own file `ledger/texttax-r1.jsonl` with one approval row carrying the cap, this post's merge commit and the runner tag sha. Cap: **$75** of metered model spend through the proxy. Item 4 was funded at $50; at that cap particle-1 could run 3 replicates with a minimum detectable difference of 11.4 points against the lead's 10, which failed the admission check (section 11). The Captain (GSTA-2, 2026-11-01, under org rule R42) chose: "Item 4's cap is $75 (particle-1 at 5 replicates, Haiku at 5, DeepSeek at 2; particle-1 and Haiku run first, and DeepSeek runs after they settle)." Ubicloud VM time is reported beside the cap and counts toward the R42 approval. Open reserves left by a settle that never reached the ledger stay open, and spend is reported from the proxy files, as #109 did.
 
+**Grid check, the first step.** Before any paid call, the operating thread runs prepare-run keyless for the full grid: particle-1, Haiku and DeepSeek, each with none, placebo-short and placebo on all 37 tasks, at 5, 5 and 2 replicates (1,332 trials). It checks every cell's tar against its manifest, its told line and its trial count. If any check fails, Run T stops before the route check.
+
 **Route check, the first paid step.** The runner's smoke task, once per model, arm none, through Run T's proxy and ledger. A model that fails twice is dropped, and the results say why.
 
 **Projected spend per trial** (measured means from #109 and quick look 3; placebo-short sits between none and placebo):
@@ -132,7 +137,7 @@ Run T projects to $64.75.
 
 **Start rule, before each batch launches.** Run T's settled spend, plus its open reserves, plus 1.4 times the projected cost of the trials not yet finished in this batch and in every batch still running, must be at most $75. `runner/start-rule.ts` computes it from the ledger file and records the inputs and the result as a note row. If it fails, the batch does not launch, Run T ends incomplete, and the results report it. A cap stop is an incomplete run, never retried to change a verdict.
 
-**Order.** particle-1 and Haiku at once (start rule $70.52 of $75 on an empty ledger), then DeepSeek after both have settled. Each batch runs on its own fresh Ubicloud standard-30 VM at 12 concurrent trials with UBI_OWNER set to GEVA-106, and every VM is deleted when its batch ends. Batch controllers run detached on the operating thread's own machine with the ledger service, and that thread waits on them.
+**Order.** particle-1 and Haiku at once (start rule $70.45 of $75 at the Haiku launch, with particle-1 running, on an empty ledger), then DeepSeek after both have settled ($70.52 if both settle at projection). Each batch runs on its own fresh Ubicloud standard-30 VM at 12 concurrent trials with UBI_OWNER set to the operating thread's code, and every VM is deleted when its batch ends. Batch controllers run detached on the operating thread's own machine with the ledger service, and that thread waits on them.
 
 ## 9. Runner
 
@@ -153,11 +158,11 @@ Run at `laneb-texttax-2-runner` on 2026-11-01 with no provider keys set. The out
 1. **Arm builds.** placebo-short (and item 2's gstack-rewritten) built twice in separate processes, streaming the tars, with identical digests both times. placebo-short's body is 846 tokens with no procedural markers. prepare-run for Run T (none, placebo-short, placebo; invoke on) accepted every tar against its manifest and gave none no told line and both placebo arms `/investigate` on all 37 tasks.
 2. **What reaches the model.** The pinned claude-agent-sdk 0.2.174 drove Claude Code 2.1.312 with `laneb_agent.py`'s options, environment and `build_prompt`, through the metering proxy, a fake upstream and a recording shim, with each arm's `.claude/` as its home. Every first request carries a 136-character system field (the SDK's default), and the skill listing sits in the second message, a message with role system. Told placebo: 103,724 bytes, 65 skills listed, the `/investigate` line and the body's first 200 characters present. Told placebo-short: 68,095 bytes, the same 65 skills, the line and the body present. none: 56,380 bytes, one skill listed (plugin-authoring). GEVA-109's separate check found the same placement under the real SDK.
 3. **One lease for the run's ledger item.** On a temporary `texttax-r1` ledger at $75: one approval row, two sessions reserved and settled through the proxy at fake prices, no open reserve; a second approval row refused; a reserve past the cap refused.
-4. **Start rule.** Run T's order passes on an empty ledger at $70.52 of $75. A case past the cap ($60 settled, then DeepSeek) comes to $80.20, is refused, and writes its note row.
+4. **Start rule.** Run T's order passes: $70.45 of $75 at the Haiku launch with particle-1 running on an empty ledger, and $70.52 at the DeepSeek launch once both settle at projection. A case past the cap ($60 settled, then DeepSeek) comes to $80.20, is refused, and writes its note row.
 5. **Analysis.** Synthetic job folders hit every row of section 7 and every claim branch: confirmed, reversed, not confirmed, smaller than the lead, the 95% body-load gate, Holm, the session-cap complete-case reading and the retried-trial sensitivity. `bun test quick/laneb`: 94 pass, 1 skip, 0 fail. The quick/laneb typecheck is clean.
 6. **Route check.** The commands are printed, not run.
 
-**What the dry run did not drive.** Harbor's local smoke hung on the dry-run machine before its agent opened a proxy session, so step 2 drives the SDK and CLI directly instead of through Harbor. The Harbor path itself is the stacks tag's, which ran #109's 1,443 trials on Ubicloud VMs. Run T changes nothing on it: the invoke switch defaults to #109's behavior, and the skill map only gains a key. The route check (section 8) is the first run through Harbor on the paid path.
+**What the dry run did not drive.** Harbor's local smoke hung on the dry-run machine before its agent opened a proxy session, so step 2 drives the SDK and CLI directly instead of through Harbor. The Harbor path itself is the stacks tag's, which ran #109's 1,443 trials on Ubicloud VMs. Run T changes nothing on it: the invoke switch defaults to #109's behavior, and the skill map only gains a key. The route check (section 8) is the first run through Harbor on the paid path. The dry run's prepare-run built particle-1's three cells only; the grid check (section 8) builds every cell before any paid call.
 
 One trap the dry run found: Claude Code also loads `.claude/skills` from every parent folder of its working directory. In a trial the working folder is the task's, under no such parent, so each arm sees only its own tree.
 
@@ -175,9 +180,22 @@ Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, whic
 | 4 | 9.9 | 11.4 |
 | 5 | 8.8 | 10.2 |
 
-At the frozen counts: particle-1's T1 MDD is 8.8 points, with power about 0.89 at the lead's 10. T2's first Holm step is 10.2 points on particle-1 and Haiku and 16.2 on DeepSeek.
+At the frozen counts, this scaling gives particle-1's T1 MDD as 8.8 points, and T2's first Holm step as 10.2 points on particle-1 and Haiku and 16.2 on DeepSeek. The scaling treats all of the contrast's variance as noise between replicates, so these are lower bounds. The simulation below measures T1's MDD with task-level variance included.
 
-**Admission (the plan's C1).** The control arm has room: no-gstack passes 76% to 83% on these tasks, more than twice the MDD above the floor. T1's MDD (8.8) sits inside the 10-point claim margin, which is the lead's size and the size that would justify short variants. Admitted. At the funded $50 (3 particle-1 replicates, MDD 11.4) it was not.
+**Simulated MDD, with task-level variance** (Captain decision on #118's review, 2026-11-01). `mdd-sim.ts.txt` runs on #109's particle-1 outcomes per task (`mdd-sim-input.json`: 37 tasks x 3 replicates, rebuilt from #109's job folders; none 92 of 111 and placebo 81 of 111, which match #109's cells). The variance of the per-task differences, 670.7 points², splits by the method of moments into 160.2 between tasks, which more replicates don't shrink, and 510.5 of sampling noise within tasks at 3 replicates. The simulation keeps the 37 tasks, sets each task's true rates to #109's shrunk by those components, shifts the mean effect in 0.25-point steps, draws r replicates per arm and applies T1's rule: the upper end of the 95% task-clustered percentile interval below 0. It runs 1,000 simulated datasets x 1,000 resamples per effect size, seed 20261101, and its output is `mdd-sim.txt`. A second reading also resamples the tasks.
+
+| Replicates | Analytic, with task variance | Simulated, tasks fixed | Power at 10, tasks fixed | Simulated, tasks resampled |
+|---|---|---|---|---|
+| 3 | 11.9 | 11.6 | 0.68 | 11.8 |
+| 4 | 10.7 | 10.4 | 0.77 | 10.7 |
+| 5 | 9.9 | 9.1 | 0.88 | 9.6 |
+| 6 | 9.4 | 8.6 | 0.90 | 8.7 |
+| 7 | 9.0 | 7.9 | 0.93 | 8.7 |
+| 8 | 8.6 | 7.9 | 0.96 | 8.2 |
+
+At 5 replicates, T1's MDD is 9.1 points with the tasks fixed, as Run T runs them (9.6 with tasks resampled, 9.9 analytic), and power at the lead's 10 is 0.88. The design stays as frozen.
+
+**Admission (the plan's C1).** The control arm has room: no-gstack passes 76% to 83% on these tasks, more than twice the MDD above the floor. T1's simulated MDD (9.1 points; 9.6 with tasks resampled and 9.9 analytic) sits inside the 10-point claim margin, which is the lead's size and the size that would justify short variants. Admitted. At the funded $50 (3 particle-1 replicates, simulated MDD 11.6) it was not.
 
 **Caveat.** #109 and quick look 3 disagree on this contrast by 16 points, more than either interval allows. Something besides sampling may move between runs, such as changes at particle-1's provider. A single run can't remove that. The results report Run T beside both earlier readings and say so.
 
