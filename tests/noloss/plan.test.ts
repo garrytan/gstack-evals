@@ -113,6 +113,15 @@ describe("the sealed root and the stub (open item 1)", () => {
     expect(() => loadSuite(counted, { sealedRoot: panel.sealedRoot })).toThrow(/counts .*, not the stub's/);
   });
 
+  test("a stub's counts match the sealed suite by value, whatever their key order", () => {
+    const stub = json(panel.stubPath);
+    const reverse = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).reverse());
+    const reordered = join(tmp("noloss-stub-order-"), "planpanel-test.json");
+    writeFileSync(reordered, JSON.stringify({ ...stub, counts: reverse({ ...stub.counts, groups: reverse(stub.counts.groups) }) }, null, 2) + "\n");
+    expect(Object.keys(json(reordered).counts)).toEqual(Object.keys(stub.counts).reverse());
+    expect(loadSuite(reordered, { sealedRoot: panel.sealedRoot }).suite.id).toBe("planpanel-test");
+  });
+
   test("a public suite read from outside the repo finds its catalogs under --sealed-root, and refuses with a code without it", async () => {
     const p = planPanel(tmp("noloss-plan-public-"), { seeded: 2, decoy: 1 }, { id: "planpanel-public", visibility: "public" });
     const bare = await run(["suite", "--check", "--suite", p.suitePath]);
@@ -248,6 +257,21 @@ describe("plan judge packets (B6, open item 11)", () => {
     const blob = git("rev-parse", "HEAD:context/goals.md");
     rmSync(join(big, ".git", "objects", blob.slice(0, 2), blob.slice(2)));
     expect(() => planMaterial(big, u.head)).toThrow("cannot read context/goals.md at head " + u.head);
+  });
+
+  test("planMaterial refuses a tree over the cap before it reads a blob", () => {
+    const big = join(tmp("noloss-plan-cap-"), "clone");
+    cpSync(panel.clone, big, { recursive: true });
+    const git = (...a: string[]) => spawnSync("git", ["-C", big, ...a], { encoding: "utf8" }).stdout.trim();
+    git("checkout", "-q", "-b", "big", panel.suite.units[0]!.head);
+    writeFileSync(join(big, "a-big.md"), "x".repeat(PLAN_MATERIAL_CAP * 2));
+    writeFileSync(join(big, "z.md"), "late file\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "big");
+    const head = git("rev-parse", "HEAD");
+    const blob = git("rev-parse", "HEAD:z.md");
+    rmSync(join(big, ".git", "objects", blob.slice(0, 2), blob.slice(2)));
+    expect(() => planMaterial(big, head)).toThrow(new RegExp("^the unit tree at " + head + " is \\d+ bytes, over the plan packet's " + PLAN_MATERIAL_CAP + "$"));
   });
 
 });

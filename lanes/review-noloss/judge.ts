@@ -73,15 +73,17 @@ const gitOut = (clone: string, args: string[]): Buffer | null => {
 export function planMaterial(clone: string, head: string): PlanMaterial {
   const tree = gitOut(clone, ["rev-parse", head + "^{tree}"])?.toString("utf8").trim();
   if (!tree) blind("the --source clone " + clone + " does not hold head " + head + "; the plan packet needs the unit tree at its head");
-  const paths = (gitOut(clone, ["ls-tree", "-r", "-z", "--name-only", head]) ?? Buffer.alloc(0)).toString("utf8").split("\0").filter(Boolean).sort();
-  if (!paths.includes("plan.md")) blind("head " + head + " in " + clone + " has no plan.md");
-  let bytes = 0;
-  const files = paths.map((path) => {
+  const entries = (gitOut(clone, ["ls-tree", "-r", "-z", "-l", head]) ?? Buffer.alloc(0)).toString("utf8").split("\0").filter(Boolean).map((line) => {
+    const tab = line.indexOf("\t");
+    return { path: line.slice(tab + 1), size: Number(line.slice(0, tab).trim().split(/\s+/)[3]) || 0 };
+  }).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  if (!entries.some((e) => e.path === "plan.md")) blind("head " + head + " in " + clone + " has no plan.md");
+  const bytes = entries.reduce((sum, e) => sum + e.size, 0);
+  if (bytes > PLAN_MATERIAL_CAP) blind("the unit tree at " + head + " is " + bytes + " bytes, over the plan packet's " + PLAN_MATERIAL_CAP);
+  const files = entries.map(({ path }) => {
     const body = gitOut(clone, ["show", head + ":" + path]) ?? blind("cannot read " + path + " at head " + head + " in " + clone + " (a blob too big to read, or a broken object), so the plan packet would not carry the unit tree as it is");
-    bytes += body.length;
     return { path, text: body.includes(0) ? "[binary file, " + body.length + " bytes]" : body.toString("utf8") };
   });
-  if (bytes > PLAN_MATERIAL_CAP) blind("the unit tree at " + head + " is " + bytes + " bytes, over the plan packet's " + PLAN_MATERIAL_CAP);
   return { head, tree: tree!, plan_sha256: sha256(gitOut(clone, ["show", head + ":plan.md"])!), files };
 }
 

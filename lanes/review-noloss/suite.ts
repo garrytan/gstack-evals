@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isPlanCase, loadCatalog, type CatalogCase, type PlanStratum } from "../review-replay/catalog/catalog.ts";
+import { canonical } from "../../src/trial/cache.ts";
 
 export const LANE_DIR = import.meta.dir;
 export const REPO_ROOT = resolve(LANE_DIR, "..", "..");
@@ -317,7 +318,7 @@ export function loadSuite(idOrPath: string, o: { sealedRoot?: string | null } = 
     const s = value as Suite;
     if (s.id !== want.id || s.kind !== want.kind || s.sealed !== true) throw new SuiteError("sealed suite " + full + " is " + s.id + " (" + s.kind + ", sealed " + s.sealed + "), not the stub's " + want.id + " (" + want.kind + ", sealed)");
     const counts = stubCounts(s);
-    if (JSON.stringify(counts) !== JSON.stringify(want.counts)) throw new SuiteError("sealed suite " + full + " counts " + JSON.stringify(counts) + ", not the stub's " + JSON.stringify(want.counts));
+    if (canonical(counts) !== canonical(want.counts)) throw new SuiteError("sealed suite " + full + " counts " + JSON.stringify(counts) + ", not the stub's " + JSON.stringify(want.counts));
     const cat = catalogsDigest(s, sealedRoot);
     if (cat !== want.catalogs_sha256) throw new SuiteError("the catalogs of sealed suite " + s.id + " under " + sealedRoot + " hash to " + cat + ", not the stub's " + want.catalogs_sha256 + "; an answer key changed after the stub was committed");
   } else {
