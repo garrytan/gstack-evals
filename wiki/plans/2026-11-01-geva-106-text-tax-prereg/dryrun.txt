@@ -1,0 +1,335 @@
+dry run at 6d0e960, 2026-11-01T19:14:16Z
+== a. variants and prepare-run
+gstack-rewritten manifest matches arms/manifests/gstack-rewritten.json and .files.tsv
+placebo-short manifest matches arms/manifests/placebo-short.json and .files.tsv
+placebo-short-tokens.tsv matches
+placebo-short investigate body tokens=846 target=847
+gstack-rewritten manifest matches arms/manifests/gstack-rewritten.json and .files.tsv
+placebo-short manifest matches arms/manifests/placebo-short.json and .files.tsv
+placebo-short-tokens.tsv matches
+placebo-short investigate body tokens=846 target=847
+a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d  b1/gstack-rewritten.tar
+bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c  b1/placebo-short.tar
+a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d  b2/gstack-rewritten.tar
+bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c  b2/placebo-short.tar
+variants: both builds give the same digests
+entries of gstack.tar carrying 'Systematic debugging with root cause investigation.':
+  .claude/skills/gstack/gstack/llms.txt
+  .claude/skills/gstack/investigate/SKILL.md
+  .claude/skills/gstack/investigate/SKILL.md.tmpl
+  .claude/skills/investigate/SKILL.md
+entries of placebo.tar carrying 'Systematic debugging with root cause investigation.':
+  .claude/skills/investigate/SKILL.md
+gstack-rewritten investigate frontmatter:
+  ---
+  name: investigate
+  preamble-tier: 2
+  version: 1.0.0
+  description: "Systematic debugging with root cause investigation. Use when a task involves something that does not work as expected: a faili
+  allowed-tools:
+<work>/geva106/dryrun/run-d: 37 tasks x 20 (model, arm) cells x 1 attempts, git 6d0e960
+<work>/geva106/dryrun/run-t: 37 tasks x 3 (model, arm) cells x 5 attempts, git 6d0e960
+run-d: 37 tasks, manifest invoke=false invoke_by_arm={"none":false,"gstack":false,"gstack-rewritten":false,"placebo":false}
+  claude-haiku-5-5 none: invoke=false skill_map={}0
+  claude-haiku-5-5 gstack: invoke=false skill_map={}0
+  claude-haiku-5-5 gstack-rewritten: invoke=false skill_map={}0
+  claude-haiku-5-5 placebo: invoke=false skill_map={}0
+  particle-1 none: invoke=false skill_map={}0
+  particle-1 gstack: invoke=false skill_map={}0
+  particle-1 gstack-rewritten: invoke=false skill_map={}0
+  particle-1 placebo: invoke=false skill_map={}0
+  claude-sonnet-5-5 none: invoke=false skill_map={}0
+  claude-sonnet-5-5 gstack: invoke=false skill_map={}0
+  claude-sonnet-5-5 gstack-rewritten: invoke=false skill_map={}0
+  claude-sonnet-5-5 placebo: invoke=false skill_map={}0
+  claude-opus-5-5 none: invoke=false skill_map={}0
+  claude-opus-5-5 gstack: invoke=false skill_map={}0
+  claude-opus-5-5 gstack-rewritten: invoke=false skill_map={}0
+  claude-opus-5-5 placebo: invoke=false skill_map={}0
+  gpt-6.1-sol none: invoke=false skill_map={}0
+  gpt-6.1-sol gstack: invoke=false skill_map={}0
+  gpt-6.1-sol gstack-rewritten: invoke=false skill_map={}0
+  gpt-6.1-sol placebo: invoke=false skill_map={}0
+run-t: 37 tasks, manifest invoke=true invoke_by_arm={"none":false,"placebo-short":true,"placebo":true}
+  particle-1 none: invoke=false skill_map={}0
+  particle-1 placebo-short: invoke=true skill_map=investigate x37
+  particle-1 placebo: invoke=true skill_map=investigate x37
+== b, c. listing and told checks, one lease per run
+driver: direct. The Harbor trial stalled after 'Skipping install' with no proxy session, so runner/dryrun-direct.py drives claude-agent-sdk 0.2.174 and Claude Code 2.1.312 on the host with laneb_agent.py's options, env and build_prompt, HOME and CLAUDE_CONFIG_DIR at the arm's extracted .claude/, through the metering proxy.
+fake upstream on 127.0.0.1:8798
+ledger: serving discovery-r1 on 127.0.0.1:9911
+laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
+-- discovery-r1 arm none told=0 (0 tar)
+direct none told=0: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-953b75fd269c", "trial": "task-public__direct-none-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_token (23 s into the dry run)
+none: first request 56380 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+none: listing in messages[1].system[0]; skills listed 1 (plugin-authoring)
+none: shipped investigate description: absent
+none: rewritten investigate description: absent
+-- discovery-r1 arm placebo told=0 (0 tar)
+direct placebo told=0: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-c0b5566d0b21", "trial": "task-public__direct-placebo-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to (30 s into the dry run)
+placebo: first request 62611 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+placebo: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
+placebo: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+placebo: rewritten investigate description: absent
+-- discovery-r1 arm gstack-rewritten told=0 (4.0K tar)
+direct gstack-rewritten told=0: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-2197881485e2", "trial": "task-public__direct-gstack-rewritten-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": { (42 s into the dry run)
+gstack-rewritten: first request 62879 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+gstack-rewritten: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
+gstack-rewritten: shipped investigate description: absent
+gstack-rewritten: rewritten investigate description: messages[1].system[0], preceded by "ty dashboard. (gstack)\n- investigate: Systematic debugging with root cause investigation. "
+-- discovery-r1 arm gstack told=0 (0 tar)
+direct gstack told=0: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-38ab6b60cbe8", "trial": "task-public__direct-gstack-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_tok (73 s into the dry run)
+gstack: first request 62610 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+gstack: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
+gstack: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+gstack: rewritten investigate description: absent
+-- lease check for discovery-r1
+{"trial":"task-public__direct-none-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-placebo-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-gstack-rewritten-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-gstack-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+approval rows 1, reserves 4, settles 4
+status: cap $100, settled $0.2825, open reserves 0
+second approval: refused (approval row already present)
+reserve past the cap: refused (cap)
+ledger: serving texttax-r1 on 127.0.0.1:9911
+fake upstream on 127.0.0.1:8798
+laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
+-- texttax-r1 arm placebo told=1 (0 tar)
+direct placebo told=1: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-7f2eaea64329", "trial": "task-public__direct-placebo-1", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to (76 s into the dry run)
+placebo: first request 103724 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.cf6; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+placebo: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
+placebo: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+placebo: rewritten investigate description: absent
+placebo: told: /investigate command line present; body's first 200 characters present
+-- texttax-r1 arm placebo-short told=1 (4.0K tar)
+direct placebo-short told=1: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-f06db83816fe", "trial": "task-public__direct-placebo-short-1", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"in (78 s into the dry run)
+placebo-short: first request 68095 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.cf6; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+placebo-short: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...)
+placebo-short: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+placebo-short: rewritten investigate description: absent
+placebo-short: told: /investigate command line present; body's first 200 characters present
+-- lease check for texttax-r1
+{"trial":"task-public__direct-placebo-1","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-placebo-short-1","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+approval rows 1, reserves 2, settles 2
+status: cap $75, settled $0.14125, open reserves 0
+second approval: refused (approval row already present)
+reserve past the cap: refused (cap)
+== d. start rule
+texttax-r1 launch particle-1: settled $0.00 + 1.4 x $44.03 = $61.64 vs cap $75 -> PASS
+texttax-r1 launch claude-haiku-5-5: settled $0.00 + 1.4 x $50.32 = $70.45 vs cap $75 -> PASS
+texttax-r1 launch deepseek-v4.1-flash-1017: settled $50.32 + 1.4 x $14.43 = $70.52 vs cap $75 -> PASS
+texttax-r1 projected total $64.75
+discovery-r1 launch claude-haiku-5-5: settled $0.00 + 1.4 x $1.44 = $2.02 vs cap $100 -> PASS
+discovery-r1 launch particle-1: settled $0.00 + 1.4 x $12.77 = $17.87 vs cap $100 -> PASS
+discovery-r1 launch claude-sonnet-5-5: settled $0.00 + 1.4 x $21.13 = $29.58 vs cap $100 -> PASS
+discovery-r1 launch claude-opus-5-5: settled $21.13 + 1.4 x $23.13 = $53.50 vs cap $100 -> PASS
+discovery-r1 launch gpt-6.1-sol: settled $44.25 + 1.4 x $22.20 = $75.33 vs cap $100 -> PASS
+discovery-r1 projected total $66.45
+{"run":"texttax-r1","cap_usd":75,"settled_usd":60,"open_reserved_usd":0,"batches":[{"model":"deepseek-v4.1-flash-1017","remaining":{"none":74,"placebo-short":74,"placebo":74},"projected_usd":14.43}],"projected_usd":14.43,"margin":1.4,"bound_usd":80.202,"pass":false}
+over-cap case refused; note row: {"kind":"note","item":"texttax-r1","pass":false,"bound_usd":80.202,"cap_usd":75}
+== e. analysis on synthetic job folders
+--- run-d.json
+# Run D: untold discovery
+Listing check: passed for every arm.
+
+## m-claim
+m-claim none: graded 37, missing 0, refused 0, retried after a response 1; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 1; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim gstack: graded 36, missing 1, refused 0, retried after a response 0; eligible 100.0%; pass 50.0% [33.3%, 66.7%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.040
+m-claim gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 1 (2.7%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 45 opened of 73 trials, rate 62.2% [45.9%, 78.4%] over 37 tasks
+D1 claim: opened an untold gstack skill in 62.2% of eligible trials
+D2 (rewritten minus pooled): -2.7 [-8.1, +0.0] pp over 37 tasks, p 1.00, Holm 1.00
+D2 no claim
+Fit stratum (5 tasks, no verdict): D1 60.0% [20.0%, 100.0%], D2 +0.0 [+0.0, +0.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 22, loaded among opened 100.0%, plugin-authoring opens 0, loaded /investigate 22 (DEBUG REPORT 14; phase 14, iron_law 0, root_cause 14, hypothesis 0), skills opened {"investigate":22}
+gstack-rewritten: browse 2.7%, opened 22, loaded among opened 100.0%, plugin-authoring opens 1, loaded /investigate 22 (DEBUG REPORT 14; phase 14, iron_law 0, root_cause 14, hypothesis 0), skills opened {"investigate":22}
+placebo: browse 0.0%, opened 23, loaded among opened 100.0%, plugin-authoring opens 0, loaded /investigate 23 (DEBUG REPORT 15; phase 15, iron_law 0, root_cause 15, hypothesis 0), skills opened {"investigate":23}
+gstack minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.8 [+0.0, +8.3] pp
+gstack-rewritten minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.7 [+0.0, +8.1] pp
+placebo minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.7 [+0.0, +8.1] pp
+
+## m-zero
+m-zero none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 claim: fewer than 7.8% (95% upper bound)
+D2 (rewritten minus pooled): +73.0 [+59.5, +86.5] pp over 37 tasks, p 0.0000100, Holm 0.0000400
+D2 claim: the rewritten description raised opens by +73.0 points
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +60.0 [+20.0, +100.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten: browse 0.0%, opened 27, loaded among opened 100.0%, plugin-authoring opens 0, loaded /investigate 27 (DEBUG REPORT 18; phase 18, iron_law 0, root_cause 18, hypothesis 0), skills opened {"investigate":27}
+placebo: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+placebo minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-sparse
+m-sparse none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse gstack: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 2 opened of 74 trials, rate 2.7% [0.0%, 8.1%] over 37 tasks
+D1 claim: fewer than 8.1% (95% upper bound)
+D2 (rewritten minus pooled): -2.7 [-8.1, +0.0] pp over 37 tasks, p 1.00, Holm 1.00
+D2 no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 1, loaded among opened 100.0%, plugin-authoring opens 0, loaded /investigate 1 (DEBUG REPORT 1; phase 1, iron_law 0, root_cause 1, hypothesis 0), skills opened {"investigate":1}
+gstack-rewritten: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo: browse 0.0%, opened 1, loaded among opened 100.0%, plugin-authoring opens 0, loaded /investigate 1 (DEBUG REPORT 1; phase 1, iron_law 0, root_cause 1, hypothesis 0), skills opened {"investigate":1}
+gstack minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+placebo minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-gate
+m-gate none: graded 37, missing 0, refused 5, retried after a response 0; eligible 86.5%; pass 43.2% [27.0%, 59.5%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.046
+m-gate gstack: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-gate gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-gate placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 no claim (gate)
+D2 (rewritten minus pooled): +0.0 [+0.0, +0.0] pp over 37 tasks, p 1.00, Holm 1.00
+D2 no claim (gate)
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo: browse 0.0%, opened 0, loaded among opened n/a, plugin-authoring opens 0, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack minus none, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+gstack-rewritten minus none, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+placebo minus none, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+
+Pooled across models, equal weight (secondary): D1 16.2% [12.2%, 20.3%]; rewritten 33.1% [27.7%, 38.5%]
+Retried-trial open sensitivity: at Harbor f3a5a923 a retry deletes the first attempt's trial folder, so no first-attempt messages exist and the reading equals the primary one.
+
+Dropped by the oracle rule: dropped-task (2 trials, $0.04)
+--- run-t-confirmed.json
+# Run T: told-text tax
+Prior readings, never pooled: #109 particle-1 -10 [-18, -2], Haiku -5 [-13, +3]; quick look 3 particle-1 +6 [-2, +15], Haiku +0 [-7, +8], DeepSeek -2 [-9, +6].
+
+## particle-1
+particle-1 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+particle-1 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+particle-1 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 21.6% [8.1%, 35.1%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.093
+T1 (placebo minus none): -78.4 [-91.9, -64.9] pp over 37 tasks; verdict confirmed
+T2 (placebo minus placebo-short): -78.4 [-91.9, -64.9] pp, p 0.0000100, Holm 0.0000300; claim: longer told text cost passes
+placebo minus none: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp; retried-after-response scored 0 -78.4 [-91.9, -64.9] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass -78.4 [-91.9, -64.9] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -78.1 [-90.6, -62.5] pp; retried-after-response scored 0 -78.4 [-91.9, -64.9] pp
+
+## claude-haiku-5-5
+claude-haiku-5-5 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+claude-haiku-5-5 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+claude-haiku-5-5 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 27.0% [13.5%, 40.5%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.074
+T2 (placebo minus placebo-short): -73.0 [-86.5, -59.5] pp, p 0.0000100, Holm 0.0000300; claim: longer told text cost passes
+placebo minus none: pass -73.0 [-86.5, -59.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -75.0 [-90.6, -59.4] pp; retried-after-response scored 0 -73.0 [-86.5, -59.5] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass -73.0 [-86.5, -59.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) -75.0 [-90.6, -59.4] pp; retried-after-response scored 0 -73.0 [-86.5, -59.5] pp
+
+## deepseek-v4.1-flash-1017
+deepseek-v4.1-flash-1017 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 27.0% [13.5%, 40.5%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.074
+deepseek-v4.1-flash-1017 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 27.0% [13.5%, 40.5%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.074
+deepseek-v4.1-flash-1017 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+T2 (placebo minus placebo-short): +73.0 [+59.5, +86.5] pp, p 0.0000100, Holm 0.0000300; claim: longer told text raised passes
+placebo minus none: pass +73.0 [+59.5, +86.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +75.0 [+59.4, +90.6] pp; retried-after-response scored 0 +73.0 [+59.5, +86.5] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +73.0 [+59.5, +86.5] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +75.0 [+59.4, +90.6] pp; retried-after-response scored 0 +73.0 [+59.5, +86.5] pp
+Pooled across models, equal weight (secondary): placebo minus none -26.1 [-30.6, -21.6] pp
+Pooled across models, equal weight (secondary): placebo-short minus none +0.0 [+0.0, +0.0] pp
+Pooled across models, equal weight (secondary): placebo minus placebo-short -26.1 [-30.6, -21.6] pp
+--- run-t-not-confirmed.json
+# Run T: told-text tax
+Prior readings, never pooled: #109 particle-1 -10 [-18, -2], Haiku -5 [-13, +3]; quick look 3 particle-1 +6 [-2, +15], Haiku +0 [-7, +8], DeepSeek -2 [-9, +6].
+
+## particle-1
+particle-1 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+particle-1 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+particle-1 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+T1 (placebo minus none): +0.0 [-8.1, +8.1] pp over 37 tasks; verdict not confirmed, smaller than the lead
+T2 (placebo minus placebo-short): +0.0 [-8.1, +8.1] pp, p 1.00, Holm 1.00; no claim
+placebo minus none: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
+
+## claude-haiku-5-5
+claude-haiku-5-5 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+claude-haiku-5-5 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+claude-haiku-5-5 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+T2 (placebo minus placebo-short): +0.0 [-8.1, +8.1] pp, p 1.00, Holm 1.00; no claim
+placebo minus none: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
+
+## deepseek-v4.1-flash-1017
+deepseek-v4.1-flash-1017 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+deepseek-v4.1-flash-1017 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+deepseek-v4.1-flash-1017 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+T2 (placebo minus placebo-short): +0.0 [-8.1, +8.1] pp, p 1.00, Holm 1.00; no claim
+placebo minus none: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [-8.1, +8.1] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [-9.4, +9.4] pp; retried-after-response scored 0 +0.0 [-8.1, +8.1] pp
+Pooled across models, equal weight (secondary): placebo minus none +0.0 [-8.1, +8.1] pp
+Pooled across models, equal weight (secondary): placebo-short minus none +0.0 [+0.0, +0.0] pp
+Pooled across models, equal weight (secondary): placebo minus placebo-short +0.0 [-8.1, +8.1] pp
+--- run-t-reversed.json
+# Run T: told-text tax
+Prior readings, never pooled: #109 particle-1 -10 [-18, -2], Haiku -5 [-13, +3]; quick look 3 particle-1 +6 [-2, +15], Haiku +0 [-7, +8], DeepSeek -2 [-9, +6].
+
+## particle-1
+particle-1 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 35.1% [21.6%, 51.4%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.057
+particle-1 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+particle-1 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 100.0% [100.0%, 100.0%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.020
+T1 (placebo minus none): +64.9 [+48.6, +78.4] pp over 37 tasks; verdict reversed, smaller than the lead
+T2 (placebo minus placebo-short): +0.0 [+0.0, +0.0] pp, p 1.00, Holm 1.00; no claim
+placebo minus none: pass +64.9 [+48.6, +78.4] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +75.0 [+59.4, +90.6] pp; retried-after-response scored 0 +64.9 [+48.6, +78.4] pp
+placebo-short minus none: pass +64.9 [+48.6, +78.4] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +64.9 [+48.6, +78.4] pp; retried-after-response scored 0 +64.9 [+48.6, +78.4] pp
+placebo minus placebo-short: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+
+## claude-haiku-5-5
+claude-haiku-5-5 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+claude-haiku-5-5 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+claude-haiku-5-5 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+T2 (placebo minus placebo-short): +0.0 [+0.0, +0.0] pp, p 1.00, Holm 1.00; no claim
+placebo minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+
+## deepseek-v4.1-flash-1017
+deepseek-v4.1-flash-1017 none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+deepseek-v4.1-flash-1017 placebo-short: graded 37, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+deepseek-v4.1-flash-1017 placebo: graded 37, missing 0, refused 0, retried after a response 0; body load 89.2%; pass 48.6% [32.4%, 64.9%]; session-cap stops 5 (13.5%), agent timeouts 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+Gate: body load under 95% in placebo; flagged, no T1 or T2 claim from it.
+T2 (placebo minus placebo-short): +0.0 [+0.0, +0.0] pp, p 1.00, Holm 1.00; no claim (gate)
+placebo minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo-short minus none: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+placebo minus placebo-short: pass +0.0 [+0.0, +0.0] pp; session-cap stop rate +13.5 [+2.7, +24.3] pp; complete case (descriptive) +0.0 [+0.0, +0.0] pp; retried-after-response scored 0 +0.0 [+0.0, +0.0] pp
+Pooled across models, equal weight (secondary): placebo minus none +21.6 [+16.2, +26.1] pp
+Pooled across models, equal weight (secondary): placebo-short minus none +21.6 [+16.2, +26.1] pp
+Pooled across models, equal weight (secondary): placebo minus placebo-short +0.0 [+0.0, +0.0] pp
+== f. MDD
+Run D MDD, 37 tasks, r = 1: 1000 simulated datasets x 1000 bootstrap resamples per power value (D2 also 1000 sign-flip draws), seed 20261101
+| Reading | Opens | Shipped rate | Per-trial open probability at 80% power | Difference | Power there |
+|---|---|---|---|---|---|
+| D1 | uniform | - | 7.4% | - | 79.9% |
+| D1 | 30% of tasks | - | 7.6% | - | 81.1% |
+| D2 | uniform | 0.0% | 26.8% | 26.8% | 77.6% |
+| D2 | 30% of tasks | 0.0% | 24.0% | 24.0% | 80.3% |
+| D2 | uniform | 2.0% | 29.7% | 27.7% | 78.5% |
+| D2 | 30% of tasks | 2.0% | 26.5% | 24.5% | 81.6% |
+ Run T analytic check (points): | r | MDD 2.8 x 4.08 x sqrt(3/r) | T2 first Holm step (2.394 + 0.842) x 4.08 x sqrt(3/r) | |---|---|---|
+| 1 | 19.8 | 22.9 |
+| 2 | 14.0 | 16.2 |
+| 3 | 11.4 | 13.2 |
+| 4 | 9.9 | 11.4 |
+| 5 | 8.8 | 10.2 |
+== g. route-check commands (not run)
+PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain-drive>/ledger/discovery-r1.jsonl MODELS='claude-haiku-5-5 particle-1 claude-sonnet-5-5 claude-opus-5-5 gpt-6.1-sol' OUT=<work>/geva106/route-d quick/laneb/runner/route-check.sh
+PREREG=<merge sha> ITEM=texttax-r1 LEDGER=<captain-drive>/ledger/texttax-r1.jsonl MODELS='particle-1 claude-haiku-5-5 deepseek-v4.1-flash-1017' OUT=<work>/geva106/route-t quick/laneb/runner/route-check.sh
