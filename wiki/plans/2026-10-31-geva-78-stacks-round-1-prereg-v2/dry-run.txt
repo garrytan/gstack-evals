@@ -1,0 +1,1312 @@
+## Pins
+
+$ git -C $R log -1 --format=rig %H %s
+rig 715f837c353700344785e2ae2c721e8195d616cd Stacks round 1 step 5a fixes: judge-run retries, flag-scan rules, impact binding, secondary guards (GST-517) (#97)
+exit 0 (log/1.txt)
+
+$ sh -c git -C $R status --porcelain | wc -l
+0
+exit 0 (log/2.txt)
+
+$ bash -c cd $R && bun -e 'import { recipeHash } from "./src/rig/recipe.ts"; console.log("trial image recipe " + recipeHash())'
+trial image recipe e742c72a07d63feb3e16e7fe5eb20613cb1d39a0a438e8e469ebdaa000a396c7
+exit 0 (log/3.txt)
+
+$ bash -c cd $R && sha256sum lanes/review-noloss/{cli,contract,derive,flag-scan,ingest,judge,judge-run,score,secondary,stats,suite,verdict}.ts quick/laneb/analysis/{analyze,model-contrast,stacks-tb2}.ts
+f80a49f63ac8e2702cc1022ce9f179630d3de73890e9c3fb3e985776a69e6e7c  lanes/review-noloss/cli.ts
+80643f45aee68b32a96fa72d9b105baf5c0e407f21b835287e57df509e8a3b84  lanes/review-noloss/contract.ts
+d00282c301e858f244d4371625fee8e8954b22ca9a1ee384a07586237c347f8f  lanes/review-noloss/derive.ts
+8598b3ec5a5efb0a2ec6d2e5193b8f7b765e53c569687631eb356df7913f89d0  lanes/review-noloss/flag-scan.ts
+03f0588b5701c3879336030ca132992f1e4bc35992d2768683b4358a90dda290  lanes/review-noloss/ingest.ts
+c109c427726a8c865e7359b2a79fa99420a199b8cabddb6ae6728801ddeb8f0e  lanes/review-noloss/judge.ts
+62d3a0b57def19ef7db33d9212a8bf0b9ed915fa3becf33c53e476a40ddb808d  lanes/review-noloss/judge-run.ts
+9810ce57f7a130cd78e55edf877c84b634bf8174ec26d01f2875f321e610ec0c  lanes/review-noloss/score.ts
+30cc00b77c0ea731d46b345e79d201b9cc3360427175c9e12b2d9201aac7f9ce  lanes/review-noloss/secondary.ts
+a3af288f6f8f7b1326534b8f9962a81746ad8a6f8dc9577277f1181b688f5fbd  lanes/review-noloss/stats.ts
+3799355ee2f0f4922c03ffed4df78d92b3159c4946e5f4cf3d3a048f6ce7357b  lanes/review-noloss/suite.ts
+5074311f40a7994383450aa3c028417bded431415654d06e3999057724dfd2aa  lanes/review-noloss/verdict.ts
+6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d  quick/laneb/analysis/analyze.ts
+9fbeedd3c07e2191e9436bdce91f1868fd1bae385d0de8d47d8eca97ee8d49d9  quick/laneb/analysis/model-contrast.ts
+1fd4a7feed14730f47978d756612fa67de3c9b200c18a7a08c4de1a1639e1590  quick/laneb/analysis/stacks-tb2.ts
+exit 0 (log/4.txt)
+
+$ sh -c cd $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg && sha256sum stacks-r1.json comparisons.stacks-r1.json comparisons.stacks-r1.opus.json severity-map.json contamination.tsv judge-brief.md labels.tsv unit-tests.tsv && cd $D && sha256sum severity-map.*.json
+4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d  stacks-r1.json
+a880a3acdd5337005aeb6fed965b9e3f0721b7d487f512d7875dccb6e83034b6  comparisons.stacks-r1.json
+f1669e4d47a2be5c1d148318d222ec495644bdb3bf542c73263b791f8b6e1a1f  comparisons.stacks-r1.opus.json
+8bcbc928de440bcbdb49434b523a33d27130e20c5b7b0865e3102998a23fbbc6  severity-map.json
+da8b365d2619f4247a980c84996f5bc1d2bf0d5310e079b699dccb34353ccc5a  contamination.tsv
+ef33d5ca0f802e49e18d1f3e4b16f989bcbd48fa4c46f339bc0533dfb1364427  judge-brief.md
+89a4b74fa6d3fe1bb8c6051e6f8298b3aed679e1ef138bb6218c71f09b1fb13e  labels.tsv
+f0db89361be79d418b9920c17c0bec3768a3e495812b2b088edb72c77ed5e500  unit-tests.tsv
+ddfd6eaffa35bafd3797415d02837a85f35994684c860b54acc17a82f02f42f0  severity-map.pstack-high-medium.json
+611cbf8c9ae0b60e889b21d5889933b37b48e2c84864623ec7dbc609b1213fcc  severity-map.pstack-high.json
+1a4ea8a89ef0f900b228ef1b935b4e2e96cc530559a92eda98d74abcbab953b7  severity-map.tstack-should.json
+exit 0 (log/5.txt)
+
+## Fixtures
+
+$ bun $W/fixtures.ts $W $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/contamination.tsv $W/final.json $R/wiki/board/2026-10-30-gsta-30-laneb-quick-3-results/analysis-config.md
+fixtures: 7 raw arms on stacks-r1 (33 units), flag-scan run dir with planted reads on garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, 1560 TB2 trials, 2 judge items
+exit 0 (log/6.txt)
+
+## Judging: matching batch (sections 3 and 7)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/none-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/7.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/gstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/8.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/pstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/9.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/tstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/10.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/none-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/11.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/gstack-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/12.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/src/pstack-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/raw
+exit 0 (log/13.txt)
+
+$ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/raw/stacks-r1/none-opus --arm $W/raw/stacks-r1/gstack-opus --arm $W/raw/stacks-r1/pstack-opus --arm $W/raw/stacks-r1/tstack-opus --arm $W/raw/stacks-r1/none-particle-1 --arm $W/raw/stacks-r1/gstack-particle-1 --arm $W/raw/stacks-r1/pstack-particle-1 --seed 20261031 --out $W/match --key $W/match-key.json
+judge-packet: batch ab40a30bd33f8a387cdf5876071028de98bb21f4194ff2887e676150379ecbc5, 33 packets, 464 findings from 7 arms; the key is outside the packets
+exit 0 (log/14.txt)
+
+$ $R/bin/gstack-evals noloss judge-run --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/match --key $W/match-key.json --arm $W/raw/stacks-r1/none-opus --arm $W/raw/stacks-r1/gstack-opus --arm $W/raw/stacks-r1/pstack-opus --arm $W/raw/stacks-r1/tstack-opus --arm $W/raw/stacks-r1/none-particle-1 --arm $W/raw/stacks-r1/gstack-particle-1 --arm $W/raw/stacks-r1/pstack-particle-1 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record --item stacks-r1-review-judge-match --out $W/judge-match --dry-run
+worst case: primary $38.45658 on 33 packets; second up to $20.086764 and third up to $19.228686 if they read every packet; $77.77203 in all, $155.54406 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+item stacks-r1-review-judge-match: cap $90.00, $0.00 committed, $90.00 left; the worst case $77.77203 fits, and asked again $155.54406 does not fit. The cap stops the run wherever it falls.
+exit 0 (log/15.txt)
+
+$ bun $W/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/match --key $W/match-key.json --arm $W/raw/stacks-r1/none-opus --arm $W/raw/stacks-r1/gstack-opus --arm $W/raw/stacks-r1/pstack-opus --arm $W/raw/stacks-r1/tstack-opus --arm $W/raw/stacks-r1/none-particle-1 --arm $W/raw/stacks-r1/gstack-particle-1 --arm $W/raw/stacks-r1/pstack-particle-1 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record --item stacks-r1-review-judge-match --out $W/judge-match --concurrency 4
+judge-run: batch ab40a30bd33f8a387cdf5876071028de98bb21f4194ff2887e676150379ecbc5, 80 requests; primary answered 33 packets, second 33, third 14; 0 unjudged; files in $W/judge-match
+next: gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/match-key.json --reply $W/judge-match/primary.json --second $W/judge-match/second.json --third $W/judge-match/third.json --arm $W/raw/stacks-r1/none-opus --arm $W/raw/stacks-r1/gstack-opus --arm $W/raw/stacks-r1/pstack-opus --arm $W/raw/stacks-r1/tstack-opus --arm $W/raw/stacks-r1/none-particle-1 --arm $W/raw/stacks-r1/gstack-particle-1 --arm $W/raw/stacks-r1/pstack-particle-1 --out $W/judge-match/joined
+exit 0 (log/16.txt)
+
+$ jq -c {state, models, unjudged, files: (.files | keys)} $W/judge-match/run.json
+{"state":"finished","models":{"primary":"anthropic/claude-opus-5-5","second":"openai/gpt-6.1-sol","third":"anthropic/claude-sonnet-5-5"},"unjudged":0,"files":["impact.tsv","primary.json","raw/primary/1808.1.txt","raw/primary/3381.1.txt","raw/primary/3431.1.txt","raw/primary/3448.1.txt","raw/primary/3475.1.txt","raw/primary/3494.1.txt","raw/primary/3507.1.txt","raw/primary/3516@3712b7971126.1.txt","raw/primary/3516@ee73419c3295.1.txt","raw/primary/3524.1.txt","raw/primary/3526.1.txt","raw/primary/3527.1.txt","raw/primary/3534.1.txt","raw/primary/3540.1.txt","raw/primary/3545.1.txt","raw/primary/3556.1.txt","raw/primary/3557.1.txt","raw/primary/3564.1.txt","raw/primary/3567.1.txt","raw/primary/3573.1.txt","raw/primary/3578.1.txt","raw/primary/3583.1.txt","raw/primary/3593.1.txt","raw/primary/3596.1.txt","raw/primary/7511.1.txt","raw/primary/7674.1.txt","raw/primary/7684.1.txt","raw/primary/7789.1.txt","raw/primary/7794.1.txt","raw/primary/7872.1.txt","raw/primary/7878.1.txt","raw/primary/7884.1.txt","raw/primary/7901.1.txt","raw/second/1808.1.txt","raw/second/3381.1.txt","raw/second/3431.1.txt","raw/second/3448.1.txt","raw/second/3475.1.txt","raw/second/3494.1.txt","raw/second/3507.1.txt","raw/second/3516@3712b7971126.1.txt","raw/second/3516@ee73419c3295.1.txt","raw/second/3524.1.txt","raw/second/3526.1.txt","raw/second/3527.1.txt","raw/second/3534.1.txt","raw/second/3540.1.txt","raw/second/3545.1.txt","raw/second/3556.1.txt","raw/second/3557.1.txt","raw/second/3564.1.txt","raw/second/3567.1.txt","raw/second/3573.1.txt","raw/second/3578.1.txt","raw/second/3583.1.txt","raw/second/3593.1.txt","raw/second/3596.1.txt","raw/second/7511.1.txt","raw/second/7674.1.txt","raw/second/7684.1.txt","raw/second/7789.1.txt","raw/second/7794.1.txt","raw/second/7872.1.txt","raw/second/7878.1.txt","raw/second/7884.1.txt","raw/second/7901.1.txt","raw/third/1808.1.txt","raw/third/3431.1.txt","raw/third/3475.1.txt","raw/third/3516@3712b7971126.1.txt","raw/third/3527.1.txt","raw/third/3534.1.txt","raw/third/3545.1.txt","raw/third/3556.1.txt","raw/third/3567.1.txt","raw/third/3578.1.txt","raw/third/3596.1.txt","raw/third/7684.1.txt","raw/third/7794.1.txt","raw/third/7901.1.txt","second.json","third.json"]}
+exit 0 (log/17.txt)
+
+$ sh -c echo impact.tsv rows: $(tail -n +2 $W/judge-match/impact.tsv | wc -l); echo reply files naming impact: $(grep -l impact $W/judge-match/primary.json $W/judge-match/second.json $W/judge-match/third.json | wc -l)
+impact.tsv rows: 1141
+reply files naming impact: 0
+exit 0 (log/18.txt)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/match-key.json --reply $W/judge-match/primary.json --second $W/judge-match/second.json --third $W/judge-match/third.json --arm $W/raw/stacks-r1/none-opus --arm $W/raw/stacks-r1/gstack-opus --arm $W/raw/stacks-r1/pstack-opus --arm $W/raw/stacks-r1/tstack-opus --arm $W/raw/stacks-r1/none-particle-1 --arm $W/raw/stacks-r1/gstack-particle-1 --arm $W/raw/stacks-r1/pstack-particle-1 --out $W/judge-match/joined
+judge-join: batch ab40a30bd33f8a387cdf5876071028de98bb21f4194ff2887e676150379ecbc5, wrote judgments for none-opus, gstack-opus, pstack-opus, tstack-opus, none-particle-1, gstack-particle-1, pstack-particle-1 under $W/judge-match/joined; second judge on 48 blockers (kappa 0.7377), third read on 14. Ingest each arm with noloss ingest.
+exit 0 (log/19.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/none-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/20.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/gstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/21.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/pstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/22.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/tstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/23.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/none-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/24.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/gstack-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/25.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-match/joined/pstack-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/judged
+exit 0 (log/26.txt)
+
+## Judging: adjudication batch with evidence sheets (section 7)
+
+$ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/judged/stacks-r1/none-opus --arm $W/judged/stacks-r1/gstack-opus --arm $W/judged/stacks-r1/pstack-opus --arm $W/judged/stacks-r1/tstack-opus --arm $W/judged/stacks-r1/none-particle-1 --arm $W/judged/stacks-r1/gstack-particle-1 --arm $W/judged/stacks-r1/pstack-particle-1 --seed 20261031 --out $W/adj --key $W/adj-key.json --adjudicate
+judge-packet: batch 4ac931dbc9b14013aadc24d3c40a9ad2124906f911db35b475b94cd972c36b35, 33 packets, 208 findings from 7 arms; the key is outside the packets
+exit 0 (log/27.txt)
+
+$ $R/bin/gstack-evals noloss judge-run --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/adj --key $W/adj-key.json --arm $W/judged/stacks-r1/none-opus --arm $W/judged/stacks-r1/gstack-opus --arm $W/judged/stacks-r1/pstack-opus --arm $W/judged/stacks-r1/tstack-opus --arm $W/judged/stacks-r1/none-particle-1 --arm $W/judged/stacks-r1/gstack-particle-1 --arm $W/judged/stacks-r1/pstack-particle-1 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record --source garrytan/gstack=$SRC/gstack --source garrytan/gbrain=$SRC/gbrain --item stacks-r1-review-judge-adjudicate --out $W/judge-adj --dry-run
+worst case: primary $48.544332 on 33 packets; second up to $26.391624 and third up to $24.272562 if they read every packet; $99.208518 in all, $198.417036 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+item stacks-r1-review-judge-adjudicate: cap $110.00, $0.00 committed, $110.00 left; the worst case $99.208518 fits, and asked again $198.417036 does not fit. The cap stops the run wherever it falls.
+exit 0 (log/28.txt)
+
+# #95's single judge item: the matching run bound it, so a second judge-run on it is refused.
+
+$ bun $W/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/adj --key $W/adj-key.json --arm $W/judged/stacks-r1/none-opus --arm $W/judged/stacks-r1/gstack-opus --arm $W/judged/stacks-r1/pstack-opus --arm $W/judged/stacks-r1/tstack-opus --arm $W/judged/stacks-r1/none-particle-1 --arm $W/judged/stacks-r1/gstack-particle-1 --arm $W/judged/stacks-r1/pstack-particle-1 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record --source garrytan/gstack=$SRC/gstack --source garrytan/gbrain=$SRC/gbrain --item stacks-r1-review-judge-match --out $W/judge-adj-on-match-item
+E_ITEM_BOUND: noloss judge-run: line item stacks-r1-review-judge-match is bound to run judge-d8cfa2b46eda, so run judge-cace87965fb1 cannot spend from it
+exit 2 (log/29.txt)
+
+$ bun $W/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/adj --key $W/adj-key.json --arm $W/judged/stacks-r1/none-opus --arm $W/judged/stacks-r1/gstack-opus --arm $W/judged/stacks-r1/pstack-opus --arm $W/judged/stacks-r1/tstack-opus --arm $W/judged/stacks-r1/none-particle-1 --arm $W/judged/stacks-r1/gstack-particle-1 --arm $W/judged/stacks-r1/pstack-particle-1 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record $W/record --source garrytan/gstack=$SRC/gstack --source garrytan/gbrain=$SRC/gbrain --item stacks-r1-review-judge-adjudicate --out $W/judge-adj --concurrency 4
+unverifiable not-defect rulings, arm none-opus: 7, 0.1094 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm gstack-opus: 7, 0.1094 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm pstack-opus: 7, 0.1094 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm tstack-opus: 4, 0.0625 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm none-particle-1: 1, 0.0313 per PR cluster per pass (1 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm gstack-particle-1: 2, 0.0625 per PR cluster per pass (1 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm pstack-particle-1: 2, 0.0625 per PR cluster per pass (1 passes, 32 PR clusters)
+judge-run: batch 4ac931dbc9b14013aadc24d3c40a9ad2124906f911db35b475b94cd972c36b35, 92 requests; primary answered 33 packets, second 33, third 26; 0 unjudged; files in $W/judge-adj
+next: gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/adj-key.json --reply $W/judge-adj/primary.json --second $W/judge-adj/second.json --third $W/judge-adj/third.json --arm $W/judged/stacks-r1/none-opus --arm $W/judged/stacks-r1/gstack-opus --arm $W/judged/stacks-r1/pstack-opus --arm $W/judged/stacks-r1/tstack-opus --arm $W/judged/stacks-r1/none-particle-1 --arm $W/judged/stacks-r1/gstack-particle-1 --arm $W/judged/stacks-r1/pstack-particle-1 --out $W/judge-adj/joined
+exit 0 (log/30.txt)
+
+$ sh -c ls $W/judge-adj/sheets 2>/dev/null | head -3; head -3 $W/judge-adj/verifiable.tsv; cat $W/judge-adj/unverifiable.tsv | head -5
+1808.json
+3381.json
+3431.json
+packet	opaque	judge	verifiable	batch	finding_sha256
+packets/3593.json	F1	anthropic/claude-opus-5-5	true	4ac931dbc9b14013aadc24d3c40a9ad2124906f911db35b475b94cd972c36b35	1af32101daf8671f36fb1ddd47366af8c30409be0d0b6815d0afcb5db0a1bc1b
+packets/3593.json	F2	anthropic/claude-opus-5-5	true	4ac931dbc9b14013aadc24d3c40a9ad2124906f911db35b475b94cd972c36b35	475b7642a977529f11b3df5ba93bb7a04be866a8fd879210f9163ae056dfd077
+arm	unit	pass	finding	judges
+tstack-opus	3593	2	x0-p2	anthropic/claude-opus-5-5,openai/gpt-6.1-sol,anthropic/claude-sonnet-5-5
+none-opus	3596	2	x0-p2	anthropic/claude-opus-5-5,openai/gpt-6.1-sol
+gstack-opus	3524	1	x0-p1	anthropic/claude-opus-5-5,openai/gpt-6.1-sol
+gstack-particle-1	3527	1	x0-p1	anthropic/claude-opus-5-5,openai/gpt-6.1-sol
+exit 0 (log/31.txt)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/adj-key.json --reply $W/judge-adj/primary.json --second $W/judge-adj/second.json --third $W/judge-adj/third.json --arm $W/judged/stacks-r1/none-opus --arm $W/judged/stacks-r1/gstack-opus --arm $W/judged/stacks-r1/pstack-opus --arm $W/judged/stacks-r1/tstack-opus --arm $W/judged/stacks-r1/none-particle-1 --arm $W/judged/stacks-r1/gstack-particle-1 --arm $W/judged/stacks-r1/pstack-particle-1 --out $W/judge-adj/joined
+judge-join: batch 4ac931dbc9b14013aadc24d3c40a9ad2124906f911db35b475b94cd972c36b35, wrote adjudication.tsv for none-opus, gstack-opus, pstack-opus, tstack-opus, none-particle-1, gstack-particle-1, pstack-particle-1 under $W/judge-adj/joined; second judge on 156 blockers (kappa 0.4028), third read on 26. Ingest each arm with noloss ingest.
+exit 0 (log/32.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/none-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/33.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/gstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/34.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/pstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/35.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/tstack-opus --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/36.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/none-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/37.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/gstack-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/38.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/judge-adj/joined/pstack-particle-1 --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms
+exit 0 (log/39.txt)
+
+## Primary family and secondaries (section 6), all seven arms
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant pstack-opus --reference gstack-opus --out $W/final/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 51.2% vs 64.3%, delta -13.1 points [95% CI -28.2, 4.5]; 17 losses, 9 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.652 (Holm 1.000 over 11), p loss 0.099 (Holm 0.397, step 1 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: pstack-opus 0.53, gstack-opus 0.47, difference +0.06 [95% CI -0.20, +0.31] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/40.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant tstack-opus --reference gstack-opus --out $W/final/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 64.3%, delta -16.7 points [95% CI -29.5, -2.7]; 17 losses, 7 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.827 (Holm n/a over 11), p loss 0.028 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/41.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant gstack-opus --reference pstack-opus --out $W/final/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 64.3% vs 51.2%, delta 13.1 points [95% CI -4.5, 28.2]; 9 losses, 17 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.012 (Holm 0.107 over 11), p loss 0.940 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.53, difference -0.06 [95% CI -0.31, +0.20] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/42.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant gstack-opus --reference tstack-opus --out $W/final/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.3% vs 47.6%, delta 16.7 points [95% CI 2.7, 29.5]; 7 losses, 17 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.0017 (Holm n/a over 11), p loss 0.988 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/43.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant gstack-opus --reference none-opus --out $W/final/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 29.8%, delta 34.5 points [95% CI 22.2, 46.6]; 2 losses, 24 gains on 42 blockers in 26 PRs (15 discordant). p non-inferior 0.0 (Holm 0.0 over 11), p loss 1.000 (minimum reachable 0.000031).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/44.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant pstack-opus --reference none-opus --out $W/final/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 51.2% vs 29.8%, delta 21.4 points [95% CI 7.1, 36.8]; 9 losses, 21 gains on 42 blockers in 26 PRs (19 discordant). p non-inferior 0.00023 (Holm 0.0023 over 11), p loss 0.998 (minimum reachable 0.0000019).
+false blockers per PR: pstack-opus 0.53, none-opus 0.53, difference 0.00 [95% CI -0.23, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/45.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant tstack-opus --reference none-opus --out $W/final/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 29.8%, delta 17.9 points [95% CI 2.2, 33.7]; 8 losses, 21 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.0015 (Holm n/a over 11), p loss 0.987 (minimum reachable 4.8e-7).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/46.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/final/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.4% vs 23.8%, delta -2.4 points [95% CI -16.3, 11.9]; 8 losses, 7 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.151 (Holm 0.951 over 11), p loss 0.500 (minimum reachable 0.016).
+false blockers per PR: pstack-particle-1 0.38, gstack-particle-1 0.34, difference +0.03 [95% CI -0.22, +0.31] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/47.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/final/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 21.4%, delta 2.4 points [95% CI -11.9, 16.3]; 7 losses, 8 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.067 (Holm 0.535 over 11), p loss 0.734 (minimum reachable 0.016).
+false blockers per PR: gstack-particle-1 0.34, pstack-particle-1 0.38, difference -0.03 [95% CI -0.31, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/48.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant gstack-particle-1 --reference none-particle-1 --out $W/final/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 21.4%, delta 2.4 points [95% CI -18.4, 19.6]; 8 losses, 9 gains on 42 blockers in 26 PRs (14 discordant). p non-inferior 0.136 (Holm 0.951 over 11), p loss 0.683 (minimum reachable 0.000061).
+false blockers per PR: gstack-particle-1 0.34, none-particle-1 0.38, difference -0.03 [95% CI -0.25, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/49.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant pstack-particle-1 --reference none-particle-1 --out $W/final/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.4% vs 21.4%, delta 0.0 points [95% CI -19.1, 18.0]; 7 losses, 7 gains on 42 blockers in 26 PRs (13 discordant). p non-inferior 0.175 (Holm 0.951 over 11), p loss 0.597 (minimum reachable 0.00012).
+false blockers per PR: pstack-particle-1 0.38, none-particle-1 0.38, difference 0.00 [95% CI -0.25, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000031); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/50.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant tstack-opus --reference gstack-opus --expect NO_VERDICT
+verdict: none
+exit 0 (log/51.txt)
+
+## Particle-1 drop (section 9): the Opus arms only
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --variant pstack-opus --reference gstack-opus
+E_NOLOSS_ARM arm pstack-particle-1 is not ingested for suite stacks-r1
+E_NOLOSS_ARM context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_NOLOSS_ARM fix: Each line names the file, row and field and how to fix that row. Fix the source arm (ingest never edits it) and run ingest --check again. For a scan hit in a finding, --digest-only <id> publishes only its digest; to replace a published arm, pass --replace with the reason.
+E_NOLOSS_ARM docs: docs/errors.md#e_noloss_arm
+exit 2 (log/52.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant pstack-opus --reference gstack-opus --out $W/opus/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 51.2% vs 64.3%, delta -13.1 points [95% CI -28.2, 4.5]; 17 losses, 9 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.652 (Holm 1.000 over 7), p loss 0.099 (Holm 0.397, step 1 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: pstack-opus 0.53, gstack-opus 0.47, difference +0.06 [95% CI -0.20, +0.31] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/53.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant tstack-opus --reference gstack-opus --out $W/opus/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 64.3%, delta -16.7 points [95% CI -29.5, -2.7]; 17 losses, 7 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.827 (Holm n/a over 7), p loss 0.028 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/54.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant gstack-opus --reference pstack-opus --out $W/opus/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 64.3% vs 51.2%, delta 13.1 points [95% CI -4.5, 28.2]; 9 losses, 17 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.012 (Holm 0.059 over 7), p loss 0.940 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.53, difference -0.06 [95% CI -0.31, +0.20] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/55.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant gstack-opus --reference tstack-opus --out $W/opus/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.3% vs 47.6%, delta 16.7 points [95% CI 2.7, 29.5]; 7 losses, 17 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.0017 (Holm n/a over 7), p loss 0.988 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/56.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant gstack-opus --reference none-opus --out $W/opus/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 29.8%, delta 34.5 points [95% CI 22.2, 46.6]; 2 losses, 24 gains on 42 blockers in 26 PRs (15 discordant). p non-inferior 0.0 (Holm 0.0 over 7), p loss 1.000 (minimum reachable 0.000031).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/57.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant pstack-opus --reference none-opus --out $W/opus/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 51.2% vs 29.8%, delta 21.4 points [95% CI 7.1, 36.8]; 9 losses, 21 gains on 42 blockers in 26 PRs (19 discordant). p non-inferior 0.00023 (Holm 0.0014 over 7), p loss 0.998 (minimum reachable 0.0000019).
+false blockers per PR: pstack-opus 0.53, none-opus 0.53, difference 0.00 [95% CI -0.23, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/58.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/opus/arms --prereg $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.opus.json --variant tstack-opus --reference none-opus --out $W/opus/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 29.8%, delta 17.9 points [95% CI 2.2, 33.7]; 8 losses, 21 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.0015 (Holm n/a over 7), p loss 0.987 (minimum reachable 4.8e-7).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/59.txt)
+
+## Section 7 secondaries: new blockers and idea cards
+
+$ $R/bin/gstack-evals noloss secondary --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --variant pstack-opus --reference gstack-opus --seed 20261031
+recall, pstack-opus: blocking 21.5/42 = 0.5119 [0.39, 0.6447]; at any severity 25.5/42 = 0.6071 [0.4804, 0.73]; 0 judgments with coverage incomplete
+recall, gstack-opus: blocking 27/42 = 0.6429 [0.5526, 0.7317]; at any severity 33/42 = 0.7857 [0.6912, 0.8684]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.1563, reference 0.1406 (10 and 9 in all, 32 PRs); difference 0.0156 [-0.0937, 0.1406], exact two-sided sign-flip p 1 (min p 0.00006103515625)
+idea-card wins: 1 of 42 blocking blockers (found by pstack-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 2.4981, 95th percentile 4; above the null: no
+  won: 7878 B1
+exit 0 (log/60.txt)
+
+$ $R/bin/gstack-evals noloss secondary --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --variant tstack-opus --reference gstack-opus --seed 20261031
+recall, tstack-opus: blocking 20/42 = 0.4762 [0.36, 0.5909]; at any severity 21.5/42 = 0.5119 [0.3902, 0.6282]; 0 judgments with coverage incomplete
+recall, gstack-opus: blocking 27/42 = 0.6429 [0.5526, 0.7317]; at any severity 33/42 = 0.7857 [0.6912, 0.8684]; 0 judgments with coverage incomplete
+new blockers: no reading: arm tstack-opus stopped
+idea-card wins: 1 of 42 blocking blockers (found by tstack-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 2.9909, 95th percentile 5; above the null: no
+  won: 7878 B1
+exit 0 (log/61.txt)
+
+$ $R/bin/gstack-evals noloss secondary --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --variant none-opus --reference gstack-opus --seed 20261031
+recall, none-opus: blocking 12.5/42 = 0.2976 [0.2105, 0.3837]; at any severity 16.5/42 = 0.3929 [0.3023, 0.4868]; 0 judgments with coverage incomplete
+recall, gstack-opus: blocking 27/42 = 0.6429 [0.5526, 0.7317]; at any severity 33/42 = 0.7857 [0.6912, 0.8684]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.1875, reference 0.1406 (12 and 9 in all, 32 PRs); difference 0.0469 [-0.0781, 0.1719], exact two-sided sign-flip p 0.653564 (min p 0.000244140625)
+idea-card wins: 0 of 42 blocking blockers (found by none-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 3.5026, 95th percentile 6; above the null: no
+exit 0 (log/62.txt)
+
+$ $R/bin/gstack-evals noloss secondary --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --variant pstack-particle-1 --reference gstack-particle-1 --seed 20261031
+recall, pstack-particle-1: blocking 9/42 = 0.2143 [0.0882, 0.3396]; at any severity 10/42 = 0.2381 [0.1111, 0.3636]; 0 judgments with coverage incomplete
+recall, gstack-particle-1: blocking 10/42 = 0.2381 [0.1081, 0.3478]; at any severity 14/42 = 0.3333 [0.2051, 0.45]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.1875, reference 0.3125 (6 and 10 in all, 32 PRs); difference -0.125 [-0.375, 0.125], exact two-sided sign-flip p 0.485046 (min p 0.00006103515625)
+idea-card wins: 7 of 42 blocking blockers (found by pstack-particle-1 in every pass and by gstack-particle-1 in none; 0 left out); null from 10000 within-unit label swaps: mean 7.4972, 95th percentile 10; above the null: no
+  won: 3596 B1
+  won: 3527 B3
+  won: 3534 B1
+  won: 3567 B3
+  won: 3573 B1
+  won: 7511 B1
+  won: 7684 B1
+exit 0 (log/63.txt)
+
+$ $R/bin/gstack-evals noloss secondary --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/final/arms --variant none-particle-1 --reference gstack-particle-1 --seed 20261031
+recall, none-particle-1: blocking 9/42 = 0.2143 [0.1111, 0.3333]; at any severity 11/42 = 0.2619 [0.1364, 0.4118]; 0 judgments with coverage incomplete
+recall, gstack-particle-1: blocking 10/42 = 0.2381 [0.1081, 0.3478]; at any severity 14/42 = 0.3333 [0.2051, 0.45]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.25, reference 0.3125 (8 and 10 in all, 32 PRs); difference -0.0625 [-0.2812, 0.1563], exact two-sided sign-flip p 0.794922 (min p 0.0009765625)
+idea-card wins: 8 of 42 blocking blockers (found by none-particle-1 in every pass and by gstack-particle-1 in none; 0 left out); null from 10000 within-unit label swaps: mean 8.5292, 95th percentile 12; above the null: no
+  won: 3526 B3
+  won: 3545 B1
+  won: 3583 B2
+  won: 7684 B1
+  won: 7794 B1
+  won: 3431 B1
+  won: 3448 B1
+  won: 3516@3712b7971126 B1
+exit 0 (log/64.txt)
+
+## Without flagged passes (section 5): flag-scan, then derive
+
+$ $R/bin/gstack-evals noloss flag-scan --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --run $W/run --audit $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/contamination.tsv --out $W/flags.tsv
+flag-scan gstack: 66 sessions, 6 unit-passes flagged on 4 units (garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, garrytan/gstack#3516@ee73419c3295, garrytan/gstack#3516@3712b7971126)
+flag-scan pstack: 66 sessions, 1 unit-passes flagged on 1 units (garrytan/gstack#3593@89156431975e)
+flag-scan tstack: 66 sessions, 0 unit-passes flagged on 0 units
+exit 0 (log/65.txt)
+
+$ cut -f1-6 $W/flags.tsv
+unit	arm	model	pass	rule	tool
+garrytan/gstack#3593@89156431975e	gstack	anthropic_claude-opus-5-5	1	read	Read
+garrytan/gstack#3596@0be7c3d44339	gstack	anthropic_claude-opus-5-5	1	read	Read
+garrytan/gstack#3516@ee73419c3295	gstack	anthropic_claude-opus-5-5	1	read	Skill
+garrytan/gstack#3516@ee73419c3295	gstack	anthropic_claude-opus-5-5	2	read	Skill
+garrytan/gstack#3516@3712b7971126	gstack	anthropic_claude-opus-5-5	1	read	Skill
+garrytan/gstack#3516@3712b7971126	gstack	anthropic_claude-opus-5-5	2	read	Skill
+garrytan/gstack#3593@89156431975e	pstack	anthropic_claude-opus-5-5	2	search	Bash
+exit 0 (log/66.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-unflagged --out $W/stacks-r1-unflagged --drop-file $W/flags.tsv
+derive stacks-r1-unflagged: drop every unit listed in flags.tsv (sha256 2ccf102d05e5b732e98bc29fc36f29c97dfd9cd60f63600b413c52a4c70fec91)
+suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json sha256 ff698b660bb8c95b672bebffd6acca5d73a3569ee2a33b7201d28bbf473feed8: 29 units, 35 blocking blockers on 23 PRs; 4 units dropped (garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, garrytan/gstack#3516@ee73419c3295, garrytan/gstack#3516@3712b7971126)
+arm gstack-opus: complete, 4 cost rows dropped, tree 09b9b200877130664f632887fe9af37eeff82827119e214e537aad4fb6e6dcc4
+arm gstack-particle-1: complete, 4 cost rows dropped, tree 047fc56871a3019408f571a7ae5dcdde9026705e209957d8f4c6dd0dac6640dc
+arm none-opus: complete, 4 cost rows dropped, tree 23f4e7b21d73575c08164118c5ebb1508c03d367d6b1d195e5ca000f3301f86a
+arm none-particle-1: complete, 4 cost rows dropped, tree 59d735e316d7470473ffa7ffd5f72be43933d21e7477f71d234aac2640532875
+arm pstack-opus: complete, 4 cost rows dropped, tree 4482b0ed51a498e974b6a522070041c5d7e27fd23f334965e27b918aa967c39d
+arm pstack-particle-1: complete, 4 cost rows dropped, tree 339683b7720887be45bbc843d9017d5350f124aeaaddc030d40154c24c4b6351
+arm tstack-opus: stopped, 1 coverage gaps left, 4 cost rows dropped, tree 0a4ff224aceb4558068f1235be1bc6c0a12b1a676ce4acde585e21a13822d992
+exit 0 (log/67.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-unflagged/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 51.4% vs 64.3%, delta -12.9 points [95% CI -28.6, 5.0]; 14 losses, 7 gains on 35 blockers in 23 PRs (18 discordant). p non-inferior 0.637 (Holm 1.000 over 11), p loss 0.122 (Holm 0.486, step 1 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: pstack-opus 0.52, gstack-opus 0.48, difference +0.03 [95% CI -0.24, +0.31] on 29 PRs; two-sided p 0.902 (minimum reachable 9.5e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/68.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-unflagged/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 44.3% vs 64.3%, delta -20.0 points [95% CI -33.3, -3.9]; 15 losses, 5 gains on 35 blockers in 23 PRs (16 discordant). p non-inferior 0.890 (Holm n/a over 11), p loss 0.025 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.000015).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/69.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-unflagged/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 64.3% vs 51.4%, delta 12.9 points [95% CI -5.0, 28.6]; 7 losses, 14 gains on 35 blockers in 23 PRs (18 discordant). p non-inferior 0.017 (Holm 0.150 over 11), p loss 0.931 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: gstack-opus 0.48, pstack-opus 0.52, difference -0.03 [95% CI -0.31, +0.24] on 29 PRs; two-sided p 0.902 (minimum reachable 9.5e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/70.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-unflagged/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.3% vs 44.3%, delta 20.0 points [95% CI 3.9, 33.3]; 5 losses, 15 gains on 35 blockers in 23 PRs (16 discordant). p non-inferior 0.0027 (Holm n/a over 11), p loss 0.990 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.000015).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/71.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-unflagged/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 30.0%, delta 34.3 points [95% CI 19.7, 47.4]; 2 losses, 20 gains on 35 blockers in 23 PRs (12 discordant). p non-inferior 0.0 (Holm 0.0000010 over 11), p loss 1.000 (minimum reachable 0.00024).
+false blockers per PR: gstack-opus 0.48, none-opus 0.52, difference -0.03 [95% CI -0.24, +0.17] on 29 PRs; two-sided p 0.876 (minimum reachable 4.8e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/72.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-unflagged/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 51.4% vs 30.0%, delta 21.4 points [95% CI 8.6, 36.4]; 7 losses, 17 gains on 35 blockers in 23 PRs (16 discordant). p non-inferior 0.00021 (Holm 0.0021 over 11), p loss 0.999 (minimum reachable 0.000015).
+false blockers per PR: pstack-opus 0.52, none-opus 0.52, difference 0.00 [95% CI -0.24, +0.24] on 29 PRs; two-sided p 1.000 (minimum reachable 4.8e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/73.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-unflagged/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 44.3% vs 30.0%, delta 14.3 points [95% CI -3.9, 32.7]; 8 losses, 17 gains on 35 blockers in 23 PRs (18 discordant). p non-inferior 0.0088 (Holm n/a over 11), p loss 0.952 (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/74.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-unflagged/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 22.9% vs 25.7%, delta -2.9 points [95% CI -19.4, 14.3]; 7 losses, 6 gains on 35 blockers in 23 PRs (6 discordant). p non-inferior 0.213 (Holm 1.000 over 11), p loss 0.500 (minimum reachable 0.016).
+false blockers per PR: pstack-particle-1 0.34, gstack-particle-1 0.38, difference -0.03 [95% CI -0.28, +0.24] on 29 PRs; two-sided p 1.000 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/75.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-unflagged/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 25.7% vs 22.9%, delta 2.9 points [95% CI -14.3, 19.4]; 6 losses, 7 gains on 35 blockers in 23 PRs (6 discordant). p non-inferior 0.101 (Holm 0.806 over 11), p loss 0.734 (minimum reachable 0.016).
+false blockers per PR: gstack-particle-1 0.38, pstack-particle-1 0.34, difference +0.03 [95% CI -0.24, +0.28] on 29 PRs; two-sided p 1.000 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/76.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-unflagged/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 25.7% vs 22.9%, delta 2.9 points [95% CI -21.4, 21.4]; 7 losses, 8 gains on 35 blockers in 23 PRs (12 discordant). p non-inferior 0.159 (Holm 1.000 over 11), p loss 0.693 (minimum reachable 0.00024).
+false blockers per PR: gstack-particle-1 0.38, none-particle-1 0.38, difference 0.00 [95% CI -0.24, +0.24] on 29 PRs; two-sided p 1.000 (minimum reachable 0.00012); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/77.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-unflagged/stacks-r1-unflagged.json --root $W/stacks-r1-unflagged/arms --prereg $W/stacks-r1-unflagged/comparisons.stacks-r1-unflagged.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-unflagged/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 22.9% vs 22.9%, delta 0.0 points [95% CI -22.2, 20.0]; 6 losses, 6 gains on 35 blockers in 23 PRs (11 discordant). p non-inferior 0.209 (Holm 1.000 over 11), p loss 0.603 (minimum reachable 0.00049).
+false blockers per PR: pstack-particle-1 0.34, none-particle-1 0.38, difference -0.03 [95% CI -0.28, +0.24] on 29 PRs; two-sided p 1.000 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/78.txt)
+
+## Complete case (section 9): every gap unit dropped
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-complete --out $W/stacks-r1-complete --drop-gaps
+derive stacks-r1-complete: drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
+suite $W/stacks-r1-complete/stacks-r1-complete.json sha256 16e911e5ec0765cebe6f65b2f684e8febbdb21ff84f9a6185acefa7dad414474: 32 units, 38 blocking blockers on 25 PRs; 1 units dropped (garrytan/gstack#3527@2684974602c1)
+arm gstack-opus: complete, 1 cost rows dropped, tree fbe8e18e4c2f194a7fa0f3c57b08c26c0a4f9c1f22658b0a5905e8e218078ef1
+arm gstack-particle-1: complete, 1 cost rows dropped, tree 4f36a86c29ab55d5ec477538e3a959f914c7f2d8e0f47c86c57db132cd5e522d
+arm none-opus: complete, 1 cost rows dropped, tree 53e9ffe9d415d04ec1fc9dbf3134609986d8678ad7573efd003e9d0b7a6228d3
+arm none-particle-1: complete, 1 cost rows dropped, tree 8699e89005e19b6740408f5ccb71c1704612140037b9cdd8a404a613ab8de1a3
+arm pstack-opus: complete, 1 cost rows dropped, tree f42c7cf01d11925c6088a444b8850a36b69de09e1f5e9b6491d7f0f5d1e590bf
+arm pstack-particle-1: complete, 1 cost rows dropped, tree 9cfd367cc33acb3ba762d17bbbf0fc90d9ccc5bc24c9fd8f42697918a2831d6a
+arm tstack-opus: stopped -> complete, 1 cost rows dropped, tree 4ed6ff9249b79c4991cd02f6e07ffe2ca320421cf4fbd490c1f1623120e28732
+exit 0 (log/79.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-complete/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 52.6% vs 64.5%, delta -11.8 points [95% CI -28.4, 7.1]; 15 losses, 9 gains on 38 blockers in 25 PRs (20 discordant). p non-inferior 0.589 (Holm 1.000 over 11), p loss 0.146 (Holm 0.437, step 2 of 4 in the declared LOSS family) (minimum reachable 9.5e-7).
+false blockers per PR: pstack-opus 0.53, gstack-opus 0.47, difference +0.06 [95% CI -0.19, +0.32] on 31 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/80.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-complete/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 51.3% vs 64.5%, delta -13.2 points [95% CI -25.7, 0.0]; 15 losses, 7 gains on 38 blockers in 25 PRs (17 discordant). p non-inferior 0.692 (Holm 1.000 over 11), p loss 0.056 (Holm 0.222, step 1 of 4 in the declared LOSS family) (minimum reachable 0.0000076).
+false blockers per PR: tstack-opus 0.52, gstack-opus 0.47, difference +0.05 [95% CI -0.15, +0.24] on 31 PRs; two-sided p 0.746 (minimum reachable 0.0000038); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/81.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-complete/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 64.5% vs 52.6%, delta 11.8 points [95% CI -7.1, 28.4]; 9 losses, 15 gains on 38 blockers in 25 PRs (20 discordant). p non-inferior 0.022 (Holm 0.153 over 11), p loss 0.909 (Holm 1.000, step 3 of 4 in the declared LOSS family) (minimum reachable 9.5e-7).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.53, difference -0.06 [95% CI -0.32, +0.19] on 31 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/82.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-complete/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.5% vs 51.3%, delta 13.2 points [95% CI 0.0, 25.7]; 7 losses, 15 gains on 38 blockers in 25 PRs (17 discordant). p non-inferior 0.0034 (Holm 0.028 over 11), p loss 0.976 (Holm 1.000, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000076).
+false blockers per PR: gstack-opus 0.47, tstack-opus 0.52, difference -0.05 [95% CI -0.24, +0.15] on 31 PRs; two-sided p 0.746 (minimum reachable 0.0000038); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/83.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-complete/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.5% vs 30.3%, delta 34.2 points [95% CI 20.7, 47.5]; 2 losses, 22 gains on 38 blockers in 25 PRs (14 discordant). p non-inferior 0.0 (Holm 0.0 over 11), p loss 1.000 (minimum reachable 0.000061).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.15] on 31 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/84.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-complete/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 52.6% vs 30.3%, delta 22.4 points [95% CI 6.6, 39.4]; 8 losses, 20 gains on 38 blockers in 25 PRs (18 discordant). p non-inferior 0.00044 (Holm 0.0044 over 11), p loss 0.996 (minimum reachable 0.0000038).
+false blockers per PR: pstack-opus 0.53, none-opus 0.53, difference 0.00 [95% CI -0.24, +0.26] on 31 PRs; two-sided p 1.000 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/85.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-complete/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 51.3% vs 30.3%, delta 21.1 points [95% CI 4.2, 36.8]; 7 losses, 21 gains on 38 blockers in 25 PRs (20 discordant). p non-inferior 0.0014 (Holm 0.012 over 11), p loss 0.992 (minimum reachable 9.5e-7).
+false blockers per PR: tstack-opus 0.52, none-opus 0.53, difference -0.02 [95% CI -0.23, +0.19] on 31 PRs; two-sided p 1.000 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/86.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-complete/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 18.4% vs 21.1%, delta -2.6 points [95% CI -17.1, 13.5]; 7 losses, 6 gains on 38 blockers in 25 PRs (6 discordant). p non-inferior 0.184 (Holm 0.919 over 11), p loss 0.500 (minimum reachable 0.016).
+false blockers per PR: pstack-particle-1 0.39, gstack-particle-1 0.32, difference +0.06 [95% CI -0.19, +0.32] on 31 PRs; two-sided p 0.818 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/87.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-complete/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.1% vs 18.4%, delta 2.6 points [95% CI -13.5, 17.1]; 6 losses, 7 gains on 38 blockers in 25 PRs (6 discordant). p non-inferior 0.085 (Holm 0.509 over 11), p loss 0.734 (minimum reachable 0.016).
+false blockers per PR: gstack-particle-1 0.32, pstack-particle-1 0.39, difference -0.06 [95% CI -0.32, +0.19] on 31 PRs; two-sided p 0.818 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/88.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-complete/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.1% vs 23.7%, delta -2.6 points [95% CI -22.9, 14.7]; 8 losses, 7 gains on 38 blockers in 25 PRs (13 discordant). p non-inferior 0.247 (Holm 0.986 over 11), p loss 0.500 (minimum reachable 0.00012).
+false blockers per PR: gstack-particle-1 0.32, none-particle-1 0.39, difference -0.06 [95% CI -0.29, +0.16] on 31 PRs; two-sided p 0.791 (minimum reachable 0.00012); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/89.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-complete/stacks-r1-complete.json --root $W/stacks-r1-complete/arms --prereg $W/stacks-r1-complete/comparisons.stacks-r1-complete.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-complete/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 18.4% vs 23.7%, delta -5.3 points [95% CI -23.3, 12.5]; 7 losses, 5 gains on 38 blockers in 25 PRs (12 discordant). p non-inferior 0.319 (Holm 0.986 over 11), p loss 0.387 (minimum reachable 0.00024).
+false blockers per PR: pstack-particle-1 0.39, none-particle-1 0.39, difference 0.00 [95% CI -0.26, +0.26] on 31 PRs; two-sided p 1.000 (minimum reachable 0.000031); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/90.txt)
+
+## Strata (section 5): provable by a run, the diff-scoped-tests cut, gbrain; the escaped-defect listing
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-run --out $W/stacks-r1-run --detection-only garrytan/gstack#3516@ee73419c3295:B2 --detection-only garrytan/gstack#3527@2684974602c1:B3 --detection-only garrytan/gstack#3545@d4f0ea3c314f:B1
+derive stacks-r1-run: count garrytan/gstack#3516@ee73419c3295 B2, garrytan/gstack#3527@2684974602c1 B3, garrytan/gstack#3545@d4f0ea3c314f B1 as detection-only
+suite $W/stacks-r1-run/stacks-r1-run.json sha256 1297fd9f9d10a40c76a4f68e4ab9d57d6232b8fdae7ea078967a5d8678366995: 33 units, 39 blocking blockers on 25 PRs; 0 units dropped
+arm gstack-opus: complete, tree 22c1d3425532ef9b73b0b7c195a53392c556cfd23d9110c7d54a8596d59d6d6e
+arm gstack-particle-1: complete, tree 66c6fc0488d869587b1b03502007541f15f9e0614e09e9a336d9e5438d178a0f
+arm none-opus: complete, tree 55e3f538334a2c9ba004f9fe2884760cd2d8fb6037ede59dacfaaf9073eb5848
+arm none-particle-1: complete, tree 23f0dbf9d2bc1032cd1efbc35196d4064c0ca69da269192e160c32fc3282cf9d
+arm pstack-opus: complete, tree f55bf07cd0e43b1cc1bf60303fe4652b88421bc9a6c452aea08293bb604082a7
+arm pstack-particle-1: complete, tree 8b7cc17838e7e1f1d05dbfbdacc90d5691b0da898816b088a2647fab076e265c
+arm tstack-opus: stopped, 1 coverage gaps left, tree 92680023521e59a33639931b618b24e2feb9c6d61a76f97329be6b364b3a3270
+exit 0 (log/91.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-run/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 53.8% vs 64.1%, delta -10.3 points [95% CI -26.2, 7.3]; 15 losses, 9 gains on 39 blockers in 25 PRs (20 discordant). p non-inferior 0.524 (Holm 1.000 over 11), p loss 0.167 (Holm 0.669, step 1 of 4 in the declared LOSS family) (minimum reachable 9.5e-7).
+false blockers per PR: pstack-opus 0.53, gstack-opus 0.47, difference +0.06 [95% CI -0.20, +0.31] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/92.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-run/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 48.7% vs 64.1%, delta -15.4 points [95% CI -30.0, 0.0]; 15 losses, 7 gains on 39 blockers in 25 PRs (18 discordant). p non-inferior 0.754 (Holm n/a over 11), p loss 0.056 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/93.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-run/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 64.1% vs 53.8%, delta 10.3 points [95% CI -7.3, 26.2]; 9 losses, 15 gains on 39 blockers in 25 PRs (20 discordant). p non-inferior 0.022 (Holm 0.201 over 11), p loss 0.895 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 9.5e-7).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.53, difference -0.06 [95% CI -0.31, +0.20] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/94.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-run/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.1% vs 48.7%, delta 15.4 points [95% CI 0.0, 30.0]; 7 losses, 15 gains on 39 blockers in 25 PRs (18 discordant). p non-inferior 0.0049 (Holm n/a over 11), p loss 0.972 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/95.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-run/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.1% vs 29.5%, delta 34.6 points [95% CI 20.8, 47.7]; 2 losses, 22 gains on 39 blockers in 25 PRs (13 discordant). p non-inferior 0.0 (Holm 0.0 over 11), p loss 1.000 (minimum reachable 0.00012).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/96.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-run/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 53.8% vs 29.5%, delta 24.4 points [95% CI 10.5, 39.4]; 8 losses, 21 gains on 39 blockers in 25 PRs (19 discordant). p non-inferior 0.00011 (Holm 0.0011 over 11), p loss 0.999 (minimum reachable 0.0000019).
+false blockers per PR: pstack-opus 0.53, none-opus 0.53, difference 0.00 [95% CI -0.23, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/97.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-run/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 48.7% vs 29.5%, delta 19.2 points [95% CI 2.4, 35.5]; 8 losses, 21 gains on 39 blockers in 25 PRs (21 discordant). p non-inferior 0.0019 (Holm n/a over 11), p loss 0.987 (minimum reachable 4.8e-7).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/98.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-run/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 20.5% vs 25.6%, delta -5.1 points [95% CI -19.6, 11.1]; 8 losses, 6 gains on 39 blockers in 25 PRs (7 discordant). p non-inferior 0.280 (Holm 1.000 over 11), p loss 0.383 (minimum reachable 0.0078).
+false blockers per PR: pstack-particle-1 0.38, gstack-particle-1 0.34, difference +0.03 [95% CI -0.22, +0.31] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/99.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-run/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 25.6% vs 20.5%, delta 5.1 points [95% CI -11.1, 19.6]; 6 losses, 8 gains on 39 blockers in 25 PRs (7 discordant). p non-inferior 0.052 (Holm 0.418 over 11), p loss 0.820 (minimum reachable 0.0078).
+false blockers per PR: gstack-particle-1 0.34, pstack-particle-1 0.38, difference -0.03 [95% CI -0.31, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/100.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-run/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 25.6% vs 20.5%, delta 5.1 points [95% CI -16.2, 23.3]; 7 losses, 9 gains on 39 blockers in 25 PRs (13 discordant). p non-inferior 0.098 (Holm 0.685 over 11), p loss 0.770 (minimum reachable 0.00012).
+false blockers per PR: gstack-particle-1 0.34, none-particle-1 0.38, difference -0.03 [95% CI -0.25, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/101.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-run/stacks-r1-run.json --root $W/stacks-r1-run/arms --prereg $W/stacks-r1-run/comparisons.stacks-r1-run.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-run/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 20.5% vs 20.5%, delta 0.0 points [95% CI -17.9, 17.1]; 6 losses, 6 gains on 39 blockers in 25 PRs (12 discordant). p non-inferior 0.154 (Holm 0.925 over 11), p loss 0.613 (minimum reachable 0.00024).
+false blockers per PR: pstack-particle-1 0.38, none-particle-1 0.38, difference 0.00 [95% CI -0.25, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000031); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/102.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-tests-run --out $W/stacks-r1-tests-run --drop-file $W/tests-cannot.tsv
+derive stacks-r1-tests-run: drop every unit listed in tests-cannot.tsv (sha256 c9ab102dfa581d5f17ef406ed231f3c132489fe2610a10d56c1e5db8fa90cc4a)
+suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json sha256 f7e2587476037f7e4a8b2c1069c2d053c2625c174536ff184c9d7fcfb02e975f: 25 units, 33 blocking blockers on 20 PRs; 8 units dropped (garrytan/gstack#3534@a76620148c19, garrytan/gstack#3540@115355a38bd6, garrytan/gstack#3564@e97b8573502b, garrytan/gbrain#7878@d43d2497a65c, garrytan/gstack#3381@8a52c271ad81, garrytan/gstack#3448@b476ae9e4b66, garrytan/gstack#3475@fc69d3ff0bfe, garrytan/gstack#3556@95d9c6d06ef1)
+arm gstack-opus: complete, 8 cost rows dropped, tree 4cf78d3e758476c3735429d89de5f4fcaaa1d134a2c06ca147cf130da4173f80
+arm gstack-particle-1: complete, 8 cost rows dropped, tree b733dbe47d94aff9e9ee9a93843636675264894536d77ebfcd92c7394eaa1dfa
+arm none-opus: complete, 8 cost rows dropped, tree ce77ca2f446901c67cd8b5618fd5c0957dc81c75d7937d4fcd5fc258f32ca0dc
+arm none-particle-1: complete, 8 cost rows dropped, tree 1b9f8c784addad1eda18aa2b088776a9e259b4bf699bad7cd9b6d90a5964fdd8
+arm pstack-opus: complete, 8 cost rows dropped, tree 4eef742693f765762c5c07f568f0741f501cc0991c4900231236dc399ec03c42
+arm pstack-particle-1: complete, 8 cost rows dropped, tree 68bbd7278e9357a6a82fa6abf5ce2f4f2586499fd54a391fe7aa01b06234c627
+arm tstack-opus: stopped, 1 coverage gaps left, 8 cost rows dropped, tree 7bbe72fcc84a2a51c08ee6059521e04b1c3a481b131c6923a0f7ff4136d2f63a
+exit 0 (log/103.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-tests-run/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 53.0% vs 65.1%, delta -12.1 points [95% CI -28.2, 5.2]; 12 losses, 7 gains on 33 blockers in 20 PRs (16 discordant). p non-inferior 0.610 (Holm 1.000 over 11), p loss 0.125 (Holm 0.500, step 1 of 4 in the declared LOSS family) (minimum reachable 0.000015).
+false blockers per PR: pstack-opus 0.60, gstack-opus 0.46, difference +0.15 [95% CI -0.15, +0.42] on 24 PRs; two-sided p 0.407 (minimum reachable 0.0000038); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/104.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-tests-run/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 43.9% vs 65.1%, delta -21.2 points [95% CI -35.1, -5.8]; 14 losses, 5 gains on 33 blockers in 20 PRs (15 discordant). p non-inferior 0.913 (Holm n/a over 11), p loss 0.019 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.000031).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/105.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-tests-run/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 65.1% vs 53.0%, delta 12.1 points [95% CI -5.2, 28.2]; 7 losses, 12 gains on 33 blockers in 20 PRs (16 discordant). p non-inferior 0.016 (Holm 0.142 over 11), p loss 0.933 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 0.000015).
+false blockers per PR: gstack-opus 0.46, pstack-opus 0.60, difference -0.15 [95% CI -0.42, +0.15] on 24 PRs; two-sided p 0.407 (minimum reachable 0.0000038); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/106.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-tests-run/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 65.1% vs 43.9%, delta 21.2 points [95% CI 5.8, 35.1]; 5 losses, 14 gains on 33 blockers in 20 PRs (15 discordant). p non-inferior 0.0017 (Holm n/a over 11), p loss 0.993 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.000031).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/107.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-tests-run/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 65.1% vs 31.8%, delta 33.3 points [95% CI 19.4, 48.3]; 2 losses, 19 gains on 33 blockers in 20 PRs (12 discordant). p non-inferior 0.0000010 (Holm 0.000010 over 11), p loss 1.000 (minimum reachable 0.00024).
+false blockers per PR: gstack-opus 0.46, none-opus 0.48, difference -0.02 [95% CI -0.25, +0.21] on 24 PRs; two-sided p 1.000 (minimum reachable 0.0000076); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/108.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-tests-run/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 53.0% vs 31.8%, delta 21.2 points [95% CI 4.8, 37.5]; 6 losses, 17 gains on 33 blockers in 20 PRs (15 discordant). p non-inferior 0.0014 (Holm 0.014 over 11), p loss 0.994 (minimum reachable 0.000031).
+false blockers per PR: pstack-opus 0.60, none-opus 0.48, difference +0.13 [95% CI -0.17, +0.40] on 24 PRs; two-sided p 0.478 (minimum reachable 0.000031); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/109.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-tests-run/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 43.9% vs 31.8%, delta 12.1 points [95% CI -5.4, 30.6]; 8 losses, 16 gains on 33 blockers in 20 PRs (17 discordant). p non-inferior 0.015 (Holm n/a over 11), p loss 0.927 (minimum reachable 0.0000076).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/110.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-tests-run/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.2% vs 21.2%, delta 0.0 points [95% CI -16.2, 17.9]; 6 losses, 6 gains on 33 blockers in 20 PRs (5 discordant). p non-inferior 0.133 (Holm 1.000 over 11), p loss 0.625 (minimum reachable 0.031).
+false blockers per PR: pstack-particle-1 0.33, gstack-particle-1 0.38, difference -0.04 [95% CI -0.33, +0.25] on 24 PRs; two-sided p 1.000 (minimum reachable 0.0020); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/111.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-tests-run/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.2% vs 21.2%, delta 0.0 points [95% CI -17.9, 16.2]; 6 losses, 6 gains on 33 blockers in 20 PRs (5 discordant). p non-inferior 0.176 (Holm 1.000 over 11), p loss 0.625 (minimum reachable 0.031).
+false blockers per PR: gstack-particle-1 0.38, pstack-particle-1 0.33, difference +0.04 [95% CI -0.25, +0.33] on 24 PRs; two-sided p 1.000 (minimum reachable 0.0020); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/112.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-tests-run/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.2% vs 21.2%, delta 0.0 points [95% CI -24.2, 20.0]; 7 losses, 7 gains on 33 blockers in 20 PRs (11 discordant). p non-inferior 0.225 (Holm 1.000 over 11), p loss 0.603 (minimum reachable 0.00049).
+false blockers per PR: gstack-particle-1 0.38, none-particle-1 0.33, difference +0.04 [95% CI -0.25, +0.29] on 24 PRs; two-sided p 1.000 (minimum reachable 0.00098); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/113.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-run/stacks-r1-tests-run.json --root $W/stacks-r1-tests-run/arms --prereg $W/stacks-r1-tests-run/comparisons.stacks-r1-tests-run.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-tests-run/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.2% vs 21.2%, delta 0.0 points [95% CI -22.2, 21.4]; 6 losses, 6 gains on 33 blockers in 20 PRs (11 discordant). p non-inferior 0.218 (Holm 1.000 over 11), p loss 0.603 (minimum reachable 0.00049).
+false blockers per PR: pstack-particle-1 0.33, none-particle-1 0.33, difference 0.00 [95% CI -0.29, +0.29] on 24 PRs; two-sided p 1.000 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/114.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-tests-cannot --out $W/stacks-r1-tests-cannot --drop-file $W/tests-run.tsv
+derive stacks-r1-tests-cannot: drop every unit listed in tests-run.tsv (sha256 2c7d8295bac0bfa9dd412c10fff0a559cac531205877c7619763f4de5d132324)
+suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json sha256 879d55a1e60528feb862bc14e60f8eccae6a30fab15cf8e5ce27b0490296909a: 8 units, 9 blocking blockers on 6 PRs; 25 units dropped (garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, garrytan/gstack#3516@ee73419c3295, garrytan/gstack#3524@205ea0e2e82f, garrytan/gstack#3526@808dead70e32, garrytan/gstack#3527@2684974602c1, garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3567@2b42ec597e03, garrytan/gstack#3573@f3a130c760f8, garrytan/gstack#3578@0ff98dba1fdd, garrytan/gstack#3583@f5bcdf71a765, garrytan/gbrain#7511@6b01f793f2bc, garrytan/gbrain#7674@af88cba164b0, garrytan/gbrain#7684@ac3c2af65960, garrytan/gbrain#7789@49eb4da5f7c8, garrytan/gbrain#7794@2d801d54cee4, garrytan/gbrain#7872@f61d1a5fd5fa, garrytan/gbrain#7884@d3b843389bd6, garrytan/gbrain#7901@40461c875975, garrytan/gstack#1808@b17f340a457a, garrytan/gstack#3431@8f4cbb8db01c, garrytan/gstack#3494@c555ce3a8324, garrytan/gstack#3507@8c021d124220, garrytan/gstack#3516@3712b7971126, garrytan/gstack#3557@7459bb48317d)
+arm gstack-opus: complete, 25 cost rows dropped, tree 26bc8ce7328f8c1ba644c1a1aec25e6ec10aaadcd237a5c0de21d712ed64dc92
+arm gstack-particle-1: complete, 25 cost rows dropped, tree 62b8e19691cfdfdf76f6bb426a66cbfd4c6a96ac112b67753a6273c2bd5d5c82
+arm none-opus: complete, 25 cost rows dropped, tree 40d234f459daeddeaecf0d38d87f0ab847f2bb88fe7fdb68368d2a5dc84fcf90
+arm none-particle-1: complete, 25 cost rows dropped, tree 7038359efc769b99622368e077415237b7ecf2bf031f4c56f91bae758a1f097b
+arm pstack-opus: complete, 25 cost rows dropped, tree 726bbe520f60fbc225850bb818bea58f885e493e79bba28f750b5e887e9e095b
+arm pstack-particle-1: complete, 25 cost rows dropped, tree 0f0c4e484154ef7650b10e11e09229a122d0106fee437b2fe2f938765609412a
+arm tstack-opus: stopped -> complete, 25 cost rows dropped, tree 1cef5130664acc67d705342e966a0f82fb2028acc073b1e933b5aab4c74e8465
+exit 0 (log/115.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-tests-cannot/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 44.4% vs 61.1%, delta -16.7 points [95% CI -45.8, 41.7]; 5 losses, 2 gains on 9 blockers in 6 PRs (5 discordant). p non-inferior 0.609 (Holm 1.000 over 11), p loss 0.375 (Holm 1.000, step 1 of 4 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: pstack-opus 0.31, gstack-opus 0.50, difference -0.19 [95% CI -0.69, +0.31] on 8 PRs; two-sided p 0.688 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/116.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-tests-cannot/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 61.1% vs 61.1%, delta 0.0 points [95% CI -22.2, 41.7]; 3 losses, 2 gains on 9 blockers in 6 PRs (3 discordant). p non-inferior 0.328 (Holm 1.000 over 11), p loss 0.625 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 0.125).
+false blockers per PR: tstack-opus 0.31, gstack-opus 0.50, difference -0.19 [95% CI -0.63, +0.25] on 8 PRs; two-sided p 0.594 (minimum reachable 0.016); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/117.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-tests-cannot/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 61.1% vs 44.4%, delta 16.7 points [95% CI -41.7, 45.8]; 2 losses, 5 gains on 9 blockers in 6 PRs (5 discordant). p non-inferior 0.266 (Holm 1.000 over 11), p loss 0.750 (Holm 1.000, step 4 of 4 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: gstack-opus 0.50, pstack-opus 0.31, difference +0.19 [95% CI -0.31, +0.69] on 8 PRs; two-sided p 0.688 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/118.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-tests-cannot/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 61.1% vs 61.1%, delta 0.0 points [95% CI -41.7, 22.2]; 2 losses, 3 gains on 9 blockers in 6 PRs (3 discordant). p non-inferior 0.281 (Holm 1.000 over 11), p loss 0.625 (Holm 1.000, step 3 of 4 in the declared LOSS family) (minimum reachable 0.125).
+false blockers per PR: gstack-opus 0.50, tstack-opus 0.31, difference +0.19 [95% CI -0.25, +0.63] on 8 PRs; two-sided p 0.594 (minimum reachable 0.016); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/119.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-tests-cannot/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 61.1% vs 22.2%, delta 38.9 points [95% CI 8.3, 61.1]; 0 losses, 5 gains on 9 blockers in 6 PRs (3 discordant). p non-inferior 0.016 (Holm 0.172 over 11), p loss 1.000 (minimum reachable 0.125).
+false blockers per PR: gstack-opus 0.50, none-opus 0.69, difference -0.19 [95% CI -0.56, +0.25] on 8 PRs; two-sided p 0.594 (minimum reachable 0.016); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/120.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-tests-cannot/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 44.4% vs 22.2%, delta 22.2 points [95% CI -6.7, 75.0]; 3 losses, 4 gains on 9 blockers in 6 PRs (4 discordant). p non-inferior 0.063 (Holm 0.500 over 11), p loss 0.938 (minimum reachable 0.063).
+false blockers per PR: pstack-opus 0.31, none-opus 0.69, difference -0.38 [95% CI -0.75, 0.00] on 8 PRs; two-sided p 0.188 (minimum reachable 0.0078); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/121.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-tests-cannot/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 61.1% vs 22.2%, delta 38.9 points [95% CI 16.7, 61.1]; 0 losses, 5 gains on 9 blockers in 6 PRs (4 discordant). p non-inferior 0.016 (Holm 0.172 over 11), p loss 1.000 (minimum reachable 0.063).
+false blockers per PR: tstack-opus 0.31, none-opus 0.69, difference -0.38 [95% CI -0.69, 0.00] on 8 PRs; two-sided p 0.156 (minimum reachable 0.031); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/122.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-tests-cannot/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 22.2% vs 33.3%, delta -11.1 points [95% CI -50.0, 0.0]; 2 losses, 1 gains on 9 blockers in 6 PRs (1 discordant). p non-inferior 0.516 (Holm 1.000 over 11), p loss 0.500 (minimum reachable 0.500).
+false blockers per PR: pstack-particle-1 0.50, gstack-particle-1 0.25, difference +0.25 [95% CI -0.25, +0.88] on 8 PRs; two-sided p 0.750 (minimum reachable 0.250); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/123.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-tests-cannot/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 33.3% vs 22.2%, delta 11.1 points [95% CI 0.0, 50.0]; 1 losses, 2 gains on 9 blockers in 6 PRs (1 discordant). p non-inferior 0.016 (Holm 0.172 over 11), p loss 1.000 (minimum reachable 0.500).
+false blockers per PR: gstack-particle-1 0.25, pstack-particle-1 0.50, difference -0.25 [95% CI -0.88, +0.25] on 8 PRs; two-sided p 0.750 (minimum reachable 0.250); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/124.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-tests-cannot/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 33.3% vs 22.2%, delta 11.1 points [95% CI -33.3, 44.4]; 1 losses, 2 gains on 9 blockers in 6 PRs (3 discordant). p non-inferior 0.141 (Holm 0.984 over 11), p loss 0.875 (minimum reachable 0.125).
+false blockers per PR: gstack-particle-1 0.25, none-particle-1 0.50, difference -0.25 [95% CI -0.75, +0.25] on 8 PRs; two-sided p 0.625 (minimum reachable 0.125); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/125.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tests-cannot/stacks-r1-tests-cannot.json --root $W/stacks-r1-tests-cannot/arms --prereg $W/stacks-r1-tests-cannot/comparisons.stacks-r1-tests-cannot.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-tests-cannot/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 22.2% vs 22.2%, delta 0.0 points [95% CI -50.0, 20.0]; 1 losses, 1 gains on 9 blockers in 6 PRs (2 discordant). p non-inferior 0.266 (Holm 1.000 over 11), p loss 0.750 (minimum reachable 0.250).
+false blockers per PR: pstack-particle-1 0.50, none-particle-1 0.50, difference 0.00 [95% CI -0.50, +0.50] on 8 PRs; two-sided p 1.000 (minimum reachable 0.125); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/126.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-gbrain --out $W/stacks-r1-gbrain --drop-file $W/gstack-units.tsv
+derive stacks-r1-gbrain: drop every unit listed in gstack-units.tsv (sha256 74c027065b9caecff3784c66ae9f792ee3751e294065340e2bd959d83e1a7cce)
+suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json sha256 a18fe6fedc1d06340414b5083bf35c6311d3d36255269f3b03a1f50886afff77: 9 units, 8 blocking blockers on 8 PRs; 24 units dropped (garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, garrytan/gstack#3516@ee73419c3295, garrytan/gstack#3524@205ea0e2e82f, garrytan/gstack#3526@808dead70e32, garrytan/gstack#3527@2684974602c1, garrytan/gstack#3534@a76620148c19, garrytan/gstack#3540@115355a38bd6, garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3564@e97b8573502b, garrytan/gstack#3567@2b42ec597e03, garrytan/gstack#3573@f3a130c760f8, garrytan/gstack#3578@0ff98dba1fdd, garrytan/gstack#3583@f5bcdf71a765, garrytan/gstack#1808@b17f340a457a, garrytan/gstack#3381@8a52c271ad81, garrytan/gstack#3431@8f4cbb8db01c, garrytan/gstack#3448@b476ae9e4b66, garrytan/gstack#3475@fc69d3ff0bfe, garrytan/gstack#3494@c555ce3a8324, garrytan/gstack#3507@8c021d124220, garrytan/gstack#3516@3712b7971126, garrytan/gstack#3556@95d9c6d06ef1, garrytan/gstack#3557@7459bb48317d)
+arm gstack-opus: complete, 24 cost rows dropped, tree 812ac83559c461105e623eea548525846f80687247238212206e2d6f66fcd762
+arm gstack-particle-1: complete, 24 cost rows dropped, tree 1ec09b7818c11b53d8c1ec1b5892a8d2cc51c19cf7a52e72d1101c42724654df
+arm none-opus: complete, 24 cost rows dropped, tree 0cb0a306b261ea08f4dbfccabf275670b5b5756cf049b1e5f3b76a2c642fd8cc
+arm none-particle-1: complete, 24 cost rows dropped, tree f71d0c3ec4affa6bf17e323234bd7160b3b2fa7974d7c2ca4ed83bb422c365cf
+arm pstack-opus: complete, 24 cost rows dropped, tree 3ae1bd88c27947e16f1d9076154bcc74546ad5a58a7f2fd904448c51fe3894b5
+arm pstack-particle-1: complete, 24 cost rows dropped, tree 5f5c4e110e35b9addbd08c660cc87d69e2304bf7a0c7832e7ab049a003b65ee2
+arm tstack-opus: stopped -> complete, 24 cost rows dropped, tree cade2eff7e8403453b12c4d5e99bd78e17bea675f3ae9b1696aaa3122219ae5c
+exit 0 (log/127.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-gbrain/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 62.5% vs 50.0%, delta 12.5 points [95% CI -18.8, 50.0]; 2 losses, 3 gains on 8 blockers in 8 PRs (5 discordant). p non-inferior 0.152 (Holm 1.000 over 11), p loss 0.844 (Holm 1.000, step 4 of 4 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: pstack-opus 0.67, gstack-opus 0.17, difference +0.50 [95% CI +0.17, +0.78] on 9 PRs; two-sided p 0.047 (minimum reachable 0.0078); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/128.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-gbrain/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 56.3% vs 50.0%, delta 6.3 points [95% CI -31.3, 43.8]; 2 losses, 3 gains on 8 blockers in 8 PRs (5 discordant). p non-inferior 0.266 (Holm 1.000 over 11), p loss 0.719 (Holm 1.000, step 3 of 4 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: tstack-opus 0.56, gstack-opus 0.17, difference +0.39 [95% CI +0.17, +0.67] on 9 PRs; two-sided p 0.063 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/129.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-gbrain/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 50.0% vs 62.5%, delta -12.5 points [95% CI -50.0, 18.8]; 3 losses, 2 gains on 8 blockers in 8 PRs (5 discordant). p non-inferior 0.590 (Holm 1.000 over 11), p loss 0.375 (Holm 1.000, step 1 of 4 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: gstack-opus 0.17, pstack-opus 0.67, difference -0.50 [95% CI -0.78, -0.17] on 9 PRs; two-sided p 0.047 (minimum reachable 0.0078); smallest drop that counts 0.5 per PR: the estimate clears it; the interval is below zero.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/130.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-gbrain/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 50.0% vs 56.3%, delta -6.3 points [95% CI -43.8, 31.3]; 3 losses, 2 gains on 8 blockers in 8 PRs (5 discordant). p non-inferior 0.465 (Holm 1.000 over 11), p loss 0.500 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: gstack-opus 0.17, tstack-opus 0.56, difference -0.39 [95% CI -0.67, -0.17] on 9 PRs; two-sided p 0.063 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval is below zero.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/131.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-gbrain/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 50.0% vs 37.5%, delta 12.5 points [95% CI 0.0, 31.3]; 0 losses, 2 gains on 8 blockers in 8 PRs (2 discordant). p non-inferior 0.0039 (Holm 0.043 over 11), p loss 1.000 (minimum reachable 0.250).
+false blockers per PR: gstack-opus 0.17, none-opus 0.33, difference -0.17 [95% CI -0.50, +0.17] on 9 PRs; two-sided p 0.563 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/132.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-gbrain/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 62.5% vs 37.5%, delta 25.0 points [95% CI -6.3, 56.3]; 1 losses, 4 gains on 8 blockers in 8 PRs (5 discordant). p non-inferior 0.035 (Holm 0.316 over 11), p loss 0.969 (minimum reachable 0.031).
+false blockers per PR: pstack-opus 0.67, none-opus 0.33, difference +0.33 [95% CI -0.06, +0.72] on 9 PRs; two-sided p 0.219 (minimum reachable 0.016); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/133.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-gbrain/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 56.3% vs 37.5%, delta 18.8 points [95% CI -25.0, 56.3]; 2 losses, 5 gains on 8 blockers in 8 PRs (7 discordant). p non-inferior 0.145 (Holm 1.000 over 11), p loss 0.859 (minimum reachable 0.0078).
+false blockers per PR: tstack-opus 0.56, none-opus 0.33, difference +0.22 [95% CI -0.17, +0.61] on 9 PRs; two-sided p 0.438 (minimum reachable 0.0078); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/134.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-gbrain/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 25.0% vs 0.0%, delta 25.0 points [95% CI 0.0, 50.0]; 0 losses, 2 gains on 8 blockers in 8 PRs (2 discordant). p non-inferior 0.0039 (Holm 0.043 over 11), p loss 1.000 (minimum reachable 0.250).
+false blockers per PR: pstack-particle-1 0.44, gstack-particle-1 0.33, difference +0.11 [95% CI -0.33, +0.56] on 9 PRs; two-sided p 1.000 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/135.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-gbrain/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 0.0% vs 25.0%, delta -25.0 points [95% CI -50.0, 0.0]; 2 losses, 0 gains on 8 blockers in 8 PRs (2 discordant). p non-inferior 0.754 (Holm 1.000 over 11), p loss 0.250 (minimum reachable 0.250).
+false blockers per PR: gstack-particle-1 0.33, pstack-particle-1 0.44, difference -0.11 [95% CI -0.56, +0.33] on 9 PRs; two-sided p 1.000 (minimum reachable 0.063); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/136.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-gbrain/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 0.0% vs 25.0%, delta -25.0 points [95% CI -50.0, 0.0]; 2 losses, 0 gains on 8 blockers in 8 PRs (2 discordant). p non-inferior 0.754 (Holm 1.000 over 11), p loss 0.250 (minimum reachable 0.250).
+false blockers per PR: gstack-particle-1 0.33, none-particle-1 0.22, difference +0.11 [95% CI -0.22, +0.44] on 9 PRs; two-sided p 1.000 (minimum reachable 0.250); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/137.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-gbrain/stacks-r1-gbrain.json --root $W/stacks-r1-gbrain/arms --prereg $W/stacks-r1-gbrain/comparisons.stacks-r1-gbrain.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-gbrain/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 25.0% vs 25.0%, delta 0.0 points [95% CI -37.5, 37.5]; 1 losses, 1 gains on 8 blockers in 8 PRs (2 discordant). p non-inferior 0.254 (Holm 1.000 over 11), p loss 0.750 (minimum reachable 0.250).
+false blockers per PR: pstack-particle-1 0.44, none-particle-1 0.22, difference +0.22 [95% CI -0.22, +0.67] on 9 PRs; two-sided p 0.625 (minimum reachable 0.125); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/138.txt)
+
+$ sh -c jq -r '.units[] | . as $u | .blockers[] | select(.case | test("fixed-by")) | "\($u.id)\t\(.id)"' $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json | while IFS=$(printf '\t') read u b; do for a in none-opus gstack-opus pstack-opus tstack-opus none-particle-1 gstack-particle-1 pstack-particle-1; do awk -F'\t' -v a=$a -v b=$b -v u="${u#*#}" 'NR > 1 && $2 == b && (u ~ "^" $1 "(@|$)" || $1 ~ "^" u) { print a, $1, b, "pass", $10, $3 }' $W/final/arms/stacks-r1/$a/judgments.tsv; done; done
+none-opus 1808 B1 pass 1 M
+none-opus 1808 B1 pass 2 M
+gstack-opus 1808 B1 pass 1 M
+gstack-opus 1808 B1 pass 2 M
+pstack-opus 1808 B1 pass 1 M
+pstack-opus 1808 B1 pass 2 M
+tstack-opus 1808 B1 pass 1 M
+tstack-opus 1808 B1 pass 2 M
+none-particle-1 1808 B1 pass 1 D
+gstack-particle-1 1808 B1 pass 1 M
+pstack-particle-1 1808 B1 pass 1 M
+exit 0 (log/139.txt)
+
+## Severity sensitivities (section 3)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-tstack-should --out $W/stacks-r1-tstack-should --severity-map $D/severity-map.tstack-should.json
+derive stacks-r1-tstack-should: re-map severity with severity-map.tstack-should.json (sha256 1a4ea8a89ef0f900b228ef1b935b4e2e96cc530559a92eda98d74abcbab953b7)
+suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json sha256 e8c9c4852450ac8bafe857fe3541e94888e051930e88b89c63846df6e8f7f3c4: 33 units, 42 blocking blockers on 26 PRs; 0 units dropped
+arm gstack-opus: complete, tree 1bad2f37be163677a68c2224b0c22e1e4dcc142f2697f85b9aadb2790cb54109
+arm gstack-particle-1: complete, tree cfd5681931baca036966b92981ac52bd737707e5159c1ee6a2fb8dd21dd03daf
+arm none-opus: complete, tree 45915ca34d68594a33e9f220c7496a417f21d07ffee41edb431d8fab9e148d8a
+arm none-particle-1: complete, tree d8f4338668af50ae498cced16f38fa1a9f929c7dbd4ab8388cb44af4e01ca9a7
+arm pstack-opus: complete, tree 5f4a5e7611801de4c38c3045919c094a6d3bb2a1462b5ef67568314d11d57148
+arm pstack-particle-1: complete, tree f6d4016a2b7d2e88970183736c050a2ef14200e73d7e940f2624e3af108e08d2
+arm tstack-opus: stopped, 1 coverage gaps left, tree 544dacadad108bcca5a758f0baa574fa6d2435f99f6e52186d87c758a546837f
+exit 0 (log/140.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-tstack-should/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 51.2% vs 64.3%, delta -13.1 points [95% CI -28.2, 4.5]; 17 losses, 9 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.652 (Holm 1.000 over 11), p loss 0.099 (Holm 0.397, step 1 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: pstack-opus 0.53, gstack-opus 0.47, difference +0.06 [95% CI -0.20, +0.31] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/141.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-tstack-should/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 30.9% vs 64.3%, delta -33.3 points [95% CI -45.2, -20.4]; 25 losses, 4 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.998 (Holm n/a over 11), p loss 0.00023 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/142.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-tstack-should/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 64.3% vs 51.2%, delta 13.1 points [95% CI -4.5, 28.2]; 9 losses, 17 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.012 (Holm 0.107 over 11), p loss 0.940 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.53, difference -0.06 [95% CI -0.31, +0.20] on 32 PRs; two-sided p 0.724 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/143.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-tstack-should/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.3% vs 30.9%, delta 33.3 points [95% CI 20.4, 45.2]; 4 losses, 25 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.0000090 (Holm n/a over 11), p loss 1.000 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/144.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-tstack-should/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 29.8%, delta 34.5 points [95% CI 22.2, 46.6]; 2 losses, 24 gains on 42 blockers in 26 PRs (15 discordant). p non-inferior 0.0 (Holm 0.0 over 11), p loss 1.000 (minimum reachable 0.000031).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/145.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-tstack-should/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 51.2% vs 29.8%, delta 21.4 points [95% CI 7.1, 36.8]; 9 losses, 21 gains on 42 blockers in 26 PRs (19 discordant). p non-inferior 0.00023 (Holm 0.0023 over 11), p loss 0.998 (minimum reachable 0.0000019).
+false blockers per PR: pstack-opus 0.53, none-opus 0.53, difference 0.00 [95% CI -0.23, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/146.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-tstack-should/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 30.9% vs 29.8%, delta 1.2 points [95% CI -14.1, 16.7]; 15 losses, 17 gains on 42 blockers in 26 PRs (23 discordant). p non-inferior 0.088 (Holm n/a over 11), p loss 0.618 (minimum reachable 1.2e-7).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/147.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-tstack-should/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.4% vs 23.8%, delta -2.4 points [95% CI -16.3, 11.9]; 8 losses, 7 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.151 (Holm 0.951 over 11), p loss 0.500 (minimum reachable 0.016).
+false blockers per PR: pstack-particle-1 0.38, gstack-particle-1 0.34, difference +0.03 [95% CI -0.22, +0.31] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/148.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-tstack-should/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 21.4%, delta 2.4 points [95% CI -11.9, 16.3]; 7 losses, 8 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.067 (Holm 0.535 over 11), p loss 0.734 (minimum reachable 0.016).
+false blockers per PR: gstack-particle-1 0.34, pstack-particle-1 0.38, difference -0.03 [95% CI -0.31, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00024); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/149.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-tstack-should/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 21.4%, delta 2.4 points [95% CI -18.4, 19.6]; 8 losses, 9 gains on 42 blockers in 26 PRs (14 discordant). p non-inferior 0.136 (Holm 0.951 over 11), p loss 0.683 (minimum reachable 0.000061).
+false blockers per PR: gstack-particle-1 0.34, none-particle-1 0.38, difference -0.03 [95% CI -0.25, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/150.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-tstack-should/stacks-r1-tstack-should.json --root $W/stacks-r1-tstack-should/arms --prereg $W/stacks-r1-tstack-should/comparisons.stacks-r1-tstack-should.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-tstack-should/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 21.4% vs 21.4%, delta 0.0 points [95% CI -19.1, 18.0]; 7 losses, 7 gains on 42 blockers in 26 PRs (13 discordant). p non-inferior 0.175 (Holm 0.951 over 11), p loss 0.597 (minimum reachable 0.00012).
+false blockers per PR: pstack-particle-1 0.38, none-particle-1 0.38, difference 0.00 [95% CI -0.25, +0.25] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000031); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/151.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-pstack-high --out $W/stacks-r1-pstack-high --severity-map $D/severity-map.pstack-high.json
+derive stacks-r1-pstack-high: re-map severity with severity-map.pstack-high.json (sha256 611cbf8c9ae0b60e889b21d5889933b37b48e2c84864623ec7dbc609b1213fcc)
+suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json sha256 1153b34ecdc9a49ea98c4ccd6b3759adc288a1d63da1628ef92a09556c5b7161: 33 units, 42 blocking blockers on 26 PRs; 0 units dropped
+arm gstack-opus: complete, tree 0d7ea89b385082ba4f2be31b78b213592f5d8fab21648c05fe676fc7112fe55f
+arm gstack-particle-1: complete, tree 83e496ef3ef0d6212397220153046dda1050c5d8171224609525a66f875aa6ea
+arm none-opus: complete, tree 5d6a2863ae78a6494e51ca4f714ddbb0a5a0009d2fad96e61c5c7039f89b506d
+arm none-particle-1: complete, tree e66a57507d88226fce2dfecb09abcc25872a83a2f2ee7d0c79282ddb6092af31
+arm pstack-opus: complete, tree b64527fd3ad5c67365806c10549cce3f3af4729f88796fb3cc11c0d2ba6cfc36
+arm pstack-particle-1: complete, tree 0a70a60db997e860760cc9064003ffe2563121e151d1c9279ec0d30742e4b898
+arm tstack-opus: stopped, 1 coverage gaps left, tree b63afbedfcf987866e0189951bb26736bef414f811cbe9d579a8ad53d67475e4
+exit 0 (log/152.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-pstack-high/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): LOSS. Blocking recall 11.9% vs 64.3%, delta -52.4 points [95% CI -63.9, -39.6]; 35 losses, 2 gains on 42 blockers in 26 PRs (25 discordant). p non-inferior 1.000 (Holm 1.000 over 11), p loss 0.0000030 (Holm 0.000013, step 1 of 4 in the declared LOSS family) (minimum reachable 3.0e-8).
+false blockers per PR: pstack-opus 0.22, gstack-opus 0.47, difference -0.25 [95% CI -0.45, -0.05] on 32 PRs; two-sided p 0.031 (minimum reachable 4.8e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval is below zero.
+verdict: LOSS
+exit 1 (log/153.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-pstack-high/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 64.3%, delta -16.7 points [95% CI -29.5, -2.7]; 17 losses, 7 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.827 (Holm n/a over 11), p loss 0.028 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/154.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-pstack-high/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 11.9%, delta 52.4 points [95% CI 39.6, 63.9]; 2 losses, 35 gains on 42 blockers in 26 PRs (25 discordant). p non-inferior 0.0 (Holm 0.0000050 over 11), p loss 1.000 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 3.0e-8).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.22, difference +0.25 [95% CI +0.05, +0.45] on 32 PRs; two-sided p 0.031 (minimum reachable 4.8e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/155.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-pstack-high/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.3% vs 47.6%, delta 16.7 points [95% CI 2.7, 29.5]; 7 losses, 17 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.0017 (Holm n/a over 11), p loss 0.988 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/156.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-pstack-high/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 29.8%, delta 34.5 points [95% CI 22.2, 46.6]; 2 losses, 24 gains on 42 blockers in 26 PRs (15 discordant). p non-inferior 0.0 (Holm 0.0 over 11), p loss 1.000 (minimum reachable 0.000031).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/157.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-pstack-high/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): LOSS. Blocking recall 11.9% vs 29.8%, delta -17.9 points [95% CI -28.6, -6.8]; 19 losses, 5 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.915 (Holm 1.000 over 11), p loss 0.0069 (minimum reachable 0.0000038).
+false blockers per PR: pstack-opus 0.22, none-opus 0.53, difference -0.31 [95% CI -0.50, -0.13] on 32 PRs; two-sided p 0.0052 (minimum reachable 9.5e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval is below zero.
+verdict: LOSS
+exit 1 (log/158.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-pstack-high/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 29.8%, delta 17.9 points [95% CI 2.2, 33.7]; 8 losses, 21 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.0015 (Holm n/a over 11), p loss 0.987 (minimum reachable 4.8e-7).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/159.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-pstack-high/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): LOSS. Blocking recall 2.4% vs 23.8%, delta -21.4 points [95% CI -33.3, -6.3]; 10 losses, 1 gains on 42 blockers in 26 PRs (8 discordant). p non-inferior 0.919 (Holm 1.000 over 11), p loss 0.023 (minimum reachable 0.0039).
+false blockers per PR: pstack-particle-1 0.16, gstack-particle-1 0.34, difference -0.19 [95% CI -0.41, 0.00] on 32 PRs; two-sided p 0.146 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: LOSS
+exit 1 (log/160.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-pstack-high/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 23.8% vs 2.4%, delta 21.4 points [95% CI 6.3, 33.3]; 1 losses, 10 gains on 42 blockers in 26 PRs (8 discordant). p non-inferior 0.0012 (Holm 0.011 over 11), p loss 0.996 (minimum reachable 0.0039).
+false blockers per PR: gstack-particle-1 0.34, pstack-particle-1 0.16, difference +0.19 [95% CI 0.00, +0.41] on 32 PRs; two-sided p 0.146 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/161.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-pstack-high/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 21.4%, delta 2.4 points [95% CI -18.4, 19.6]; 8 losses, 9 gains on 42 blockers in 26 PRs (14 discordant). p non-inferior 0.136 (Holm 1.000 over 11), p loss 0.683 (minimum reachable 0.000061).
+false blockers per PR: gstack-particle-1 0.34, none-particle-1 0.38, difference -0.03 [95% CI -0.25, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/162.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high/stacks-r1-pstack-high.json --root $W/stacks-r1-pstack-high/arms --prereg $W/stacks-r1-pstack-high/comparisons.stacks-r1-pstack-high.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-pstack-high/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): LOSS. Blocking recall 2.4% vs 21.4%, delta -19.1 points [95% CI -31.7, -7.0]; 9 losses, 1 gains on 42 blockers in 26 PRs (10 discordant). p non-inferior 0.920 (Holm 1.000 over 11), p loss 0.011 (minimum reachable 0.00098).
+false blockers per PR: pstack-particle-1 0.16, none-particle-1 0.38, difference -0.22 [95% CI -0.44, 0.00] on 32 PRs; two-sided p 0.118 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: LOSS
+exit 1 (log/163.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-pstack-high-medium --out $W/stacks-r1-pstack-high-medium --severity-map $D/severity-map.pstack-high-medium.json
+derive stacks-r1-pstack-high-medium: re-map severity with severity-map.pstack-high-medium.json (sha256 ddfd6eaffa35bafd3797415d02837a85f35994684c860b54acc17a82f02f42f0)
+suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json sha256 6b35ac79434bdf18063b9886d3b7b678a4c67c13c0ab18f7e6745aeda295b11c: 33 units, 42 blocking blockers on 26 PRs; 0 units dropped
+arm gstack-opus: complete, tree 3640696ba0bb92f9d073dbc8a73dea8bd060eef0531895b7968b8c869cfb16d9
+arm gstack-particle-1: complete, tree a1419b2f4f737ba50d5a309c9f55c07eb5c45fe4533b2b067dfa0dbdb0bb1319
+arm none-opus: complete, tree 2b95cca7e5d5e07ba230a1c5b1f847b6b08d59afe2cca774be4ee2e70dee45a0
+arm none-particle-1: complete, tree eb98f81dc4aff556f73b8bcfafe6f45afeb0f29f63caca19181b5ec529c9489d
+arm pstack-opus: complete, tree 2e4d6053ff1b0c41f4b0048503aadaaf249e33e3bde627be44f698fedd472de8
+arm pstack-particle-1: complete, tree de580ed00bd2a9d767f95a7f1024bf541f8f1969fcde619e3d4dbaa4447199e0
+arm tstack-opus: stopped, 1 coverage gaps left, tree 6428c747d94eca7ceaa8d1c8922d56627a682f2044ad0c3f5d34f164b1d09422
+exit 0 (log/164.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): LOSS. Blocking recall 32.1% vs 64.3%, delta -32.1 points [95% CI -47.1, -15.7]; 25 losses, 5 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.992 (Holm 1.000 over 11), p loss 0.0012 (Holm 0.0047, step 1 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: pstack-opus 0.38, gstack-opus 0.47, difference -0.09 [95% CI -0.33, +0.14] on 32 PRs; two-sided p 0.531 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: LOSS
+exit 1 (log/165.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 64.3%, delta -16.7 points [95% CI -29.5, -2.7]; 17 losses, 7 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.827 (Holm n/a over 11), p loss 0.028 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/166.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 32.1%, delta 32.1 points [95% CI 15.7, 47.1]; 5 losses, 25 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.000088 (Holm 0.00088 over 11), p loss 1.000 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 4.8e-7).
+false blockers per PR: gstack-opus 0.47, pstack-opus 0.38, difference +0.09 [95% CI -0.14, +0.33] on 32 PRs; two-sided p 0.531 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/167.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 64.3% vs 47.6%, delta 16.7 points [95% CI 2.7, 29.5]; 7 losses, 17 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.0017 (Holm n/a over 11), p loss 0.988 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/168.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 64.3% vs 29.8%, delta 34.5 points [95% CI 22.2, 46.6]; 2 losses, 24 gains on 42 blockers in 26 PRs (15 discordant). p non-inferior 0.0 (Holm 0.0 over 11), p loss 1.000 (minimum reachable 0.000031).
+false blockers per PR: gstack-opus 0.47, none-opus 0.53, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.662 (minimum reachable 6.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/169.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 32.1% vs 29.8%, delta 2.4 points [95% CI -12.1, 16.7]; 15 losses, 16 gains on 42 blockers in 26 PRs (22 discordant). p non-inferior 0.058 (Holm 0.464 over 11), p loss 0.687 (minimum reachable 2.4e-7).
+false blockers per PR: pstack-opus 0.38, none-opus 0.53, difference -0.16 [95% CI -0.38, +0.06] on 32 PRs; two-sided p 0.224 (minimum reachable 4.8e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/170.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-pstack-high-medium/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 47.6% vs 29.8%, delta 17.9 points [95% CI 2.2, 33.7]; 8 losses, 21 gains on 42 blockers in 26 PRs (21 discordant). p non-inferior 0.0015 (Holm n/a over 11), p loss 0.987 (minimum reachable 4.8e-7).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/171.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-pstack-high-medium/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 19.1% vs 23.8%, delta -4.8 points [95% CI -18.9, 10.3]; 8 losses, 6 gains on 42 blockers in 26 PRs (7 discordant). p non-inferior 0.251 (Holm 1.000 over 11), p loss 0.383 (minimum reachable 0.0078).
+false blockers per PR: pstack-particle-1 0.22, gstack-particle-1 0.34, difference -0.13 [95% CI -0.34, +0.09] on 32 PRs; two-sided p 0.424 (minimum reachable 0.00012); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/172.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-pstack-high-medium/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 19.1%, delta 4.8 points [95% CI -10.3, 18.9]; 6 losses, 8 gains on 42 blockers in 26 PRs (7 discordant). p non-inferior 0.042 (Holm 0.380 over 11), p loss 0.820 (minimum reachable 0.0078).
+false blockers per PR: gstack-particle-1 0.34, pstack-particle-1 0.22, difference +0.13 [95% CI -0.09, +0.34] on 32 PRs; two-sided p 0.424 (minimum reachable 0.00012); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/173.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-pstack-high-medium/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 21.4%, delta 2.4 points [95% CI -18.4, 19.6]; 8 losses, 9 gains on 42 blockers in 26 PRs (14 discordant). p non-inferior 0.136 (Holm 0.951 over 11), p loss 0.683 (minimum reachable 0.000061).
+false blockers per PR: gstack-particle-1 0.34, none-particle-1 0.38, difference -0.03 [95% CI -0.25, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/174.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-pstack-high-medium/stacks-r1-pstack-high-medium.json --root $W/stacks-r1-pstack-high-medium/arms --prereg $W/stacks-r1-pstack-high-medium/comparisons.stacks-r1-pstack-high-medium.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-pstack-high-medium/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 19.1% vs 21.4%, delta -2.4 points [95% CI -21.2, 15.1]; 7 losses, 6 gains on 42 blockers in 26 PRs (12 discordant). p non-inferior 0.234 (Holm 1.000 over 11), p loss 0.500 (minimum reachable 0.00024).
+false blockers per PR: pstack-particle-1 0.22, none-particle-1 0.38, difference -0.16 [95% CI -0.38, +0.06] on 32 PRs; two-sided p 0.302 (minimum reachable 0.000061); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/175.txt)
+
+$ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/comparisons.stacks-r1.json --root $W/final/arms --id stacks-r1-impact --out $W/stacks-r1-impact --impact $W/judge-match/impact.tsv --key $W/match-key.json --impact-judge anthropic/claude-opus-5-5
+derive stacks-r1-impact: re-map severity by judge anthropic/claude-opus-5-5's impact ratings in impact.tsv (sha256 b95d3a9a2ad71230b0dcc4e197a5bd4c27a234fac5fd2cbe417f1afd1289e5b1) from batch ab40a30bd33f8a387cdf5876071028de98bb21f4194ff2887e676150379ecbc5; an unrated finding counts as non-blocking
+suite $W/stacks-r1-impact/stacks-r1-impact.json sha256 3070dae4bfbc4adf60b7896d462ba8a6fc488e5a4900db243803ca40cbf64749: 33 units, 42 blocking blockers on 26 PRs; 0 units dropped
+arm gstack-opus: complete, tree 9f322eb120e1cccd341b3df9be11a6efe325b17e3939b2654ac245a7157d3faf
+arm gstack-particle-1: complete, tree 9f3d2d09404db1d2183b4e9d131625eb945968450fdd99a6172dfe73fe8f0a50
+arm none-opus: complete, tree 577a01bdae423e9269482d2706a699ee2f701c731e6d321af236b05e48ee877e
+arm none-particle-1: complete, tree beebaf2d19475acada094e8c3f06321db44b3e008188bc559e648cf51dc7c5b6
+arm pstack-opus: complete, tree 8f384c4960bdb2ffcea900049068de2636885efdc45e8ae5b48d68dd267dd435
+arm pstack-particle-1: complete, tree 399adf2ce5339e3b2f3b3cc929c70193aa0560f538c9491db5c100150ef97126
+arm tstack-opus: stopped, 1 coverage gaps left, tree 9bd7ef0b94c79bd2dc3c4a00b8144dd7f765ce32364946115fbb8909aff42e32
+exit 0 (log/176.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant pstack-opus --reference gstack-opus --out $W/stacks-r1-impact/arms/../score-pstack-vs-gstack.json
+pstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 38.1% vs 48.8%, delta -10.7 points [95% CI -26.2, 8.6]; 15 losses, 8 gains on 42 blockers in 26 PRs (16 discordant). p non-inferior 0.541 (Holm 1.000 over 11), p loss 0.174 (Holm 0.695, step 1 of 4 in the declared LOSS family) (minimum reachable 0.000015).
+false blockers per PR: pstack-opus 0.36, gstack-opus 0.28, difference +0.08 [95% CI -0.13, +0.27] on 32 PRs; two-sided p 0.541 (minimum reachable 0.0000076); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/177.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant tstack-opus --reference gstack-opus --out $W/stacks-r1-impact/arms/../score-tstack-vs-gstack.json
+tstack-opus vs gstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 35.7% vs 48.8%, delta -13.1 points [95% CI -26.0, 1.6]; 16 losses, 8 gains on 42 blockers in 26 PRs (17 discordant). p non-inferior 0.668 (Holm n/a over 11), p loss 0.084 (Holm n/a, step 3 of 4 in the declared LOSS family) (minimum reachable 0.0000076).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/178.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant gstack-opus --reference pstack-opus --out $W/stacks-r1-impact/arms/../score-gstack-vs-pstack.json
+gstack-opus vs pstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 48.8% vs 38.1%, delta 10.7 points [95% CI -8.6, 26.2]; 8 losses, 15 gains on 42 blockers in 26 PRs (16 discordant). p non-inferior 0.035 (Holm 0.276 over 11), p loss 0.881 (Holm 1.000, step 2 of 4 in the declared LOSS family) (minimum reachable 0.000015).
+false blockers per PR: gstack-opus 0.28, pstack-opus 0.36, difference -0.08 [95% CI -0.27, +0.13] on 32 PRs; two-sided p 0.541 (minimum reachable 0.0000076); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/179.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant gstack-opus --reference tstack-opus --out $W/stacks-r1-impact/arms/../score-gstack-vs-tstack.json
+gstack-opus vs tstack-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 48.8% vs 35.7%, delta 13.1 points [95% CI -1.6, 26.0]; 8 losses, 16 gains on 42 blockers in 26 PRs (17 discordant). p non-inferior 0.0075 (Holm n/a over 11), p loss 0.954 (Holm n/a, step 4 of 4 in the declared LOSS family) (minimum reachable 0.0000076).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/180.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant gstack-opus --reference none-opus --out $W/stacks-r1-impact/arms/../score-gstack-vs-none.json
+gstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): non-inferior within 10 points (NO_LOSS). Blocking recall 48.8% vs 30.9%, delta 17.9 points [95% CI 2.4, 31.8]; 8 losses, 20 gains on 42 blockers in 26 PRs (17 discordant). p non-inferior 0.0025 (Holm 0.027 over 11), p loss 0.984 (minimum reachable 0.0000076).
+false blockers per PR: gstack-opus 0.28, none-opus 0.34, difference -0.06 [95% CI -0.27, +0.14] on 32 PRs; two-sided p 0.657 (minimum reachable 1.2e-7); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+exit 2 (log/181.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant pstack-opus --reference none-opus --out $W/stacks-r1-impact/arms/../score-pstack-vs-none.json
+pstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 38.1% vs 30.9%, delta 7.1 points [95% CI -6.4, 22.5]; 12 losses, 16 gains on 42 blockers in 26 PRs (15 discordant). p non-inferior 0.011 (Holm 0.102 over 11), p loss 0.876 (minimum reachable 0.000031).
+false blockers per PR: pstack-opus 0.36, none-opus 0.34, difference +0.02 [95% CI -0.19, +0.22] on 32 PRs; two-sided p 1.000 (minimum reachable 3.0e-8); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/182.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant tstack-opus --reference none-opus --out $W/stacks-r1-impact/arms/../score-tstack-vs-none.json
+tstack-opus vs none-opus at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): no verdict (arm tstack-opus stopped, so there is no verdict). Blocking recall 35.7% vs 30.9%, delta 4.8 points [95% CI -8.0, 17.9]; 11 losses, 17 gains on 42 blockers in 26 PRs (18 discordant). p non-inferior 0.020 (Holm n/a over 11), p loss 0.817 (minimum reachable 0.0000038).
+false blockers per PR: incomplete, so not tested (arm tstack-opus stopped, so there is no verdict).
+verdict: none
+exit 2 (log/183.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant pstack-particle-1 --reference gstack-particle-1 --out $W/stacks-r1-impact/arms/../score-pstack-vs-gstack-particle.json
+pstack-particle-1 vs gstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 11.9% vs 23.8%, delta -11.9 points [95% CI -25.7, 2.8]; 9 losses, 4 gains on 42 blockers in 26 PRs (11 discordant). p non-inferior 0.614 (Holm 1.000 over 11), p loss 0.113 (minimum reachable 0.00049).
+false blockers per PR: pstack-particle-1 0.22, gstack-particle-1 0.19, difference +0.03 [95% CI -0.19, +0.28] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/184.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant gstack-particle-1 --reference pstack-particle-1 --out $W/stacks-r1-impact/arms/../score-gstack-vs-pstack-particle.json
+gstack-particle-1 vs pstack-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 11.9%, delta 11.9 points [95% CI -2.8, 25.7]; 4 losses, 9 gains on 42 blockers in 26 PRs (11 discordant). p non-inferior 0.0073 (Holm 0.073 over 11), p loss 0.967 (minimum reachable 0.00049).
+false blockers per PR: gstack-particle-1 0.19, pstack-particle-1 0.22, difference -0.03 [95% CI -0.28, +0.19] on 32 PRs; two-sided p 1.000 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/185.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant gstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-impact/arms/../score-gstack-vs-none-particle.json
+gstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 23.8% vs 14.3%, delta 9.5 points [95% CI -10.6, 27.1]; 5 losses, 9 gains on 42 blockers in 26 PRs (12 discordant). p non-inferior 0.041 (Holm 0.290 over 11), p loss 0.878 (minimum reachable 0.00024).
+false blockers per PR: gstack-particle-1 0.19, none-particle-1 0.25, difference -0.06 [95% CI -0.28, +0.16] on 32 PRs; two-sided p 0.774 (minimum reachable 0.00049); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/186.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/stacks-r1-impact/stacks-r1-impact.json --root $W/stacks-r1-impact/arms --prereg $W/stacks-r1-impact/comparisons.stacks-r1-impact.json --variant pstack-particle-1 --reference none-particle-1 --out $W/stacks-r1-impact/arms/../score-pstack-vs-none-particle.json
+pstack-particle-1 vs none-particle-1 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin): NOT_DISTINGUISHED. Blocking recall 11.9% vs 14.3%, delta -2.4 points [95% CI -17.5, 10.8]; 5 losses, 4 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.172 (Holm 1.000 over 11), p loss 0.500 (minimum reachable 0.016).
+false blockers per PR: pstack-particle-1 0.22, none-particle-1 0.25, difference -0.03 [95% CI -0.22, +0.16] on 32 PRs; two-sided p 1.000 (minimum reachable 0.0039); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NOT_DISTINGUISHED
+exit 2 (log/187.txt)
+
+## TB2 (section 8 and the superseding post)
+
+$ sh -c git -C $R show laneb-stacks-1-runner:quick/laneb/tasks/final.json | sha256sum
+9ccfec13f01c150f4ec838e19285375a1f034522c1a069c0ee83d75d12dd56d9  -
+exit 0 (log/188.txt)
+
+$ bun $R/quick/laneb/analysis/stacks-tb2.ts $W/tb2/stacks-tb2.config.json
+## all tasks, trials without a reward after a model response scored 0
+| claude-opus-5-5 | pstack - gstack | 40 | +7 [-3, +17] |
+| claude-opus-5-5 | gstack - none | 40 | -2 [-12, +9] |
+| claude-haiku-5-5 | pstack - gstack | 40 | +2 [-8, +12] |
+| claude-haiku-5-5 | pstack - pstack-placebo | 40 | +6 [-7, +20] |
+| claude-haiku-5-5 | gstack - none | 40 | +2 [-11, +14] |
+| particle-1 | pstack - gstack | 40 | -1 [-11, +9] |
+| particle-1 | pstack - pstack-placebo | 40 | +4 [-8, +15] |
+| particle-1 | gstack - none | 40 | -4 [-16, +7] |
+| claude-opus-5-5 | no |
+| claude-haiku-5-5 | no |
+| particle-1 | no |
+| claude-opus-5-5 | 40 | 1 | 0.50 | 1 | no | large-scale-text-editing |
+| claude-haiku-5-5 | 40 | 0 | 0.00 | 0 | no | none |
+| particle-1 | 40 | 2 | 1.50 | 3 | no | configure-git-webserver, kv-store-grpc |
+## subset original_20 (20 tasks), trials without a reward after a model response scored 0
+| claude-opus-5-5 | pstack - gstack | 20 | +7 [-5, +20] |
+| claude-opus-5-5 | gstack - none | 20 | -5 [-20, +10] |
+| claude-haiku-5-5 | pstack - gstack | 20 | -2 [-15, +12] |
+| claude-haiku-5-5 | pstack - pstack-placebo | 20 | +12 [-5, +28] |
+| claude-haiku-5-5 | gstack - none | 20 | +5 [-15, +23] |
+| particle-1 | pstack - gstack | 20 | -5 [-20, +10] |
+| particle-1 | pstack - pstack-placebo | 20 | -5 [-22, +12] |
+| particle-1 | gstack - none | 20 | -7 [-22, +8] |
+| claude-opus-5-5 | no |
+| claude-haiku-5-5 | no |
+| particle-1 | no |
+| claude-opus-5-5 | 20 | 0 | 0.00 | 0 | no | none |
+| claude-haiku-5-5 | 20 | 0 | 0.00 | 0 | no | none |
+| particle-1 | 20 | 1 | 0.99 | 2 | no | configure-git-webserver |
+## all tasks, trials without a reward after a model response dropped
+| claude-opus-5-5 | pstack - gstack | 40 | +6 [-4, +16] |
+| claude-opus-5-5 | gstack - none | 40 | -1 [-11, +10] |
+| claude-haiku-5-5 | pstack - gstack | 40 | +2 [-8, +12] |
+| claude-haiku-5-5 | pstack - pstack-placebo | 40 | +5 [-8, +19] |
+| claude-haiku-5-5 | gstack - none | 40 | +1 [-12, +13] |
+| particle-1 | pstack - gstack | 40 | -1 [-11, +9] |
+| particle-1 | pstack - pstack-placebo | 40 | +4 [-8, +15] |
+| particle-1 | gstack - none | 40 | -5 [-17, +7] |
+| claude-opus-5-5 | no |
+| claude-haiku-5-5 | no |
+| particle-1 | no |
+| claude-opus-5-5 | 40 | 1 | 0.50 | 1 | no | large-scale-text-editing |
+| claude-haiku-5-5 | 40 | 0 | 0.00 | 0 | no | none |
+| particle-1 | 40 | 2 | 1.50 | 3 | no | configure-git-webserver, kv-store-grpc |
+## subset original_20 (20 tasks), trials without a reward after a model response dropped
+| claude-opus-5-5 | pstack - gstack | 20 | +7 [-5, +20] |
+| claude-opus-5-5 | gstack - none | 20 | -5 [-20, +10] |
+| claude-haiku-5-5 | pstack - gstack | 20 | -2 [-15, +12] |
+| claude-haiku-5-5 | pstack - pstack-placebo | 20 | +10 [-8, +28] |
+| claude-haiku-5-5 | gstack - none | 20 | +5 [-15, +23] |
+| particle-1 | pstack - gstack | 20 | -5 [-20, +10] |
+| particle-1 | pstack - pstack-placebo | 20 | -5 [-22, +12] |
+| particle-1 | gstack - none | 20 | -7 [-22, +8] |
+| claude-opus-5-5 | no |
+| claude-haiku-5-5 | no |
+| particle-1 | no |
+| claude-opus-5-5 | 20 | 0 | 0.00 | 0 | no | none |
+| claude-haiku-5-5 | 20 | 0 | 0.00 | 0 | no | none |
+| particle-1 | 20 | 1 | 0.99 | 2 | no | configure-git-webserver |
+exit 0 (log/189.txt)
+
+# The runner tag's analyze.ts: its fixed pairs give no pstack row, and it drops trials without a reward.
+
+$ bun $W/tag/quick/laneb/analysis/analyze.ts $W/tb2/tag-analyze.config.json
+| claude-opus-5-5 | gstack - none | 40 | -1 [-11, +10] |
+| claude-opus-5-5 | gstack - placebo | 0 | n/a [n/a, n/a] |
+| claude-opus-5-5 | placebo - none | 0 | n/a [n/a, n/a] |
+| claude-haiku-5-5 | gstack - none | 40 | +1 [-12, +13] |
+| claude-haiku-5-5 | gstack - placebo | 40 | +6 [-6, +18] |
+| claude-haiku-5-5 | placebo - none | 40 | -5 [-16, +6] |
+| particle-1 | gstack - none | 40 | -5 [-17, +7] |
+| particle-1 | gstack - placebo | 40 | +2 [-12, +15] |
+| particle-1 | placebo - none | 40 | -7 [-20, +6] |
+| claude-opus-5-5 | gstack - none | 20 | -5 [-20, +10] |
+| claude-opus-5-5 | gstack - placebo | 0 | n/a [n/a, n/a] |
+| claude-opus-5-5 | placebo - none | 0 | n/a [n/a, n/a] |
+| claude-haiku-5-5 | gstack - none | 20 | +5 [-15, +23] |
+| claude-haiku-5-5 | gstack - placebo | 20 | +12 [-7, +30] |
+| claude-haiku-5-5 | placebo - none | 20 | -7 [-23, +10] |
+| particle-1 | gstack - none | 20 | -7 [-22, +8] |
+| particle-1 | gstack - placebo | 20 | +5 [-13, +23] |
+| particle-1 | placebo - none | 20 | -12 [-33, +8] |
+  "infra": [
+  "nTrials": 1560
+exit 0 (log/190.txt)
+
+$ sh -c sed -n '/skillCounts/,/infra/p' $W/log/190.txt | grep -v '{}\|^  *}' | head -40
+  "skillCounts": {
+    "claude-opus-5-5|gstack": {
+      "investigate": 100
+    "claude-opus-5-5|pstack": {
+      "poteto-mode": 92
+    "claude-haiku-5-5|gstack": {
+      "investigate": 96
+    "claude-haiku-5-5|placebo": {
+      "investigate": 87
+    "claude-haiku-5-5|pstack": {
+      "poteto-mode": 96
+    "claude-haiku-5-5|pstack-placebo": {
+      "poteto-mode": 93
+    "particle-1|gstack": {
+      "investigate": 98
+    "particle-1|placebo": {
+      "investigate": 89
+    "particle-1|pstack": {
+      "poteto-mode": 92
+    "particle-1|pstack-placebo": {
+      "poteto-mode": 92
+  "infra": [
+exit 0 (log/191.txt)
+
+$ python3 -c import json,sys; last=lambda p: json.loads(open(p).read()[open(p).read().rindex('\n{'):]); t=last('$W/log/190.txt'); s=last('$W/log/189.txt'); print('stacks-tb2.ts: %d no-reward trials scored 0 (drop reading beside), %d infra' % (len(s['noReward']), len(s['infra']))); print('tag analyze.ts: %d trials dropped as infra' % len(t['infra']))
+stacks-tb2.ts: 7 no-reward trials scored 0 (drop reading beside), 5 infra
+tag analyze.ts: 12 trials dropped as infra
+exit 0 (log/192.txt)
+
+dry run done: 192 steps

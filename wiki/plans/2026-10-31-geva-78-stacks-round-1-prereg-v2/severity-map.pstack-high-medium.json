@@ -1,0 +1,21 @@
+{
+  "pstack": {
+    "default": {
+      "HIGH": "INFORMATIONAL",
+      "MEDIUM": "INFORMATIONAL",
+      "LOW": "INFORMATIONAL"
+    },
+    "by_reader": {
+      "confirmed": {
+        "HIGH": "CRITICAL",
+        "MEDIUM": "CRITICAL",
+        "LOW": "INFORMATIONAL"
+      },
+      "unconfirmed": {
+        "HIGH": "INFORMATIONAL",
+        "MEDIUM": "INFORMATIONAL",
+        "LOW": "INFORMATIONAL"
+      }
+    }
+  }
+}
