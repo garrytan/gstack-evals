@@ -1,0 +1,5 @@
+noloss secondary: none-opus vs lens-opus on planrev-ceo-r1a-pilot (sha256 40e0b954a419514e9e5faf7a11c0dedc6a5b17bef308481dfe1dc26bd527ab14), seed 20261031
+recall, none-opus: blocking 8/8 = 1 [1, 1]; at any severity 8/8 = 1 [1, 1]; 0 judgments with coverage incomplete
+recall, lens-opus: blocking 8/8 = 1 [1, 1]; at any severity 8/8 = 1 [1, 1]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.25, reference 0.5 (1 and 2 in all, 4 PRs); difference -0.25 [-0.75, 0], exact two-sided sign-flip p 1 (min p 1)
+idea-card wins: 0 of 8 blocking blockers (found by none-opus in every pass and by lens-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 0, 95th percentile 0; above the null: no
