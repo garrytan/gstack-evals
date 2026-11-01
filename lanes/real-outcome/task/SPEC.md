@@ -103,24 +103,26 @@ shell.
    `.real-verifier-config.<ext>`.
 3. Run, in a container from the same image: the volume mounted read-only at `/testbed`, user 10001, `--network
    none`, `--read-only` root, a tmpfs `/tmp`, no capabilities, no-new-privileges, a CPU quota and a memory cap.
-   pytest runs through `vrun.py`, which prints the start line (step 5) first, then imports pytest and the image's
-   pytest11 plugins while only the image's paths are on `sys.path`, then runs with plugin autoload off, so no module or
-   dist-info in the tree loads as a plugin. An editable install in the image can still map a package name into the
-   tree, so an image plugin that imports it runs tree code; that code runs after the start line. It
+   pytest runs through `vrun.py`, which an sh entrypoint execs after it prints the start line (step 5). vrun.py imports
+   pytest and the image's pytest11 plugins while only the image's paths are on `sys.path`, then runs with plugin
+   autoload off, so no module or dist-info in the tree loads as a plugin. An editable install in the image can still
+   put a tree path on `sys.path` (a `.pth`) or map a package name into the tree, so site.py can import a
+   `sitecustomize` from the tree at interpreter start, and an image plugin that imports the package runs tree code; that
+   code runs after the start line. It
    reads ini options only from gold's config (`-c`), shuffles the tests with a recorded seed and writes each test's phases to
    the record as it goes. Go runs `go test -json -count=1 -shuffle=<seed>` with `GOFLAGS=-mod=readonly` and
    `GOPROXY=off`; gold's go.mod and go.sum are restored, so a `replace` in the tree can't swap a dependency. Build
    errors are read from stderr (Go 1.23 and older) or from build-output events (Go 1.24 and newer).
 4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
    only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it.
-5. Each run prints `real-verifier: started` on stdout before any code from the tree can run: vrun.py as the first act
-   of its main, before it imports pytest or loads a plugin, and the Go command before `go test`. A run that never
-   printed it and did not time out has no verdict, and `verify` and `check` stop with E_REAL_TASK_DOCKER: Docker could
-   not start the container or its entrypoint (exit 125 to 127), or the interpreter exited before vrun.py's first line.
-   Once the line is out, code from the tree can run as the same user, write `/out` and pick its own exit status, so
-   every exit status, crash, missing record or missing `/out/exit` after it is the tree's outcome, a swapped runner or
-   a plugin that fails to load included. Every timeout is the tree's outcome too, with or without the line. Nothing the
-   tree can touch turns a failure into no verdict.
+5. Each run's sh entrypoint prints `real-verifier: started` on stdout before it execs python (vrun.py) or `go test`,
+   so the line comes out before any interpreter, start-up hook or code from the tree runs. A run that never printed it
+   and did not time out has no verdict, and `verify` and `check` stop with E_REAL_TASK_DOCKER: Docker could not start
+   the container or its entrypoint (exit 125 to 127). Once the line is out, code from the tree can run as the same
+   user, write `/out` and pick its own exit status, so every exit status, crash, missing record or missing `/out/exit`
+   after it is the tree's outcome, a runner that fails to start, a swapped runner, a plugin that fails to load or a
+   tree `sitecustomize` that exits at interpreter start included. Every timeout is the tree's outcome too, with or
+   without the line. Nothing the tree can touch turns a failure into no verdict.
 
 Failure classes: `assert` (the test body ran and failed), `missing_name` (an attribute, import or symbol that
 doesn't exist) and `load` (collection, import, setup or build failed otherwise).

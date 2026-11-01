@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
 import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, regressionDigest, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
-import { requiredTests, RUN_STARTED, runInfra } from "../../lanes/real-outcome/task/verify.ts";
+import { PYTEST_ENTRY, requiredTests, RUN_STARTED, runInfra } from "../../lanes/real-outcome/task/verify.ts";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { isProtectedPath } from "../../lanes/real-outcome/mine/paths.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
@@ -290,9 +290,11 @@ describe("what a grader grades", () => {
     expect(runInfra({ status: 126, stdout: RUN_STARTED + "\n", timed_out: false })).toBeNull();
     expect(runInfra({ status: 1, stdout: "a plugin banner\n" + RUN_STARTED + "\n1 failed\n", timed_out: false })).toBeNull();
     expect(runInfra({ status: 137, stdout: "", timed_out: true })).toBeNull();
-    const vrun = readFileSync(join(VERIFIER_DIR, "vrun.py"), "utf8");
-    expect(vrun).toContain('    print("' + RUN_STARTED + '", flush=True)\n');
-    expect(vrun.indexOf('    print("' + RUN_STARTED + '", flush=True)\n')).toBeLessThan(vrun.indexOf("\n    import pytest\n"));
+    const stub = join(tmp.dir, "stub-python");
+    writeFileSync(stub, '#!/bin/sh\necho "runner $*"\nexit 3\n', { mode: 0o755 });
+    const entry = spawnSync("sh", ["-c", PYTEST_ENTRY, stub, "/out/record.jsonl", "/testbed/.real-verifier-config.ini"], { encoding: "utf8" });
+    expect(entry.stdout).toBe(RUN_STARTED + "\nrunner -s /verifier/vrun.py /out/record.jsonl /testbed/.real-verifier-config.ini\n");
+    expect(entry.status).toBe(3);
   });
 });
 

@@ -4,8 +4,8 @@
 // conftest hooks, symlinked tests, a swapped runner, a plugin in the tree, an exit at import or inside a test,
 // agent-side config, an early TestMain, a weakened helper, a go.mod edit and a patch that does not apply, none of
 // which passes a hidden test it should fail, beside honest fixes that pass. Also: the regression list grades only once
-// frozen, a run the verifier never started has no verdict, and a tree an image plugin imports through an editable
-// install still fails when it exits or breaks at that import. Keyless: no model call; the images install pinned, hashed packages at build time.
+// frozen, only a run Docker never started has no verdict, and a tree an image plugin imports through an editable
+// install, or one site.py imports through a .pth, still fails when it exits or breaks at that import. Keyless: no model call; the images install pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { appendFileSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -129,11 +129,15 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(allPass(tree, requiredTests(frozen))).toBe(false);
   }, LONG);
 
-  test("a run the verifier never started has no verdict, and an exit status from the tree stays the tree's", () => {
+  test("only a run Docker never started has no verdict, and every outcome after the start line stays the tree's", () => {
     const honest = patchFrom(calc(), sha.c3, { ...intro, "calc/fmt.py": fixed });
-    const run = (label: string, python: string) => () => verifyTree({ taskDir: k1Dir, task: { ...k1, runner: { ...k1.runner, python } as TaskJson["runner"] }, image, label, patch: honest, runs: 1, seed: 7, work: join(tmp.dir, "work-infra") });
-    expect(run("no-entrypoint", "/nonexistent/python")).toThrow(/no-entrypoint: run 1 of 1 has no verdict: the verifier never started \(docker exited 12[5-7]\)/);
-    expect(run("runner-crash", "/bin/false")).toThrow(/runner-crash: run 1 of 1 has no verdict: the verifier never started \(docker exited 1\)/);
+    const run = (label: string, task: TaskJson) => verifyTree({ taskDir: k1Dir, task, image, label, patch: honest, runs: 1, seed: 7, work: join(tmp.dir, "work-infra") });
+    expect(() => run("not-started", { ...k1, limits: { ...k1.limits, memory: "lots" } })).toThrow(/not-started: run 1 of 1 has no verdict: the verifier never started \(docker exited 125\)/);
+    for (const [label, python] of [["no-runner", "/nonexistent/python"], ["runner-crash", "/bin/false"]]) {
+      const tree = run(label, { ...k1, runner: { ...k1.runner, python } as TaskJson["runner"] });
+      expect(allPass(tree, [...k1.tests.functional, ...k1.tests.escaped_defect])).toBe(false);
+      expect(resultFor(tree.runs[0].parsed, "tests/test_percent.py::test_percent_half").status).toBe("missing");
+    }
     const forged = grade("exit-126", { ...intro, "calc/fmt.py": "import os\nos._exit(126)\n" + FMT_4 });
     expect(forged.tree.runs[0].exit).toBe(126);
     expect(forged.pass).toBe(false);
@@ -162,6 +166,27 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
       expect(on("editable-honest", "")).toEqual({ pass: true, half: "pass" });
       expect(on("editable-exit", "import os\nos._exit(0)\n")).toEqual({ pass: false, half: "missing" });
       expect(on("editable-import-error", 'raise ImportError("broken by the tree")\n')).toEqual({ pass: false, half: "missing" });
+    } finally {
+      docker(["rmi", "-f", tag]);
+    }
+  }, LONG);
+
+  test("a tree that site.py imports through a path .pth before the verifier runs is graded when it exits there", () => {
+    const ctx = join(tmp.dir, "pth-image");
+    mkdirSync(ctx, { recursive: true });
+    writeFileSync(join(ctx, "testbed.pth"), "/testbed\n");
+    const python = (k1.runner as { python: string }).python;
+    writeFileSync(join(ctx, "Dockerfile"), "FROM " + image + "\nCOPY testbed.pth /tmp/testbed.pth\nRUN " + python + " -c \"import shutil, sysconfig; shutil.move('/tmp/testbed.pth', sysconfig.get_paths()['purelib'])\"\n");
+    const tag = "real-pth-test:" + process.pid;
+    expect(docker(["build", "-q", "-t", tag, ctx], { timeoutMs: LONG }).status).toBe(0);
+    try {
+      const on = (label: string, files: Record<string, string>) => {
+        const tree = verifyTree({ taskDir: k1Dir, task: k1, image: tag, label, patch: patchFrom(calc(), sha.c3, { ...intro, "calc/fmt.py": fixed, ...files }), runs: 1, seed: 7, work: join(tmp.dir, "work-pth") });
+        return { pass: allPass(tree, [...k1.tests.functional, ...k1.tests.escaped_defect]), half: resultFor(tree.runs[0].parsed, "tests/test_percent.py::test_percent_half").status };
+      };
+      expect(on("pth-honest", {})).toEqual({ pass: true, half: "pass" });
+      expect(on("pth-sitecustomize-exit", { "sitecustomize/__init__.py": "import os\nos._exit(0)\n" })).toEqual({ pass: false, half: "missing" });
+      expect(on("pth-sitecustomize-system-exit", { "sitecustomize/__init__.py": "raise SystemExit(3)\n" })).toEqual({ pass: false, half: "missing" });
     } finally {
       docker(["rmi", "-f", tag]);
     }

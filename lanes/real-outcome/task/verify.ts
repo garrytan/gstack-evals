@@ -14,9 +14,12 @@ import { parseGoTest, parsePytest, resultFor, type Parsed, type TestResult } fro
 
 export const RUN_UID = "10001:10001";
 
-/** The line each run prints on stdout before any code from the tree can run: vrun.py as the first act of its main,
- * before it imports pytest or loads a plugin, the Go command before go test. Code from the tree can only add to stdout after it, never take it back. */
+/** The line each run's sh entrypoint prints on stdout before it execs python or go test, so it comes out before any
+ * interpreter, start-up hook or code from the tree runs. Code from the tree can only add to stdout after it, never take it back. */
 export const RUN_STARTED = "real-verifier: started";
+
+/** The pytest run's sh entrypoint: $0 is the image's python, the rest are vrun.py's arguments. */
+export const PYTEST_ENTRY = 'echo "' + RUN_STARTED + '"; exec "$0" -s /verifier/vrun.py "$@"';
 
 export interface RunRecord {
   seed: number;
@@ -49,11 +52,11 @@ export interface VerifyOptions {
 }
 
 /** Why a run has no verdict for the tree, or null when it has one. A run that never printed RUN_STARTED and did not
- * time out was never graded: Docker could not start the container or its entrypoint (exit 125 to 127), or the
- * interpreter exited before vrun.py's first line. vrun.py prints RUN_STARTED before it imports pytest or loads a
- * plugin, so code from the tree (same user, can write /out and pick its own exit status) runs only after it, and every
- * exit status, crash, missing record or missing /out/exit is the tree's outcome. Every timeout is the tree's outcome
- * too, with or without the line. */
+ * time out was never graded: Docker could not start the container or its sh entrypoint (exit 125 to 127). The
+ * entrypoint prints RUN_STARTED before it execs python or go, so no interpreter, start-up hook (site.py, a .pth, a
+ * sitecustomize in any form) or code from the tree (same user, can write /out and pick its own exit status) runs before
+ * it, and every exit status, crash, missing record or missing /out/exit is the tree's outcome, a runner that fails to
+ * start included. Every timeout is the tree's outcome too, with or without the line. */
 export function runInfra(res: { status: number; stdout: string; timed_out: boolean }): string | null {
   if (res.timed_out || res.stdout.split("\n").includes(RUN_STARTED)) return null;
   return "the verifier never started (docker exited " + res.status + ")";
@@ -124,7 +127,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
       const r = o.task.runner;
       const cmd =
         r.kind === "pytest"
-          ? [...base, "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "PYTHONPYCACHEPREFIX=/tmp/pycache", "--entrypoint", r.python, o.image, "-s", "/verifier/vrun.py", "/out/record.jsonl", "/testbed/" + configName(r.config), "/out/targets.txt", String(seed)]
+          ? [...base, "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "PYTHONPYCACHEPREFIX=/tmp/pycache", "--entrypoint", "sh", o.image, "-c", PYTEST_ENTRY, r.python, "/out/record.jsonl", "/testbed/" + configName(r.config), "/out/targets.txt", String(seed)]
           : [...base, "-e", "GOFLAGS=-mod=readonly", "-e", "GOPROXY=off", "-e", "GOTOOLCHAIN=local", "-e", "GOCACHE=/tmp/gocache", "-e", "GOTMPDIR=/tmp", "--entrypoint", "sh", o.image, "-c", 'echo "' + RUN_STARTED + '"; go test -json -count=1 -shuffle=' + seed + ' $(sed "s|^|./|" /out/targets.txt) > /out/record.jsonl 2> /out/stderr.txt; echo $? > /out/exit'];
       const res = docker(cmd, { timeoutMs: limits.verifier_sec * 1000 });
       if (res.timed_out) docker(["kill", name]);
