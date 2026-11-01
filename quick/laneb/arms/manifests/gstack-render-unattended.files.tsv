@@ -614,7 +614,6 @@ eac4a918e6c850a7c6aa28e76c5dc5c88e01737ff037b27533959d9aeb0a5a7a	1531	755	file	.
 e82e5ec114a71bbf18f10893994477ff6500aed88640de4b45534021d0aede7f	1897	755	file	.claude/skills/gstack-upgrade/migrations/v1.91.65.0.sh
 39fb695d7b1345eaaffe3fdf62cb4f45c0daa27fcb54230e08eb40338ef1aeb9	171	644	file	.claude/skills/gstack/.env.example
 -	0	755	dir	.claude/skills/gstack/.git
-049b84ab1d77a3b4cc19dfbfbf58d12c808e88f0344feb11e3a8c4ef7b02f14c	124	644	file	.claude/skills/gstack/.git/FETCH_HEAD
 724348b835220fdb8ecb791f147ac724915fc3d3e16354f63d39c574aa11423f	41	644	file	.claude/skills/gstack/.git/HEAD
 cfe7ba1238c9a78be7535d7c63bcaf5a4d5011d46b07c9b45d3bbf7d6c312dfe	92	644	file	.claude/skills/gstack/.git/config
 85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee	73	644	file	.claude/skills/gstack/.git/description
@@ -639,9 +638,9 @@ a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f	2783	755	file	.
 -	0	755	dir	.claude/skills/gstack/.git/objects
 -	0	755	dir	.claude/skills/gstack/.git/objects/info
 -	0	755	dir	.claude/skills/gstack/.git/objects/pack
-1709e34b51edc3013ddddc97a232140a447c1d8fcfc475cd1a6e82287fd46c0e	138160	444	file	.claude/skills/gstack/.git/objects/pack/pack-971f3e360daa1ff14ebaf83e90ee59366f87273b.idx
-5efb0d297443c08542a092483c046ba348d36c00f49172e79f574cc7b36601b9	24721584	444	file	.claude/skills/gstack/.git/objects/pack/pack-971f3e360daa1ff14ebaf83e90ee59366f87273b.pack
-d40e3d87a6cc0317df9918802d87092a8eb2097873320f1fadb2ac08ea4aaaaa	19636	444	file	.claude/skills/gstack/.git/objects/pack/pack-971f3e360daa1ff14ebaf83e90ee59366f87273b.rev
+2787c475bc00d542ce5cc8ca34c690a3973cebc94b2a124a005c929610c0bf05	138160	444	file	.claude/skills/gstack/.git/objects/pack/pack-bac0e02e19038d1ba1c83b93ef1c0373fe80332e.idx
+23bbf56dc93f8380897319492fc18b4d7e01a9f164d09c5bbb8d1dac913a7048	24892689	444	file	.claude/skills/gstack/.git/objects/pack/pack-bac0e02e19038d1ba1c83b93ef1c0373fe80332e.pack
+71298fcee031582842ad92378284fa0c63fbf5dd79fa8f8e9d556c27984ae282	19636	444	file	.claude/skills/gstack/.git/objects/pack/pack-bac0e02e19038d1ba1c83b93ef1c0373fe80332e.rev
 -	0	755	dir	.claude/skills/gstack/.git/refs
 -	0	755	dir	.claude/skills/gstack/.git/refs/heads
 -	0	755	dir	.claude/skills/gstack/.git/refs/tags
