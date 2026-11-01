@@ -5,8 +5,8 @@
 // after the user message (no result with STUB_HANG=1, so the turn never ends; STUB_CONTENT_LATER, when set, answers every
 // user message after the first). STUB_MODE=exit exits with STUB_EXIT after the tool_use: STUB_DELAY ms later, or with
 // STUB_ON_EOF=1 only once its stdin closes. STUB_STDERR is written to stderr STUB_STDERR_TIMES times (default once) on each
-// user message. STUB_RECORD, when set, names a file the stub appends its argv and every control request to, one JSON
-// line each.
+// user message. STUB_RECORD, when set, names a file the stub appends its argv, every control request and every user
+// message to, one JSON line each.
 const rl = require("readline").createInterface({ input: process.stdin });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const env = process.env;
@@ -29,6 +29,7 @@ rl.on("line", (line) => {
     return;
   }
   if (m.type !== "user") return;
+  if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify(m) + "\n");
   users++;
   if (users === 1) out({ type: "system", subtype: "init", session_id: "s", model: "stub", tools: [], cwd: "/", permissionMode: "default", apiKeySource: "none", claude_code_version: "0", skills: [], mcp_servers: [], slash_commands: [], output_style: "default", uuid: "u0" });
   if (env.STUB_STDERR) process.stderr.write(env.STUB_STDERR.repeat(Number(env.STUB_STDERR_TIMES ?? 1)));

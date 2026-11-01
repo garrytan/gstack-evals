@@ -21,7 +21,8 @@ import { volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
 import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, type PreparedUnit, type ReviewArm } from "./run.ts";
-import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planArmLine, planArmOf, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanLens } from "./plan.ts";
+import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_ASK, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
+import { planArmFor, planPrefixProblem, planToldLine } from "./plan-told.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -41,15 +42,18 @@ export const REVIEW_UNITS_HELP = [
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
   "    [--max-turns <n>] [--session-kind unattended]",
   "",
-  "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha> and gstack-auto=<repo>@<sha>, each with",
-  "its plan line and the frozen plan output block, the rec user, no second model, and no install or test step. --arm-models",
-  "limits an arm to some of --models. --sealed-root names the directory outside the repo that holds a sealed suite.",
+  "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
+  "gstack arm) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output block, the rec user, no second",
+  "model, and no install or test step. --arm-models limits an arm to some of --models. --sealed-root names the directory",
+  "outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
   "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command) in place",
-  "of the frozen one. --render serves a gstack stack arm from its own gstack-modules render of that session kind. --max-turns",
-  "caps each session's model turns (default " + MAX_TURNS + "). --session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's",
-  "agent env, none included; left out, no arm gets one.",
+  "of the frozen one. With --plan only a gstack arm takes one: the file's line opens with the lens's command, and the arm's",
+  "line becomes that line, a space and \"" + PLAN_ASK + "\". --render serves a gstack stack arm from",
+  "its own gstack-modules render of that session kind. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
+  "--session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's agent env, none included; left out, no arm",
+  "gets one.",
 ].join("\n");
 
 const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind"]);
@@ -174,7 +178,6 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (spec.kind !== "stack" || toldArmOf(spec) !== "gstack") throw new Usage("--render names arm " + name + ", which is not a gstack stack arm (<name>=<gstack repo>@<sha>)");
   }
   const prefixes = new Map([...perArm("--told-prefix", null)].map(([arm, file]) => {
-    if (lens) throw new Usage("--told-prefix runs on code units, not with --plan");
     try {
       return [arm, readFileSync(file, "utf8").replace(/\n$/, "")] as const;
     } catch (e) {
@@ -187,10 +190,13 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (sessionKind !== null && sessionKind !== "unattended") throw new Usage("--session-kind takes unattended; leave it out for no session kind");
   const arms: ReviewArm[] = specs.map((a) => {
     if (lens) {
-      const plan = planArmOf(a);
-      if (!plan) throw new Usage("arm " + a.name + " (" + a.kind + "): plan units run none, lens, placebo, gstack=<gstack repo>@<sha> and gstack-auto=<gstack repo>@<sha>");
+      const plan = planArmFor(a);
+      if (!plan) throw new Usage("arm " + a.name + " (" + a.kind + "): plan units run none, lens, placebo, gstack=<gstack repo>@<sha>, gstack-<suffix>=<gstack repo>@<sha> and gstack-auto=<gstack repo>@<sha>");
+      const prefix = prefixes.get(a.name);
+      const refused = prefix === undefined ? null : planPrefixProblem(plan, lens, prefix);
+      if (refused) throw new Usage("--told-prefix " + a.name + ": " + refused);
       if (plan === "gstack-auto" && GSTACK_AUTO.min_version === null) throw new Usage("arm gstack-auto: " + gstackAutoProblem(null));
-      return { name: a.name, told: plan, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}) };
+      return { name: a.name, told: plan, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
     }
     const told = toldArmOf(a);
     if (!told) throw new Usage("arm " + a.name + " (" + a.kind + "): review units run none, gstack, pstack and tstack arms only");
@@ -203,6 +209,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
   if (lens && specs.some((a) => a.kind === "placebo") && !specs.some((a) => a.name === "gstack")) throw new Usage("the placebo arm is generated from the gstack arm, so --arms needs gstack=<repo>@<sha> too");
+  if (lens && specs.some((a) => a.kind === "placebo") && prefixes.has("gstack")) throw new Usage("the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
   const armModels = new Map<string, string[]>();
   for (const v of flags.get("--arm-models") ?? []) {
     const at = v.indexOf("=");
@@ -277,7 +284,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out(lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
     io.out("units (" + units.length + "):");
     for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + (lens ? "  plan unit: no install or test" : "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test")));
-    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planArmLine(a.told as Parameters<typeof planArmLine>[0], lens)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
+    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));

@@ -76,9 +76,13 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   passes no system prompt option, so the Agent SDK sends its empty one. claude-code-preset passes the SDK's claude_code
   preset, which brings Claude Code's own system guidance. arm_provenance.system_prompt in arm.json and system_prompt in
   each session's init.json record it.
-- `--told-prefix <arm>=<file>`, repeatable, code units only. The file's one line replaces the arm's told command (for
+- `--told-prefix <arm>=<file>`, repeatable. On code units the file's one line replaces the arm's told command (for
   example R2's full-procedure /review line); it must open with the arm's own command. The template and TOLD_SHA256 stay
-  the same. arm.json's told block records the prefix and prefix_sha256; an arm without one keeps today's block.
+  the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
+  command (/plan-ceo-review), and the arm's line becomes that line, a space and "Review this plan for problems.".
+  none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo runs,
+  since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
+  and an arm without one keeps today's prompt and block.
 - `--render <arm>=interactive|unattended`, repeatable, on a gstack stack arm. The install runs gstack's setup, renders
   the full loadout into ~/.claude/gstack-render, serves each rendered skill's SKILL.md and sections from it, and checks
   the lock's session_kind and the served review and investigate start lines (src/arms/install.ts). arm_provenance.render
@@ -99,7 +103,9 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
 - Arms: `none` ("Review this plan for problems."), `gstack=<gstack repo>@<sha>` (`/plan-ceo-review` and that line),
   `lens` (the lens line from the skill's description, then that line), `placebo` (Lane B's placebo tree generated
   from the gstack arm, with the gstack line) and `gstack-auto=<gstack repo>@<sha>`, a frozen placeholder for
-  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. `--arm-models
+  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
+  `gstack-<suffix>` (not gstack-auto) is a second gstack arm, such as a forced-procedure arm with its own
+  `--told-prefix`. `--arm-models
   <arm>=<model>[,<model>]` limits an arm to some of `--models`, so lens runs only on Opus and placebo only on particle-1.
 - TOLD_PLAN_TEMPLATE, pinned by TOLD_PLAN_SHA256, asks for a `plan-findings` fence with severity (Critical, High,
   Medium, Low), section, line, claim, evidence and fix. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
