@@ -94,6 +94,25 @@
           "allow_fallbacks": false
         }
       }
+    },
+    "gpt-6.1-sol": {
+      "route": "openrouter",
+      "upstream_model": "openai/gpt-6.1-sol",
+      "price_per_mtok": {
+        "input": 2,
+        "output": 10,
+        "cache_write_5m": 2,
+        "cache_write_1h": 2,
+        "cache_read": 0.1
+      },
+      "body_overrides": {
+        "provider": {
+          "only": [
+            "openai"
+          ],
+          "allow_fallbacks": false
+        }
+      }
     }
   }
 }

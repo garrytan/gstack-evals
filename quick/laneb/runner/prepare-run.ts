@@ -1,7 +1,8 @@
 // Builds a run directory for one Lane B batch: materialized tasks (digest-checked against
 // tasks/tasks.json), arm tarballs, the proxy config and a Harbor JobConfig whose paths point
 // at the VM layout launch.sh syncs (runner at <vm>/runner, run dir at <vm>/run).
-// Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>
+// Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent> [invoke on|off]
+// invoke (default on) is the batch's told switch: off gives every arm the plain prompt and reads no skill map.
 // An arms entry may set agent options per arm (grid.ts armSpec), e.g. gstack:system_prompt=claude-code-preset; the
 // manifest records every arm's system_prompt and session_kind.
 // Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM's work directory, default below),
@@ -24,9 +25,16 @@ export function toldSkillMaps(map: Record<string, Record<string, string>>, arms:
   }));
 }
 
+export function invokeSwitch(arg: string | undefined): boolean {
+  if (arg === undefined || arg === "on") return true;
+  if (arg === "off") return false;
+  throw new Error(`E_USAGE invoke must be on or off, not ${arg}`);
+}
+
 if (import.meta.main) {
-  const [runArg, jobName, modelsCsv, armsCsv, armDir, attempts, concurrent] = Bun.argv.slice(2);
-  if (!concurrent) throw new Error("E_USAGE usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>");
+  const [runArg, jobName, modelsCsv, armsCsv, armDir, attempts, concurrent, invokeArg] = Bun.argv.slice(2);
+  if (!concurrent) throw new Error("E_USAGE usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent> [invoke on|off]");
+  const invoke = invokeSwitch(invokeArg);
   const here = import.meta.dir;
   const root = resolve(here, "..");
   const run = resolve(runArg);
@@ -43,7 +51,7 @@ if (import.meta.main) {
   const armSpecs = armsCsv.split(",").map(armSpec);
   if (new Set(armSpecs.map((a) => a.name)).size !== armSpecs.length) throw new Error(`E_USAGE arms ${armsCsv}: an arm is named twice`);
   const toldMap = { ...JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), ...JSON.parse(readFileSync(join(here, "skill-map.render.json"), "utf8")) };
-  const skillMaps = toldSkillMaps(toldMap, armSpecs.map((a) => a.name), final);
+  const skillMaps = invoke ? toldSkillMaps(toldMap, armSpecs.map((a) => a.name), final) : {};
   const expected = new Map<string, string>([...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
@@ -90,7 +98,7 @@ if (import.meta.main) {
     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`, wrapper,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
-    skill_maps: skillMaps,
+    invoke, skill_maps: skillMaps,
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
   if (process.env.ORACLE === "1") {
@@ -102,7 +110,9 @@ if (import.meta.main) {
     job_name: jobName, created_at: new Date().toISOString(), network,
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
     wrapper, wrapper_sha256: sha256(join(here, wrapper)), persona_sha256: sha256(join(here, "agent/persona.json")),
-    skill_map_sha256: sha256(join(here, "skill-map.stacks.json")), render_skill_map_sha256: sha256(join(here, "skill-map.render.json")), invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invokesArm(name)])),
+    invoke, skill_map_sha256: invoke ? sha256(join(here, "skill-map.stacks.json")) : null,
+    render_skill_map_sha256: invoke ? sha256(join(here, "skill-map.render.json")) : null,
+    invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invoke && invokesArm(name)])),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "" })), tasks,
   };

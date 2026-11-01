@@ -25,6 +25,11 @@
       "id": "particle-1",
       "harbor_model": "anthropic/particle-1",
       "session_cap_usd": 0.5
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "harbor_model": "anthropic/gpt-6.1-sol",
+      "session_cap_usd": 2.5
     }
   ],
   "max_output_tokens": 32000,
