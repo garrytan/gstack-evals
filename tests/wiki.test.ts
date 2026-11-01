@@ -94,10 +94,9 @@ describe("the committed wiki", () => {
     spawnSync("git", ["init", "-q"], { cwd: root });
     spawnSync("git", ["add", "wiki"], { cwd: root });
     const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
-    const realGit = spawnSync("sh", ["-c", "command -v git"]).stdout.toString().trim();
-    write(root, "bin/git", '#!/bin/sh\nif [ "$1" = cat-file ]; then "' + realGit + '" "$@" | head -c 60; exit 0; fi\nexec "' + realGit + '" "$@"\n');
-    chmodSync(join(root, "bin/git"), 0o755);
     const path = process.env.PATH;
+    write(root, "bin/git", "#!/bin/sh\nPATH='" + path + "'\nif [ \"$1\" = cat-file ]; then git \"$@\" | head -c 60; exit 0; fi\nexec git \"$@\"\n");
+    chmodSync(join(root, "bin/git"), 0o755);
     process.env.PATH = join(root, "bin") + ":" + path;
     try {
       expect(() => gitBaseFiles(root, tree)).toThrow("unreadable reply for " + DECISION);
