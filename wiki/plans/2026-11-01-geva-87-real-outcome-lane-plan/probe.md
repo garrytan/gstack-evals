@@ -1,6 +1,6 @@
 # Mining-yield probe (GEVA-87, keyless)
 
-Run on 2026-10-31 against public GitHub clones (blob-less, shallow since 2026-04-01). No model calls. The garrytan/gstack row reads a depth-1 local checkout and is not a measurement.
+Run on 2026-10-31 against public GitHub clones (blob-less, shallow since 2026-04-01). No model calls. The garrytan/gstack row reads a depth-1 local checkout and is not a measurement. The measured run used an absolute output path; the published script makes OUT absolute the same way.
 
 ## Script (probe.sh)
 
@@ -9,7 +9,7 @@ Run on 2026-10-31 against public GitHub clones (blob-less, shallow since 2026-04
 # Keyless mining-yield probe for the GEVA-87 plan: counts, per repo, commits merged 2026-07-01..2026-10-31 that change source and tests,
 # fix commits with tests, and SZZ pairs (a fix commit whose changed lines blame to a commit in the same window). No model calls.
 set -u
-OUT=./probe-out; mkdir -p $OUT; cd $OUT
+OUT="$PWD/probe-out"; mkdir -p "$OUT"; cd "$OUT"
 for R in honojs/hono pydantic/pydantic drizzle-team/drizzle-orm python-poetry/poetry tailwindlabs/tailwindcss garrytan/gstack; do
   D=$(echo $R | tr / _)
   if [ "$R" = garrytan/gstack ]; then SRC=$HOME/.local/share/gstack; else
