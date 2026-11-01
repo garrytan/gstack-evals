@@ -381,18 +381,20 @@ export function gitBaseFiles(root: string, ref: string): Map<string, Buffer> {
     if (type === "blob") blobs.push([path, oid]);
   }
   if (!blobs.length) return files;
-  const out = git(root, ["cat-file", "--batch"], blobs.map(([, oid]) => oid + "\n").join("")).out;
+  const read = git(root, ["cat-file", "--batch"], blobs.map(([, oid]) => oid + "\n").join(""));
+  if (!read.ok) throw new Error("wiki: git cat-file --batch failed reading wiki/ at " + ref);
+  const out = read.out;
   let at = 0;
   for (const [path, oid] of blobs) {
     const nl = out.indexOf(10, at);
-    if (nl < 0) break;
-    const [name, type, size] = out.subarray(at, nl).toString().split(" ");
-    if (name !== oid) break;
-    at = nl + 1;
-    if (type === "missing") continue;
-    const end = at + Number(size);
-    if (type !== "blob" || !(end < out.length) || out[end] !== 10) break;
-    files.set(path, out.subarray(at, end));
+    const [name, type, size] = out.subarray(at, Math.max(at, nl)).toString().split(" ");
+    if (name === oid && type === "missing") {
+      at = nl + 1;
+      continue;
+    }
+    const end = nl + 1 + Number(size);
+    if (name !== oid || type !== "blob" || !(end < out.length) || out[end] !== 10) throw new Error("wiki: git cat-file --batch returned an unreadable reply for " + path);
+    files.set(path, out.subarray(nl + 1, end));
     at = end + 1;
   }
   return files;

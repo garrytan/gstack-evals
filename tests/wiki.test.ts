@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { checkWiki, gitBaseFiles, loadWiki, parseFrontMatter, renderIndex, resolveBase } from "../scripts/wiki.ts";
@@ -83,9 +83,27 @@ describe("the committed wiki", () => {
     for (const [path, bytes] of Object.entries(files)) write(root, path, bytes);
     spawnSync("git", ["init", "-q"], { cwd: root });
     spawnSync("git", ["add", "wiki"], { cwd: root });
+    spawnSync("git", ["update-index", "--add", "--cacheinfo", "160000," + "1".repeat(40) + ",wiki/board/a-gitlink"], { cwd: root });
     const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
     const hex = (m: Iterable<[string, Buffer]>) => [...m].map(([path, bytes]) => [path, bytes.toString("hex")]);
-    expect(hex(gitBaseFiles(root, tree))).toEqual(hex(Object.entries(files)));
+    expect(hex(gitBaseFiles(root, tree))).toEqual([["wiki/board/a-gitlink", ""], ...hex(Object.entries(files))]);
+  });
+
+  test("reading posts at a commit fails when git cat-file --batch output is cut short", () => {
+    const root = makeWiki({ [DECISION]: post(fields(DECISION_ID, "decision")) });
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["add", "wiki"], { cwd: root });
+    const tree = spawnSync("git", ["write-tree"], { cwd: root }).stdout.toString().trim();
+    const realGit = spawnSync("sh", ["-c", "command -v git"]).stdout.toString().trim();
+    write(root, "bin/git", '#!/bin/sh\nif [ "$1" = cat-file ]; then "' + realGit + '" "$@" | head -c 60; exit 0; fi\nexec "' + realGit + '" "$@"\n');
+    chmodSync(join(root, "bin/git"), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = join(root, "bin") + ":" + path;
+    try {
+      expect(() => gitBaseFiles(root, tree)).toThrow("unreadable reply for " + DECISION);
+    } finally {
+      process.env.PATH = path;
+    }
   });
 });
 
