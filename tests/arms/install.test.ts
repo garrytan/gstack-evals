@@ -347,7 +347,7 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
 
 // Value: protects=GEVA-109's rendered gstack arm and GST-837: the render is served for each rendered skill and nothing else moves, a rendered skill with no served folder or a lock of another session_kind fails the install, two arms on one ref and render install the same tree, and provenance names no machine path; fails_when=a served SKILL.md is setup's, a check passes a wrong render, or provenance carries the source's path; why_new=GEVA-108 point 1, 2 and 4; seam=installArms' stack branch with the local installer
 describe("GEVA-109: a rendered gstack arm (keyless, local installer)", () => {
-  const fake = (o: { lockKind?: string; drop?: string; escape?: string } = {}) => {
+  const fake = (o: { lockKind?: string; drop?: string; escape?: string; failSetup?: boolean; lockLink?: string } = {}) => {
     const root = scratch("render-src");
     const skills = ["review", "investigate", "other"];
     for (const s of skills) {
@@ -356,9 +356,9 @@ describe("GEVA-109: a rendered gstack arm (keyless, local installer)", () => {
       writeFileSync(join(root, s, "sections", "a.md"), "setup\n");
       writeFileSync(join(root, s, "checklist.md"), "setup\n");
     }
-    writeFileSync(join(root, "setup"), "#!/bin/sh\nset -e\n" + (o.escape ? "mkdir -p \"$HOME/.claude\"; ln -s " + JSON.stringify(o.escape) + " \"$HOME/.claude/skills\"\n" : "") + "for s in " + skills.filter((s) => s !== o.drop).join(" ") + "; do mkdir -p \"$HOME/.claude/skills/$s\"; for f in SKILL.md sections checklist.md; do ln -s \"$PWD/$s/$f\" \"$HOME/.claude/skills/$s/$f\"; done; done\n");
+    writeFileSync(join(root, "setup"), "#!/bin/sh\nset -e\n" + (o.failSetup ? "exit 3\n" : "") + (o.escape ? "mkdir -p \"$HOME/.claude\"; ln -s " + JSON.stringify(o.escape) + " \"$HOME/.claude/skills\"\n" : "") + "for s in " + skills.filter((s) => s !== o.drop).join(" ") + "; do mkdir -p \"$HOME/.claude/skills/$s\"; for f in SKILL.md sections checklist.md; do ln -s \"$PWD/$s/$f\" \"$HOME/.claude/skills/$s/$f\"; done; done\n");
     mkdirSync(join(root, "bin"));
-    writeFileSync(join(root, "bin", "gstack-modules"), "#!/bin/sh\nkind=interactive; flag=; prev=\nfor a; do case \"$prev\" in --session-kind) kind=$a;; --out-dir) out=$a;; esac; prev=$a; done\n[ \"$kind\" = unattended ] && flag=' --render unattended'\nfor s in " + skills.join(" ") + "; do mkdir -p \"$out/$s/sections\"; printf -- '---\\nname: %s\\n---\\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"%s\"%s\\n' \"$s\" \"$s\" \"$flag\" > \"$out/$s/SKILL.md\"; echo rendered > \"$out/$s/sections/a.md\"; done\nprintf '{\"session_kind\":\"%s\",\"spec\":\"full@%s\",\"spec_sha256\":\"s\",\"gstack_version\":\"1\",\"total_bytes\":3,\"files\":[{},{}]}' \"" + (o.lockKind ?? "$kind") + "\" \"$kind\" > \"$out/loadout.lock.json\"\n");
+    writeFileSync(join(root, "bin", "gstack-modules"), "#!/bin/sh\nkind=interactive; flag=; prev=\nfor a; do case \"$prev\" in --session-kind) kind=$a;; --out-dir) out=$a;; esac; prev=$a; done\n[ \"$kind\" = unattended ] && flag=' --render unattended'\nfor s in " + skills.join(" ") + "; do mkdir -p \"$out/$s/sections\"; printf -- '---\\nname: %s\\n---\\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"%s\"%s\\n' \"$s\" \"$s\" \"$flag\" > \"$out/$s/SKILL.md\"; echo rendered > \"$out/$s/sections/a.md\"; done\nprintf '{\"session_kind\":\"%s\",\"spec\":\"full@%s\",\"spec_sha256\":\"s\",\"gstack_version\":\"1\",\"total_bytes\":3,\"files\":[{},{}]}' \"" + (o.lockKind ?? "$kind") + "\" \"$kind\" > \"$out/loadout.lock.json\"\n" + (o.lockLink ? "rm -f \"$out/loadout.lock.json\"; ln -s " + JSON.stringify(o.lockLink) + " \"$out/loadout.lock.json\"\n" : ""));
     chmodSync(join(root, "setup"), 0o755);
     chmodSync(join(root, "bin", "gstack-modules"), 0o755);
     return { root, sha: commitAll(root) };
@@ -403,5 +403,14 @@ describe("GEVA-109: a rendered gstack arm (keyless, local installer)", () => {
     expect(stopped(() => run(escaped, [arm("e", escaped.sha, "unattended")]))).toMatch(/^E_IMAGE_BUILD .*resolves outside the install tree through a symlink/);
     expect(readlinkSync(join(outside, "review", "SKILL.md"))).not.toContain("gstack-render");
     expect(readFileSync(join(outside, "review", "sections", "a.md"), "utf8")).toBe("setup\n");
+  });
+  // Value: protects=a failed setup fails a rendered install with its installer error, and the render's lock is never read through a link out of the tree; fails_when="setup && render" under set -e hides the setup's exit, or an absolute lock link lets the host's own file pass the lock check; why_new=#119 /ship adversarial findings 2 and 3; seam=installArms' render branch with the local installer
+  test("a rendered install fails on a failed setup, and a lock linked out of the tree counts as missing", () => {
+    const failing = fake({ failSetup: true });
+    expect(stopped(() => run(failing, [arm("f", failing.sha, "interactive")]))).toMatch(/^E_IMAGE_BUILD .*failed: the installer exited 3/);
+    const hostLock = join(scratch("render-host-lock"), "loadout.lock.json");
+    writeFileSync(hostLock, JSON.stringify({ session_kind: "interactive", spec: "full@interactive", spec_sha256: "s", gstack_version: "1", total_bytes: 3, files: [] }));
+    const linked = fake({ lockLink: hostLock });
+    expect(stopped(() => run(linked, [arm("l", linked.sha, "interactive")]))).toMatch(/^E_IMAGE_BUILD .*loadout\.lock\.json is missing, not the requested interactive/);
   });
 });
