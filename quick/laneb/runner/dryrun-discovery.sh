@@ -76,7 +76,7 @@ if has a; then
     rm -rf "$r/arms" "$r/tasks"
   done
   if MAX_TURNS=60 TASKS=$tasks bun "$here/prepare-run.ts" "$out/run-d-dup" dup claude-haiku-5-5 "gstack:system_prompt=$PRESET,gstack:system_prompt=$PRESET" "$armdir" 1 12 off >/dev/null 2>"$out/dup.err"; then echo "duplicate cell accepted (bad)"; exit 1; fi
-  echo "a cell listed twice is refused: $(grep -o 'E_USAGE[^(]*' "$out/dup.err" | head -1)"
+  echo "a cell listed twice is refused: $(grep -m1 -o '^error: E_USAGE.*' "$out/dup.err")"
 fi
 
 # One harness: fake upstream behind the recording shim, the run's temp ledger service, the metering proxy.
