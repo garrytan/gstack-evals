@@ -1,0 +1,407 @@
+## 1. Pins
+
+$ git -C $W/rig log -1 --format=rig %H %s
+rig b792646b43cb8ea170039623b420229e0d669216 Harness: per-arm Claude Code system prompt, GST-837 provenance, rendered gstack arm, told override and turn cap (GST-841) (#119)
+exit 0 (log/1.txt)
+
+$ git -C $W/laneb2 log -1 --format=lane b runner %H %s
+lane b runner 8cd497367e3d7e609103540c22e01542b705604d laneb: rendered arm manifests from two matching clean builds at 5a1b774 (gstack 142757b); gstack-render eeab89bf, gstack-render-unattended 406d4a86 (GEVA-108)
+exit 0 (log/2.txt)
+
+$ bash -c cd $W/rig && bun -e 'import { recipeHash } from "./src/rig/recipe.ts"; console.log("trial image recipe " + recipeHash())'
+trial image recipe f0c9cf9b5e5abd6d3e9b2eaaeea9657fc6c31099500fc95563319ff1c59d389c
+exit 0 (log/3.txt)
+
+$ sh -c cd $W/prereg && sha256sum comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json decide.py exposure.py review-cost.py projection.py caps.py peak.py renders.txt $REPO/quick/laneb/analysis/ceremony-tb2.ts $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json
+d5dfdf48fadac37286c494e7a414187ec9f9a476100e26c1889f11eae1ef71b2  comparisons.ceremony-r1.json
+c4ad189204ee2bec4ad40db4b22073c57c0234c0033142a088c721ca00374d10  comparisons.ceremony-r1-secondary.json
+000cfad35b9aab5502802c3027e4fa7d1b0eed423b1beb2499a5f62c50cc95a2  decide.py
+33c8a3548789a10e949143287e42d698130b4af3ad310e9a1518f27887672212  exposure.py
+704f65b8e4cd36aa345dc534a538f9f0770a6dab289e3ea3087d7c53ab5f35e8  review-cost.py
+1cd81c87d3e9f7f8da3c7b772b42f26eaad3eaf78f86417a8b09a3c9f7ee7c2c  projection.py
+c4f7a497e4d89a5261a63d1fe0e8d661dc98853856dd93d800ddea720d953a11  caps.py
+fabfcc9e802d0b790cf1e329f731874b7b2b222e08472d1316e2cf1e803a6311  peak.py
+7ec737bd085bb6b6ba23ebf8d5a3f1f990d679252b3fb7e8339472d1195ffd0e  renders.txt
+b6b53a098b84182ceecdd530ee8daee60af27aafef9d51d304190a6eda8fcad8  $REPO/quick/laneb/analysis/ceremony-tb2.ts
+4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d  $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
+8bcbc928de440bcbdb49434b523a33d27130e20c5b7b0865e3102998a23fbbc6  $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json
+exit 0 (log/4.txt)
+
+## 2. review-units, each invocation of section 9 (--dry-run)
+
+$ $W/rig/bin/gstack-evals review-units --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --severity-map $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$W/gstack --source garrytan/gbrain=$W/dry/gbrain-src --models claude-opus-5-5 --session-kind unattended --units garrytan/gstack#3524@205ea0e2e82f garrytan/gstack#3527@2684974602c1 --arms none control=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 variant=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 control-sdk=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 --render control=interactive variant=unattended control-sdk=interactive --system-prompt none=claude-code-preset control=claude-code-preset variant=claude-code-preset --passes 1 --parallel 1 --allowance 15 --spend-cap 70 --item ceremony-r1-review-pilot --out $W/dry/review-pilot --dry-run
+review-units dry run: nothing is built, written or spent
+suite stacks-r1 (sha256 4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d)
+told template sha256 16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad; parser sha256 584c81bcc40202798713cec9647c3a45c282373b379196e8fee413caa7ddb959
+units (2):
+  garrytan/gstack#3524@205ea0e2e82f  task gstack-3524-205ea0e2  base branch main  source $W/gstack  install "bun install --frozen-lockfile"  test "true"
+  garrytan/gstack#3527@2684974602c1  task gstack-3527-26849746  base branch main  source $W/gstack  install "bun install --frozen-lockfile"  test "true"
+arms: none (told none) system prompt claude-code-preset, control (told gstack, "/review") system prompt claude-code-preset render interactive, variant (told gstack, "/review") system prompt claude-code-preset render unattended, control-sdk (told gstack, "/review") render interactive
+models: claude-opus-5-5; passes 1; sessions 8
+max turns 60; session kind unattended
+worst case at the allowance: $120.00; spend cap $70.00
+out $W/dry/review-pilot
+exit 0 (log/5.txt)
+
+$ $W/rig/bin/gstack-evals review-units --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --severity-map $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$W/gstack --source garrytan/gbrain=$W/dry/gbrain-src --models claude-opus-5-5 --session-kind unattended --units all --arms none control=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 variant=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 --render control=interactive variant=unattended --system-prompt none=claude-code-preset control=claude-code-preset variant=claude-code-preset --passes 2 --parallel 3 --allowance 10 --spend-cap 227.44 --item ceremony-r1-review-grid --out $W/dry/review-grid --dry-run
+review-units dry run: nothing is built, written or spent
+arms: none (told none) system prompt claude-code-preset, control (told gstack, "/review") system prompt claude-code-preset render interactive, variant (told gstack, "/review") system prompt claude-code-preset render unattended
+models: claude-opus-5-5; passes 2; sessions 198
+max turns 60; session kind unattended
+worst case at the allowance: $1980.00; spend cap $227.44
+exit 0 (log/6.txt)
+
+$ $W/rig/bin/gstack-evals review-units --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --severity-map $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$W/gstack --source garrytan/gbrain=$W/dry/gbrain-src --models claude-opus-5-5 --session-kind unattended --units all --arms control-sdk=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 --render control-sdk=interactive --passes 1 --parallel 3 --allowance 10 --spend-cap 66.84 --item ceremony-r1-review-sdk --out $W/dry/review-sdk --dry-run
+review-units dry run: nothing is built, written or spent
+arms: control-sdk (told gstack, "/review") render interactive
+models: claude-opus-5-5; passes 1; sessions 33
+max turns 60; session kind unattended
+worst case at the allowance: $330.00; spend cap $66.84
+exit 0 (log/7.txt)
+# refusals: a render on the none arm, and a bad system prompt value
+
+$ $W/rig/bin/gstack-evals review-units --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --severity-map $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$W/gstack --source garrytan/gbrain=$W/dry/gbrain-src --models claude-opus-5-5 --session-kind unattended --units all --arms none control=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 --render none=unattended --out $W/dry/bad1 --dry-run
+E_USAGE review-units: --render names arm none, which is not a gstack stack arm (<name>=<gstack repo>@<sha>)
+exit 2 (log/8.txt)
+
+$ $W/rig/bin/gstack-evals review-units --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --severity-map $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$W/gstack --source garrytan/gbrain=$W/dry/gbrain-src --models claude-opus-5-5 --session-kind unattended --units all --arms none control=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7 --system-prompt control=preset --out $W/dry/bad2 --dry-run
+E_USAGE review-units: --system-prompt gives arm control "preset"; it takes sdk-default or claude-code-preset
+exit 2 (log/9.txt)
+
+## 3. Rig ledger: one item per invocation, one lease each (temporary ledger)
+
+$ $W/rig/bin/gstack-evals ledger init --cap 70 --item ceremony-r1-review-pilot --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
+APPROVED: item=ceremony-r1-review-pilot cap=$70.00 admission=warn approval=1 record=$W/dry/record
+exit 0 (log/10.txt)
+
+$ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-pilot --run dry-ceremony-r1-review-pilot --json
+  "lease_id": "ceremony-r1-review-pilot.0001.8bd55a",
+    "RIG_UNPROVEN line item ceremony-r1-review-pilot leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-pilot/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-pilot on the machine that will spend (docs/rig.md)"
+RIG_UNPROVEN line item ceremony-r1-review-pilot leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-pilot/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-pilot on the machine that will spend (docs/rig.md)
+exit 0 (log/11.txt)
+
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-pilot.0001.8bd55a
+exit 0 (log/12.txt)
+
+$ $W/rig/bin/gstack-evals ledger init --cap 227.44 --item ceremony-r1-review-grid --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
+APPROVED: item=ceremony-r1-review-grid cap=$227.44 admission=warn approval=1 record=$W/dry/record
+exit 0 (log/13.txt)
+
+$ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-grid --run dry-ceremony-r1-review-grid --json
+  "lease_id": "ceremony-r1-review-grid.0001.257f0f",
+    "RIG_UNPROVEN line item ceremony-r1-review-grid leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-grid/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-grid on the machine that will spend (docs/rig.md)"
+RIG_UNPROVEN line item ceremony-r1-review-grid leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-grid/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-grid on the machine that will spend (docs/rig.md)
+exit 0 (log/14.txt)
+
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-grid.0001.257f0f
+exit 0 (log/15.txt)
+
+$ $W/rig/bin/gstack-evals ledger init --cap 66.84 --item ceremony-r1-review-sdk --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
+APPROVED: item=ceremony-r1-review-sdk cap=$66.84 admission=warn approval=1 record=$W/dry/record
+exit 0 (log/16.txt)
+
+$ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-sdk --run dry-ceremony-r1-review-sdk --json
+  "lease_id": "ceremony-r1-review-sdk.0001.d61163",
+    "RIG_UNPROVEN line item ceremony-r1-review-sdk leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-sdk/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-sdk on the machine that will spend (docs/rig.md)"
+RIG_UNPROVEN line item ceremony-r1-review-sdk leased without admission: no admission record at $W/dry/record/items/ceremony-r1-review-sdk/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-review-sdk on the machine that will spend (docs/rig.md)
+exit 0 (log/17.txt)
+
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-review-sdk.0001.d61163
+exit 0 (log/18.txt)
+
+$ $W/rig/bin/gstack-evals ledger init --cap 20 --item ceremony-r1-judge-match --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
+APPROVED: item=ceremony-r1-judge-match cap=$20.00 admission=warn approval=1 record=$W/dry/record
+exit 0 (log/19.txt)
+
+$ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-judge-match --run dry-ceremony-r1-judge-match --json
+  "lease_id": "ceremony-r1-judge-match.0001.058601",
+    "RIG_UNPROVEN line item ceremony-r1-judge-match leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-match on the machine that will spend (docs/rig.md)"
+RIG_UNPROVEN line item ceremony-r1-judge-match leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-match on the machine that will spend (docs/rig.md)
+exit 0 (log/20.txt)
+
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-match.0001.058601
+exit 0 (log/21.txt)
+
+$ $W/rig/bin/gstack-evals ledger init --cap 20 --item ceremony-r1-judge-adj --admission warn --words dry run, not an approval --by GEVA-108 --source dry-run.sh
+APPROVED: item=ceremony-r1-judge-adj cap=$20.00 admission=warn approval=1 record=$W/dry/record
+exit 0 (log/22.txt)
+
+$ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-judge-adj --run dry-ceremony-r1-judge-adj --json
+  "lease_id": "ceremony-r1-judge-adj.0001.2a332f",
+    "RIG_UNPROVEN line item ceremony-r1-judge-adj leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-adj/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-adj on the machine that will spend (docs/rig.md)"
+RIG_UNPROVEN line item ceremony-r1-judge-adj leased without admission: no admission record at $W/dry/record/items/ceremony-r1-judge-adj/admission-0001.json for slot 1; run gstack-evals rig admit --item ceremony-r1-judge-adj on the machine that will spend (docs/rig.md)
+exit 0 (log/23.txt)
+
+$ $W/rig/bin/gstack-evals ledger settle --lease ceremony-r1-judge-adj.0001.2a332f
+exit 0 (log/24.txt)
+# a second run on a bound item is refused
+
+$ $W/rig/bin/gstack-evals ledger lease --item ceremony-r1-review-grid --run dry-second-run
+E_ITEM_BOUND line item ceremony-r1-review-grid is bound to run dry-ceremony-r1-review-grid, so run dry-second-run cannot spend from it
+E_ITEM_BOUND fix: This run cannot spend from that item. Continue the run the message names with its own --resume <out>, or ask the owner for a new line item for this run and record it with gstack-evals ledger init and their words.
+E_ITEM_BOUND docs: docs/errors.md#e_item_bound
+exit 2 (log/25.txt)
+
+$ $W/rig/bin/gstack-evals ledger status
+RECORD: $W/dry/record (GSTACK_EVALS_LEDGER_RECORD)
+LEDGER: $W/dry/ledger.sqlite (GSTACK_EVALS_LEDGER)
+ITEM: ceremony-r1-judge-adj cap=$20.00 admission=warn committed=$0.00 left=$20.00 run=dry-ceremony-r1-judge-adj leases=1 open=-
+  words: "dry run, not an approval" by GEVA-108 (dry-run.sh)
+ITEM: ceremony-r1-judge-match cap=$20.00 admission=warn committed=$0.00 left=$20.00 run=dry-ceremony-r1-judge-match leases=1 open=-
+  words: "dry run, not an approval" by GEVA-108 (dry-run.sh)
+ITEM: ceremony-r1-review-grid cap=$227.44 admission=warn committed=$0.00 left=$227.44 run=dry-ceremony-r1-review-grid leases=1 open=-
+  words: "dry run, not an approval" by GEVA-108 (dry-run.sh)
+ITEM: ceremony-r1-review-pilot cap=$70.00 admission=warn committed=$0.00 left=$70.00 run=dry-ceremony-r1-review-pilot leases=1 open=-
+  words: "dry run, not an approval" by GEVA-108 (dry-run.sh)
+ITEM: ceremony-r1-review-sdk cap=$66.84 admission=warn committed=$0.00 left=$66.84 run=dry-ceremony-r1-review-sdk leases=1 open=-
+  words: "dry run, not an approval" by GEVA-108 (dry-run.sh)
+exit 0 (log/26.txt)
+
+## 4. Lane B ledger: one file per TB2 item, one approval row, a reserve and settle each
+
+$ bun -e import { Ledger, readRows, totals } from '$W/laneb2/quick/laneb/runner/ledger.ts'; const l = new Ledger('$W/dry/ceremony-r1-tb2-pilot.jsonl', 'ceremony-r1-tb2-pilot'); l.approve(45, { by: 'GEVA-108', dry_run: true }); console.log('reserve', JSON.stringify(l.reserve('s-dry', 2500000, { arm: 'gstack-render' }))); console.log('settle', JSON.stringify(l.settle('s-dry', 300000))); console.log('over cap', JSON.stringify(l.reserve('s-big', Math.round((45 + 1) * 1e6))).slice(0, 160)); console.log('totals', JSON.stringify(totals(readRows('$W/dry/ceremony-r1-tb2-pilot.jsonl'))));
+reserve {"ok":true,"existing":false}
+settle {"ok":true}
+over cap {"ok":false,"reason":"cap","totals":{"capMicros":45000000,"settledMicros":300000,"openReservedMicros":0,"openIds":[]}}
+totals {"capMicros":45000000,"settledMicros":300000,"openReservedMicros":0,"openIds":[]}
+exit 0 (log/27.txt)
+
+$ bun -e import { Ledger, readRows, totals } from '$W/laneb2/quick/laneb/runner/ledger.ts'; const l = new Ledger('$W/dry/ceremony-r1-tb2.jsonl', 'ceremony-r1-tb2'); l.approve(160.75, { by: 'GEVA-108', dry_run: true }); console.log('reserve', JSON.stringify(l.reserve('s-dry', 2500000, { arm: 'gstack-render' }))); console.log('settle', JSON.stringify(l.settle('s-dry', 300000))); console.log('over cap', JSON.stringify(l.reserve('s-big', Math.round((160.75 + 1) * 1e6))).slice(0, 160)); console.log('totals', JSON.stringify(totals(readRows('$W/dry/ceremony-r1-tb2.jsonl'))));
+reserve {"ok":true,"existing":false}
+settle {"ok":true}
+over cap {"ok":false,"reason":"cap","totals":{"capMicros":160750000,"settledMicros":300000,"openReservedMicros":0,"openIds":[]}}
+totals {"capMicros":160750000,"settledMicros":300000,"openReservedMicros":0,"openIds":[]}
+exit 0 (log/28.txt)
+
+## 5. Lane B arms and job config
+
+$ sh -c cd $W/laneb2/quick/laneb && B=$(sed -n 's/^ARG BUILDER_IMAGE=//p' arms/Dockerfile) && mkdir -p $W/dry/none/trees/none/.claude/skills && chmod 755 $W/dry/none/trees/none/.claude $W/dry/none/trees/none/.claude/skills && docker run --rm --network none -u $(id -u):$(id -g) -v $W/dry/none:/out -w /out $B tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -C trees/none -cf none.tar .claude && sha256sum $W/dry/none/none.tar && jq -r .tar.sha256 arms/manifests/none.json arms/manifests/gstack-render.json arms/manifests/gstack-render-unattended.json
+8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e  $W/dry/none/none.tar
+8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e
+eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e
+406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1
+exit 0 (log/29.txt)
+# the tag's tars rebuilt with quick/laneb/arms/build-render.sh, against the digests GEVA-109 reported
+
+$ sh -c grep -E '^exit=' $W/tarsA/build.log; cd $W/tarsA && printf '%s  %s\n' eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e gstack-render.tar c7ef36e8d7013fa49e86b7403a20a667adb78065dd837e3e5898d0ae8a7526c5 gstack-render.tar.gz 406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1 gstack-render-unattended.tar 22545ba5b3a9d5b981952faf773ec19dcce897fc2f1e06852309d200273b4ce2 gstack-render-unattended.tar.gz | sha256sum -c -
+exit=0
+gstack-render.tar: OK
+gstack-render.tar.gz: OK
+gstack-render-unattended.tar: OK
+gstack-render-unattended.tar.gz: OK
+exit 0 (log/30.txt)
+
+$ bun -e import { armSpec, jobConfig } from '$W/laneb2/quick/laneb/runner/grid.ts'; const arms = ['none:system_prompt=claude-code-preset:session_kind=unattended', 'gstack-render:system_prompt=claude-code-preset:session_kind=unattended', 'gstack-render-unattended:system_prompt=claude-code-preset:session_kind=unattended'].map(armSpec).map((a) => ({ ...a, tar: '/vm/' + a.name + '.tar', sha256: 'x' })); const cfg = jobConfig({ job_name: 'dry-pilot', tasks_dir: '/vm/tasks', tasks: 'pypi-server,dna-insert,headless-terminal,pytorch-model-cli,mailman' === 'all' ? ['t1', 't2'] : 'pypi-server,dna-insert,headless-terminal,pytorch-model-cli,mailman'.split(','), models: [{ id: 'claude-opus-5-5', harbor_model: 'anthropic/claude-opus-5-5', session_cap_usd: 2.5 }, { id: 'particle-1', harbor_model: 'openrouter/particle-ai/particle-1', session_cap_usd: 0.5 }], arms, attempts: 1, n_concurrent: 12, agent_dir: '/vm/agent', runner_dir: '/vm/runner', base_url: 'http://proxy', max_output_tokens: 32000, verifier_timeout_multiplier: 1 }); console.log(JSON.stringify(cfg, null, 1));
+ "n_attempts": 1,
+ "n_concurrent_trials": 12,
+   "model_name": "anthropic/claude-opus-5-5",
+    "session_cap_usd": 2.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "anthropic/claude-opus-5-5",
+    "session_cap_usd": 2.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "anthropic/claude-opus-5-5",
+    "session_cap_usd": 2.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "openrouter/particle-ai/particle-1",
+    "session_cap_usd": 0.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "openrouter/particle-ai/particle-1",
+    "session_cap_usd": 0.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "openrouter/particle-ai/particle-1",
+    "session_cap_usd": 0.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+exit 0 (log/31.txt)
+
+$ bun -e import { armSpec, jobConfig } from '$W/laneb2/quick/laneb/runner/grid.ts'; const arms = ['none:system_prompt=claude-code-preset:session_kind=unattended', 'gstack-render:system_prompt=claude-code-preset:session_kind=unattended', 'gstack-render-unattended:system_prompt=claude-code-preset:session_kind=unattended'].map(armSpec).map((a) => ({ ...a, tar: '/vm/' + a.name + '.tar', sha256: 'x' })); const cfg = jobConfig({ job_name: 'dry-grid', tasks_dir: '/vm/tasks', tasks: 'all' === 'all' ? ['t1', 't2'] : 'all'.split(','), models: [{ id: 'claude-opus-5-5', harbor_model: 'anthropic/claude-opus-5-5', session_cap_usd: 2.5 }, { id: 'particle-1', harbor_model: 'openrouter/particle-ai/particle-1', session_cap_usd: 0.5 }], arms, attempts: 3, n_concurrent: 12, agent_dir: '/vm/agent', runner_dir: '/vm/runner', base_url: 'http://proxy', max_output_tokens: 32000, verifier_timeout_multiplier: 1 }); console.log(JSON.stringify(cfg, null, 1));
+ "n_attempts": 3,
+ "n_concurrent_trials": 12,
+   "model_name": "anthropic/claude-opus-5-5",
+    "session_cap_usd": 2.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "anthropic/claude-opus-5-5",
+    "session_cap_usd": 2.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "anthropic/claude-opus-5-5",
+    "session_cap_usd": 2.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "openrouter/particle-ai/particle-1",
+    "session_cap_usd": 0.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "openrouter/particle-ai/particle-1",
+    "session_cap_usd": 0.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+   "model_name": "openrouter/particle-ai/particle-1",
+    "session_cap_usd": 0.5,
+    "system_prompt": "claude-code-preset",
+    "session_kind": "unattended"
+exit 0 (log/32.txt)
+
+## 6. Scoring at the rig pin: review (noloss score, frozen files with dry arm ids), TB2 (ceremony-tb2.ts)
+
+$ $W/rig/bin/gstack-evals noloss score --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/review/judge/final/arms --prereg $W/dry/dry-comparisons.ceremony-r1.json --variant none-opus --reference gstack-opus --out $W/dry/score/variant-vs-control.json
+none-opus vs gstack-opus at a 10-point margin (The review no-loss lane's margin (stacks round 1 plan, section 7), kept so the scorer and size rule run unchanged. Control sits near 10% blocking recall, so this margin can only bound a loss; section 5 says so.): NOT_DISTINGUISHED. Blocking recall 7.1% vs 9.5%, delta -2.4 points [95% CI -11.3, 6.4]; 5 losses, 3 gains on 42 blockers in 26 PRs (8 discordant). p non-inferior 0.065, p loss 0.398 (Holm 0.398, step 1 of 1 in the declared LOSS family) (minimum reachable 0.0039).
+size rule: met, an arm as good as the reference gets NO_LOSS in 80.8% of 2000 simulations (spread wide, recall 0.095, seed 20261101).
+claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+exit 2 (log/33.txt)
+
+$ $W/rig/bin/gstack-evals noloss score --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/review/judge/final/arms --prereg $W/dry/dry-comparisons.ceremony-r1-secondary.json --variant gstack-opus --reference tstack-opus --out $W/dry/score/control-vs-none.json
+gstack-opus vs tstack-opus at a 10-point margin (Secondary, the lane's margin.): NOT_DISTINGUISHED. Blocking recall 9.5% vs 11.9%, delta -2.4 points [95% CI -10.3, 5.9]; 6 losses, 3 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.043 (Holm 0.128 over 3), p loss 0.391 (Holm 0.391, step 1 of 1 in the declared LOSS family) (minimum reachable 0.016).
+size rule: below, an arm as good as the reference gets NO_LOSS in 58.4% of 2000 simulations (spread wide, recall 0.119, seed 20261101, no-loss alpha 0.05/3, Holm's strictest step).
+claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+exit 2 (log/34.txt)
+
+$ $W/rig/bin/gstack-evals noloss score --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/review/judge/final/arms --prereg $W/dry/dry-comparisons.ceremony-r1-secondary.json --variant none-opus --reference tstack-opus --out $W/dry/score/variant-vs-none.json
+none-opus vs tstack-opus at a 10-point margin (Secondary, the lane's margin.): NOT_DISTINGUISHED. Blocking recall 7.1% vs 11.9%, delta -4.8 points [95% CI -15.6, 5.3]; 6 losses, 3 gains on 42 blockers in 26 PRs (6 discordant). p non-inferior 0.180 (Holm 0.360 over 3), p loss 0.266 (minimum reachable 0.016).
+size rule: below, an arm as good as the reference gets NO_LOSS in 58.4% of 2000 simulations (spread wide, recall 0.119, seed 20261101, no-loss alpha 0.05/3, Holm's strictest step).
+claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+exit 2 (log/35.txt)
+
+$ $W/rig/bin/gstack-evals noloss score --suite $W/rig/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/review/judge/final/arms --prereg $W/dry/dry-comparisons.ceremony-r1-secondary.json --variant gstack-opus --reference gstack-particle-1 --out $W/dry/score/control-vs-control-sdk.json
+gstack-opus vs gstack-particle-1 at a 10-point margin (Secondary, the lane's margin.): no verdict (arm gstack-particle-1 stopped, so there is no verdict). Blocking recall 9.5% vs 2.4%, delta 7.1 points [95% CI 1.1, 14.1]; 1 losses, 6 gains on 42 blockers in 26 PRs (7 discordant). p non-inferior 0.000033 (Holm n/a over 3), p loss 0.992 (minimum reachable 0.0078).
+size rule: below, an arm as good as the reference gets NO_LOSS in 78.3% of 2000 simulations (spread wide, recall 0.024, seed 20261101, no-loss alpha 0.05/3, Holm's strictest step).
+claim "non-inferior within 10 points of blocking recall": may not be made: arm gstack-particle-1 stopped, so there is no verdict; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+exit 2 (log/36.txt)
+
+$ bun $W/rig/quick/laneb/analysis/ceremony-tb2.ts $W/prereg/dry-tb2-config.json --json $W/dry/tb2.json
+## No-reward trials scored 0 (primary)
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 74 | 74 | 85.1% (63) | 0 | 0 | 2 | 0 | $20.4271 | $0.2760 | $0.3242 | 7.28 | 34243, 33832, 36651 |
+| claude-opus-5-5 | variant | 74 | 74 | 85.1% (63) | 0 | 0 | 1 | 0 | $17.5715 | $0.2375 | $0.2789 | 6.95 | 28788, 28377, 31196 |
+| claude-opus-5-5 | none | 74 | 74 | 82.4% (61) | 0 | 0 | 0 | 0 | $11.2158 | $0.1516 | $0.1839 | 6.07 | 20557, 20354, 21761 |
+| particle-1 | control | 75 | 75 | 81.3% (61) | 0 | 0 | 3 | 3 | $7.0832 | $0.0944 | $0.1161 | 19.64 | 93459, 92404, 99938 |
+| particle-1 | variant | 75 | 75 | 82.7% (62) | 0 | 0 | 3 | 4 | $7.6457 | $0.1019 | $0.1233 | 23.35 | 81824, 80769, 88303 |
+| particle-1 | none | 75 | 75 | 81.3% (61) | 0 | 0 | 4 | 2 | $6.1825 | $0.0824 | $0.1014 | 19.97 | 57905, 57384, 61144 |
+| Model | Contrast | Tasks | Difference, pp | 90% CI | 95% CI | LOSS p (one-sided) | Margin | Size | No-loss |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | variant - control | 37 | +0.0 | [-2.7, +2.7] | [-4.1, +4.1] | 0.6452 | 7.5 | 0.989 | NO_LOSS |
+| claude-opus-5-5 | control - none | 37 | +2.7 | [-2.7, +9.5] | [-4.1, +10.8] | - | - | - | - |
+| claude-opus-5-5 | variant - none | 37 | +2.7 | [-2.7, +9.5] | [-4.1, +10.8] | - | - | - | - |
+| particle-1 | variant - control | 38 | +1.3 | [-5.3, +7.9] | [-6.6, +9.2] | 0.6798 | 10 | 0.698 | NOLOSS_UNDERPOWERED |
+| particle-1 | control - none | 38 | +1.3 | [-7.9, +10.5] | [-9.2, +11.8] | - | - | - | - |
+| particle-1 | variant - none | 38 | +2.6 | [-6.6, +11.8] | [-9.2, +14.5] | - | - | - | - |
+| Model | Ratio | Tasks | Per trial [95% CI] | Per success [95% CI] |
+|---|---|---|---|---|
+| claude-opus-5-5 | variant / control | 37 | 0.860 [0.806, 0.910] | 0.860 [0.788, 0.924] |
+| claude-opus-5-5 | control / none | 37 | 1.821 [1.641, 2.094] | 1.763 [1.508, 2.099] |
+| claude-opus-5-5 | variant / none | 37 | 1.567 [1.434, 1.764] | 1.517 [1.318, 1.780] |
+| particle-1 | variant / control | 38 | 1.078 [0.915, 1.281] | 1.062 [0.884, 1.298] |
+| particle-1 | control / none | 38 | 1.132 [0.968, 1.386] | 1.146 [0.915, 1.469] |
+| particle-1 | variant / none | 38 | 1.221 [1.049, 1.491] | 1.217 [0.957, 1.597] |
+## No-reward trials dropped (sensitivity)
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 74 | 74 | 85.1% (63) | 0 | 0 | 2 | 0 | $20.4271 | $0.2760 | $0.3242 | 7.28 | 34243, 33832, 36651 |
+| claude-opus-5-5 | variant | 74 | 74 | 85.1% (63) | 0 | 0 | 1 | 0 | $17.5715 | $0.2375 | $0.2789 | 6.95 | 28788, 28377, 31196 |
+exit 0 (log/37.txt)
+
+## 7. Exposure, cost, caps and the decision rule
+# all four roles; control-sdk reads its own out dir (particle-1's gstack run stands in for it, as in section 6)
+
+$ python3 $W/prereg/review-cost.py {"control":["$W/review/runs/stacks-r1-review-opus-gstack/out","gstack-opus","gstack"],"variant":["$W/review/runs/stacks-r1-review-opus-gstack/out","none-opus","none"],"none":["$W/review/runs/stacks-r1-review-opus-gstack/out","none-opus","none"],"control-sdk":["$W/review/runs/stacks-r1-review-particle-gstack/out","gstack-particle-1","gstack"]} --json $W/dry/review-cost.json
+| Role | Arm | Unit-passes | Dollars | Per unit-pass | Tokens per unit-pass | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|
+| control | gstack-opus | 66 | $66.99 | $1.015 | 1,760,915 | 17.8 | 60027.0, 59902, 67517 |
+| variant | none-opus | 66 | $45.51 | $0.690 | 1,053,915 | 15.55 | 34415.0, 34290, 41905 |
+| none | none-opus | 66 | $45.51 | $0.690 | 1,053,915 | 15.55 | 34415.0, 34290, 41905 |
+| control-sdk | gstack-particle-1 | 33 | $5.33 | $0.162 | 5,277,265 | 53.39 | 0, 0, 0 |
+| Ratio of mean dollars per unit-pass | Units | PRs | Ratio [95% CI] |
+|---|---|---|---|
+| variant / control | 33 | 32 | 0.679 [0.633, 0.730] |
+| control / none | 33 | 32 | 1.472 [1.370, 1.581] |
+| variant / none | 33 | 32 | 1.000 [1.000, 1.000] |
+| control / control-sdk | 33 | 32 | 6.284 [5.537, 7.025] |
+exit 0 (log/38.txt)
+
+$ python3 $W/prereg/exposure.py review $W/review/runs/stacks-r1-review-opus-gstack/out --json $W/dry/exposure-review.json
+| Marker | claude-opus-5-5 gstack (n=66) | claude-opus-5-5 none (n=66) |
+|---|---|---|
+| start_line | 0 | 0 |
+| any_gstack_helper | 0 | 1 |
+| preamble_read | 0 | 0 |
+| question_tuning | 0 | 0 |
+| telemetry | 0 | 0 |
+| learnings | 0 | 1 |
+| aside | 0 | 0 |
+| queue_status | 0 | 0 |
+| brain_sync | 0 | 0 |
+| review_log | 0 | 0 |
+| scope_lock | 0 | 0 |
+| checklist_read | 0 | 0 |
+| review_army_read | 0 | 0 |
+| adversarial_read | 0 | 0 |
+| render_kind_unattended | 0 | 0 |
+| render_kind_mismatch | 0 | 0 |
+| session_kind_unattended | 0 | 0 |
+| debug_report | 0 | 0 |
+exit 0 (log/39.txt)
+
+$ sh -c python3 $W/prereg/exposure.py tb2 $(jq -r '.jobs[]' $W/prereg/dry-tb2-config.json) --json $W/dry/exposure-tb2.json | tail -12
+| render_kind_unattended | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| render_kind_mismatch | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| session_kind_unattended | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| debug_report | 0 | 0 | 0 | 13 | 0 | 0 | 0 | 0 |
+| status_line | 0 | 0 | 0 | 19 | 0 | 0 | 0 | 0 |
+| root_cause_hypothesis | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| pre_landing_review | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| agent_dispatch | 0 | 0 | 0 | 0 | 0 | 0 | 11 | 0 |
+| ask_user | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| skill_tool | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| any_ceremony | 1 | 0 | 0 | 11 | 0 | 0 | 0 | 0 |
+| turn_cap | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+exit 0 (log/40.txt)
+
+$ python3 $W/prereg/caps.py --review $W/review/runs/stacks-r1-review-opus-gstack/out --tb2 $W100/geva93/geva93-tb2/runs/r3-opus/pulled/out/proxy-sessions.jsonl $W100/geva93/geva93-tb2/runs/r3-particle/pulled/out/proxy-sessions.jsonl --map gstack=control,variant,control-sdk none=none --settled 17 --json $W/dry/caps.json
+ "allowance_usd": 10,
+ "session_cap_usd": {
+ "caps": {
+   "fits": true
+   "fits": true
+   "fits": true
+   "fits": true
+   "fits": true
+ "verdict": "launch review-grid"
+exit 0 (log/41.txt)
+
+$ python3 $W/prereg/decide.py --tb2 $W/dry/tb2.json --review-score $W/dry/score/variant-vs-control.json --review-cost $W/dry/review-cost.json --exposure-review $W/dry/exposure-review.json --exposure-tb2 $W/dry/exposure-tb2.json --arms {"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}} --json $W/dry/decide.json
+claude-opus-5-5: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 claude-opus-5-5 control: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks); G4 coverage, TB2 claude-opus-5-5 variant: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks)
+particle-1: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 particle-1 control: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks); G4 coverage, TB2 particle-1 variant: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks)
+LOSS test review: Holm-adjusted p 1.0000
+LOSS test TB2 claude-opus-5-5: Holm-adjusted p 1.0000
+LOSS test TB2 particle-1: Holm-adjusted p 1.0000
+gate failed: G4 coverage, TB2 claude-opus-5-5 control: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks)
+gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 74 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 37 paired tasks)
+gate failed: G4 coverage, TB2 particle-1 control: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks)
+gate failed: G4 coverage, TB2 particle-1 variant: 75 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 38 paired tasks)
+TB2 claude-opus-5-5 cost per trial, variant/control: 0.860 [0.806, 0.910]
+TB2 particle-1 cost per trial, variant/control: 1.078 [0.915, 1.281]
+review cost per unit-pass, variant/control: 0.679 [0.633, 0.730]
+exit 0 (log/42.txt)
+# G4's planned count: the stand-in with 111 graded trials in every TB2 cell, then four tasks dropped from Opus's variant
+# (99 graded, 33 paired tasks). G4 holds on the first and must fail on the second: planned stays 3 x 37 = 111.
+
+$ python3 $W/prereg/decide.py --tb2 $W/dry/tb2-full.json --review-score $W/dry/score/variant-vs-control.json --review-cost $W/dry/review-cost.json --exposure-review $W/dry/exposure-review.json --exposure-tb2 $W/dry/exposure-tb2.json --arms {"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}
+claude-opus-5-5: CUT, no-loss yes. TB2 variant minus control +0.0 pp, 90% CI lower end -2.7 above -7.5, size 0.989
+particle-1: FIX-METHOD, no-loss no. no LOSS and no NO_LOSS: TB2 NOLOSS_UNDERPOWERED (90% CI lower end -5.3, margin 10, size 0.698)
+exit 0 (log/43.txt)
+
+$ python3 $W/prereg/decide.py --tb2 $W/dry/tb2-drop4.json --review-score $W/dry/score/variant-vs-control.json --review-cost $W/dry/review-cost.json --exposure-review $W/dry/exposure-review.json --exposure-tb2 $W/dry/exposure-tb2.json --arms {"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}
+claude-opus-5-5: FIX-METHOD, no-loss no. a gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 99 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 33 paired tasks)
+particle-1: FIX-METHOD, no-loss no. no LOSS and no NO_LOSS: TB2 NOLOSS_UNDERPOWERED (90% CI lower end -5.3, margin 10, size 0.698)
+gate failed: G4 coverage, TB2 claude-opus-5-5 variant: 99 graded of 111 planned (3 replicates of 37 frozen tasks less 0 oracle exclusions; 33 paired tasks)
+exit 0 (log/44.txt)
+
+dry run done

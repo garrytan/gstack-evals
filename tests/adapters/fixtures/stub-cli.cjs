@@ -5,10 +5,10 @@
 // after the user message (no result with STUB_HANG=1, so the turn never ends; STUB_CONTENT_LATER, when set, answers every
 // user message after the first). STUB_MODE=exit exits with STUB_EXIT after the tool_use: STUB_DELAY ms later, or with
 // STUB_ON_EOF=1 only once its stdin closes. STUB_STDERR is written to stderr STUB_STDERR_TIMES times (default once) on each
-// user message. STUB_RECORD, when set, names a file the stub appends its argv and every control request to, one JSON
-// line each. The modes below copy pinned CLI 2.1.314's messages (tests/adapters/claude-code.test.ts runs the real CLI):
-// STUB_MODE=turns takes one Bash turn per model turn until the argv's --max-turns=<n>, then ends with an error_max_turns
-// result; STUB_TURN_TEXTS, a JSON object from turn number to text, writes that text as its own message before the turn's
+// user message. STUB_RECORD, when set, names a file the stub appends its argv, every control request and every user
+// message to, one JSON line each. The modes below copy pinned CLI 2.1.314's messages
+// (tests/adapters/claude-code.test.ts runs the real CLI): STUB_MODE=turns takes one Bash turn per model turn until the
+// argv's --max-turns=<n>, then ends with an error_max_turns result; STUB_TURN_TEXTS, a JSON object from turn number to text, writes that text as its own message before the turn's
 // tool_use. STUB_MODE=apierror answers with one tool_use, then the CLI's synthetic API error message whose text is
 // STUB_API_ERROR (status STUB_API_STATUS) and its result. STUB_MODE=agents launches the subagents STUB_AGENTS lists (a
 // JSON array of {id, prompt, started, tokens}) through the Agent tool in one message, starts each with started true
@@ -36,6 +36,7 @@ rl.on("line", (line) => {
     return;
   }
   if (m.type !== "user") return;
+  if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify(m) + "\n");
   users++;
   if (users === 1) out({ type: "system", subtype: "init", session_id: "s", model: "stub", tools: [], cwd: "/", permissionMode: "default", apiKeySource: "none", claude_code_version: "0", skills: [], mcp_servers: [], slash_commands: [], output_style: "default", uuid: "u0" });
   if (env.STUB_STDERR) process.stderr.write(env.STUB_STDERR.repeat(Number(env.STUB_STDERR_TIMES ?? 1)));

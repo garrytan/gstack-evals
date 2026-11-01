@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Ceremony-cut dry run (prereg section 11). Keyless: every frozen rule through the pinned code, no model call.
+# Usage: bash dry-run.sh. W is a work dir; P holds this bundle's scripts without the .txt suffix; R is a gstack-evals checkout at the
+# rig pin; L is one at laneb-stacks-3-runner; #108 and #109 data sit under W/review and W100 (Captain drive handoffs).
+set -u
+W=$HOME/.capy/work/geva108; P=$W/prereg; R=$W/rig; L=$W/laneb2; X=$W/dry
+S=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+G10=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY
+export GSTACK_EVALS_APPROVALS_BIN=/bin/true GSTACK_EVALS_LEDGER=$X/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$X/record
+rm -rf "$X"; mkdir -p "$X/log" "$X/gbrain-src"
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*"; "$@" > "$X/log/$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$X/log/$n.txt" | head -"${SHOW:-20}"; echo "exit $c (log/$n.txt)"; }
+GE="$R/bin/gstack-evals"
+
+echo "## 1. Pins"
+step . git -C "$R" log -1 --format='rig %H %s'
+step . git -C "$L" log -1 --format='lane b runner %H %s'
+step . bash -c "cd $R && bun -e 'import { recipeHash } from \"./src/rig/recipe.ts\"; console.log(\"trial image recipe \" + recipeHash())'"
+step . sh -c "cd $P && sha256sum comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json decide.py exposure.py review-cost.py projection.py caps.py peak.py renders.txt $P/ceremony-tb2.ts $S/stacks-r1.json $S/severity-map.json"
+
+echo; echo "## 2. review-units, each invocation of section 9 (--dry-run)"
+C="--suite $S/stacks-r1.json --severity-map $S/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$W/gstack --source garrytan/gbrain=$X/gbrain-src --models claude-opus-5-5 --session-kind unattended"
+SP="--system-prompt none=claude-code-preset control=claude-code-preset variant=claude-code-preset"
+SHOW=40 step . $GE review-units $C --units garrytan/gstack#3524@205ea0e2e82f garrytan/gstack#3527@2684974602c1 --arms none control=$G10 variant=$G10 control-sdk=$G10 --render control=interactive variant=unattended control-sdk=interactive $SP --passes 1 --parallel 1 --allowance 15 --spend-cap 70 --item ceremony-r1-review-pilot --out $X/review-pilot --dry-run
+SHOW=12 step '^(review-units|arms|models|max turns|worst|E_)' $GE review-units $C --units all --arms none control=$G10 variant=$G10 --render control=interactive variant=unattended $SP --passes 2 --parallel 3 --allowance 10 --spend-cap 227.44 --item ceremony-r1-review-grid --out $X/review-grid --dry-run
+SHOW=12 step '^(review-units|arms|models|max turns|worst|E_)' $GE review-units $C --units all --arms control-sdk=$G10 --render control-sdk=interactive --passes 1 --parallel 3 --allowance 10 --spend-cap 66.84 --item ceremony-r1-review-sdk --out $X/review-sdk --dry-run
+echo "# refusals: a render on the none arm, and a bad system prompt value"
+step 'E_' $GE review-units $C --units all --arms none control=$G10 --render none=unattended --out $X/bad1 --dry-run
+step 'E_' $GE review-units $C --units all --arms none control=$G10 --system-prompt control=preset --out $X/bad2 --dry-run
+
+echo; echo "## 3. Rig ledger: one item per invocation, one lease each (temporary ledger)"
+for ic in review-pilot:70 review-grid:227.44 review-sdk:66.84 judge-match:20 judge-adj:20; do
+  i=ceremony-r1-${ic%%:*}; c=${ic#*:}
+  step 'E_|cap|item' $GE ledger init --cap $c --item $i --admission warn --words "dry run, not an approval" --by GEVA-108 --source dry-run.sh
+  step 'E_|lease' $GE ledger lease --item $i --run dry-$i --json
+  id=$(grep -o '"lease_id": *"[^"]*"' "$X/log/$n.txt" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+  step 'E_|settled|closed' $GE ledger settle --lease "$id"
+done
+echo "# a second run on a bound item is refused"
+step 'E_' $GE ledger lease --item ceremony-r1-review-grid --run dry-second-run
+SHOW=40 step . $GE ledger status
+
+echo; echo "## 4. Lane B ledger: one file per TB2 item, one approval row, a reserve and settle each"
+for ic in ceremony-r1-tb2-pilot:45 ceremony-r1-tb2:160.75; do
+  i=${ic%%:*}; c=${ic#*:}
+  step . bun -e "import { Ledger, readRows, totals } from '$L/quick/laneb/runner/ledger.ts'; const l = new Ledger('$X/$i.jsonl', '$i'); l.approve($c, { by: 'GEVA-108', dry_run: true }); console.log('reserve', JSON.stringify(l.reserve('s-dry', 2500000, { arm: 'gstack-render' }))); console.log('settle', JSON.stringify(l.settle('s-dry', 300000))); console.log('over cap', JSON.stringify(l.reserve('s-big', Math.round(($c + 1) * 1e6))).slice(0, 160)); console.log('totals', JSON.stringify(totals(readRows('$X/$i.jsonl'))));"
+done
+
+echo; echo "## 5. Lane B arms and job config"
+step . sh -c "cd $L/quick/laneb && B=\$(sed -n 's/^ARG BUILDER_IMAGE=//p' arms/Dockerfile) && mkdir -p $X/none/trees/none/.claude/skills && chmod 755 $X/none/trees/none/.claude $X/none/trees/none/.claude/skills && docker run --rm --network none -u \$(id -u):\$(id -g) -v $X/none:/out -w /out \$B tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -C trees/none -cf none.tar .claude && sha256sum $X/none/none.tar && jq -r .tar.sha256 arms/manifests/none.json arms/manifests/gstack-render.json arms/manifests/gstack-render-unattended.json"
+echo "# the tag's tars rebuilt with quick/laneb/arms/build-render.sh, against the digests GEVA-109 reported"
+step . sh -c "grep -E '^exit=' $W/tarsA/build.log; cd $W/tarsA && printf '%s  %s\\n' eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e gstack-render.tar c7ef36e8d7013fa49e86b7403a20a667adb78065dd837e3e5898d0ae8a7526c5 gstack-render.tar.gz 406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1 gstack-render-unattended.tar 22545ba5b3a9d5b981952faf773ec19dcce897fc2f1e06852309d200273b4ce2 gstack-render-unattended.tar.gz | sha256sum -c -"
+for b in pilot:pypi-server,dna-insert,headless-terminal,pytorch-model-cli,mailman:1 grid:all:3; do
+  name=${b%%:*}; rest=${b#*:}; tasks=${rest%%:*}; att=${rest##*:}
+  SHOW=40 step 'system_prompt|session_kind|E_|n_attempts|n_concurrent|model_name|cap' bun -e "import { armSpec, jobConfig } from '$L/quick/laneb/runner/grid.ts'; const arms = ['none:system_prompt=claude-code-preset:session_kind=unattended', 'gstack-render:system_prompt=claude-code-preset:session_kind=unattended', 'gstack-render-unattended:system_prompt=claude-code-preset:session_kind=unattended'].map(armSpec).map((a) => ({ ...a, tar: '/vm/' + a.name + '.tar', sha256: 'x' })); const cfg = jobConfig({ job_name: 'dry-$name', tasks_dir: '/vm/tasks', tasks: '$tasks' === 'all' ? ['t1', 't2'] : '$tasks'.split(','), models: [{ id: 'claude-opus-5-5', harbor_model: 'anthropic/claude-opus-5-5', session_cap_usd: 2.5 }, { id: 'particle-1', harbor_model: 'openrouter/particle-ai/particle-1', session_cap_usd: 0.5 }], arms, attempts: $att, n_concurrent: 12, agent_dir: '/vm/agent', runner_dir: '/vm/runner', base_url: 'http://proxy', max_output_tokens: 32000, verifier_timeout_multiplier: 1 }); console.log(JSON.stringify(cfg, null, 1));"
+done
+
+echo; echo "## 6. Scoring at the rig pin: review (noloss score, frozen files with dry arm ids), TB2 (ceremony-tb2.ts)"
+for f in comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json; do
+  sed -e 's/"none-opus"/"@N@"/g' -e 's/"variant-opus"/"none-opus"/g' -e 's/"control-sdk-opus"/"gstack-particle-1"/g' -e 's/"control-opus"/"gstack-opus"/g' -e 's/"@N@"/"tstack-opus"/g' "$P/$f" > "$X/dry-$f"
+done
+mkdir -p "$X/score"
+for f in comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json; do
+  for id in $(jq -r '.comparisons[].id' "$X/dry-$f"); do
+    v=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .variant' "$X/dry-$f"); r=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .reference' "$X/dry-$f")
+    step '^([a-z0-9-]+ vs [a-z0-9-]+ at a |size rule|claim|E_)' $GE noloss score --suite $S/stacks-r1.json --root $W/review/judge/final/arms --prereg "$X/dry-$f" --variant $v --reference $r --out "$X/score/$id.json"
+  done
+done
+cp $P/ceremony-tb2.ts "$R/quick/laneb/analysis/ceremony-tb2.ts"
+SHOW=30 step . bun "$R/quick/laneb/analysis/ceremony-tb2.ts" "$P/dry-tb2-config.json" --json "$X/tb2.json"
+rm -f "$R/quick/laneb/analysis/ceremony-tb2.ts"
+
+echo; echo "## 7. Exposure, cost, caps and the decision rule"
+RV=$W/review/runs
+RG=$RV/stacks-r1-review-opus-gstack/out; RS=$RV/stacks-r1-review-particle-gstack/out
+echo "# all four roles; control-sdk reads its own out dir (particle-1's gstack run stands in for it, as in section 6)"
+step . python3 $P/review-cost.py "{\"control\":[\"$RG\",\"gstack-opus\",\"gstack\"],\"variant\":[\"$RG\",\"none-opus\",\"none\"],\"none\":[\"$RG\",\"none-opus\",\"none\"],\"control-sdk\":[\"$RS\",\"gstack-particle-1\",\"gstack\"]}" --json "$X/review-cost.json"
+step . python3 $P/exposure.py review $RV/stacks-r1-review-opus-gstack/out --json "$X/exposure-review.json"
+step . sh -c "python3 $P/exposure.py tb2 \$(jq -r '.jobs[]' $P/dry-tb2-config.json) --json $X/exposure-tb2.json | tail -12"
+T=$HOME/.capy/work/geva100/geva93/geva93-tb2/runs
+step 'allowance|session_cap|caps|verdict|fits' python3 $P/caps.py --review $RV/stacks-r1-review-opus-gstack/out --tb2 $T/r3-opus/pulled/out/proxy-sessions.jsonl $T/r3-particle/pulled/out/proxy-sessions.jsonl --map gstack=control,variant,control-sdk none=none --settled 17 --json "$X/caps.json"
+SHOW=40 step . python3 $P/decide.py --tb2 "$X/tb2.json" --review-score "$X/score/variant-vs-control.json" --review-cost "$X/review-cost.json" --exposure-review "$X/exposure-review.json" --exposure-tb2 "$X/exposure-tb2.json" --arms '{"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}' --json "$X/decide.json"
+echo "# G4's planned count: the stand-in with 111 graded trials in every TB2 cell, then four tasks dropped from Opus's variant"
+echo "# (99 graded, 33 paired tasks). G4 holds on the first and must fail on the second: planned stays 3 x 37 = 111."
+jq '(.zero.cells[].graded) |= 111 | (.zero.contrasts[].tasks) |= 37' "$X/tb2.json" > "$X/tb2-full.json"
+jq '(.zero.cells[] | select(.model == "claude-opus-5-5" and .arm == "variant") | .graded) |= 99 | (.zero.contrasts[] | select(.model == "claude-opus-5-5") | .tasks) |= 33' "$X/tb2-full.json" > "$X/tb2-drop4.json"
+for t in full drop4; do
+  step '^(claude-opus-5-5|particle-1):|G4' python3 $P/decide.py --tb2 "$X/tb2-$t.json" --review-score "$X/score/variant-vs-control.json" --review-cost "$X/review-cost.json" --exposure-review "$X/exposure-review.json" --exposure-tb2 "$X/exposure-tb2.json" --arms '{"tb2":{"control":"gstack","variant":"pstack"},"review":{"control":"gstack","variant":"none"}}'
+done
+echo; echo "dry run done"
