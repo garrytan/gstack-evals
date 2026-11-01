@@ -14,6 +14,8 @@ Each arm ships as a tar whose paths are relative to `/root` (`.claude/...`, and 
 | --- | --- |
 | `build.sh` | Builds the three tars, the placebo tree and the manifests. Needs docker with buildx, bun, git and network at build time. Every tar and gzip runs in the pinned builder image. |
 | `Dockerfile` | `gstack-tar` runs gstack's setup in an Ubuntu 24.04 builder. `runtime` and `check` mirror the trial runtime for the offline checks. |
+| `build-render.sh` | Builds the rendered gstack arms for the ceremony eval (GEVA-108) at gstack 10d41ed: `gstack-render` (the interactive render) and `gstack-render-unattended`. Each runs gstack's `./setup`, renders the full loadout to `/root/.claude/gstack-render` and serves it (`GSTACK_RENDER` in the Dockerfile). Their manifests carry the render lock's fields. `runner/skill-map.render.json` tells both arms /investigate. |
+| `check-render.sh` | Offline checks of the rendered arms: served skills match the lock, section pointers resolve, and served /investigate's start line prints `RENDER_KIND: unattended` only in the unattended arm (`--network none`). |
 | `check-arms.sh`, `check-inside.sh` | Offline checks of each tar on a set of base images, with `--network none`. |
 | `placebo/placebo.ts` | The placebo generator: frontmatter split, routing section, seeded prose, token count, procedural-marker check. |
 | `placebo/generate.ts` | Generator CLI. Prints the generator hash, the seed and both digests. |

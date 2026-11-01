@@ -14,11 +14,12 @@ import { armSpec, jobConfig, invokesArm } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-// Each invoked arm gets its own task-to-skill map from skill-map.stacks.json (arm, then task, to skill);
+// Each invoked arm gets its own task-to-skill map from skill-map.stacks.json, or skill-map.render.json for the
+// rendered gstack arms (arm, then task, to skill);
 // none is never told, so it gets no map.
 export function toldSkillMaps(map: Record<string, Record<string, string>>, arms: string[], tasks: string[]) {
   return Object.fromEntries(arms.filter(invokesArm).map((arm) => {
-    for (const id of tasks) if (!map[arm]?.[id]) throw new Error(`E_USAGE arm ${arm}: task ${id} has no entry in runner/skill-map.stacks.json`);
+    for (const id of tasks) if (!map[arm]?.[id]) throw new Error(`E_USAGE arm ${arm}: task ${id} has no entry in runner/skill-map.stacks.json or runner/skill-map.render.json`);
     return [arm, Object.fromEntries(tasks.map((id) => [id, map[arm][id]]))];
   }));
 }
@@ -41,7 +42,8 @@ if (import.meta.main) {
   if (!/^prompt-wrapper[\w-]*\.md$/.test(wrapper) || !existsSync(join(here, wrapper))) throw new Error(`E_USAGE WRAPPER ${wrapper} is not a prompt-wrapper*.md file in ${here}`);
   const armSpecs = armsCsv.split(",").map(armSpec);
   if (new Set(armSpecs.map((a) => a.name)).size !== armSpecs.length) throw new Error(`E_USAGE arms ${armsCsv}: an arm is named twice`);
-  const skillMaps = toldSkillMaps(JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), armSpecs.map((a) => a.name), final);
+  const toldMap = { ...JSON.parse(readFileSync(join(here, "skill-map.stacks.json"), "utf8")), ...JSON.parse(readFileSync(join(here, "skill-map.render.json"), "utf8")) };
+  const skillMaps = toldSkillMaps(toldMap, armSpecs.map((a) => a.name), final);
   const expected = new Map<string, string>([...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
@@ -100,7 +102,7 @@ if (import.meta.main) {
     job_name: jobName, created_at: new Date().toISOString(), network,
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
     wrapper, wrapper_sha256: sha256(join(here, wrapper)), persona_sha256: sha256(join(here, "agent/persona.json")),
-    skill_map_sha256: sha256(join(here, "skill-map.stacks.json")), invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invokesArm(name)])),
+    skill_map_sha256: sha256(join(here, "skill-map.stacks.json")), render_skill_map_sha256: sha256(join(here, "skill-map.render.json")), invoke_by_arm: Object.fromEntries(arms.map(({ name }) => [name, invokesArm(name)])),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "" })), tasks,
   };

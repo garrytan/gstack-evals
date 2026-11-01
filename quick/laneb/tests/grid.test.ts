@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { tb2TaskToml, TB2_AGENT_HOSTS } from "../runner/materialize.ts";
 
@@ -35,6 +37,14 @@ describe("grid", () => {
     for (const bad of ["gstack:system_prompt=claude_code", "gstack:session_kind=", "gstack:session_kind=interactive", "gstack:model=x", "gstack:system_prompt", "gstack:session_kind=unattended:session_kind=unattended"]) {
       expect(() => armSpec(bad)).toThrow("E_USAGE");
     }
+  });
+
+  test("the rendered gstack arms are told /investigate for every task, from their own map", () => {
+    const dir = join(import.meta.dir, "../runner");
+    const stacks = JSON.parse(readFileSync(join(dir, "skill-map.stacks.json"), "utf8"));
+    const render = JSON.parse(readFileSync(join(dir, "skill-map.render.json"), "utf8"));
+    expect(Object.keys(render).sort()).toEqual(["gstack-render", "gstack-render-unattended"]);
+    for (const arm of Object.keys(render)) expect(render[arm]).toEqual(Object.fromEntries(Object.keys(stacks.gstack).map((t) => [t, "investigate"])));
   });
 
   test("a model with only_arms gets just those arms, in arm order, after the full models", () => {
