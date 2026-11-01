@@ -1,0 +1,593 @@
+# R1a keyless dry run, 2026-11-01T11:37:07.717Z
+scorer HEAD e305ed087b3f17bd211287b0e2d5e3f3960b5a4f
+stub sha256 f8262d93b69048fdabbe8e15b38cdcec266e2e09f56275e31f267530d8e6c533
+post any-severity.json sha256 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367
+post comparisons.fable.json sha256 5ca0068b088297e615a29c8a4667b958952fc49a98d9161e6f790a6ef99b9e67
+post comparisons.primary.json sha256 9d5ac46292c7579a666b0c6a00f08a9e603409f8a7c436c034f1af4ba094e7e8
+post comparisons.real-neutral.json sha256 af86671913b46fdd2dd23f45190252f98e1168ff2d308bdee59776f17ade948d
+post comparisons.secondary-opus.json sha256 22b4d37bbbe62535071d6db23946811d0d22ee16a6122ff3d6e9e03236212216
+post comparisons.secondary.json sha256 4fe8dd0f822665d83cd621249797ca74a1762008eeb54481f9c0f0e24f582466
+post fable-subset.tsv sha256 36a7008358b9a1f1ec8bff454c5ca4221cd04a92e4b07220e902d0557178bda5
+post judge-brief.md sha256 64e35c81c8bfdb038a7c21652ffaeaed8e3683d4e67ecc87638703a00d73fc06
+post policy.json sha256 e3bfc99132b2eca114d42663d99dfa3ca4f46384865e5c9bc16d7d7ae19bb001
+
+## 1. Suites, stub and sealed root
+$ noloss suite --check --suite planrev-ceo-r1a --sealed-root $SEALED
+  exit 0  (headline suite)
+    suite planrev-ceo-r1a ok: 36 units, 60 blockers, sha256 954f8f6e72f2f196d8de5757d231d39753b18d6a55dbd806770c2f2acb6bfdba
+PASS stub loads with the sealed root
+$ noloss suite --check --suite planrev-ceo-r1a
+  exit 2  (no sealed root)
+    E_NOLOSS_SUITE suite planrev-ceo-r1a is sealed, and $SCORER/lanes/review-noloss/suites/planrev-ceo-r1a.json is its stub (counts and digests only); pass --sealed-root <dir>, the directory outside the repo that holds suites/planrev-ceo-r1a.json and its catalogs
+PASS stub refuses without the sealed root
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --sealed-root $SEALED
+  exit 0  (pilot suite)
+    suite planrev-ceo-r1a-pilot ok: 4 units, 8 blockers, sha256 40e0b954a419514e9e5faf7a11c0dedc6a5b17bef308481dfe1dc26bd527ab14
+PASS pilot suite checks
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-r1a-real.json --sealed-root $SEALED
+  exit 0  (real-neutral suite)
+    suite planrev-ceo-r1a-real ok: 2 units, 2 blockers, sha256 e07c0a1528d2d54987d9fe7f9527adfc85e3b4cd3aec823fbfcc71dcfab6c9d0
+PASS real-neutral suite checks
+$ noloss suite --check --suite $SEALED/suites/planrev-ceo-r1a-fable.json --sealed-root $SEALED
+  exit 0  (Fable subset suite)
+    suite planrev-ceo-r1a-fable ok: 18 units, 30 blockers, sha256 d3337d23af13a6834835c4ac9fcb1025ba0860efda675b732f2bc8d3090b637c
+PASS Fable subset suite checks
+
+## 2. The frozen run commands (review-units --dry-run)
+$ review-units --suite planrev-ceo-r1a --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
+  exit 0  (headline: 6 cells, 3 passes)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-r1a (sha256 954f8f6e72f2f196d8de5757d231d39753b18d6a55dbd806770c2f2acb6bfdba)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (36):
+    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
+    models: claude-opus-5-5, particle-ai/particle-1; passes 3; sessions 648
+    worst case at the allowance: $2343.17; spend cap none
+    out $OUT/ru
+PASS headline run plans 648 sessions
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-real.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
+  exit 0  (real-neutral: 6 cells, 3 passes)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-r1a-real (sha256 e07c0a1528d2d54987d9fe7f9527adfc85e3b4cd3aec823fbfcc71dcfab6c9d0)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (2):
+    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
+    models: claude-opus-5-5, particle-ai/particle-1; passes 3; sessions 36
+    worst case at the allowance: $130.18; spend cap none
+    out $OUT/ru
+PASS real-neutral run plans 36 sessions
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f lens placebo --models claude-opus-5-5 particle-ai/particle-1 claude-fable-5-1 --arm-models lens=claude-opus-5-5 placebo=particle-ai/particle-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
+  exit 0  (pilot: 8 cells, 1 pass)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-r1a-pilot (sha256 40e0b954a419514e9e5faf7a11c0dedc6a5b17bef308481dfe1dc26bd527ab14)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (4):
+    arms: none ("Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1, claude-fable-5-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-opus-5-5, particle-ai/particle-1, claude-fable-5-1), lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on claude-opus-5-5), placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)
+    models: claude-opus-5-5, particle-ai/particle-1, claude-fable-5-1; passes 1; sessions 32
+    worst case at the allowance: $227.58; spend cap none
+    out $OUT/ru
+PASS pilot run plans 32 sessions
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
+  exit 0  (Fable subset: 2 cells, 1 pass)
+    review-units dry run: nothing is built, written or spent
+    suite planrev-ceo-r1a-fable (sha256 d3337d23af13a6834835c4ac9fcb1025ba0860efda675b732f2bc8d3090b637c)
+    plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d051830ca7971
+    units (18):
+    arms: none ("Review this plan for problems." on claude-fable-5-1), gstack ("/plan-ceo-review Review this plan for problems." on claude-fable-5-1)
+    models: claude-fable-5-1; passes 1; sessions 36
+    worst case at the allowance: $633.60; spend cap none
+    out $OUT/ru
+PASS Fable run plans 36 sessions
+$ review-units --suite planrev-ceo-r1a --arms none gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-opus-5-5 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $OUT/ru
+  exit 2  (gstack-auto placeholder)
+    E_USAGE review-units: arm gstack-auto: gstack-auto (GST-537) is not released; its told command "/autoplan --ceo-only" is a placeholder until a gstack release sets GSTACK_AUTO in src/trial/review/plan.ts
+PASS gstack-auto is refused until GST-537 sets its release
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --item planning-r1a --out $OUT/ru
+  exit 2  (Fable under the default policy)
+    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke); ledger item planning-r1a is not named, so its prereg does not name this rung
+PASS the default policy refuses Fable as a subject (smoke_only, no rungs)
+$ review-units --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-fable-5-1 --passes 1 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item some-other-item --out $OUT/ru
+  exit 2  (Fable under R1a's policy, another ledger item)
+    E_USAGE review-units: --models: claude-fable-5-1 as a model under test: the policy allows it only in smoke runs (--smoke) or as a capped rung of ledger item planning-r1a; ledger item some-other-item is not named, so its prereg does not name this rung
+PASS R1a's policy refuses Fable under any ledger item but planning-r1a
+$ review-units --suite planrev-ceo-r1a --arms none gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f --models claude-opus-5-5 --passes 3 --sealed-root $SEALED --plan ceo --units all --source panel/plans=$SOURCE --base-branch panel/plans=main --dry-run --policy $POST/policy.json --item planning-r1a --out $SCORER/runs/r1a-dry
+  exit 2  (a sealed run with --out inside the repo)
+    E_USAGE review-units: suite planrev-ceo-r1a is sealed, and --out $SCORER/runs/r1a-dry is inside the repo; write sealed runs outside it
+PASS review-units refuses a sealed run whose --out is inside the repo
+
+## 3. Headline: synthetic arms through blind judging and adjudication
+PASS headline: raw arm none-opus ingests
+PASS headline: raw arm gstack-opus ingests
+PASS headline: raw arm lens-opus ingests
+PASS headline: raw arm none-particle-1 ingests
+PASS headline: raw arm gstack-particle-1 ingests
+PASS headline: raw arm placebo-particle-1 ingests
+PASS headline: raw arm flagall-opus ingests
+$ noloss judge-packet --suite planrev-ceo-r1a --arm $OUT/headline/raw-root/planrev-ceo-r1a/none-opus --arm $OUT/headline/raw-root/planrev-ceo-r1a/gstack-opus --arm $OUT/headline/raw-root/planrev-ceo-r1a/lens-opus --arm $OUT/headline/raw-root/planrev-ceo-r1a/none-particle-1 --arm $OUT/headline/raw-root/planrev-ceo-r1a/gstack-particle-1 --arm $OUT/headline/raw-root/planrev-ceo-r1a/placebo-particle-1 --arm $OUT/headline/raw-root/planrev-ceo-r1a/flagall-opus --seed 20261031 --out $OUT/headline/packets --key $OUT/headline/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (headline: blind packets over every arm, plan trees from the source clone)
+    judge-packet: batch e37252e319722927a2c975bb691105ad3d5de081995e3316ffd45661b79ac8b2, 36 packets, 782 findings from 7 arms; the key is outside the packets
+PASS headline: judge-packet exit 0
+  judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
+$ noloss judge-join --suite planrev-ceo-r1a --key $OUT/headline/key.json --out $OUT/headline/judged --arm $OUT/headline/raw-root/planrev-ceo-r1a/none-opus --arm $OUT/headline/raw-root/planrev-ceo-r1a/gstack-opus --arm $OUT/headline/raw-root/planrev-ceo-r1a/lens-opus --arm $OUT/headline/raw-root/planrev-ceo-r1a/none-particle-1 --arm $OUT/headline/raw-root/planrev-ceo-r1a/gstack-particle-1 --arm $OUT/headline/raw-root/planrev-ceo-r1a/placebo-particle-1 --arm $OUT/headline/raw-root/planrev-ceo-r1a/flagall-opus --sealed-root $SEALED --reply $OUT/headline-blockers-primary.json --second $OUT/headline-blockers--second.json
+  exit 0  (headline: judge-join blockers for every arm at once)
+    judge-join: batch e37252e319722927a2c975bb691105ad3d5de081995e3316ffd45661b79ac8b2, wrote judgments for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1, flagall-opus under $OUT/headline/judged; second judge on 60 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
+PASS headline: judge-join exit 0
+$ noloss judge-packet --suite planrev-ceo-r1a --arm $OUT/headline/judged/none-opus --arm $OUT/headline/judged/gstack-opus --arm $OUT/headline/judged/lens-opus --arm $OUT/headline/judged/none-particle-1 --arm $OUT/headline/judged/gstack-particle-1 --arm $OUT/headline/judged/placebo-particle-1 --arm $OUT/headline/judged/flagall-opus --seed 20261101 --out $OUT/headline/adj-packets --key $OUT/headline/adj-key.json --adjudicate --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (headline: blind adjudication packets)
+    judge-packet: batch 72c109bc8d0b789873f7552a9c313c5881b0b0ace46b80d666d431e9daeb1f9e, 12 packets, 108 findings from 7 arms; the key is outside the packets
+PASS headline: adjudication packets build, or there is nothing to adjudicate
+  judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
+$ noloss judge-join --suite planrev-ceo-r1a --key $OUT/headline/adj-key.json --out $OUT/headline/adjudicated --arm $OUT/headline/judged/none-opus --arm $OUT/headline/judged/gstack-opus --arm $OUT/headline/judged/lens-opus --arm $OUT/headline/judged/none-particle-1 --arm $OUT/headline/judged/gstack-particle-1 --arm $OUT/headline/judged/placebo-particle-1 --arm $OUT/headline/judged/flagall-opus --sealed-root $SEALED --reply $OUT/headline-findings-primary.json --second $OUT/headline-findings--second.json
+  exit 0  (headline: judge-join findings for every arm at once)
+    judge-join: batch 72c109bc8d0b789873f7552a9c313c5881b0b0ace46b80d666d431e9daeb1f9e, wrote adjudication.tsv for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1, flagall-opus under $OUT/headline/adjudicated; second judge on 108 blockers (kappa n/a), third read on 0. Ingest each arm with noloss ingest.
+PASS headline: adjudication join exit 0
+PASS headline: judged arm none-opus ingests
+PASS headline: judged arm gstack-opus ingests
+PASS headline: judged arm lens-opus ingests
+PASS headline: judged arm none-particle-1 ingests
+PASS headline: judged arm gstack-particle-1 ingests
+PASS headline: judged arm placebo-particle-1 ingests
+PASS headline: judged arm flagall-opus ingests
+
+## 4. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys
+$ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.primary.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (primary: gstack better)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 20.8% vs 64.6%, delta -43.8 points [95% CI -53.5, -34.0]; 40 losses, 3 gains on 48 blockers in 24 PRs (21 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0 (Holm 0.0000010, step 1 of 2 in the declared LOSS family) (minimum reachable 4.8e-7).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.19, none-opus 0.19 on 12 decoys; gstack-opus's excess 0.00 [95% CI -0.17, +0.17]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS primary: gstack better: --expect LOSS
+PASS primary prints its Holm step of 2
+PASS primary gate reads 12 decoys
+$ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.primary.json --variant gstack-opus --reference none-opus --sealed-root $SEALED
+  exit 2  (primary: gstack worse (mirror))
+    gstack-opus vs none-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): non-inferior within 10 points (NO_LOSS). Blocking recall 64.6% vs 20.8%, delta 43.8 points [95% CI 34.0, 53.5]; 3 losses, 40 gains on 48 blockers in 24 PRs (21 discordant). p non-inferior 0.0 (Holm 0.0 over 2), p loss 1.000 (Holm 1.000, step 2 of 2 in the declared LOSS family) (minimum reachable 4.8e-7).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass none-opus 0.19, gstack-opus 0.19 on 12 decoys; none-opus's excess 0.00 [95% CI -0.17, +0.17]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the size rule is unchecked.
+    claim "none-opus catches more of these blockers than gstack-opus": may not be made: the verdict is NO_LOSS.
+    verdict: NO_LOSS NOLOSS_UNDERPOWERED
+PASS primary: gstack worse (mirror): --expect NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+ceiling rule: none-opus must-fix recall 0.208 (ceiling above 0.85: not met)
+PASS the ceiling rule reads none-opus recall
+
+## 5. Secondary family: Holm over 3
+$ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.secondary.json --variant none-particle-1 --reference gstack-particle-1 --sealed-root $SEALED
+  exit 1  (secondary: particle-1 gstack)
+    none-particle-1 vs gstack-particle-1 at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 13.2% vs 37.5%, delta -24.3 points [95% CI -35.4, -13.2]; 28 losses, 7 gains on 48 blockers in 24 PRs (17 discordant). p non-inferior 0.988 (Holm 1.000 over 3), p loss 0.00051 (Holm 0.0015, step 1 of 3 in the declared LOSS family) (minimum reachable 0.0000076).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-particle-1 0.08, none-particle-1 0.08 on 12 decoys; gstack-particle-1's excess 0.00 [95% CI -0.11, +0.11]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-particle-1 catches more of these blockers than none-particle-1": may be made.
+    verdict: LOSS
+PASS secondary: particle-1 gstack: --expect LOSS
+$ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.secondary.json --variant none-opus --reference lens-opus --sealed-root $SEALED
+  exit 2  (secondary: Opus lens)
+    none-opus vs lens-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): NOT_DISTINGUISHED. Blocking recall 20.8% vs 31.9%, delta -11.1 points [95% CI -22.2, -0.7]; 18 losses, 9 gains on 48 blockers in 24 PRs (17 discordant). p non-inferior 0.588 (Holm 1.000 over 3), p loss 0.038 (Holm 0.076, step 2 of 3 in the declared LOSS family) (minimum reachable 0.0000076).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass lens-opus 0.08, none-opus 0.19 on 12 decoys; lens-opus's excess -0.11 [95% CI -0.31, +0.08]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED.
+    claim "lens-opus catches more of these blockers than none-opus": may not be made: the verdict is NOT_DISTINGUISHED.
+    verdict: NOT_DISTINGUISHED
+PASS secondary: Opus lens: --expect NOT_DISTINGUISHED,LOSS
+$ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $POST/comparisons.secondary.json --variant none-particle-1 --reference placebo-particle-1 --sealed-root $SEALED
+  exit 2  (secondary: particle-1 placebo)
+    none-particle-1 vs placebo-particle-1 at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): NOT_DISTINGUISHED. Blocking recall 13.2% vs 13.9%, delta -0.7 points [95% CI -8.3, 6.9]; 12 losses, 13 gains on 48 blockers in 24 PRs (15 discordant). p non-inferior 0.018 (Holm 0.053 over 3), p loss 0.500 (Holm 0.500, step 3 of 3 in the declared LOSS family) (minimum reachable 0.000031).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass placebo-particle-1 0.03, none-particle-1 0.08 on 12 decoys; placebo-particle-1's excess -0.06 [95% CI -0.17, +0.06]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED.
+    claim "placebo-particle-1 catches more of these blockers than none-particle-1": may not be made: the verdict is NOT_DISTINGUISHED.
+    verdict: NOT_DISTINGUISHED
+PASS secondary: particle-1 placebo: --expect NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS secondary prints its Holm step of 3
+
+## 6. Frozen particle-1 rung drop (pilot stop c)
+$ noloss score --suite planrev-ceo-r1a --root $OUT/arms-opus --prereg $POST/comparisons.secondary.json --variant none-opus --reference lens-opus --sealed-root $SEALED
+  exit 2  (full secondary file without particle-1 arms)
+    E_NOLOSS_ARM arm none-particle-1 is not ingested for suite planrev-ceo-r1a
+PASS full secondary file without particle-1 arms: --expect E_NOLOSS_ARM
+$ noloss score --suite planrev-ceo-r1a --root $OUT/arms-opus --prereg $POST/comparisons.secondary-opus.json --variant none-opus --reference lens-opus --sealed-root $SEALED
+  exit 1  (Opus-only secondary file)
+    none-opus vs lens-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 20.8% vs 31.9%, delta -11.1 points [95% CI -22.2, -0.7]; 18 losses, 9 gains on 48 blockers in 24 PRs (17 discordant). p non-inferior 0.588, p loss 0.038 (Holm 0.038, step 1 of 1 in the declared LOSS family) (minimum reachable 0.0000076).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass lens-opus 0.08, none-opus 0.19 on 12 decoys; lens-opus's excess -0.11 [95% CI -0.31, +0.08]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "lens-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS Opus-only secondary file: --expect NOT_DISTINGUISHED,LOSS
+PASS Opus-only file is a family of 1
+
+## 7. False-alarm gate: a flag-everything arm
+$ noloss score --suite planrev-ceo-r1a --root $OUT/headline/arms --prereg $OUT/gate.json --variant none-opus --reference flagall-opus --sealed-root $SEALED
+  exit 1  (flag-everything arm)
+    none-opus vs flagall-opus at a 10-point margin (dry run): LOSS. Blocking recall 20.8% vs 100.0%, delta -79.2 points [95% CI -84.7, -72.9]; 48 losses, 0 gains on 48 blockers in 24 PRs (24 discordant). p non-inferior 1.000, p loss 0.0 (Holm 0.0, step 1 of 1 in the declared LOSS family) (minimum reachable 6.0e-8).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass flagall-opus 4.00, none-opus 0.19 on 12 decoys; flagall-opus's excess +3.81 [95% CI +3.69, +3.92]: FAIL.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "flagall-opus catches more of these blockers than none-opus": may not be made: false-alarm gate FAIL.
+    verdict: LOSS FALSE_ALARM_GATE_FAIL
+PASS flag-everything arm: --expect FALSE_ALARM_GATE_FAIL
+PASS gate fails on 12 decoys
+
+## 8. Volume-matched reading (first 2 must-fix findings per unit-pass)
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-k2 --out $OUT/derived/planrev-ceo-r1a-k2 --first-k 2 --sealed-root $SEALED
+  exit 0  (first-k 2)
+    derive planrev-ceo-r1a-k2: keep each unit-pass's first 2 must-fix findings as must-fix and relabel the rest VOLUME-CUT (volume-matched)
+    suite $OUT/derived/planrev-ceo-r1a-k2/planrev-ceo-r1a-k2.json sha256 8b15b531c10ed3512f5f529c7bf71916e06ac797febf0b822e7268e6fa05ca21: 36 units, 48 blocking blockers on 24 PRs; 0 units dropped
+    comparisons $OUT/derived/planrev-ceo-r1a-k2/comparisons.planrev-ceo-r1a-k2.json sha256 d67f9623a83cc70ba44a8eae104fab9d27da1f99b6754cec4c2a4d6aa2b5c394
+    arm flagall-opus: complete, tree 4107ec455a3774096d166e2db663c5e6d6deb73cc846905f6c2bdcc5a0647a6d
+PASS first-k 2: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-k2/planrev-ceo-r1a-k2.json --root $OUT/derived/planrev-ceo-r1a-k2/arms --prereg $OUT/derived/planrev-ceo-r1a-k2/comparisons.planrev-ceo-r1a-k2.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (first-k 2: same sign as the primary)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 20.8% vs 64.6%, delta -43.8 points [95% CI -53.5, -34.0]; 40 losses, 3 gains on 48 blockers in 24 PRs (21 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0 (Holm 0.0000010, step 1 of 2 in the declared LOSS family) (minimum reachable 4.8e-7).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.19, none-opus 0.19 on 12 decoys; gstack-opus's excess 0.00 [95% CI -0.17, +0.17]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS first-k 2: same sign as the primary: --expect LOSS
+
+## 9. Any-severity recall (secondary) and the any-severity fallback
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-any --out $OUT/derived/planrev-ceo-r1a-any --severity-map $POST/any-severity.json --sealed-root $SEALED
+  exit 0  (any severity)
+    derive planrev-ceo-r1a-any: re-map severity with any-severity.json (sha256 849226d6dd3e991157a0912b8efef02a9bd0b570c0f33cb96a0ba3485ec0a367)
+    suite $OUT/derived/planrev-ceo-r1a-any/planrev-ceo-r1a-any.json sha256 7fa8e76fc653210a9747de2b2c72fb1b2d38b3086beacc3af48193f2af30c31f: 36 units, 48 blocking blockers on 24 PRs; 0 units dropped
+    comparisons $OUT/derived/planrev-ceo-r1a-any/comparisons.planrev-ceo-r1a-any.json sha256 30f521367bfd52539607a9c7eff486b5b77360f51b4766ccfead1d817ca3d931
+    arm flagall-opus: complete, tree f3f0203b4d5c5b8afcb3a99cdeddbe2e6f4b4a14ce3bcf14ec87637447d65101
+PASS any severity: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-any/planrev-ceo-r1a-any.json --root $OUT/derived/planrev-ceo-r1a-any/arms --prereg $OUT/derived/planrev-ceo-r1a-any/comparisons.planrev-ceo-r1a-any.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (any severity)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 38.9% vs 74.3%, delta -35.4 points [95% CI -43.8, -27.1]; 37 losses, 4 gains on 48 blockers in 24 PRs (21 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0 (Holm 0.0000010, step 1 of 2 in the declared LOSS family) (minimum reachable 4.8e-7).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.39, none-opus 0.44 on 12 decoys; gstack-opus's excess -0.06 [95% CI -0.25, +0.14]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS any severity: --expect LOSS
+$ noloss secondary --suite planrev-ceo-r1a --variant none-opus --reference gstack-opus --seed 20261031 --root $OUT/headline/arms --sealed-root $SEALED
+  exit 0  (secondary)
+    noloss secondary: none-opus vs gstack-opus on planrev-ceo-r1a (sha256 954f8f6e72f2f196d8de5757d231d39753b18d6a55dbd806770c2f2acb6bfdba), seed 20261031
+    recall, none-opus: blocking 10/48 = 0.2083 [0.1528, 0.2708]; at any severity 18.6667/48 = 0.3889 [0.3125, 0.4722]; 0 judgments with coverage incomplete
+    recall, gstack-opus: blocking 31/48 = 0.6458 [0.5625, 0.7222]; at any severity 35.6667/48 = 0.7431 [0.6736, 0.8056]; 0 judgments with coverage incomplete
+    new blockers per pass per PR: variant 0, reference 0 (0 and 0 in all, 36 PRs); difference 0 [0, 0], exact two-sided sign-flip p 1 (min p n/a)
+    idea-card wins: 0 of 48 blocking blockers (found by none-opus in every pass and by gstack-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 2.0018, 95th percentile 4; above the null: no
+PASS secondary readings (any severity, new defects)
+
+## 10. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-mc --out $OUT/derived/planrev-ceo-r1a-mc --drop-file $OUT/missing-cells.drop.tsv --sealed-root $SEALED
+  exit 0  (missing cells)
+    derive planrev-ceo-r1a-mc: drop every unit listed in missing-cells.drop.tsv (sha256 6a1e901690a28d418a7057a400936c7c0fae54b67cd0d3e9877e8a0f65476183)
+    comparisons $OUT/derived/planrev-ceo-r1a-mc/comparisons.planrev-ceo-r1a-mc.json sha256 7a0fc6161310c0c1846f35357409e1e62d01c3841ed7ed19046b9a45aa57c875
+    arm flagall-opus: complete, 3 cost rows dropped, tree 8e16bd5f55f3313630c9c449fc91b0189a63d3f3c22fe789af7af8490b6f8f0b
+    arm gstack-opus: complete, 3 cost rows dropped, tree 3e71e037ba2969e21c31c652f56fb4f3e65bc63a6c9e53b614d5dcdf72690c68
+PASS missing cells: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-mc/planrev-ceo-r1a-mc.json --root $OUT/derived/planrev-ceo-r1a-mc/arms --prereg $OUT/derived/planrev-ceo-r1a-mc/comparisons.planrev-ceo-r1a-mc.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (missing-cell sensitivity)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 18.3% vs 63.5%, delta -45.2 points [95% CI -54.8, -34.9]; 36 losses, 2 gains on 42 blockers in 21 PRs (19 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0000020 (Holm 0.0000040, step 1 of 2 in the declared LOSS family) (minimum reachable 0.0000019).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.19, none-opus 0.19 on 12 decoys; gstack-opus's excess 0.00 [95% CI -0.17, +0.17]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS missing-cell sensitivity: --expect LOSS
+
+## 11. Stopped arm: no verdict, the family keeps its size
+PASS stopped arm ingests
+$ noloss score --suite planrev-ceo-r1a --root $OUT/arms-stopped --prereg $POST/comparisons.secondary.json --variant none-opus --reference lens-opus --sealed-root $SEALED
+  exit 2  (stopped lens arm)
+    none-opus vs lens-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): no verdict (arm lens-opus stopped, so there is no verdict). Blocking recall 20.8% vs 31.9%, delta -11.1 points [95% CI -22.2, -0.7]; 18 losses, 9 gains on 48 blockers in 24 PRs (17 discordant). p non-inferior 0.588 (Holm n/a over 3), p loss 0.038 (Holm n/a, step 3 of 3 in the declared LOSS family) (minimum reachable 0.0000076).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass lens-opus 0.08, none-opus 0.19 on 12 decoys; not read (arm lens-opus stopped, so there is no verdict).
+    claim "non-inferior within 10 points of blocking recall": may not be made: arm lens-opus stopped, so there is no verdict.
+    claim "lens-opus catches more of these blockers than none-opus": may not be made: arm lens-opus stopped, so there is no verdict; false-alarm gate not read (arm lens-opus stopped, so there is no verdict).
+    verdict: none
+PASS stopped lens arm: --expect NO_VERDICT
+PASS stopped arm keeps step of 3
+
+## 12. Recall by source (T1, T2) and by mode, descriptive
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-t1 --out $OUT/derived/planrev-ceo-r1a-t1 --detection-only "<each of the 24 lines of $SEALED/readings/source-T1.detection-only.txt>" --sealed-root $SEALED
+  exit 0  (source T1)
+    suite $OUT/derived/planrev-ceo-r1a-t1/planrev-ceo-r1a-t1.json sha256 4bce481688bf4eef9b7a7102608a5d207617e7a742ab16686b775e5eb5018c5d: 36 units, 24 blocking blockers on 24 PRs; 0 units dropped
+    comparisons $OUT/derived/planrev-ceo-r1a-t1/comparisons.planrev-ceo-r1a-t1.json sha256 7678f4bd8629980d483f3a227f302e6493eb87354b904f0300a22fff9e89878b
+    arm flagall-opus: complete, tree b70ef5f3315b45653887f41d23a250121f5db1759395c7c57d7d92530a44867c
+    arm gstack-opus: complete, tree ff1eee7197cc7e965c543c75f6cd7c9c06b4b8d4436f5bda54d624752e5691c7
+PASS source T1: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-t1/planrev-ceo-r1a-t1.json --root $OUT/derived/planrev-ceo-r1a-t1/arms --prereg $OUT/derived/planrev-ceo-r1a-t1/comparisons.planrev-ceo-r1a-t1.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (source T1)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 15.3% vs 59.7%, delta -44.4 points [95% CI -59.7, -27.8]; 20 losses, 2 gains on 24 blockers in 24 PRs (22 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.000056 (Holm 0.00011, step 1 of 2 in the declared LOSS family) (minimum reachable 2.4e-7).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.19, none-opus 0.19 on 12 decoys; gstack-opus's excess 0.00 [95% CI -0.17, +0.17]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS source T1: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS source T1 reads 24 flaws
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-t2 --out $OUT/derived/planrev-ceo-r1a-t2 --detection-only "<each of the 24 lines of $SEALED/readings/source-T2.detection-only.txt>" --sealed-root $SEALED
+  exit 0  (source T2)
+    suite $OUT/derived/planrev-ceo-r1a-t2/planrev-ceo-r1a-t2.json sha256 b6ffc9100b7e8aab3f574f378815bd514d9ca7cf373e61360ba6c1284e34695c: 36 units, 24 blocking blockers on 24 PRs; 0 units dropped
+    comparisons $OUT/derived/planrev-ceo-r1a-t2/comparisons.planrev-ceo-r1a-t2.json sha256 4f895fe2339eca28c0ddb14a22e6ef913e219e0b6d338e4d4f1e78b02f30809d
+    arm flagall-opus: complete, tree 342d5a6ea4f7ecefb09e74dd82237b0930e4cad12765eef29d1e1ae031009353
+    arm gstack-opus: complete, tree c5f66f4ff5ddce809d9edacec32bcf772d0b0935ac8dfe467a726c60f0f230dc
+PASS source T2: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-t2/planrev-ceo-r1a-t2.json --root $OUT/derived/planrev-ceo-r1a-t2/arms --prereg $OUT/derived/planrev-ceo-r1a-t2/comparisons.planrev-ceo-r1a-t2.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (source T2)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 26.4% vs 69.4%, delta -43.1 points [95% CI -54.2, -30.6]; 20 losses, 1 gains on 24 blockers in 24 PRs (21 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0000050 (Holm 0.000010, step 1 of 2 in the declared LOSS family) (minimum reachable 4.8e-7).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.19, none-opus 0.19 on 12 decoys; gstack-opus's excess 0.00 [95% CI -0.17, +0.17]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS source T2: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS source T2 reads 24 flaws
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-greenfield --out $OUT/derived/planrev-ceo-r1a-greenfield --drop-file $SEALED/readings/mode-greenfield.drop.tsv --sealed-root $SEALED
+  exit 0  (mode greenfield)
+    derive planrev-ceo-r1a-greenfield: drop every unit listed in mode-greenfield.drop.tsv (sha256 75515f4ff889bcc6233e56b310bb79ed83341f71b94b02ce726cc1449d07a462)
+    comparisons $OUT/derived/planrev-ceo-r1a-greenfield/comparisons.planrev-ceo-r1a-greenfield.json sha256 9d7727c59ff8565ffbdd3b59e218409106c0c190da1ecefa4edb861389adaff6
+    arm flagall-opus: complete, 24 cost rows dropped, tree 72b0507a3e40026e2caca75e8b8e0e9df85478b5dd87e47685696994de095c94
+    arm gstack-opus: complete, 24 cost rows dropped, tree 0edd67851206c3e2a79f134d5dd93084259074f576c3b6e3212dc46d36c59660
+PASS mode greenfield: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-greenfield/planrev-ceo-r1a-greenfield.json --root $OUT/derived/planrev-ceo-r1a-greenfield/arms --prereg $OUT/derived/planrev-ceo-r1a-greenfield/comparisons.planrev-ceo-r1a-greenfield.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (mode greenfield)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 25.0% vs 56.3%, delta -31.3 points [95% CI -45.8, -16.7]; 12 losses, 2 gains on 16 blockers in 8 PRs (6 discordant). p non-inferior 0.977 (Holm 0.977 over 2), p loss 0.016 (Holm 0.031, step 1 of 2 in the declared LOSS family) (minimum reachable 0.016).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.08, none-opus 0.25 on 4 decoys; gstack-opus's excess -0.17 [95% CI -0.33, 0.00]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS mode greenfield: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS mode greenfield reads 16 flaws in 8 plans
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-added-capability --out $OUT/derived/planrev-ceo-r1a-added-capability --drop-file $SEALED/readings/mode-added-capability.drop.tsv --sealed-root $SEALED
+  exit 0  (mode added-capability)
+    derive planrev-ceo-r1a-added-capability: drop every unit listed in mode-added-capability.drop.tsv (sha256 e564eba7b9d4316a7c8180ec2c8c343a89dd088bb4a42a9c3587033488d13240)
+    comparisons $OUT/derived/planrev-ceo-r1a-added-capability/comparisons.planrev-ceo-r1a-added-capability.json sha256 a87083e5c85ec56b9ed23f4066166a6b665156657aff45c1c736011121c96052
+    arm flagall-opus: complete, 24 cost rows dropped, tree e3cacc4ae859c67a88037043e6c2a087d6e207e0f38b622d7f3ea8ff8657f13d
+    arm gstack-opus: complete, 24 cost rows dropped, tree 0685d80559ff3d158160909fffa940ccb01763daf8970ad114545a448562f1a8
+PASS mode added-capability: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-added-capability/planrev-ceo-r1a-added-capability.json --root $OUT/derived/planrev-ceo-r1a-added-capability/arms --prereg $OUT/derived/planrev-ceo-r1a-added-capability/comparisons.planrev-ceo-r1a-added-capability.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (mode added-capability)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 22.9% vs 68.8%, delta -45.8 points [95% CI -62.5, -29.2]; 13 losses, 1 gains on 16 blockers in 8 PRs (7 discordant). p non-inferior 0.992 (Holm 0.992 over 2), p loss 0.0078 (Holm 0.016, step 1 of 2 in the declared LOSS family) (minimum reachable 0.0078).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.25, none-opus 0.25 on 4 decoys; gstack-opus's excess 0.00 [95% CI -0.42, +0.33]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS mode added-capability: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS mode added-capability reads 16 flaws in 8 plans
+$ noloss derive --suite planrev-ceo-r1a --comparisons $POST/comparisons.primary.json --root $OUT/headline/arms --id planrev-ceo-r1a-fix --out $OUT/derived/planrev-ceo-r1a-fix --drop-file $SEALED/readings/mode-fix.drop.tsv --sealed-root $SEALED
+  exit 0  (mode fix)
+    derive planrev-ceo-r1a-fix: drop every unit listed in mode-fix.drop.tsv (sha256 7bf69d1b96f2cb31a06628cc568cc9c65580703f49c9c0289cc18a0a628f5931)
+    comparisons $OUT/derived/planrev-ceo-r1a-fix/comparisons.planrev-ceo-r1a-fix.json sha256 22d75be4479450d9859f118b08c39771ffa05568f91205429c283c4d26892c11
+    arm flagall-opus: complete, 24 cost rows dropped, tree 285ccc5cdaf473ebe9535f1968d129bc3c6ee339de0d7f8c4a1548b23d48d09e
+    arm gstack-opus: complete, 24 cost rows dropped, tree f2caac8800719473405feb9b8ff8361939942d5f9e61fa5e352e68449767495f
+PASS mode fix: derive exit 0
+$ noloss score --suite $OUT/derived/planrev-ceo-r1a-fix/planrev-ceo-r1a-fix.json --root $OUT/derived/planrev-ceo-r1a-fix/arms --prereg $OUT/derived/planrev-ceo-r1a-fix/comparisons.planrev-ceo-r1a-fix.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 1  (mode fix)
+    none-opus vs gstack-opus at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): LOSS. Blocking recall 14.6% vs 68.8%, delta -54.2 points [95% CI -66.7, -41.7]; 15 losses, 0 gains on 16 blockers in 8 PRs (8 discordant). p non-inferior 1.000 (Holm 1.000 over 2), p loss 0.0039 (Holm 0.0078, step 1 of 2 in the declared LOSS family) (minimum reachable 0.0039).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-opus 0.25, none-opus 0.08 on 4 decoys; gstack-opus's excess +0.17 [95% CI 0.00, +0.33]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is LOSS.
+    claim "gstack-opus catches more of these blockers than none-opus": may be made.
+    verdict: LOSS
+PASS mode fix: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS mode fix reads 16 flaws in 8 plans
+
+## 13. Real-neutral stratum, alone
+PASS real-neutral: raw arm none-opus ingests
+PASS real-neutral: raw arm gstack-opus ingests
+PASS real-neutral: raw arm lens-opus ingests
+PASS real-neutral: raw arm none-particle-1 ingests
+PASS real-neutral: raw arm gstack-particle-1 ingests
+PASS real-neutral: raw arm placebo-particle-1 ingests
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-real.json --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/none-opus --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/gstack-opus --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/lens-opus --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/none-particle-1 --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/gstack-particle-1 --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/placebo-particle-1 --seed 20261031 --out $OUT/real-neutral/packets --key $OUT/real-neutral/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (real-neutral: blind packets over every arm, plan trees from the source clone)
+    judge-packet: batch b2efb6ef661d37d1b765bcb01643792390d387ee2216557940e2aae50b14ac34, 2 packets, 23 findings from 6 arms; the key is outside the packets
+PASS real-neutral: judge-packet exit 0
+  judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-r1a-real.json --key $OUT/real-neutral/key.json --out $OUT/real-neutral/judged --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/none-opus --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/gstack-opus --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/lens-opus --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/none-particle-1 --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/gstack-particle-1 --arm $OUT/real-neutral/raw-root/planrev-ceo-r1a-real/placebo-particle-1 --sealed-root $SEALED --reply $OUT/real-neutral-blockers-primary.json --second $OUT/real-neutral-blockers--second.json
+  exit 0  (real-neutral: judge-join blockers for every arm at once)
+    judge-join: batch b2efb6ef661d37d1b765bcb01643792390d387ee2216557940e2aae50b14ac34, wrote judgments for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1 under $OUT/real-neutral/judged; second judge on 2 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
+PASS real-neutral: judge-join exit 0
+PASS real-neutral: judged arm none-opus ingests
+PASS real-neutral: judged arm gstack-opus ingests
+PASS real-neutral: judged arm lens-opus ingests
+PASS real-neutral: judged arm none-particle-1 ingests
+PASS real-neutral: judged arm gstack-particle-1 ingests
+PASS real-neutral: judged arm placebo-particle-1 ingests
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-real.json --root $OUT/real-neutral/arms --prereg $POST/comparisons.real-neutral.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 2  (real-neutral, descriptive)
+    none-opus vs gstack-opus at a 10-point margin (Descriptive: two real-neutral plans, reported per unit; the margin is the lane's 10 points.): NOT_DISTINGUISHED. Blocking recall 33.3% vs 83.3%, delta -50.0 points [95% CI -66.7, -33.3]; 2 losses, 0 gains on 2 blockers in 2 PRs (2 discordant). p non-inferior 1.000 (Holm 1.000 over 4), p loss 0.250 (minimum reachable 0.250).
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED.
+    verdict: NOT_DISTINGUISHED
+PASS real-neutral, descriptive: --expect NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED,LOSS
+
+## 14. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone
+PASS pilot: raw arm none-opus ingests
+PASS pilot: raw arm gstack-opus ingests
+PASS pilot: raw arm lens-opus ingests
+PASS pilot: raw arm none-particle-1 ingests
+PASS pilot: raw arm gstack-particle-1 ingests
+PASS pilot: raw arm placebo-particle-1 ingests
+PASS pilot: raw arm none-fable ingests
+PASS pilot: raw arm gstack-fable ingests
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/lens-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/placebo-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-fable --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-fable --seed 20261031 --out $OUT/pilot/packets --key $OUT/pilot/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (pilot: blind packets over every arm, plan trees from the source clone)
+    judge-packet: batch 64c486df91b85e9b536269b90b823c2dbf96fea9615268d7b30431abfc1bdbe8, 4 packets, 28 findings from 8 arms; the key is outside the packets
+PASS pilot: judge-packet exit 0
+  judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --key $OUT/pilot/key.json --out $OUT/pilot/judged --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/lens-opus --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/placebo-particle-1 --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/none-fable --arm $OUT/pilot/raw-root/planrev-ceo-r1a-pilot/gstack-fable --sealed-root $SEALED --reply $OUT/pilot-blockers-primary.json --second $OUT/pilot-blockers--second.json
+  exit 0  (pilot: judge-join blockers for every arm at once)
+    judge-join: batch 64c486df91b85e9b536269b90b823c2dbf96fea9615268d7b30431abfc1bdbe8, wrote judgments for none-opus, gstack-opus, lens-opus, none-particle-1, gstack-particle-1, placebo-particle-1, none-fable, gstack-fable under $OUT/pilot/judged; second judge on 8 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
+PASS pilot: judge-join exit 0
+PASS pilot: judged arm none-opus ingests
+PASS pilot: judged arm gstack-opus ingests
+PASS pilot: judged arm lens-opus ingests
+PASS pilot: judged arm none-particle-1 ingests
+PASS pilot: judged arm gstack-particle-1 ingests
+PASS pilot: judged arm placebo-particle-1 ingests
+PASS pilot: judged arm none-fable ingests
+PASS pilot: judged arm gstack-fable ingests
+PASS no pilot unit, by id or head, sits in the headline, real-neutral or Fable suite
+PASS no frozen comparisons file names the pilot suite (5 files)
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --root $OUT/pilot/arms --prereg $POST/comparisons.fable.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 2  (score on the pilot suite under comparisons.fable.json)
+    E_USAGE --prereg is for suite planrev-ceo-r1a-fable, not planrev-ceo-r1a-pilot
+PASS score refuses the pilot suite under comparisons.fable.json
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --root $OUT/pilot/arms --prereg $POST/comparisons.primary.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 2  (score on the pilot suite under comparisons.primary.json)
+    E_USAGE --prereg is for suite planrev-ceo-r1a, not planrev-ceo-r1a-pilot
+PASS score refuses the pilot suite under comparisons.primary.json
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --root $OUT/pilot/arms --prereg $POST/comparisons.real-neutral.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 2  (score on the pilot suite under comparisons.real-neutral.json)
+    E_USAGE --prereg is for suite planrev-ceo-r1a-real, not planrev-ceo-r1a-pilot
+PASS score refuses the pilot suite under comparisons.real-neutral.json
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --root $OUT/pilot/arms --prereg $POST/comparisons.secondary-opus.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 2  (score on the pilot suite under comparisons.secondary-opus.json)
+    E_USAGE --prereg is for suite planrev-ceo-r1a, not planrev-ceo-r1a-pilot
+PASS score refuses the pilot suite under comparisons.secondary-opus.json
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --root $OUT/pilot/arms --prereg $POST/comparisons.secondary.json --variant none-opus --reference gstack-opus --sealed-root $SEALED
+  exit 2  (score on the pilot suite under comparisons.secondary.json)
+    E_USAGE --prereg is for suite planrev-ceo-r1a, not planrev-ceo-r1a-pilot
+PASS score refuses the pilot suite under comparisons.secondary.json
+$ noloss secondary --suite $SEALED/suites/planrev-ceo-r1a-pilot.json --variant none-opus --reference gstack-opus --seed 20261031 --root $OUT/pilot/arms --json --sealed-root $SEALED
+  exit 0  (pilot stop (a): recall with its interval, no verdict)
+pilot none-opus must-fix recall 0/8 = 0; stop (a) fires outside 0.10 to 0.85: fires
+PASS pilot recall reads on the pilot's 8 flaws, from noloss secondary
+PASS the pilot reading carries no verdict and no claim
+
+## 15. Fable 5.1 subset, exploratory
+PASS fable: raw arm none-fable ingests
+PASS fable: raw arm gstack-fable ingests
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arm $OUT/fable/raw-root/planrev-ceo-r1a-fable/none-fable --arm $OUT/fable/raw-root/planrev-ceo-r1a-fable/gstack-fable --seed 20261031 --out $OUT/fable/packets --key $OUT/fable/key.json --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 0  (fable: blind packets over every arm, plan trees from the source clone)
+    judge-packet: batch 66b57ede8012d6333438d19dd5d30339d327502c39af6b9753bfd1fc9a999edd, 18 packets, 36 findings from 2 arms; the key is outside the packets
+PASS fable: judge-packet exit 0
+  judge-join waits: E_NOLOSS_BLIND scoring waits for the second judge
+$ noloss judge-join --suite $SEALED/suites/planrev-ceo-r1a-fable.json --key $OUT/fable/key.json --out $OUT/fable/judged --arm $OUT/fable/raw-root/planrev-ceo-r1a-fable/none-fable --arm $OUT/fable/raw-root/planrev-ceo-r1a-fable/gstack-fable --sealed-root $SEALED --reply $OUT/fable-blockers-primary.json --second $OUT/fable-blockers--second.json
+  exit 0  (fable: judge-join blockers for every arm at once)
+    judge-join: batch 66b57ede8012d6333438d19dd5d30339d327502c39af6b9753bfd1fc9a999edd, wrote judgments for none-fable, gstack-fable under $OUT/fable/judged; second judge on 25 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
+PASS fable: judge-join exit 0
+$ noloss judge-packet --suite $SEALED/suites/planrev-ceo-r1a-fable.json --arm $OUT/fable/judged/none-fable --arm $OUT/fable/judged/gstack-fable --seed 20261101 --out $OUT/fable/adj-packets --key $OUT/fable/adj-key.json --adjudicate --source panel/plans=$SOURCE --sealed-root $SEALED
+  exit 2  (fable: blind adjudication packets)
+    E_NOLOSS_BLIND no arm has a blocking finding that judgments.tsv leaves unmatched, so there is nothing to adjudicate
+PASS fable: adjudication packets build, or there is nothing to adjudicate
+  no must-fix finding is left unmatched, so there is no adjudication batch
+PASS fable: judged arm none-fable ingests
+PASS fable: judged arm gstack-fable ingests
+$ noloss score --suite $SEALED/suites/planrev-ceo-r1a-fable.json --root $OUT/fable/arms --prereg $POST/comparisons.fable.json --variant none-fable --reference gstack-fable --sealed-root $SEALED
+  exit 2  (Fable none vs gstack)
+    none-fable vs gstack-fable at a 10-point margin (Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.): NOT_DISTINGUISHED. Blocking recall 25.0% vs 62.5%, delta -37.5 points [95% CI -70.8, 0.0]; 13 losses, 4 gains on 24 blockers in 12 PRs (10 discordant). p non-inferior 0.925 (Holm 0.925 over 2), p loss 0.055 (Holm 0.109, step 1 of 2 in the declared LOSS family) (minimum reachable 0.00098).
+    false-alarm gate (decoys only, margin 1 per decoy): must-fix false alarms per decoy per pass gstack-fable 0.00, none-fable 0.00 on 6 decoys; gstack-fable's excess 0.00 [95% CI 0.00, 0.00]: PASS.
+    claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED.
+    claim "gstack-fable catches more of these blockers than none-fable": may not be made: the verdict is NOT_DISTINGUISHED.
+    verdict: NOT_DISTINGUISHED
+PASS Fable none vs gstack: --expect LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED
+PASS Fable subset reads 24 flaws in 12 plans and 6 decoys
+
+## 16. Power at the panel's shape
+$ noloss power --suite planrev-ceo-r1a --passes 3 --recall 0.35 --margin 10 --loss 20 --alpha 0.025 --dependence 0.3 --sims 2000 --sealed-root $SEALED
+  exit 0  (power on the headline suite)
+    | planrev-ceo-r1a | 24 | 48 | 3 | 52.4% | 2.3% | 97.5% |
+PASS power counts 24 clusters and 48 flaws
+
+## 17. OpenRouter routes: the pinned route, its data policy and price headroom
+read keyless at 2026-11-01T11:37:21.594Z: OpenRouter's endpoints API and its public all-providers feed (96 providers)
+particle-ai/particle-1 route {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 22cb6215a4019fba2cf7949d892df384d96d0a57e12375a40fa3abe7531570d2
+  endpoint Particle AI (particle-ai, unknown): $0.05 / $0.5 per Mtok, max_price $0.1 / $1 (headroom x2.00 input, x2.00 output); data policy: training false, retains prompts false, kept by data_collection deny
+PASS particle-ai/particle-1: the route pins its providers with no fallbacks and sends data_collection deny
+PASS particle-ai/particle-1: an endpoint of a pinned provider is kept by data_collection deny and priced at or under max_price
+outside R1a: deepseek/deepseek-v4.1-flash-1017 route {"only":["inference-net"],"allow_fallbacks":false,"quantizations":["fp8"],"data_collection":"deny","max_price":{"prompt":0.08,"completion":0.55,"request":0,"image":0}} sha256 13e8c0c037669c3ce6074fe7208ce1105ccf3fe6fc4522b90ea1d9fd45221936
+  endpoint InferenceNet (inference-net/us, fp8): $0.08 / $0.55 per Mtok, max_price $0.08 / $0.55 (headroom x1.00 input, x1.00 output; max_price equals the current price, so any price rise refuses every call); data policy: training false, retains prompts false, kept by data_collection deny
+  endpoint InferenceNet (inference-net/fp8, fp8): $0.08 / $0.55 per Mtok, max_price $0.08 / $0.55 (headroom x1.00 input, x1.00 output; max_price equals the current price, so any price rise refuses every call); data policy: training false, retains prompts false, kept by data_collection deny
+  deepseek/deepseek-v4.1-flash-1017 is not an R1a model; reported for GST-637, not checked
+route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 935feb940de8bb1ac9d84d700af39943af8fc6c2ff1d649ccae87fa1c60839de
+
+## 18. Receipts and run paths
+PASS R1a's frozen --out root and receipts sink (~/.capy/work/planning-r1a) sit outside the repo
+
+## 19. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink
+$ bun test tests/trial/review/plan-scoring.test.ts tests/adapters/claude-code.test.ts (keys unset)
+  exit 0
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > an interactive session: scripted answers by category, a prose reply, and user-visible turns only
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > GST-109: the offer mid-session passes, a phrase only the persona said does not
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > an AskUserQuestion in a task with no replies is a missing cell, E_USER_TURNS_MISSING, naming the question
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > a Skill call and a Read under the skill's root open it; a failed Skill call in the none arm does not
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > a cap stop at the proxy ends the cell as cap_stop
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > a CLI crash mid-run is an arm failure, harness_crash
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > a connection reset between the CLI and the proxy after one text turn is a missing cell, UPSTREAM
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > a key missing from the proxy is a missing cell, E_KEY_MISSING
+    (pass) Claude Code adapter on the Agent SDK, against a fake upstream behind the metering proxy > particle-1 through OpenRouter's /v1/messages route: bearer key, pinned routing, usage priced in Anthropic's shape
+    (pass) Claude Code adapter pieces > the agent env pins the model, disables bundled skills and names the slot's provider path
+    (pass) Claude Code adapter pieces > OpenRouter's Messages route reads usage in Anthropic's shape; its chat route keeps OpenAI's
+    (pass) Claude Code adapter pieces > refusal codes come out of API error text
+    (pass) the PreToolUse hook on the real CLI, with a fixture's allow rules > a fixture allow rule, settings hook and permission mode cannot route a tool call around canUseTool
+    (pass) a settings hook that denies AskUserQuestion, on the real CLI > a deny reason in place of the simulator's answer voids the cell
+    (pass) the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless) > an exit 0 with the turn's result still awaited is E_INFRA_FAILURE (turn1)
+    (pass) the pinned Agent SDK against a stub CLI that exits 0 mid-turn (keyless) > an exit 0 with the turn's result still awaited is E_INFRA_FAILURE (turn2)
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > OV5: empty text, whitespace text and empty thinking are no model output
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > adversarial 3: redacted thinking, like thinking, is model output
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > outside voice 2: a reset, then a nonzero exit once the SDK closes stdin, is infra
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > control: a CLI that exits 1 on its own is the arm's crash, probed without exec
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > adversarial 2: an exit of 125, 126 or 127 is the launcher's, so infra
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > OV4: an unwritable cli-stderr.log never hangs a session whose CLI cannot spawn
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > the CLI's stderr is recorded, and an unwritable stderr log is infra
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > OV2: a read error on the CLI's stderr stream is infra, never an uncaught exception
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > outside voice 1: an evaluator stall never times out a session that answered in time
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > A1: a signed empty thinking block is model output, an unsigned empty one is not
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > A1: a signed empty thinking block, then a timeout, is a timeout after model output (a miss)
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > B1: a stall within the cap is credited and recorded
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > B1: a stall past the cap, then a timeout, is E_INFRA_FAILURE
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > B1: a wall-clock step has no effect on the session clock
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > B1: a stall just before a persona pause is credited, not charged to the arm
+    (pass) GST-748: the failure rule on the pinned Agent SDK against a stub CLI (keyless) > B1: with no stall, a CLI that answers past the limit is the arm's timeout
+    (pass) GST-748: model output on the real pinned CLI (keyless) > empty thinking is no model output, redacted thinking is
+    (pass) GST-748: model output on the real pinned CLI (keyless) > A1: a signed empty thinking block is model output on the real CLI, an unsigned one is not
+    (pass) GST-748: model output on the real pinned CLI (keyless) > a response cut at max_tokens is model output on an ordinary message
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > control: a clean session scores its findings, records model output and completes its arm
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 1 and 2: a tool-call-only session whose CLI then crashes is a miss, from model_output, not turns
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 1: a tool-call-only session that times out is a miss
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 3: a CLI crash before any model output is a gap that stops the arm
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > ruling A1: a timeout before any model output is a gap that stops the arm
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > ruling B1: completed with model output and no text turn is a miss, counted per arm; with no model output it is a gap
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > ruling B1: a completed session whose only turn is a question counts as completed_without_text
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 4: the transcript append failing after one text turn is infra, a gap that stops the arm
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 4: the user simulator failing after a turn is infra, a gap that stops the arm
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 4: the user simulator failing on an AskUserQuestion is infra, not a scored session
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 4: an ECONNRESET after one text turn, with the CLI still running, is infra, not the arm's miss
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 4: a provider error after model output is a gap, never a miss
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 4: a machine that stops answering, or cannot spawn the CLI, is infra
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > F1: a teardown error after a timeout or an arm failure keeps the miss; an infra failure before the timeout stays a gap
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > the record keeps the CLI's own exit status, and null for both when our abort or teardown killed it
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > OV2: a spawn that fails when the query is built is infra, and the batch runs on
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > OV3: an empty assistant message is no model output, so completing after it is a gap
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > OV1: a CLI that exits 0 with no result before the SDK's error is infra; a nonzero exit stays the arm's crash
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 2: a record with no model_output flag is a gap that says so
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 7: every stopped arm, and only those, is an E_COVERAGE_GAP stop
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why
+    (pass) the planning lane's failure rule, end to end through the Claude Code driver (keyless) > a sealed run copies its receipts to a sink outside the repo
+    (pass) the receipts sink of a sealed suite (keyless) > a sealed suite refuses a receipts sink inside the repo with E_USAGE, before any session
+    (pass) the receipts sink of a sealed suite (keyless) > an unsealed suite that reads sealed-root catalogs refuses a receipts sink inside the repo
+    (pass) a symlink in the receipts sink (keyless) > OV1: a hard-linked file in the sink refuses the copy before it writes
+    (pass) a symlink in the receipts sink (keyless) > OV3: a symlinked directory in the sink refuses the copy before it writes; a plain sink copies
+    (pass) a symlink in the receipts sink (keyless) > a sink holding a symlink on a receipt's path is refused before any session
+    (pass) a symlink in the receipts sink (keyless) > RT1: a dangling symlink at the sink or on a receipt's path is refused before any session
+    (pass) a symlink in the receipts sink (keyless) > RT1: a dangling symlink above the sink is refused before any session
+    (pass) the seeded question preferences (keyless) > never-ask wins over a unit's own preferences file, and arm.json records what was written
+    (pass) the seeded question preferences (keyless) > seedStateRoot writes project-level files over each slug's copy and removes a symlinked slug dir
+    (pass) the seeded question preferences (keyless) > seedStateRoot replaces a fixture's file or symlink at a seeded name
+    (pass) the seeded question preferences (keyless) > seedStateRoot never reaches outside the work dir through a fixture's symlinks
+PASS every test in tests/trial/review/plan-scoring.test.ts and tests/adapters/claude-code.test.ts passes (68 tests)
+PASS case: a clean session scores and completes its arm
+PASS case: a tool-call-only session that then crashes is a miss
+PASS case: a tool-call-only session that times out is a miss
+PASS case: a crash before any model output is a gap that stops the arm
+PASS case: a timeout before any model output is a gap that stops the arm
+PASS case: completed with output and no text turn is a miss counted per arm; with no output, a gap
+PASS case: an evaluator error after a text turn stops the arm, not the arm's miss
+PASS case: a provider error after model output is a gap, never a miss
+PASS case: a record with no model_output flag is a gap
+PASS case: every stopped arm, and only those, is an E_COVERAGE_GAP stop
+PASS case: a signed empty thinking block is model output, an unsigned one is not
+PASS case: a signed empty thinking block, then a timeout, is a miss
+PASS case: empty text, whitespace text and empty thinking are no model output
+PASS case: a stall within the cap is credited and recorded
+PASS case: a stall past the cap, then a timeout, is infra
+PASS case: a stall just before a persona pause is credited
+PASS case: docker exec's own exits 125, 126 and 127 are infra
+PASS case: the record keeps the CLI's exit_code and signal
+PASS case: a sealed suite refuses a receipts sink inside the repo before any session
+PASS case: an unsealed suite reading sealed-root catalogs refuses an in-repo sink
+PASS case: a hard-linked file in the sink is refused
+PASS case: a symlinked directory in the sink is refused
+PASS case: a dangling symlink above the sink is refused
+
+## Leak check
+PASS no unit head or base prefix (7+ hex) appears in this transcript
+PASS no unit reference appears in this transcript
+
+all checks passed

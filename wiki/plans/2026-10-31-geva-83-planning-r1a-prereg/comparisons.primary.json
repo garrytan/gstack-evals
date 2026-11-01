@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "suite": "planrev-ceo-r1a",
+  "decision_rule": "Preregistered in wiki/plans/2026-10-31-geva-83-planning-r1a-prereg. A seeded flaw's value is the share of an arm's passes that flagged it must-fix (Critical or High, PLAN_SEVERITY_MAP); plan clusters are the units of the test. Primary family: Opus 5.5 with no gstack against Opus 5.5 with standalone /plan-ceo-review, in both directions, so gstack can win or lose. One-sided LOSS tests at null zero, exact sign-flip over plan clusters, Holm step-down across this file's family in the declared order, LOSS when the Holm-adjusted p is below 0.05. A LOSS claim is made only when the false-alarm gate passes: the reference's excess must-fix false alarms per decoy, with its decoy-clustered 95% interval, stays at or under 1. NO_LOSS is never claimed at this size. An arm that stopped or has coverage-incomplete blockers gets no verdict. Otherwise NOT_DISTINGUISHED.",
+  "seed": 20261031,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "none-opus-vs-gstack-opus",
+      "variant": "none-opus",
+      "reference": "gstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "false_alarm_gate": {
+        "margin_per_decoy": 1
+      }
+    },
+    {
+      "id": "gstack-opus-vs-none-opus",
+      "variant": "gstack-opus",
+      "reference": "none-opus",
+      "margin_points": 10,
+      "margin_reason": "Planning lane plan section 8: 10 points of must-fix recall, the review no-loss lane's margin. No NO_LOSS claim is made at this size.",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "false_alarm_gate": {
+        "margin_per_decoy": 1
+      }
+    }
+  ],
+  "loss_family": {
+    "order": [
+      "none-opus-vs-gstack-opus",
+      "gstack-opus-vs-none-opus"
+    ],
+    "null": "zero",
+    "reason": "Garry's rule (2026-10-31): the no-gstack arm is required and primary. LOSS of none-opus against gstack-opus means gstack catches more; the mirror means gstack catches fewer. If GST-537's gstack-auto releases before the full run, an amendment makes none-opus against gstack-auto-opus the primary pair and moves this pair to the secondary family."
+  }
+}

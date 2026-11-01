@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+# Writes R1a's descriptive reading inputs under <sealed root>/readings from the built suite and its plan cases: per source
+# (T1, T2) the other source's blockers as detection-only specs, and per mode (greenfield, added-capability, fix) the units
+# of the other modes as a drop file. Sealed: these lists map units to sources and modes. Prints counts only.
+import json, os, sys
+root = os.path.abspath(sys.argv[1]); sid = sys.argv[2]
+suite = json.load(open(os.path.join(root, "suites", sid + ".json")))
+cases = {}
+for d in suite["catalogs"]:
+    for f in os.listdir(os.path.join(root, d)):
+        c = json.load(open(os.path.join(root, d, f))); cases[c["id"]] = c
+out = os.path.join(root, "readings"); os.makedirs(out, exist_ok=True)
+src = {"T1": [], "T2": []}
+modes = {"greenfield": [], "added-capability": [], "fix": []}
+for u in suite["units"]:
+    mode = {cases[b["case"]]["plan"]["plan_type"] for b in u["blockers"]}
+    assert len(mode) == 1
+    m = mode.pop()
+    for other in modes:
+        if other != m: modes[other].append(u["id"])
+    for b in u["blockers"]:
+        c = cases[b["case"]]
+        if c["plan"]["stratum"] != "seeded": continue
+        s = c["plan"]["source"].split(" ")[0]
+        src["T2" if s == "T1" else "T1"].append(u["id"] + ":" + b["id"])
+for s, specs in src.items():
+    open(os.path.join(out, "source-" + s + ".detection-only.txt"), "w").write("".join(x + "\n" for x in specs))
+for m, ids in modes.items():
+    open(os.path.join(out, "mode-" + m + ".drop.tsv"), "w").write("unit\n" + "".join(x + "\n" for x in ids))
+subset = set(l.split("\t")[0] for l in open(sys.argv[3]).read().splitlines()[1:])
+panel_id = lambda u: cases[u["blockers"][0]["case"]]["receipt"]["source"].split("units/")[1].split("/")[0]
+keep = [u["id"] for u in suite["units"] if panel_id(u) in subset]
+assert len(keep) == len(subset)
+kept = [u for u in suite["units"] if panel_id(u) in subset]
+kind = lambda u: cases[u["blockers"][0]["case"]]["plan"]
+for m in modes:
+    assert sum(kind(u)["stratum"] == "seeded" and kind(u)["plan_type"] == m for u in kept) == 4, m
+    assert sum(kind(u)["stratum"] != "seeded" and kind(u)["plan_type"] == m for u in kept) == 2, m
+fsrc = {"T1": 0, "T2": 0}
+for u in kept:
+    for b in u["blockers"]:
+        c = cases[b["case"]]["plan"]
+        if c["stratum"] == "seeded": fsrc[c["source"].split(" ")[0]] += 1
+print("readings: fable subset seeded flaws by source", fsrc)
+open(os.path.join(out, "fable-subset.drop.tsv"), "w").write("unit\n" + "".join(u["id"] + "\n" for u in suite["units"] if panel_id(u) not in subset))
+fdir = os.path.join(root, "catalog", "plans-fable"); os.makedirs(fdir, exist_ok=True)
+for u in suite["units"]:
+    if panel_id(u) in subset:
+        for b in u["blockers"]:
+            c = b["case"]; open(os.path.join(fdir, c + ".json"), "w").write(open(os.path.join(root, suite["catalogs"][0], c + ".json")).read())
+print("readings: fable subset keeps", len(keep), "units,", len(os.listdir(fdir)), "cases copied to catalog/plans-fable")
+print("readings: source-T1 marks", len(src["T1"]), "detection-only; source-T2 marks", len(src["T2"]), "; mode drops", {m: len(v) for m, v in modes.items()})

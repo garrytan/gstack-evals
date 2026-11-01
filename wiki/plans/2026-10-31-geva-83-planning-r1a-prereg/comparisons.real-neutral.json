@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "suite": "planrev-ceo-r1a-real",
+  "decision_rule": "Preregistered in wiki/plans/2026-10-31-geva-83-planning-r1a-prereg. A seeded flaw's value is the share of an arm's passes that flagged it must-fix (Critical or High, PLAN_SEVERITY_MAP); plan clusters are the units of the test. Real-neutral stratum (GST-538 item 1): read alone, apart from the headline, per unit and per arm; descriptive, no verdict is read from 2 plans. One-sided LOSS tests at null zero, exact sign-flip over plan clusters, Holm step-down across this file's family in the declared order, LOSS when the Holm-adjusted p is below 0.05. A LOSS claim is made only when the false-alarm gate passes: the reference's excess must-fix false alarms per decoy, with its decoy-clustered 95% interval, stays at or under 1. NO_LOSS is never claimed at this size. An arm that stopped or has coverage-incomplete blockers gets no verdict. Otherwise NOT_DISTINGUISHED.",
+  "seed": 20261031,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "none-opus-vs-gstack-opus",
+      "variant": "none-opus",
+      "reference": "gstack-opus",
+      "margin_points": 10,
+      "margin_reason": "Descriptive: two real-neutral plans, reported per unit; the margin is the lane's 10 points.",
+      "post_hoc": false,
+      "frozen_bar": null
+    },
+    {
+      "id": "none-particle-1-vs-gstack-particle-1",
+      "variant": "none-particle-1",
+      "reference": "gstack-particle-1",
+      "margin_points": 10,
+      "margin_reason": "Descriptive: two real-neutral plans, reported per unit.",
+      "post_hoc": false,
+      "frozen_bar": null
+    },
+    {
+      "id": "none-opus-vs-lens-opus",
+      "variant": "none-opus",
+      "reference": "lens-opus",
+      "margin_points": 10,
+      "margin_reason": "Descriptive: two real-neutral plans, reported per unit.",
+      "post_hoc": false,
+      "frozen_bar": null
+    },
+    {
+      "id": "none-particle-1-vs-placebo-particle-1",
+      "variant": "none-particle-1",
+      "reference": "placebo-particle-1",
+      "margin_points": 10,
+      "margin_reason": "Descriptive: two real-neutral plans, reported per unit.",
+      "post_hoc": false,
+      "frozen_bar": null
+    }
+  ]
+}

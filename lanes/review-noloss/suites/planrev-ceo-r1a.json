@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "planrev-ceo-r1a",
+  "title": "plan cases from catalog/plans",
+  "kind": "plan",
+  "sealed": true,
+  "stub": true,
+  "purpose": "Plan cases: one unit per plan, one blocker per flaw. Deserved CRITICAL counts toward must-fix recall, INFORMATIONAL (a decoy's bait) toward false alarms, unsettled toward detection only.",
+  "sha256": "954f8f6e72f2f196d8de5757d231d39753b18d6a55dbd806770c2f2acb6bfdba",
+  "catalogs_sha256": "34b2f8e4d9a89aac677838aac5fbfccddd3c863f4972ff2f9c697a0ee92f3b04",
+  "counts": {
+    "units": 36,
+    "clusters": 36,
+    "blocking": 48,
+    "detection": 0,
+    "over_blocking": 12,
+    "groups": {
+      "seeded": 24,
+      "decoy": 12
+    }
+  },
+  "custody": "procedural custody (interim, Captain drive, encrypted): the run bundle planning-r1a-ceo-run-v1.tar.age beside the panel bundle, age key held apart in the project-user drive; not sealed in plan v3.2's sense"
+}

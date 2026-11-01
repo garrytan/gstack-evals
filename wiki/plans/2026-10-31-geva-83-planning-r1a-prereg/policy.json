@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "gstack-evals planning R1a model policy",
+  "source": "CREW.md, the gstack-evals Captain's rules: Sonnet 5.5 has the roles of the other current models, judge included (Garry, 2026-10-29: \"tbh sonnet is good now maybe we shouldn't have gstack say no sonnet\"), and the judge is chosen per preregistration with an Opus 5.5 preference stated in docs/skill-eval.md; particle-1 is a model under test (Garry, 2026-10-29: \"also can you add particle-1 as a model everywhere?\", GST-225), with DeepSeek V4.1 Flash, particle-1's base, beside it as a fixed ladder rung; the newest generation of each family only; never gpt-5.4-mini; Fable only in smoke tests. Other projects pass their own file with --policy. Planning R1a (wiki/plans/2026-10-31-geva-83-planning-r1a-prereg): this copy of the default adds the ledger item planning-r1a to claude-fable-5-1's rungs, so Fable 5.1 runs as a capped rung only in that item (Garry, 2026-10-31, \"Do it\" on GST-659).",
+  "models": {
+    "claude-opus-5-5": {"provider": "anthropic", "roles": ["subject", "judge", "adjudicator"]},
+    "claude-sonnet-5-5": {"provider": "anthropic", "roles": ["subject", "judge", "adjudicator"]},
+    "claude-haiku-5-5": {"provider": "anthropic", "roles": ["subject"]},
+    "claude-fable-5-1": {"provider": "anthropic", "roles": ["subject"], "smoke_only": true, "rungs": ["planning-r1a"]},
+    "gpt-6-astra": {"provider": "openai", "roles": ["subject", "judge", "adjudicator"]},
+    "gpt-6.1-sol": {"provider": "openai", "roles": ["subject", "judge", "adjudicator"]},
+    "gpt-6-luna": {"provider": "openai", "roles": ["subject", "usersim"]},
+    "gpt-5.4-mini": {"provider": "openai", "roles": [], "refused_because": "Never gpt-5.4-mini (CREW.md)."},
+    "particle-ai/particle-1": {"provider": "openrouter", "roles": ["subject"]},
+    "deepseek/deepseek-v4.1-flash-1017": {"provider": "openrouter", "roles": ["subject"]}
+  },
+  "defaults": {"judge": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "adjudicator": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "usersim": "gpt-6-luna"}
+}

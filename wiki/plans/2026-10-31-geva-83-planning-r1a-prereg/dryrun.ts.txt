@@ -1,0 +1,388 @@
+// R1a keyless dry run (GEVA-83, planning lane B8, plan 2026-10-31-geva-79-planning-lane-plan). Runs every frozen rule of
+// the R1a preregistration through the pinned scorer on the sealed panel's real suites with synthetic arms, keyless:
+//   bun dryrun.ts <scorer checkout> <sealed root> <source clone> <post dir> <scratch dir>
+// The stub must sit in the scorer checkout at lanes/review-noloss/suites/planrev-ceo-r1a.json. Every finding, judgment
+// and ruling here is synthetic. The transcript keeps each step's command (paths shortened), exit code and the scorer's
+// summary lines, drops every line that names a unit, and ends with a leak check over every unit's head and base.
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const [scorer, SR, SRC, POST, OUT] = process.argv.slice(2).map((p) => resolve(p));
+const { nolossCli } = await import(join(scorer, "lanes/review-noloss/cli.ts"));
+const { loadSuite } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const { writePlanArm } = await import(join(scorer, "tests/noloss/plan-panel.ts"));
+const { armId } = await import(join(scorer, "src/trial/review/run.ts"));
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+
+const S = ["--sealed-root", SR];
+const OPUS = "claude-opus-5-5", P1 = "particle-ai/particle-1", FABLE = "claude-fable-5-1";
+const id = (arm: string, model: string) => armId(arm, model);
+const headline = loadSuite("planrev-ceo-r1a", { sealedRoot: SR });
+const pilotPath = join(SR, "suites/planrev-ceo-r1a-pilot.json"), realPath = join(SR, "suites/planrev-ceo-r1a-real.json");
+const fablePath = join(SR, "suites/planrev-ceo-r1a-fable.json");
+const fableFile = join(POST, "comparisons.fable.json");
+const suites = [headline.suite, loadSuite(pilotPath, { sealedRoot: SR }).suite, loadSuite(realPath, { sealedRoot: SR }).suite, loadSuite(fablePath, { sealedRoot: SR }).suite];
+const shas = new Set(suites.flatMap((s: any) => s.units.flatMap((u: any) => [u.head, u.base])));
+
+const lines: string[] = [];
+let failures = 0;
+const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER");
+const UNIT = /panel\/plans#\d+|plans-\d+-[0-9a-f]{8}|\br1a-\d+-\d+\b|@[0-9a-f]{12}\b|\bpr-\d+\b/;
+const say = (t: string) => lines.push(scrub(t));
+const check = (label: string, ok: boolean) => {
+  if (!ok) failures++;
+  say((ok ? "PASS " : "FAIL ") + label);
+};
+const show = (text: string, max = 40) => {
+  const kept = text.split("\n").filter((l) => l.trim() && !UNIT.test(l) && !/^\|\s*\S+\s*\|/.test(l.trim()) || /\| planrev/.test(l));
+  for (const l of kept.slice(0, max)) say("    " + l);
+};
+async function cli(label: string, argv: string[], o: { show?: number; display?: string[] } = {}) {
+  const out: string[] = [], err: string[] = [];
+  const code = await nolossCli(argv, { out: (t: string) => out.push(t), err: (t: string) => err.push(t) });
+  say("$ noloss " + (o.display ?? argv).map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+  say("  exit " + code + (label ? "  (" + label + ")" : ""));
+  if (o.show !== 0) show(out.join("\n") + "\n" + err.join("\n").split("\n").filter((l) => /^E_[A-Z_]+ /.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), o.show ?? 40);
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+function units(argv: string[], label: string, show_ = 30) {
+  const r = spawnSync(join(scorer, "bin/gstack-evals"), ["review-units", ...argv], { encoding: "utf8", cwd: scorer, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
+  say("$ review-units " + argv.join(" "));
+  say("  exit " + r.status + "  (" + label + ")");
+  show((r.stdout ?? "") + "\n" + (r.stderr ?? "").split("\n").filter((l) => /^E_[A-Z_]+ |^Usage/.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), show_);
+  return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
+const draw = (...parts: unknown[]) => parseInt(createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 8), 16) / 0x100000000;
+const RATE: Record<string, [number, number]> = { [id("none", OPUS)]: [0.3, 0.1], [id("gstack", OPUS)]: [0.65, 0.15], [id("lens", OPUS)]: [0.35, 0.1], [id("none", P1)]: [0.15, 0.05], [id("gstack", P1)]: [0.4, 0.1], [id("placebo", P1)]: [0.15, 0.05], [id("none", FABLE)]: [0.35, 0.1], [id("gstack", FABLE)]: [0.6, 0.15], [id("flagall", OPUS)]: [1, 1] };
+const isDecoy = (u: any) => u.blockers.every((b: any) => b.counts === "over-blocking");
+const save = (name: string, value: unknown) => {
+  const p = join(OUT, name);
+  writeFileSync(p, typeof value === "string" ? value : JSON.stringify(value, null, 2) + "\n");
+  return p;
+};
+
+async function judged(name: string, suite: any, suiteArg: string, cells: string[], passes: number, adjudicate: boolean, diag: Record<string, string[]> = {}) {
+  const raw = join(OUT, name, "raw"), rawRoot = join(OUT, name, "raw-root"), judgedDir = join(OUT, name, "judged"), adjDir = join(OUT, name, "adjudicated"), root = join(OUT, name, "arms");
+  for (const c of cells) {
+    const [hit, bait] = RATE[c]!;
+    writePlanArm(join(raw, c), suite, { id: c, passes, raw: true, noise: c.startsWith("flagall") ? 3 : 0, outcome: (u: any, b: any, pass: number) => (draw(c, u.pr, pass, b.id) < (isDecoy(u) ? bait : hit) ? "F" : draw(c, u.pr, pass, b.id, "d") < 0.25 ? "D" : "M") });
+    if (diag[c]) {
+      const a = JSON.parse(readFileSync(join(raw, c, "arm.json"), "utf8"));
+      writeFileSync(join(raw, c, "arm.json"), JSON.stringify({ ...a, diagnostics: diag[c] }, null, 2) + "\n");
+    }
+    const r = await nolossCli(["ingest", join(raw, c), "--suite", suiteArg, "--root", rawRoot, ...S], { out: () => {}, err: () => {} });
+    check(name + ": raw arm " + c + " ingests", r === 0);
+  }
+  const armDir = (r: string, c: string) => join(r, suite.id, c);
+  const join_ = async (keyPath: string, packets: string, arms: string[], outDir: string, item: "blockers" | "findings") => {
+    const key = JSON.parse(readFileSync(keyPath, "utf8"));
+    const all = key.packets.map((p: any) => {
+      const pk = JSON.parse(readFileSync(join(packets, p.file), "utf8"));
+      const items = item === "blockers" ? pk.blockers.map((b: any) => ({ id: b.id, matches: pk.findings.filter((f: any) => f.line === b.line).map((f: any) => f.id) })) : pk.findings.map((f: any) => ({ id: f.id, ruling: "not-defect" }));
+      return { p, items };
+    });
+    const body = (judge: string, only?: Set<string>) => ({ batch: key.batch, judge, packets: all.map(({ p, items }: any) => ({ file: p.file, sha256: p.sha256, [item]: items.filter((x: any) => !only || only.has(p.file + " " + x.id)) })).filter((p: any) => p[item].length) });
+    const named = (text: string) => new Set([...text.matchAll(/(packets\/\S+\.json) ([BF]\d+)/g)].map((m) => m[1] + " " + m[2]));
+    const args = ["judge-join", "--suite", suiteArg, "--key", keyPath, "--out", outDir, ...arms.flatMap((a) => ["--arm", a]), ...S];
+    const replies = ["--reply", save(name + "-" + item + "-primary.json", body("judge one"))];
+    const attempt = async () => {
+      const o: string[] = [], e: string[] = [];
+      const code = await nolossCli([...args, ...replies], { out: (t: string) => o.push(t), err: (t: string) => e.push(t) });
+      return { code, out: o.join("\n"), err: e.join("\n") };
+    };
+    let r = await attempt();
+    for (const [flag, judge] of [["--second", "judge two"], ["--third", "judge three"]] as const) {
+      if (r.code === 0) break;
+      say("  judge-join waits: " + (r.err.split("\n")[0] ?? "").replace(/:.*$/, ""));
+      replies.push(flag, save(name + "-" + item + flag + ".json", body(judge, named(r.err))));
+      r = await attempt();
+    }
+    say("$ noloss " + [...args, ...replies].join(" "));
+    say("  exit " + r.code + "  (" + name + ": judge-join " + item + " for every arm at once)");
+    show(r.out + "\n" + r.err.split("\n").filter((l) => /^E_[A-Z_]+ /.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), 3);
+    return r;
+  };
+  const packets = join(OUT, name, "packets"), keyPath = join(OUT, name, "key.json");
+  const p = await cli(name + ": blind packets over every arm, plan trees from the source clone", ["judge-packet", "--suite", suiteArg, ...cells.flatMap((c) => ["--arm", armDir(rawRoot, c)]), "--seed", "20261031", "--out", packets, "--key", keyPath, "--source", "panel/plans=" + SRC, ...S], { show: 3 });
+  check(name + ": judge-packet exit 0", p.code === 0);
+  const j = await join_(keyPath, packets, cells.map((c) => armDir(rawRoot, c)), judgedDir, "blockers");
+  check(name + ": judge-join exit 0", j.code === 0);
+  let from = judgedDir;
+  if (adjudicate) {
+    const adjPackets = join(OUT, name, "adj-packets"), adjKey = join(OUT, name, "adj-key.json");
+    const a = await cli(name + ": blind adjudication packets", ["judge-packet", "--suite", suiteArg, ...cells.flatMap((c) => ["--arm", join(judgedDir, c)]), "--seed", "20261101", "--out", adjPackets, "--key", adjKey, "--adjudicate", "--source", "panel/plans=" + SRC, ...S], { show: 3 });
+    check(name + ": adjudication packets build, or there is nothing to adjudicate", a.code === 0 || /nothing to adjudicate/.test(a.err));
+    if (existsSync(adjKey)) {
+      const k = await join_(adjKey, adjPackets, cells.map((c) => join(judgedDir, c)), adjDir, "findings");
+      check(name + ": adjudication join exit 0", k.code === 0);
+      from = adjDir;
+    } else say("  no must-fix finding is left unmatched, so there is no adjudication batch");
+  }
+  for (const c of cells) check(name + ": judged arm " + c + " ingests", (await nolossCli(["ingest", join(from, c), "--suite", suiteArg, "--root", root, ...S], { out: () => {}, err: () => {} })) === 0);
+  return { root, from, armDir: (c: string) => armDir(root, c) };
+}
+
+const outcome = (r: { out: string; err: string; code: number }) => (r.out.match(/verdict: (\S+)( NOLOSS_UNDERPOWERED)?/) ?? [])[0] ?? (r.err.match(/^E_[A-Z_]+/m) ?? ["?"])[0];
+async function score(label: string, file: string, v: string, r: string, expect: string, o: { suite?: string; root: string; extra?: string[] }) {
+  const argv = ["score", "--suite", o.suite ?? "planrev-ceo-r1a", "--root", o.root, "--prereg", file, "--variant", v, "--reference", r, ...S, ...(o.extra ?? [])];
+  const s = await cli(label, argv, { show: 0 });
+  show(s.out.split("\n").filter((l) => /verdict:|Holm|claim|false alarm|recall|on \d+ blockers|NOLOSS|delta|FALSE_ALARM/i.test(l)).join("\n") + "\n" + s.err.split("\n").filter((l) => /^E_[A-Z_]+ /.test(l) && !/context:|fix:|docs:|correlation:/.test(l)).join("\n"), 14);
+  const e = await nolossCli([...argv, "--expect", expect], { out: () => {}, err: () => {} });
+  check(label + ": --expect " + expect, e === 0);
+  return s;
+}
+async function derive(label: string, name: string, file: string, root: string, extra: string[], shown?: string[]) {
+  const out = join(OUT, "derived", name);
+  const head = ["derive", "--suite", "planrev-ceo-r1a", "--comparisons", file, "--root", root, "--id", name, "--out", out];
+  const d = await cli(label, [...head, ...extra, ...S], { show: 4, display: [...head, ...(shown ?? extra), ...S] });
+  check(label + ": derive exit 0", d.code === 0);
+  return { suite: join(out, name + ".json"), root: join(out, "arms"), file: join(out, "comparisons." + name + ".json") };
+}
+
+say("# R1a keyless dry run, " + new Date().toISOString());
+say("scorer HEAD " + spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim());
+for (const f of ["lanes/review-noloss/suites/planrev-ceo-r1a.json"]) say("stub sha256 " + createHash("sha256").update(readFileSync(join(scorer, f))).digest("hex"));
+for (const f of readdirSync(POST).filter((x) => /\.(json|tsv|md)$/.test(x) && x !== "README.md").sort()) say("post " + f + " sha256 " + createHash("sha256").update(readFileSync(join(POST, f))).digest("hex"));
+
+say("\n## 1. Suites, stub and sealed root");
+check("stub loads with the sealed root", (await cli("headline suite", ["suite", "--check", "--suite", "planrev-ceo-r1a", ...S])).code === 0);
+check("stub refuses without the sealed root", (await cli("no sealed root", ["suite", "--check", "--suite", "planrev-ceo-r1a"])).code === 2);
+check("pilot suite checks", (await cli("pilot suite", ["suite", "--check", "--suite", pilotPath, ...S])).code === 0);
+check("real-neutral suite checks", (await cli("real-neutral suite", ["suite", "--check", "--suite", realPath, ...S])).code === 0);
+check("Fable subset suite checks", (await cli("Fable subset suite", ["suite", "--check", "--suite", fablePath, ...S])).code === 0);
+
+say("\n## 2. The frozen run commands (review-units --dry-run)");
+const POLICY = join(POST, "policy.json"), ITEM = "planning-r1a";
+const common = ["--sealed-root", SR, "--plan", "ceo", "--units", "all", "--source", "panel/plans=" + SRC, "--base-branch", "panel/plans=main", "--dry-run"];
+const base = [...common, "--policy", POLICY, "--item", ITEM, "--out", join(OUT, "ru")];
+const GS = "gstack=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f";
+let u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "lens", "placebo", "--models", OPUS, P1, "--arm-models", "lens=" + OPUS, "placebo=" + P1, "--passes", "3", ...base], "headline: 6 cells, 3 passes");
+check("headline run plans 648 sessions", u.code === 0 && /sessions 648\b/.test(u.out));
+u = units(["--suite", realPath, "--arms", "none", GS, "lens", "placebo", "--models", OPUS, P1, "--arm-models", "lens=" + OPUS, "placebo=" + P1, "--passes", "3", ...base], "real-neutral: 6 cells, 3 passes");
+check("real-neutral run plans 36 sessions", u.code === 0 && /sessions 36\b/.test(u.out));
+u = units(["--suite", pilotPath, "--arms", "none", GS, "lens", "placebo", "--models", OPUS, P1, FABLE, "--arm-models", "lens=" + OPUS, "placebo=" + P1, "--passes", "1", ...base], "pilot: 8 cells, 1 pass");
+check("pilot run plans 32 sessions", u.code === 0 && /sessions 32\b/.test(u.out));
+u = units(["--suite", fablePath, "--arms", "none", GS, "--models", FABLE, "--passes", "1", ...base], "Fable subset: 2 cells, 1 pass");
+check("Fable run plans 36 sessions", u.code === 0 && /sessions 36\b/.test(u.out));
+u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", "gstack-auto=garrytan/gstack@2d1b55d7621df1a71e02037c79b63b7ee2fdc64f", "--models", OPUS, "--passes", "3", ...base], "gstack-auto placeholder");
+check("gstack-auto is refused until GST-537 sets its release", u.code !== 0 && /GST-537/.test(u.err));
+u = units(["--suite", fablePath, "--arms", "none", GS, "--models", FABLE, "--passes", "1", ...common, "--item", ITEM, "--out", join(OUT, "ru")], "Fable under the default policy");
+check("the default policy refuses Fable as a subject (smoke_only, no rungs)", u.code !== 0 && /smoke/.test(u.err));
+u = units(["--suite", fablePath, "--arms", "none", GS, "--models", FABLE, "--passes", "1", ...common, "--policy", POLICY, "--item", "some-other-item", "--out", join(OUT, "ru")], "Fable under R1a's policy, another ledger item");
+check("R1a's policy refuses Fable under any ledger item but planning-r1a", u.code !== 0 && /smoke/.test(u.err));
+u = units(["--suite", "planrev-ceo-r1a", "--arms", "none", GS, "--models", OPUS, "--passes", "3", ...common, "--policy", POLICY, "--item", ITEM, "--out", join(scorer, "runs", "r1a-dry")], "a sealed run with --out inside the repo");
+check("review-units refuses a sealed run whose --out is inside the repo", u.code !== 0 && /inside the repo/.test(u.err));
+
+say("\n## 3. Headline: synthetic arms through blind judging and adjudication");
+const cells = [id("none", OPUS), id("gstack", OPUS), id("lens", OPUS), id("none", P1), id("gstack", P1), id("placebo", P1), id("flagall", OPUS)];
+const firstSeeded = headline.suite.units.filter((x: any) => !isDecoy(x)).slice(0, 3).map((x: any) => x.id);
+const diag = { [id("gstack", OPUS)]: [firstSeeded[0] + " pass 2: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing", firstSeeded[1] + " pass 3: incomplete, the session ended timeout; scored as finding nothing"], [id("lens", OPUS)]: [firstSeeded[2] + " pass 1: missing; scored as finding nothing"] };
+const H = await judged("headline", headline.suite, "planrev-ceo-r1a", cells, 3, true, diag);
+const PRIMARY = join(POST, "comparisons.primary.json"), SECONDARY = join(POST, "comparisons.secondary.json"), SECOPUS = join(POST, "comparisons.secondary-opus.json");
+
+say("\n## 4. Primary family: none-opus against gstack-opus, both directions, Holm over 2, gate on 12 decoys");
+const prim = await score("primary: gstack better", PRIMARY, id("none", OPUS), id("gstack", OPUS), "LOSS", { root: H.root });
+check("primary prints its Holm step of 2", /of 2 in the declared LOSS family/.test(prim.out));
+check("primary gate reads 12 decoys", /on 12 decoys/.test(prim.out));
+await score("primary: gstack worse (mirror)", PRIMARY, id("gstack", OPUS), id("none", OPUS), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { root: H.root });
+const j = JSON.parse((await nolossCli(["score", "--suite", "planrev-ceo-r1a", "--root", H.root, "--prereg", PRIMARY, "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--json", ...S], { out: (t: string) => save("primary.json", t), err: () => {} }), readFileSync(join(OUT, "primary.json"), "utf8"))).result;
+say("ceiling rule: none-opus must-fix recall " + j.recall.variant.toFixed(3) + " (ceiling above 0.85: " + (j.recall.variant > 0.85 ? "met, no claim" : "not met") + ")");
+check("the ceiling rule reads none-opus recall", typeof j.recall.variant === "number");
+
+say("\n## 5. Secondary family: Holm over 3");
+await score("secondary: particle-1 gstack", SECONDARY, id("none", P1), id("gstack", P1), "LOSS", { root: H.root });
+await score("secondary: Opus lens", SECONDARY, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: H.root });
+const plac = await score("secondary: particle-1 placebo", SECONDARY, id("none", P1), id("placebo", P1), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { root: H.root });
+check("secondary prints its Holm step of 3", /of 3 in the declared LOSS family/.test(plac.out));
+
+say("\n## 6. Frozen particle-1 rung drop (pilot stop c)");
+const opusRoot = join(OUT, "arms-opus");
+for (const c of cells.filter((c) => c.endsWith("-opus"))) cpSync(H.armDir(c), join(opusRoot, "planrev-ceo-r1a", c), { recursive: true });
+await score("full secondary file without particle-1 arms", SECONDARY, id("none", OPUS), id("lens", OPUS), "E_NOLOSS_ARM", { root: opusRoot });
+const so = await score("Opus-only secondary file", SECOPUS, id("none", OPUS), id("lens", OPUS), "NOT_DISTINGUISHED,LOSS", { root: opusRoot });
+check("Opus-only file is a family of 1", /of 1 in the declared LOSS family/.test(so.out));
+
+say("\n## 7. False-alarm gate: a flag-everything arm");
+const gate = save("gate.json", { ...JSON.parse(readFileSync(PRIMARY, "utf8")), comparisons: [{ id: "none-opus-vs-flagall-opus", variant: id("none", OPUS), reference: id("flagall", OPUS), margin_points: 10, margin_reason: "dry run", post_hoc: false, frozen_bar: null, false_alarm_gate: { margin_per_decoy: 1 } }], loss_family: { order: ["none-opus-vs-flagall-opus"], null: "zero", reason: "dry run only" } });
+const g = await score("flag-everything arm", gate, id("none", OPUS), id("flagall", OPUS), "FALSE_ALARM_GATE_FAIL", { root: H.root });
+check("gate fails on 12 decoys", /FAIL/.test(g.out) && /on 12 decoys/.test(g.out));
+
+say("\n## 8. Volume-matched reading (first 2 must-fix findings per unit-pass)");
+const k2 = await derive("first-k 2", "planrev-ceo-r1a-k2", PRIMARY, H.root, ["--first-k", "2"]);
+await score("first-k 2: same sign as the primary", k2.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: k2.suite, root: k2.root });
+
+say("\n## 9. Any-severity recall (secondary) and the any-severity fallback");
+const anyS = await derive("any severity", "planrev-ceo-r1a-any", PRIMARY, H.root, ["--severity-map", join(POST, "any-severity.json")]);
+await score("any severity", anyS.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: anyS.suite, root: anyS.root });
+check("secondary readings (any severity, new defects)", (await cli("secondary", ["secondary", "--suite", "planrev-ceo-r1a", "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--seed", "20261031", "--root", H.root, ...S], { show: 12 })).code === 0);
+
+say("\n## 10. Missing cells: failed passes scored as misses; sensitivity drops every unit a diagnostic names");
+const named = [...new Set(cells.flatMap((c) => (JSON.parse(readFileSync(join(OUT, "headline/raw", c, "arm.json"), "utf8")).diagnostics ?? []).map((d: string) => d.split(" pass ")[0])))];
+const dropFile = save("missing-cells.drop.tsv", "unit\n" + named.map((x) => x + "\n").join(""));
+const mc = await derive("missing cells", "planrev-ceo-r1a-mc", PRIMARY, H.root, ["--drop-file", dropFile]);
+await score("missing-cell sensitivity", mc.file, id("none", OPUS), id("gstack", OPUS), "LOSS", { suite: mc.suite, root: mc.root });
+
+say("\n## 11. Stopped arm: no verdict, the family keeps its size");
+const r5 = join(OUT, "arms-stopped");
+for (const c of cells.filter((c) => c !== id("lens", OPUS))) cpSync(H.armDir(c), join(r5, "planrev-ceo-r1a", c), { recursive: true });
+const lens = join(OUT, "lens-stopped");
+cpSync(join(H.from, id("lens", OPUS)), lens, { recursive: true });
+writeFileSync(join(lens, "arm.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(lens, "arm.json"), "utf8")), status: "stopped", coverage_gaps: [firstSeeded[2] + " pass 3: not run (cap stop)"] }, null, 2) + "\n");
+check("stopped arm ingests", (await nolossCli(["ingest", lens, "--suite", "planrev-ceo-r1a", "--root", r5, ...S], { out: () => {}, err: () => {} })) === 0);
+const st = await score("stopped lens arm", SECONDARY, id("none", OPUS), id("lens", OPUS), "NO_VERDICT", { root: r5 });
+check("stopped arm keeps step of 3", /of 3 in the declared LOSS family/.test(st.out));
+
+say("\n## 12. Recall by source (T1, T2) and by mode, descriptive");
+for (const s of ["T1", "T2"]) {
+  const specs = readFileSync(join(SR, "readings/source-" + s + ".detection-only.txt"), "utf8").split("\n").filter(Boolean).flatMap((x) => ["--detection-only", x]);
+  const d = await derive("source " + s, "planrev-ceo-r1a-" + s.toLowerCase(), PRIMARY, H.root, specs, ["--detection-only", "<each of the " + specs.length / 2 + " lines of $SEALED/readings/source-" + s + ".detection-only.txt>"]);
+  const r = await score("source " + s, d.file, id("none", OPUS), id("gstack", OPUS), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: d.suite, root: d.root });
+  check("source " + s + " reads 24 flaws", /on 24 blockers in 24 PRs/.test(r.out));
+}
+for (const m of ["greenfield", "added-capability", "fix"]) {
+  const d = await derive("mode " + m, "planrev-ceo-r1a-" + m, PRIMARY, H.root, ["--drop-file", join(SR, "readings/mode-" + m + ".drop.tsv")]);
+  const r = await score("mode " + m, d.file, id("none", OPUS), id("gstack", OPUS), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: d.suite, root: d.root });
+  check("mode " + m + " reads 16 flaws in 8 plans", /on 16 blockers in 8 PRs/.test(r.out));
+}
+
+say("\n## 13. Real-neutral stratum, alone");
+const realCells = cells.filter((c) => !c.startsWith("flagall"));
+const R = await judged("real-neutral", suites[2], realPath, realCells, 3, false);
+await score("real-neutral, descriptive", join(POST, "comparisons.real-neutral.json"), id("none", OPUS), id("gstack", OPUS), "NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED,LOSS", { suite: realPath, root: R.root });
+
+say("\n## 14. Pilot units: in no claim and no comparisons file; stop (a) reads recall alone");
+const pilotCells = [...realCells, id("none", FABLE), id("gstack", FABLE)];
+const PL = await judged("pilot", suites[1], pilotPath, pilotCells, 1, false);
+const pilotIds = new Set(suites[1].units.map((u: any) => u.id)), pilotHeads = new Set(suites[1].units.map((u: any) => u.head));
+check("no pilot unit, by id or head, sits in the headline, real-neutral or Fable suite", [suites[0], suites[2], suites[3]].every((s: any) => s.units.every((u: any) => !pilotIds.has(u.id) && !pilotHeads.has(u.head))));
+const frozen = readdirSync(POST).filter((f) => /^comparisons\..+\.json$/.test(f)).sort();
+check("no frozen comparisons file names the pilot suite (" + frozen.length + " files)", frozen.length === 5 && frozen.every((f) => JSON.parse(readFileSync(join(POST, f), "utf8")).suite !== suites[1].id));
+for (const f of frozen) {
+  const r = await cli("score on the pilot suite under " + f, ["score", "--suite", pilotPath, "--root", PL.root, "--prereg", join(POST, f), "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), ...S], { show: 0 });
+  const why = (r.err + "\n" + r.out).split("\n").find((l) => /--prereg is for suite/.test(l)) ?? "";
+  say("    " + why.trim());
+  check("score refuses the pilot suite under " + f, r.code !== 0 && why !== "");
+}
+const ps = await cli("pilot stop (a): recall with its interval, no verdict", ["secondary", "--suite", pilotPath, "--variant", id("none", OPUS), "--reference", id("gstack", OPUS), "--seed", "20261031", "--root", PL.root, "--json", ...S], { show: 0 });
+const pj = JSON.parse(ps.out);
+const pr = pj.recall.find((x: any) => x.arm === id("none", OPUS)).blocking;
+say("pilot none-opus must-fix recall " + pr.found + "/" + pr.n + " = " + pr.recall + "; stop (a) fires outside 0.10 to 0.85: " + (pr.recall > 0.85 || pr.recall < 0.1 ? "fires" : "does not fire"));
+check("pilot recall reads on the pilot's 8 flaws, from noloss secondary", ps.code === 0 && pr.n === 8 && typeof pr.recall === "number");
+check("the pilot reading carries no verdict and no claim", !/claim|LOSS|NOT_DISTINGUISHED|NO_LOSS|verdict/i.test(ps.out));
+
+say("\n## 15. Fable 5.1 subset, exploratory");
+const F = await judged("fable", suites[3], fablePath, [id("none", FABLE), id("gstack", FABLE)], 1, true);
+const fr = await score("Fable none vs gstack", fableFile, id("none", FABLE), id("gstack", FABLE), "LOSS,NOT_DISTINGUISHED,NOLOSS_UNDERPOWERED", { suite: fablePath, root: F.root });
+check("Fable subset reads 24 flaws in 12 plans and 6 decoys", /on 24 blockers in 12 PRs/.test(fr.out) && /on 6 decoys/.test(fr.out));
+
+say("\n## 16. Power at the panel's shape");
+const pw = await cli("power on the headline suite", ["power", "--suite", "planrev-ceo-r1a", "--passes", "3", "--recall", "0.35", "--margin", "10", "--loss", "20", "--alpha", "0.025", "--dependence", "0.3", "--sims", "2000", ...S], { show: 8 });
+check("power counts 24 clusters and 48 flaws", /\| planrev-ceo-r1a \| 24 \| 48 \| 3 \|/.test(pw.out));
+
+say("\n## 17. OpenRouter routes: the pinned route, its data policy and price headroom");
+const { chatPrice, openRouterRouting } = await import(join(scorer, "src/runner/pricing/prices.ts"));
+const { canonical } = await import(join(scorer, "src/trial/cache.ts"));
+const readAt = new Date().toISOString();
+const getJson = async (url: string) => {
+  const r = await fetch(url, { headers: { "user-agent": "gstack-evals-r1a-dryrun" } });
+  if (!r.ok) throw new Error(url + " HTTP " + r.status);
+  return r.json();
+};
+let providers: any[] = [];
+try {
+  const p: any = await getJson("https://openrouter.ai/api/frontend/v1/all-providers");
+  providers = p.data ?? p;
+} catch (e) {
+  say("all-providers read failed: " + (e as Error).message);
+}
+say("read keyless at " + readAt + ": OpenRouter's endpoints API and its public all-providers feed (" + providers.length + " providers)");
+const dpOf = (tag: string) => providers.find((p: any) => p.slug === tag.split("/")[0])?.dataPolicy ?? null;
+const usd = (x: string) => Math.round(Number(x) * 1e12) / 1e6;
+const routes: Record<string, unknown> = {};
+for (const [model, inR1a] of [[P1, true], ["deepseek/deepseek-v4.1-flash-1017", false]] as const) {
+  const route: any = openRouterRouting(chatPrice("openrouter:" + model));
+  const sha = createHash("sha256").update(canonical(route)).digest("hex");
+  if (inR1a) routes[model] = { route, sha256: sha };
+  say((inR1a ? "" : "outside R1a: ") + model + " route " + JSON.stringify(route) + " sha256 " + sha);
+  let eps: any[] = [];
+  try {
+    eps = ((await getJson("https://openrouter.ai/api/v1/models/" + model + "/endpoints")) as any).data.endpoints;
+  } catch (e) {
+    say("  endpoints read failed: " + (e as Error).message);
+  }
+  const pinned = eps.filter((e) => (!route.only || route.only.includes(String(e.tag).split("/")[0])) && (!route.quantizations || route.quantizations.includes(e.quantization)));
+  const live: any[] = [];
+  for (const e of pinned) {
+    const dp = dpOf(String(e.tag));
+    const pin = usd(e.pricing.prompt), pout = usd(e.pricing.completion);
+    const keeps = dp?.training === false && dp?.retainsPrompts === false;
+    const under = pin <= route.max_price.prompt && pout <= route.max_price.completion;
+    const exact = pin === route.max_price.prompt || pout === route.max_price.completion;
+    if (keeps && under) live.push(e);
+    say("  endpoint " + String(e.name).split(" | ")[0] + " (" + e.tag + ", " + e.quantization + "): $" + pin + " / $" + pout + " per Mtok, max_price $" + route.max_price.prompt + " / $" + route.max_price.completion + " (headroom x" + (route.max_price.prompt / pin).toFixed(2) + " input, x" + (route.max_price.completion / pout).toFixed(2) + " output" + (exact ? "; max_price equals the current price, so any price rise refuses every call" : "") + "); data policy: training " + dp?.training + ", retains prompts " + dp?.retainsPrompts + (keeps ? ", kept by data_collection deny" : ", dropped by data_collection deny"));
+  }
+  if (!inR1a) {
+    say("  " + model + " is not an R1a model; reported for GST-637, not checked");
+    continue;
+  }
+  check(model + ": the route pins its providers with no fallbacks and sends data_collection deny", Array.isArray(route.only) && route.only.length > 0 && route.allow_fallbacks === false && route.data_collection === "deny");
+  check(model + ": an endpoint of a pinned provider is kept by data_collection deny and priced at or under max_price", live.length > 0);
+}
+const routeRecord = JSON.stringify({ schema_version: 1, scorer: spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(), routes }, null, 2) + "\n";
+writeFileSync(join(OUT, "route.json"), routeRecord);
+say("route.json, written into each R1a run's out dir and joined to every session in cells.ndjson: sha256 " + createHash("sha256").update(routeRecord).digest("hex"));
+
+say("\n## 18. Receipts and run paths");
+const { insideRepo } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const RUNROOT = join(process.env.HOME ?? "", ".capy", "work", "planning-r1a");
+check("R1a's frozen --out root and receipts sink (~/.capy/work/planning-r1a) sit outside the repo", !insideRepo(RUNROOT) && !insideRepo(join(RUNROOT, "receipts")));
+
+say("\n## 19. The pinned harness's own keyless tests: outcome classification and the sealed receipts sink");
+const TS = ["tests/trial/review/plan-scoring.test.ts", "tests/adapters/claude-code.test.ts"];
+const tr = spawnSync("bun", ["test", ...TS], { cwd: scorer, encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) });
+const tout = (tr.stdout ?? "") + "\n" + (tr.stderr ?? "");
+say("$ bun test " + TS.join(" ") + " (keys unset)");
+say("  exit " + tr.status);
+const results = tout.split("\n").filter((l) => /^\((pass|fail)\)/.test(l.trim())).map((l) => l.trim().replace(/ \[[\d.]+m?s\]$/, ""));
+for (const l of results) say("    " + l);
+const passed = (name: string) => results.some((l) => l.startsWith("(pass)") && l.includes(name));
+check("every test in " + TS.join(" and ") + " passes (" + results.length + " tests)", tr.status === 0 && results.length > 0 && results.every((l) => l.startsWith("(pass)")));
+for (const [label, name] of [
+  ["a clean session scores and completes its arm", "a clean session scores its findings"],
+  ["a tool-call-only session that then crashes is a miss", "a tool-call-only session whose CLI then crashes is a miss"],
+  ["a tool-call-only session that times out is a miss", "a tool-call-only session that times out is a miss"],
+  ["a crash before any model output is a gap that stops the arm", "a CLI crash before any model output is a gap"],
+  ["a timeout before any model output is a gap that stops the arm", "a timeout before any model output is a gap"],
+  ["completed with output and no text turn is a miss counted per arm; with no output, a gap", "completed with model output and no text turn is a miss"],
+  ["an evaluator error after a text turn stops the arm, not the arm's miss", "the transcript append failing after one text turn is infra"],
+  ["a provider error after model output is a gap, never a miss", "a provider error after model output is a gap"],
+  ["a record with no model_output flag is a gap", "a record with no model_output flag is a gap"],
+  ["every stopped arm, and only those, is an E_COVERAGE_GAP stop", "every stopped arm, and only those, is an E_COVERAGE_GAP stop"],
+  ["a signed empty thinking block is model output, an unsigned one is not", "A1: a signed empty thinking block is model output, an unsigned empty one is not"],
+  ["a signed empty thinking block, then a timeout, is a miss", "A1: a signed empty thinking block, then a timeout"],
+  ["empty text, whitespace text and empty thinking are no model output", "OV5: empty text, whitespace text and empty thinking are no model output"],
+  ["a stall within the cap is credited and recorded", "B1: a stall within the cap is credited and recorded"],
+  ["a stall past the cap, then a timeout, is infra", "B1: a stall past the cap, then a timeout, is E_INFRA_FAILURE"],
+  ["a stall just before a persona pause is credited", "B1: a stall just before a persona pause is credited"],
+  ["docker exec's own exits 125, 126 and 127 are infra", "an exit of 125, 126 or 127 is the launcher's"],
+  ["the record keeps the CLI's exit_code and signal", "the record keeps the CLI's own exit status"],
+  ["a sealed suite refuses a receipts sink inside the repo before any session", "a sealed suite refuses a receipts sink inside the repo"],
+  ["an unsealed suite reading sealed-root catalogs refuses an in-repo sink", "an unsealed suite that reads sealed-root catalogs refuses a receipts sink inside the repo"],
+  ["a hard-linked file in the sink is refused", "a hard-linked file in the sink refuses the copy"],
+  ["a symlinked directory in the sink is refused", "a symlinked directory in the sink refuses the copy"],
+  ["a dangling symlink above the sink is refused", "a dangling symlink above the sink is refused"],
+] as const) check("case: " + label, passed(name));
+
+say("\n## Leak check");
+const text = lines.join("\n");
+const hex = [...new Set(text.match(/\b[0-9a-f]{7,40}\b/g) ?? [])];
+const leaked = hex.filter((h) => [...shas].some((s: any) => s.startsWith(h)));
+check("no unit head or base prefix (7+ hex) appears in this transcript", leaked.length === 0);
+check("no unit reference appears in this transcript", !UNIT.test(text));
+say("\n" + (failures ? failures + " FAILED" : "all checks passed"));
+writeFileSync(join(OUT, "transcript.txt"), lines.join("\n") + "\n");
+console.log(lines.join("\n"));
+process.exit(failures ? 1 : 0);
