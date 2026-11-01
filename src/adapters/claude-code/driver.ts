@@ -32,7 +32,9 @@
 //   it is a missing cell, UPSTREAM). Any other failure is infra, never the arm's: the evaluator's
 //   own code (the transcript or init write, the user simulator, the persona), the SDK's link to a CLI that still runs (a
 //   reset or a broken pipe), or the machine (a spawn that fails, a session that no longer answers once the CLI ends). An
-//   infra failure leaves a missing cell, E_INFRA_FAILURE, and replaces a timeout or an arm failure already recorded.
+//   infra failure leaves a missing cell, E_INFRA_FAILURE. Once a timeout or an arm failure is recorded, an error from the
+//   adapter's own abort or teardown (a kill that hits a docker exec already gone, a child error after the abort) does not
+//   replace it; cli-stderr.log names it as teardown after that stop.
 // - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
 //   with text, thinking or a tool call. Scorers read it instead of turns, which hold main-agent text only. text_output
 //   says whether the main agent wrote any text, apart from the AskUserQuestion questions turns also hold.
@@ -238,9 +240,9 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         abort.abort();
       };
       const infra = (error: unknown) => {
-        if (stop?.kind === "timeout" || stop?.kind === "arm_failure") stop = null;
+        const before = stop;
         end(INFRA);
-        appendFileSync(join(o.out, "cli-stderr.log"), "adapter: infra failure, not the arm's: " + String((error as Error)?.message ?? error) + "\n");
+        appendFileSync(join(o.out, "cli-stderr.log"), "adapter: " + (before ? "after the " + before.kind + " stop, teardown: " : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
       };
       let deadline = Date.now() + timeoutMs;
       let timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs);

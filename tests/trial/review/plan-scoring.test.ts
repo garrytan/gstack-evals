@@ -138,6 +138,18 @@ const CASES: Record<string, { script: (out: string) => Script; persona?: "down";
   upstream: { script: () => async function* () { yield init; yield assistant(text("Reading the plan.")); yield { type: "assistant", error: "server_error", is_api_error_message: true, message: { role: "assistant", content: [text("API Error: 500 Internal server error")] }, parent_tool_use_id: null }; yield { ...result, is_error: true }; } },
   machine: { machine: "gone", script: () => async function* (_sdk, cli) { yield init; yield assistant(text("Reading the plan.")); await crash(cli); } },
   nospawn: { spawn: "fails", script: () => async function* () { yield init; } },
+  timeouterror: { script: () => async function* (sdk, cli) { yield init; yield toolsOnly; await new Promise((r) => sdk.abortController.signal.addEventListener("abort", r)); cli.emit("error", new Error("kill ESRCH")); } },
+  failerror: { script: () => async function* (_sdk, cli) {
+    try {
+      yield init;
+      yield assistant(text("Reading the plan."));
+      yield { ...result, subtype: "error_during_execution", is_error: true };
+    } finally {
+      cli.emit("error", new Error("write EPIPE"));
+    }
+  } },
+  // gstack-timing-ok: the wait only outlasts the 3 s wall clock, so the timer fires after the infra stop; nothing is asserted on elapsed time
+  errortimeout: { script: () => async function* (_sdk, cli) { yield init; yield toolsOnly; cli.emit("error", new Error("read ECONNRESET")); await new Promise((r) => setTimeout(r, 4500)); } },
 };
 
 describe("the planning lane's failure rule, end to end through the Claude Code driver (keyless)", () => {
@@ -290,10 +302,22 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
     expect(stderr("machine")).toContain("adapter: infra failure, not the arm's: Claude Code process terminated by signal SIGKILL\n");
   });
 
+  // Value: protects=the Captain's F1 ruling (#106 /ship): once a timeout or an arm failure after model output is recorded, an error from the adapter's own abort or teardown does not replace it, so the session stays a miss, and an infra failure first stays a gap that stops the arm even when the wall clock fires after it; fails_when=a teardown error turns a miss into a gap, or a later timeout turns a gap into a miss; why_new=#106 /ship review F1; seam=the driver's infra() and end(); no_claim=a real docker exec kill
+  test("F1: a teardown error after a timeout or an arm failure keeps the miss; an infra failure before the timeout stays a gap", () => {
+    expect(record("timeouterror")).toEqual({ termination: { kind: "timeout" }, model_output: true, turns: 0 });
+    expect(record("failerror")).toEqual({ termination: { kind: "arm_failure", failure: "harness_crash" }, model_output: true, turns: 1 });
+    for (const arm of ["timeouterror", "failerror"]) expect([arm, armJson(arm).status, (armJson(arm).coverage_gaps ?? []).length]).toEqual([arm, "complete", 0]);
+    expect(stderr("timeouterror")).toContain("adapter: after the timeout stop, teardown: kill ESRCH\n");
+    expect(stderr("failerror")).toContain("adapter: after the arm_failure stop, teardown: write EPIPE\n");
+    expect(record("errortimeout")).toEqual({ termination: INFRA, model_output: true, turns: 0 });
+    expect([armJson("errortimeout").status, armJson("errortimeout").coverage_gaps]).toEqual(["stopped", [note("incomplete, the session ended missing (E_INFRA_FAILURE)")]]);
+    expect(stderr("errortimeout")).toContain("adapter: infra failure, not the arm's: read ECONNRESET\n");
+  });
+
   // Value: protects=rule 5 and #101's p3 fix-check 2: progress.json counts each plan session the way arm.json scores it, so an arm failure, timeout or textless completion scored as a miss is a fail and every gap is missing; fails_when=progress counts a miss as missing or a gap as a timeout; why_new=GST-737; seam=recordSession's outcome, planScore; no_claim=none beyond protects
   test("rule 5: progress.json agrees with arm.json, and every stopped arm's arm.json says why", () => {
     const progress = JSON.parse(readFileSync(join(out, "progress.json"), "utf8"));
-    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 4, 0, 10]);
+    expect([progress.passed, progress.failed, progress.timeouts, progress.missing]).toEqual([1, 6, 0, 11]);
     for (const arm of arms) {
       const a = armJson(arm);
       expect([arm, a.status === "stopped", (a.coverage_gaps ?? []).length === 1]).toEqual([arm, a.status === "stopped", a.status === "stopped"]);
