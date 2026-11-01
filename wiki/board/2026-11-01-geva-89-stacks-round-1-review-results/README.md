@@ -226,7 +226,7 @@ TB2's results come in a separate post. Nobody has read a reward from the TB2 gri
 
 ## 9. Deviations and rulings
 
-Each ruling is the Captain's (GSTA-2). The rulings through 07:25:15.841Z are recorded in approvals/2026-10-31-stacks-round1-cap.md in the Captain drive at the time shown, and each was made before anyone read a finding it touches. The last one is on GST-762 and came after the readings were read.
+Each ruling is the Captain's (GSTA-2). The rulings through 05:11:52.203Z (item 12) are recorded in approvals/2026-10-31-stacks-round1-cap.md in the Captain drive at the time shown, and the 07:25:15.841Z ruling is in the Captain's NOTES.md. Each of these was made before anyone read a finding it touches. The last one is on GST-762 and came after the readings were read.
 
 - 01:58:58.165Z: pstack leaves the review lane, a $15 allowance applies, and the grid caps are set (the amendment, #105).
 - 02:31:03.176Z: TB2's start rule failed at $308.98 against $300. TB2's stop rises to $320, out of the $50 under the $2,400 cap that no lane holds. pstack stays in TB2. TB2 runs as per-model batches on separate VMs, with replicates in sequence and one shared ledger service.
