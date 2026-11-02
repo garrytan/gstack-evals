@@ -123,7 +123,7 @@ export interface Arm {
   cost: CostRow[];
 }
 
-export type ContractCode = "E_NOLOSS_ARM" | "E_NOLOSS_JUDGMENT" | "E_NOLOSS_COST" | "E_NOLOSS_ADJUDICATION";
+export type ContractCode = "E_NOLOSS_ARM" | "E_NOLOSS_JUDGMENT" | "E_NOLOSS_COST" | "E_NOLOSS_ADJUDICATION" | "E_ARM_CONTAMINATED";
 
 /** The blockers each finding is matched to in judgments.tsv. A blocking finding absent here is unmatched. */
 export function matchedBlockers(judgments: readonly Judgment[]): Map<Finding, Blocker[]> {
@@ -203,6 +203,12 @@ export function untestedProblem(files: Map<string, Buffer>): string | null {
   const arm = JSON.parse(text.toString("utf8")) as { id?: unknown; untested?: { reason?: unknown } };
   if (!arm.untested) return null;
   return "E_ARM_CONTAMINATED arm " + String(arm.id) + " is untested (" + String(arm.untested.reason ?? "a contaminated read") + "), so it gets no judge packet, join or score; rerun the arm clean";
+}
+
+/** untestedProblem as a refusal with its own code, which judge-packet raises before it writes a packet and each join before it writes. */
+export function refuseUntested(files: Map<string, Buffer>): void {
+  const problem = untestedProblem(files);
+  if (problem) throw new ContractError([{ code: "E_ARM_CONTAMINATED", where: "arm.json", message: problem.slice("E_ARM_CONTAMINATED ".length), fix: "close the path the read audit named, then run the arm again under a named repair and a separately approved item" }]);
 }
 
 export function parseArm(files: Map<string, Buffer>, suite: Suite, suiteSha256: string | null = null): Arm {

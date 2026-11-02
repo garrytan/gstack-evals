@@ -25,7 +25,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
-import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, RULINGS, untestedProblem, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
+import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, refuseUntested, RULINGS, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
 import { ScoreError } from "./score.ts";
 import { isPlanCase } from "../review-replay/catalog/catalog.ts";
 import { holdsSealed, insideRepo, sealedAs, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
@@ -185,6 +185,7 @@ export function judgePacket(o: { suite: Suite; suiteSha256: string; arms: Loaded
   if (existsSync(o.key)) blind("--key " + o.key + " already exists; give each batch a new key path");
   if (existsSync(o.out) && readdirSync(o.out).length) blind("--out " + o.out + " is not empty; write each batch to a new directory");
   if (!arms.length) blind("judge-packet needs at least one arm");
+  for (const a of arms) refuseUntested(a.files);
   const ids = arms.map((a) => a.arm.arm.id);
   if (new Set(ids).size !== ids.length) blind("an arm is given twice: " + ids.join(", "));
   for (const a of arms) if (!a.arm.findings) blind("arm " + a.arm.arm.id + " is transcribed: it has no findings to judge");
@@ -521,8 +522,7 @@ function adjudicationJoin(o: JoinInput, key: JudgeKey, unjudged: ReturnType<type
     files.delete("ingest.json");
     files.set("adjudication.tsv", Buffer.from(rows.join("\n") + "\n"));
     parseArm(files, suite, o.suiteSha256);
-    const untested = untestedProblem(files);
-    if (untested) throw new Error(untested);
+    refuseUntested(files);
     written.set(a.arm.arm.id, files);
   }
   const k = kappa([...secondSet].map((s) => [primary.rulings.get(s)!, second.rulings.get(s)!] as [Ruling, Ruling]), RULINGS);
@@ -590,8 +590,7 @@ export function judgeJoin(o: JoinInput): JoinResult {
     files.delete("ingest.json");
     files.set("judgments.tsv", Buffer.from(rows.join("\n") + "\n"));
     parseArm(files, suite, o.suiteSha256);
-    const untested = untestedProblem(files);
-    if (untested) throw new Error(untested);
+    refuseUntested(files);
     written.set(arm.arm.id, files);
   }
   const k = kappa([...secondSet].flatMap((s) => [...first.get(s)!].map(([ck, c]) => [c.outcome, secondCells.get(s)!.get(ck)!.outcome] as [Outcome, Outcome])), ["F", "D", "M"]);
