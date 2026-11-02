@@ -1,19 +1,26 @@
-// Plan units in review-units (planning lane plan 2026-10-31-geva-79-planning-lane-plan, B2 to B4 with open items 2, 3,
-// 4, 6 and 10). A plan unit's tree holds plan.md and the context it was written in. Every arm reviews it under one frozen
-// output block, with the same rec user and the same driver model and no second model.
+// Plan units in review-units (planning lane plan 2026-10-31-geva-79-planning-lane-plan, B2 to B4; panel v3 plan
+// 2026-11-02-geva-165-planning-panel-v3-plan, sections 4 and 5). A plan unit's tree holds plan.md and the context it was
+// written in. Every arm reviews it in two turns, with the same rec user and the same driver model and no second model.
 //
-// - Arms: none ("Review this plan for problems."), gstack (the lens's command, then that line), gstack-auto (GST-537's
-//   CEO-only /autoplan, a frozen placeholder until a gstack release ships it), lens (the line naming the lens from the
-//   skill's own description, then that line) and placebo (the gstack line, on Lane B's placebo tree of the gstack arm).
-// - TOLD_PLAN_TEMPLATE is the shared output block; a test pins TOLD_PLAN_SHA256. Findings go in a fence whose info word
-//   is plan-findings, so a stray json block in a review never parses as the findings list.
-// - The rec user (B4) answers every question "Go with your recommendation.", and "No, not now." to one that names
-//   another skill or review, or asks to promote or commit docs. It needs no model. src/usersim's binding rules still
-//   hold, so a question that names a gated effect (write, commit, run, ...) gets the simulator's non-approving answer.
+// - Turn 1 holds no format words (GST-925). Arms: none (PLAN_ASK), lens (the lens line, then PLAN_ASK), gstack and
+//   placebo (the lens's command and plan.md, on Lane B's placebo tree for placebo) and gstack-auto (GST-537's CEO-only
+//   /autoplan and plan.md, a frozen placeholder until a gstack release ships it).
+// - Turn 2 is PLAN_TURN2_TEXT, sent once in the same session after turn 1 completes, with its own turn cap and clock
+//   (PLAN_TURN2); a test pins PLAN_TURN2_SHA256. Findings go in a fence whose info word is plan-findings, so a stray json
+//   block in a review never parses as the findings list.
+// - Lenses: ceo, eng, devex and design. Each has its skill, its command, its lens line (the CEO pattern on the skill's
+//   frontmatter description at gstack v1.93.17.0, 68410828fd85) and the review phrases it owns.
+// - The rec user (B4) answers every question "Go with your recommendation.". A question about a review mode or a Step 0
+//   choice (MODE, built from each lens's Step 0 and mode names in the pinned skills) gets that answer before any other
+//   rule (GSTA-2's ruling on GST-925). Otherwise it answers "No, not now." to a question that names another skill or
+//   review (a slash command other than the lens's own, or a review phrase the lens does not own), or asks to promote or
+//   commit docs. It needs no model. src/usersim's binding rules still hold, so a question that names a gated effect
+//   (write, commit, run, ship, ...) gets the simulator's non-approving answer.
 //   An arm that installs gstack also gets every question its registry lists set to never-ask (auto-decide) in the
 //   trial's throwaway state root, through gstack's global preference file.
 // - parsePlanSession reads the last plan-findings block in any assistant turn of a completed session. A plan run scores
 //   a malformed, missing or incomplete pass as finding nothing, with a diagnostic note (open item 2).
+// - ceoMode reads the review mode gstack's mode handoff line names, so each session's mode is recorded (open item 6).
 // - ceoMode reads the review mode gstack's mode handoff line names, so each session's mode is recorded (open item 6).
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -29,13 +36,18 @@ const sha256 = (text: string | Buffer) => createHash("sha256").update(text).dige
 export type PlanArm = "none" | "gstack" | "gstack-auto" | "lens" | "placebo";
 export const PLAN_ARMS: readonly PlanArm[] = ["none", "gstack", "gstack-auto", "lens", "placebo"];
 
-/** Each lens's skill, its told command and its lens line (the skill's own description, frozen in the prereg). Later rounds add devex, design and eng. */
-export const PLAN_LENSES = { ceo: { skill: "plan-ceo-review", command: "/plan-ceo-review", line: "Do a CEO/founder-mode review of this plan." } } as const;
+/** Each lens's skill, its told command, its lens line (the skill's own description, frozen in the prereg) and the review phrases it owns. */
+export const PLAN_LENSES = {
+  ceo: { skill: "plan-ceo-review", command: "/plan-ceo-review", line: "Do a CEO/founder-mode review of this plan.", phrases: ["ceo review"] },
+  eng: { skill: "plan-eng-review", command: "/plan-eng-review", line: "Do an eng manager-mode review of this plan.", phrases: ["eng review"] },
+  devex: { skill: "plan-devex-review", command: "/plan-devex-review", line: "Do a developer experience review of this plan.", phrases: ["devex review", "dx review"] },
+  design: { skill: "plan-design-review", command: "/plan-design-review", line: "Do a designer's eye review of this plan.", phrases: ["design review"] },
+} as const satisfies Record<string, { skill: string; command: string; line: string; phrases: readonly string[] }>;
 export type PlanLens = keyof typeof PLAN_LENSES;
 export const isPlanLens = (v: string): v is PlanLens => Object.hasOwn(PLAN_LENSES, v);
 
-/** The none arm's whole line, and the line every other arm ends with. */
-export const PLAN_ASK = "Review this plan for problems.";
+/** The none arm's whole turn 1, and the end of the lens arm's. */
+export const PLAN_ASK = "Review plan.md for problems.";
 
 /**
  * gstack-auto (GST-537): /autoplan's CEO-only phase with no questions and the native voice only. Not released: the
@@ -49,8 +61,9 @@ export type PlanSeverity = (typeof PLAN_SEVERITIES)[number];
 /** Critical and High are must-fix (the scorer's CRITICAL), Medium and Low noted only; arm.json carries it. */
 export const PLAN_SEVERITY_MAP = { default: { Critical: "CRITICAL", High: "CRITICAL", Medium: "INFORMATIONAL", Low: "INFORMATIONAL" } } as const;
 
-export const TOLD_PLAN_TEMPLATE = [
-  "The plan is plan.md at the root of this repository. The repository also holds the context the plan was written in, such as context/ and any existing code; read what you need. Do not commit or push.",
+/** Turn 2, sent once in the same session after turn 1 completes. */
+export const PLAN_TURN2_TEXT = [
+  "List every problem you found in plan.md.",
   "",
   "End your reply with one fenced block whose info string is " + PLAN_FENCE + ". It holds a JSON array with one object per finding, or [] when you have none. Each object has these fields:",
   '- "severity": Critical, High, Medium or Low',
@@ -61,18 +74,17 @@ export const TOLD_PLAN_TEMPLATE = [
   '- "fix": what the plan should change',
 ].join("\n");
 
-export const TOLD_PLAN_SHA256 = sha256(TOLD_PLAN_TEMPLATE);
+export const PLAN_TURN2_SHA256 = sha256(PLAN_TURN2_TEXT);
+/** Turn 2's text, its own turn cap and its own clock in seconds, frozen in the prereg. */
+export const PLAN_TURN2 = { text: PLAN_TURN2_TEXT, maxTurns: 5, timeoutS: 300 } as const;
 
-/** The arm's line: the first paragraph of its prompt. */
+/** The arm's turn 1: its whole first message, with no format words. */
 export function planArmLine(arm: PlanArm, lens: PlanLens): string {
   const l = PLAN_LENSES[lens];
   if (arm === "none") return PLAN_ASK;
   if (arm === "lens") return l.line + " " + PLAN_ASK;
-  if (arm === "gstack-auto") return GSTACK_AUTO.command + " " + PLAN_ASK;
-  return l.command + " " + PLAN_ASK;
+  return (arm === "gstack-auto" ? GSTACK_AUTO.command : l.command) + " plan.md";
 }
-
-export const planPrompt = (arm: PlanArm, lens: PlanLens): string => planArmLine(arm, lens) + "\n\n" + TOLD_PLAN_TEMPLATE;
 
 /** The skill the arm's told command names; null for none and lens, which install no skill. */
 export const planSkill = (arm: PlanArm, lens: PlanLens): string | null => (arm === "gstack" || arm === "placebo" ? PLAN_LENSES[lens].skill : arm === "gstack-auto" ? "autoplan" : null);
@@ -131,16 +143,19 @@ export function neverAskPreferences(dir: string | null): string | null {
 
 export const REC_REPLY = "Go with your recommendation.";
 export const REC_DECLINE = "No, not now.";
-export const REC_PERSONA = "You take every recommendation. To each question you answer exactly " + JSON.stringify(REC_REPLY) + " To one that offers to run another skill or review, or to promote or commit docs, you answer exactly " + JSON.stringify(REC_DECLINE);
-const OTHER_SKILL = /(^|[\s("'`])\/(?!plan-ceo-review(?![\w-]))[a-z][a-z0-9-]*(:[a-z0-9-]+)?(?=$|[\s.,;:!?)"'`])|\b(eng|design|devex|dx|security|code) review\b|\bautoplan\b|\boffice[ -]hours\b/i;
+export const REC_PERSONA = "You take every recommendation. To each question you answer exactly " + JSON.stringify(REC_REPLY) + " That includes a question about a review mode or a Step 0 choice. To any other question that offers to run another skill or review, or to promote or commit docs, you answer exactly " + JSON.stringify(REC_DECLINE);
+const OTHER_REVIEWS = ["eng review", "design review", "devex review", "dx review", "security review", "code review", "autoplan", "office hours"];
+const OTHER_SKILL = Object.fromEntries(Object.entries(PLAN_LENSES).map(([lens, l]) => [lens, new RegExp(["(^|[\\s(\"'`])\\/(?!" + l.command.slice(1) + "(?![\\w-]))[a-z][a-z0-9-]*(:[a-z0-9-]+)?(?=$|[\\s.,;:!?)\"'`])", ...OTHER_REVIEWS.filter((p) => !(l.phrases as readonly string[]).includes(p)).map((p) => "\\b" + p.replace(" ", "[ -]") + "\\b")].join("|"), "i")])) as Record<PlanLens, RegExp>;
 const DOCS = /\bpromot(e|es|ed|ing)\b|\bcommit(s|ted|ting)?\b|\bdocs\//i;
+const MODE = /\b(SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION|DX EXPANSION|DX POLISH|DX TRIAGE)\b|\breview mode\b|\bmode selection\b|\bStep 0[A-I]?\b|\bscope (gate|challenge)\b|\bWhat should I review\?|\b(original|smaller) arrangement\b|\bdesign completeness\b|\bfocus on specific areas\b|\bHow deep should this DX review go\b/i;
 
-/** The rec user's answer to one question, as the user simulator's free-form source. */
-export const recAnswer = (question: string): string => (OTHER_SKILL.test(question) || DOCS.test(question) ? REC_DECLINE : REC_REPLY);
-export const recFreeform = async (_persona: string, question: string): Promise<PersonaAnswer> => ({ text: recAnswer(question) });
+/** The rec user's answer to one question under one lens, as the user simulator's free-form source. */
+export const recAnswer = (question: string, lens: PlanLens): string => (MODE.test(question) ? REC_REPLY : OTHER_SKILL[lens].test(question) || DOCS.test(question) ? REC_DECLINE : REC_REPLY);
+/** The driver's free-form source for one lens. */
+export const recFreeformFor = (lens: PlanLens) => async (_persona: string, question: string): Promise<PersonaAnswer> => ({ text: recAnswer(question, lens) });
 /** The sidecar entry every plan arm runs with: a persona and no scripted replies, so every question reaches recAnswer. */
 export const REC_USER: UserScript = { persona: REC_PERSONA };
-export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: OTHER_SKILL.source, docs: DOCS.source }));
+export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: Object.fromEntries(Object.entries(OTHER_SKILL).map(([lens, r]) => [lens, r.source])), docs: DOCS.source, mode: MODE.source }));
 
 export interface PlanFinding {
   severity: PlanSeverity;

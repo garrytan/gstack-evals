@@ -5,10 +5,16 @@
 // the record's turns, which also hold each AskUserQuestion's question with nothing marking it; a missing or unreadable
 // transcript leaves no text, so the session is missing. A run with cap stops adds CAPPED_PARSER_SHA256 to the session
 // key's verifier, so a change to this rule invalidates its cached sessions, and arm.json records it in cap_stops.
+//
+// Plan units read stops the same way (panel v3 plan, section 5). A plan session that the turn cap or the allowance ended,
+// in either turn, or that timed out after model output, is scored on the latest main-agent text block whose last
+// plan-findings block parses as findings (cappedPlanParse); with no such block it is missing, scored as finding nothing.
+// Every plan session key's verifier covers this file.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseFinalTurn, type ParseOutcome } from "./findings.ts";
+import { fencedBlocks, parseFinalTurn, type ParseOutcome } from "./findings.ts";
+import { PLAN_FENCE, parsePlanBlock, type PlanParse } from "./plan.ts";
 import { readTranscript } from "./readers.ts";
 
 /** sha256 of this file: part of the session key's verifier in a run with cap stops. */
@@ -20,3 +26,10 @@ export const mainAgentTexts = (transcript: string): string[] =>
 
 /** A cap-stopped code session's parse: the latest main-agent text whose last json block parses as findings, else missing. */
 export const cappedParse = (turns: readonly string[]): ParseOutcome => turns.map(parseFinalTurn).findLast((p) => p.kind === "findings") ?? { kind: "missing" };
+
+/** A stopped plan session's parse: the latest main-agent text whose last plan-findings block parses as findings, else missing. */
+export const cappedPlanParse = (texts: readonly string[]): PlanParse =>
+  texts.map((t): PlanParse => {
+    const block = fencedBlocks(t).filter((b) => b.info.toLowerCase() === PLAN_FENCE).at(-1);
+    return block ? parsePlanBlock(block.body) : { kind: "missing" };
+  }).findLast((p) => p.kind === "findings") ?? { kind: "missing" };

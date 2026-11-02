@@ -4,13 +4,14 @@
 // Rules for later units:
 // - Codes never change and are never removed. Add a new code as a new object.
 // - Edit only the codes your unit owns (the owner field): their meaning, fix, side_effects, retry_safe and resumable text.
-// - exit is part of the contract: 1 fails the edit, 2 is no verdict, 3 is a failed calibration, null is a warning.
+// - exit is part of the contract: 1 fails the edit, 2 is no verdict, 3 is a failed calibration, 4 is an untested arm,
+//   null is a warning.
 
 export type Unit = "U1" | "U2" | "U3" | "U4" | "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U13" | "U14" | "U15" | "U16" | "U17" | "U18" | "U20";
 
 export interface StopCode {
-  /** 1: the edit lost something (FAIL). 2: no verdict (INCOMPLETE). 3: calibration failed (INCOMPLETE). */
-  exit: 1 | 2 | 3;
+  /** 1: the edit lost something (FAIL). 2: no verdict (INCOMPLETE). 3: calibration failed (INCOMPLETE). 4: an arm is untested (INCOMPLETE). */
+  exit: 1 | 2 | 3 | 4;
   meaning: string;
   fix: string;
   /** What has already happened when this code is printed: spend, files, reservations. */
@@ -1075,6 +1076,24 @@ export const CODES = {
     retry_safe: true,
     resumable: false,
     owner: "U20",
+  },
+  E_CLEAN_ROOM: {
+    exit: 2,
+    meaning: "A none or lens plan arm could see a Capy drive or gstack (src/trial/review/clean-room.ts): a .capy, .local/share/gstack or .claude/skills path in its home, a home .claude/CLAUDE.md or AGENTS.md that names gstack, a /home/*/.capy/drive or /root/.capy/drive, a unit's .claude/skills, or an AGENTS.md or CLAUDE.md in a unit tree that names gstack. review-units checks each none and lens arm image, with each unit tree mounted read-only, before the lease opens, and refuses the run. The driver checks again in each none and lens session before the CLI starts; that cell is then a coverage gap that stops its arm (E_COVERAGE_GAP). Each line names a path the check found; a check that cannot run refuses the same way.",
+    fix: "Remove the named paths from the arm image or the unit tree, then rerun the same command; a refusal before the lease left the item unopened. A session's refusal is not journaled, so --resume <out> reruns that cell after the fix and reuses the scored sessions.",
+    side_effects: "Before the lease: none, refused before any spend. In a session: no model call in that session; completed cells and their spend are kept.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U10",
+  },
+  E_ARM_CONTAMINATED: {
+    exit: 4,
+    meaning: "The read audit (src/trial/review/audit.ts) found a contaminated read in a plan arm's session: in any arm, a touch under a home's .capy whose result was not an error; in a none or lens arm, also a gstack skill file, anything under .local/share/gstack or a gstack-* command whose result was not an error. The arm's result is untested, never \"no effect\": its arm.json has status stopped and an untested block with the sessions, the paths (HOME as ~, the unit as <unit>) and the arm's paid spend, so the scorer and the secondaries give it no reading. review-units logs every touch the audit saw and exits 4 once every arm is written.",
+    fix: "Read the run's read audit lines and the named session's host/transcript.ndjson to see how the arm reached the path, close that path in the arm's image or the unit tree, and start a new run under a named repair and a separately approved item. Never rerun the arm inside the same run to change a verdict.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
   },
 } as const satisfies Record<string, CodeInfo>;
 

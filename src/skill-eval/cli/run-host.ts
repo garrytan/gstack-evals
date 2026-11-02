@@ -513,8 +513,13 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
   return images;
 }
 
-/** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
-export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean }): HostRig {
+/**
+ * The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code
+ * when a step fails, after undoing the steps before it, the installs the run built included. preflight, when set, runs
+ * once the arm images are built (keyed arm, arm@model and arm#calibration) and before the lease opens, so a refusal there
+ * spends nothing and leaves the item unopened.
+ */
+export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; preflight?: (images: ReadonlyMap<string, string>, at: { docker: string; digest: string; home: string }) => void }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
@@ -529,6 +534,7 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
     if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
     const cells = armCells(installs, call.models, call.policy, join(state, "cells"), { voice: o.voice ?? true });
     const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
+    o.preflight?.(images, { docker: bin, digest: pin.pin.digest, home });
     const local = openLocalLedger(call.ledger);
     const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
     undo.unshift(() => settleLease(call.record.path, local, lease.lease_id));

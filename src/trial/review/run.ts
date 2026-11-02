@@ -28,30 +28,41 @@
 //   background deadline records in session_end whether a findings block existed (findings_block), which is never scored.
 //   arm.json records the system prompt in arm_provenance, and an overridden prefix
 //   with its sha256 in told, on either kind of unit.
-// - A run with capStops (the CLI's --cap-stops, code units only) records its code sessions' cap stops as their own
+// - A run with capStops (the CLI's --cap-stops; always on for plan units) records its code sessions' cap stops as their own
 //   terminations (the driver's capStops): turn_cap and allowance_stop. A capped
 //   session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts against its own arm: capped.ts reads
 //   its findings from the latest main-agent text block in its transcript.ndjson whose last json block parses as findings
 //   (never an AskUserQuestion's question), and with no such block, or no readable transcript, it is missing, scored as
 //   finding nothing. The session key's verifier then also covers capped.ts and readers.ts (its transcript reader), and
 //   arm.json counts cap stops in cap_stops with the units they hit and capped.ts's sha256; diagnostics names each capped
-//   session with its settled metered spend. Only then does the allowance join the session key. A run without capStops,
-//   whatever its turn cap or allowance, and every plan unit, keeps today's records; every code run's verifier covers
-//   findings.ts, capped.ts, readers.ts and held.ts.
+//   session with its settled metered spend. Only then does the allowance join a code session's key. A code run without
+//   capStops, whatever its turn cap or allowance, keeps today's records; every code run's verifier covers findings.ts,
+//   capped.ts, readers.ts and held.ts.
 // - A run with a reader map (readers.ts) records each code session's readers from its transcript in the journal and
 //   writes them to cost.tsv as reader:<name> rows; arm.json names the map's sha256 in reader_map_sha256.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
-//   that keeps a voice, since a plan arm runs no second model.
-// - A plan session scores by planScore. After the model produced output (the record's model_output: non-empty text or
-//   thinking, a thinking block with a non-empty signature, or a tool call; never its turns), a
-//   malformed or missing block, a timeout, the arm's CLI failing, or a session that completed with no text turn is a miss
-//   with a diagnostic note. arm.json counts as completed_without_text every miss whose session completed with no text from
-//   the main agent (no turn, or only AskUserQuestion questions, which parse as missing), since the parser reads text
-//   turns only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the arm, as
-//   is an infra failure (E_INFRA_FAILURE) or any other incomplete session at any point, so the arm gets no verdict.
-//   progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as failed, a gap as
-//   missing. A record with no model_output flag is a gap whose note says so; plan units run on host claude only, whose
-//   driver records the flag.
+//   that keeps a voice, since a plan arm runs no second model. Every plan session runs two turns (the driver's followUp
+//   with PLAN_TURN2) with cap stops on, the lens's rec user, and, in the none and lens arms, the clean-room preflight
+//   (clean-room.ts). Its key carries PLAN_TURN2_SHA256, the allowance, and a verifier over plan.ts, capped.ts, readers.ts
+//   and audit.ts.
+// - A plan session scores by planScore (panel v3 plan, section 5). A completed session scores the last plan-findings block
+//   in its turns. A stop, scored like a turn cap (planStop: a turn cap or allowance stop in either turn, or a timeout after
+//   model output), scores the findings capped.ts reads from its transcript, else a miss; arm.json counts stops by kind and
+//   turn in stops, with a diagnostic per stopped session and its settled spend. After the model produced output (the
+//   record's model_output: non-empty text or thinking, a thinking block with a non-empty signature, or a tool call; never
+//   its turns), a malformed or missing block, the arm's CLI failing, or a session that completed with no text turn is a
+//   miss with a diagnostic note. arm.json counts as completed_without_text every miss whose session completed with no text
+//   from the main agent (no turn, or only AskUserQuestion questions, which parse as missing), since the parser reads text
+//   turns only. Before any model output, a timeout, a CLI failure or a completed session is a coverage gap that stops the
+//   arm, as is a missing session at any point (E_INFRA_FAILURE, UPSTREAM, an E_ALLOWANCE refusal, E_BACKGROUND_DEADLINE,
+//   E_CLEAN_ROOM, ...) or rejected credentials, so the arm gets no verdict. A clean-room refusal is not journaled, so
+//   --resume reruns it. progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as
+//   failed, a gap as missing. A record with no model_output flag is a gap whose note says so; plan units run on host
+//   claude only, whose driver records the flag. <out>/terminations.tsv lists every plan session's termination, turn, model
+//   output and score.
+// - Every plan session's transcript goes through the read audit (audit.ts), and each touch is logged. An arm with a
+//   contaminated session is untested: its arm.json is stopped with an untested block (the sessions, the paths and the
+//   arm's paid spend), and the run stops with E_ARM_CONTAMINATED, so review-units exits 4.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
@@ -73,11 +84,13 @@ import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatile
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
-import { CAPPED_PARSER_SHA256, mainAgentTexts } from "./capped.ts";
+import { AUDIT_SHA256, auditTranscript, touchLine, type Touch } from "./audit.ts";
+import { CAPPED_PARSER_SHA256, cappedPlanParse, mainAgentTexts } from "./capped.ts";
+import { CLEAN_ROOM_COMMAND } from "./clean-room.ts";
 import { PARSER_SHA256, renderFindings, type ParseOutcome } from "./findings.ts";
 import { codeParse, hasFindingsBlock, HELD_PARSER_SHA256, mainAgentTurns, type ScoredTurn } from "./held.ts";
-import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
-import { planNoPrefixProblem, planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
+import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, PLAN_TURN2, PLAN_TURN2_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeformFor, renderPlanFindings, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
+import { planNoPrefixProblem, planPrefixProblem, planToldLine } from "./plan-told.ts";
 import { READERS_SHA256, readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
 import type { UnitRef } from "./unit.ts";
@@ -180,6 +193,8 @@ export interface ReviewEntry {
   readers?: ReaderUsage[];
   /** Code units: the turn the session was scored from (held.ts). */
   scored_turn?: ScoredTurn;
+  /** Plan units: the read audit's touches (audit.ts). */
+  audit?: Touch[];
 }
 
 export interface ReviewRun {
@@ -210,17 +225,23 @@ export const armId = (arm: string, model: string): string => arm + "-" + modelTa
 /** A unit id as a findings file name: / written __. */
 export const unitFile = (unitId: string): string => unitId.replaceAll("/", "__");
 
+/** The stop a plan session is scored on like a turn cap, or null: a turn cap or allowance stop in either turn, or a timeout after model output. */
+export function planStop(record: Pick<TrialRecord, "termination" | "model_output">): "turn_cap" | "allowance_stop" | "timeout" | null {
+  const kind = record.termination.kind;
+  return kind === "turn_cap" || kind === "allowance_stop" || (kind === "timeout" && record.model_output === true) ? kind : null;
+}
+
 /**
  * How a plan session scores: findings; a miss, scored as finding nothing with a diagnostic note (a malformed or missing
- * block, or, after model output, a timeout, the arm's CLI failing or a session that completed with no text turn); or a
- * coverage gap that stops the arm (a timeout, a CLI failure or a completed session before any model output, an infra
- * failure, or any other incomplete session).
+ * block, a stop with no block before it, or, after model output, the arm's CLI failing or a session that completed with
+ * no text turn); or a coverage gap that stops the arm (a timeout, a CLI failure or a completed session before any model
+ * output, or any missing, rejected or other incomplete session). A stop's parse is capped.ts's, findings or missing.
  */
 export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" | "miss" | "gap" {
   if (e.parse.kind === "findings") return "findings";
   if (e.parse.kind !== "incomplete") return "miss";
   const kind = e.record.termination.kind;
-  return e.record.model_output === true && (kind === "timeout" || kind === "arm_failure" || kind === "completed") ? "miss" : "gap";
+  return e.record.model_output === true && (kind === "arm_failure" || kind === "completed") ? "miss" : "gap";
 }
 
 const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
@@ -283,7 +304,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
+  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv"), join(o.out, "terminations.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
@@ -303,7 +324,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (micros === null) throw new Error("E_MODEL_POLICY: " + model + " has no price row, so its session allowance is unknown");
     return micros;
   };
-  const capStops = !plan && o.capStops === true;
+  const capStops = plan !== null || o.capStops === true;
   const readers = !plan && o.host === "claude" ? (o.readers ?? null) : null;
   const prefs = new Map<string, string | null>();
   if (plan) for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
@@ -329,10 +350,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (text === null) throw new Error("E_USAGE: arm " + arm.name + "'s gstack tree has no question registry (scripts/question-registry.ts), so its questions cannot be set to auto-decide");
     prefs.set(arm.name, text);
   }
-  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planToldPrompt(arm.told as PlanArm, plan.lens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
+  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planToldLine(arm.told as PlanArm, plan.lens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? PLAN_TURN2_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(plan ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + AUDIT_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -377,7 +398,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
     const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(capStops ? { capStops } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeformFor(plan.lens), followUp: { text: PLAN_TURN2.text, maxTurns: PLAN_TURN2.maxTurns, timeoutMs: PLAN_TURN2.timeoutS * 1000 }, ...(arm.told === "none" || arm.told === "lens" ? { preflight: { command: CLEAN_ROOM_COMMAND, code: "E_CLEAN_ROOM" as const } } : {}) } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(capStops ? { capStops } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
@@ -391,22 +412,25 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const waited = kind === "completed" && (trial.record.session_end?.waited_ms ?? 0) > 0;
     let transcript = "";
     try {
-      transcript = readers || (!plan && (capStopped || waited || deadline)) ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
+      transcript = readers || plan || capStopped || waited || deadline ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
     } catch {
       transcript = "";
+      if (plan) log(cellName(cell) + ": host/transcript.ndjson is unreadable, so a stop scores as finding nothing and the read audit sees no call");
       if (!plan && (waited || deadline)) log(cellName(cell) + ": host/transcript.ndjson is unreadable, so the session is scored on its final turn" + (deadline ? " and its findings_block is false" : ""));
     }
-    const texts = plan ? [] : mainAgentTexts(transcript);
+    const texts = mainAgentTexts(transcript);
     if (deadline && trial.record.session_end) trial.record.session_end = { ...trial.record.session_end, findings_block: plan ? parsePlanSession({ termination: { kind: "completed" }, turns: trial.record.turns }).kind === "findings" : hasFindingsBlock(texts) };
     const code = plan ? null : codeParse(trial.record, texts, mainAgentTurns(transcript));
-    const parse = code ? code.parse : parsePlanSession(trial.record);
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
+    const parse = code ? code.parse : planStop(trial.record) ? cappedPlanParse(texts) : parsePlanSession(trial.record);
+    const audit = plan ? auditTranscript(transcript, { arm: arm.told as PlanArm, home, work: "/work/" + unit.task }) : [];
+    for (const t of audit) log(cellName(cell) + ": read audit: " + touchLine(t));
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns), audit } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
     progress = recordSession(progress, cellName(cell), plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
     writeProgress(o.out, progress);
-    if (kind !== "cap_stop") appendFileSync(journal, JSON.stringify(entry) + "\n");
+    if (kind !== "cap_stop" && !(ended.kind === "missing" && ended.code === "E_CLEAN_ROOM")) appendFileSync(journal, JSON.stringify(entry) + "\n");
     return entry;
   };
 
@@ -429,6 +453,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
 
   const parseRows = [["arm_id", "arm", "model", "unit", "pass", "outcome", "findings", "reason"].join("\t")];
   const modeRows = [["arm_id", "arm", "model", "unit", "pass", "mode"].join("\t")];
+  const terminationRows = [["arm_id", "arm", "model", "unit", "pass", "termination", "turn", "model_output", "score", "findings"].join("\t")];
   const label = (p: ParseOutcome | PlanParse) => (p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind);
   const refusals: CellRefusals[] = [];
   const armDirs: string[] = [];
@@ -444,7 +469,9 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const modes: Record<string, number> = {};
     let withoutText = 0;
     let held = 0;
-    const capped = { turn_cap: 0, allowance_stop: 0 };
+    const capped = { turn_cap: 0, allowance_stop: 0, timeout: 0, turn_2: 0 };
+    const untested: { session: string; paths: string[] }[] = [];
+    let paid = 0;
     const cappedUnits = new Set<string>();
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
@@ -462,18 +489,25 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
         if (e.scored_turn?.rule === "held" && e.parse.kind === "findings") held++;
-        if (ended === "turn_cap" || ended === "allowance_stop") {
-          capped[ended]++;
+        const stop = plan ? planStop(e.record) : ended === "turn_cap" || ended === "allowance_stop" ? ended : null;
+        const turn = (e.record as { follow_up?: { sent: boolean } }).follow_up?.sent ? 2 : 1;
+        paid += e.record.cost_micros ?? 0;
+        if (stop) {
+          capped[stop]++;
+          if (plan && turn === 2) capped.turn_2++;
           cappedUnits.add(unit.unit.id);
-          diagnostics.push(note + "; ended " + ended + ", settled spend " + (e.record.cost_micros === null ? "unavailable" : "$" + (e.record.cost_micros / 1_000_000).toFixed(6)) + ", " + (e.parse.kind === "findings" ? "scored on the findings it wrote before the stop" : "scored as finding nothing"));
+          diagnostics.push(note + "; ended " + stop + (plan ? " in turn " + turn : "") + ", settled spend " + (e.record.cost_micros === null ? "unavailable" : "$" + (e.record.cost_micros / 1_000_000).toFixed(6)) + ", " + (e.parse.kind === "findings" ? "scored on the findings it wrote before the stop" : "scored as finding nothing"));
         }
         if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
-        if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
+        if (score === "miss" && !stop) diagnostics.push(note + "; scored as finding nothing");
         else if (score === "gap") gaps.push(note + (!plan || (ended !== "arm_failure" && ended !== "timeout" && ended !== "completed") ? "" : e.record.model_output !== false ? " with no model_output recorded" : ended === "completed" ? " and no model output" : " before any model output"));
         parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (plan) {
           modes[e.ceo_mode ?? "unstated"] = (modes[e.ceo_mode ?? "unstated"] ?? 0) + 1;
           modeRows.push([id, arm.name, model, unit.unit.id, String(pass), e.ceo_mode ?? "unstated"].join("\t"));
+          terminationRows.push([id, arm.name, model, unit.unit.id, String(pass), e.record.termination.kind + ("code" in e.record.termination ? ":" + e.record.termination.code : ""), String(turn), e.record.model_output === undefined ? "" : String(e.record.model_output), score!, e.parse.kind === "findings" ? String(e.parse.findings.length) : ""].join("\t"));
+          const paths = [...new Set((e.audit ?? []).filter((t) => t.contaminated).map((t) => t.target))];
+          if (paths.length) untested.push({ session: unit.unit.id + " pass " + pass, paths });
         }
         if (e.parse.kind === "findings") for (const f of plan ? renderPlanFindings((e.parse as Extract<PlanParse, { kind: "findings" }>).findings, pass) : renderFindings((e.parse as Extract<ParseOutcome, { kind: "findings" }>).findings, pass, "/work/" + unit.task)) lines.push(JSON.stringify(f));
         sessions.push({ pr: unit.unit.id, pass, wall_ms: e.record.wall_ms, cost: e.cost, ...(readers ? { readers: e.readers ?? [] } : {}) });
@@ -492,16 +526,17 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const source = provenance && typeof provenance.repo === "string" && typeof provenance.sha === "string" ? { repo: provenance.repo, sha: provenance.sha } : null;
     const armJson = {
       contract_version: 1, id, label: arm.name + " on " + model, suite: o.suite.id, ...(o.suite.sha256 ? { suite_sha256: o.suite.sha256 } : {}), date: o.date, passes: o.passes, provenance: "live",
-      status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(diagnostics.length ? { diagnostics } : {}), ...(source ? { source } : {}),
+      status: counts.not_run || stops.length || gaps.length || untested.length ? "stopped" : "complete", ...(untested.length ? { untested: { code: "E_ARM_CONTAMINATED", reason: "the read audit found a contaminated read in " + untested.length + " session" + (untested.length === 1 ? "" : "s"), sessions: untested, audit_sha256: AUDIT_SHA256, paid_usd: paid / 1_000_000 } } : {}), ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(diagnostics.length ? { diagnostics } : {}), ...(source ? { source } : {}),
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
-      told: plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
+      told: plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), turn2_sha256: PLAN_TURN2_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
-      ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
+      ...(plan ? { stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : capStops ? { cap_stops: { turn_cap: capped.turn_cap, allowance_stop: capped.allowance_stop, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);
+    if (untested.length) armStops.push({ code: "E_ARM_CONTAMINATED", message: "arm " + id + " is untested: the read audit found " + untested.map((u) => u.session + " read " + u.paths.join(", ")).join("; ") + "; the arm's paid spend is $" + (paid / 1_000_000).toFixed(6) });
     if (gaps.length) armStops.push({ code: "E_COVERAGE_GAP", message: "arm " + id + " stopped with " + gaps.length + " coverage gap" + (gaps.length === 1 ? "" : "s") + ", so it gets no verdict: " + gaps.join("; ") });
   }
   for (const s of armStops) {
@@ -510,8 +545,9 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   }
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
   if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
+  if (plan) writeFileSync(join(o.out, "terminations.tsv"), terminationRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
-  writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
+  writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: plan ? PLAN_TURN2_SHA256 : TOLD_SHA256, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
 
   const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
   return result(armDirs, copied);

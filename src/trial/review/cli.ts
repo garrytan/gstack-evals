@@ -21,8 +21,9 @@ import { volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
 import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, type PreparedUnit, type ReviewArm } from "./run.ts";
-import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_ASK, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
+import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, PLAN_TURN2_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
 import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine } from "./plan-told.ts";
+import { cleanRoomPreflight } from "./clean-room.ts";
 import { loadReaderMap } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
@@ -43,22 +44,26 @@ export const REVIEW_UNITS_HELP = [
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
   "    [--max-turns <n>] [--session-kind unattended] [--cap-stops] [--reader-map <file>] [--background-wait <s>]",
   "",
-  "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
-  "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
-  "block, the rec user, no second model, and no install or test step. --arm-models limits an arm to some of --models.",
+  "--plan <lens> (ceo, eng, devex or design) runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>,",
+  "gstack-<suffix>=<repo>@<sha> (a second gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>. Each session",
+  "sends the arm's turn 1 line, then the frozen turn 2 that asks for the findings block, with the rec user, cap stops on, no",
+  "second model, and no install or test step. The none and lens arms run a clean-room check in their images before the lease",
+  "and in each session before the CLI starts (E_CLEAN_ROOM), and every session's reads are audited; a contaminated arm is",
+  "untested (E_ARM_CONTAMINATED, exit 4). --arm-models limits an arm to some of --models.",
   "--sealed-root names the directory outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
   "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command) in place",
-  "of the frozen one. With --plan only a gstack arm takes one: the file's line opens with the lens's command, and the arm's",
-  "line becomes that line, a space and \"" + PLAN_ASK + "\". --render serves a gstack stack arm from",
+  "of the frozen one. With --plan only a gstack arm takes one: the file's line opens with the lens's command and plan.md, adds",
+  "words after them, and is sent verbatim as the arm's turn 1. --render serves a gstack stack arm from",
   "its own gstack-modules render of that session kind. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
   "--session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's agent env, none included; left out, no arm",
   "gets one.",
   "",
   "--allowance caps each session's spend in dollars (default: 1.6M input and 32k output tokens at the model's price).",
-  "--cap-stops, code units only, records a code session that the turn cap or the allowance ends as turn_cap or",
-  "allowance_stop, scored on the findings it wrote before the stop; left out, both caps keep today's records.",
+  "--cap-stops records a code session that the turn cap or the allowance ends as turn_cap or allowance_stop, scored on the",
+  "findings it wrote before the stop; left out, both caps keep today's records. Plan runs always record cap stops, so",
+  "--cap-stops changes nothing with --plan.",
   "--reader-map writes each code session's readers (the subagents it",
   "launched, named through a map pinned to one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json)",
   "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit. run.json records the allowance and the map",
@@ -233,7 +238,6 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (readerMap && "problem" in readerMap) throw new Usage("--reader-map " + mapFile + ": " + readerMap.problem);
   if (readerMap && lens) throw new Usage("--reader-map runs on code units, not with --plan");
   const capStops = flags.has("--cap-stops");
-  if (capStops && lens) throw new Usage("--cap-stops runs on code units, not with --plan");
   if (readerMap && "map" in readerMap) for (const a of specs) {
     if (a.kind !== "stack" || toldArmOf(a) !== "gstack") continue;
     const pin = readerMap.map.gstack;
@@ -319,7 +323,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (dry) {
     io.out("review-units dry run: nothing is built, written or spent");
     io.out("suite " + suite.id + " (sha256 " + loaded.sha256 + ")");
-    io.out(lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
+    io.out(lens ? "plan lens " + lens + "; turn 2 sha256 " + PLAN_TURN2_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
     io.out("units (" + units.length + "):");
     for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + (lens ? "  plan unit: no install or test" : "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test")));
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
@@ -383,7 +387,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
   const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
-  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
+  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false, preflight: (images: ReadonlyMap<string, string>, at: { docker: string; digest: string; home: string }) => cleanRoomPreflight({ ...at, images, arms: arms.filter((a) => a.told === "none" || a.told === "lens").map((a) => a.name), units: prepared.map((u) => ({ task: u.task, tree: u.tree })) }) } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
     run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
@@ -394,5 +398,5 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   for (const s of run.stale) io.err(s.code + " " + s.message + "\n  fix: " + s.fix);
   for (const [id, counts] of Object.entries(run.outcomes)) io.out(id + ": " + Object.entries(counts).map(([k, v]) => k + " " + v).join(", "));
   io.out("spent " + usd(run.spent) + "; arms under " + join(out, "arms"));
-  return run.stops.length ? 2 : 0;
+  return run.stops.some((s) => s.code === "E_ARM_CONTAMINATED") ? 4 : run.stops.length ? 2 : 0;
 }

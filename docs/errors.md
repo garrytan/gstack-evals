@@ -6,7 +6,7 @@ Every gstack-evals error line on stderr starts with its code, and every code has
 
 Each entry gives the meaning, the fix, and these facts:
 
-- **Exit**: 1 means the edit lost something, 2 means no verdict, 3 means calibration failed. Warnings attach to any verdict. A run with several models exits 3, then 1, then 2, then 0.
+- **Exit**: 1 means the edit lost something, 2 means no verdict, 3 means calibration failed, 4 means an arm is untested. Warnings attach to any verdict. A run with several models exits 3, then 1, then 2, then 0.
 - **Side effects**: what has already happened when the code prints: spend, files, reservations.
 - **Retry safe**: yes means repeating the command after the fix (with `--resume <out>` when resumable) cannot charge a call twice, overwrite a recorded result or change a verdict already reached.
 - **Resumable**: yes means `--resume <out>` continues the run. No means start a new run; a terminal stop prints "do not --resume" and `--resume` refuses it with E_NOT_RESUMABLE.
@@ -134,6 +134,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_REAL_SCORE_INPUT](#e_real_score_input) | 2 | U20 |
 | [E_REAL_SCORE_GRADE](#e_real_score_grade) | 2 | U20 |
 | [E_REAL_SCORE_CONFIG](#e_real_score_config) | 2 | U20 |
+| [E_CLEAN_ROOM](#e_clean_room) | 2 | U10 |
+| [E_ARM_CONTAMINATED](#e_arm_contaminated) | 4 | U10 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -931,6 +933,14 @@ Fix: Fix the config to match the preregistration (lanes/real-outcome/score/READM
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_CLEAN_ROOM
+
+A none or lens plan arm could see a Capy drive or gstack (src/trial/review/clean-room.ts): a .capy, .local/share/gstack or .claude/skills path in its home, a home .claude/CLAUDE.md or AGENTS.md that names gstack, a /home/*/.capy/drive or /root/.capy/drive, a unit's .claude/skills, or an AGENTS.md or CLAUDE.md in a unit tree that names gstack. review-units checks each none and lens arm image, with each unit tree mounted read-only, before the lease opens, and refuses the run. The driver checks again in each none and lens session before the CLI starts; that cell is then a coverage gap that stops its arm (E_COVERAGE_GAP). Each line names a path the check found; a check that cannot run refuses the same way.
+
+Fix: Remove the named paths from the arm image or the unit tree, then rerun the same command; a refusal before the lease left the item unopened. A session's refusal is not journaled, so --resume &lt;out> reruns that cell after the fix and reuses the scored sessions.
+
+Exit 2. Side effects: Before the lease: none, refused before any spend. In a session: no model call in that session; completed cells and their spend are kept. Retry safe: yes. Resumable: yes. Owner: U10.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -980,6 +990,16 @@ An egress probe to a non-model host succeeded, so the trial network is not locke
 Fix: Fix the trial network so its only exit is the proxy, and run no trials until this passes.
 
 Exit 3. Side effects: Calibration sessions are charged; no task cell ran. Retry safe: yes. Resumable: no. Owner: U10.
+
+## Exit 4: an arm is untested (INCOMPLETE)
+
+### E_ARM_CONTAMINATED
+
+The read audit (src/trial/review/audit.ts) found a contaminated read in a plan arm's session: in any arm, a touch under a home's .capy whose result was not an error; in a none or lens arm, also a gstack skill file, anything under .local/share/gstack or a gstack-* command whose result was not an error. The arm's result is untested, never "no effect": its arm.json has status stopped and an untested block with the sessions, the paths (HOME as ~, the unit as &lt;unit>) and the arm's paid spend, so the scorer and the secondaries give it no reading. review-units logs every touch the audit saw and exits 4 once every arm is written.
+
+Fix: Read the run's read audit lines and the named session's host/transcript.ndjson to see how the arm reached the path, close that path in the arm's image or the unit tree, and start a new run under a named repair and a separately approved item. Never rerun the arm inside the same run to change a verdict.
+
+Exit 4. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
 
 ## Warnings: attach to any verdict, never change the exit code
 

@@ -10,6 +10,7 @@ const SECTIONS: { exit: CodeInfo["exit"]; title: string }[] = [
   { exit: 1, title: "Exit 1: the edit lost something (FAIL)" },
   { exit: 2, title: "Exit 2: no verdict (INCOMPLETE)" },
   { exit: 3, title: "Exit 3: calibration failed (INCOMPLETE)" },
+  { exit: 4, title: "Exit 4: an arm is untested (INCOMPLETE)" },
   { exit: null, title: "Warnings: attach to any verdict, never change the exit code" },
 ];
 
@@ -38,7 +39,7 @@ export function renderErrorsDoc(): string {
     "",
     "Each entry gives the meaning, the fix, and these facts:",
     "",
-    "- **Exit**: 1 means the edit lost something, 2 means no verdict, 3 means calibration failed. Warnings attach to any verdict. A run with several models exits 3, then 1, then 2, then 0.",
+    "- **Exit**: 1 means the edit lost something, 2 means no verdict, 3 means calibration failed, 4 means an arm is untested. Warnings attach to any verdict. A run with several models exits 3, then 1, then 2, then 0.",
     "- **Side effects**: what has already happened when the code prints: spend, files, reservations.",
     "- **Retry safe**: yes means repeating the command after the fix (with `--resume <out>` when resumable) cannot charge a call twice, overwrite a recorded result or change a verdict already reached.",
     "- **Resumable**: yes means `--resume <out>` continues the run. No means start a new run; a terminal stop prints \"do not --resume\" and `--resume` refuses it with E_NOT_RESUMABLE.",
