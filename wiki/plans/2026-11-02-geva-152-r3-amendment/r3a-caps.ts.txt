@@ -1,0 +1,86 @@
+// R3a's caps against its own rules (R3 amendment, section 7). Keyless: no session, model call or VM. It replays R3a's
+// planned order on the build pin's real Ledger (quick/laneb/runner/ledger.ts) at the real caps, $150 for r3a-screen and
+// $140 for r3a-sol, with every rule that can refuse a start: the proxy's batch cap per part (proxy.ts openSession: the
+// part's committed spend plus the new session's allowance must fit the batch cap screen.ts passes, which is the item's
+// cap), the ledger's reserve per session at its $4 allowance (Ledger.reserve: settled plus open reserves plus the new
+// reserve must fit the item's cap), and each VM block reserved on the same item (launch.sh: $0.60 an hour in 4-hour
+// blocks, $2.40 a block). Harbor runs 8 trials at a time (screen.ts's CONCURRENT default), so session i opens when
+// session i-8 has settled. A part's VM blocks are reserved when the part starts and settle when it ends, which commits
+// them earlier than launch.sh does, so a pass here is conservative. Told trials cost 1.9 times a none trial (#112).
+// Usage: B=<gstack-evals checkout at the build pin> bun r3a-caps.ts <empty work dir>
+import { mkdirSync, writeFileSync } from "node:fs";
+const { Ledger, readRows, totals, toMicros, fromMicros } = await import(process.env.B + "/quick/laneb/runner/ledger.ts");
+const work = process.argv[2]!;
+mkdirSync(work, { recursive: true });
+const ALLOW = 4, K = 8, BLOCK = 0.6 * 4, TOLD = 1.9;
+type Part = { name: string; n: number; cost: number; blocks: number };
+const usd = (m: number) => "$" + fromMicros(m).toFixed(2);
+let seq = 0;
+
+function replay(item: string, cap: number, parts: Part[]) {
+  const path = `${work}/${item}-${++seq}.jsonl`;
+  writeFileSync(path, JSON.stringify({ ts: new Date(0).toISOString(), item, kind: "approval", id: "approval", usd_micros: toMicros(cap), words: "R3 amendment dry run: the real cap, no spend", by: "GEVA-152" }) + "\n");
+  const L = new Ledger(path, item);
+  let peak = 0, peakAt = "", ran = 0;
+  const planned = parts.reduce((a, p) => a + p.n, 0);
+  for (const p of parts) {
+    for (let b = 1; b <= p.blocks; b++) {
+      const r = L.reserve(`${p.name}-vm-${b}`, toMicros(BLOCK));
+      if (!r.ok) return { ran, planned, stop: `${p.name}'s VM block ${b} refused (launch.sh exit 9)`, path };
+    }
+    const open: { id: string; cost: number }[] = [];
+    let closedSpent = 0;
+    for (let i = 0; i < p.n; i++) {
+      if (open.length === K) { const s = open.shift()!; L.settle(s.id, toMicros(s.cost)); closedSpent += toMicros(s.cost); }
+      const proxyCommitted = closedSpent + open.length * toMicros(ALLOW);
+      if (proxyCommitted + toMicros(ALLOW) > toMicros(cap)) return { ran, planned, stop: `proxy batch cap at ${p.name} trial ${i + 1} of ${p.n}`, path };
+      const t = totals(readRows(path));
+      const id = `${p.name}-${i + 1}`;
+      const r = L.reserve(id, toMicros(ALLOW));
+      if (!r.ok) return { ran, planned, stop: `ledger refused ${p.name} trial ${i + 1} of ${p.n}: settled ${usd(t.settledMicros)} + open ${usd(t.openReservedMicros)} + $4 > $${cap}`, path };
+      const committed = t.settledMicros + t.openReservedMicros + toMicros(ALLOW);
+      if (committed > peak) { peak = committed; peakAt = `${p.name} trial ${i + 1}`; }
+      open.push({ id, cost: p.cost });
+      ran++;
+    }
+    for (const s of open) L.settle(s.id, toMicros(s.cost));
+    for (let b = 1; b <= p.blocks; b++) L.settle(`${p.name}-vm-${b}`, toMicros(BLOCK));
+  }
+  const t = totals(readRows(path));
+  return { ran, planned, stop: null as string | null, peak, peakAt, settled: t.settledMicros, path };
+}
+
+function partsFor(model: "opus" | "sol", c: number, vm: "plan" | "wide", routeSessions = 2): Part[] {
+  const [sb, pb] = vm === "plan" ? [2, 1] : model === "opus" ? [9, 4] : [8, 4];
+  const route: Part[] = model === "sol" ? [{ name: "route", n: routeSessions, cost: c, blocks: vm === "plan" ? 0 : 1 }] : [];
+  return [...route, { name: "screen", n: 93, cost: c, blocks: sb }, { name: "pilot", n: 10, cost: c * TOLD, blocks: pb }];
+}
+
+function line(label: string, item: string, cap: number, parts: Part[]) {
+  const r = replay(item, cap, parts);
+  const vm = parts.reduce((a, p) => a + p.blocks, 0) * BLOCK;
+  const head = `${label}: ${item} at $${cap}, VM blocks $${vm.toFixed(2)}`;
+  console.log(r.stop ? `${head}: STOP after ${r.ran} of ${r.planned} trials (${r.stop})` : `${head}: all ${r.ran} of ${r.planned} trials ran; peak commitment ${usd(r.peak!)} at ${r.peakAt}; settled ${usd(r.settled!)}`);
+}
+
+function breakEven(model: "opus" | "sol", item: string, cap: number, vm: "plan" | "wide", routeSessions = 2) {
+  let lo = 0, hi = ALLOW;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; replay(item, cap, partsFor(model, m, vm, routeSessions)).stop ? (hi = m) : (lo = m); }
+  return lo;
+}
+
+console.log("rules: 8 trials at a time, $4 reserved per session (Opus and Sol), VM at $0.60 an hour in $2.40 blocks, told = 1.9 x none");
+console.log("VM plan: 2 blocks on the screen, 1 on the pilot (12 VM hours, $7.20, per model). VM wide: Opus 13 blocks ($31.20, at least #112's $30); Sol 13 with one for the route check");
+for (const [label, c] of [["Opus planning $0.82", 0.82]] as const) {
+  line(label + ", VM plan", "r3a-screen", 150, partsFor("opus", c, "plan"));
+  line(label + ", VM wide", "r3a-screen", 150, partsFor("opus", c, "wide"));
+}
+line("Opus, every trial at its $4 allowance", "r3a-screen", 150, partsFor("opus", ALLOW / TOLD, "plan").map((p) => ({ ...p, cost: ALLOW })));
+for (const vm of ["plan", "wide"] as const) console.log(`Opus break-even, VM ${vm}: every planned trial runs while the mean none trial costs at most $${breakEven("opus", "r3a-screen", 150, vm).toFixed(3)} (told ${TOLD} x)`);
+for (const [label, c] of [["Sol low $0.41", 0.41], ["Sol central $0.60", 0.6], ["Sol high $0.85", 0.85]] as const) {
+  line(label + ", VM plan", "r3a-sol", 140, partsFor("sol", c, "plan"));
+  line(label + ", VM wide", "r3a-sol", 140, partsFor("sol", c, "wide"));
+}
+line("Sol high $0.85, route check retried (4 sessions), VM wide", "r3a-sol", 140, partsFor("sol", 0.85, "wide", 4));
+line("Sol, every trial at its $4 allowance", "r3a-sol", 140, partsFor("sol", ALLOW / TOLD, "plan").map((p) => ({ ...p, cost: ALLOW })));
+for (const vm of ["plan", "wide"] as const) console.log(`Sol break-even, VM ${vm}: every planned trial runs while the mean none trial costs at most $${breakEven("sol", "r3a-sol", 140, vm).toFixed(3)}; with the route check retried, $${breakEven("sol", "r3a-sol", 140, vm, 4).toFixed(3)}`);
