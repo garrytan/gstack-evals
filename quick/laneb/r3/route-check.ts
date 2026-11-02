@@ -46,8 +46,8 @@ const SECRET = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i;
 
 export type RouteSession = {
   kind: "smoke" | "told"; try: number; job: string; started_at: string; finished_at: string | null; harbor_exit: number | null;
-  trial: string | null; tool_results: number; model_responded: boolean; body_loaded: boolean | null;
-  proxy_session: Record<string, unknown> | null; proxy_cap_stop: string | null; pass: boolean; reasons: string[];
+  trial: string | null; tool_results: number; model_responded: boolean; body_loaded: boolean | null; proxy_session: Record<string, unknown> | null;
+  proxy_cap_stop: string | null; pass: boolean; reasons: string[];
 };
 export type RouteRecord = RouteVerdict & { proxy_config_sha256: string; sessions: RouteSession[]; open_route_reserves?: string[] };
 
