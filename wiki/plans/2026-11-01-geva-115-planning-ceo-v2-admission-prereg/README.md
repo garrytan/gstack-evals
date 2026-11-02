@@ -17,14 +17,14 @@ links:
   - GST-618
   - GST-837
 attachments:
-  - 66a715883610095ed208038a04b1cbc9680ec4c5ecb1c14fedaab3d6b1070bd0  admission.ts.txt
+  - a7d109ed1f437be4797d6455f3f74fd28bd0834f8a4adb21d0e24e8df9ebda8a  admission.ts.txt
   - 6a2c1d39c709f7d717bb7bb51db2dc71d33ab9f5f3ad576b37f02863a29ebab0  admit-oc.py.txt
   - e7a52848e2fb431e3f6e6867c81aad4116e1ac5b3eab78843b77406b1d88041e  admit-oc.txt
   - d26af28718a95adc7bd1b5707f68972ae9977f76697876f4d3ba3c9669ef0d6f  author-spec.md
   - dfbf30ce43665862f126113f9dff27b89edaa9280b1184c2c87f25d4f2a32014  build-v2.sh.txt
   - 939f8f59c42fd95a4f36145a4d976e3bc01dff4eb9954431ad582177d2de07d2  convert-v2.py.txt
-  - 65091069a043c874ac1c7e298667988c3f4f138ae4f0f4ca5d7cce9ffabd2883  dryrun.ts.txt
-  - 9ad7cc86a00cd328894480f3be0c75b685686087e27cafe1fffc5c0d49fbbc89  dryrun.txt
+  - 956a7aea74496ab34b0967d8ec5044a747a97da8e8e4828c368d4d2900d70b96  dryrun.ts.txt
+  - 290cf25a0f7ae8476cf8858df2e1822d0c51e1c147648e3d1f7e64f51c75965f  dryrun.txt
   - dfb6ff670256ce25813472edb905ad474638e3678af91bd50d0a91580e3912f3  echo-terms.txt
   - 3804fbed74bcad1fe296805f3cabb606df4a6658e29bc01a54290c199570c8a9  exposure.py.txt
   - d4f56ad49c82e6b8ca9a2ec05b24a641c45e9d158e11c9de65420008b66d4e43  forced-line.txt
@@ -293,6 +293,7 @@ The plan behind this post was attacked by two blind reviewers before any authori
 - The dry run found and fixed four bugs in the plan's draft scripts: admission.ts compared judgment rows by the wrong id and so would have read R = 0 (it now maps rows through the pinned suite, and its R equals `noloss secondary` exactly); a missing or duplicate judgment row now reads NO READ; exposure.py never read the mode handoff file (wrong column); and a Bash read of another skill's review-sections.md through a relative path counted as reading this one.
 - "Ran the procedure" is the longest increasing run of first appearances, as the script computes it; the plan said "first appearances in increasing order".
 - /ship's review of this post (one outside voice, GPT-6.1 Sol) found three places where the attached scripts did not do what sections 5 and 6 say, and each now does: exposure.py counted a forced session that the turn cap ended as having run the procedure; exposure.py let repeated headings into the ordered run instead of each section's first appearance; and admission.ts did not read NO READ when a treatment arm had no judgments file. dryrun.ts gained a check for each, and the final dry run was rerun under custody.
+- Capy's review of #127 found that the dry-run transcript printed judge packet file names. judge.ts names each packet after its unit number, so those lines named the admission units and, through their blocker labels, which units are in the hard stratum, though no unit text. dryrun.ts now replaces each packet file name before it prints a line and checks the transcript for that form; the check failed on the earlier transcript and passes on this one. The same review found that a FIX-METHOD with turn-cap stops did not name the cap as a cause. admission.ts now names it and prints turn-cap stops per arm on the verdict line, as section 6 says, and dryrun.ts checks both. The final dry run was rerun under custody.
 - The judge items are named, and the power row of the admission table is marked unreachable.
 - The plan pinned the scorer to GEVA-117's merge commit. On the Captain's ruling the pin is the main that also carries #126, which fixes #123's /ship Step 11 findings 1, 2 and 4 (open notes on #123), so the frozen run cannot use a no-op or missing prefix.
 
@@ -300,7 +301,7 @@ The plan behind this post was attacked by two blind reviewers before any authori
 
 [dryrun.ts](dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on the sealed panel's real suites with synthetic arms, judges and sessions; [dryrun.txt](dryrun.txt) is its transcript. It checks the pin; loads both suites with and without the sealed root; plans the frozen command (48 sessions, three arms on claude-code-preset, the forced line, the default 60 turns) and its refusals, including #126's guards (every `gstack-<suffix>` arm carries a real prefix that is not a no-op); runs blind packets, three judges, adjudication and ingest; reads R with `noloss secondary` and decides synthetic panels with admission.ts at both edges of the band; runs exposure.py on fixtures and on R1a's real pilot transcripts; and opens and settles a lease for the run item and each judge item on a temporary ledger. It ends with a leak check over every unit head and base.
 
-Results: on a synthetic panel at #119's head e8b9a6b (no forced arm), PASS 102, FAIL 0, with 7 forced-arm checks skipped; on a synthetic panel at GEVA-117's head 8fa576e, PASS 111, FAIL 0; and on the real sealed suites with R1a's real pilot transcripts (opened under custody, logged) at 8fa576e, PASS 113, FAIL 0. The attached transcript is the run at the pin, a5633c6205b735989c9fbe082092947dec9c2f19, on the real sealed suites (opened under custody, logged), and it passed: PASS 127, FAIL 0, SKIP 0. Before #126 merged, a synthetic panel at its head 6986f2a gave PASS 122, FAIL 0, SKIP 0. R1a's real transcripts reproduce #114's exposure reading (gstack-opus read the sections file in 0 of 4 sessions, gstack-fable in 2 of 4), and every R1a none-opus session falls below the 21,300 floor.
+Results: on a synthetic panel at #119's head e8b9a6b (no forced arm), PASS 102, FAIL 0, with 7 forced-arm checks skipped; on a synthetic panel at GEVA-117's head 8fa576e, PASS 111, FAIL 0; and on the real sealed suites with R1a's real pilot transcripts (opened under custody, logged) at 8fa576e, PASS 113, FAIL 0. The attached transcript is the run at the pin, a5633c6205b735989c9fbe082092947dec9c2f19, on the real sealed suites (opened under custody, logged), and it passed: PASS 129, FAIL 0, SKIP 0. Before #126 merged, a synthetic panel at its head 6986f2a gave PASS 122, FAIL 0, SKIP 0. R1a's real transcripts reproduce #114's exposure reading (gstack-opus read the sections file in 0 of 4 sessions, gstack-fable in 2 of 4), and every R1a none-opus session falls below the 21,300 floor.
 
 ## 15. Files
 

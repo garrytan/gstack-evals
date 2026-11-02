@@ -28,8 +28,9 @@ mkdirSync(OUT, { recursive: true });
 const lines: string[] = [];
 let failures = 0, passes = 0;
 const skipped: string[] = [];
-const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(MAP, "$MAP").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER").replaceAll(GDIR, "$GSTACK").replaceAll(HOME || "\0", "~");
+const scrub = (t: string) => t.replaceAll(SR, "$SEALED").replaceAll(OUT, "$OUT").replaceAll(SRC, "$SOURCE").replaceAll(MAP, "$MAP").replaceAll(POST, "$POST").replaceAll(scorer, "$SCORER").replaceAll(GDIR, "$GSTACK").replaceAll(HOME || "\0", "~").replace(new RegExp(PACKET.source, "g"), "packets/<n>.json");
 const UNIT = /panel\/plans#\d+|plans-\d+-[0-9a-f]{8}|@[0-9a-f]{12}\b|\bv2-\d+-\d+\b/;
+const PACKET = /packets\/\d+\.json/;
 const say = (t: string) => lines.push(scrub(t));
 const check = (label: string, ok: boolean) => {
   ok ? passes++ : failures++;
@@ -377,7 +378,7 @@ const outcomeOf = (pt: Pat) => (uu: any, b: any, pass: number) => {
   const f = (pt as any)[k] as number;
   return slot < f ? "F" : pt.dSlots && slot - f < pt.dSlots ? "D" : "M";
 };
-const expStub = (o: { sp?: string; procedure?: string } = {}) => ({ arms: Object.fromEntries(["none", "gstack", "gstack-forced"].map((a) => [a, { preset: 16, above_floor: a === "none" ? 16 : 0, exposed: a === "gstack" ? 3 : 16, ran: a === "gstack" ? 0 : 15 }])), system_prompt_check: o.sp ?? "PASS", procedure: o.procedure ?? "READY" });
+const expStub = (o: { sp?: string; procedure?: string; cap?: number } = {}) => ({ arms: Object.fromEntries(["none", "gstack", "gstack-forced"].map((a) => [a, { preset: 16, above_floor: a === "none" ? 16 : 0, exposed: a === "gstack" ? 3 : 16, ran: a === "gstack" ? 0 : 15, max_turn_endings: a === "gstack-forced" ? o.cap ?? 0 : 0 }])), system_prompt_check: o.sp ?? "PASS", procedure: o.procedure ?? "READY" });
 async function admission(label: string, o: { judged?: string; pat?: Pat; cells?: (arm: string, uu: any, pass: number) => string; exp?: object; extra?: string[]; edit?: (file: string) => void }) {
   const d = join(ADMDIR, label.replace(/[^a-z0-9]+/gi, "-").toLowerCase());
   mkdirSync(join(d, "out"), { recursive: true });
@@ -438,6 +439,8 @@ for (const [label, o, re] of noRead) {
 }
 let r6 = await admission("procedure from exposure: FIX-METHOD", { ...BAND, exp: expStub({ procedure: "FIX-METHOD" }) });
 check("the procedure disposition prints beside the panel's: ADMIT with FIX-METHOD", r6.panel === "ADMIT" && r6.procedure === "FIX-METHOD" && /^Panel: ADMIT .*Procedure: FIX-METHOD .*System prompt: PASS/.test(r6.line));
+r6 = await admission("procedure from exposure: FIX-METHOD with turn-cap stops", { ...BAND, exp: expStub({ procedure: "FIX-METHOD", cap: 2 }) });
+check("a FIX-METHOD with turn-cap stops names the cap as a cause, and the verdict line prints turn-cap stops per arm", r6.procedure === "FIX-METHOD" && /Procedure: FIX-METHOD \([^)]*; the turn cap ended 2 gstack-forced sessions, so the cap is a cause\)\. .*Turn-cap stops: none 0, gstack 0, gstack-forced 2\.$/.test(r6.line));
 r6 = await admission("a gap in a gstack-forced session", { ...BAND, cells: (a: string, uu: any, pass: number) => (a === "gstack-forced" && uu === adm.units[2] && pass === 1 ? "gap" : "findings") });
 check("a gap in a gstack-forced session voids only the procedure read: panel ADMIT, procedure NO READ", r6.panel === "ADMIT" && r6.procedure === "NO READ");
 const HEADLINE = [...Array(12).fill(2), ...Array(12).fill(1)].join(","), H_ONLY = Array(12).fill(2).join(","), PU_ONLY = Array(12).fill(1).join(",");
@@ -581,6 +584,7 @@ for (const d of ["admission", "headline"]) for (const f of readdirSync(join(SR, 
 }
 check("no unit head or base, or a 7+ hex prefix of one, appears in this transcript", leakedSha.length === 0);
 check("no unit reference (PR number, task id, unit id or case id) appears in this transcript", !UNIT.test(text));
+check("no packet file name (judge.ts names each packets/<n>.json after a unit number) appears in this transcript", !PACKET.test(text));
 check("no line of any unit file (" + unitLines.size + " distinct lines of 24+ characters from " + (adm.units.length + hl.units.length) + " units) appears in this transcript", unitLines.size > 0 && ![...unitLines].some((l) => text.includes(l)));
 check("no catalog cause or evidence line appears in this transcript", !catalogText.some((c) => c.length >= 24 && text.includes(c)));
 say("\n" + (failures ? failures + " FAILED" : "all checks passed") + ": PASS " + passes + ", FAIL " + failures + ", SKIP " + skipped.length);

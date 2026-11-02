@@ -112,8 +112,8 @@ const f = cells[ARMS.forced]!;
 const procedure = f.gap + f.not_run > 0 ? "NO READ" : exp.procedure;
 const ex = exp.arms;
 const line = "Panel: " + panel + " (none R = " + round(R) + ", any severity " + round(RA) + ", Power " + (pw["0.3"] === null ? "n/a" : round(pw["0.3"], 3)) + "; flags " + (flags.length ? flags.join("; ") : "none") + "). " +
-  "Procedure: " + procedure + " (gstack-forced ran it " + ex[ARMS.forced]?.ran + "/" + nUnits * passes + ", exposed " + ex[ARMS.forced]?.exposed + "/" + nUnits * passes + "; gstack exposed " + ex[ARMS.gstack]?.exposed + "/" + nUnits * passes + ", ran " + ex[ARMS.gstack]?.ran + "). " +
-  "System prompt: " + exp.system_prompt_check + " (claude-code-preset " + Object.values(ex).reduce((s: number, v: any) => s + v.preset, 0) + "/" + Object.keys(ex).length * nUnits * passes + ", none first-request floor " + ex[ARMS.none]?.above_floor + "/" + nUnits * passes + ").";
+  "Procedure: " + procedure + " (gstack-forced ran it " + ex[ARMS.forced]?.ran + "/" + nUnits * passes + ", exposed " + ex[ARMS.forced]?.exposed + "/" + nUnits * passes + "; gstack exposed " + ex[ARMS.gstack]?.exposed + "/" + nUnits * passes + ", ran " + ex[ARMS.gstack]?.ran + (procedure === "FIX-METHOD" && ex[ARMS.forced]?.max_turn_endings > 0 ? "; the turn cap ended " + ex[ARMS.forced].max_turn_endings + " gstack-forced sessions, so the cap is a cause" : "") + "). " +
+  "System prompt: " + exp.system_prompt_check + " (claude-code-preset " + Object.values(ex).reduce((s: number, v: any) => s + v.preset, 0) + "/" + Object.keys(ex).length * nUnits * passes + ", none first-request floor " + ex[ARMS.none]?.above_floor + "/" + nUnits * passes + "). Turn-cap stops: " + [ARMS.none, ARMS.gstack, ARMS.forced].map((a) => a + " " + ex[a]?.max_turn_endings).join(", ") + ".";
 const result = { panel, procedure, flags, no_read: noRead, R: round(R), any_severity: round(RA), power: pw, stratum_power: stratumPower, recall: allRec, stratum_recall: strat, dead_items: dead, items: items.length, sessions: cells, line };
 console.log(line);
 if (noRead.length) console.log("NO READ because: " + noRead.join("; "));
