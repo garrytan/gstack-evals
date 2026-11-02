@@ -1,0 +1,1 @@
+/ship Run only the pre-landing review panel and stop before any fix: dispatch the reviewers your plan selects and report their findings. Do not bump the version, edit the changelog, commit, push or open a pull request.

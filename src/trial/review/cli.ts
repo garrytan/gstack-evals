@@ -22,10 +22,10 @@ import { checkImagePin, stateRoot } from "../image.ts";
 import { PARSER_SHA256 } from "./findings.ts";
 import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, type PreparedUnit, type ReviewArm } from "./run.ts";
 import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, PLAN_TURN2_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
-import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine } from "./plan-told.ts";
+import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine, prefixControlProblem } from "./plan-told.ts";
 import { cleanRoomPreflight } from "./clean-room.ts";
 import { loadReaderMap } from "./readers.ts";
-import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
+import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
 type Env = Record<string, string | undefined>;
@@ -53,10 +53,10 @@ export const REVIEW_UNITS_HELP = [
   "--sealed-root names the directory outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
-  "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command) in place",
-  "of the frozen one. With --plan only a gstack arm takes one: the file's line opens with the lens's command and plan.md, adds",
+  "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command, or for a",
+  "gstack arm with /ship) in place of the frozen one, and the arm installs the skill that command names. With --plan only a gstack arm takes one: the file's line opens with the lens's command and plan.md, adds",
   "words after them, and is sent verbatim as the arm's turn 1. --render serves a gstack stack arm from",
-  "its own gstack-modules render of that session kind. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
+  "its own gstack-modules render of that session kind; on code units only an arm told /review takes one. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
   "--session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's agent env, none included; left out, no arm",
   "gets one.",
   "",
@@ -66,7 +66,7 @@ export const REVIEW_UNITS_HELP = [
   "--cap-stops changes nothing with --plan.",
   "--reader-map writes each code session's readers (the subagents it",
   "launched, named through a map pinned to one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json)",
-  "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit. run.json records the allowance and the map",
+  "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit and be told /review. run.json records the allowance and the map",
   "when they are set.",
   "",
   "--background-wait bounds how long, in all, a session may sit idle after a turn ends with background work it started still",
@@ -228,9 +228,13 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     const prefix = prefixes.get(a.name);
     if (prefix !== undefined) {
       if (told === "none") throw new Usage("arm " + a.name + " runs no told command, so it takes no --told-prefix");
+      const control = prefixControlProblem(prefix);
+      if (control) throw new Usage("--told-prefix " + a.name + ": " + control);
       if (!/^\/\S+( [^\n]*)?$/.test(prefix)) throw new Usage("--told-prefix " + a.name + ": the prefix must be one line that opens with the arm's command, such as " + JSON.stringify(TOLD_PREFIX[told]));
-      if (prefix.split(" ")[0] !== TOLD_PREFIX[told].split(" ")[0]) throw new Usage("--told-prefix " + a.name + " opens with " + prefix.split(" ")[0] + ", but the arm's told command opens with " + TOLD_PREFIX[told].split(" ")[0]);
+      if (!TOLD_COMMANDS[told].includes(prefix.split(" ")[0]!)) throw new Usage("--told-prefix " + a.name + " opens with " + prefix.split(" ")[0] + ", but the arm's told command opens with " + TOLD_COMMANDS[told].join(" or "));
     }
+    const command = (prefix ?? TOLD_PREFIX[told]).split(" ")[0];
+    if (renders.has(a.name) && command !== "/review") throw new Usage("--render names arm " + a.name + ", whose told prefix opens with " + command + "; the install checks a render's start line only in the review and investigate skills, so --render takes only an arm told /review");
     return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
   const mapFile = one("--reader-map");
@@ -240,6 +244,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const capStops = flags.has("--cap-stops");
   if (readerMap && "map" in readerMap) for (const a of specs) {
     if (a.kind !== "stack" || toldArmOf(a) !== "gstack") continue;
+    const command = (prefixes.get(a.name) ?? TOLD_PREFIX.gstack).split(" ")[0];
+    if (command !== "/review") throw new Usage("--reader-map " + mapFile + " names /review's readers, and arm " + a.name + "'s told prefix opens with " + command + ", so cost.tsv would misname its readers; leave out --reader-map for that arm's run");
     const pin = readerMap.map.gstack;
     if (a.stack.repo !== pin.repo || a.stack.sha !== pin.sha) throw new Usage("--reader-map " + mapFile + " is pinned to " + pin.repo + "@" + pin.sha + ", and arm " + a.name + " runs " + a.stack.repo + "@" + a.stack.sha + "; use a map for that commit");
   }
@@ -266,7 +272,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     ids.set(id, pair);
   }
   const skills = Object.fromEntries(arms.flatMap((a) => {
-    const skill = lens ? planSkill(a.told as Parameters<typeof planSkill>[0], lens) : toldSkill(a.told as Parameters<typeof toldSkill>[0]);
+    const skill = lens ? planSkill(a.told as Parameters<typeof planSkill>[0], lens) : toldSkill(a.told as Parameters<typeof toldSkill>[0], a.toldPrefix);
     return skill ? [[a.name, skill]] : [];
   }));
   const passes = Number(one("--passes") ?? "1");

@@ -13,12 +13,18 @@ export const planArmFor = (spec: ArmSpec): PlanArm | null => planArmOf(spec) ?? 
 
 const CONTROL_NAMES: Record<string, string> = { "\n": "a line feed", "\r": "a carriage return", "\t": "a tab", "\ufeff": "a byte order mark" };
 
+/** Why a told prefix is not one line of plain text, naming its first control character, or null when it is. */
+export function prefixControlProblem(prefix: string): string | null {
+  const control = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\ufeff]/.exec(prefix);
+  return control ? "the prefix must be one line of plain text, but it has " + (CONTROL_NAMES[control[0]] ?? "a control character") + " (U+" + control[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, "0") + ") at character " + (control.index + 1) : null;
+}
+
 /** Why a plan arm cannot take this told prefix, or null when it can. */
 export function planPrefixProblem(arm: PlanArm, lens: PlanLens, prefix: string): string | null {
   const opening = PLAN_LENSES[lens].command + " plan.md";
   if (arm !== "gstack") return "plan arm " + arm + " takes no told prefix; only a gstack plan arm (gstack or gstack-<suffix>) does";
-  const control = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\ufeff]/.exec(prefix);
-  if (control) return "the prefix must be one line of plain text, but it has " + (CONTROL_NAMES[control[0]] ?? "a control character") + " (U+" + control[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, "0") + ") at character " + (control.index + 1);
+  const control = prefixControlProblem(prefix);
+  if (control) return control;
   if (prefix !== prefix.trim()) return "the prefix must not start or end with whitespace; the harness sends it verbatim as turn 1";
   if (prefix !== opening && !prefix.startsWith(opening + " ")) return "the prefix must be one line that opens with " + JSON.stringify(opening);
   if (prefix === opening) return "the prefix adds nothing after " + JSON.stringify(opening) + ", so the arm would send the default gstack line; put the forced instruction after it";
