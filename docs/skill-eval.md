@@ -135,6 +135,8 @@ The judge is chosen per preregistration, always from another family than the mod
 
 LOSS, the other exit 1 code, belongs to `gstack-evals noloss score`, not to skill-eval. An exit 1 reason outranks NOT_MEASURABLE. Warnings, such as CEILING, NONE_MATCHES, FLAKY and DEGRADED, never change the exit code. Every error line on stderr starts with its code, and the last lines give the fix and the docs anchor. docs/errors.md lists every code, and `gstack-evals explain <CODE>` prints one code's meaning, fix, side effects, retry safety and whether a run can resume.
 
+E_ROUTE_TOOL_ROUNDTRIP, E_ROUTE_NO_BLOCK and E_ROUTE_METERING also exit 1. They belong to `gstack-evals route-check` (src/trial/review/README.md), not to skill-eval: each is a failed part of a model's OpenRouter route check, not a lost edit.
+
 ## verdict.json
 
 The contract's fields keep their names and shapes: `verdict`, `reasons`, `harness_version`, `model`, `trials`, `calibration`, `arms`, `tasks` and `adjudication`. gstack-evals adds the rest; schema/verdict.schema.json is the full definition.

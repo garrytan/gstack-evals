@@ -31,6 +31,9 @@
 //   token per four bytes of the request, and sent nowhere, as Lane B's proxy answers them (quick/laneb/config/proxy.json,
 //   count_tokens estimate). Refused, they counted toward review-units' 2% degraded share (GEVA-89: all 106 of particle-1's
 //   refusals). The answer only sizes Claude Code's own context checks; the reservation still bounds input by bytes.
+// - Each outcome line carries upstream_id, the provider's id for the call: the JSON body's id, or the id in an SSE
+//   stream's message_start event; null when the reply has none or never arrived. route-check (src/trial/review) looks up
+//   OpenRouter's billed cost by it.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -589,7 +592,7 @@ export class MeteringProxy {
           .then(
             text => {
               const cost = usageCost(price, sseUsage(text));
-              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage");
+              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage", sseMessageId(text));
             },
             e => this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, `the stream broke: ${scrubbedCause(e, ctx.secrets)}`),
           )
@@ -620,8 +623,11 @@ export class MeteringProxy {
         return problem("UPSTREAM", 502, reason);
       }
       let reported: unknown = null;
+      let upstreamId: string | null = null;
       try {
-        reported = (JSON.parse(text) as { usage?: unknown })?.usage;
+        const body = JSON.parse(text) as { usage?: unknown; id?: unknown } | null;
+        reported = body?.usage;
+        upstreamId = typeof body?.id === "string" ? body.id : null;
       } catch {}
       const cost = usageCost(price, reported);
       const retryable = res.status === 429 || res.status >= 500;
@@ -630,7 +636,7 @@ export class MeteringProxy {
       else if (res.status >= 400 && res.status < 500) outcome = { kind: "spent", spent_micros: 0, usage: NO_TOKENS };
       else if (res.status >= 500) outcome = { kind: "spent", spent_micros: maxMicros, usage: NO_TOKENS };
       else outcome = { kind: "unknown" };
-      await this.settle(ctx, rid, maxMicros, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined);
+      await this.settle(ctx, rid, maxMicros, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined, upstreamId);
       if (res.status === 401 || res.status === 403) return problem("E_KEY_REJECTED", 502, `${provider} answered ${res.status} to the proxy's key`);
       if (!retryable) return new Response(text, { status: res.status, headers: strip(res) });
       const delay = retryDelayMs(res, attempt);
@@ -646,12 +652,12 @@ export class MeteringProxy {
    * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
    * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
    */
-  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string): Promise<void> {
+  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstreamId: string | null = null): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     let journaled = true;
     try {
-      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}) });
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}), upstream_id: upstreamId });
     } catch (e) {
       journaled = false;
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);
@@ -669,6 +675,18 @@ export class MeteringProxy {
     } catch {}
     if (!journaled || !reply?.ok) meter.unsettled++;
   }
+}
+
+/** The message id in an Anthropic Messages stream's message_start event, or null. */
+function sseMessageId(text: string): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    try {
+      const event = JSON.parse(line.slice(5).trim());
+      if (event?.type === "message_start") return typeof event.message?.id === "string" ? event.message.id : null;
+    } catch {}
+  }
+  return null;
 }
 
 /**

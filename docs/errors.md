@@ -125,6 +125,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_INFRA_FAILURE](#e_infra_failure) | 2 | U10 |
 | [E_BACKGROUND_DEADLINE](#e_background_deadline) | 2 | U10 |
 | [E_COVERAGE_GAP](#e_coverage_gap) | 2 | U10 |
+| [E_ROUTE_TOOL_ROUNDTRIP](#e_route_tool_roundtrip) | 1 | U9 |
+| [E_ROUTE_NO_BLOCK](#e_route_no_block) | 1 | U9 |
+| [E_ROUTE_METERING](#e_route_metering) | 1 | U9 |
+| [E_ROUTE_INFRA](#e_route_infra) | 2 | U9 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
 | [E_REAL_SANDBOX_SETUP](#e_real_sandbox_setup) | 2 | U20 |
@@ -210,6 +214,30 @@ A review no-loss comparison found the variant worse than the reference: the non-
 Fix: Read the comparison's losses: the blockers the reference found and the variant missed. Restore what the variant dropped and score a new arm; never rerun the same arm to change a verdict.
 
 Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_ROUTE_TOOL_ROUNDTRIP
+
+route-check's tool part failed on the model's OpenRouter route: in a one-turn session that reads a random token from token.txt, no main-agent tool call got a non-error result holding the token, the main agent's last text did not quote it, or the session did not complete. The try counts against the part's two; a second failure takes the model out of E1 with this code.
+
+Fix: Apply a named repair from the frozen list (--repair provider-pin=&lt;openrouter provider>), then rerun route-check with the same --out. After the second failure there is no fix inside the check: the results name this code.
+
+Exit 1. Side effects: Spend on the model's e1-route line item, settled in the ledger; the try is recorded in &lt;out>/route-check.json. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_ROUTE_NO_BLOCK
+
+route-check's block part failed on the model's OpenRouter route: the two-turn none-arm plan session on the fixture unit (the plan ask, then the turn-2 ask with the frozen output block) did not complete with a plan-findings block that parses. An empty list ([]) passes. The try counts against the part's two; a second failure takes the model out of E1 with this code.
+
+Fix: Raise the output allowance (--repair output-allowance=&lt;tokens>, above 32000), then rerun route-check with the same --out. After the second failure there is no fix inside the check: the results name this code.
+
+Exit 1. Side effects: Spend on the model's e1-route line item, settled in the ledger; the try is recorded in &lt;out>/route-check.json. Retry safe: yes. Resumable: no. Owner: U9.
+
+### E_ROUTE_METERING
+
+route-check's metering part failed on the model's OpenRouter route: a call of the try's two sessions has no spent outcome with its spend and reasoning tokens in the proxy journal, has no upstream id, has no billed generation at OpenRouter within the wait, or a session's metered spend is more than 10% away from OpenRouter's billed cost. &lt;out>/metering-&lt;try>.json holds the per-call comparison. The try counts against the part's two.
+
+Fix: Reconcile the try's lease against OpenRouter's billed cost with the gstack-evals ledger reconcile command the fix line names (its --source is &lt;out>/metering-&lt;try>.json), then rerun route-check with the same --out. A metering retry is refused until the approval record holds that reconcile.
+
+Exit 1. Side effects: Spend on the model's e1-route line item, settled in the ledger at the metered figure; &lt;out>/metering-&lt;try>.json is written. A ledger reconcile row must be written before any retry. Retry safe: yes. Resumable: no. Owner: U9.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -876,6 +904,14 @@ A review-units arm stopped with a coverage gap, so it gets no verdict, and the r
 Fix: Read the arm's coverage_gaps in arm.json and each named session's host/cli-stderr.log, fix the cause, and start a new run for that arm's verdict. Never rerun a gap inside the same run to change a verdict.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_ROUTE_INFRA
+
+route-check hit an endpoint, credential or proxy failure, which is not a compatibility failure: a session ended missing (such as UPSTREAM or E_INFRA_FAILURE), with rejected credentials, as an infra incident or before any model output; the rig failed without a reason code of its own; or OpenRouter's generation lookup refused the key or kept failing. It uses no try. Two infra failures stop the check for the Captain, and the model stays in E1.
+
+Fix: Check the endpoint, credential or proxy that stderr names, then rerun route-check with the same --out. After the second infra failure, report the check to the Captain instead.
+
+Exit 2. Side effects: Spend on the model's e1-route line item if a call went out, settled in the ledger; the failure is recorded in &lt;out>/route-check.json. Retry safe: yes. Resumable: no. Owner: U9.
 
 ### E_REAL_SANDBOX_SETUP
 

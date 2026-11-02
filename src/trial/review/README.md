@@ -203,3 +203,33 @@ sealed. plan.ts holds what differs:
   arm gets no verdict. progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as
   failed, a gap as missing.
 - Each session's CEO review mode, from gstack's mode handoff line, goes to modes.tsv and arm.json `ceo_modes`.
+
+## Route check (GEVA-203)
+
+`bin/gstack-evals route-check --model <id> --unit <fixture dir under tests/> --item e1-route-<model> --out <dir>` is E1's
+first paid step for a model that Claude Code runs through OpenRouter (plan 2026-11-02-geva-165, section 4). It checks three
+parts on review-units' Docker rig, with one bare none arm and the metering proxy:
+
+- tool: a one-turn session reads a random token from token.txt. It passes when a main-agent tool call gets a non-error
+  result that holds the token and the main agent's last text quotes it.
+- block: a two-turn none-arm plan session on the fixture unit (tests/trial/review/fixtures/route-check-unit): the plan
+  ask, then PLAN_TURN2 as the driver's follow-up, with the rec user and cap stops on. It passes when parsePlanSession gives
+  findings, an empty list included.
+- metering: every call of both sessions has a spent outcome in the proxy journal with its spend and reasoning tokens,
+  and each session's metered spend is within 10% of OpenRouter's billed cost. The proxy journals each call's
+  upstream_id, and route-check reads the bill from GET /api/v1/generation?id=<id>, polling until every id is found or
+  three minutes pass.
+
+Each run is one try of every part not yet passed, kept in <out>/route-check.json with one run id for the item. A part gets
+two tries; a model that fails a part twice leaves E1 with that part's code (E_ROUTE_TOOL_ROUNDTRIP, E_ROUTE_NO_BLOCK or
+E_ROUTE_METERING, exit 1), and a third try is refused. Between tries the only change allowed is a repair from the frozen
+list: `--repair provider-pin=<openrouter provider>` or `--repair output-allowance=<tokens>` (each session's output
+allowance, above 32,000 tokens). A provider pin applies only when it names the price row's own provider, since the proxy
+routes OpenRouter calls to the row's providers and has no per-run pin. An endpoint, credential or proxy failure is
+E_ROUTE_INFRA (exit 2) and uses no try; two of them stop the check for the Captain, and the model stays in E1.
+
+The check's cap is four sessions at the model's full allowance, and each try leases its own worst case on the item. A cap
+stop, from that budget, the ledger or the proxy, leaves the check incomplete (CAP_STOP, exit 2). On E_ROUTE_METERING the
+per-call comparison goes to <out>/metering-<try>.json and the fix names the `gstack-evals ledger reconcile` command for
+the try's lease. A metering retry is refused until the approval record holds that lease closed as reconciled from that
+file. stderr names the endpoint, the model, the Claude Code version and what the proxy said, with secrets scrubbed.

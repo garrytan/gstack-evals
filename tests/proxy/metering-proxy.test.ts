@@ -1185,3 +1185,26 @@ test("scrubbedCause walks nested causes and redacts every secret", () => {
   const e = new Error("outer", { cause: new Error("inner gse_abc", { cause: "deepest sk-1" }) });
   expect(scrubbedCause(e, ["gse_abc", "sk-1"])).toBe("outer: inner [redacted]: deepest [redacted]");
 });
+
+describe("upstream ids", () => {
+  // Value: protects=each outcome line names the provider's id for the call, which route-check needs to look up OpenRouter's bill; fails_when=a JSON reply's id or a stream's message_start id is not journaled, or a reply with no id journals something other than null; why_new=GEVA-203 (route-check's metering part reads billed cost by upstream id); seam=MeteringProxy's settle and its journal; no_claim=that OpenRouter's ids are generation ids, which a live route check shows
+  test("journal the JSON body's id, the stream's message_start id, or null when the reply has none", async () => {
+    const replies = [
+      () => Response.json({ id: "gen-json-1", usage: { input_tokens: 10, output_tokens: 5 } }),
+      () => sse([{ type: "message_start", message: { id: "gen-sse-1", usage: { input_tokens: 10, output_tokens: 1 } } }, { type: "message_delta", usage: { output_tokens: 5 } }, { type: "message_stop" }]),
+      () => Response.json({ usage: { input_tokens: 10, output_tokens: 5 } }),
+      () => sse([{ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1 } } }, { type: "message_delta", usage: { output_tokens: 5 } }]),
+    ];
+    const t = setup(() => replies.shift()!());
+    const a = t.bind();
+    for (let i = 0; i < 4; i++) {
+      const res = await t.call(a.slot, a.token);
+      expect(res.status).toBe(200);
+      await res.text();
+    }
+    await t.proxy.finalize(a.meter_id);
+    const outcomes = t.journal().filter((l) => l.kind === "outcome");
+    expect(outcomes.map((l) => l.upstream_id)).toEqual(["gen-json-1", "gen-sse-1", null, null]);
+    expect(outcomes.map((l) => l.outcome.kind)).toEqual(["spent", "spent", "spent", "spent"]);
+  });
+});
