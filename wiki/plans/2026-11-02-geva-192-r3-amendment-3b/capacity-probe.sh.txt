@@ -10,12 +10,12 @@
 # run sets PROBE_ITEM (r3-capacity-probe-dry). A pass writes <record dir>/probe-pass ("location=<location>",
 # "vm=<name>", "passed=<iso>"), whose mtime the run step checks (3b section 10 step 9). Each probe's runner and ledger
 # output goes to <record dir>/probe-<n>.log.
-# Usage: UBI_OWNER=<thread code> bash probe.sh.txt <runner copy> <laneb dir> <probe ledger> <location> <record dir>
+# Usage: UBI_OWNER=<thread code> bash capacity-probe.sh.txt <runner copy> <laneb dir> <probe ledger> <location> <record dir>
 # Exit 0: a probe passed. 1: every probe in the window failed and each probe's VM is confirmed gone. 3: a probe's VM may
 # still exist (down or list --mine failed, or list --mine lists a VM): destroy it and empty list --mine before anything
 # else. 9: the probe ledger refused a reserve (cap stop). 2: usage. No exit path binds or touches an R3a ledger.
 set -uo pipefail
-[ $# -eq 5 ] || { echo "usage: UBI_OWNER=<code> bash probe.sh.txt <runner copy> <laneb dir> <probe ledger> <location> <record dir>" >&2; exit 2; }
+[ $# -eq 5 ] || { echo "usage: UBI_OWNER=<code> bash capacity-probe.sh.txt <runner copy> <laneb dir> <probe ledger> <location> <record dir>" >&2; exit 2; }
 R=$1 LANEB=$2 L=$3 LOC=$4 OUT=$5
 [ -n "${UBI_OWNER:-}" ] || { echo "probe: set UBI_OWNER to the thread code" >&2; exit 2; }
 WINDOW=${PROBE_WINDOW_SEC:-10800} GAP=${PROBE_GAP_SEC:-600} ITEM=${PROBE_ITEM:-r3-capacity-probe}

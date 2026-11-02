@@ -2,7 +2,7 @@
 # R3 amendment 3b dry run (GEVA-192), at the 3b pin (GST-981's merge commit, for Sol and Opus attempt 4). It reruns
 # amendment 3's dry-run-a3.sh.txt with the pin's export, both models on temporary ledgers, and prints its whole output.
 # Then it drives each rule 3b adds. It shows the diff from 73042c5 to the pin and which pinned files changed, and that
-# UBI_LOCATION reaches the runner with no code change. It drives probe.sh.txt against a stub runner (no VM, no
+# UBI_LOCATION reaches the runner with no code change. It drives capacity-probe.sh.txt against a stub runner (no VM, no
 # network, no key) through a failing window, a pass after failures, a VM it can't confirm gone and a probe ledger that
 # refuses, and the run step's 30-minute and location guard. It drives a no-start through the export's own screen.ts run and
 # launch.sh with the stub runner standing in for a VM that never reaches running: Opus on a temporary a4 ledger, then a5
@@ -76,7 +76,7 @@ guard() { test -f "$1/probe-pass" && grep -qx "location=$2" "$1/probe-pass" && t
 runenv() { [ -x "$S" ] || { echo "runenv: no stub runner" >&2; return 2; }; env -u UBICLOUD_API_KEY LEDGER="$1" UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$S" STUB_STATE="$2" UBI_TTL_HOURS=24 VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 UBI_SIZE=standard-16 UBI_STORAGE=640 LEDGER_PORT="$3" VM_EXTEND_LEAD_SEC=1800 UBI_LOCATION="$4" "${@:5}"; }
 
 echo "## Amendment 3's dry run at the 3b pin"
-step . sh -c "sha256sum $A3/dry-run-a3.sh.txt $B/probe.sh.txt $B/no-start.sh.txt"
+step . sh -c "sha256sum $A3/dry-run-a3.sh.txt $B/capacity-probe.sh.txt $B/no-start.sh.txt"
 SHOW=1000 step . env PIN="$PIN" G="$G" SWEBV="$SWEBV" ARMS="$ARMS" R="$R" HARBOR_DIR="$HARBOR_DIR" DROPS="$DROPS" A2="$A2" bash "$A3/dry-run-a3.sh.txt" "$W/a3"
 
 echo; echo "## What changed from 73042c5 to the pin"
@@ -89,10 +89,10 @@ step . sh -c "sha256sum $R; grep -n 'DEFAULT_LOCATION=' $R; grep -n '\"\$S\" up'
 
 echo; echo "## Probe fixtures (stub runner, no VM)"
 F=$W/probe-fixtures; mkdir -p "$F"
-step . sh -c "LEDGER=$F/fail.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B/probe.sh.txt $S $L $F/fail.jsonl eu-central-h1 $F/fail; echo probe exit \$?; test ! -e $F/fail/probe-pass && echo 'no probe-pass'; bun $L/runner/ledger.ts status --path $F/fail.jsonl --item r3-capacity-probe"
-step . sh -c "LEDGER=$F/late.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B/probe.sh.txt $S $L $F/late.jsonl eu-north-h1 $F/late; echo probe exit \$?; cat $F/late/probe-pass; cat $F/s-late/calls"
-step . sh -c "LEDGER=$F/left.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=$UBI_OWNER bash $B/probe.sh.txt $S $L $F/left.jsonl eu-central-h1 $F/left; echo probe exit \$?; test ! -e $F/left/probe-pass && echo 'no probe-pass'"
-step . sh -c "LEDGER=$F/cap.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 0.2 '$DRY' GEVA-192 && STUB_STATE=$F/s-cap UBI_OWNER=$UBI_OWNER bash $B/probe.sh.txt $S $L $F/cap.jsonl eu-central-h1 $F/cap; echo probe exit \$?; test ! -e $F/s-cap/calls && echo 'the runner was never called'"
+step . sh -c "LEDGER=$F/fail.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/fail.jsonl eu-central-h1 $F/fail; echo probe exit \$?; test ! -e $F/fail/probe-pass && echo 'no probe-pass'; bun $L/runner/ledger.ts status --path $F/fail.jsonl --item r3-capacity-probe"
+step . sh -c "LEDGER=$F/late.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/late.jsonl eu-north-h1 $F/late; echo probe exit \$?; cat $F/late/probe-pass; cat $F/s-late/calls"
+step . sh -c "LEDGER=$F/left.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/left.jsonl eu-central-h1 $F/left; echo probe exit \$?; test ! -e $F/left/probe-pass && echo 'no probe-pass'"
+step . sh -c "LEDGER=$F/cap.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 0.2 '$DRY' GEVA-192 && STUB_STATE=$F/s-cap UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/cap.jsonl eu-central-h1 $F/cap; echo probe exit \$?; test ! -e $F/s-cap/calls && echo 'the runner was never called'"
 step . bash -c "$(declare -f guard); guard $F/late eu-north-h1 && echo 'fresh pass in eu-north-h1: the run step may start'; guard $F/late eu-central-h1 || echo 'pass in another location: the run step refuses'; touch -d '31 minutes ago' $F/late/probe-pass; guard $F/late eu-north-h1 || echo 'pass 31 minutes old: the run step refuses'; guard $F/fail eu-central-h1 || echo 'no pass: the run step refuses'"
 
 echo; echo "## No-start fixtures: the export's screen.ts run with the stub runner"
@@ -164,6 +164,6 @@ step . bash "$W/bin/rc-rule.sh" "$X3" drop dirsessions badsessions
 
 echo; echo "## One real probe: eu-central-h1, standard-16, 640 GB, temporary item r3-capacity-probe-dry"
 step . sh -c "test -s $PROBE_LEDGER || LEDGER=$PROBE_LEDGER bun $W/bin/approve.ts $E r3-capacity-probe-dry 5 'GSTA-2, approvals/2026-11-02-r3-amendment-3b-caps.md: \$5 of VM time in all for the author probes, no model calls' GSTA-2; bun $L/runner/ledger.ts status --path $PROBE_LEDGER --item r3-capacity-probe-dry"
-step . sh -c "echo '$(sha256sum "$R" | cut -c1-64)' | grep -qx e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8 && echo 'runner copy OK' && PROBE_ITEM=r3-capacity-probe-dry UBI_OWNER=$UBI_OWNER bash $B/probe.sh.txt $R $L $PROBE_LEDGER eu-central-h1 $W/probe-real; echo probe exit \$?; cat $W/probe-real/probe-pass; grep -h '^ubi-runner: \(creating\|ready\|destroy\|destroyed\|gone\|VM did\)' $W/probe-real/probe-*.log | sed 's/ready: \([a-z0-9-]*\) (.*)/ready: \1/'"
+step . sh -c "echo '$(sha256sum "$R" | cut -c1-64)' | grep -qx e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8 && echo 'runner copy OK' && PROBE_ITEM=r3-capacity-probe-dry UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $R $L $PROBE_LEDGER eu-central-h1 $W/probe-real; echo probe exit \$?; cat $W/probe-real/probe-pass; grep -h '^ubi-runner: \(creating\|ready\|destroy\|destroyed\|gone\|VM did\)' $W/probe-real/probe-*.log | sed 's/ready: \([a-z0-9-]*\) (.*)/ready: \1/'"
 step . sh -c "UBI_OWNER=$UBI_OWNER $R list --mine; echo list --mine exit \$?; bun $L/runner/ledger.ts status --path $PROBE_LEDGER --item r3-capacity-probe-dry; grep -c '\"kind\":\"settle\"' $PROBE_LEDGER"
 echo; echo "## Done"
