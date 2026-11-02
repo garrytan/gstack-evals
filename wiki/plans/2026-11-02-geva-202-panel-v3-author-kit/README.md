@@ -13,11 +13,11 @@ links:
   - 2026-11-01-geva-115-planning-ceo-v2-admission-prereg
 source: "Kit v3 built by GEVA-202 (issue GST-1049) from #127's author-spec.md and echo-terms.txt under the approved panel v3 plan (#156, 0aeb3f1), step 2."
 attachments:
-  - 6f21a709317f889b2472cc1e3f0637b36e4057499c12da7a5e31e055b83e0722  KIT.sha256
+  - 6f21a709317f889b2472cc1e3f0637b36e4057499c12da7a5e31e055b83e0722  KIT.sha256.txt
   - ce0576203a3071782d3586221b9fa1e4f2189fcbc7db8eb2c3f18ce45916b5cd  author-spec.md
   - 4b9f51aac56bcfdfbfa1abdb05ba9d8be000db804affd7219ac48f81adb00400  audit-brief.md
-  - 2a49ae804955e060af28522c8ed7a8f79ec3c36f70be0b78c9fe142dfce59a09  check_units.py
-  - a3ac8b97504afc9b2118a1d8a34b6201d9826b57308a303440b142803a19957a  draw.py
+  - 2a49ae804955e060af28522c8ed7a8f79ec3c36f70be0b78c9fe142dfce59a09  check_units.py.txt
+  - a3ac8b97504afc9b2118a1d8a34b6201d9826b57308a303440b142803a19957a  draw.py.txt
   - dcb86b4be31d03722f02dea15cb890c794b3586576474140102341a2f8750c3d  echo-terms.txt
 ---
 
@@ -31,6 +31,8 @@ The kit is the five files below. KIT.sha256 lists their sha256 in name order, ex
 
     sha256sum author-spec.md audit-brief.md check_units.py draw.py echo-terms.txt > KIT.sha256
     sha256sum KIT.sha256
+
+In this bundle the two scripts and the manifest carry a .txt suffix (check_units.py.txt, draw.py.txt, KIT.sha256.txt), as #127's scripts did, so the post stays a document; their bytes are the kit's. To check the kit from the bundle, copy those three files without the suffix beside the other two and run `sha256sum -c KIT.sha256`.
 
 Kit digest: **6f21a709317f889b2472cc1e3f0637b36e4057499c12da7a5e31e055b83e0722**
 
