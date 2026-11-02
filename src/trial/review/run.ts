@@ -20,7 +20,13 @@
 //   code units in place of TOLD_PREFIX's, on plan units in place of a gstack plan arm's command (plan-told.ts), and any
 //   other plan arm's prefix is refused before any session. The run may set the turn cap (maxTurns) and
 //   GSTACK_SESSION_KIND=unattended for every arm (sessionKind). A setting off its default joins the session key's task,
-//   so a default run keeps today's keys. arm.json records the system prompt in arm_provenance, and an overridden prefix
+//   so a default run keeps today's task key. Every run hands the driver how long, in all, a session may sit idle waiting on
+//   its background work (backgroundWaitS, BACKGROUND_WAIT_MS unless set), so its Claude Code sessions hold while that work
+//   is out (the driver holds only for a run that sets a wait); a wait off its default joins the key too. A completed code
+//   session that waited is scored by held.ts's rule, every code session records the turn it was scored from
+//   (scored_turn), arm.json counts a code arm's held rescues, held reads that parse as findings (held_rescues), and a
+//   background deadline records in session_end whether a findings block existed (findings_block), which is never scored.
+//   arm.json records the system prompt in arm_provenance, and an overridden prefix
 //   with its sha256 in told, on either kind of unit.
 // - A run with capStops (the CLI's --cap-stops, code units only) records its code sessions' cap stops as their own
 //   terminations (the driver's capStops): turn_cap and allowance_stop. A capped
@@ -30,7 +36,8 @@
 //   finding nothing. The session key's verifier then also covers capped.ts and readers.ts (its transcript reader), and
 //   arm.json counts cap stops in cap_stops with the units they hit and capped.ts's sha256; diagnostics names each capped
 //   session with its settled metered spend. Only then does the allowance join the session key. A run without capStops,
-//   whatever its turn cap or allowance, and every plan unit, keeps today's records and keys.
+//   whatever its turn cap or allowance, and every plan unit, keeps today's records; every code run's verifier covers
+//   findings.ts, capped.ts, readers.ts and held.ts.
 // - A run with a reader map (readers.ts) records each code session's readers from its transcript in the journal and
 //   writes them to cost.tsv as reader:<name> rows; arm.json names the map's sha256 in reader_map_sha256.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
@@ -53,7 +60,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
-import { MAX_TURNS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
+import { BACKGROUND_WAIT_MS, MAX_TURNS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { hostDriver } from "../../adapters/host.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
@@ -66,8 +73,9 @@ import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatile
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
-import { CAPPED_PARSER_SHA256, cappedParse, mainAgentTexts } from "./capped.ts";
-import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
+import { CAPPED_PARSER_SHA256, mainAgentTexts } from "./capped.ts";
+import { PARSER_SHA256, renderFindings, type ParseOutcome } from "./findings.ts";
+import { codeParse, hasFindingsBlock, HELD_PARSER_SHA256, mainAgentTurns, type ScoredTurn } from "./held.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { planNoPrefixProblem, planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
 import { READERS_SHA256, readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
@@ -147,6 +155,8 @@ export interface ReviewRunInput {
   readers?: { map: ReaderMap; sha256: string };
   /** Record code sessions' cap stops as turn_cap and allowance_stop, scored against their own arm; unset, today's records. */
   capStops?: boolean;
+  /** The most idle time, in seconds, a session may wait on its background work; BACKGROUND_WAIT_MS / 1000 when unset. Always passed to the driver. */
+  backgroundWaitS?: number;
   env?: Env;
 }
 
@@ -168,6 +178,8 @@ export interface ReviewEntry {
   ceo_mode?: CeoMode | null;
   /** The session's readers, when the run has a reader map. */
   readers?: ReaderUsage[];
+  /** Code units: the turn the session was scored from (held.ts). */
+  scored_turn?: ScoredTurn;
 }
 
 export interface ReviewRun {
@@ -320,7 +332,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planToldPrompt(arm.told as PlanArm, plan.lens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : capStops ? PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -365,7 +377,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
     const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(capStops ? { capStops } : {}) });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(capStops ? { capStops } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
@@ -374,14 +386,21 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     trial.record.cost_micros = meter.micros;
     const kind = trial.record.termination.kind;
     const capStopped = !plan && (kind === "turn_cap" || kind === "allowance_stop");
+    const ended = trial.record.termination;
+    const deadline = ended.kind === "missing" && ended.code === "E_BACKGROUND_DEADLINE";
+    const waited = kind === "completed" && (trial.record.session_end?.waited_ms ?? 0) > 0;
     let transcript = "";
     try {
-      transcript = readers || capStopped ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
+      transcript = readers || (!plan && (capStopped || waited || deadline)) ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
     } catch {
       transcript = "";
+      if (!plan && (waited || deadline)) log(cellName(cell) + ": host/transcript.ndjson is unreadable, so the session is scored on its final turn" + (deadline ? " and its findings_block is false" : ""));
     }
-    const parse = plan ? parsePlanSession(trial.record) : capStopped ? cappedParse(mainAgentTexts(transcript)) : parseFindings(trial.record);
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
+    const texts = plan ? [] : mainAgentTexts(transcript);
+    if (deadline && trial.record.session_end) trial.record.session_end = { ...trial.record.session_end, findings_block: plan ? parsePlanSession({ termination: { kind: "completed" }, turns: trial.record.turns }).kind === "findings" : hasFindingsBlock(texts) };
+    const code = plan ? null : codeParse(trial.record, texts, mainAgentTurns(transcript));
+    const parse = code ? code.parse : parsePlanSession(trial.record);
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
@@ -424,6 +443,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const diagnostics: string[] = [];
     const modes: Record<string, number> = {};
     let withoutText = 0;
+    let held = 0;
     const capped = { turn_cap: 0, allowance_stop: 0 };
     const cappedUnits = new Set<string>();
     const sessions: CostSession[] = [];
@@ -441,6 +461,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
+        if (e.scored_turn?.rule === "held" && e.parse.kind === "findings") held++;
         if (ended === "turn_cap" || ended === "allowance_stop") {
           capped[ended]++;
           cappedUnits.add(unit.unit.id);
@@ -476,7 +497,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
       ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");

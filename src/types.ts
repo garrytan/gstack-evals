@@ -197,6 +197,23 @@ export interface ErrorRecord {
   trace: string | null;
 }
 
+/**
+ * How a Claude Code session ended against the background work it started (GST-734); its termination says how it ended
+ * overall. A deadline end is a missing cell (E_BACKGROUND_DEADLINE), never the arm finding nothing.
+ */
+export interface SessionEnd {
+  /** clean: nothing held the session at its end; deadline: its background wait ran out, or its timeout came while it sat idle on held work; tasks_pending: it ended another way while work still held it. */
+  cause: "clean" | "deadline" | "tasks_pending";
+  /** What held the session at its end: each unfinished background task as its type and description, and a pending ScheduleWakeup. */
+  pending: string[];
+  /** Milliseconds, in all, the session sat idle with its turn over, waiting on background work. */
+  waited_ms: number;
+  /** ScheduleWakeups the adapter did not wait for: set while background tasks ran, and still pending once they finished. */
+  released_wakeups: { set_at: string; delay_s: number; fires_at: string; running: string[] }[];
+  /** review-units, on a deadline end only, in the cells.ndjson record (trial.json is written before it): whether a findings block existed when the deadline hit. Recorded, never scored. */
+  findings_block?: boolean;
+}
+
 // Verdict inputs (interface v0.5): what the trial module (U9) and the host adapters (U10) hand the verdict engine (U6)
 // for each finished trial, and what calibration (U10) reports per model. The verdict engine grades and decides; it
 // never parses a transcript.
@@ -229,6 +246,8 @@ export interface TrialRecord {
   signal?: string | null;
   /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout; set by adapters whose clock credits stalls. */
   credited_stall_ms?: number;
+  /** How the session ended against the background work it started; set by the Claude Code adapter (GST-734). */
+  session_end?: SessionEnd;
   /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
   check: boolean | null;
   /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */

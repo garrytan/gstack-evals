@@ -123,6 +123,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CELL_RULE](#e_cell_rule) | 2 | U10 |
 | [E_CODEX_CONFIG](#e_codex_config) | 2 | U10 |
 | [E_INFRA_FAILURE](#e_infra_failure) | 2 | U10 |
+| [E_BACKGROUND_DEADLINE](#e_background_deadline) | 2 | U10 |
 | [E_COVERAGE_GAP](#e_coverage_gap) | 2 | U10 |
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
@@ -858,9 +859,17 @@ Fix: Read the adapter line in the trial's host/cli-stderr.log, which names what 
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
 
+### E_BACKGROUND_DEADLINE
+
+A Claude Code session in a review-units run sat idle past its background wait with background work it started still out: a background Agent or Bash task the main thread launched that had not finished, or a ScheduleWakeup it set while nothing ran that had not fired. The wait counts, in all, the time from each turn that ended with that work out to the start of the main agent's next turn: the turn init the CLI sends or the main agent's next message, whichever comes first (review-units --background-wait, 3600 s unless set). The adapter ends the session at that deadline, or at its session timeout when that comes while the session sits idle on that work. The cell is missing, never a miss or the arm finding nothing: it is a coverage gap that stops its arm (E_COVERAGE_GAP). Only review-units sets a background wait; every other runner ends a session at its turn's result. The trial record's session_end has cause deadline and names the work still out; the session's record in cells.ndjson also says whether a findings block existed (findings_block), which is never scored.
+
+Fix: Read the adapter line in the trial's host/cli-stderr.log and session_end.pending in the trial record, which name the work still out. Set a longer --background-wait only under a preregistration that names it, and start a new run for the arm's verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U10.
+
 ### E_COVERAGE_GAP
 
-A review-units arm stopped with a coverage gap, so it gets no verdict, and the run exits 2 once every arm is written. A gap is a session that ended on an infra failure (E_INFRA_FAILURE), a provider failure, a refusal or a cap stop; a plan session that timed out, crashed or completed before any model output; or a code unit's malformed or incomplete pass. The arm's arm.json has status stopped and lists each gap under coverage_gaps; an arm with no gap completes as usual.
+A review-units arm stopped with a coverage gap, so it gets no verdict, and the run exits 2 once every arm is written. A gap is a session that ended on an infra failure (E_INFRA_FAILURE), its background wait's deadline (E_BACKGROUND_DEADLINE), a provider failure, a refusal or a cap stop; a plan session that timed out, crashed or completed before any model output; or a code unit's malformed or incomplete pass. The arm's arm.json has status stopped and lists each gap under coverage_gaps; an arm with no gap completes as usual.
 
 Fix: Read the arm's coverage_gaps in arm.json and each named session's host/cli-stderr.log, fix the cause, and start a new run for that arm's verdict. Never rerun a gap inside the same run to change a verdict.
 
