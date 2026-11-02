@@ -18,8 +18,8 @@
 //   (12,1) a held malformed array (it stays malformed: a gap); (8,2) a malformed final block after an earlier findings
 //   block (rule final, malformed: a gap); (10,1) the turn cap after a review at turn 2; (11,1) the allowance stops the
 //   session before any review.
-// Scenario pilot is none at 1 pass on every unit in agents mode; smoke is gstack-full at 1 pass on --units; pause is pilot
-// under --cap. After the run it checks every session that never waited and was not capped: it must be scored by rule final,
+// Scenario pilot is none at 5 passes on every unit in agents mode; smoke is gstack-full at 1 pass on --units; pause is
+// none at 1 pass on every unit under --cap. After the run it checks every session that never waited and was not capped: it must be scored by rule final,
 // with the parse findings.ts's parseFindings gives its record.
 // Usage: B=<gstack-evals at 176fdc7> MAP=<reader map> TOLD=<told-gstack-full.txt> bun rr-stub-arms.ts <stacks-r1.json>
 //   <out dir> <none|gstack-full> <grid|pilot|smoke|pause> [--units <id,...>] [--cap <usd>] [--resume]
@@ -54,7 +54,7 @@ const suite = JSON.parse(suiteText.toString());
 type U = { id: string; repo: string; pr: number; head: string; base: string; blockers?: Array<{ id: string; counts?: string; paths: string[]; line?: number }> };
 const pick = opt("--units");
 const units: U[] = pick ? pick.split(",").map((id) => suite.units.find((u: U) => u.id === id) ?? (() => { throw new Error("E_RR_UNIT " + id); })()) : suite.units;
-const passes = scen === "grid" ? 2 : 1;
+const passes = scen === "grid" ? 2 : scen === "pilot" ? 5 : 1;
 
 const specialist = (name: string) => "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/" + name + ".md, then run DIFF_BASE=$(git merge-base origin/main HEAD) && git diff \"$DIFF_BASE\" to get the full diff.";
 const ADVERSARIAL = "Read the diff for this branch. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production.";

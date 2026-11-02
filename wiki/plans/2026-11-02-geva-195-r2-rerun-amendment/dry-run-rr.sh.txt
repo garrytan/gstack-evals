@@ -122,7 +122,7 @@ step '^(exposure|gate|E_)' python3 "$W/bin/rr-gate.py" "$W/smoke-suite.json" "$W
 echo; echo "## Dry-run judge items (caps for the fake judge's spend only; the frozen caps come later)"
 step item init_items "$W/record" rr-pilot-judge:1000 rr-judge-match:1000 rr-judge-adjudicate:1000
 
-echo; echo "## The admission pilot: none, 1 pass, all 33 units, one matching batch (section 5)"
+echo; echo "## The admission pilot: none, 5 passes, all 33 units, one matching batch (section 5)"
 step '^(stub run|E_)' STE "$W/run/rr-pilot-none.stderr" "$S" "$W/run/rr-pilot-none" none pilot
 src "$W/run" "$W/psrc" none-pilot:none-opus:rr-pilot-none
 step '^(reader|none|E_)' python3 "$W/bin/blind.py" "$S" "$W/psrc/none-pilot"
@@ -257,14 +257,14 @@ open(out, "a").write("%s\t%d\n" % (item, cap))
 EOF
 }
 : > "$W/judge/caps.tsv"
-step '^judge cap' size_judge rr-pilot-judge "$W/judge/pilot-match.txt" "$W/pilot/floor/match-key.json" 1 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
+step '^judge cap' size_judge rr-pilot-judge "$W/judge/pilot-match.txt" "$W/pilot/floor/match-key.json" 5 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
 step '^judge cap' size_judge rr-judge-match "$W/judge/grid-match.txt" "$W/grid/keep/match-key.json" 4 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
 step '^judge cap' size_judge rr-judge-adjudicate "$W/judge/grid-adj.txt" "$W/grid/keep/adj-key.json" 4 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
 step . cat "$W/judge/caps.tsv"
 
 echo; echo "## The seven items at their frozen caps: one lease each, opened and settled; a bound item refuses a second run (section 8)"
 LR=$W/ledger; mkdir -p "$LR"; LG="--ledger $LR/ledger.sqlite --ledger-record $LR/record"
-CAPS="rr-pilot-none:1320 rr-smoke-full:120 rr-grid-none:2640 rr-grid-full:2640 $(awk '{ printf "%s:%s ", $1, $2 }' "$W/judge/caps.tsv")"
+CAPS="rr-pilot-none:6600 rr-smoke-full:120 rr-grid-none:2640 rr-grid-full:2640 $(awk '{ printf "%s:%s ", $1, $2 }' "$W/judge/caps.tsv")"
 step item init_items "$LR/record" $CAPS
 for p in $CAPS; do it=${p%%:*}; step 'lease_id|state|E_' sh -c "$L lease --item $it --run rr-dry-$it --amount ${p#*:} $LG --json | tee $LR/$it.json"; step 'settle|E_' $L settle --lease "$(jq -r .lease_id "$LR/$it.json")" $LG; done
 step 'E_' $L lease --item rr-grid-full --run rr-dry-again --amount 1 $LG

@@ -15,16 +15,16 @@ links:
   - 2026-10-31-geva-76-stacks-round-1-prereg
 attachments:
   - d74c0bee01a73674fe92de8603cf07c000f3fc469917752fef841c037feaf9db  comparisons.rr.json
-  - fde146cb5b64653fffd1d82e2bb1bf9cce0ef5b646359cdb8df6c534b7320388  dry-run-rr.sh.txt
-  - 37ed892f6701ad36be4fb033734e418ff6ae5b55ebe7ff7aa51bf25d5b63067c  dry-run-rr.txt
-  - 21093ca9fc8c1744b2e418c3a6cc1110601b213da77f340fa962808b90a31528  power-rr.py.txt
+  - aaa46b6c104e14bdd9de9ed12ed2329f34d63ba39f7c4c63e9a7b85f99e5e8c2  dry-run-rr.sh.txt
+  - a975f631814cce7a349f670c9c165955850e9882dd2465a2d515abf5997a11fc  dry-run-rr.txt
+  - c1bb431cde482da750f6a6ba3152d3e29357247e5b731cb28a7591d4a6cf3e38  power-rr.py.txt
   - a17fc2c08073053c225258af9448f3e520cfd03cfa7f23593e0750646587051d  reader-map-gstack-5209e9262d80.json
-  - 4eae3ffd96a2cdde5a13997136bd01328239510288d694f9f33f51f52b03cdcc  rr-admit.py.txt
+  - 95ed70447dc13d5cb280c0fc364bfc69ce1d8c52487fe754ac0f86e09c20c3df  rr-admit.py.txt
   - 45c5f92089a95de130dcfef3e5273a886cc0a6470041d415960cce4e83602324  rr-decide.py.txt
   - 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548  rr-gate.py.txt
   - cc708fa60c0c354bc48a6ca54117dcc3357b272a5f5bc9e880c0d4ed7ebb92c3  rr-held.py.txt
   - e6aefa5da928b40b6aeecd676e6ff09b12d4380ba839eefa6d48a83d4ec92afb  rr-pause.py.txt
-  - 93feee1358443a88cbd612cd4d4892aa11faf5fc31c027e0a81ee90f08fc966a  rr-stub-arms.ts.txt
+  - 473e157f375e12cdebe540c93a7b14f5998e1e084d392c20d9caf2c22b764c76  rr-stub-arms.ts.txt
 ---
 
 # R2 rerun amendment
@@ -38,7 +38,7 @@ What changes, in short:
 - A paid grid starts only after an admission pilot shows the no-gstack arm off the floor and below the top, and after a 3-session exposure smoke of gstack-full.
 - GPT-6.1 Sol and R56-1 (/ship's review panel) each need a code change first, so each follows in its own short amendment (section 9).
 
-The rerun is also the first real test of gstack's background-reader path under a driver that waits. GStack Minder's two repros for GST-950 (canceled) went through gstack's own launcher and never dispatched a reader, so they did not exercise this path.
+The rerun is also the first real test of gstack's background-reader path under a driver that waits. The two repros gstack's maintainers ran for GST-950 (canceled) went through gstack's own launcher and never dispatched a reader, so they did not exercise this path.
 
 ## 1. Why R2 sat on the floor, and why the set changes
 
@@ -53,16 +53,18 @@ R2 caught 0 of its 13 blocking blockers in both arms (control 0%, MDD about 43 p
 
 **The 19 units fail admission from data in hand.** Plain Opus 5.5 found 0 of the 13 as blocking in R2's none-r2, which ran at the settings this rerun keeps for its no-gstack arm (claude-code-preset, CLI 2.1.314, 200 turns, $40; #141 changes nothing for a session that never waits), and 0 of 13 in each of #108's two none-opus passes. A paid pilot on those units would only restate that.
 
-**The rerun set is all 33 stacks-r1 units** (GSTA-2's pick): 42 blocking blockers on 26 PR clusters, plus 6 over-blocking units. #108's none-opus found 3 of the 42 as blocking, 7.1% [2.1, 13.9], all three among the 14 units of GSTA-167's cohort. That ran on the SDK's empty system prompt and the old driver, so the admission pilot (section 5) measures the control again at this post's settings. The 33 units include R1's cohort of 14 (gsta167-14pr), which R1 judged before choosing to run R2, so the rerun is not independent of R1 on those 14. The results post reports the cohort and the out19 units as strata (section 7).
+**The rerun set is all 33 stacks-r1 units** (the Captain's pick): 42 blocking blockers on 26 PR clusters, plus 6 over-blocking units. #108's none-opus found 3 of the 42 as blocking, 7.1% [2.1, 13.9], all three among the 14 units of GSTA-167's cohort. That ran on the SDK's empty system prompt and the old driver, so the admission pilot (section 5) measures the control again at this post's settings. The 33 units include R1's cohort of 14 (gsta167-14pr), which R1 judged before choosing to run R2, so the rerun is not independent of R1 on those 14. The results post reports the cohort and the out19 units as strata (section 7).
 
 | Set considered | Blockers, PR clusters | Control from data in hand | MDD at 1 pass | MDD at 2 passes |
 |---|---|---|---|---|
-| out19, blocking (R2 as run) | 13, 13 | 0 of 13, three times | 39 | 27 |
-| out19, any severity | 13, 13 | 4 of 13 (R2), 2 of 13 (#108) | 44 | 31 |
-| cohort14, blocking | 29, 14 | 3 of 29, 10.3% [3.1, 20.8] (R1, blind) | 27 | 19 |
-| **all 33 units, blocking (this rerun)** | **42, 26** | **3 of 42, 7.1% [2.1, 13.9] (#108)** | **22** | **16** |
+| out19, blocking (R2 as run) | 13, 13 | 0 of 13, three times | 40.7 | 33.3 |
+| out19, any severity | 13, 13 | 4 of 13 (R2), 2 of 13 (#108) | 51.7 | 42.4 |
+| cohort14, blocking | 29, 14 | 3 of 29, 10.3% [3.1, 20.8] (R1, blind) | 37.6 | 32.9 |
+| **all 33 units, blocking (this rerun)** | **42, 26** | **3 of 42, 7.1% [2.1, 13.9] (#108)** | **28.1** | **24.5** |
 
-MDDs here use #112's R1 method (power-rr.py): the standard error of the arms' difference at a 30-point lead, simulated on each set's own clusters with a wide spread, times 2.8. #112's exact figure for R2's KEEP rule on the 19 units was about 43 points; this method gives 39 at 1 pass.
+MDDs here come from power-rr.py: the standard error of the arms' difference at a 30-point lead, times 2.8 (80% power, two-sided 0.05). It keeps #112's R1 method (a wide beta spread, one Bernoulli draw a pass) but draws by PR cluster, the unit the scorer's interval resamples. Each cluster gets one chance in each arm, drawn on its own for each arm, and every blocker in the cluster uses its arm's chance on every pass, so the lead varies by PR. #112's method drew each blocker on its own with a fixed lead, which gave 22 and 16 on all 33 units. With a fixed lead, a PR's shared chance cancels in the paired difference, so drawing that model by cluster changes almost nothing. The cluster model runs about 40% above what R1's and #108's PR-clustered intervals imply (32.3 against 22.6 on R1's cohort, 17.7 against 12.5 on #108's 33 units), so these MDDs are conservative.[^draw] #112's exact figure for R2's KEEP rule on the 19 units was about 43 points; this method gives 40.7 at 1 pass.
+
+[^draw]: The alternative draws each blocker's two chances on their own and ignores PR clusters. It fits R1's and #108's intervals more closely (23.8 and 13.6, against 22.6 and 12.5). Under it, a 3-pass pilot would also pass 86% of the time at the planning rate (85.9%, section 5).
 
 ## 2. Pins
 
@@ -125,9 +127,11 @@ Each arm runs 2 passes on all 33 units: 66 sessions an arm, 132 in the grid. The
 
 The pilot answers one question before any grid: does plain Opus 5.5 sit clearly above zero and clearly below the top on this primary, on this set, at these settings?
 
-**The run.** The none arm, 1 pass on all 33 units, at the pins above, on item rr-pilot-none. Its source arm (id none-pilot) goes through the same ingest, scrub, blinding and one matching batch as the grid (section 7), on item rr-pilot-judge. No adjudication runs; the pass line reads blocking recall only.
+**The run.** The none arm, 5 passes on all 33 units (165 sessions), at the pins above, on item rr-pilot-none. Its source arm (id none-pilot) goes through the same ingest, scrub, blinding and one matching batch as the grid (section 7), on item rr-pilot-judge. No adjudication runs; the pass line reads blocking recall only.
 
-**The pass line** (rr-admit.py, attached). First `noloss derive --drop-gaps` on the judged pilot arm; if that drops more than 3 units, the pilot is incomplete and goes to the Captain with no admission. So is a pilot whose review-units arm left any session not run (arm.json parse_outcomes.not_run above 0) or stopped for any reason other than coverage gaps, which the drop rule handles: it is incomplete, gets no admission and goes to the Captain, so an interrupted pilot can never pass. rr-admit.py checks this first, from the pilot run's own arm.json, and exits 4. It also reads the pilot run's saved stderr, <dir>/rr-pilot-none.stderr from the run commands below, and exits 4 when that log is missing, empty or unreadable, has no closing review-units exit line, or carries any stop line whose code is not E_COVERAGE_GAP, such as a proxy CAP_STOP. Then blocking recall on the remaining blockers, with a PR-clustered 95% percentile bootstrap (10,000 draws, seed 20261031). **The pilot passes when the interval's lower bound is above 0 and its upper bound plus the MDD is at most 100 points.** The MDD is the larger of two, both from power-rr.py's method on the derived suite's clusters at the grid's 2 passes: the MDD at the pilot's point estimate, and the MDD at the planning control rate of 7.1% (section 1, 16 points on all 33 units). The second keeps a pilot at the ceiling from passing: at 100% recall the interval is [100, 100] and the MDD at the point estimate is 0. A fail stops the rerun on this set: the run thread reports the numbers to the Captain, and no grid runs.
+**The pass line** (rr-admit.py, attached). First `noloss derive --drop-gaps` on the judged pilot arm; if that drops more than 3 units, the pilot is incomplete and goes to the Captain with no admission. So is a pilot whose review-units arm left any session not run (arm.json parse_outcomes.not_run above 0) or stopped for any reason other than coverage gaps, which the drop rule handles: it is incomplete, gets no admission and goes to the Captain, so an interrupted pilot can never pass. rr-admit.py checks this first, from the pilot run's own arm.json, and exits 4. It also reads the pilot run's saved stderr, <dir>/rr-pilot-none.stderr from the run commands below, and exits 4 when that log is missing, empty or unreadable, has no closing review-units exit line, or carries any stop line whose code is not E_COVERAGE_GAP, such as a proxy CAP_STOP. Then blocking recall on the remaining blockers, with a PR-clustered 95% percentile bootstrap (10,000 draws, seed 20261031). **The pilot passes when the interval's lower bound is above 0 and its upper bound plus the MDD is at most 100 points.** The MDD is the larger of two, both from power-rr.py's method on the derived suite's clusters at the grid's 2 passes: the MDD at the pilot's point estimate, and the MDD at the planning control rate of 7.1% (section 1, 24.5 points on all 33 units). The second keeps a pilot at the ceiling from passing: at 100% recall the interval is [100, 100] and the MDD at the point estimate is 0. A fail stops the rerun on this set: the run thread reports the numbers to the Captain, and no grid runs.
+
+**Why 5 passes.** The pilot has to be able to pass at the rate this post plans for. power-rr.py simulates no-gstack pilots at the 7.1% planning rate, with one chance per PR cluster shared by its blockers, and runs rr-admit.py's own pass line on each. 21.4% of 1-pass pilots pass, and 86.2% of 5-pass pilots. The rest fail at the floor, never at the top: the interval's lower bound clears 0 only when finds land in at least 4 of the 26 clusters, and more passes reach more of them. The pass line is unchanged; only the pilot grew. The pool can't add clusters instead: stacks-combined's other 23 units are detection-only and 3 are ineligible, so no other unit carries a blocking blocker.
 
 **Pilot sessions are admission data only and never enter the grid.** The grid's none-rr arm is a new review-units run with its own run id, in its own out dir, on its own item, and never resumes from the pilot's. No pilot finding, judgment or score is read by any grid step.
 
@@ -166,23 +170,25 @@ The scorer's NO_LOSS, LOSS and size-rule lines print and decide nothing. Reporte
 
 ## 8. Spend: items, caps and the pause rule
 
-Caps are sized for the science (R57): every review-units item's cap is its worst case at the allowance, sessions times $40, so the allowance binds before an item cap can. Judge items cap at judge-run's worst case for a batch of their real size. The dry run fits judge-run's per-packet worst case on its stub batches, sizes each packet at R2's largest session (9 findings at R2's line length, 27 stub-sized findings) times the sessions a packet holds (1 in the pilot, 4 in the grid), takes 33 packets, doubles the sum because judge-run may ask every answer again once, and rounds up to the dollar. Expected spend uses R2's metered rates: none-r2 $0.83 a session; gstack-full $3.36 a session over all 19, and $3.80 to $9.19 for the sessions that ran the full procedure and returned. The smoke re-costs the grid before it starts.
+Caps are sized for the science (R57): every review-units item's cap is its worst case at the allowance, sessions times $40, so the allowance binds before an item cap can. Judge items cap at judge-run's worst case for a batch of their real size. The dry run fits judge-run's per-packet worst case on its stub batches, sizes each packet at R2's largest session (9 findings at R2's line length, 27 stub-sized findings) times the sessions a packet holds (5 in the pilot, 4 in the grid), takes 33 packets, doubles the sum because judge-run may ask every answer again once, and rounds up to the dollar. Expected spend uses R2's metered rates: none-r2 $0.83 a session; gstack-full $3.36 a session over all 19, and $3.80 to $9.19 for the sessions that ran the full procedure and returned. The smoke re-costs the grid before it starts.
 
 | Item | Sessions | Cap (worst case) | Expected |
 |---|---|---|---|
-| rr-pilot-none | 33 | $1,320 | about $30 |
+| rr-pilot-none | 165 | $6,600 | about $140 |
 | rr-smoke-full | 3 | $120 | $10 to $30 |
-| rr-pilot-judge | 1 batch | $176 | about $1 |
-| **Pilot total** | | **$1,616** | **about $40 to $60** |
+| rr-pilot-judge | 1 batch | $220 | a few dollars |
+| **Pilot total** | | **$6,940** | **about $150 to $175** |
 | rr-grid-none | 66 | $2,640 | about $55 |
 | rr-grid-full | 66 | $2,640 | $250 to $610 |
 | rr-judge-match | 1 batch | $209 | a few dollars |
 | rr-judge-adjudicate | 1 batch | $1,130 | a few dollars |
 | **Grid total** | | **$6,619** | **about $310 to $680** |
 
+**R42.** The pilot's caps total $6,940, above the $5,000 one thread may spend on the Captain's approval alone. The pause rule below keeps this rerun's settled plus reserved spend under $4,500 until the Captain gives word to resume, and the pilot's expected spend is about $150, so no thread passes $5,000 without a later decision. The Captain gives Garry a heads-up before the pilot and asks him before any resume past the pause.
+
 Every item serves one run: its first lease binds it, and a second run on it is refused (E_ITEM_BOUND). A resume of the same run, with the same run id, may take a further lease, as R2's none-r2 did.
 
-**The pause rule (GSTA-2, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. With the caps above, the worst case of every item together ($8,235) passes $4,500, so the rule binds only if sessions cost far more than R2's.
+**The pause rule (the Captain's, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. With the caps above, the worst case of every item together ($13,559) passes $4,500, so the rule binds only if sessions cost far more than R2's.
 
 **Launches run one at a time.** A launch is one review-units command or one judge batch. review-units opens its lease only after the arm's image builds (src/skill-eval/cli/run-host.ts at 176fdc7), so the guard can't see a launch that has started but not yet leased. The operator runs rr-pause.py for the next launch only after the previous launch's lease shows in the ledger record, and two launches never run at once. This closes the overlap the /ship red-team found: two grid arms launched together each saw the full $4,500 of headroom, and their leases reserved $5,280.
 
@@ -192,9 +198,9 @@ Every item serves one run: its first lease binds it, and a second run on it is r
 
 ## 9. What follows in separate amendments
 
-**GPT-6.1 Sol.** R54 puts Sol under test beside Opus 5.5. At 176fdc7 review-units can't drive it: it takes only a model with an anthropic or openrouter route for Claude Code (src/trial/review/cli.ts), policy/models.json routes gpt-6.1-sol to openai, and src/runner/pricing/prices.ts has no openrouter row for it, so the metering proxy can't price it, and a `--policy` file can't add a price. GSTA-2 started a build (GEVA-196) for the price row and the route. It had not merged when this post froze, so this post freezes Opus only. A short amendment on the same set adds Sol's none and gstack-full arms at that build's merge commit, reusing this post's rules, as its own Holm family. One fact that amendment must face: src/arms/cells.ts keeps no cross-family voice in a Sol cell, so gstack's outside voice is off there.
+**GPT-6.1 Sol.** R54 puts Sol under test beside Opus 5.5. At 176fdc7 review-units can't drive it: it takes only a model with an anthropic or openrouter route for Claude Code (src/trial/review/cli.ts), policy/models.json routes gpt-6.1-sol to openai, and src/runner/pricing/prices.ts has no openrouter row for it, so the metering proxy can't price it, and a `--policy` file can't add a price. The Captain started a build (GEVA-196) for the price row and the route. It had not merged when this post froze, so this post freezes Opus only. A short amendment on the same set adds Sol's none and gstack-full arms at that build's merge commit, reusing this post's rules, as its own Holm family. One fact that amendment must face: src/arms/cells.ts keeps no cross-family voice in a Sol cell, so gstack's outside voice is off there.
 
-**R56-1, /ship's review panel.** The registry's R56-1 row (org drive research/registry.md) shares these units and could have shared this post's none arm. At 176fdc7 it can't run: review-units refuses a gstack arm's told prefix that opens with anything but /review (src/trial/review/cli.ts:226, E_USAGE), and the CLI takes the install's target skill from the default prefix (cli.ts:258) while the run loop takes it from the given one (run.ts:376). GSTA-2 started a small build for it. R56-1 follows in its own short amendment that reuses this post's frozen rules (A1, B1, the coverage and cap-stop rules, the gate counted on returned reports, the admission and smoke rules, the pause rule), with its own none arm at its own pin and its own gate for every panel voice.
+**R56-1, /ship's review panel.** The registry's R56-1 row (org drive research/registry.md) shares these units and could have shared this post's none arm. At 176fdc7 it can't run: review-units refuses a gstack arm's told prefix that opens with anything but /review (src/trial/review/cli.ts:226, E_USAGE), and the CLI takes the install's target skill from the default prefix (cli.ts:258) while the run loop takes it from the given one (run.ts:376). The Captain started a small build for it. R56-1 follows in its own short amendment that reuses this post's frozen rules (A1, B1, the coverage and cap-stop rules, the gate counted on returned reports, the admission and smoke rules, the pause rule), with its own none arm at its own pin and its own gate for every panel voice.
 
 ## 10. Commands
 
@@ -208,7 +214,7 @@ Each arm runs alone, one launch at a time (section 8), in its own out dir, on it
     COMMON="--models claude-opus-5-5 --max-turns 200 --allowance 40 --cap-stops --timeout 10800 --reader-map $A/reader-map-gstack-5209e9262d80.json --ledger $L --record $R"
 
     # pilot and smoke
-    gstack-evals review-units --suite $S --units all --arms none --passes 1 --system-prompt none=claude-code-preset \
+    gstack-evals review-units --suite $S --units all --arms none --passes 5 --system-prompt none=claude-code-preset \
       $COMMON --item rr-pilot-none --spend-cap P --out <dir>/rr-pilot-none <step 5 flags> 2> <dir>/rr-pilot-none.stderr
     echo "review-units exit $?" >> <dir>/rr-pilot-none.stderr
     gstack-evals review-units --suite $S --units garrytan/gbrain#7789@49eb4da5f7c8 garrytan/gstack#3475@fc69d3ff0bfe \
@@ -225,16 +231,16 @@ Every command runs `--dry-run` first, which prints the cap-stop line, the reader
 
 dry-run-rr.sh runs this post's steps keyless at rig 715f837 and build 176fdc7, and dry-run-rr.txt is its output. rr-stub-arms.ts drives review-units' run loop and Claude Code driver through the pinned Agent SDK, with the build's stub CLI (STUB_MODE=background) answering every model call, so the journals, session files and arm.json are the build's own. #112's judge-fake.ts answers every judge request at a set match rate, and every ledger is temporary. The background wait is 3 s, a dry-run setting; the frozen wait is 3600 s. No model was called.
 
-- **Pins.** Rig 715f837 and build 176fdc7 are clean. #112's and #129's reused attachments match their front matter, and GEVA-89's sevmap.ts and R1's scrub chain match their digests. The reader map loads at 176fdc7, its 11 checklist paths exist at 5209e92, and the adversarial marker is present. stacks-r1 has 33 units and 42 blocking blockers. power-rr.py prints section 1's MDDs.
+- **Pins.** Rig 715f837 and build 176fdc7 are clean. #112's and #129's reused attachments match their front matter, and GEVA-89's sevmap.ts and R1's scrub chain match their digests. The reader map loads at 176fdc7, its 11 checklist paths exist at 5209e92, and the adversarial marker is present. stacks-r1 has 33 units and 42 blocking blockers. power-rr.py prints section 1's MDDs and their calibration, and section 5's pass chances.
 - **A1.** Each arm has one held rescue, scored by rule held on its first turn's findings, and arm.json's held_rescues matches the journal. A waited session whose final turn has the block is scored by rule final. A held malformed block stays malformed and is a gap, and so is a malformed final block after an earlier valid one. Every never-waited session (60 in none, 62 in gstack-full) is scored by rule final with findings.ts's parse.
 - **B1.** One session per arm ends E_BACKGROUND_DEADLINE after about 3.2 s of idle time, and both are coverage gaps. block_present_at_deadline is 1 in gstack-full and 0 in none; session_end.cause is clean 65 and deadline 1 in each arm.
 - **Coverage and cap stops.** Three units carry gaps, at the coverage limit without passing it. gstack-full has 1 cap stop (turn_cap); none-rr has 2, a turn_cap scored on its turn-2 review and an allowance_stop scored as finding nothing. The rescue drop file holds 2 units and the complete-case drop file 3.
 - **Before blinding.** sevmap leaves 0 unmapped labels, the scrub chain takes every source arm's publication-scan hits to 0, and blind.py and ingest pass.
 - **Gate.** The stub output passes at 60 of 66 returned PR-passes. A copy with one more reader's tokens unavailable fails at 59 (exit 3), and three bad inputs exit 5. The smoke passes 3 of 3.
-- **Admission.** The pilot's stub run journals 33 sessions. A fake judge matching nothing fails at the floor (recall 0, interval [0, 0], exit 3). One matching a third passes (33.3%, [19.4, 48.6], MDD 17.6, upper bound plus MDD 66.2, exit 0). One matching everything fails at the top: the interval is [100, 100], the MDD at the point estimate is 0 and at the planning rate 16.0, so 116 (exit 3). Four units marked as gaps make the pilot incomplete (exit 4). A pilot run whose arm.json shows 5 sessions not run is refused as incomplete (exit 4), and a stop for one coverage gap with every session run goes on to the drop rule and passes.
+- **Admission.** The pilot's stub run journals 165 sessions (5 passes). A fake judge matching nothing fails at the floor (recall 0, interval [0, 0], exit 3). One matching at a 30% rate passes (42.4%, [28.1, 55.3], MDD 30.3, upper bound plus MDD 85.6, exit 0). One matching everything fails at the top: the interval is [100, 100], the MDD at the point estimate is 0 and at the planning rate 24.5, so 124.5 (exit 3). Four units marked as gaps make the pilot incomplete (exit 4). A pilot run whose arm.json shows 5 sessions not run is refused as incomplete (exit 4), and a stop for one coverage gap with every session run goes on to the drop rule and passes.
 - **Decision.** On the same stub sessions, three fake judgings give KEEP (69 of 78 blocker-passes against 13, +71.8 points [+59.7, +83.3]), CUT-CANDIDATE (14 against 44, -38.5 [-50.0, -25.6]) and FIX-METHOD (35 against 33, +2.6 [-10.3, +16.2]). A failing gate, 7 capped sessions in none-rr, a fourth dropped unit and a missing interval each give no outcome (exit 4), and a missing score file exits 5. noloss score prints its margin verdict beside each; it decides nothing.
 - **Beside KEEP.** The secondaries, the rescue and complete-case sensitivities and both strata run. rr-admit.py's port of the bootstrap gives each arm the scorer's own recall interval ([74.4, 98.7] and [7.4, 26.7]).
-- **Judge caps.** The fit gives $176, $209 and $1,130, with every answer asked again (section 8).
+- **Judge caps.** The fit gives $220, $209 and $1,130, with every answer asked again (section 8).
 - **Ledger.** All seven items record at their frozen caps, and each opens one lease and settles it. A second run on rr-grid-full is refused (E_ITEM_BOUND).
 - **Pause.** rr-pause.py gives $4,500 of headroom on a fresh ledger, $1,860 after rr-grid-none's lease, and STOP (exit 3) at $150, below one rr-grid-full round ($160). A judge batch with a $100 worst case on rr-judge-adjudicate launches on the fresh ledger and is refused at $150, because its lease would reserve the item's $1,130. Through review-units, a spend cap of $150 stops a 33-session run before any session (CAP_STOP, 0 journaled), and `--resume` with a larger cap finishes the same run.
 
@@ -249,6 +255,7 @@ The dry run leaves out real model behavior, real judges and real spend.
 - Gaps are dropped under a coverage rule instead of stopping the comparison outright, and the cap-stop rule scales to 66 sessions (section 4).
 - An admission pilot and an exposure smoke come before the grid (section 5).
 - sevmap and the scrub chain before blinding, a deviation in R2, are frozen steps (section 7).
+- MDDs draw by PR cluster with each arm on its own, not blocker by blocker with a fixed lead (section 1).
 - Caps sit at the worst case at the allowance, under a pause rule at $4,500 (section 8).
 - Sol and R56-1 follow in their own amendments (section 9).
 
@@ -256,7 +263,7 @@ The dry run leaves out real model behavior, real judges and real spend.
 
 - reader-map-gstack-5209e9262d80.json: the reader map for `--reader-map` (section 2).
 - comparisons.rr.json: the one comparison and R2's KEEP rule, for derive and score (section 7).
-- power-rr.py.txt: section 1's MDDs, and the MDD rr-admit.py uses.
+- power-rr.py.txt: section 1's MDDs and their calibration, section 5's pass chances, and the MDD rr-admit.py uses.
 - rr-admit.py.txt: the admission pass line (section 5).
 - rr-gate.py.txt: the exposure gate on returned reports (section 6).
 - rr-held.py.txt: held rescues, deadline gaps, causes and the rescue drop file (section 4).
