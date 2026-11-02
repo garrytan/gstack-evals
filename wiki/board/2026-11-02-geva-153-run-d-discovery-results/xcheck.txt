@@ -1,0 +1,4 @@
+trials 629 labels 15
+trials using each tool [('Bash', 620), ('Write', 306), ('Read', 206), ('Edit', 118), ('ToolSearch', 28), ('Skill', 17), ('TaskStop', 16), ('Monitor', 12), ('Agent', 7), ('SendMessage', 2), ('ScheduleWakeup', 1)]
+Skill tool calls {'gpt-6.1-sol:gstack-rewritten@claude-code-preset': 10, 'gpt-6.1-sol:placebo@claude-code-preset': 3, 'gpt-6.1-sol:gstack@claude-code-preset': 4}
+tool inputs naming SKILL.md or /skills/ {'gpt-6.1-sol:gstack-rewritten@claude-code-preset': 10, 'gpt-6.1-sol:gstack@claude-code-preset': 4}

@@ -1,0 +1,111 @@
+===== analysis/config-primary.json
+{
+ "run": "D",
+ "models": [
+  "claude-opus-5-5",
+  "particle-1",
+  "gpt-6.1-sol"
+ ],
+ "setting": "claude-code-preset",
+ "contrast": {
+  "setting": "sdk-default",
+  "models": [
+   "claude-opus-5-5"
+  ]
+ },
+ "d2": "pooled",
+ "d3": "per-model",
+ "task_count": 37,
+ "mdd": {
+  "d2_per_model": "22.3 to 25.8",
+  "d2_pooled": {
+   "3": "7.5 to 10.3",
+   "2": "10.8 to 13.0"
+  },
+  "d3_per_model": "10.9 to 15.4"
+ },
+ "jobs": [
+  "<work>/runs/particle-1/pulled/jobs/discovery-r1-particle-1",
+  "<work>/runs/claude-opus-5-5-b/pulled/jobs/discovery-r1-claude-opus-5-5-b",
+  "<work>/runs/claude-opus-5-5-r2-b/pulled/jobs/discovery-r1-claude-opus-5-5-r2-b",
+  "<work>/runs/gpt-6.1-sol/pulled/jobs/discovery-r1-gpt-6.1-sol"
+ ],
+ "sessions": [
+  "<work>/runs/particle-1/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/claude-opus-5-5-b/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/claude-opus-5-5-r2-b/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/gpt-6.1-sol/pulled/out/proxy-sessions.jsonl"
+ ],
+ "replicate_2_jobs": [
+  "<work>/runs/claude-opus-5-5-r2-b/pulled/jobs/discovery-r1-claude-opus-5-5-r2-b"
+ ],
+ "dropped_tasks": [],
+ "listing_check": {
+  "none": true,
+  "gstack": true,
+  "gstack-rewritten": true,
+  "placebo": true
+ },
+ "arm_tars": {
+  "none": "<work>/arms-tar/none.tar",
+  "gstack": "<work>/arms-tar/gstack.tar",
+  "gstack-rewritten": "<work>/arms-tar/gstack-rewritten.tar",
+  "placebo": "<work>/arms-tar/placebo.tar"
+ }
+}
+===== analysis/config-recovered.json
+{
+ "run": "D",
+ "models": [
+  "claude-opus-5-5",
+  "particle-1",
+  "gpt-6.1-sol"
+ ],
+ "setting": "claude-code-preset",
+ "contrast": {
+  "setting": "sdk-default",
+  "models": [
+   "claude-opus-5-5"
+  ]
+ },
+ "d2": "pooled",
+ "d3": "per-model",
+ "task_count": 37,
+ "mdd": {
+  "d2_per_model": "22.3 to 25.8",
+  "d2_pooled": {
+   "3": "7.5 to 10.3",
+   "2": "10.8 to 13.0"
+  },
+  "d3_per_model": "10.9 to 15.4"
+ },
+ "jobs": [
+  "<work>/runs/particle-1/pulled/jobs/discovery-r1-particle-1",
+  "<work>/runs/claude-opus-5-5-b/pulled/jobs/discovery-r1-claude-opus-5-5-b",
+  "<work>/runs/claude-opus-5-5-r2-b/pulled/jobs/discovery-r1-claude-opus-5-5-r2-b",
+  "<work>/runs/gpt-6.1-sol/pulled/jobs/discovery-r1-gpt-6.1-sol"
+ ],
+ "sessions": [
+  "<work>/runs/particle-1/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/claude-opus-5-5-b/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/claude-opus-5-5-r2-b/pulled/out/proxy-sessions.jsonl",
+  "<work>/runs/gpt-6.1-sol/pulled/out/proxy-sessions.jsonl",
+  "<work>/analysis/lost-session.jsonl"
+ ],
+ "replicate_2_jobs": [
+  "<work>/runs/claude-opus-5-5-r2-b/pulled/jobs/discovery-r1-claude-opus-5-5-r2-b"
+ ],
+ "dropped_tasks": [],
+ "listing_check": {
+  "none": true,
+  "gstack": true,
+  "gstack-rewritten": true,
+  "placebo": true
+ },
+ "arm_tars": {
+  "none": "<work>/arms-tar/none.tar",
+  "gstack": "<work>/arms-tar/gstack.tar",
+  "gstack-rewritten": "<work>/arms-tar/gstack-rewritten.tar",
+  "placebo": "<work>/arms-tar/placebo.tar"
+ }
+}

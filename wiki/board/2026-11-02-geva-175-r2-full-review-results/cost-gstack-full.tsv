@@ -1,0 +1,107 @@
+pr	scope	pass	total_tokens	input_tokens	output_tokens	cache_read_tokens	cache_write_tokens	reasoning_tokens	usd	wall_seconds	meter_source	requests	refused	unknown_calls
+garrytan/gbrain#7511@6b01f793f2bc	all	1	2385303	54	15483	2197543	172223	0	1.610510	229.9	proxy-journal	27	0	0
+garrytan/gbrain#7511@6b01f793f2bc	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7511@6b01f793f2bc	reader:other	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7674@af88cba164b0	all	1	3309171	56	14665	3172759	121691	0	1.536540	247.2	proxy-journal	28	0	0
+garrytan/gbrain#7674@af88cba164b0	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7684@ac3c2af65960	all	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	203.6	proxy-journal	33	0	1
+garrytan/gbrain#7684@ac3c2af65960	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7684@ac3c2af65960	reader:other	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7789@49eb4da5f7c8	all	1	10150508	264	70804	9611425	468015	0	5.679549	260.5	proxy-journal	132	0	0
+garrytan/gbrain#7789@49eb4da5f7c8	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7789@49eb4da5f7c8	reader:adversarial-native	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7789@49eb4da5f7c8	reader:batched	1	48661	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7789@49eb4da5f7c8	reader:performance	1	54065	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7789@49eb4da5f7c8	reader:red-team	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7789@49eb4da5f7c8	reader:security	1	82950	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7789@49eb4da5f7c8	reader:testing	1	63686	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7794@2d801d54cee4	all	1	3960598	94	30217	3741794	188493	0	2.295561	466.5	proxy-journal	47	0	0
+garrytan/gbrain#7794@2d801d54cee4	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7794@2d801d54cee4	reader:other	1	88539	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	all	1	14968871	354	100949	13993470	874098	0	9.189649	935.2	proxy-journal	177	0	0
+garrytan/gbrain#7872@f61d1a5fd5fa	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:adversarial-native	1	138712	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:maintainability	1	49401	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:performance	1	50519	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:red-team	1	114417	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:security	1	65016	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:simplification	1	47693	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:state-machines	1	98925	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7872@f61d1a5fd5fa	reader:testing	1	74251	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7878@d43d2497a65c	all	1	8305567	186	57843	7846427	401111	0	4.732479	477.3	proxy-journal	93	0	0
+garrytan/gbrain#7878@d43d2497a65c	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7878@d43d2497a65c	reader:adversarial-native	1	128660	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7878@d43d2497a65c	reader:batched	1	179225	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7884@d3b843389bd6	all	1	1831631	40	9159	1730353	92079	0	0.989814	117.7	proxy-journal	20	0	0
+garrytan/gbrain#7884@d3b843389bd6	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7901@40461c875975	all	1	2650227	68	25952	2373231	250976	0	2.248851	204.4	proxy-journal	34	0	0
+garrytan/gbrain#7901@40461c875975	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gbrain#7901@40461c875975	reader:maintainability	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7901@40461c875975	reader:other	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gbrain#7901@40461c875975	reader:testing	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#1808@b17f340a457a	all	1	2795680	70	25022	2603668	166920	0	1.856066	313.6	proxy-journal	35	0	0
+garrytan/gstack#1808@b17f340a457a	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#1808@b17f340a457a	reader:other	1	83754	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	all	1	6160593	191	83690	5556439	520273	0	5.347970	607.3	proxy-journal	95	0	0
+garrytan/gstack#3381@8a52c271ad81	voice	1	15700	3	5	0	15692	0	0.039286		proxy-journal	1		0
+garrytan/gstack#3381@8a52c271ad81	reader:adversarial-native	1	59092	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:maintainability	1	43772	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:performance	1	39858	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:red-team	1	67551	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:security	1	55716	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:simplification	1	41324	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:state-machines	1	74303	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3381@8a52c271ad81	reader:testing	1	60003	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	all	1	4792645	142	40202	4285332	466969	0	3.996548	298.2	proxy-journal	71	0	0
+garrytan/gstack#3431@8f4cbb8db01c	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3431@8f4cbb8db01c	reader:adversarial-native	1	89078	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	reader:data-migration	1	38678	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	reader:maintainability	1	53433	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	reader:performance	1	35137	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	reader:security	1	79604	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	reader:simplification	1	47210	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3431@8f4cbb8db01c	reader:testing	1	66753	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3448@b476ae9e4b66	all	1	3276204	98	47708	2898363	330035	0	3.184422	578.9	proxy-journal	49	0	0
+garrytan/gstack#3448@b476ae9e4b66	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3448@b476ae9e4b66	reader:adversarial-native	1	73839	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3448@b476ae9e4b66	reader:maintainability	1	50931	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3448@b476ae9e4b66	reader:security	1	52726	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3448@b476ae9e4b66	reader:testing	1	76410	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3475@fc69d3ff0bfe	all	1	8620921	192	45930	8068914	505885	0	5.062613	345.4	proxy-journal	96	0	0
+garrytan/gstack#3475@fc69d3ff0bfe	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3475@fc69d3ff0bfe	reader:adversarial-native	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3475@fc69d3ff0bfe	reader:maintainability	1	73071	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3475@fc69d3ff0bfe	reader:performance	1	47418	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3475@fc69d3ff0bfe	reader:security	1	57121	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3475@fc69d3ff0bfe	reader:simplification	1	50389	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3475@fc69d3ff0bfe	reader:testing	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	all	1	3527144	117	58337	3051512	417178	0	3.823798	485.4	proxy-journal	58	0	0
+garrytan/gstack#3494@c555ce3a8324	voice	1	15837	3	5	0	15829	0	0.039629		proxy-journal	1		0
+garrytan/gstack#3494@c555ce3a8324	reader:adversarial-native	1	53392	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	reader:batched	1	42154	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	reader:maintainability	1	48802	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	reader:performance	1	38378	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	reader:red-team	1	69418	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	reader:security	1	41188	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3494@c555ce3a8324	reader:testing	1	58895	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3507@8c021d124220	all	1	5584845	168	45812	5110253	428612	0	4.082059	352.2	proxy-journal	83	0	0
+garrytan/gstack#3507@8c021d124220	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3507@8c021d124220	reader:adversarial-native	1	77367	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3507@8c021d124220	reader:maintainability	1	68547	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3507@8c021d124220	reader:performance	1	47208	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3507@8c021d124220	reader:red-team	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3507@8c021d124220	reader:simplification	1	39304	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3507@8c021d124220	reader:testing	1	64324	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3516@3712b7971126	all	1	1707111	52	12157	1508530	186372	0	1.476926	106.2	proxy-journal	25	0	0
+garrytan/gstack#3516@3712b7971126	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3516@3712b7971126	reader:other	1	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3556@95d9c6d06ef1	all	1	1070845	24	8426	981720	80675	0	0.768339	119.1	proxy-journal	12	0	0
+garrytan/gstack#3556@95d9c6d06ef1	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3557@7459bb48317d	all	1	2885161	92	27003	2563174	294892	0	2.527545	237.5	proxy-journal	46	0	0
+garrytan/gstack#3557@7459bb48317d	voice	1	0	0	0	0	0	0	0.000000		proxy-journal	0		0
+garrytan/gstack#3557@7459bb48317d	reader:adversarial-native	1	56306	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3557@7459bb48317d	reader:maintainability	1	41402	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3557@7459bb48317d	reader:performance	1	34876	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3557@7459bb48317d	reader:security	1	33496	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3557@7459bb48317d	reader:simplification	1	36492	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			
+garrytan/gstack#3557@7459bb48317d	reader:testing	1	41664	unavailable	unavailable	unavailable	unavailable	unavailable	unavailable		reader-counter			

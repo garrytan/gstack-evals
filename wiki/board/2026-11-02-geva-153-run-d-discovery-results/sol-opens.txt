@@ -1,0 +1,27 @@
+| Arm | Task | Fit | Skills called (in order) | Reward |
+|---|---|---|---|---|
+| gstack | custom-memory-heap-crash | fit | investigate | 1.0 |
+| gstack | filter-js-from-html |  | cso | 0.0 |
+| gstack | fix-code-vulnerability | fit | cso,cso | 1.0 |
+| gstack | sanitize-git-repo |  | cso | 1.0 |
+| gstack-rewritten | custom-memory-heap-crash | fit | investigate | 1.0 |
+| gstack-rewritten | db-wal-recovery | fit | investigate | 1.0 |
+| gstack-rewritten | filter-js-from-html |  | cso | 0.0 |
+| gstack-rewritten | fix-code-vulnerability | fit | cso | 1.0 |
+| gstack-rewritten | fix-git | fit | investigate | 1.0 |
+| gstack-rewritten | git-leak-recovery |  | investigate | 1.0 |
+| gstack-rewritten | git-multibranch |  | investigate | 1.0 |
+| gstack-rewritten | mailman |  | investigate | 1.0 |
+| gstack-rewritten | overfull-hbox | fit | investigate | 1.0 |
+| gstack-rewritten | password-recovery |  | investigate | 1.0 |
+| placebo | custom-memory-heap-crash | fit | investigate | 1.0 |
+| placebo | fix-code-vulnerability | fit | cso | 1.0 |
+| placebo | sanitize-git-repo |  | cso | 0.0 |
+
+Sol pass by arm and whether the trial called Skill (trials, passes):
+  ('gstack', False) [33, 30]
+  ('gstack', True) [4, 3]
+  ('gstack-rewritten', False) [27, 23]
+  ('gstack-rewritten', True) [10, 9]
+  ('placebo', False) [34, 30]
+  ('placebo', True) [3, 2]
