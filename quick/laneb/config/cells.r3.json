@@ -1,5 +1,5 @@
 {
-  "note": "Cells for R3 (GEVA-101 prereg, section 4.2): the per-trial allowance is each session's cap, reserved in the item's ledger before the session and enforced by the metering proxy. Opus 5.5 $4, particle-1 $1 through OpenRouter.",
+  "note": "Cells for R3 (GEVA-101 prereg, section 4.2): the per-trial allowance is each session's cap, reserved in the item's ledger before the session and enforced by the metering proxy. Opus 5.5 $4, particle-1 $1 through OpenRouter. GPT-6.1 Sol $4 through OpenRouter, on its own item r3a-sol (R3 amendment, Captain ruling A1).",
   "models": [
     {
       "id": "claude-opus-5-5",
@@ -10,6 +10,11 @@
       "id": "particle-1",
       "harbor_model": "anthropic/particle-1",
       "session_cap_usd": 1
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "harbor_model": "anthropic/gpt-6.1-sol",
+      "session_cap_usd": 4
     }
   ],
   "max_output_tokens": 32000,

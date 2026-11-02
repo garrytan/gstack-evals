@@ -17,14 +17,14 @@ Each real-outcome trial ships into this sandbox instead of a real host (plan [20
 gstack-evals real sandbox serve --root <dir> --agent-host <ip> [--agent-port 8790] [--control-port 8791]
 ```
 
-It prints `SIDECAR_READY control=<url> agent=<url>`. The Harbor agent (`lanes/real-outcome/agent/real_agent.py`) opens each trial with `POST /trials`, runs the returned prep script in the container after the egress rules are on, and closes the trial with `POST /trials/<id>/close` when the session ends.
+It resolves `--root` to an absolute path first, so a relative root still gets every trial's pre-receive ref guard, and prints `SIDECAR_READY control=<url> agent=<url>`. The Harbor agent (`lanes/real-outcome/agent/real_agent.py`) opens each trial with `POST /trials`, runs the returned prep script in the container after the egress rules are on, and closes the trial with `POST /trials/<id>/close` when the session ends.
 
 Prep puts the stub first on PATH, points origin at the sidecar with the trial's token, sets origin/<base> and origin/HEAD to the base commit, and checks out the starting branch: a feature branch cut from base (K1 to K3), or the replay branch (K4). /ship's preflight stops on the base branch, so no trial starts there.
 
 A base tree holding `.claude/` or `.mcp.json` is refused at open, so no task brings project-local skills, plugins, settings or MCP servers into either arm. `CLAUDE.md`, `CLAUDE.local.md` and `AGENTS.md` are recorded and left in place: both arms read them alike.
 
-`gstack-evals real sandbox gh-surface <gstack tree>` lists every gh shape the tree's /ship can reach and whether the sidecar serves it. The scan reads prose too, so it over-reports; at gstack 1.92.35.0 its unserved rows are prose matches and merge-queue paths a trial never takes. P0's recorded trace settles the surface.
+`gstack-evals real sandbox gh-surface <gstack tree>` lists every gh shape the tree's /ship can reach and whether the sidecar serves it. A `gh api` row names its method unless it is GET, and counts as served only where the sidecar answers that method and path, with the repo as `{owner}/{repo}` or shell variables and a number as digits or a shell variable. The scan reads prose too, so it over-reports; at gstack 1.92.35.0 its unserved rows are prose matches and merge-queue paths a trial never takes. P0's recorded trace settles the surface.
 
 ## Tests
 
-`tests/real-outcome/sandbox.test.ts` drives a fake agent with real git and the real stub: a pull request, no pull request, a direct push to base, a force push, merge attempts, a draft, several pull requests, a deleted branch, a forged shipment, a journal bypass, hooks, another trial's token, calls after close and calls outside the surface.
+`tests/real-outcome/sandbox.test.ts` drives a fake agent with real git and the real stub: a pull request, no pull request, a direct push to base, a force push, merge attempts, a draft, several pull requests, a deleted branch, a forged shipment, a relative root, a journal bypass, hooks, another trial's token, calls after close and calls outside the surface.
