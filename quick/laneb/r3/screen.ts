@@ -7,8 +7,9 @@
 //   bun quick/laneb/r3/screen.ts analyze <work dir> [--model <id>]   env LEDGER; reads the pulled results
 // --model is claude-opus-5-5 (the default) or gpt-6.1-sol. Each model has its own item, cap, parts, ledger and work dir
 // (R3A below): Opus 5.5 on r3a-screen ($150, the prereg's), GPT-6.1 Sol on r3a-sol ($140 with VMs, the R3 amendment's
-// ruling A1). A model's R3a is one none trial for each of the 93 tasks and one told trial on each of 10 tasks drawn with
-// seed 20261101, every arm on claude-code-preset (GSTA-2 ruling). Both batches and their VM hours settle to its item.
+// ruling A1). A model's R3a is one none trial for each of the 93 band tasks less R3's drop list (tasks/swebv-r3-drop.json,
+// its sha256 pinned in materialize.ts) and one told trial on each of 10 band tasks drawn with seed 20261101, every arm on
+// claude-code-preset (GSTA-2 ruling). A dropped task never reaches the screen's run, its oracle job or its coverage. Both batches and their VM hours settle to its item.
 // The item serves one run: prepare refuses a ledger that already holds a reserve or settle, and run binds the item before
 // its first spend by creating <LEDGER>.bound, so any later run is refused. Sol's item also takes its route check first
 // (route-check.ts): its settled rows under the item's route prefix are allowed, and the screen is refused until the route
@@ -31,7 +32,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { readSessionRows, rng } from "../analysis/analyze.ts";
 import { fromMicros, readRows, totals } from "../runner/ledger.ts";
-import { loadSwebvTasks, R3_BAND_SHA256 } from "../runner/materialize.ts";
+import { loadR3Drops, loadSwebvTasks, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, type R3Drop } from "../runner/materialize.ts";
 import { loadR3Jobs, type R3Trial } from "./exposure.ts";
 
 export const OPUS = "claude-opus-5-5";
@@ -92,6 +93,12 @@ const LANEB = resolve(HERE, "..");
 
 export function bandIds(): string[] {
   return loadSwebvTasks(join(LANEB, "tasks/swebv-r3.txt"), join(LANEB, "tasks/swebv-r3.json"), R3_BAND_SHA256).map((t) => t.task_id);
+}
+
+// The screen's tasks: the band less R3's drop list, in band order. The pilot still draws from the whole band.
+export function screenIds(drops: R3Drop[] = loadR3Drops(join(LANEB, R3_DROP_FILE), R3_DROP_SHA256, bandIds())): string[] {
+  const dropped = new Set(drops.map((d) => d.task_id));
+  return bandIds().filter((id) => !dropped.has(id));
 }
 
 // r3-dry.ts's draw: 10 tasks from the sorted band, seed 20261101.
@@ -240,7 +247,7 @@ function prepare(work: string, m: R3aModel) {
     writeFileSync(join(run, "STOP_ON_CAP"), "");
   }
   writeFileSync(join(work, "plan.json"), JSON.stringify({ item: m.item, cap_usd: m.capUsd, band_sha256: R3_BAND_SHA256, pilot_seed: PILOT.seed, pilot_tasks: pilot, parts: m.parts }, null, 2) + "\n");
-  console.log(`prepared ${work}: screen (93 tasks, none) and pilot (${pilot.join(", ")}, told /investigate), item ${m.item} unbound`);
+  console.log(`prepared ${work}: screen (${screenIds().length} tasks, none) and pilot (${pilot.join(", ")}, told /investigate), item ${m.item} unbound`);
 }
 
 function run(work: string, m: R3aModel) {
@@ -257,7 +264,7 @@ function run(work: string, m: R3aModel) {
   if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; ${m.item} is still unbound`);
   const configs = m.parts.map((part) => join(work, part.name, "proxy.json"));
   routePassed(ledger, m, configs);
-  const planned: Record<string, string[]> = { screen: bandIds(), pilot: plan.pilot_tasks };
+  const planned: Record<string, string[]> = { screen: screenIds(), pilot: plan.pilot_tasks };
   const bound = ledger + ".bound";
   try {
     writeFileSync(bound, JSON.stringify({ item: m.item, work, at: new Date().toISOString() }) + "\n", { flag: "wx" });
@@ -293,7 +300,7 @@ function unreadable(path: string): boolean {
 }
 
 // Why a part is incomplete, or null. A cap refusal anywhere, a pulled proxy file that is empty or unparseable (a cap stop
-// can't be ruled out), a launch that didn't exit 0, a part with no pulled results, trials that are not one per planned
+// can't be ruled out), an image that didn't pull (vm-run.sh's out/pull-fails.txt), a launch that didn't exit 0, a part with no pulled results, trials that are not one per planned
 // task on the model, or more than 10% of the part's trials infra (GSTA-2 rulings).
 function stopReason(work: string, part: Part, trials: R3Trial[], tasks: string[], m: R3aModel): string | null {
   const dir = join(work, part.name);
@@ -309,6 +316,8 @@ function stopReason(work: string, part: Part, trials: R3Trial[], tasks: string[]
   if (status) return `${part.name}: ${status.cap_stop}`;
   const capped = trials.find((t) => t.cap_stop);
   if (capped) return `${part.name}: ${capped.trial} stopped at the cap (LedgerCapStop)`;
+  const pullFails = join(dir, "pulled/out/pull-fails.txt");
+  if (existsSync(pullFails)) return `${part.name}: infra before any model call: an image did not pull (6 tries and up to 3 hours at the rate limit): ${readFileSync(pullFails, "utf8").trim().split("\n").join("; ")}`;
   if (rc === null) return `${part.name} was never launched`;
   if (rc !== 0) return `${part.name}'s launch exited ${rc}`;
   if (!existsSync(join(dir, "pulled/jobs"))) return `${part.name} has no pulled results`;
@@ -335,7 +344,7 @@ function analyze(work: string, m: R3aModel): number {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
   const band = bandIds();
   if (JSON.stringify(plan.pilot_tasks) !== JSON.stringify(pilotTasks(band))) throw new Error(`${work}/plan.json's pilot tasks are not the seed ${PILOT.seed} draw`);
-  const planned: Record<string, string[]> = { screen: band, pilot: plan.pilot_tasks };
+  const planned: Record<string, string[]> = { screen: screenIds(), pilot: plan.pilot_tasks };
   const parts = m.parts.map((part) => loadPart(work, part, planned[part.name]!, m));
   const [screen, pilot] = parts.map((p) => p.trials) as [R3Trial[], R3Trial[]];
   writeFileSync(join(work, "trials.jsonl"), parts.flatMap((p) => p.trials.map((t) => JSON.stringify({ part: p.part.name, ...t }))).join("\n") + "\n");
@@ -344,7 +353,13 @@ function analyze(work: string, m: R3aModel): number {
   const vm = rows.filter((r) => r.kind === "settle" && String(r.kind_detail ?? "").startsWith("VM hours")).map((r) => ({ id: r.id, usd: fromMicros(r.usd_micros), detail: r.kind_detail }));
   const ledgerLine = `${m.item}: ${screen.length} screen trials, ${pilot.length} pilot trials, settled $${fromMicros(t.settledMicros).toFixed(2)} of $${fromMicros(t.capMicros)}, open reserves ${t.openIds.length}`;
   const route = m.routePrefix === null ? {} : { model: m.id, route_check: readRoute(ledger) };
-  const base = { item: m.item, ...route, ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
+  // Each part's image pulls as vm-run.sh logged them (out/pulls.tsv): images, failures and seconds waited at the rate limit.
+  const pulls = Object.fromEntries(m.parts.map((part) => {
+    const f = join(work, part.name, "pulled/out/pulls.tsv");
+    const rows = existsSync(f) ? readFileSync(f, "utf8").split("\n").slice(1).filter(Boolean).map((l) => l.split("\t")) : null;
+    return [part.name, rows && { images: rows.length, failed: rows.filter((r) => r[0] !== "ok").map((r) => r[3]), rate_limit_wait_s: rows.reduce((s, r) => s + Number(r[2]), 0) }];
+  }));
+  const base = { item: m.item, ...route, pulls, ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
   console.log(ledgerLine);
   const stop = parts.map((p) => p.stop).find(Boolean);
   if (stop) {

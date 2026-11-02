@@ -178,6 +178,47 @@ export function loadSwebvTasks(listPath: string, digestsPath: string, wantSha256
   return doc.tasks;
 }
 
+// R3's drop list (Captain ruling on GEVA-177's finding, GST-941): GEVA-177's r3-drop-list.json, committed byte for byte
+// as R3 amendment 3's drop-list.py.txt writes it. Its dropped tasks leave the screen's run, its oracle job and its
+// coverage; each carries its reason and both oracle passes' evidence with their digests. The file must hash to
+// R3_DROP_SHA256, name R3's band, list band tasks that failed both passes, once each, match its own id digests, and drop
+// no task in the pilot draw. The band file, its sha256 and the pilot draw stay.
+export const R3_DROP_FILE = "tasks/swebv-r3-drop.json";
+export const R3_DROP_SHA256 = "1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc";
+
+export type R3Drop = { task_id: string; reason: string };
+
+export function loadR3Drops(path: string, wantSha256: string, band: string[]): R3Drop[] {
+  const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+  const raw = readFileSync(path);
+  if (sha(raw) !== wantSha256) throw new Error(`${path}: sha256 ${sha(raw)} is not the pinned ${wantSha256}`);
+  const doc = JSON.parse(raw.toString("utf8")) as {
+    band_file_sha256: string;
+    band_size: number;
+    dropped: { task: string; reason: string; pass1?: { result?: string }; pass2?: { result?: string } }[];
+    dropped_ids_sha256: string;
+    kept_size: number;
+    kept_ids_sha256: string;
+    pilot_tasks: string[];
+    pilot_dropped: string[];
+  };
+  if (doc.band_file_sha256 !== R3_BAND_SHA256 || doc.band_size !== band.length) throw new Error(`${path}: band_file_sha256 ${doc.band_file_sha256} with band_size ${doc.band_size} is not R3's band (${R3_BAND_SHA256}, ${band.length} tasks)`);
+  const seen = new Set<string>();
+  for (const d of doc.dropped) {
+    if (!band.includes(d.task)) throw new Error(`${path}: ${d.task} is not a band task`);
+    if (seen.has(d.task)) throw new Error(`${path}: ${d.task} is listed twice`);
+    if (typeof d.reason !== "string" || !d.reason.trim()) throw new Error(`${path}: ${d.task} has no reason`);
+    if (d.pass1?.result !== "fail" || d.pass2?.result !== "fail") throw new Error(`${path}: ${d.task} did not fail both oracle passes`);
+    seen.add(d.task);
+  }
+  const listing = (ids: string[]) => sha([...ids].sort().map((i) => i + "\n").join(""));
+  const kept = band.filter((id) => !seen.has(id));
+  if (doc.dropped_ids_sha256 !== listing([...seen]) || doc.kept_size !== kept.length || doc.kept_ids_sha256 !== listing(kept)) throw new Error(`${path}: dropped_ids_sha256, kept_size or kept_ids_sha256 does not match its dropped tasks`);
+  const inPilot = [...new Set([...doc.pilot_tasks.filter((id) => seen.has(id)), ...doc.pilot_dropped])];
+  if (inPilot.length) throw new Error(`${path}: drops tasks in the pilot draw: ${inPilot.join(", ")}`);
+  return doc.dropped.map((d) => ({ task_id: d.task, reason: d.reason }));
+}
+
 function tomlNumber(text: string, section: string, key: string): number | null {
   const body = new RegExp(`^\\[${section}\\]\\s*$([\\s\\S]*?)(?=^\\[|(?![\\s\\S]))`, "m").exec(text)?.[1] ?? "";
   const v = new RegExp(`^\\s*${key}\\s*=\\s*([0-9.]+)`, "m").exec(body)?.[1];

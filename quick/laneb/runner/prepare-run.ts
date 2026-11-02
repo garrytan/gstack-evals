@@ -6,13 +6,14 @@
 // the manifest records every arm's system_prompt, session_kind and told skill.
 // Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM work dir, default in the code), NETWORK (default allowlist),
 // TASK_SET (tb2, the default, or swebv-r3: R3's SWE-bench Verified list, materialized from SWEBV, a harbor-datasets checkout
-// at the registry pin, with the patch exported from /testbed), TASKS (a comma list from the task set, default all),
+// at the registry pin, with the patch exported from /testbed, less R3's drop list), TASKS (a comma list from the task set,
+// default all; a task on R3's drop list is refused),
 // CELLS (a cells*.json file in config/, default cells.json), ARM_MANIFESTS (the arm manifest directory under quick/laneb,
 // default arms/manifests).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
-import { loadSwebvTasks, materializeSwebv, materializeTb2, R3_BAND_SHA256 } from "./materialize.ts";
+import { loadR3Drops, loadSwebvTasks, materializeSwebv, materializeTb2, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256 } from "./materialize.ts";
 import { armSpec, jobConfig } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -35,10 +36,16 @@ if (import.meta.main) {
   const cells = JSON.parse(readFileSync(join(root, "config", cellsFile), "utf8"));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
-  const swebv = taskSet === "swebv-r3" ? loadSwebvTasks(join(root, "tasks/swebv-r3.txt"), join(root, "tasks/swebv-r3.json"), R3_BAND_SHA256) : [];
+  const band = taskSet === "swebv-r3" ? loadSwebvTasks(join(root, "tasks/swebv-r3.txt"), join(root, "tasks/swebv-r3.json"), R3_BAND_SHA256) : [];
+  const drops = taskSet === "swebv-r3" ? loadR3Drops(join(root, R3_DROP_FILE), R3_DROP_SHA256, band.map((t) => t.task_id)) : [];
+  const swebv = band.filter((t) => !drops.some((d) => d.task_id === t.task_id));
   const all: string[] = taskSet === "swebv-r3" ? swebv.map((t) => t.task_id) : JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
   const final = process.env.TASKS ? process.env.TASKS.split(",") : all;
-  for (const id of final) if (!all.includes(id)) throw new Error(`E_USAGE task ${id} is not in the ${taskSet} task set`);
+  for (const id of final) {
+    const drop = drops.find((d) => d.task_id === id);
+    if (drop) throw new Error(`E_USAGE task ${id} is on R3's drop list (${drop.reason}); it never runs`);
+    if (!all.includes(id)) throw new Error(`E_USAGE task ${id} is not in the ${taskSet} task set`);
+  }
   if (new Set(final).size !== final.length) throw new Error(`E_USAGE TASKS names a task twice`);
   if (existsSync(run)) throw new Error(`${run} exists; use a fresh run directory`);
   mkdirSync(join(run, "arms"), { recursive: true });
