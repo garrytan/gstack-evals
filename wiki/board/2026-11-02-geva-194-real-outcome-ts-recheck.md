@@ -106,7 +106,7 @@ On scratch copies of those 2 units (regression lists frozen from this check, sea
 | Repositories, all units | 4 | 6 | |
 | Strict stratum (merged on or after 2026-10-01), units | 5 | 9 (5 of them build tasks) | |
 
-Shortfalls: 1 build task (9 of 10) and 1 K1 pair (2 of 3). The repository target is met. Fixing the two L2 false positives would restore the third pair and a tenth build task, since nothing else failed on either unit.
+Shortfalls: 1 build task (9 of 10) and 1 K1 pair (2 of 3). The repository target is met. Fixing the two L2 false positives would restore the third pair and bring the set to 11 build tasks, since nothing else failed on either unit.
 
 ## Owed before P0
 
