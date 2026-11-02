@@ -1,0 +1,94 @@
+{
+  "source": "Recorded from the sol-review-smoke session (GST-1019, 2026-11-02): one review-units session, arm none, openai/gpt-6.1-sol through OpenRouter's Messages route, on a synthetic unit. Per call: the proxy's reservation, the usage the proxy read from OpenRouter's reply (Anthropic's shape) and what it settled; then the session's cost.tsv row, and the usage totals Claude Code reported in its result. Numbers only: no request or response text.",
+  "model": "openai/gpt-6.1-sol",
+  "max_output_tokens": 32000,
+  "calls": [
+    {
+      "max_micros": 472910,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 11599,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 128
+      },
+      "spent_micros": 30284
+    },
+    {
+      "max_micros": 474885,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 859,
+        "cache_read_input_tokens": 10913,
+        "output_tokens": 122
+      },
+      "spent_micros": 4465
+    },
+    {
+      "max_micros": 478288,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 436,
+        "cache_read_input_tokens": 11772,
+        "output_tokens": 110
+      },
+      "spent_micros": 3374
+    },
+    {
+      "max_micros": 483018,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 635,
+        "cache_read_input_tokens": 12208,
+        "output_tokens": 87
+      },
+      "spent_micros": 3685
+    },
+    {
+      "max_micros": 491035,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 65,
+        "cache_read_input_tokens": 12843,
+        "output_tokens": 204
+      },
+      "spent_micros": 3493
+    },
+    {
+      "max_micros": 493380,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 246,
+        "cache_read_input_tokens": 12908,
+        "output_tokens": 54
+      },
+      "spent_micros": 2452
+    },
+    {
+      "max_micros": 495025,
+      "usage": {
+        "input_tokens": 3,
+        "cache_creation_input_tokens": 143,
+        "cache_read_input_tokens": 13154,
+        "output_tokens": 250
+      },
+      "spent_micros": 4179
+    }
+  ],
+  "cost_tsv": {
+    "input_tokens": "21",
+    "output_tokens": "955",
+    "cache_read_tokens": "73798",
+    "cache_write_tokens": "13983",
+    "reasoning_tokens": "0",
+    "usd": "0.051932",
+    "requests": "7",
+    "refused": "0",
+    "unknown_calls": "0"
+  },
+  "claude_code_result_usage": {
+    "input_tokens": 21,
+    "cache_creation_input_tokens": 13983,
+    "cache_read_input_tokens": 73798,
+    "output_tokens": 955
+  }
+}

@@ -42,6 +42,9 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 ## A run
 
 - Task id: `<repo name>-<pr>-<first 8 of head>`. The agent sees only /work/<task id>, seeded with the unit tree.
+- Models: `--models` takes policy models with a Claude Code route (provider anthropic or openrouter), and the dry run
+  prints each one's provider. GPT-6.1 Sol runs as `openai/gpt-6.1-sol`, through OpenRouter's Anthropic-compatible
+  Messages route; `gpt-6.1-sol` is its openai route, which the judge and the Codex host use.
 - Prompt: the told prompt with the arm's command (none no prefix, gstack /review, pstack /pstack:interrogate, tstack
   /sol-loop with "Run one review round and stop before any fix.") and the base branch.
 - Session key: the unit tree's digest in fixture_tree, the told template's sha256 in task, the parser's source sha256 in

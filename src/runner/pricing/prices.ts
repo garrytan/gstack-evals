@@ -47,6 +47,14 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // 2026-10-31: $0.08 input, $0.55 output, $0.008 cache read. DeepSeek's own endpoint may train on prompts, so data_collection deny
   // leaves it no route; the rung runs on a third-party fp8 host instead (GST-575, the Captain's option B).
   "deepseek/deepseek-v4.1-flash-1017": { input: 0.08, output: 0.55, cache_read: 0.008, providers: ["inference-net"], quantizations: ["fp8"] },
+  // GPT-6.1 Sol as a model under test on the Claude Code host (R54, GST-1019). OpenRouter's models API
+  // (https://openrouter.ai/api/v1/models), read 2026-11-02T16:38:39Z: $2 input, $10 output, $0.10 cache read and $2.50 cache
+  // write, and $4, $15, $0.20 and $5 past 272,000 prompt tokens (its min_prompt_tokens override). Its endpoints API, read at the
+  // same time, lists the openai endpoint at those prices, as does OpenRouter's record of 2026-11-02
+  // (wiki/plans/2026-11-02-geva-177-r3-amendment-3/openrouter-gpt-6.1-sol.json); they match the openai:gpt-6.1-sol row.
+  // Pinned to the openai provider, as Lane B's R3 row pins it (quick/laneb/config/proxy.json). The proxy refuses a service_tier
+  // on OpenRouter, so OpenRouter serves the standard tier, and max_price leaves out openai/fast and openai/ultrafast.
+  "openai/gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 }, providers: ["openai"] },
 };
 
 /** List prices, USD per 1M tokens, as harness-evals checked them on 2026-10-02 to 2026-10-08. */
