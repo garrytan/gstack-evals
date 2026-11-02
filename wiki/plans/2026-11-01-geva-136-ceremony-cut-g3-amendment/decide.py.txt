@@ -6,7 +6,8 @@
 # wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment: a variant session whose start line the session cut with its own pipe or
 # redirect, run with --render unattended, keeping UNATTENDED_SESSION: true and showing RENDER_KIND: unattended nowhere (exposure.py's
 # start_line_cut_render), is not observable and leaves the count, and a
-# SESSION_KIND mismatch fails G3 like a RENDER_KIND_MISMATCH line.
+# SESSION_KIND mismatch fails G3 like a RENDER_KIND_MISMATCH line. A variant session counts as printing RENDER_KIND: unattended only
+# when a start-line call's own result holds that line (start_line_render_kind).
 # Usage: python3 decide.py --tb2 F --review-score F --review-cost F --exposure-review F --exposure-tb2 F [--arms JSON]
 import json, sys
 a = dict(zip(sys.argv[1::2], sys.argv[2::2]))
@@ -29,10 +30,10 @@ def g3(name, ev, ec):
     if not (ev and ec): return gate(name, False, 'no exposure row for the control or variant arm')
     seen, ctl = ev['start_line'] - ev['start_line_cut_render'], ec['start_line'] - ec['start_line_cut']
     rk, sk = (sum(x[k] for x in (ev, ec)) for k in ('render_kind_mismatch', 'session_kind_mismatch'))
-    g3_read[name] = (f"variant {ev['render_kind_unattended']} of {seen} counted start-line sessions printed RENDER_KIND: unattended, {ev['start_line_cut_render']} more cut by the session"
+    g3_read[name] = (f"variant {ev['start_line_render_kind']} of {seen} counted start-line sessions printed RENDER_KIND: unattended, {ev['start_line_cut_render']} more cut by the session"
                      + (' (variant half not observable)' if seen == 0 else '') + f"; control {ec['render_kind_unattended']} printed it, {ctl} uncut start-line sessions"
                      + (' (control half not observable)' if ctl == 0 else '') + f"; mismatch sessions: {rk} RENDER_KIND_MISMATCH, {sk} SESSION_KIND")
-    gate(name, ev['render_kind_unattended'] >= RENDER_SHARE * seen and ec['render_kind_unattended'] == 0 and rk + sk == 0, g3_read[name])
+    gate(name, ev['start_line_render_kind'] >= RENDER_SHARE * seen and ec['render_kind_unattended'] == 0 and rk + sk == 0, g3_read[name])
 for m in (OPUS, PARTICLE):
     c, v = cell(m, 'control'), cell(m, 'variant')
     gate('G2 body load, TB2 ' + m, v['firstMedian'] <= c['firstMedian'] - BODY_DROP, f"variant median {v['firstMedian']} vs control {c['firstMedian']}")

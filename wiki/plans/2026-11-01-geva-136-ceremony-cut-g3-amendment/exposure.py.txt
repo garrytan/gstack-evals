@@ -9,7 +9,8 @@
 # and its own tool result: start_line_cut (every start line in the session ran with the session's own pipe or redirect, and its kept
 # output holds UNATTENDED_SESSION: true and no RENDER_KIND line), start_line_cut_render (those whose every start line also carried
 # --render unattended and whose tool results hold RENDER_KIND: unattended nowhere, so an excused session never adds to
-# render_kind_unattended) and session_kind_mismatch (a start line printed a SESSION_KIND other than unattended).
+# render_kind_unattended), session_kind_mismatch (a start line printed a SESSION_KIND other than unattended) and
+# start_line_render_kind (a start-line call's own result holds a RENDER_KIND: unattended line), which decide.py's G3 counts as printed.
 # Usage: python3 exposure.py review <review-units out dir>... | tb2 <job dir>...  [--json <file>]
 import glob, json, os, re, sys, collections
 G = r'\.claude/skills/gstack/'
@@ -71,6 +72,7 @@ def session(path):
     m['start_line_cut'] = bool(starts) and all(cut(c, outs.get(i, '')) for i, c in starts)
     m['start_line_cut_render'] = m['start_line_cut'] and not m['render_kind_unattended'] and all(re.search(r'--render\s+unattended\b', own(c)) for _, c in starts)
     m['session_kind_mismatch'] = any(re.search(r'(?m)^SESSION_KIND: (?!unattended\s*$)', outs.get(i, '')) for i, _ in starts)
+    m['start_line_render_kind'] = any(re.search(r'(?m)^RENDER_KIND: unattended\s*$', outs.get(i, '')) for i, _ in starts)
     return m
 def sessions(kind, roots):
     for root in roots:
@@ -89,7 +91,7 @@ agg = collections.defaultdict(lambda: collections.Counter()); n = collections.Co
 for model, arm, f in sessions(kind, roots):
     n[(model, arm)] += 1
     for k, v in session(f).items(): agg[(model, arm)][k] += int(v)
-keys = list(CALL) + list(RESULT) + list(TEXT) + list(TOOLS) + ['any_ceremony', 'turn_cap', 'start_line_cut', 'start_line_cut_render', 'session_kind_mismatch']
+keys = list(CALL) + list(RESULT) + list(TEXT) + list(TOOLS) + ['any_ceremony', 'turn_cap', 'start_line_cut', 'start_line_cut_render', 'session_kind_mismatch', 'start_line_render_kind']
 res = [dict(model=m, arm=a, sessions=n[(m, a)], **{k: agg[(m, a)][k] for k in keys}) for (m, a) in sorted(n)]
 print('| Marker | ' + ' | '.join(f"{r['model']} {r['arm']} (n={r['sessions']})" for r in res) + ' |')
 print('|---|' + '---|' * len(res))
