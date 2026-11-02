@@ -2,7 +2,7 @@
 // pinned Agent SDK, the screen per model, the route check, #121's two notes, Sol's stops leaving Opus untouched, and Sol's
 // planned layout against its real $140 cap and $4 allowance through the real proxy and ledger service.
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, toMicros, totals } from "../runner/ledger.ts";
 import { priceFor, costMicros, startProxy, type ProxyConfig } from "../runner/proxy.ts";
 import { loadR3Jobs, type R3Trial } from "../r3/exposure.ts";
-import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, R3A, routeRecordPath, SOL, vmBlock } from "../r3/screen.ts";
+import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, SOL, vmBlock } from "../r3/screen.ts";
 import { judge, next, toolResults, type RouteRecord } from "../r3/route-check.ts";
 
 const here = import.meta.dir;
@@ -28,17 +28,21 @@ function freePort() {
   return port;
 }
 const approve = (path: string, item: string, cap: number) => new Ledger(path, item).approve(cap, { words: "test", by: "test" });
-const passRecord = (ledger: string, m = sol, verdict: "pass" | "drop" = "pass", reason = "smoke passed on try 1, told passed on try 1") =>
-  writeFileSync(routeRecordPath(ledger), JSON.stringify({ item: m.item, model: m.id, verdict, reason, proxy_config_sha256: "x", sessions: [] }));
-// A stub upstream that answers every request with the usage the test sets: output tokens at Sol's $10 a million.
+// The proxy config a test work dir's parts run with, as work() and #121's notes write it; passRecord binds a pass to it.
+const proxyBytes = JSON.stringify(proxyConfig);
+const passRecord = (ledger: string, m = sol, verdict: "pass" | "drop" = "pass", reason = "smoke passed on try 1, told passed on try 1", configSha = sha(proxyBytes)) =>
+  writeFileSync(routeRecordPath(ledger), JSON.stringify({ item: m.item, model: m.id, verdict, reason, proxy_config_sha256: configSha, sessions: [] }));
+// A stub upstream that answers every request with the usage the test sets: output tokens at Sol's $10 a million, and
+// nextCacheRead cache-read tokens.
 let nextUsd = 0.01;
+let nextCacheRead = 0;
 const upstream = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   async fetch(req) {
     const body = (await req.json()) as any;
     received.push({ auth: req.headers.get("authorization"), body });
-    return Response.json({ id: "msg_1", type: "message", role: "assistant", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 0, output_tokens: Math.round(nextUsd * 1e5) } });
+    return Response.json({ id: "msg_1", type: "message", role: "assistant", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 0, output_tokens: Math.round(nextUsd * 1e5), cache_read_input_tokens: nextCacheRead } });
   },
 });
 const received: any[] = [];
@@ -248,30 +252,32 @@ describe("the screen per model", () => {
 
   test("r3a-sol binds at $140 with its route check passed and settled, and is refused otherwise", () => {
     const d = tmp("sol-bind-");
+    const cfg = join(d, "proxy.json");
+    writeFileSync(cfg, proxyBytes);
     const at = (name: string, cap = 140) => { const p = join(d, name + ".jsonl"); approve(p, "r3a-sol", cap); return p; };
     const fresh = at("fresh");
-    expect(() => bindCheck(fresh, sol)).toThrow("GPT-6.1 Sol has not passed its route check on r3a-sol");
+    expect(() => bindCheck(fresh, sol, [cfg])).toThrow("GPT-6.1 Sol has not passed its route check on r3a-sol");
     passRecord(fresh);
-    expect(() => bindCheck(fresh, sol)).not.toThrow();
+    expect(() => bindCheck(fresh, sol, [cfg])).not.toThrow();
     const routed = at("routed");
     passRecord(routed);
     const L = new Ledger(routed, "r3a-sol");
     L.reserve("r3a-sol-route/s1", toMicros(4));
-    expect(() => bindCheck(routed, sol)).toThrow("1 route check reserves are still open on r3a-sol");
+    expect(() => bindCheck(routed, sol, [cfg])).toThrow("1 route check reserves are still open on r3a-sol");
     L.settle("r3a-sol-route/s1", toMicros(0.3));
-    expect(() => bindCheck(routed, sol)).not.toThrow();
+    expect(() => bindCheck(routed, sol, [cfg])).not.toThrow();
     L.reserve("r3a-sol-screen/s1", toMicros(4));
-    expect(() => bindCheck(routed, sol)).toThrow("an item serves one run");
+    expect(() => bindCheck(routed, sol, [cfg])).toThrow("an item serves one run");
     const cap = at("cap", 150);
     passRecord(cap);
-    expect(() => bindCheck(cap, sol)).toThrow("r3a-sol's cap is $150, not the R3 amendment's $140");
+    expect(() => bindCheck(cap, sol, [cfg])).toThrow("r3a-sol's cap is $150, not the R3 amendment's $140");
     expect(() => bindCheck(fresh, opus)).toThrow("no approval row for item r3a-screen");
     const dropped = at("dropped");
     passRecord(dropped, sol, "drop", "the told part failed twice: try 1: Harbor exited 1 | try 2: Harbor exited 1");
-    expect(() => bindCheck(dropped, sol)).toThrow("GPT-6.1 Sol dropped out of R3a at its route check: the told part failed twice");
+    expect(() => bindCheck(dropped, sol, [cfg])).toThrow("GPT-6.1 Sol dropped out of R3a at its route check: the told part failed twice");
     const other = at("other");
     writeFileSync(routeRecordPath(other), JSON.stringify({ item: "r3a-sol", model: OPUS, verdict: "pass", reason: "x" }));
-    expect(() => bindCheck(other, sol)).toThrow("is for claude-opus-5-5 on r3a-sol, not gpt-6.1-sol on r3a-sol");
+    expect(() => bindCheck(other, sol, [cfg])).toThrow("is for claude-opus-5-5 on r3a-sol, not gpt-6.1-sol on r3a-sol");
   });
 
   test("run refuses Sol before it binds the item when the route check hasn't passed", () => {
@@ -284,6 +290,64 @@ describe("the screen per model", () => {
     expect(r.stderr.toString()).toContain("GPT-6.1 Sol has not passed its route check on r3a-sol");
     expect(existsSync(ledger + ".bound")).toBe(false);
     expect(readRows(ledger).filter((x) => x.kind === "reserve")).toEqual([]);
+  });
+
+  test("a pass covers only the proxy config it ran with: routePassed refuses a screen config with other bytes", () => {
+    const d = tmp("sol-config-");
+    const ledger = join(d, "r3a-sol.jsonl");
+    approve(ledger, "r3a-sol", 140);
+    const [same, other] = [join(d, "same.json"), join(d, "other.json")];
+    writeFileSync(same, proxyBytes);
+    writeFileSync(other, readFileSync(join(laneb, "config/proxy.json")));
+    passRecord(ledger);
+    expect(() => routePassed(ledger, sol, [same])).not.toThrow();
+    expect(() => routePassed(ledger, sol, [same, other])).toThrow(`GPT-6.1 Sol's route check passed with proxy config sha256 ${sha(proxyBytes)}, but the screen's ${other} is ${sha(readFileSync(other))}`);
+    expect(() => bindCheck(ledger, sol, [other])).toThrow("GPT-6.1 Sol's route check passed with proxy config sha256");
+    expect(() => routePassed(ledger, sol, [join(d, "missing.json")])).toThrow(`the screen's proxy config ${join(d, "missing.json")} is missing`);
+    expect(() => routePassed(ledger, sol, [])).toThrow("names no proxy config");
+    expect(() => routePassed(ledger, opus, [])).not.toThrow();
+  });
+
+  test("prepare checks the pass against config/proxy.json, the file prepare-run copies into each part", () => {
+    const d = tmp("sol-prepare-");
+    const ledger = join(d, "r3a-sol.jsonl");
+    approve(ledger, "r3a-sol", 140);
+    const prepare = () => Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "prepare", join(d, "work"), "--model", SOL], { env: { ...process.env, LEDGER: ledger, ARMS: "" } });
+    passRecord(ledger);
+    const off = prepare();
+    expect(off.exitCode).toBe(1);
+    expect(off.stderr.toString()).toContain(`but the screen's ${join(laneb, "config/proxy.json")} is ${sha(readFileSync(join(laneb, "config/proxy.json")))}`);
+    passRecord(ledger, sol, "pass", undefined, sha(readFileSync(join(laneb, "config/proxy.json"))));
+    const on = prepare();
+    expect(on.exitCode).toBe(2);
+    expect(on.stderr.toString()).toContain("E_USAGE set ARMS");
+  });
+
+  test("run refuses a pass whose proxy config isn't its parts' proxy.json, before it binds the item", () => {
+    const { w, ledger } = work(sol);
+    passRecord(ledger, sol, "pass", undefined, sha(readFileSync(join(laneb, "config/proxy.json"))));
+    const before = readFileSync(ledger, "utf8");
+    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env: { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(freePort()), UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" } });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr.toString()).toContain(`but the screen's ${join(w, "screen", "proxy.json")} is ${sha(proxyBytes)}`);
+    expect(existsSync(ledger + ".bound")).toBe(false);
+    expect(readFileSync(ledger, "utf8")).toBe(before);
+  });
+
+  test("analyze with the wrong --model refuses a work dir whose plan.json names another item and removes nothing (B1)", () => {
+    for (const [m, other] of [[opus, sol], [sol, opus]] as const) {
+      const o = work(m);
+      expect(analyzeCli(o.w, o.ledger, m.id === OPUS ? undefined : m.id).code).toBe(0);
+      const files = ["admitted.txt", "r3b-tasks.txt"];
+      const kept = files.map((f) => readFileSync(join(o.w, f), "utf8"));
+      const r = analyzeCli(o.w, o.ledger, other.id === OPUS ? undefined : other.id);
+      expect(r.code).toBe(2);
+      expect(r.err).toContain(`E_USAGE ${o.w}/plan.json is item ${m.item}'s, not ${other.label}'s ${other.item}; nothing was removed`);
+      expect(files.map((f) => readFileSync(join(o.w, f), "utf8"))).toEqual(kept);
+      writeFileSync(join(o.w, "plan.json"), "not json");
+      expect(analyzeCli(o.w, o.ledger, other.id === OPUS ? undefined : other.id).code).toBe(1);
+      for (const f of files) expect(existsSync(join(o.w, f))).toBe(false);
+    }
   });
 });
 
@@ -334,7 +398,9 @@ describe("#121's notes", () => {
 // Stub harbor for the route check: it reads the one-task JobConfig, opens a real session at the proxy's control port,
 // sends one request through the proxy to the stub upstream (with /investigate's expansion in a told session), closes the
 // session and writes the trial. STUB_PLAN sets a session's mode by part and try, as in told2=noexpand: harbor (exit 1,
-// no trial), noexpand, noresponse (no request reaches the model), notool, latefail (a passing trial, then exit 1).
+// no trial), noexpand, noresponse (no request reaches the model), notool, latefail (a passing trial, then exit 1), and
+// three failures on our side: killproxy and killledger (the stub stops that local service after its request) and hang
+// (it writes its pid to <STUB_LOG>.hang and waits to be stopped). STUB_SLEEP holds every session that many ms.
 const STUB = `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = process.argv.slice(2);
@@ -354,7 +420,11 @@ if (mode !== "noresponse") {
   const content = kind === "told" && mode !== "noexpand" ? "<command-name>/investigate</command-name>\\nFix calc." : "Fix calc.";
   await (await fetch(a.base_url + "/v1/messages", { method: "POST", headers: { authorization: "Bearer " + s.token, "content-type": "application/json" }, body: JSON.stringify({ model: k.upstream_model, max_tokens: 100, messages: [{ role: "user", content }] }) })).text();
 }
-await fetch(control + "/sessions/" + s.id + "/close", { method: "POST", body: "{}" });
+if (mode === "killproxy") Bun.spawnSync(["pkill", "-f", "proxy.ts --config " + process.env.PROXY_CONFIG]);
+if (mode === "killledger") Bun.spawnSync(["pkill", "-f", "ledger.ts serve --path " + process.env.LEDGER]);
+if (mode === "hang") { writeFileSync(log + ".hang", String(process.pid)); await Bun.sleep(600_000); }
+if (process.env.STUB_SLEEP) await Bun.sleep(Number(process.env.STUB_SLEEP));
+await fetch(control + "/sessions/" + s.id + "/close", { method: "POST", body: "{}" }).catch(() => undefined);
 const d = join(process.cwd(), "jobs", job.job_name, trial);
 mkdirSync(join(d, "evaluator"), { recursive: true });
 writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: task }, agent: { name: a.name, kwargs: k } }));
@@ -383,14 +453,17 @@ function rig(ledger?: string) {
   if (!ledger) approve(path, "r3a-sol", 140);
   return { dir, ledger: path };
 }
-async function routeCheck(r: ReturnType<typeof rig>, env: Record<string, string> = {}, args: string[] = []) {
+function spawnRouteCheck(r: ReturnType<typeof rig>, env: Record<string, string> = {}, args: string[] = []) {
   nextUsd = 0.05;
-  const p = Bun.spawn([process.execPath, join(laneb, "r3/route-check.ts"), ...args], {
-    env: { PATH: join(r.dir, "bin") + ":" + process.env.PATH, HOME: r.dir, LEDGER: r.ledger, ARMS: join(r.dir, "arms"), ARM_MANIFESTS: join(r.dir, "manifests"), PROXY_CONFIG: join(r.dir, "proxy.json"),
-      OPENROUTER_API_KEY: "fake-openrouter", ANTHROPIC_API_KEY: "fake-anthropic", UBICLOUD_API_KEY: "fake-ubicloud", GH_TOKEN: "fake-gh", OUT: join(r.dir, "out"), LEDGER_PORT: String(freePort()), PROXY_DATA_PORT: String(freePort()), PROXY_CONTROL_PORT: String(freePort()),
-      STUB_LOG: join(r.dir, "calls.jsonl"), STUB_BUN: process.execPath, STUB_JS: join(r.dir, "stub-harbor.ts"), ...env },
-    stdout: "pipe", stderr: "pipe",
-  });
+  const full: Record<string, string> = { PATH: join(r.dir, "bin") + ":" + process.env.PATH, HOME: r.dir, LEDGER: r.ledger, ARMS: join(r.dir, "arms"), ARM_MANIFESTS: join(r.dir, "manifests"), PROXY_CONFIG: join(r.dir, "proxy.json"),
+    OPENROUTER_API_KEY: "fake-openrouter", ANTHROPIC_API_KEY: "fake-anthropic", UBICLOUD_API_KEY: "fake-ubicloud", GH_TOKEN: "fake-gh", OUT: join(r.dir, "out"), LEDGER_PORT: String(freePort()), PROXY_DATA_PORT: String(freePort()), PROXY_CONTROL_PORT: String(freePort()),
+    STUB_LOG: join(r.dir, "calls.jsonl"), STUB_BUN: process.execPath, STUB_JS: join(r.dir, "stub-harbor.ts"), ...env };
+  return { env: full, p: Bun.spawn([process.execPath, join(laneb, "r3/route-check.ts"), ...args], { env: full, stdout: "pipe", stderr: "pipe" }) };
+}
+async function routeCheck(r: ReturnType<typeof rig>, env: Record<string, string> = {}, args: string[] = []) {
+  return finish(r, spawnRouteCheck(r, env, args).p);
+}
+async function finish(r: ReturnType<typeof rig>, p: ReturnType<typeof spawnRouteCheck>["p"]) {
   const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
   const code = await p.exited;
   const calls = existsSync(join(r.dir, "calls.jsonl")) ? readFileSync(join(r.dir, "calls.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : [];
@@ -399,7 +472,7 @@ async function routeCheck(r: ReturnType<typeof rig>, env: Record<string, string>
 }
 
 describe("the route check's verdicts", () => {
-  test("smoke counts tool results; told needs the expansion and a model response; Harbor's exit and a cap stop fail either", () => {
+  test("smoke counts tool results; told needs the expansion and a model response; Harbor's exit fails either", () => {
     const d = tmp("sol-judge-");
     const job = join(d, "job");
     const sessions: any[] = [];
@@ -407,30 +480,30 @@ describe("the route check's verdicts", () => {
     sessions.push(...readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)));
     const jobDir = join(job, "job");
     expect(toolResults([{ type: "AssistantMessage", content: [{ id: "a", name: "Bash", input: {} }] }, { type: "UserMessage", content: [{ tool_use_id: "a" }] }])).toBe(1);
-    expect(judge("told", 0, jobDir, sessions, proxyConfig, null)).toMatchObject({ pass: true, body_loaded: true, model_responded: true });
-    expect(judge("smoke", 0, jobDir, sessions, proxyConfig, null)).toMatchObject({ pass: false, reasons: ["no tool call got its result back"] });
-    expect(judge("told", 1, jobDir, sessions, proxyConfig, null).reasons).toEqual(["Harbor exited 1"]);
-    expect(judge("told", 0, jobDir, sessions, proxyConfig, "ledger refused a reserve").reasons).toEqual(["the proxy latched a cap stop: ledger refused a reserve"]);
-    expect(judge("told", 0, join(d, "nothing"), [], proxyConfig, null).reasons).toEqual(["no trial directory with a readable config.json"]);
+    expect(judge("told", 0, jobDir, sessions, proxyConfig)).toMatchObject({ pass: true, body_loaded: true, model_responded: true });
+    expect(judge("smoke", 0, jobDir, sessions, proxyConfig)).toMatchObject({ pass: false, reasons: ["no tool call got its result back"] });
+    expect(judge("told", 1, jobDir, sessions, proxyConfig).reasons).toEqual(["Harbor exited 1"]);
+    expect(judge("told", 0, join(d, "nothing"), [], proxyConfig).reasons).toEqual(["no trial directory with a readable config.json"]);
     const bare = sessions.map((s) => ({ ...s, cmd_names: [], ok_responses: 0 }));
-    expect(judge("told", 0, jobDir, bare, proxyConfig, null).reasons).toEqual([
+    expect(judge("told", 0, jobDir, bare, proxyConfig).reasons).toEqual([
       "the proxy's body-load probe did not record /investigate's expansion in the first request (cmd_names [])",
       "no model response reached the agent (4 requests, 0 refused, 0 ok)",
     ]);
   });
 
-  test("a part gets one retry, a second failure drops the model, and a session cut short counts as failed", () => {
-    const s = (kind: "smoke" | "told", t: number, pass: boolean, finished = true) => ({ kind, try: t, pass, finished_at: finished ? "x" : null, reasons: pass ? [] : ["Harbor exited 1"] }) as any;
+  test("a part gets one retry and a second failure drops the model; a session that failed on our side or never finished is not a try (A1)", () => {
+    const s = (kind: "smoke" | "told", t: number, pass: boolean, finished = true) => ({ kind, try: t, pass, finished_at: finished ? "x" : null, infra: null, reasons: pass ? [] : ["Harbor exited 1"] }) as any;
     const rec = (sessions: any[]) => ({ item: "r3a-sol", model: SOL, verdict: null, reason: null, proxy_config_sha256: "x", sessions }) as RouteRecord;
     expect(next(rec([]))).toEqual({ kind: "smoke", try: 1 });
     expect(next(rec([s("smoke", 1, false)]))).toEqual({ kind: "smoke", try: 2 });
     expect(next(rec([s("smoke", 1, true)]))).toEqual({ kind: "told", try: 1 });
     expect(next(rec([s("smoke", 1, false), s("smoke", 2, true), s("told", 1, false), s("told", 2, true)]))).toEqual({ verdict: "pass", reason: "smoke passed on try 2, told passed on try 2" });
     expect(next(rec([s("smoke", 1, true), s("told", 1, false), s("told", 2, false)]))).toEqual({ verdict: "drop", reason: "the told part failed twice: try 1: Harbor exited 1 | try 2: Harbor exited 1" });
-    const cut = rec([s("smoke", 1, false, false)]);
-    expect(next(cut)).toEqual({ kind: "smoke", try: 2 });
-    expect(cut.sessions[0]!.reasons).toEqual(["Harbor exited 1"]);
-    expect(next(rec([{ kind: "smoke", try: 1, pass: false, finished_at: null, reasons: [] }, s("smoke", 2, false)]))).toMatchObject({ verdict: "drop", reason: "the smoke part failed twice: try 1: the session did not finish (cut short) | try 2: Harbor exited 1" });
+    const ours = (x: any, infra: string) => ({ ...x, infra });
+    expect(next(rec([ours(s("smoke", 1, false), "interrupted by SIGTERM")]))).toEqual({ kind: "smoke", try: 1 });
+    expect(next(rec([s("smoke", 1, false), ours(s("smoke", 2, false), "the proxy is down (exit 1)")]))).toEqual({ kind: "smoke", try: 2 });
+    expect(next(rec([s("smoke", 1, true), ours(s("told", 1, true), "the proxy latched a cap stop: x"), s("told", 1, false)]))).toEqual({ kind: "told", try: 2 });
+    expect(next(rec([s("smoke", 1, false, false), s("smoke", 1, false)]))).toEqual({ kind: "smoke", try: 2 });
   });
 });
 
@@ -450,14 +523,15 @@ describe("route-check.ts", () => {
       expect(c.toml).not.toContain("allowlist");
       expect(c.toml).not.toContain("no-network");
     }
-    expect(rec).toMatchObject({ item: "r3a-sol", model: SOL, verdict: "pass", open_route_reserves: [], proxy_config_sha256: sha(readFileSync(join(r.dir, "proxy.json"))) });
+    expect(rec).toMatchObject({ item: "r3a-sol", model: SOL, verdict: "pass", incomplete: null, open_route_reserves: [], proxy_config_sha256: sha(readFileSync(join(r.dir, "proxy.json"))) });
     expect(rec!.sessions.map((s) => [s.kind, s.try, s.harbor_exit, s.pass, s.tool_results, s.body_loaded, s.model_responded])).toEqual([["smoke", 1, 0, true, 1, false, true], ["told", 1, 0, true, 1, true, true]]);
     expect(rec!.sessions[1]!.proxy_session).toMatchObject({ model: SOL, ok_responses: 1, refused: 0, cmd_names: ["investigate"] });
     const rows = readRows(r.ledger).filter((x) => x.kind !== "approval");
     expect(rows.map((x) => x.kind)).toEqual(["reserve", "settle", "reserve", "settle"]);
     expect(rows.every((x) => x.id.startsWith("r3a-sol-route/"))).toBe(true);
     expect(rows.filter((x) => x.kind === "reserve").every((x) => x.usd_micros === 4_000_000)).toBe(true);
-    expect(() => bindCheck(r.ledger, sol)).not.toThrow();
+    expect(() => bindCheck(r.ledger, sol, [join(r.dir, "proxy.json")])).not.toThrow();
+    expect(() => bindCheck(r.ledger, sol, [join(laneb, "config/proxy.json")])).toThrow("GPT-6.1 Sol's route check passed with proxy config sha256");
     const again = await routeCheck(r);
     expect(again.code).toBe(0);
     expect(again.out).toContain("route check: gpt-6.1-sol already passed on r3a-sol");
@@ -483,7 +557,7 @@ describe("route-check.ts", () => {
     expect(out).toContain("route check: gpt-6.1-sol dropped out of R3a: the told part failed twice: try 1: the proxy's body-load probe did not record /investigate's expansion in the first request (cmd_names []) | try 2: the proxy's body-load probe did not record /investigate's expansion in the first request (cmd_names null); no model response reached the agent (0 requests, 0 refused, 0 ok)");
     expect(rec).toMatchObject({ verdict: "drop", open_route_reserves: [] });
     expect(calls).toHaveLength(3);
-    expect(() => bindCheck(r.ledger, sol)).toThrow("GPT-6.1 Sol dropped out of R3a at its route check: the told part failed twice");
+    expect(() => bindCheck(r.ledger, sol, [join(r.dir, "proxy.json")])).toThrow("GPT-6.1 Sol dropped out of R3a at its route check: the told part failed twice");
     const again = await routeCheck(r);
     expect(again.code).toBe(1);
     expect(again.calls).toHaveLength(3);
@@ -497,13 +571,25 @@ describe("route-check.ts", () => {
     expect(rec!.reason).toBe("the smoke part failed twice: try 1: Harbor exited 1; no trial directory with a readable config.json | try 2: no tool call got its result back");
   }, 60_000);
 
-  test("a session cut short counts as a failed try on the next run", async () => {
+  test("a session cut short (a machine sleep or a kill) ends the check incomplete, is not a try, and a rerun needs --rerun (A1)", async () => {
     const r = rig();
-    writeFileSync(routeRecordPath(r.ledger), JSON.stringify({ item: "r3a-sol", model: SOL, verdict: null, reason: null, proxy_config_sha256: "x", sessions: [{ kind: "smoke", try: 1, job: "j", started_at: "x", finished_at: null, reasons: [] }] }));
-    const { code, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=harbor" });
-    expect(code).toBe(1);
-    expect(calls).toHaveLength(1);
-    expect(rec!.reason).toBe("the smoke part failed twice: try 1: the session did not finish (cut short) | try 2: Harbor exited 1; no trial directory with a readable config.json");
+    const cut = "smoke try 1: the session did not finish: the route check stopped during it (a machine sleep or a kill)";
+    writeFileSync(routeRecordPath(r.ledger), JSON.stringify({ item: "r3a-sol", model: SOL, verdict: null, reason: null, proxy_config_sha256: sha(readFileSync(join(r.dir, "proxy.json"))), sessions: [{ kind: "smoke", try: 1, job: "j", started_at: "x", finished_at: null, pass: false, reasons: [] }] }));
+    const held = await routeCheck(r);
+    expect(held.code).toBe(4);
+    expect(held.calls).toEqual([]);
+    expect(held.out).toContain(`route check: gpt-6.1-sol is incomplete on r3a-sol: ${cut}; the Captain decides on a rerun (route-check.ts --rerun)`);
+    expect(held.rec).toMatchObject({ verdict: null, reason: null, incomplete: cut });
+    expect(() => routePassed(r.ledger, sol, [join(r.dir, "proxy.json")])).toThrow(`GPT-6.1 Sol's route check on r3a-sol is incomplete (${cut})`);
+    expect(existsSync(join(r.dir, "out", "ledger-service.log"))).toBe(false);
+    const { code, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=harbor" }, ["--rerun"]);
+    expect(code).toBe(0);
+    expect(calls.map((c) => c.kind)).toEqual(["smoke", "smoke", "told"]);
+    expect(rec!.sessions.map((s) => [s.kind, s.try, s.pass, s.infra])).toEqual([
+      ["smoke", 1, false, "the session did not finish: the route check stopped during it (a machine sleep or a kill)"],
+      ["smoke", 1, false, null], ["smoke", 2, true, null], ["told", 1, true, null],
+    ]);
+    expect(rec).toMatchObject({ verdict: "pass", reason: "smoke passed on try 2, told passed on try 1", incomplete: null, reruns: [{ after: cut }] });
   }, 60_000);
 
   test("it refuses Opus, another cap, a bound item and arm tars off their manifests, before any session", async () => {
@@ -524,6 +610,131 @@ describe("route-check.ts", () => {
 });
 
 // Opus's work dir and ledger, analyzed before and after Sol's line stops at its route check and at its cap.
+// R3 amendment section 6.2 with Captain ruling A1: only a route-side failure is a try. A failure on our side (a local
+// service died, the run was interrupted, or the proxy latched a cap stop) ends the check incomplete with the session's
+// spend kept, and the Captain decides on a rerun.
+describe("route-check.ts failures on our side (A1)", () => {
+  for (const [service, mode] of [["proxy", "killproxy"], ["ledger service", "killledger"]] as const) {
+    test(`the ${service} dying during a session ends the check incomplete: no try counted, the spend kept, the screen refused`, async () => {
+      const r = rig();
+      const { code, out, calls, rec } = await routeCheck(r, { STUB_PLAN: `smoke1=${mode}` });
+      expect(code).toBe(4);
+      expect(calls).toHaveLength(1);
+      expect(rec).toMatchObject({ verdict: null, reason: null });
+      expect(rec!.incomplete).toStartWith(`smoke try 1: the ${service} is down`);
+      expect(out).toContain(`route check: gpt-6.1-sol is incomplete on r3a-sol: smoke try 1: the ${service} is down`);
+      expect(rec!.sessions.map((s) => [s.kind, s.try, s.infra?.startsWith(`the ${service} is down`)])).toEqual([["smoke", 1, true]]);
+      expect(next(rec!)).toEqual({ kind: "smoke", try: 1 });
+      const rows = readRows(r.ledger).filter((x) => x.kind !== "approval");
+      expect(rows[0]).toMatchObject({ kind: "reserve", usd_micros: 4_000_000 });
+      if (service === "proxy") expect(rec!.open_route_reserves).toEqual([rows[0]!.id]);
+      else expect(rows.map((x) => x.kind)).toEqual(["reserve", "settle"]);
+      expect(() => routePassed(r.ledger, sol, [join(r.dir, "proxy.json")])).toThrow("GPT-6.1 Sol's route check on r3a-sol is incomplete (smoke try 1: the " + service + " is down");
+      const again = await routeCheck(r);
+      expect(again.code).toBe(4);
+      expect(again.calls).toHaveLength(1);
+    }, 60_000);
+  }
+
+  test("a cap stop the proxy latches ends the check incomplete instead of counting a failed try", async () => {
+    const r = rig();
+    const L = new Ledger(r.ledger, "r3a-sol");
+    L.reserve("r3a-sol-route/earlier", toMicros(137));
+    L.settle("r3a-sol-route/earlier", toMicros(137));
+    const { code, out, rec } = await routeCheck(r);
+    expect(code).toBe(4);
+    expect(rec!.incomplete).toStartWith("smoke try 1: the proxy latched a cap stop: ledger refused a reserve for smoke-task__smoke1__env");
+    expect(out).toContain("route check: gpt-6.1-sol is incomplete on r3a-sol: smoke try 1: the proxy latched a cap stop");
+    expect(rec!.sessions).toHaveLength(1);
+    expect(rec!.sessions[0]!.proxy_cap_stop).toStartWith("ledger refused a reserve");
+    expect(next(rec!)).toEqual({ kind: "smoke", try: 1 });
+  }, 60_000);
+
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    test(`${sig} during a session stops Harbor and the services, frees their ports, settles the session and records an interrupted, incomplete run`, async () => {
+      const r = rig();
+      const { p, env } = spawnRouteCheck(r, { STUB_PLAN: "smoke1=hang" });
+      const marker = join(r.dir, "calls.jsonl.hang");
+      for (let i = 0; i < 300 && !existsSync(marker); i++) await Bun.sleep(100);
+      const stub = Number(readFileSync(marker, "utf8"));
+      p.kill(sig);
+      const { code, out, rec } = await finish(r, p);
+      expect(code).toBe(4);
+      expect(out).toContain(`route check: gpt-6.1-sol is incomplete on r3a-sol: smoke try 1: interrupted by ${sig}`);
+      expect(rec).toMatchObject({ verdict: null, reason: null, incomplete: `smoke try 1: interrupted by ${sig}`, open_route_reserves: [] });
+      expect(rec!.sessions).toHaveLength(1);
+      expect(rec!.sessions[0]).toMatchObject({ kind: "smoke", try: 1, infra: `interrupted by ${sig}` });
+      expect(rec!.sessions[0]!.finished_at).not.toBeNull();
+      expect(readRows(r.ledger).filter((x) => x.kind !== "approval").map((x) => x.kind)).toEqual(["reserve", "settle"]);
+      for (const port of [env.LEDGER_PORT!, env.PROXY_DATA_PORT!, env.PROXY_CONTROL_PORT!]) expect(portTaken("127.0.0.1", port)).toBe(false);
+      expect(() => process.kill(stub, 0)).toThrow();
+      expect(() => routePassed(r.ledger, sol, [join(r.dir, "proxy.json")])).toThrow(`GPT-6.1 Sol's route check on r3a-sol is incomplete (smoke try 1: interrupted by ${sig})`);
+    }, 60_000);
+  }
+});
+
+describe("route-check.ts records", () => {
+  test("two route checks at once on the item: the second is refused by the lock, and the record holds every session that ran", async () => {
+    const r = rig();
+    const runs = await Promise.all([routeCheck(r, { STUB_SLEEP: "1500" }), routeCheck(r, { STUB_SLEEP: "1500" })]);
+    expect(runs.map((x) => x.code).sort()).toEqual([0, 2]);
+    expect(runs.find((x) => x.code === 2)!.out).toContain(`E_USAGE another route check holds ${r.ledger}.route.lock; this one ran nothing`);
+    const calls = readFileSync(join(r.dir, "calls.jsonl"), "utf8").trim().split("\n");
+    const rec = JSON.parse(readFileSync(routeRecordPath(r.ledger), "utf8")) as RouteRecord;
+    expect(calls).toHaveLength(2);
+    expect(rec.sessions).toHaveLength(2);
+    expect(readRows(r.ledger).filter((x) => x.kind === "reserve")).toHaveLength(2);
+  }, 60_000);
+
+  test("a rerun with another PROXY_CONFIG than the record's sessions ran with is refused before any session", async () => {
+    const r = rig();
+    writeFileSync(routeRecordPath(r.ledger), JSON.stringify({ item: "r3a-sol", model: SOL, verdict: null, reason: null, incomplete: null, proxy_config_sha256: "x", sessions: [{ kind: "smoke", try: 1, job: "j", started_at: "x", finished_at: "y", pass: false, infra: null, reasons: ["Harbor exited 1"] }] }));
+    const { code, out, calls } = await routeCheck(r);
+    expect(code).toBe(2);
+    expect(out).toContain(`E_USAGE PROXY_CONFIG ${join(r.dir, "proxy.json")} has sha256 ${sha(readFileSync(join(r.dir, "proxy.json")))}, but this record's sessions ran with x; no session ran`);
+    expect(calls).toEqual([]);
+  }, 60_000);
+
+  test("the record is replaced by a rename, never rewritten in place", async () => {
+    const r = rig();
+    writeFileSync(routeRecordPath(r.ledger), JSON.stringify({ item: "r3a-sol", model: SOL, verdict: null, reason: null, incomplete: null, proxy_config_sha256: sha(readFileSync(join(r.dir, "proxy.json"))), sessions: [{ kind: "smoke", try: 1, job: "j", started_at: "x", finished_at: "y", pass: false, infra: null, reasons: ["Harbor exited 1"] }] }));
+    const inode = statSync(routeRecordPath(r.ledger)).ino;
+    const { code, rec } = await routeCheck(r);
+    expect(code).toBe(0);
+    expect(rec!.verdict).toBe("pass");
+    expect(statSync(routeRecordPath(r.ledger)).ino).not.toBe(inode);
+    expect(readdirSync(r.dir).filter((f) => f.includes(".route.json") && f !== "r3a-sol.jsonl.route.json")).toEqual([]);
+  }, 60_000);
+
+  test("each service log keeps its stdout and stderr to the end, on a normal run and on a crash", async () => {
+    const r = rig();
+    // The real proxy, preloaded with a script that writes 200 KB and a last line to its stderr, as a crash trace would.
+    writeFileSync(join(r.dir, "loud.ts"), `if (process.argv.some((a) => a.endsWith("proxy.ts"))) await Bun.write(Bun.stderr, "x".repeat(200_000) + "\\nlast line\\n");\n`);
+    expect((await routeCheck(r, { BUN_OPTIONS: "--preload " + join(r.dir, "loud.ts") })).code).toBe(0);
+    expect(readFileSync(join(r.dir, "out", "ledger-service.log"), "utf8")).toContain("ledger: serving r3a-sol on 127.0.0.1:");
+    const proxyLog = readFileSync(join(r.dir, "out", "proxy.log"), "utf8");
+    expect(proxyLog).toContain("laneb proxy: data 127.0.0.1:");
+    expect(proxyLog.endsWith("x".repeat(200_000) + "\nlast line\n")).toBe(true);
+    const crash = rig();
+    const c = await routeCheck(crash, { PROXY_DATA_PORT: "99999" });
+    expect(c.code).toBe(1);
+    expect(c.out).toContain("the proxy exited 1 before it was up");
+    expect(readFileSync(join(crash.dir, "out", "proxy.log"), "utf8")).toMatch(/error/i);
+  }, 60_000);
+
+  test("the record keeps each session's cache-read tokens from the proxy's session row, report-only (C1)", async () => {
+    const r = rig();
+    nextCacheRead = 1234;
+    try {
+      const { code, rec } = await routeCheck(r);
+      expect(code).toBe(0);
+      expect(rec!.sessions.map((s) => s.proxy_session?.cache_read_tokens)).toEqual([1234, 1234]);
+    } finally {
+      nextCacheRead = 0;
+    }
+  }, 60_000);
+});
+
 describe("Sol's stops and Opus", () => {
   test("a Sol route-check drop and a Sol cap stop leave Opus's ledger, files and outcome as they were", async () => {
     const o = work(opus);

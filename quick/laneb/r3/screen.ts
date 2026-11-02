@@ -12,7 +12,8 @@
 // The item serves one run: prepare refuses a ledger that already holds a reserve or settle, and run binds the item before
 // its first spend by creating <LEDGER>.bound, so any later run is refused. Sol's item also takes its route check first
 // (route-check.ts): its settled rows under the item's route prefix are allowed, and the screen is refused until the route
-// record (<LEDGER>.route.json) says pass. A model's stops read and write only its own ledger, record and work dir, so a
+// record (<LEDGER>.route.json) says pass with the proxy config the screen's parts run with (an incomplete record is
+// refused too, Captain ruling A1). A model's stops read and write only its own ledger, record and work dir, so a
 // Sol stop can't touch Opus's item or outcome. run refuses a plan.json prepared for another model's item, and a ledger
 // port something already answers on, before it binds the item; each model's ledger service has its own default port
 // (Opus 9911, Sol 9912), so the two runs never share one. A cap refusal (a VM block, a session reserve
@@ -21,10 +22,12 @@
 // another arm or on another model). So does a part with more than 10% infra trials, a pulled proxy file that is empty or
 // unparseable, or a launch exit that can't be read (GSTA-2 rulings). run reads the screen's stop reason before it launches
 // the pilot and stops there when the screen is already incomplete, and analyze removes an earlier analysis's
-// admitted.txt and r3b-tasks.txt before it reads anything (#121's notes, R3 amendment section 6.6).
+// admitted.txt and r3b-tasks.txt before it reads anything else (#121's notes, R3 amendment section 6.6). A plan.json that
+// parses and names another item is refused first, with nothing removed (Captain ruling B1).
 // Exit codes, as r3-dry.ts: 0 admission passed (R3b waits for Garry's caps), 4 incomplete, 5 saturation, 6 pilot
 // FIX-METHOD; 2 usage, 1 any other error.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { readSessionRows, rng } from "../analysis/analyze.ts";
 import { fromMicros, readRows, totals } from "../runner/ledger.ts";
@@ -99,7 +102,7 @@ export function pilotTasks(band: string[]): string[] {
 }
 
 // The route check's record, beside the item's ledger; route-check.ts writes it with every session's evidence.
-export type RouteVerdict = { item: string; model: string; verdict: "pass" | "drop" | null; reason: string | null };
+export type RouteVerdict = { item: string; model: string; verdict: "pass" | "drop" | null; reason: string | null; incomplete?: string | null; proxy_config_sha256?: string };
 export const routeRecordPath = (ledgerPath: string) => ledgerPath + ".route.json";
 
 export function readRoute(ledgerPath: string): RouteVerdict | null {
@@ -112,13 +115,23 @@ export function readRoute(ledgerPath: string): RouteVerdict | null {
   }
 }
 
-// A model with a route check runs its screen only once its record, beside its own ledger, says it passed on its item.
-export function routePassed(ledgerPath: string, m: R3aModel) {
+// A model with a route check runs its screen only once its record, beside its own ledger, says it passed on its item. A
+// pass covers only the proxy config it ran with: each of the screen's proxy configs must hash to the record's
+// proxy_config_sha256. Without proxyConfigs it checks the verdict only; bindCheck always passes them.
+export function routePassed(ledgerPath: string, m: R3aModel, proxyConfigs?: string[]) {
   if (m.routePrefix === null) return;
   const route = readRoute(ledgerPath);
   if (route && (route.model !== m.id || route.item !== m.item)) throw new Error(`${routeRecordPath(ledgerPath)} is for ${route.model} on ${route.item}, not ${m.id} on ${m.item}`);
   if (route?.verdict === "drop") throw new Error(`${m.label} dropped out of R3a at its route check: ${route.reason}`);
+  if (route?.incomplete) throw new Error(`${m.label}'s route check on ${m.item} is incomplete (${route.incomplete}); the Captain decides on a rerun`);
   if (route?.verdict !== "pass") throw new Error(`${m.label} has not passed its route check on ${m.item} (${routeRecordPath(ledgerPath)}); run r3/route-check.ts first`);
+  if (!proxyConfigs) return;
+  if (!proxyConfigs.length) throw new Error(`the screen names no proxy config to match ${m.label}'s route check against`);
+  for (const path of proxyConfigs) {
+    if (!existsSync(path)) throw new Error(`the screen's proxy config ${path} is missing, so ${m.label}'s route check can't be matched to it; run prepare first`);
+    const got = createHash("sha256").update(readFileSync(path)).digest("hex");
+    if (got !== route.proxy_config_sha256) throw new Error(`${m.label}'s route check passed with proxy config sha256 ${route.proxy_config_sha256}, but the screen's ${path} is ${got}; a pass covers only the config it ran with`);
+  }
 }
 
 // The item's ledger holds its approval row at the model's cap, and no reserve or settle rows but its route check's.
@@ -133,13 +146,14 @@ export function itemCheck(ledgerPath: string, m: R3aModel) {
   return rows;
 }
 
-export function bindCheck(ledgerPath: string, m: R3aModel = R3A[OPUS]!) {
+// proxyConfigs are the proxy configs the screen runs with, which a model's route check must have passed with.
+export function bindCheck(ledgerPath: string, m: R3aModel = R3A[OPUS]!, proxyConfigs: string[] = []) {
   const rows = itemCheck(ledgerPath, m);
   const route = m.routePrefix;
   if (route === null) return;
   const open = totals(rows).openIds.filter((id) => id.startsWith(route));
   if (open.length) throw new Error(`${ledgerPath}: ${open.length} route check reserves are still open on ${m.item} (${open.slice(0, 3).join(", ")}); reconcile them before the screen`);
-  routePassed(ledgerPath, m);
+  routePassed(ledgerPath, m, proxyConfigs);
 }
 
 // A model's R3a plan is one trial per planned task on that model in the part's arm. A trial outside the plan (another
@@ -213,7 +227,7 @@ function sh(cmd: string[], env: Record<string, string | undefined>) {
 
 function prepare(work: string, m: R3aModel) {
   const ledger = process.env.LEDGER ?? "";
-  bindCheck(ledger, m);
+  bindCheck(ledger, m, [join(LANEB, "config/proxy.json")]);
   const arms = process.env.ARMS;
   if (!arms) throw new Error("E_USAGE set ARMS to the directory holding none, gstack and placebo arm tars (#109's, handoffs/GSTA-30/arms)");
   const pilot = pilotTasks(bandIds());
@@ -241,6 +255,8 @@ function run(work: string, m: R3aModel) {
   const lport = process.env.LEDGER_PORT ?? m.ledgerPort;
   const busy = `something already answers on 127.0.0.1:${lport} (another run's ledger service?)`;
   if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; ${m.item} is still unbound`);
+  const configs = m.parts.map((part) => join(work, part.name, "proxy.json"));
+  routePassed(ledger, m, configs);
   const planned: Record<string, string[]> = { screen: bandIds(), pilot: plan.pilot_tasks };
   const bound = ledger + ".bound";
   try {
@@ -249,7 +265,7 @@ function run(work: string, m: R3aModel) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     throw new Error(`${m.item} is already bound to a run (${readFileSync(bound, "utf8").trim()}); an item serves one run (prereg section 5)`);
   }
-  bindCheck(ledger, m);
+  bindCheck(ledger, m, configs);
   for (const [i, part] of m.parts.entries()) {
     const dir = join(work, part.name);
     if (portTaken("127.0.0.1", lport)) { console.log(`${part.name}: ${busy}; the run stops here`); return; }
@@ -312,10 +328,11 @@ function loadPart(work: string, part: Part, tasks: string[], m: R3aModel) {
 
 function analyze(work: string, m: R3aModel): number {
   const ledger = process.env.LEDGER ?? "";
+  const named = (() => { try { return JSON.parse(readFileSync(join(work, "plan.json"), "utf8")); } catch { return null; } })();
+  if (named?.item !== undefined && named.item !== m.item) throw new Error(`E_USAGE ${work}/plan.json is item ${named.item}'s, not ${m.label}'s ${m.item}; nothing was removed`);
   for (const stale of ["admitted.txt", "r3b-tasks.txt"]) rmSync(join(work, stale), { force: true });
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
-  if (plan.item !== undefined && plan.item !== m.item) throw new Error(`E_USAGE ${work}/plan.json is item ${plan.item}'s, not ${m.label}'s ${m.item}`);
   const band = bandIds();
   if (JSON.stringify(plan.pilot_tasks) !== JSON.stringify(pilotTasks(band))) throw new Error(`${work}/plan.json's pilot tasks are not the seed ${PILOT.seed} draw`);
   const planned: Record<string, string[]> = { screen: band, pilot: plan.pilot_tasks };

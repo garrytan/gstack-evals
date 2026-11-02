@@ -8,14 +8,23 @@
 //          expansion in the session's first request, and a model response reached the agent. R3 tells the skill by slash
 //          command, so its body reaches the model as a user message; this is what Run D's listing check is for its
 //          untold design.
-// A part that fails is retried once. A model whose part fails twice leaves R3a: the record says which part failed and
-// why, with each session's Harbor exit and the proxy's evidence (its session row and any cap stop), and screen.ts refuses
-// the model's screen. The record (<LEDGER>.route.json) is written before each session starts, so a session cut short
-// counts as a failed one, and a passed or dropped record ends the route check: a rerun spends nothing.
+// A part that fails on the route's side is retried once. A model whose part fails twice leaves R3a: the record says which
+// part failed and why, with each session's Harbor exit and the proxy's evidence (its session row, with the cache-read
+// tokens it metered, and any cap stop), and screen.ts refuses the model's screen. A failure on our side is not a try
+// (Captain ruling A1): a local proxy or ledger service that died, a run interrupted by SIGINT or SIGTERM, a session cut
+// short by a machine sleep or a kill, or a cap stop the proxy latched. The check then ends incomplete: the verdict stays
+// null, the session's spend stays on the ledger, the screen refuses to bind, and the record names the cause. The Captain
+// decides on a rerun, and only --rerun runs past an incomplete record. On SIGINT or SIGTERM the check stops Harbor,
+// closes the proxy's sessions so they settle, stops the services it started (freeing their ports) and lists any reserve
+// still open in the record. The record (<LEDGER>.route.json) is written before each session starts and replaced by a
+// rename, and a passed or dropped record ends the route check: a rerun spends nothing. The whole check holds an exclusive
+// lock on <LEDGER>.route.lock, so a second route check on the item is refused. A pass covers only the proxy config it ran
+// with: the record keeps its sha256, a rerun under another PROXY_CONFIG is refused, and screen.ts refuses a pass whose
+// config isn't the one its parts run with.
 // Sessions reserve their allowance on the item under its route prefix (r3a-sol-route/) and settle at metered cost. At the
 // end, open route reserves are reconciled from the proxy's sessions file, as launch.sh does, so the screen's bind sees
 // settled rows only.
-//   bun quick/laneb/r3/route-check.ts [--model gpt-6.1-sol]
+//   bun quick/laneb/r3/route-check.ts [--model gpt-6.1-sol] [--rerun]
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only
 // the proxy sees it), OUT (the work dir, default ~/.capy/work/r3-route-check/<item>), PROXY_CONFIG (default
@@ -24,10 +33,11 @@
 // ledger service that exits early or serves another ledger, so a session can't reserve on another run's item. Harbor's own
 // retries are off (max_retries 0): each try is one session, and the record counts every session.
 // Every phase is public here (Capy cloud kernels cannot run Harbor's egress sidecar), as in Run D's route check.
-// Exit codes: 0 passed, 1 dropped or any other error, 2 usage.
-import { appendFileSync, cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+// Exit codes: 0 passed, 1 dropped or any other error, 2 usage, 4 incomplete.
+import { appendFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
+import { dlopen, FFIType } from "bun:ffi";
 import { readSessionRows, sessionsByTrial } from "../analysis/analyze.ts";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, reconcile, totals } from "../runner/ledger.ts";
@@ -43,13 +53,18 @@ export const PARTS = [
 export const TRIES = 2;
 // Harbor gets no credential: every variable named like a key, token, secret or password stays with the proxy.
 const SECRET = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i;
+const LOCK_EX = 2, LOCK_NB = 4;
 
 export type RouteSession = {
   kind: "smoke" | "told"; try: number; job: string; started_at: string; finished_at: string | null; harbor_exit: number | null;
   trial: string | null; tool_results: number; model_responded: boolean; body_loaded: boolean | null; proxy_session: Record<string, unknown> | null;
   proxy_cap_stop: string | null; pass: boolean; reasons: string[];
+  // Why the session failed on our side (A1), so it is not a try; null for a session judged on the route's side.
+  infra: string | null;
 };
-export type RouteRecord = RouteVerdict & { proxy_config_sha256: string; sessions: RouteSession[]; open_route_reserves?: string[] };
+export type RouteRecord = RouteVerdict & {
+  proxy_config_sha256: string; incomplete: string | null; sessions: RouteSession[]; reruns?: { at: string; after: string }[]; open_route_reserves?: string[];
+};
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -58,8 +73,8 @@ export function toolResults(msgs: any[]): number {
   return msgs.filter((m) => m.type === "UserMessage" && Array.isArray(m.content)).flatMap((m) => m.content).filter((b: any) => b?.tool_use_id).length;
 }
 
-// One session's verdict from its Harbor exit, its job directory and the proxy's session rows.
-export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: string, sessionRows: any[], proxyConfig: any, capStop: string | null) {
+// One session's route-side verdict from its Harbor exit, its job directory and the proxy's session rows.
+export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: string, sessionRows: any[], proxyConfig: any) {
   const dir = existsSync(jobDir) ? readdirSync(jobDir).map((t) => join(jobDir, t)).find((d) => existsSync(join(d, "config.json"))) : undefined;
   const bySession = sessionsByTrial(sessionRows);
   const trial = dir ? loadR3Trial(dir, bySession, proxyConfig) : null;
@@ -68,26 +83,23 @@ export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: st
   const row = trial ? (bySession.get(trial.trial) ?? []).at(-1) ?? null : null;
   const out = {
     trial: trial?.trial ?? null, tool_results: toolResults(msgs), model_responded: trial?.model_responded ?? false, body_loaded: trial?.body_loaded ?? null,
-    proxy_session: row && { model: (row as any).model, requests: row.requests, ok_responses: row.ok_responses, refused: row.refused, refused_budget: row.refused_budget, close_reason: (row as any).close_reason ?? null, spent_usd: fromMicros(row.spent_micros), cmd_names: (row as any).cmd_names ?? null },
-    proxy_cap_stop: capStop,
+    proxy_session: row && { model: (row as any).model, requests: row.requests, ok_responses: row.ok_responses, refused: row.refused, refused_budget: row.refused_budget, close_reason: (row as any).close_reason ?? null, spent_usd: fromMicros(row.spent_micros), cache_read_tokens: (row as any).usage?.cache_read_input_tokens ?? null, cmd_names: (row as any).cmd_names ?? null },
   };
   const reasons: string[] = [];
   if (harborExit !== 0) reasons.push(`Harbor exited ${harborExit}`);
   if (!trial) reasons.push("no trial directory with a readable config.json");
-  if (capStop) reasons.push(`the proxy latched a cap stop: ${capStop}`);
   if (trial && kind === "smoke" && out.tool_results === 0) reasons.push("no tool call got its result back");
   if (trial && kind === "told" && !out.body_loaded) reasons.push(`the proxy's body-load probe did not record /investigate's expansion in the first request (cmd_names ${JSON.stringify(out.proxy_session?.cmd_names ?? null)})`);
   if (trial && kind === "told" && !out.model_responded) reasons.push(`no model response reached the agent (${out.proxy_session ? `${out.proxy_session.requests} requests, ${out.proxy_session.refused} refused, ${out.proxy_session.ok_responses} ok` : "no proxy session row"})`);
   return { ...out, pass: reasons.length === 0, reasons };
 }
 
-// The next session to run, or the verdict. A session that started and never finished counts as a failed one.
+// The next session to run, or the verdict. Only a finished session judged on the route's side is a try (A1).
 export function next(rec: RouteRecord): { kind: RouteSession["kind"]; try: number } | { verdict: "pass" | "drop"; reason: string } {
-  for (const s of rec.sessions) if (s.finished_at === null && !s.reasons.length) s.reasons.push("the session did not finish (cut short)");
   const done: string[] = [];
   for (const { kind } of PARTS) {
-    const tries = rec.sessions.filter((s) => s.kind === kind);
-    const passed = tries.find((s) => s.pass && s.finished_at !== null);
+    const tries = rec.sessions.filter((s) => s.kind === kind && s.finished_at !== null && !s.infra);
+    const passed = tries.find((s) => s.pass);
     if (passed) { done.push(`${kind} passed on try ${passed.try}`); continue; }
     if (tries.length >= TRIES) return { verdict: "drop", reason: `the ${kind} part failed twice: ${tries.map((s) => `try ${s.try}: ${s.reasons.join("; ")}`).join(" | ")}` };
     return { kind, try: tries.length + 1 };
@@ -95,22 +107,35 @@ export function next(rec: RouteRecord): { kind: RouteSession["kind"]; try: numbe
   return { verdict: "pass", reason: done.join(", ") };
 }
 
-async function waitUp(urls: string[], procs: Record<string, { exitCode: number | null }>) {
-  for (let i = 0; i < 80; i++) {
-    const gone = Object.entries(procs).find(([, p]) => p.exitCode !== null);
-    if (gone) throw new Error(`the ${gone[0]} exited ${gone[1].exitCode} before it was up (see its log in OUT); no session ran`);
+// The whole check holds an exclusive flock(2) on <LEDGER>.route.lock, taken before it reads the record, so a second route
+// check on the item is refused. The kernel drops the lock when the process ends, however it ends.
+function lock(ledger: string) {
+  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
+  const path = ledger + ".route.lock";
+  if (libc.symbols.flock(openSync(path, "a", 0o600), LOCK_EX | LOCK_NB) !== 0) throw new Error(`E_USAGE another route check holds ${path}; this one ran nothing`);
+}
+
+type Proc = { exitCode: number | null; signalCode: string | null };
+const ended = (p: Proc) => (p.exitCode !== null ? String(p.exitCode) : p.signalCode);
+
+async function waitUp(urls: string[], procs: Record<string, Proc>, stopped: () => boolean) {
+  for (let i = 0; i < 80 && !stopped(); i++) {
+    const gone = Object.entries(procs).find(([, p]) => ended(p) !== null);
+    if (gone) throw new Error(`the ${gone[0]} exited ${ended(gone[1])} before it was up (see its log in OUT); no session ran`);
     const ok = await Promise.all(urls.map((u) => fetch(u).then((r) => r.ok, () => false)));
     if (ok.every(Boolean)) return;
     await Bun.sleep(250);
   }
-  throw new Error(`not up after 20 s: ${urls.join(", ")}`);
+  if (!stopped()) throw new Error(`not up after 20 s: ${urls.join(", ")}`);
 }
 
 async function main(argv: string[]): Promise<number> {
-  const modelId = argv.length === 0 ? SOL : argv.length === 2 && argv[0] === "--model" ? argv[1]! : "";
+  const rerun = argv.includes("--rerun");
+  const args = argv.filter((a) => a !== "--rerun");
+  const modelId = args.length === 0 ? SOL : args.length === 2 && args[0] === "--model" ? args[1]! : "";
   const m: R3aModel | undefined = R3A[modelId];
   const routeModels = Object.values(R3A).filter((x) => x.routePrefix !== null).map((x) => x.id);
-  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")}]`);
+  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")}] [--rerun]`);
   if (m.routePrefix === null) throw new Error(`E_USAGE ${m.id} has no route check in R3a (route-checked models: ${routeModels.join(", ")})`);
   const prefix = m.routePrefix;
   const ledger = process.env.LEDGER;
@@ -127,6 +152,7 @@ async function main(argv: string[]): Promise<number> {
   const cell = cells.models.find((c: any) => c.id === m.id);
   if (!cell) throw new Error(`config/cells.r3.json has no cell for ${m.id}`);
 
+  lock(ledger);
   itemCheck(ledger, m);
   if (existsSync(ledger + ".bound")) throw new Error(`${m.item} is already bound to its screen (${ledger}.bound); the route check comes first`);
   const recPath = routeRecordPath(ledger);
@@ -134,8 +160,24 @@ async function main(argv: string[]): Promise<number> {
   if (prior && (prior.model !== m.id || prior.item !== m.item)) throw new Error(`${recPath} is for ${prior.model} on ${prior.item}, not ${m.id} on ${m.item}`);
   if (prior?.verdict === "pass") { console.log(`route check: ${m.id} already passed on ${m.item} (${prior.reason}); nothing to run`); return 0; }
   if (prior?.verdict === "drop") { console.log(`route check: ${m.id} dropped out of R3a: ${prior.reason}`); return 1; }
-  const rec: RouteRecord = prior ?? { item: m.item, model: m.id, verdict: null, reason: null, proxy_config_sha256: sha256(proxyPath), sessions: [] };
-  const save = () => writeFileSync(recPath, JSON.stringify(rec, null, 2) + "\n");
+  const configSha = sha256(proxyPath);
+  if (prior && prior.proxy_config_sha256 !== configSha) throw new Error(`E_USAGE PROXY_CONFIG ${proxyPath} has sha256 ${configSha}, but this record's sessions ran with ${prior.proxy_config_sha256}; no session ran`);
+  const rec: RouteRecord = prior ?? { item: m.item, model: m.id, verdict: null, reason: null, incomplete: null, proxy_config_sha256: configSha, sessions: [] };
+  const save = () => {
+    writeFileSync(recPath + ".tmp", JSON.stringify(rec, null, 2) + "\n");
+    renameSync(recPath + ".tmp", recPath);
+  };
+  const incomplete = () => `route check: ${m.id} is incomplete on ${m.item}: ${rec.incomplete}; the Captain decides on a rerun (route-check.ts --rerun)`;
+  for (const s of rec.sessions) {
+    if (s.finished_at !== null || s.infra) continue;
+    s.infra = "the session did not finish: the route check stopped during it (a machine sleep or a kill)";
+    rec.incomplete ??= `${s.kind} try ${s.try}: ${s.infra}`;
+  }
+  if (rec.incomplete) {
+    if (!rerun) { save(); console.log(incomplete()); return 4; }
+    (rec.reruns ??= []).push({ at: new Date().toISOString(), after: rec.incomplete });
+    rec.incomplete = null;
+  }
 
   const out = resolve(process.env.OUT ?? join(process.env.HOME ?? "", ".capy/work/r3-route-check", m.item));
   mkdirSync(join(out, "arms"), { recursive: true });
@@ -162,22 +204,50 @@ async function main(argv: string[]): Promise<number> {
   const lport = process.env.LEDGER_PORT ?? m.ledgerPort, dport = process.env.PROXY_DATA_PORT ?? "8787", cport = process.env.PROXY_CONTROL_PORT ?? "8788";
   const taken = [["127.0.0.1", lport], ["127.0.0.1", cport], [gw, dport]].filter(([h, p]) => portTaken(h!, p!)).map(([h, p]) => `${h}:${p}`);
   if (taken.length) throw new Error(`E_USAGE something already answers on ${taken.join(", ")} (another run's ledger service or proxy?); set LEDGER_PORT, PROXY_DATA_PORT or PROXY_CONTROL_PORT to a free port; no session ran`);
-  const control = `http://127.0.0.1:${cport}`;
+  const control = `http://127.0.0.1:${cport}`, ledgerUrl = `http://127.0.0.1:${lport}`;
   const sessionsFile = join(out, "proxy-sessions.jsonl");
-  const log = (name: string) => { const w = createWriteStream(join(out, name), { flags: "a" }); return w; };
-  const ledgerSvc = Bun.spawn([process.execPath, join(RUNNER, "ledger.ts"), "serve", "--path", ledger, "--item", m.item, "--port", lport], { stdout: "pipe", stderr: "pipe" });
+  // From here a SIGINT or SIGTERM ends the check incomplete. Harbor and the services run in their own process groups, so
+  // a terminal's Ctrl-C reaches only this process, which stops Harbor, lets the proxy settle its sessions and stops them.
+  let interrupted: string | null = null;
+  const caught = () => interrupted;
+  let harbor: ReturnType<typeof Bun.spawn> | null = null;
+  const stop = (sig: NodeJS.Signals) => {
+    if (interrupted) return;
+    interrupted = sig;
+    harbor?.kill(sig);
+    setTimeout(() => harbor?.kill("SIGKILL"), 30_000);
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+  const ledgerSvc = Bun.spawn([process.execPath, join(RUNNER, "ledger.ts"), "serve", "--path", ledger, "--item", m.item, "--port", lport], { stdout: "pipe", stderr: "pipe", detached: true });
   const proxy = Bun.spawn([process.execPath, join(RUNNER, "proxy.ts"), "--config", proxyPath, "--data-host", gw, "--data-port", dport, "--control-port", cport,
-    "--log", join(out, "proxy-requests.jsonl"), "--sessions", sessionsFile, "--ledger-url", `http://127.0.0.1:${lport}`, "--ledger-prefix", prefix], { stdout: "pipe", stderr: "pipe" });
-  for (const [p, name] of [[ledgerSvc, "ledger-service.log"], [proxy, "proxy.log"]] as const) { const w = log(name); Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]).then(([o, e]) => { w.write(o); w.end(e); }); }
+    "--log", join(out, "proxy-requests.jsonl"), "--sessions", sessionsFile, "--ledger-url", ledgerUrl, "--ledger-prefix", prefix], { stdout: "pipe", stderr: "pipe", detached: true });
+  // Each service's log gets its whole stdout and stderr once both streams end; the check waits for it before it exits.
+  const logs = ([[ledgerSvc, "ledger-service.log"], [proxy, "proxy.log"]] as const).map(([p, name]) =>
+    Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]).then(([o, e]) => appendFileSync(join(out, name), o + e)));
+  // Why a service this check started is down, or null.
+  const down = async () => {
+    for (const [name, p, url] of [["ledger service", ledgerSvc, ledgerUrl + "/status"], ["proxy", proxy, control + "/healthz"]] as const) {
+      const up = ended(p) === null && (await fetch(url, { signal: AbortSignal.timeout(10_000) }).then((r) => r.ok, () => false));
+      if (!up) return `the ${name} is down (${ended(p) === null ? "it stopped answering" : `it exited ${ended(p)}`})`;
+    }
+    return null;
+  };
   const harborEnv: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => v !== undefined && !SECRET.test(k)) as [string, string][]);
   Object.assign(harborEnv, { ANTHROPIC_API_KEY: "placeholder-not-a-key", PYTHONPATH: join(RUNNER, "agent") });
-  let verdict: ReturnType<typeof next>;
+  let verdict: { verdict: "pass" | "drop"; reason: string } | null = null;
   try {
-    await waitUp([control + "/healthz", `http://127.0.0.1:${lport}/status`], { "ledger service": ledgerSvc, proxy });
-    const served = await fetch(`http://127.0.0.1:${lport}/status`).then((r) => r.json());
-    if (!Bun.deepEquals(served, JSON.parse(JSON.stringify(totals(readRows(ledger)))))) throw new Error(`the ledger service on port ${lport} does not serve ${ledger}; no session ran`);
-    while (!("verdict" in (verdict = next(rec)))) {
-      const { kind, try: n } = verdict;
+    await waitUp([control + "/healthz", ledgerUrl + "/status"], { "ledger service": ledgerSvc, proxy }, () => caught() !== null);
+    if (caught() === null) {
+      const served = await fetch(ledgerUrl + "/status").then((r) => r.json());
+      if (!Bun.deepEquals(served, JSON.parse(JSON.stringify(totals(readRows(ledger)))))) throw new Error(`the ledger service on port ${lport} does not serve ${ledger}; no session ran`);
+    }
+    while (!rec.incomplete) {
+      const step = next(rec);
+      if ("verdict" in step) { verdict = step; break; }
+      const before = caught() ? `interrupted by ${caught()}` : await down();
+      if (before || caught()) { rec.incomplete = before ?? `interrupted by ${caught()}`; break; }
+      const { kind, try: n } = step;
       const job = `route-${m.id}-${kind}-${n}-${Date.now()}`;
       const part = PARTS.find((p) => p.kind === kind)!;
       const spec = armSpec(part.arm);
@@ -189,33 +259,55 @@ async function main(argv: string[]): Promise<number> {
       config.retry.max_retries = 0;
       if (cport !== "8788") for (const a of config.agents) Object.assign(a.kwargs, { control_url: control });
       writeFileSync(join(out, job + ".json"), JSON.stringify(config, null, 2) + "\n");
-      const s: RouteSession = { kind, try: n, job, started_at: new Date().toISOString(), finished_at: null, harbor_exit: null, trial: null, tool_results: 0, model_responded: false, body_loaded: null, proxy_session: null, proxy_cap_stop: null, pass: false, reasons: [] };
+      const s: RouteSession = { kind, try: n, job, started_at: new Date().toISOString(), finished_at: null, harbor_exit: null, trial: null, tool_results: 0, model_responded: false, body_loaded: null, proxy_session: null, proxy_cap_stop: null, pass: false, reasons: [], infra: null };
       rec.sessions.push(s);
       save();
-      const h = Bun.spawn(["harbor", "run", "-y", "-c", join(out, job + ".json")], { cwd: out, env: harborEnv, stdout: "pipe", stderr: "pipe" });
+      const h = Bun.spawn(["harbor", "run", "-y", "-c", join(out, job + ".json")], { cwd: out, env: harborEnv, stdout: "pipe", stderr: "pipe", detached: true });
+      harbor = h;
       const [hout, herr] = await Promise.all([new Response(h.stdout).text(), new Response(h.stderr).text()]);
       appendFileSync(join(out, job + ".log"), hout + herr);
       const exit = await h.exited;
-      const capStop = await fetch(control + "/totals").then((r) => r.json() as Promise<any>).then((t) => t.cap_stop ?? null, () => "proxy status unreadable");
+      harbor = null;
+      let capStop: string | null = null;
+      let infra = caught() ? `interrupted by ${caught()}` : await down();
+      if (!infra) {
+        const t = await fetch(control + "/totals", { signal: AbortSignal.timeout(10_000) }).then((r) => r.json() as Promise<any>, () => null);
+        capStop = t?.cap_stop ?? null;
+        infra = !t ? "the proxy is down (its /totals did not answer)" : capStop ? `the proxy latched a cap stop: ${capStop}` : null;
+      }
       const rows = existsSync(sessionsFile) ? readSessionRows([sessionsFile]) : [];
-      Object.assign(s, judge(kind, exit, join(out, "jobs", job), rows, proxyConfig, capStop), { harbor_exit: exit, finished_at: new Date().toISOString() });
+      Object.assign(s, judge(kind, exit, join(out, "jobs", job), rows, proxyConfig), { harbor_exit: exit, finished_at: new Date().toISOString(), proxy_cap_stop: capStop, infra });
+      if (infra) rec.incomplete = `${kind} try ${n}: ${infra}`;
       save();
-      console.log(`route-check ${m.id} ${kind} try ${n}: ${s.pass ? "PASS" : "FAIL"} (Harbor ${exit}; tool results ${s.tool_results}; ${kind === "told" ? `body loaded ${s.body_loaded}; ` : ""}model responded ${s.model_responded}${s.reasons.length ? "; " + s.reasons.join("; ") : ""})`);
+      console.log(`route-check ${m.id} ${kind} try ${n}: ${infra ? `INCOMPLETE (${infra})` : s.pass ? "PASS" : "FAIL"} (Harbor ${exit}; tool results ${s.tool_results}; ${kind === "told" ? `body loaded ${s.body_loaded}; ` : ""}model responded ${s.model_responded}${s.reasons.length ? "; " + s.reasons.join("; ") : ""})`);
     }
+  } catch (e) {
+    const open = rec.sessions.find((s) => s.finished_at === null);
+    if (open) {
+      Object.assign(open, { finished_at: new Date().toISOString(), infra: `the route check failed during the session: ${String((e as Error).message ?? e)}` });
+      rec.incomplete = `${open.kind} try ${open.try}: ${open.infra}`;
+    }
+    throw e;
   } finally {
-    await fetch(control + "/close-all", { method: "POST" }).catch(() => undefined);
+    await fetch(control + "/close-all", { method: "POST", signal: AbortSignal.timeout(120_000) }).catch(() => undefined);
     proxy.kill();
     ledgerSvc.kill();
-    await Promise.all([proxy.exited, ledgerSvc.exited]);
+    await Promise.all([proxy.exited, ledgerSvc.exited, ...logs]);
     if (existsSync(sessionsFile)) reconcile(new Ledger(ledger, m.item), readRows(sessionsFile) as any[], prefix);
     rec.open_route_reserves = totals(readRows(ledger)).openIds.filter((id) => id.startsWith(prefix));
     save();
   }
+  const t = totals(readRows(ledger));
+  console.log(`${m.item}: settled $${fromMicros(t.settledMicros).toFixed(2)} of $${fromMicros(t.capMicros)}, open route reserves ${rec.open_route_reserves.length}`);
+  if (!verdict) {
+    rec.incomplete ??= `interrupted by ${caught()}`;
+    save();
+    console.log(incomplete());
+    return 4;
+  }
   rec.verdict = verdict.verdict;
   rec.reason = verdict.reason;
   save();
-  const t = totals(readRows(ledger));
-  console.log(`${m.item}: settled $${fromMicros(t.settledMicros).toFixed(2)} of $${fromMicros(t.capMicros)}, open route reserves ${rec.open_route_reserves.length}`);
   if (verdict.verdict === "pass") { console.log(`route check: ${m.id} passed on ${m.item} (${verdict.reason})`); return 0; }
   console.log(`route check: ${m.id} dropped out of R3a: ${verdict.reason}`);
   return 1;
