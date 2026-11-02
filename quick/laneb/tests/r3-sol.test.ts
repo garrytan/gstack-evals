@@ -419,8 +419,8 @@ describe("#121's notes", () => {
 // three failures on our side: killproxy and killledger (the stub stops that local service after its request) and hang
 // (it writes its pid to <STUB_LOG>.hang and waits to be stopped). hangkid hangs the same way with a child in Harbor's
 // process group (its pid in <STUB_LOG>.kid), and stubborn does too with both ignoring SIGTERM. badtrial writes a trial
-// whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), noread makes it unreadable
-// (EACCES), and nolog makes the check's own log of the session a directory, so the
+// whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), nomsgs leaves it out
+// (ENOENT), noread makes it unreadable (EACCES), and nolog makes the check's own log of the session a directory, so the
 // check fails writing it. STUB_SLEEP holds every session that many ms.
 const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -460,7 +460,7 @@ writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: task }, age
 writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: trial, verifier_result: { rewards: { reward: 1 } }, exception_info: null }));
 const msgs = mode === "notool" ? [{ type: "AssistantMessage", content: [{ text: "done" }] }] : [{ type: "AssistantMessage", content: [{ id: "t1", name: "Bash", input: { command: "cat calc.py" } }] }, { type: "UserMessage", content: [{ tool_use_id: "t1", content: "def add" }] }];
 if (mode === "dirmsgs") mkdirSync(join(d, "evaluator", "sdk-messages.jsonl"));
-else writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), (mode === "badtrial" ? "null\\n" : "") + msgs.map((m) => JSON.stringify(m)).join("\\n") + "\\n");
+else if (mode !== "nomsgs") writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), (mode === "badtrial" ? "null\\n" : "") + msgs.map((m) => JSON.stringify(m)).join("\\n") + "\\n");
 if (mode === "noread") chmodSync(join(d, "evaluator", "sdk-messages.jsonl"), 0);
 process.exit(mode === "latefail" ? 1 : 0);
 `;
@@ -569,6 +569,21 @@ describe("the route check's verdicts", () => {
     expect(j.pass).toBe(false);
     expect(j.reasons[0]).toStartWith("the trial's files could not be read: ");
     expect(j.reasons[0]).toContain("EISDIR");
+  });
+
+  test.skipIf(process.getuid?.() === 0)("an unreadable config.json or result.json throws too; a trial file missing inside the trial dir (ENOENT) stays a failed try", () => {
+    const d = tmp("sol-judge-files-");
+    const job = join(d, "job");
+    writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
+    const dir = join(job, "job", "smoke-task__0");
+    const sessions = readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    rmSync(join(dir, "evaluator", "sdk-messages.jsonl"));
+    expect(judge("smoke", 0, join(job, "job"), sessions, proxyConfig).pass).toBe(false);
+    for (const f of ["config.json", "result.json"]) {
+      chmodSync(join(dir, f), 0);
+      expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
+      chmodSync(join(dir, f), 0o644);
+    }
   });
 });
 
@@ -737,6 +752,11 @@ describe("route-check.ts failures on our side (A1)", () => {
     expect(rec).toMatchObject({ verdict: "drop", incomplete: null });
     expect(rec!.reason).toStartWith("the smoke part failed twice: try 1: the trial's files could not be read: ");
     expect(rec!.reason).toContain("EISDIR");
+    const missing = await routeCheck(rig(), { STUB_PLAN: "smoke1=nomsgs,smoke2=badtrial" });
+    expect(missing.code).toBe(1);
+    expect(missing.calls).toHaveLength(2);
+    expect(missing.rec).toMatchObject({ verdict: "drop", incomplete: null });
+    expect(missing.rec!.reason).toStartWith("the smoke part failed twice: try 1: ");
   }, 60_000);
 
   test("a cap stop the proxy latches ends the check incomplete instead of counting a failed try", async () => {

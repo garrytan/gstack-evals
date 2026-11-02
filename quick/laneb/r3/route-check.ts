@@ -85,12 +85,14 @@ const OUR_READ_ERRORS = new Set(["EACCES", "EIO", "EMFILE", "ENFILE", "ENOMEM", 
 
 // One session's route-side verdict from its Harbor exit, its job directory and the proxy's session rows. A trial whose
 // files can't be read fails with the read error as its reason; a read that fails on our machine (OUR_READ_ERRORS) throws
-// instead, so the check ends incomplete and counts no try (A1).
+// instead, so the check ends incomplete and counts no try (A1). loadR3Trial reads a JSON file it can't read as missing,
+// so judge reads each trial file once itself first and the error surfaces here.
 export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: string, sessionRows: any[], proxyConfig: any) {
   const bySession = sessionsByTrial(sessionRows);
   let trial: ReturnType<typeof loadR3Trial> = null, toolCount = 0, unreadable: string | null = null;
   try {
     const dir = existsSync(jobDir) ? readdirSync(jobDir).map((t) => join(jobDir, t)).find((d) => existsSync(join(d, "config.json"))) : undefined;
+    if (dir) for (const f of ["config.json", "result.json", "evaluator/laneb-summary.json"]) if (existsSync(join(dir, f))) readFileSync(join(dir, f));
     trial = dir ? loadR3Trial(dir, bySession, proxyConfig) : null;
     const msgsPath = dir ? join(dir, "evaluator", "sdk-messages.jsonl") : "";
     const msgs = msgsPath && existsSync(msgsPath) ? readFileSync(msgsPath, "utf8").split("\n").flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : [];
