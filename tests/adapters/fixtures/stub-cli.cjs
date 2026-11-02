@@ -35,7 +35,12 @@
 // blocks and a success result; {apierror, status} answers as STUB_MODE=apierror does; {exit} answers with one tool_use
 // (or its content) and exits with that code 100 ms later. Message ids carry the user message's number, so no two turns
 // share one. On each user message STUB_PROBE, a JSON list of paths, appends {probe: {path: exists}} to STUB_RECORD, and
-// on the first one the stub creates the file STUB_TOUCH names, after the probe.
+// on the first one the stub creates the file STUB_TOUCH names, after the probe. STUB_TOUCH may instead be a JSON list of
+// paths: the stub creates each, with its parent directories, and appends {touched: [paths]} to STUB_RECORD. In both,
+// $HOME and $GSTACK_STATE_ROOT expand to the CLI's own values; a probe is recorded under the path as given. A script
+// entry's calls ([{name, input}]) run before its content: each is a tool_use the stub asks the SDK to allow with a
+// can_use_tool control request, as the CLI does, and its tool_result follows the SDK's control_response, which
+// STUB_RECORD gets. An allowed AskUserQuestion's result carries the answers the SDK returned; a denied call's is an error.
 const rl = require("readline").createInterface({ input: process.stdin });
 let buf = null;
 const out = (o) => (buf ? buf.push(JSON.stringify(o) + "\n") : process.stdout.write(JSON.stringify(o) + "\n"));
@@ -45,6 +50,8 @@ const usage = { input_tokens: 1, output_tokens: Number(env.STUB_OUTPUT_TOKENS ??
 const assistant = (id, content, stop) => ({ type: "assistant", message: { id, type: "message", role: "assistant", model: "stub", content, stop_reason: stop, usage }, parent_tool_use_id: null, session_id: "s", uuid: "a" + id });
 const result = (n, text) => ({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: text, session_id: "s", duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage, uuid: "r" + n });
 let users = 0;
+const permits = new Map();
+const expand = (p) => p.replace(/\$(HOME|GSTACK_STATE_ROOT)\b/g, (v, k) => env[k] ?? v);
 if (env.STUB_ON_EOF) rl.on("close", () => process.exit(Number(env.STUB_EXIT)));
 rl.on("line", (line) => {
   let m;
@@ -58,18 +65,42 @@ rl.on("line", (line) => {
     out({ type: "control_response", response: { subtype: "success", request_id: m.request_id, response: { commands: [], models: [], account: {}, output_style: "default", available_output_styles: [] } } });
     return;
   }
+  if (m.type === "control_response") {
+    if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify(m) + "\n");
+    permits.get(m.response?.request_id)?.(m.response?.response ?? {});
+    return;
+  }
   if (m.type !== "user") return;
   if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify(m) + "\n");
   users++;
-  if (env.STUB_PROBE && env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify({ probe: Object.fromEntries(JSON.parse(env.STUB_PROBE).map((p) => [p, require("fs").existsSync(p)])) }) + "\n");
-  if (env.STUB_TOUCH && users === 1) require("fs").writeFileSync(env.STUB_TOUCH, "");
+  if (env.STUB_PROBE && env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify({ probe: Object.fromEntries(JSON.parse(env.STUB_PROBE).map((p) => [p, require("fs").existsSync(expand(p))])) }) + "\n");
+  if (env.STUB_TOUCH && users === 1) {
+    const list = env.STUB_TOUCH.startsWith("[");
+    const paths = (list ? JSON.parse(env.STUB_TOUCH) : [env.STUB_TOUCH]).map(expand);
+    for (const p of paths) {
+      require("fs").mkdirSync(require("path").dirname(p), { recursive: true });
+      require("fs").writeFileSync(p, "");
+    }
+    if (list && env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify({ touched: paths }) + "\n");
+  }
   if (users === 1) out({ type: "system", subtype: "init", session_id: "s", model: "stub", tools: [], cwd: "/", permissionMode: "default", apiKeySource: "none", claude_code_version: "0", skills: [], mcp_servers: [], slash_commands: [], output_style: "default", uuid: "u0" });
   if (env.STUB_STDERR) process.stderr.write(env.STUB_STDERR.repeat(Number(env.STUB_STDERR_TIMES ?? 1)));
   if (env.STUB_MODE === "script") {
     const n = users;
     const s = JSON.parse(env.STUB_SCRIPT)[n - 1] ?? { content: [{ type: "text", text: "done" }] };
     const id = "u" + n;
-    setTimeout(() => {
+    setTimeout(async () => {
+      for (const [k, c] of (s.calls ?? []).entries()) {
+        const tu = "tu_" + id + "k" + (k + 1);
+        out(assistant(id + "k" + (k + 1), [{ type: "tool_use", id: tu, name: c.name, input: c.input }], "tool_use"));
+        const r = await new Promise((done) => {
+          permits.set("perm_" + tu, done);
+          out({ type: "control_request", request_id: "perm_" + tu, request: { subtype: "can_use_tool", tool_name: c.name, input: c.input, tool_use_id: tu } });
+        });
+        const answers = r.updatedInput?.answers;
+        const text = r.behavior !== "allow" ? r.message || "Denied." : answers ? "User has answered your questions: " + Object.entries(answers).map(([q, a]) => JSON.stringify(q) + "=" + JSON.stringify(a)).join(", ") + "." : "ok";
+        out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: tu, content: text, is_error: r.behavior !== "allow" }] }, parent_tool_use_id: null, session_id: "s", uuid: "uk" + tu });
+      }
       for (let k = 1; k <= (s.turns ?? 0); k++) {
         out(assistant(id + "t" + k, [{ type: "tool_use", id: "tu_" + id + "t" + k, name: "Bash", input: { command: "true" } }], "tool_use"));
         out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_" + id + "t" + k, content: "", is_error: false }] }, parent_tool_use_id: null, session_id: "s", uuid: "ur" + id + "t" + k });
@@ -92,7 +123,7 @@ rl.on("line", (line) => {
         return;
       }
       if (s.content) out(assistant(id + "c", s.content, "end_turn"));
-      if (!s.hang) out({ ...result(id, s.content.filter((b) => b.type === "text").map((b) => b.text).join("")), num_turns: (s.turns ?? 0) + 1 });
+      if (!s.hang) out({ ...result(id, s.content.filter((b) => b.type === "text").map((b) => b.text).join("")), num_turns: (s.turns ?? 0) + (s.calls?.length ?? 0) + 1 });
     }, s.delay ?? 0);
     return;
   }
