@@ -27,6 +27,10 @@
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
 //   (/v1/messages, which Claude Code arms use for OpenRouter models) usage comes in Anthropic's shape, with cache reads and
 //   writes beside input_tokens, and is read that way.
+// - Claude Code's token counts on OpenRouter's Messages route (/v1/messages/count_tokens) are answered by the proxy, at one
+//   token per four bytes of the request, and sent nowhere, as Lane B's proxy answers them (quick/laneb/config/proxy.json,
+//   count_tokens estimate). Refused, they counted toward review-units' 2% degraded share (GEVA-89: all 106 of particle-1's
+//   refusals). The answer only sizes Claude Code's own context checks; the reservation still bounds input by bytes.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -38,8 +42,11 @@ import { chatPrice, openRouterRouting, PriceError, priceRequest, reservationMicr
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api" };
-/** Routes the proxy forwards. A free route costs nothing at the provider, so it is forwarded without a reservation. */
-const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true }>> = {
+/**
+ * Routes the proxy serves. A free route costs nothing at the provider, so it is forwarded without a reservation. An estimate
+ * route is answered by the proxy itself and sent nowhere.
+ */
+const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true; estimate?: true }>> = {
   anthropic: [
     { method: "POST", path: /^\/v1\/messages$/ },
     { method: "POST", path: /^\/v1\/messages\/count_tokens$/, free: true },
@@ -52,6 +59,7 @@ const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true
   ],
   openrouter: [
     { method: "POST", path: /^\/v1\/messages$/ },
+    { method: "POST", path: /^\/v1\/messages\/count_tokens$/, free: true, estimate: true },
     { method: "POST", path: /^\/v1\/chat\/completions$/ },
     { method: "POST", path: /^\/v1\/responses$/ },
     { method: "GET", path: /^\/v1\/models$/, free: true },
@@ -493,6 +501,10 @@ export class MeteringProxy {
     const body = parsed as Record<string, any>;
     ctx.model = typeof body.model === "string" ? body.model : "";
     if (!slot.models.has(`${provider}:${ctx.model}`)) return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
+    if (allowed.estimate) {
+      this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model, source: ctx.source, status: 200, estimated: true });
+      return Response.json({ input_tokens: Math.ceil(Buffer.byteLength(raw) / 4) });
+    }
     if (allowed.free) return forwardFree(raw);
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
