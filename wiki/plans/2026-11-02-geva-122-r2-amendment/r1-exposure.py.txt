@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+# R2's procedure gate (the R2 amendment's B1, on GEVA-101 prereg section 3.3). The prereg's r1-exposure.py with one
+# change: a reader row must be in the format the R2 build writes (src/trial/review/readers.ts, READER_ROW): pr is a suite
+# unit id exactly, pass a whole number from 1 to arm.json's passes, meter_source reader-counter, and a reader name after
+# "reader:". A malformed reader row, or a cost.tsv and findings in which no row or finding names a PR-pass of the suite,
+# is bad input: the gate exits 5, an error, and r2-decide.py exits 5 too, never an outcome. Rows that are not reader
+# rows still count toward no PR-pass when their pass is blank, as before. It keeps its file name so that r2-decide.py
+# runs it; R1 ran the prereg's version, which is unchanged.
+# R1 procedure gate (GEVA-101 prereg, section 2): did arm C's full procedure run? Per PR-pass, a reader counts as run
+# when cost.tsv has a reader:<name> row for it or a finding carries reader <name>. The Review Army ran when a specialist
+# reader ran (testing, maintainability, security, performance, data-migration, api-contract, design, simplification,
+# state-machines, red-team, or batched: GSTA-167's one reader that ran the plan's selected checklists together); the
+# adversarial pass ran when adversarial-native ran. The denominator is every PR-pass the suite asks for, its units times
+# arm.json's passes, so a PR-pass that left no rows is a miss. A row or finding whose pass is blank or not a pass number
+# (a run-level row), or whose unit ref names no suite unit, counts toward no PR-pass. The gate passes when both ran in
+# at least 90% of PR-passes. R2 runs the same gate on gstack-full.
+# Exit 0 when the gate passes and 3 when it fails; any other exit is an error, never a gate result.
+# Usage: python3 r1-exposure.py <suite json> <source arm dir>
+import csv, json, math, os, re, sys
+
+suite, a = json.load(open(sys.argv[1])), sys.argv[2]
+passes = json.load(open(os.path.join(a, "arm.json")))["passes"]
+SPEC = {"testing", "maintainability", "security", "performance", "data-migration", "api-contract", "design", "simplification", "state-machines", "red-team", "batched"}
+REF = re.compile(r"^(?:([A-Za-z0-9_.-]+)(?:/|__)([A-Za-z0-9_.-]+)#)?(\d+)(?:@([0-9a-f]{7,40}))?$")
+
+
+def unit(ref):
+    m = REF.match(ref)
+    if not m:
+        return None
+    repo = m.group(1) + "/" + m.group(2) if m.group(1) else None
+    hits = [u["id"] for u in suite["units"] if u["pr"] == int(m.group(3)) and (repo is None or u["repo"] == repo) and (not m.group(4) or u["head"].startswith(m.group(4)))]
+    return hits[0] if len(hits) == 1 else None
+
+
+ran = {(u["id"], p): set() for u in suite["units"] for p in range(1, passes + 1)}
+loose = matched = 0
+
+
+def note(ref, p, reader):
+    global loose, matched
+    k = (unit(ref), int(p) if re.fullmatch(r"\d+", str(p).strip()) else None)
+    if k not in ran:
+        loose += 1
+        return
+    matched += 1
+    if reader:
+        ran[k].add(reader)
+
+
+ids = {u["id"] for u in suite["units"]}
+bad = []
+for r in csv.DictReader(open(os.path.join(a, "cost.tsv")), delimiter="\t"):
+    scope = r.get("scope") or ""
+    if scope.startswith("reader:"):
+        p = (r.get("pass") or "").strip()
+        if not (scope[7:] and r.get("pr") in ids and re.fullmatch(r"[1-9][0-9]*", p) and int(p) <= passes and r.get("meter_source") == "reader-counter"):
+            bad.append("%s pass %r scope %s" % (r.get("pr"), r.get("pass"), scope))
+    note(r.get("pr") or "", r.get("pass") or "", scope[7:] if scope.startswith("reader:") else None)
+if bad:
+    sys.stderr.write("E_GATE_ROW %d reader row%s not in the R2 build's format (pr a suite unit id, pass 1 to %d, meter_source reader-counter): %s\n" % (len(bad), "" if len(bad) == 1 else "s", passes, "; ".join(bad[:5])))
+    sys.exit(5)
+for f in os.listdir(os.path.join(a, "findings")):
+    for line in open(os.path.join(a, "findings", f)):
+        if line.strip():
+            o = json.loads(line)
+            note(f[:-6], o.get("pass", ""), o.get("reader"))
+n = len(ran)
+if loose and not matched:
+    sys.stderr.write("E_GATE_ROW every row and finding (%d) names no PR-pass of the suite: the wrong suite, or rows in another format\n" % loose)
+    sys.exit(5)
+army = sum(1 for k in ran if ran[k] & SPEC)
+adv = sum(1 for k in ran if "adversarial-native" in ran[k])
+both = sum(1 for k in ran if ran[k] & SPEC and "adversarial-native" in ran[k])
+need = math.ceil(0.9 * n)
+print("exposure: Review Army specialists ran in %d of %d PR-passes, the adversarial pass in %d, both in %d (%d rows or findings name no PR-pass of the suite)" % (army, n, adv, both, loose))
+print("gate: %s (both in at least %d of %d PR-passes)" % ("pass" if both >= need else "FAIL", need, n))
+sys.exit(0 if both >= need else 3)
