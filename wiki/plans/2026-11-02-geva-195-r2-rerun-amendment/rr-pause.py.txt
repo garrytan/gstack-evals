@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+# The pause rule for the R2 rerun (GEVA-195 amendment, section 8). Reads the ledger's approval record in 176fdc7's layout
+# (src/runner/ledger/record.ts: <record>/items/<item>/approval-NNNN.json, lease-NNNN.json and close-NNNN.json, write-once,
+# a close in its lease's slot) over this post's seven items. Settled spend is each closed lease's spent_micros plus its
+# unknown_micros (unknown calls count as spent); reserved is each open lease's reserved_micros; an item's committed spend
+# is both, as readItem counts it. It prints the headroom, $4,500 less settled less reserved over the seven items, and the
+# next launch's spend cap: the smaller of the item's cap less its committed spend and the headroom. It exits 3, the
+# pause, when the headroom is below one launch round's worst case: parallel x $40 for a review-units launch (one arm, so
+# a round is parallel sessions at the allowance), or the judge batch's printed worst case when that is given.
+# Exit 0 to launch, 3 to pause and report to the Captain, 5 on bad input.
+# Usage: python3 rr-pause.py <record dir> <next item> <parallel> [<round worst case in dollars>]
+import json, os, re, sys
+
+ITEMS = ["rr-pilot-none", "rr-smoke-full", "rr-pilot-judge", "rr-grid-none", "rr-grid-full", "rr-judge-match", "rr-judge-adjudicate"]
+LIMIT, ALLOWANCE = 4500 * 10**6, 40 * 10**6
+FILE = re.compile(r"^(approval|lease|close)-(\d{4})\.json$")
+usd = lambda m: "$%.2f" % (m / 1e6)
+
+
+def item(record, name):
+    d = os.path.join(record, "items", name)
+    files = [json.load(open(os.path.join(d, n))) for n in sorted(os.listdir(d)) if FILE.match(n)] if os.path.isdir(d) else []
+    leases = [f for f in files if f["kind"] == "lease"]
+    closes = {f["seq"]: f for f in files if f["kind"] == "close"}
+    for seq, c in closes.items():
+        if not any(l["seq"] == seq and l["lease_id"] == c["lease_id"] for l in leases):
+            raise ValueError("item %s: close %d names lease %s, which is not the lease in that slot" % (name, seq, c["lease_id"]))
+    approvals = [f for f in files if f["kind"] == "approval"]
+    settled = sum(closes[l["seq"]]["spent_micros"] + closes[l["seq"]]["unknown_micros"] for l in leases if l["seq"] in closes)
+    reserved = sum(l["reserved_micros"] for l in leases if l["seq"] not in closes)
+    return (approvals[-1]["cap_micros"] if approvals else None), settled, reserved
+
+
+try:
+    record, nxt, parallel = sys.argv[1], sys.argv[2], int(sys.argv[3])
+    if nxt not in ITEMS or parallel < 1 or not os.path.isdir(os.path.join(record, "items")):
+        raise ValueError("usage: rr-pause.py <record dir> <one of %s> <parallel> [<round worst case>]" % ", ".join(ITEMS))
+    state = {n: item(record, n) for n in ITEMS}
+    settled = sum(s for _, s, _ in state.values())
+    reserved = sum(r for _, _, r in state.values())
+    for n in ITEMS:
+        c, s, r = state[n]
+        print("item %s: cap %s, settled %s, reserved %s" % (n, "none" if c is None else usd(c), usd(s), usd(r)))
+    head = LIMIT - settled - reserved
+    rnd = round(float(sys.argv[4]) * 1e6) if len(sys.argv) > 4 else parallel * ALLOWANCE
+    cap, s, r = state[nxt]
+    if cap is None:
+        raise ValueError("item %s has no approval on record" % nxt)
+    spend = min(cap - s - r, head)
+    print("pause: settled %s and reserved %s over the seven items; headroom %s of $4500.00; one round of %s costs at most %s" % (usd(settled), usd(reserved), usd(head), nxt, usd(rnd)))
+    if head < rnd:
+        print("pause: STOP. The headroom is below one round's worst case: launch nothing, report to the Captain, and resume only on the Captain's word.")
+        sys.exit(3)
+    print("pause: launch %s with --spend-cap %.2f (the smaller of the item's %s left and the headroom)%s" % (nxt, spend / 1e6, usd(cap - s - r), "; that is below one round, so review-units stops with CAP_STOP before a session" if spend < rnd else ""))
+except SystemExit:
+    raise
+except Exception as e:
+    print("E_RR_PAUSE %s: %s" % (type(e).__name__, e))
+    sys.exit(5)

@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+# R2 rerun decision (GEVA-195 amendment, section 7) for gstack-full-vs-none, a Holm family of one, in this order:
+#  1. none (no outcome), FIX-METHOD to the Captain with the counts, when gstack-full's exposure gate failed (rr-gate.py
+#     exit 3), more than 6 of an arm's 66 sessions ended in turn_cap or allowance_stop (arm.json cap_stops), noloss derive
+#     --drop-gaps dropped more than 3 of the 33 units (derive.json), an arm stopped, or the scorer gave no verdict, delta
+#     or interval;
+#  2. CUT-CANDIDATE when gstack-full found no more blocking blocker-passes than none-rr;
+#  3. KEEP when the scorer's 95% PR-clustered interval of the recall difference is above zero (R2's own rule);
+#  4. FIX-METHOD otherwise: gstack-full found more, but this grid can't show it.
+# The scorer's NO_LOSS, LOSS and size-rule lines decide nothing. Exit 0 KEEP, 1 CUT-CANDIDATE, 2 FIX-METHOD, 4 none, 5 an
+# error (bad input, or a gate error), which is never an outcome.
+# Usage: python3 rr-decide.py <score json> <derive.json> <stacks-r1.json> <gstack-full source arm> <none-rr source arm>
+#   <gstack-full run out dir>/parses.tsv <gstack-full run arm id>
+import json, os, subprocess, sys
+
+
+def main():
+    score, dj, sp, full, none, parses, run_id = sys.argv[1:8]
+    s, d, suite = json.load(open(score)), json.load(open(dj)), json.load(open(sp))
+    here = os.path.dirname(os.path.abspath(__file__))
+    gate = subprocess.run([sys.executable, os.path.join(here, "rr-gate.py"), sp, full, parses, run_id], capture_output=True, text=True)
+    print(gate.stdout.strip())
+    if gate.returncode not in (0, 3):
+        raise RuntimeError("the exposure gate exited %d: %s" % (gate.returncode, (gate.stderr or gate.stdout).strip()[-300:]))
+    caps = {}
+    for name, a in (("gstack-full", full), ("none-rr", none)):
+        arm = json.load(open(os.path.join(a, "arm.json")))
+        if len(suite["units"]) * arm["passes"] != 66:
+            raise ValueError("%s has %d sessions, not 66" % (name, len(suite["units"]) * arm["passes"]))
+        c = arm.get("cap_stops")
+        if not isinstance(c, dict) or not all(isinstance(c.get(k), int) for k in ("turn_cap", "allowance_stop")):
+            raise ValueError(name + "'s arm.json has no cap_stops counts; the run needs --cap-stops")
+        caps[name] = (c["turn_cap"], c["allowance_stop"])
+    dropped = [x["unit"] for x in d["dropped"]]
+    print("R2 rerun counts: cap stops gstack-full %d (turn_cap %d, allowance_stop %d), none-rr %d (turn_cap %d, allowance_stop %d); units dropped by --drop-gaps %d of %d" % (sum(caps["gstack-full"]), *caps["gstack-full"], sum(caps["none-rr"]), *caps["none-rr"], len(dropped), len(suite["units"])))
+    res = s["result"]
+    ci = res.get("ci95") or [None, None]
+    capped = [k for k, v in caps.items() if sum(v) > 6]
+    why = None
+    if gate.returncode:
+        why = "the exposure gate failed"
+    elif capped:
+        why = "the cap-stop rule: more than 6 of 66 sessions capped in " + " and ".join(capped)
+    elif len(dropped) > 3:
+        why = "the coverage rule: --drop-gaps dropped %d of 33 units, %s" % (len(dropped), ", ".join(dropped))
+    elif s["variant"]["status"] != "complete" or s["reference"]["status"] != "complete":
+        why = "an arm stopped"
+    elif res.get("no_verdict_reason"):
+        why = res["no_verdict_reason"]
+    elif res.get("delta") is None or None in ci:
+        why = "the scorer gave no delta or no interval"
+    if why:
+        print("R2 rerun outcome: none (" + why + "). FIX-METHOD to the Captain with these counts; no CUT-CANDIDATE and no KEEP.")
+        sys.exit(4)
+    b, pv, pr = res["blockers"], s["variant"]["passes"], s["reference"]["passes"]
+    f, n = round(res["recall"]["variant"] * b * pv), round(res["recall"]["reference"] * b * pr)
+    lo, hi = ci[0] * 100, ci[1] * 100
+    print("R2 rerun count: gstack-full found %d of %d blocking blocker-passes, none-rr %d of %d; difference %+.1f points [95%% CI %+.1f, %+.1f]" % (f, b * pv, n, b * pr, res["delta"] * 100, lo, hi))
+    if f <= n:
+        print("R2 rerun outcome: CUT-CANDIDATE. The full /review procedure found no more blocking blockers than plain Opus 5.5; it goes to Garry with this record.")
+        sys.exit(1)
+    if lo > 0:
+        print("R2 rerun outcome: KEEP. The full procedure found more blocking blockers than plain Opus 5.5, and the interval is above zero.")
+        sys.exit(0)
+    print("R2 rerun outcome: FIX-METHOD. The full procedure found more, but the interval includes zero.")
+    sys.exit(2)
+
+
+try:
+    main()
+except Exception as e:
+    print("E_RR_DECIDE %s: %s. This is an error, not an outcome." % (type(e).__name__, e))
+    sys.exit(5)

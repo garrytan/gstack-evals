@@ -1,0 +1,172 @@
+// R2 rerun amendment dry run (GEVA-195): review-units output from a stub run of 176fdc7's run loop. Every record here is
+// written by runReviewUnits with the real Claude Code driver and the pinned Agent SDK, whose CLI is 176fdc7's stub
+// (tests/adapters/fixtures/stub-cli.cjs), under the rerun's settings: one arm per run, claude-code-preset, gstack-full's
+// told prefix from #129 (TOLD), 200 turns, a $40 allowance, cap stops on, this post's reader map (MAP), and a background
+// wait of 3 s, a dry-run setting (the frozen wait is review-units' default, 3600 s). Keyless: the stub answers every model
+// call and the metering proxy is the test harness's. Units keep their suite ids, heads and bases, but every session runs
+// on one synthetic repo, since the stub reads no code. A final answer carries one CRITICAL finding on each blocking
+// blocker's first path, in ordinary review words, so the fake judge's rates decide who found it; on three out19 units the
+// first finding's evidence names a machine path the publication scan flags, so the scrub chain has work.
+// Sessions run STUB_MODE=agents (gstack-full launches the testing, api-contract and state-machines specialists and the
+// adversarial pass, each with its task notification; none launches nothing), except these grid cells (unit index, pass):
+//   gstack-full (0,1): A1 held rescue: findings in the first turn (STUB_BG.first), a background reader lands, and the
+//   landing turn (STUB_BG.final) says they stand with no block; (1,1) waited, and the landing turn holds the block (rule
+//   final); (8,1) a reader that never lands (delay null) after a findings block: a B1 deadline gap, findings_block true;
+//   (3,1) the turn cap with no review; (4,1) the adversarial reader's notification carries no tokens; (5,1) a final answer
+//   with no json block (missing).
+//   none (13,2): a held rescue on a background Bash task; (9,1) a deadline gap after "Waiting.", findings_block false;
+//   (12,1) a held malformed array (it stays malformed: a gap); (8,2) a malformed final block after an earlier findings
+//   block (rule final, malformed: a gap); (10,1) the turn cap after a review at turn 2; (11,1) the allowance stops the
+//   session before any review.
+// Scenario pilot is none at 1 pass on every unit in agents mode; smoke is gstack-full at 1 pass on --units; pause is pilot
+// under --cap. After the run it checks every session that never waited and was not capped: it must be scored by rule final,
+// with the parse findings.ts's parseFindings gives its record.
+// Usage: B=<gstack-evals at 176fdc7> MAP=<reader map> TOLD=<told-gstack-full.txt> bun rr-stub-arms.ts <stacks-r1.json>
+//   <out dir> <none|gstack-full> <grid|pilot|smoke|pause> [--units <id,...>] [--cap <usd>] [--resume]
+import { createHash } from "node:crypto";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const B = process.env.B!;
+const args = process.argv.slice(2);
+const [suitePath, out, armName, scen] = args as [string, string, string, string];
+const opt = (f: string) => (args.includes(f) ? args[args.indexOf(f) + 1]! : null);
+const resume = args.includes("--resume");
+if (!B || !process.env.MAP || !process.env.TOLD || !suitePath || !out || !["none", "gstack-full"].includes(armName) || !["grid", "pilot", "smoke", "pause"].includes(scen)) throw new Error("usage: B=<176fdc7 checkout> MAP=<map> TOLD=<told file> bun rr-stub-arms.ts <suite json> <out dir> <none|gstack-full> <grid|pilot|smoke|pause> [--units <ids>] [--cap <usd>] [--resume]");
+if (existsSync(out) && !resume) throw new Error("E_RR_OUT " + out + " exists");
+const { runReviewUnits, readReviewJournal } = await import(B + "/src/trial/review/run.ts");
+const { loadReaderMap } = await import(B + "/src/trial/review/readers.ts");
+const { parseFindings } = await import(B + "/src/trial/review/findings.ts");
+const { buildUnitRepo, unitTaskId } = await import(B + "/src/trial/review/unit.ts");
+const { dirTreeSha256 } = await import(B + "/src/trial/cache.ts");
+const { DEFAULT_POLICY, loadPolicy } = await import(B + "/src/skill-eval/cli/policy.ts");
+const { harness } = await import(B + "/tests/adapters/harness.ts");
+const { sourceRepo } = await import(B + "/tests/trial/review/helpers.ts");
+
+const STUB = join(B, "tests", "adapters", "fixtures", "stub-cli.cjs");
+const loaded = loadReaderMap(process.env.MAP);
+if ("problem" in loaded) throw new Error("E_RR_MAP " + loaded.problem);
+const PREFIX = readFileSync(process.env.TOLD, "utf8").replace(/\n$/, "");
+const suiteText = readFileSync(suitePath);
+const suite = JSON.parse(suiteText.toString());
+type U = { id: string; repo: string; pr: number; head: string; base: string; blockers?: Array<{ id: string; counts?: string; paths: string[]; line?: number }> };
+const pick = opt("--units");
+const units: U[] = pick ? pick.split(",").map((id) => suite.units.find((u: U) => u.id === id) ?? (() => { throw new Error("E_RR_UNIT " + id); })()) : suite.units;
+const passes = scen === "grid" ? 2 : 1;
+
+const specialist = (name: string) => "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/" + name + ".md, then run DIFF_BASE=$(git merge-base origin/main HEAD) && git diff \"$DIFF_BASE\" to get the full diff.";
+const ADVERSARIAL = "Read the diff for this branch. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production.";
+const ARMY = [
+  { id: "tu_testing", prompt: specialist("testing"), started: true, tokens: 41000 },
+  { id: "tu_api", prompt: specialist("api-contract"), started: true, tokens: 38000 },
+  { id: "tu_state", prompt: specialist("state-machines"), started: true, tokens: 36000 },
+];
+const ADV = { id: "tu_adv", prompt: ADVERSARIAL, started: true, tokens: 52000 };
+const WORDS = ["This breaks the API contract for existing callers", "The data migration leaves old rows behind", "The state machines here miss a transition"];
+const SCAN: Record<number, string> = { 14: "ran /tmp/gse-dry/repro.sh", 15: "see /Users/dry run/notes.txt", 16: "see " + ["", "home", "reviewer", "notes.log"].join("/") };
+const at = (u: U) => suite.units.findIndex((x: U) => x.id === u.id);
+const answer = (u: U) => {
+  const found = (u.blockers ?? []).filter((b) => b.counts === "blocking").map((b, i) => ({ file: b.paths[0], line: b.line ?? 1, severity: "CRITICAL", claim: WORDS[(at(u) + i) % WORDS.length] + " (dry-run fixture finding on blocker " + b.id + "; not a review finding).", evidence: i === 0 && SCAN[at(u)] ? "fixture; " + SCAN[at(u)] : "fixture" }));
+  return "Review done.\n\n```json\n" + JSON.stringify(found) + "\n```\n";
+};
+const SPENT = 'API Error: 402 {"type":"https://github.com/garrytan/gstack-evals/blob/main/docs/errors.md#e_allowance","title":"E_ALLOWANCE","status":402,"code":"E_ALLOWANCE","detail":"E_ALLOWANCE: metering proxy: the slot\'s allowance of $40.000000 cannot hold this call\'s worst case of $1.120000 ($39.100000 already committed)"}';
+const STAND = "The background check finished; my findings above stand.";
+const BROKEN = "Revised.\n\n```json\n[{\"file\": \"src/a.ts\", \"line\": 1, \"severity\": \"CRITICAL\", \"claim\": \"x\", \"evidence\": \"y\",}]\n```\n";
+const OBJECT = "Updated.\n\n```json\n{\"findings\": \"see above\"}\n```\n";
+const bg = (o: object) => ({ STUB_MODE: "background", STUB_BG: JSON.stringify(o) });
+const lands = { id: "tu_bg", delay: 300 };
+const bash = { id: "tu_bg", delay: 300, kind: "local_bash" };
+const cell = (unitId: string, pass: number): Record<string, string> => {
+  const u = suite.units.find((x: U) => x.id === unitId) as U;
+  switch (scen === "grid" ? armName + " " + at(u) + " " + pass : "") {
+    case "gstack-full 0 1": return bg({ first: answer(u), readers: [lands], final: STAND });
+    case "gstack-full 1 1": return bg({ readers: [lands], final: answer(u) });
+    case "gstack-full 8 1": return bg({ first: answer(u), readers: [{ id: "tu_hang", delay: null }] });
+    case "gstack-full 3 1": return { STUB_MODE: "turns" };
+    case "gstack-full 4 1": return { STUB_MODE: "agents", STUB_AGENTS: JSON.stringify([...ARMY, { id: ADV.id, prompt: ADV.prompt, started: true }]), STUB_FINAL: answer(u) };
+    case "gstack-full 5 1": return { STUB_MODE: "agents", STUB_AGENTS: JSON.stringify([...ARMY, ADV]), STUB_FINAL: "Review done. I have nothing to put in a findings block." };
+    case "none 13 2": return bg({ first: answer(u), readers: [bash], final: STAND });
+    case "none 9 1": return bg({ readers: [{ id: "tu_hang", delay: null, kind: "local_bash" }] });
+    case "none 12 1": return bg({ first: BROKEN, readers: [bash], final: STAND });
+    case "none 8 2": return bg({ first: answer(u), readers: [bash], final: OBJECT });
+    case "none 10 1": return { STUB_MODE: "turns", STUB_TURN_TEXTS: JSON.stringify({ 2: answer(u) }) };
+    case "none 11 1": return { STUB_MODE: "apierror", STUB_API_ERROR: SPENT, STUB_API_STATUS: "402" };
+  }
+  return { STUB_MODE: "agents", STUB_AGENTS: JSON.stringify(armName === "gstack-full" ? [...ARMY, ADV] : []), STUB_FINAL: answer(u) };
+};
+
+function stubSandbox(env: (task: string, e: Record<string, string>) => Record<string, string>) {
+  const run = (command: string, cwd: string, e: Record<string, string>, timeout: number) => {
+    const r = spawnSync("sh", ["-c", command], { cwd, env: e, timeout, encoding: "utf8" });
+    return { exitCode: r.status ?? 1, timedOut: false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  };
+  return {
+    isolation: "process",
+    workPath: (work: string) => work,
+    fixturesPath: (fixtures: string) => fixtures,
+    homePath: (dir: string) => join(dir, "home"),
+    step: (_role: string, command: string, _task: string, o: { work: string; env: Record<string, string>; timeoutMs: number }) => run(command, o.work, o.env, o.timeoutMs),
+    agent(task: string, o: { work: string; env: Record<string, string> }) {
+      mkdirSync(o.env.HOME!, { recursive: true });
+      return {
+        exec: (command: string, timeoutMs: number) => run(command, o.work, o.env, timeoutMs),
+        spawn: (argv: string[], extra: Record<string, string> = {}) => (argv[0] === "claude" ? spawn(process.execPath, [STUB, ...argv.slice(1)], { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? "", ...extra, ...env(task, o.env) }, stdio: ["pipe", "pipe", "pipe"] }) : spawn(argv[0]!, argv.slice(1), { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? "", ...extra }, stdio: ["pipe", "pipe", "pipe"] })),
+        stop() {},
+      };
+    },
+  };
+}
+
+const s = sourceRepo();
+const tree = join(mkdtempSync(join(tmpdir(), "gse-rrdry-")), "repo");
+const synthetic = { id: "garrytan/gstack#1@" + s.head.slice(0, 12), repo: "garrytan/gstack", pr: 1, head: s.head, base: s.base };
+const repo = buildUnitRepo({ unit: synthetic, source: s.root, dest: tree });
+const treeSha = dirTreeSha256(tree);
+const prepared = units.map((u) => {
+  const unit = { id: u.id, repo: u.repo, pr: u.pr, head: u.head, base: u.base };
+  return { unit, task: unitTaskId(unit), base_branch: repo.base_branch, merge_base: repo.merge_base, tree, tree_sha256: treeSha, instructions: repo.instructions };
+});
+const passOf = (e: Record<string, string>): number => {
+  const m = /\/p(\d+)\/home\/?$/.exec(e.HOME ?? "");
+  if (!m) throw new Error("E_RR_PASS the agent's HOME " + e.HOME + " names no pass");
+  return Number(m[1]);
+};
+const byTask = new Map(prepared.map((p) => [p.task, p.unit.id]));
+const h = harness(() => [{ type: "text", text: "ok" }]);
+const rig = {
+  baseUrl: h.baseUrl, network: null, imageDigest: null,
+  bind: async (request: unknown) => h.proxy.bind(request),
+  finalize: (m: unknown) => h.proxy.finalize(m),
+  arms: { "gstack-full": { tree_sha256: "gstack-tree", skill: null, gstack: null, plugins: [], provenance: { kind: "stack", stack: { repo: loaded.map.gstack.repo, sha: loaded.map.gstack.sha, source: "local-git" } } }, none: { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] } },
+  sandbox: (_arm: string) => stubSandbox((task, e) => cell(byTask.get(task) as string, passOf(e))),
+  judgeSandbox: () => stubSandbox(() => ({})),
+  egress: () => ({ open: false, detail: "dry-run stub rig" }),
+  close: async () => ({ committed: 0, unknown: 0, lease_id: null }),
+  recovery: null,
+};
+const policy = loadPolicy(DEFAULT_POLICY);
+const cap = opt("--cap");
+const arm = armName === "gstack-full" ? { name: "gstack-full", told: "gstack", toldPrefix: PREFIX, systemPrompt: "claude-code-preset" } : { name: "none", told: "none", systemPrompt: "claude-code-preset" };
+try {
+  const run = await runReviewUnits({
+    host: "claude", suite: { id: suite.id, sha256: createHash("sha256").update(suiteText).digest("hex"), sealed: false }, units: prepared,
+    arms: [arm], models: ["claude-opus-5-5"], passes, parallel: 4, timeoutS: 120, cap: cap === null ? 1_000_000_000 : Math.round(Number(cap) * 1_000_000), runId: "rr-dry-" + armName + "-" + scen, out, date: "2026-11-02", policy,
+    keyBase: { image_digest: null, recipe: "dry-run", host_version: null, adapter_sha256: "dry-run", isolation: "process" }, journal: join(h.dir, "journal.ndjson"), env: {},
+    maxTurns: 200, allowanceMicros: 40_000_000, capStops: true, readers: { map: loaded.map, sha256: loaded.sha256 }, backgroundWaitS: 3, ...(resume ? { reuse: readReviewJournal(out) } : {}),
+  }, rig, (line: string) => console.error(line.slice(0, 400)));
+  let never = 0, final = 0, same = 0;
+  for (const e of readReviewJournal(out).values()) {
+    const k = e.record.termination.kind;
+    if ((e.record.session_end?.waited_ms ?? 0) > 0 || k === "turn_cap" || k === "allowance_stop") continue;
+    never++;
+    if (e.scored_turn?.rule === "final") final++;
+    if (JSON.stringify(parseFindings(e.record)) === JSON.stringify(e.parse)) same++;
+  }
+  console.log("stub run " + armName + " " + scen + ": " + run.armDirs.length + " arm, " + prepared.length + " units x " + passes + " passes, stops " + ([...new Set(run.stops.map((x: { code: string }) => x.code))].join(", ") || "none") + "; reader map sha256 " + loaded.sha256 + "; background wait 3 s (dry-run setting)");
+  console.log("stub run " + armName + " " + scen + ": never-waited sessions " + never + ", scored by rule final " + final + ", parse equal to findings.ts's parseFindings " + same);
+  for (const x of run.stops) if (x.code === "CAP_STOP") console.log("CAP_STOP " + x.message);
+} finally {
+  h.proxy.stop();
+}

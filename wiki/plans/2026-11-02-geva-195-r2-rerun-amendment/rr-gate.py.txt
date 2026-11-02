@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+# The exposure gate for the R2 rerun's gstack-full arm (GEVA-195 amendment, section 6), counted on returned reports. It
+# is #129's r1-exposure.py (2026-11-02-geva-122-r2-amendment) with that post's reader-row format and bad-input rules
+# unchanged, and one change: a PR-pass counts only when it returned. It returned when parses.tsv gives its session the
+# outcome findings or empty (a findings block was scored, by the final, held or capped rule), and the reader rows the
+# gate needs carry a numeric total_tokens, which the build writes only when that reader's task notification arrived
+# (src/trial/review/readers.ts at 176fdc7); a reader still out when the session ended has total_tokens unavailable and
+# does not count. A PR-pass passes when it returned with a Review Army specialist other than red-team (testing,
+# maintainability, security, performance, data-migration, api-contract, design, simplification, state-machines, or
+# batched) and adversarial-native, each with a numeric total_tokens. red-team and targeted are counted, never gated. The
+# gate passes at ceil(0.9 x PR-passes): 60 of 66 in the grid, 3 of 3 in a smoke.
+# Bad input, exit 5 and never a gate result: a reader row not in the build's format (pr a suite unit id, pass 1 to
+# arm.json's passes, meter_source reader-counter, a reader name), rows that name no PR-pass of the suite, no parses.tsv
+# row for the run arm id, or a parses.tsv row whose unit is not a suite unit id.
+# Exit 0 when the gate passes, 3 when it fails, 5 on bad input.
+# Usage: python3 rr-gate.py <suite json> <source arm dir> <run out dir>/parses.tsv <run arm id>
+import csv, json, math, os, re, sys
+from collections import Counter
+
+SPEC = {"testing", "maintainability", "security", "performance", "data-migration", "api-contract", "design", "simplification", "state-machines", "batched"}
+REF = re.compile(r"^(?:([A-Za-z0-9_.-]+)(?:/|__)([A-Za-z0-9_.-]+)#)?(\d+)(?:@([0-9a-f]{7,40}))?$")
+
+
+def unit_of(suite, ref):
+    if any(u["id"] == ref for u in suite["units"]):
+        return ref
+    m = REF.match(ref)
+    if not m:
+        return None
+    repo = m.group(1) + "/" + m.group(2) if m.group(1) else None
+    hits = [u["id"] for u in suite["units"] if u["pr"] == int(m.group(3)) and (repo is None or u["repo"] == repo) and (not m.group(4) or u["head"].startswith(m.group(4)))]
+    return hits[0] if len(hits) == 1 else None
+
+
+try:
+    suite = json.load(open(sys.argv[1]))
+    a, parses, run_id = sys.argv[2:5]
+    passes = json.load(open(os.path.join(a, "arm.json")))["passes"]
+    ids = {u["id"] for u in suite["units"]}
+    keys = [(u["id"], p) for u in suite["units"] for p in range(1, passes + 1)]
+    tok = {k: {} for k in keys}
+    loose = matched = 0
+    bad = []
+    for r in csv.DictReader(open(os.path.join(a, "cost.tsv")), delimiter="\t"):
+        scope, p = r.get("scope") or "", (r.get("pass") or "").strip()
+        if scope.startswith("reader:") and not (scope[7:] and r.get("pr") in ids and re.fullmatch(r"[1-9][0-9]*", p) and int(p) <= passes and r.get("meter_source") == "reader-counter"):
+            bad.append("%s pass %r scope %s" % (r.get("pr"), r.get("pass"), scope))
+            continue
+        k = (unit_of(suite, r.get("pr") or ""), int(p) if re.fullmatch(r"\d+", p) else None)
+        if k not in tok:
+            loose += 1
+            continue
+        matched += 1
+        if scope.startswith("reader:"):
+            tok[k][scope[7:]] = tok[k].get(scope[7:], True) and bool(re.fullmatch(r"\d+", (r.get("total_tokens") or "").strip()))
+    if bad:
+        sys.stderr.write("E_GATE_ROW %d reader row%s not in the build's format (pr a suite unit id, pass 1 to %d, meter_source reader-counter): %s\n" % (len(bad), "" if len(bad) == 1 else "s", passes, "; ".join(bad[:5])))
+        sys.exit(5)
+    if loose and not matched:
+        sys.stderr.write("E_GATE_ROW every cost row (%d) names no PR-pass of the suite: the wrong suite, or rows in another format\n" % loose)
+        sys.exit(5)
+    outcome = {}
+    for r in csv.DictReader(open(parses), delimiter="\t"):
+        if r.get("arm_id") != run_id:
+            continue
+        if r.get("unit") not in ids:
+            sys.stderr.write("E_GATE_ROW parses.tsv names unit %r, which is no unit of suite %s\n" % (r.get("unit"), suite["id"]))
+            sys.exit(5)
+        outcome[(r["unit"], int(r["pass"]))] = r["outcome"]
+    if not outcome:
+        sys.stderr.write("E_GATE_ROW parses.tsv holds no row for run arm %s\n" % run_id)
+        sys.exit(5)
+    ret = [k for k in keys if outcome.get(k) in ("findings", "empty")]
+    has = lambda k, names: any(v for n, v in tok[k].items() if n in names)
+    army = sum(1 for k in ret if has(k, SPEC))
+    adv = sum(1 for k in ret if has(k, {"adversarial-native"}))
+    both = sum(1 for k in ret if has(k, SPEC) and has(k, {"adversarial-native"}))
+    na = sum(1 for k in ret if any(v is False for v in tok[k].values()))
+    left = Counter(outcome.get(k, "no parse row") for k in keys if k not in ret)
+    n, need = len(keys), math.ceil(0.9 * len(keys))
+    print("exposure: %d of %d PR-passes returned (not returned: %s); of those, a specialist with tokens in %d, adversarial-native with tokens in %d, both in %d; red-team %d, targeted %d (not gated); %d returned PR-passes have a reader row with total_tokens unavailable" % (len(ret), n, ", ".join("%s %d" % kv for kv in sorted(left.items())) or "none", army, adv, both, sum(1 for k in ret if has(k, {"red-team"})), sum(1 for k in ret if has(k, {"targeted"})), na))
+    print("gate: %s (returned with both in at least %d of %d PR-passes)" % ("pass" if both >= need else "FAIL", need, n))
+    sys.exit(0 if both >= need else 3)
+except SystemExit:
+    raise
+except Exception as e:
+    sys.stderr.write("E_GATE_INPUT %s: %s\n" % (type(e).__name__, e))
+    sys.exit(5)
