@@ -25,7 +25,7 @@ function capture(): Capture {
   const dir = mkdtempSync(join(tmpdir(), "gse-told-capture-"));
   try {
     const file = join(dir, "capture.json");
-    const r = spawnSync(process.execPath, ["test", "./tests/trial/review/told-capture.ts"], { cwd: REPO_ROOT, env: { ...process.env, CAPTURE_OUT: file, CAPTURE_CONFIGS: "", GIT_AUTHOR_DATE: "2026-11-02T00:00:00Z", GIT_COMMITTER_DATE: "2026-11-02T00:00:00Z" }, encoding: "utf8", timeout: 300_000 });
+    const r = spawnSync(process.execPath, ["test", join(REPO_ROOT, "tests", "trial", "review", "told-capture.ts")], { cwd: REPO_ROOT, env: { ...process.env, CAPTURE_OUT: file, CAPTURE_CONFIGS: "", GIT_AUTHOR_DATE: "2026-11-02T00:00:00Z", GIT_COMMITTER_DATE: "2026-11-02T00:00:00Z" }, encoding: "utf8", timeout: 300_000 });
     if (r.status !== 0) throw new Error("told-capture.ts exited " + r.status + ": " + (r.stderr || r.stdout).slice(-2000));
     return JSON.parse(readFileSync(file, "utf8")) as Capture;
   } finally {
