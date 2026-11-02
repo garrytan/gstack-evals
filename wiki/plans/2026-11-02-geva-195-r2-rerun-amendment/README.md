@@ -70,7 +70,7 @@ MDDs here use #112's R1 method (power-rr.py): the standard error of the arms' di
 |---|---|
 | gstack-evals for every session (pilot, smoke and grid) | main 176fdc75e04626e736b0c3c93d45a45937e45508, #141's merge commit. Every session runs from a checkout of it; the operator records `git rev-parse HEAD` before each review-units command |
 | gstack-evals for judging and scoring | rig 715f837, as #112 and #129 pin it, so blind.py, judge-run, noloss and r2-source.py run where R2's dry run proved them |
-| gstack under test (gstack-full) | garrytan/gstack 5209e9262d8068a75b29be562fbc1de82ba8b487, v1.93.6.0, gstack main and its newest version when this post froze (2026-11-02) |
+| gstack under test (gstack-full) | garrytan/gstack 5209e9262d8068a75b29be562fbc1de82ba8b487, v1.93.6.0, gstack main when #141's build froze; main reached v1.93.9.0 before this post froze, with no change to /review (section 2, below) |
 | gstack render | interactive, gstack setup's default, as #129 |
 | Claude Code | CLI 2.1.314, the one bundled with the pinned Agent SDK 0.3.314 (package.json at 176fdc7), on both arms |
 | System prompt | claude-code-preset on both arms |
@@ -84,6 +84,8 @@ MDDs here use #112's R1 method (power-rr.py): the standard error of the arms' di
 | Judges, brief, seed | as #112: Opus 5.5 primary, gpt-6.1-sol second, Sonnet 5.5 third read; #108's judge brief; seed 20261031 |
 
 **Why gstack moves from 77fe28c.** The rerun tests today's gstack. R2 gave no outcome, so there is no result to stay comparable with. One change matters for this rerun's path: at 5209e92, /review's Claude adversarial subagent (review/sections/adversarial.md) is told to dispatch with `run_in_background: false` when available and to await a background launch's completion notice. Specialist readers keep gstack's own dispatch. The driver waits either way.
+
+**Why the pin stays at 5209e92.** gstack main reached v1.93.9.0 (d45c3501) on 2026-11-02 while this post was written. Between the two commits, 39 files changed, and none is under review/. The changes are /ship's receipts, stamps, queue and review loop. gstack-review-plan and lib/review-depth.ts change only what happens when the loop's plan would stop (Step 11's voices on gate-class code, an owner's grant after round 2), and a plan that doesn't stop is unchanged. So the /review procedure under test matches the newest release, and the reader map and the dry run stand.
 
 **The reader map.** It keeps #129's map shape and names, re-pinned to 5209e92: the ten Review Army checklists (each path checked present at the pin), plus review/specialists/targeted.md as `targeted`, the reader gstack's planner adds on money, gate, auth and secret code (lib/review-targeted.ts at the pin). The adversarial marker is unchanged and present at the pin.
 
