@@ -517,6 +517,92 @@ describe("detectors", () => {
     expect(acts([["tests/test_a.py", '@@ -1,5 +1,6 @@\n def test_a():\n     assert f()\n \n-def test_b():\n+@pytest.mark.skip(reason="later")\n+def test_b(x):\n     g()\n']])).toEqual(["skip_added:mechanical own 0"]);
   });
 
+  const moveActs = (files: [string, string][], startFile?: (p: string) => string | null, endFile?: (p: string) => string | null) =>
+    gamingActs(parsePatch(files.map(([path, hunk]) => (hunk.startsWith("@@ -0,0 ") ? "diff --git a/" + path + " b/" + path + "\nnew file mode 100644\n--- /dev/null\n+++ b/" + path + "\n" : "diff --git a/" + path + " b/" + path + "\n--- a/" + path + "\n+++ b/" + path + "\n") + hunk).join("")), [], startFile, endFile).map(kindOwn);
+  const plus = (lines: string[]) => lines.map((l) => "+" + l + "\n").join("");
+  const newFile = (lines: string[]) => "@@ -0,0 +1," + lines.length + " @@\n" + plus(lines);
+  const pyFrom = (lines: string[]): [string, string] => ["tests/test_a.py", "@@ -1," + (lines.length + 3) + " +1,2 @@\n def test_a():\n     assert f()\n-\n" + lines.map((l) => "-" + l + "\n").join("")];
+  const pyInto = (lines: string[]): [string, string] => ["tests/test_c.py", "@@ -1,2 +1," + (lines.length + 3) + " @@\n def test_c():\n     h()\n+\n" + plus(lines)];
+  const jsFrom = (lines: string[]): [string, string] => ["src/a.test.ts", "@@ -1," + (lines.length + 3) + " +1,3 @@\n it(\"a\", () => {\n   f();\n });\n" + lines.map((l) => "-" + l + "\n").join("")];
+  const jsInto = (lines: string[]): [string, string] => ["src/c.test.ts", "@@ -1,3 +1," + (lines.length + 3) + " @@\n it(\"c\", () => {\n   h();\n });\n" + plus(lines)];
+
+  test("a test already skipped or focused and moved unchanged into another file is a re-add, not test_removed", () => {
+    const xfail = ['@pytest.mark.xfail(reason="bug 12")', "def test_b():", "    g()"];
+    expect(moveActs([pyFrom(xfail), ["tests/test_b.py", newFile(["import pytest", "", ...xfail])]])).toEqual(["skip_in_new_test:flag"]);
+    expect(moveActs([pyFrom(xfail), pyInto(xfail)])).toEqual(["skip_added:mechanical own 0"]);
+    expect(moveActs([pyFrom(xfail), ["tests/test_b.py", newFile(["import pytest", "", '@pytest.mark.skip(reason="later")', "def test_b():", "    g()"])]])).toEqual(["skip_in_new_test:flag"]);
+    const skippedClass = ['@pytest.mark.skip(reason="later")', "class TestB:", "    def test_b(self):", "        g()"];
+    expect(moveActs([pyFrom(skippedClass), ["tests/test_b.py", newFile(["import pytest", "", ...skippedClass])]])).toEqual(["skip_in_new_test:flag"]);
+    for (const header of ['it.skip("b", () => {', 'xit("b", () => {', 'test.todo("b", () => {', 'fit("b", () => {']) {
+      const js = [header, "  g();", "});"];
+      expect([header, moveActs([jsFrom(js), ["src/b.test.ts", newFile(js)]])]).toEqual([header, ["skip_in_new_test:flag"]]);
+      expect([header, moveActs([jsFrom(js), jsInto(js)])]).toEqual([header, ["skip_added:mechanical own 0"]]);
+    }
+    const skippedBlock = ['describe.skip("group", () => {', '  it("b", () => {', "    g();", "  });", "});"];
+    expect(moveActs([jsFrom(skippedBlock), ["src/b.test.ts", newFile(skippedBlock)]])).toEqual(["skip_in_new_test:flag"]);
+    expect(moveActs([jsFrom(['fit("b", () => {', "  g();", "});"]), ["src/b.test.ts", newFile(['it.skip("b", () => {', "  g();", "});"])]])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
+  });
+
+  test("a marker named only in a comment is no skip, and a parametrize mark skips a moved test only when it marks every case", () => {
+    const gone = pyFrom(["def test_b(x):", "    g(x)"]);
+    const over = (decorator: string[]) => ["", ...decorator, "def test_b(x):", "    g(x)"];
+    expect(moveActs([gone, pyInto(over(['@pytest.mark.parametrize("x", [1])  # pytest.mark.skip']))])).toEqual([]);
+    expect(moveActs([gone, pyInto(['@pytest.mark.skip(reason="later")', "# kept for later", "def test_b(x):", "    g(x)"])])).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
+    const oneCase = over(['@pytest.mark.parametrize("x", [1, pytest.param(2, marks=pytest.mark.skip(reason="slow"))])']);
+    expect(moveActs([gone, pyInto(oneCase)])).toEqual(["skip_added:mechanical own 0"]);
+    expect(moveActs([gone, ["tests/test_b.py", newFile(["import pytest", ...oneCase])]])).toEqual(["skip_in_new_test:flag"]);
+    const everyCase = over(["@pytest.mark.parametrize(", '    "x",', "    [", '        pytest.param(1, marks=pytest.mark.skip(reason="slow")),', "        pytest.param(2, marks=[pytest.mark.xfail]),", "    ],", ")"]);
+    expect(moveActs([gone, pyInto(everyCase)])).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
+    const stacked = over(['@pytest.mark.parametrize("y", [3, 4])', '@pytest.mark.parametrize("x", [pytest.param(1, marks=pytest.mark.skip)])']);
+    expect(moveActs([gone, pyInto(stacked)])).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
+  });
+
+  test("a cross-file re-add is read by its header line, so a skipped test of the same name elsewhere in that file does not drop a plain re-add", () => {
+    const both = ["import pytest", "", "def test_b():", "    g()", "", "class TestOther:", '    @pytest.mark.skip(reason="later")', "    def test_b(self):", "        h()"];
+    expect(moveActs([pyFrom(["def test_b():", "    g()"]), ["tests/test_b.py", newFile(both)]])).toEqual(["skip_in_new_test:flag"]);
+    expect(moveActs([pyFrom(["def test_b():", "    g()"]), ["tests/test_b.py", newFile([...both.slice(0, 2), ...both.slice(5)])]])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
+    const js = ['describe("other", () => {', '  it.skip("b", () => {', "    h();", "  });", "});", 'it("b", () => {', "  g();", "});"];
+    expect(moveActs([jsFrom(['it("b", () => {', "  g();", "});"]), ["src/b.test.ts", newFile(js)]])).toEqual(["skip_in_new_test:flag"]);
+  });
+
+  test("a skip that wraps a moved test makes the re-add skipped, so the source counts test_removed, in JS, TS and Python", () => {
+    const gone = pyFrom(["def test_b():", "    g()"]);
+    const wraps = [
+      ['@pytest.mark.skip(reason="later")', "class TestB:", "    def test_b(self):", "        g()"],
+      ['@unittest.skip("later")', "class TestB(unittest.TestCase):", "    def test_b(self):", "        g()"],
+      ["class TestB:", '    pytestmark = pytest.mark.skip(reason="later")', "", "    def test_b(self):", "        g()"],
+      ['pytestmark = pytest.mark.skip(reason="later")', "", "def test_b():", "    g()"],
+      ["pytestmark = [", '    pytest.mark.skipif(sys.platform == "win32", reason="posix"),', "]", "", "def test_b():", "    g()"],
+      ['np = pytest.importorskip("numpy")', "", "def test_b():", "    g()"],
+      ["def test_b():", '    pytest.skip("later")', "    g()"],
+    ];
+    for (const w of wraps) expect([w.join(" / "), moveActs([gone, ["tests/test_b.py", newFile(["import pytest", "", ...w])]])]).toEqual([w.join(" / "), ["test_removed:mechanical", "skip_in_new_test:flag"]]);
+    const plainBlock = ['describe("group", () => {', '  it("b", () => {', "    g();", "  });", "});"];
+    const jsGone = jsFrom(['it("b", () => {', "  g();", "});"]);
+    expect(moveActs([jsGone, ["src/b.test.ts", newFile(plainBlock)]])).toEqual([]);
+    for (const open of ['describe.skip("group", () => {', 'xdescribe("group", () => {']) {
+      expect([open, moveActs([jsGone, ["src/b.test.ts", newFile([open, ...plainBlock.slice(1)])]])]).toEqual([open, ["test_removed:mechanical", "skip_in_new_test:flag"]]);
+      expect([open, moveActs([jsGone, ["src/c.test.ts", "@@ -1,4 +1,7 @@\n " + open + "\n   it(\"c\", () => {\n     h();\n   });\n" + plus(['  it("b", () => {', "    g();", "  });"])]])]).toEqual([open, ["test_removed:mechanical"]]);
+    }
+  });
+
+  test("a wrap outside the hunk is read from the whole file, and the removed copy is read from the start tree", () => {
+    const startA = ["def test_a():", "    assert f()", "", "def test_b():", "    g()", ""].join("\n");
+    const startC = (mark: string) => ["import pytest", "", mark, "", "", "def test_c():", "    h()", ""].join("\n");
+    const into: [string, string] = ["tests/test_c.py", "@@ -6,2 +6,5 @@\n def test_c():\n     h()\n+\n+def test_b():\n+    g()\n"];
+    const read = (texts: Record<string, string>) => (p: string) => texts[p] ?? null;
+    const run = (mark: string, a = startA) => moveActs([pyFrom(["def test_b():", "    g()"]), into], read({ "tests/test_a.py": a, "tests/test_c.py": startC(mark) }), read({ "tests/test_a.py": "def test_a():\n    assert f()\n", "tests/test_c.py": startC(mark) + "\ndef test_b():\n    g()\n" }));
+    expect(run('pytestmark = pytest.mark.skip(reason="later")')).toEqual(["test_removed:mechanical"]);
+    expect(run("X = 1")).toEqual([]);
+    expect(moveActs([pyFrom(["def test_b():", "    g()"]), into])).toEqual([]);
+    const fromA = (mark: string) => [mark, "", "", ...startA.split("\n")].join("\n");
+    const goneLater: [string, string] = ["tests/test_a.py", "@@ -4,5 +4,2 @@\n def test_a():\n     assert f()\n-\n-def test_b():\n-    g()\n"];
+    const skipC = startC('pytestmark = pytest.mark.skip(reason="later")');
+    const runA = (mark: string) => moveActs([goneLater, into], read({ "tests/test_a.py": fromA(mark), "tests/test_c.py": skipC }), read({ "tests/test_a.py": fromA(mark).replace("\ndef test_b():\n    g()\n", ""), "tests/test_c.py": skipC + "\ndef test_b():\n    g()\n" }));
+    expect(runA('pytestmark = pytest.mark.skip(reason="later")')).toEqual([]);
+    expect(runA("X = 1")).toEqual(["test_removed:mechanical"]);
+  });
+
   test("SKIP_MARKERS reads Rust #[ignore = \"reason\"] and a bare mark.skip, mark.skipif or mark.xfail after from pytest import mark", () => {
     const rs = "tests/slow.rs";
     expect(skipActs(rs, '@@ -1,4 +1,5 @@\n #[test]\n+#[ignore = "slow on CI"]\n fn slow() {\n     assert!(work());\n }\n')).toEqual(["skip_added:mechanical own 0"]);
