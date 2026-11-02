@@ -26,8 +26,11 @@
 // STUB_BG.first replaces the prompt's turn text ("Waiting."). A reader with stall true starts its landing turn (init and
 // its text) and never ends it, so the main agent is mid-turn from then on; stall "init" stops right after the turn's init,
 // before any text. A reader's think delays its landing turn's text and result that many ms after the turn's init.
+// A reader with at_result true lands in the same stdout write as the prompt turn's result, so that result, its
+// task_notification and the next turn's init reach the SDK together. STUB_BG.final replaces STUB_FINAL as the landing turn's text.
 const rl = require("readline").createInterface({ input: process.stdin });
-const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+let buf = null;
+const out = (o) => (buf ? buf.push(JSON.stringify(o) + "\n") : process.stdout.write(JSON.stringify(o) + "\n"));
 const env = process.env;
 if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify({ argv: process.argv.slice(2) }) + "\n");
 const usage = { input_tokens: 1, output_tokens: Number(env.STUB_OUTPUT_TOKENS ?? 1) };
@@ -130,17 +133,24 @@ rl.on("line", (line) => {
         out({ type: "command_lifecycle", command_uuid: "c1", state: "completed", uuid: "cl2", session_id: "s" });
       }, bg.wakeup.delay);
     }
+    if (bg.readers.some((x) => x.at_result)) buf = [];
     out(assistant("wait", [{ type: "text", text: bg.first || "Waiting." }], "end_turn"));
     out(result("wait", bg.first || "Waiting."));
-    for (const r of bg.readers.filter((x) => x.delay !== null)) setTimeout(() => {
+    const land = (r) => {
       out({ type: "assistant", message: { id: "sub_" + r.id, type: "message", role: "assistant", model: "stub", content: [{ type: "text", text: "FINDING from " + r.id }], stop_reason: null, usage }, parent_tool_use_id: r.id, session_id: "s", uuid: "as_" + r.id });
       out({ type: "system", subtype: "task_updated", task_id: "task_" + r.id, run_id: "run_" + r.id, patch: { status: "completed", end_time: Date.now() }, session_id: "s", uuid: "tu_" + r.id });
       out({ type: "system", subtype: "task_notification", task_id: "task_" + r.id, run_id: "run_" + r.id, tool_use_id: r.id, status: "completed", output_file: "", summary: "done", session_id: "s", uuid: "tn_" + r.id });
       live.splice(live.indexOf(r), 1);
       if (!bg.late_level) level();
-      turn(out_() ? "Still waiting." : env.STUB_FINAL || "done", { kind: "task-notification", producer: "session-task", runId: "run_" + r.id }, r);
+      turn(out_() ? "Still waiting." : bg.final || env.STUB_FINAL || "done", { kind: "task-notification", producer: "session-task", runId: "run_" + r.id }, r);
       if (bg.late_level) level();
-    }, r.delay);
+    };
+    for (const r of bg.readers.filter((x) => x.at_result)) land(r);
+    if (buf) {
+      process.stdout.write(buf.join(""));
+      buf = null;
+    }
+    for (const r of bg.readers.filter((x) => x.delay !== null && !x.at_result)) setTimeout(() => land(r), r.delay);
     return;
   }
   if (env.STUB_MODE === "content") {

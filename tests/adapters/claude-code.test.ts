@@ -8,6 +8,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ALLOWANCE_SPENT, BACKGROUND_WAIT_MS, claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
 import { parseFindings } from "../../src/trial/review/findings.ts";
+import { codeParse } from "../../src/trial/review/held.ts";
 import { loadReaderMap, readerUsage, readTranscript } from "../../src/trial/review/readers.ts";
 import { priceRequest, usageCost } from "../../src/runner/pricing/prices.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "../../src/runner/proxy/metering-proxy.ts";
@@ -781,6 +782,20 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     const r = await bg({ readers: [agent("tu_a", 300, { think: 1_500 })] }, { waitMs: 1_000 });
     expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, REPORT, "clean"]);
     expect(r.outcome.session_end!.waited_ms).toBeLessThan(1_000);
+  }, 30_000);
+
+  // Value: protects=GSTA-2's ruling A on the #141 fix-check: a held session whose result, task notification and next turn's init reach the driver in one write still records a wait, so it scores from its report and not from the acknowledgement after it; fails_when=waited_ms rounds that sub-millisecond idle down to 0 and the held rule never applies
+  test("a held session whose result, notification and init arrive in one write still counts as waited", async () => {
+    const ack = "The background check finished; my findings above stand.";
+    const r = await bg({ readers: [agent("tu_a", 0, { at_result: true })], first: REPORT, final: ack });
+    expect([r.outcome.termination, r.outcome.turns, r.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, [REPORT, ack], "clean"]);
+    expect(r.outcome.session_end!.waited_ms).toBeGreaterThan(0);
+    expect(codeParse(r.outcome, r.outcome.turns)).toMatchObject({ parse: { kind: "findings" }, scored_turn: { rule: "held", index: 0, of: 2 } });
+  }, 30_000);
+
+  // Value: protects=ruling A's one risk: rounding the wait up never turns a session that never sat idle on held work into a waited one; fails_when=such a session records waited_ms above 0
+  test("a session that never sat idle on held work records waited_ms 0 exactly", async () => {
+    for (const r of [await bg({ readers: [] }), await bg({ readers: [agent("tu_a", 300, { ambient: true })] })]) expect(r.outcome.session_end?.waited_ms).toBe(0);
   }, 30_000);
 
   // Value: protects=ruling B (GEVA-2, 2026-11-02): a ScheduleWakeup set while nothing ran holds the session until it fires, one set while readers ran is their fallback and is released once they finish, with when it was set, its delay and what ran recorded, and a stopped wakeup holds nothing; fails_when=a fallback wakeup keeps the session open past the report (R2's 3 fallback sessions would end on a later turn), a lone wakeup is not waited for, or a released one goes unrecorded; why_new=GST-734 ruling B; seam=the driver's wakeup tracking; no_claim=a real model

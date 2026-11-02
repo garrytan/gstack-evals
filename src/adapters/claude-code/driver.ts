@@ -91,7 +91,7 @@
 //   ruling on #141); a timeout during an active turn stays the arm's. Every other stop (a cap stop, the turn cap or the
 //   allowance, a crash) keeps its own termination. The outcome's session_end
 //   records the cause (clean: nothing held the session at its end; deadline; tasks_pending: it ended another way while
-//   work still held it), what was pending and the idle time waited.
+//   work still held it), what was pending and the idle time waited, in whole ms rounded up so any held idle counts.
 import type { ChildProcess } from "node:child_process";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -558,6 +558,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 idleSince = performance.now();
                 awaitingResult = true;
               } else {
+                if (waitMs === null && holding().length) log("adapter: the session ended at its turn's result with background work still out (" + holding().join("; ") + "); this run sets no background wait, so nothing held it\n");
                 ended = true;
                 inbox.close();
                 break;
@@ -590,8 +591,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         if (!abort.signal.aborted) abort.abort();
       }
       const held = holding();
-      if (waitMs === null && held.length) log("adapter: the session ended at its turn's result with background work still out (" + held.join("; ") + "); this run sets no background wait, so nothing held it\n");
-      const session_end: SessionEnd = { cause: overdue ? "deadline" : held.length ? "tasks_pending" : "clean", pending: held, waited_ms: Math.round(waited), released_wakeups: wakeup && wakeup.running.length && !running().length ? [wakeup] : [] };
+      const session_end: SessionEnd = { cause: overdue ? "deadline" : held.length ? "tasks_pending" : "clean", pending: held, waited_ms: Math.ceil(waited), released_wakeups: wakeup && wakeup.running.length && !running().length ? [wakeup] : [] };
       if (unapprovedAsks(messages, approved, hooked).length && (stop as Termination | null)?.kind !== "cap_stop") stop = { kind: "missing", code: "E_APPROVAL_BYPASS" };
       const { turns, calls, outputs } = parseClaudeCode(messages);
       const use = skillUse(calls, o.skill, outputs);
