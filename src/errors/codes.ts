@@ -1040,6 +1040,33 @@ export const CODES = {
     resumable: false,
     owner: "U10",
   },
+  E_REAL_SCORE_INPUT: {
+    exit: 2,
+    meaning: "The real-outcome scorer could not read a trial's records as the lane defines them: a shipment.json that is not a real-outcome/shipment/v1 record, an arm that arms.json does not list, a K4 task with no replay role, a task bundle without the starting commit, a gold patch that does not apply, a trial-score.json of another schema, or a termination reason the taxonomy does not class. Nothing was scored.",
+    fix: "Read the message. A missing record means the trial is infra (rig reason), never a fail. An unclassed termination needs B7's frozen taxonomy (--taxonomy) to class it before any trial is scored.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_REAL_SCORE_GRADE: {
+    exit: 2,
+    meaning: "The real-outcome scorer's scratch git repository failed while it built a trial's trees: a bundle would not fetch, or git could not read, diff or write a tree. The trial has no grade yet; it is not a fail for the arm.",
+    fix: "Check that git is installed and the work directory is writable, then rerun gstack-evals real score trial for the trial.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_REAL_SCORE_CONFIG: {
+    exit: 2,
+    meaning: "The real-outcome analysis config or termination taxonomy is not usable: a missing or wrong schema, a primary model outside the models list, the same arm as treatment and control, a task order that repeats a task or misses a build task of the primary model, a margin, ceiling or guard outside 0 to 1, fewer than 1000 bootstrap draws, or a taxonomy class other than completed, truncated or infra.",
+    fix: "Fix the config to match the preregistration (lanes/real-outcome/score/README.md lists the fields). Never change a frozen number after the run to change a verdict.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
