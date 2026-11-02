@@ -616,6 +616,19 @@ function panel(o: { tasks: number; trials: number; models?: string[]; seed?: num
 const order = (n: number, prefix = "t") => Array.from({ length: n }, (_, i) => prefix + i);
 const config = (o: Partial<AnalysisConfig> & { n: number }): AnalysisConfig => readConfig({ schema: "real-outcome/analysis-config/v1", primary_model: OPUS, models: [OPUS], treatment: "gstack", control: "none", task_order: order(o.n), look: "final", ...PLAN_DEFAULTS, bootstrap: { seed: 1, draws: 2000 }, ...o });
 const p = (t: number) => 0.2 + 0.6 * ((t * 37) % 100) / 100;
+// An exact panel: per task and arm, completed trials and the clean ones among them, then truncated trials and the clean ones.
+interface Cell { done: number; clean: number; cut: number; cutClean: number }
+const cell = (done: number, clean: number, cut = 0, cutClean = 0): Cell => ({ done, clean, cut, cutClean });
+const exact = (tasks: number, control: (t: number) => Cell, treatment: (t: number) => Cell): TrialEvidence[] =>
+  Array.from({ length: tasks }, (_, t) =>
+    ([["none", control(t)], ["gstack", treatment(t)]] as const).flatMap(([arm, c]) =>
+      Array.from({ length: c.done + c.cut }, (_, k) => ev({ trial: "t" + t + "-" + arm + "-" + k, task: "t" + t, repo: "o/r" + Math.floor(t / 3), arm, bare: arm === "none", termination: k < c.done ? "completed" : "wall_limit", pass: k < c.done ? k < c.clean : k - c.done < c.cutClean })),
+    ),
+  ).flat();
+/** A final reading look() would call same within the margin if no interim crossing blocked it: no ceiling, no boundary
+ * crossing, and the 90% interval inside the 7-point margin. */
+const wouldBeSame = (f: { reading: { z: number | null; ci90: [number, number] | null; boundary: number } | null; control_clean_share: number | null }): boolean =>
+  f.reading !== null && f.reading.z !== null && f.reading.ci90 !== null && Math.abs(f.reading.z) <= f.reading.boundary && f.reading.ci90[0] > -0.07 && f.reading.ci90[1] < 0.07 && (f.control_clean_share ?? 1) <= 0.85;
 
 describe("paired analysis", () => {
   test("a large effect stops at the interim look on the first half of the frozen order", () => {
@@ -856,6 +869,35 @@ describe("paired analysis", () => {
       expect(a.verdict).toBe("not_distinguished");
       expect(a.cut.conditions.clean_same).toBe(false);
     }
+  });
+
+  test("rule 1: a crossing at the interim look on either primary reading blocks every final reading that would otherwise read same within the margin", () => {
+    const n = (t: number) => ((t * 2) % 5) - 2;
+    const panels: [string, (t: number) => Cell, string[]][] = [
+      ["with truncated trials", (t) => (t < 75 ? cell(20, 10 + n(t), 4, 4) : cell(20, 10 + n(t), 4, 0)), ["treatment_better", "continue"]],
+      ["without truncated trials", (t) => (t < 75 ? cell(20, 12 + n(t), 4, 0) : cell(20, 8 + n(t), 4, 4)), ["continue", "treatment_better"]],
+    ];
+    for (const [crossing, treatment, interim] of panels) {
+      const a = analyze(exact(150, () => cell(20, 10), treatment), config({ n: 150 }));
+      const m = a.models[0].primary;
+      expect([crossing, m.with_truncated.interim.verdict, m.without_truncated.interim.verdict, m.truncation.interim.tripped, m.deciding_look]).toEqual([crossing, ...interim, true, "final"]);
+      const finals = { with_truncated: m.with_truncated.final!, without_truncated: m.without_truncated.final!, task_clustered: m.task_clustered.final! };
+      for (const [reading, f] of Object.entries(finals)) expect([crossing, reading, wouldBeSame(f), f.verdict]).toEqual([crossing, reading, true, "not_distinguished"]);
+      expect([crossing, a.verdict, a.cut.conditions.clean_same]).toEqual([crossing, "not_distinguished", false]);
+    }
+  });
+
+  test("rule 1 on the task-clustered sensitivity: its own interim crossing blocks its final equivalence, and the repository readings that did not cross still call it", () => {
+    const repoShift = [0.2, -0.1, 0.1, -0.05, 0.1];
+    const shift = (t: number) => (t < 75 ? 1 : -1) * repoShift[Math.floor(t / 3) % 5];
+    const a = analyze(exact(150, () => cell(20, 10), (t) => cell(20, 10 + Math.round(20 * shift(t)))), config({ n: 150 }));
+    const m = a.models[0].primary;
+    expect([m.with_truncated.interim.verdict, m.without_truncated.interim.verdict, m.task_clustered.interim.verdict]).toEqual(["continue", "continue", "treatment_better"]);
+    const finals = [m.with_truncated.final!, m.without_truncated.final!, m.task_clustered.final!];
+    expect(finals.map(wouldBeSame)).toEqual([true, true, true]);
+    expect(finals.map((f) => f.verdict)).toEqual(["same_within_margin", "same_within_margin", "not_distinguished"]);
+    expect(m.task_clustered.final!.note).toContain("cannot call equivalence");
+    expect(a.verdict).toBe("same_within_margin");
   });
 
   test("a patch_not_applied count above zero prints a rig-health warning under the verdict and does not withhold the verdict", () => {
