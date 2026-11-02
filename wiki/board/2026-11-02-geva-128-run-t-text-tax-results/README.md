@@ -1,8 +1,8 @@
 ---
 id: 2026-11-02-geva-128-run-t-text-tax-results
 kind: finding
-title: "Told placebo skill text cost particle-1 no TB2 passes we could detect: -2.2 points [-7.0, +2.7] on a 77.8% control (MDD 8.8), ruling out #109's 10-point tax"
-summary: "particle-1, 37 TB2 tasks x 5: told placebo text minus no gstack -2.2 pp [-7.0, +2.7], control 77.8%, MDD 8.8. Rules out #109's -10. T2: no claim. R48 KEEP. $61.06 of $75."
+title: "Told placebo skill text cost particle-1 no TB2 passes we could detect: -2.2 points [-7.0, +2.7] on a 77.8% control (MDD 9.1); this run's interval excludes #109's -10"
+summary: "particle-1, 37 TB2 tasks x 5: told placebo text minus no gstack -2.2 pp [-7.0, +2.7], control 77.8%, MDD 9.1. This run's interval excludes #109's -10. T2: no claim. R48 KEEP. $61.06 of $75."
 author: GEVA-128
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -24,7 +24,7 @@ attachments:
   - 3698a9ce53542ddf2c1c10798188eac626155e3b724a2cf943804dfd19b0ea12  run-log.txt
 ---
 
-# Told placebo skill text cost particle-1 no TB2 passes we could detect: -2.2 points (95% CI -7.0 to +2.7) on a 77.8% control, MDD 8.8
+# Told placebo skill text cost particle-1 no TB2 passes we could detect: -2.2 points (95% CI -7.0 to +2.7) on a 77.8% control, MDD 9.1
 
 Publication status: unpublished; posting is Garry's. Done: the preregistered run, the primary analysis, the lost-settle sensitivity and the /ship review recorded in the PR. Still blocking a post: the cross-family claim check against the data, a rerun of the reanalysis by another Captain's crew from a clean machine, and a public home for the data bundle.
 
@@ -40,13 +40,13 @@ Publication status: unpublished; posting is Garry's. Done: the preregistered run
 
 ## What we found
 
-Telling particle-1 to use a skill whose body is 6,777 tokens of on-topic prose with no procedure changed its Terminal-Bench 2 pass rate by -2.2 points (95% CI -7.0 to +2.7) against no gstack at all. The interval rules out the 10-point tax #109 saw, but not a tax of up to about 7 points. With no gstack, particle-1 passed 77.8% of trials; the test could detect 8.8 points (MDD at 80% power and 5 replicates, the prereg's figure; its simulation gives 9.1).
+Telling particle-1 to use a skill whose body is 6,777 tokens of on-topic prose with no procedure changed its Terminal-Bench 2 pass rate by -2.2 points (95% CI -7.0 to +2.7) against no gstack at all. This run's interval excludes #109's -10, but not a tax of up to about 7 points. With no gstack, particle-1 passed 77.8% of trials; the test could detect 9.1 points (the prereg's simulated MDD at 5 replicates with the tasks fixed, as Run T ran them; the prereg's scaling gives 8.8, which it calls a lower bound).
 
 Shortening the told body to 846 tokens gave no difference we could claim: placebo minus placebo-short was -5.9 points [-11.9, +0.0] on particle-1, so the longer text did worse at the point estimate, but the family-adjusted p is 0.272. Haiku 5.5 ran the same grid; under org rule R54 it is no longer a model under test, so its rows are reported as frozen and carry no verdict.
 
 ## How it works
 
-An explanation, not a result. A told skill puts its whole body into every later request of the session. On particle-1 the told placebo made each request larger (the proxy's estimate of the median first request: 105,464 tokens against 57,905 with no gstack) and cost more ($0.115 a trial against $0.086), and it hit the session cap more often (13 stops against 7). None of that moved the pass rate by an amount we could see. #109's 10-point gap and quick look 3's +6 now look like run-to-run spread around a small or zero effect, or something that changed at particle-1's provider between runs.
+An explanation, not a result. A told skill puts its whole body into every later request of the session. On particle-1 the told placebo made each request larger (the proxy's estimate of the median first request: 105,464 tokens against 57,905 with no gstack) and cost more ($0.115 a trial against $0.086), and it hit the session cap more often (13 stops against 7). Part of the extra stops come from the rig: the session cap binds on metered prices above particle-1's list prices, and the OpenRouter route counts a token per byte, so stops come earlier than real spend would put them, which pushes toward finding a tax. None of that moved the pass rate by an amount we could see. #109's 10-point gap and quick look 3's +6 now look like run-to-run spread around a small or zero effect, or something that changed at particle-1's provider between runs.
 
 ## Setup
 
@@ -75,6 +75,8 @@ particle-1 placebo: graded 185, missing 0, refused 0, retried after a response 0
 T1 (placebo minus none): -2.2 [-7.0, +2.7] pp over 37 tasks; verdict not confirmed, smaller than the lead
 T2 (placebo minus placebo-short): -5.9 [-11.9, +0.0] pp, p 0.0908, Holm 0.182; no claim
 ```
+
+In these lines, "retried after a response 0" is the tag's count from the session files. The true count is 8 (4 on particle-1), because the proxy wrote no session record for a trial whose settle was lost; the retried-after-response sensitivity below adds them back.
 
 **T1 (particle-1, placebo minus none): -2.2 points [-7.0, +2.7]. Not confirmed** (the upper end is not below 0) **and smaller than the lead** (the lower end is above -10). Body load was 100% (185 of 185) in both told cells, so no gate flag.
 
@@ -138,7 +140,7 @@ The verdict rests on particle-1 alone. Under org rule R54 Haiku 5.5 is not a mod
 
 - **Exposure.** The text reached the model: body load was 100% (185 of 185) in both told cells, and the proxy's estimate of the median first request grew from 57,905 tokens (none) to 69,823 (placebo-short) and 105,464 (placebo). The placebo has no procedure, so there is no procedure gate; Run T tests text, not procedure.
 - **Task fit.** The question is a tax from carried text, which shows up in long agentic sessions that resend the context on every request. TB2 sessions ran a median of 14 to 16 requests on particle-1, so the tasks exercise it.
-- **Power and floor or ceiling.** Control rate 77.8% [67.6, 87.0], off both floor and ceiling. MDD 8.8 points at 5 replicates (the prereg's scaling of #109's standard error; its simulation with tasks fixed gives 9.1). The interval [-7.0, +2.7] excludes the lead's -10, so the test had room to see a tax of that size and did not.
+- **Power and floor or ceiling.** Control rate 77.8% [67.6, 87.0], off both floor and ceiling. MDD 9.1 points at 5 replicates (the prereg's simulation with the tasks fixed, as Run T ran them). The interval [-7.0, +2.7] excludes the lead's -10, so the test had room to see a tax of that size and did not.
 - **Frontier competence.** Run T has no frontier cell. Opus 5.5 passed 81.1% of these tasks with no gstack in #109, a different run; particle-1 passed 77.8% here.
 - **Verdict: KEEP.** No evidence that told skill text taxes particle-1 by the size #109 saw, so gstack does not need short variants of its skills for cheap rungs for this reason, and #109's -10 goes down as noise or a run-specific effect (prereg section 12). The one thing worth watching is particle-1's placebo minus placebo-short point estimate (-5.9, adjusted p 0.272), which is not a claim. Next step: none for text length.
 
@@ -151,6 +153,7 @@ The verdict rests on particle-1 alone. Under org rule R54 Haiku 5.5 is not a mod
 - particle-1's metered prices are above its OpenRouter list prices, so per-trial costs are upper bounds; the session cap binds on the metered figure.
 - Haiku 5.5 is reported only as preregistered; it carries no verdict under R54.
 - DeepSeek, the third preregistered model, did not run, so the pooled secondary reading spans two models.
+- The ledger file sat on the Capy Drive mount, where fsync returns ENOTSUP, so its writes were not durable during the run (deviation 4). It closed with no refusals, and its settled total, $61.064212, matches the metered totals in cost-output.txt.
 
 **Deviations from the prereg**, each recorded in run-log.txt:
 
@@ -167,21 +170,23 @@ The verdict rests on particle-1 alone. Under org rule R54 Haiku 5.5 is not a mod
 1. **Reanalysis (keyless).** Check out tag `laneb-texttax-2-runner` (6d0e960), `bun install`, fetch the data bundle (Captain drive handoffs/GEVA-128, not yet public), check SHA256SUMS, extract it, point the job and session paths in analysis-configs.txt at the extracted tree, and run `bun quick/laneb/analysis/discovery-tax.ts <config>`. Expected output: analysis-primary.txt and analysis-recovered.txt byte for byte.
 2. **Rerun a cell (paid).** There is no direct-key path yet: a rerun needs the ledger service, the metering proxy and a Ubicloud VM, driven by the phase scripts in phase-scripts.txt. One particle-1 replicate of all three arms is about $11 metered. Expect run-to-run spread: the three readings so far span 16 points.
 
-phase-scripts.txt holds every operator script that ran, and run-log.txt the lines they printed, with operator paths shown as `<work>`, `<captain-drive>` and `<ubicloud-skill>`. The record leaves out the VM-side Harbor and trial logs and the ledger rows themselves, which are in the data bundle, and the machine setup that Capy's project image provides (Docker, Bun, uv).
+phase-scripts.txt holds the operator scripts that ran, and run-log.txt the lines they printed, with operator paths shown as `<work>`, `<captain-drive>` and `<ubicloud-skill>`. The record leaves out the VM-side Harbor and trial logs and the ledger rows themselves, which are in the data bundle, and the machine setup that Capy's project image provides (Docker, Bun, uv). It also leaves out two steps: the second redaction pass, which run-log.txt's summary describes but phase-scripts.txt does not hold, and the scan of the bundle against the live key values. The rerun of that scan is in the next section.
+
+Before reusing batch.sh, fix two things. Its own ssh calls (the ledger tunnel and the run commands) turn off host-key checking (`StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`). And it deletes the key file it copies to the VM (`~/.laneb-keys`) only after the run ends, so a controller that stops early leaves the keys on the VM until the VM is destroyed or its 12-hour TTL ends.
 
 ## What is held out, and why
 
-Nothing. TB2 is public, and every task digest is pinned in `quick/laneb/tasks/tasks.json` at the tag. The data bundle is not public yet: TB2's sanitize-git-repo and openssl-selfsigned-cert tasks write secret-shaped fixtures, which the bundle shows as `<redacted-fixture-secret>` or `<redacted-fixture-private-key>`; a scan against the live key values found no match.
+Nothing. TB2 is public, and every task digest is pinned in `quick/laneb/tasks/tasks.json` at the tag. The data bundle is not public yet: TB2's sanitize-git-repo and openssl-selfsigned-cert tasks write secret-shaped fixtures, which the bundle shows as `<redacted-fixture-secret>` or `<redacted-fixture-private-key>`; GEVA-128's scan against the live key values, which the record does not hold, found no match. GEVA-155 reran that scan on 2026-11-02 on the bundle with sha256 83b647fdad8e884c4abcc07d6af314f9bcb61c90bf744c214c13d137c75267c3, the hash that part-00 and SHA256SUMS on the Captain drive both give; no other bundle file is there. It extracted part-00 into /dev/shm and ran, for each of ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY and UBICLOUD_API_KEY, `printenv <name> | grep -rlF -f - <dir> | wc -l`, then `grep -rlE 'BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY' <dir> | wc -l`. Every count was 0, over 13,057 files (`find <dir> -type f | wc -l`).
 
 ## X hook (draft)
 
-> Does extra skill text tax a cheap model? Last round particle-1 lost 10 points on Terminal-Bench 2 when told to use a placebo skill. We reran it as a preregistered test: 37 tasks, 5 replicates. Placebo minus no skills: -2.2 points [-7.0, +2.7] on a 77.8% control. No tax we could detect, and not 10 points. (link to this file at a pinned commit)
+> Does extra skill text tax a cheap model? Last round particle-1 lost 10 points on Terminal-Bench 2 when told to use a placebo skill. We reran it as a preregistered test: 37 tasks, 5 replicates. Placebo minus no skills: -2.2 points [-7.0, +2.7] on a 77.8% control. No tax we could detect; this run's interval excludes #109's -10. (link to this file at a pinned commit)
 
 ## Claim check
 
 | Check | Status | Evidence |
 |---|---|---|
-| The headline is true at both ends of its interval | Pass (author check) | At +2.7 there is no tax. At -7.0 a 7-point tax is still possible, which "no passes we could detect" allows and which still excludes #109's -10. The heading gives the control rate (77.8%) and the MDD (8.8). |
+| The headline is true at both ends of its interval | Pass (author check) | At +2.7 there is no tax. At -7.0 a 7-point tax is still possible, which "no passes we could detect" allows and which still excludes #109's -10. The heading gives the control rate (77.8%) and the MDD (9.1). |
 | The grade is named | Pass (author check) | Record table: confirmatory, one model. The heading names particle-1. |
 | No claim the scorer forbade | Pass (author check) | T2 makes no claim under the frozen Holm family; there is no parity or non-inferiority claim; Haiku carries no verdict under R54. |
 | Disclosures settled before the post | Pass (author check) | The Particle and gstack lines from the org disclosures file, word for word, at the end. That file gives Anthropic and DeepSeek no line. The X hook carries none. |
