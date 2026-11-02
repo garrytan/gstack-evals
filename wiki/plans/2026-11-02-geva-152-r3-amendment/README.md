@@ -39,7 +39,7 @@ R3a on Opus 5.5 starts when this post merges, on item r3a-screen at $150 includi
 | Cells and prices | config/cells.r3.json 7fe70d5ee4f55cd1efab783f08543192873ec1bd0ff071706df0d5d444ac5dbf (allowances: Opus 5.5 $4, particle-1 $1); config/proxy.json ba3927b68624958714c2fee7ac19836181c76a8bbabe148fbfdddce3d169c474 |
 | Screen and its rules | r3/screen.ts c7a11aff14d42735066b00749cf43b905d2df1a9f95ccdbb48b7c078cf568eb0, r3/exposure.ts 98db9f1310ae3f0e7631ce8666368d2bcc579412636a417b2c4a3e090eae2f4f, runner/launch.sh ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38, runner/vm-run.sh 7c149a38a54f4f52aa3b1e3f660b14bdb2b705c0262c968bea520e236667088a, runner/ledger.ts 9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33, analysis/analyze.ts 6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d |
 | System prompt | claude-code-preset on every arm and model (section 2) |
-| Ubicloud runner | ubi-runner.sh e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8, the user drive's ubicloud skill copy of 2026-11-02, saved in the Captain drive as handoffs/GEVA-161/pins/ubi-runner.sh. launch.sh calls the runner UBI_RUNNER names (launch.sh:25), and section 10 sets UBI_RUNNER to this copy and checks its sha256 before run binds the item. It accepts 320 or 640 GB disks (ubi-runner.sh:117 and :930) and names each VM ubirun-<owner>-<epoch>-<suffix>-t<UBI_TTL_HOURS> (:874) |
+| Ubicloud runner | ubi-runner.sh e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8, the user drive's ubicloud skill copy of 2026-11-02, saved in the Captain drive as handoffs/GEVA-161/pins/ubi-runner.sh. launch.sh calls the runner UBI_RUNNER names (launch.sh:25), and section 10 copies this file to a read-only file on the run thread's machine, checks that file's sha256 before run binds the item, and sets UBI_RUNNER to it. It accepts 320 or 640 GB disks (ubi-runner.sh:117 and :930) and names each VM ubirun-<owner>-<epoch>-<suffix>-t<UBI_TTL_HOURS> (:874) |
 | Run settings | 8 trials at a time (screen.ts's CONCURRENT default), a standard-16 VM with 640 GB per part (UBI_SIZE is launch.sh's default; UBI_STORAGE=640 replaces launch.sh's default of 600, which the pinned runner refuses), each VM named with a 24-hour TTL (UBI_TTL_HOURS=24 in place of the runner's 3), VM hours settled at VM_USD_PER_HOUR=0.60 in blocks of VM_RESERVE_HOURS=4 ($2.40 a block), the ledger service on LEDGER_PORT=9911 and each next block reserved VM_EXTEND_LEAD_SEC=1800 ahead (launch.sh's defaults). Section 10's commands set each value explicitly. ORACLE=1, so each part's oracle gate runs before its paid batch, and an oracle failure makes R3a incomplete (sections 3 and 10) |
 
 ledger.ts and analyze.ts differ in bytes from tag laneb-stacks-1-runner's, which #112's dry run used: main's lineage changed analyze.ts, and #121 added ledger.ts's reserve, settle and open commands. #112's frozen r3-dry.ts still prints its 135 R3 lines byte for byte at the pin (section 11).
@@ -213,14 +213,15 @@ Opus's R3a, from a checkout of 8ad436d in the run thread's own machine (section 
 
     LEDGER=<r3a-screen.jsonl> SWEBV=<harbor-datasets> ARMS=<arm tars> ORACLE=1 CONCURRENT=8 \
       bun quick/laneb/r3/screen.ts prepare <work>
-    R=<pinned runner>
-    echo "e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8  $R" | sha256sum -c - && test -x "$R" && \
+    R=~/.capy/work/r3a/ubi-runner.sh
+    install -D -m 0555 <pinned runner> "$R" && \
+      echo "e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8  $R" | sha256sum -c - && test -x "$R" && \
       LEDGER=<r3a-screen.jsonl> UBI_OWNER=<thread code> UBI_RUNNER="$R" UBI_TTL_HOURS=24 \
       VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 UBI_SIZE=standard-16 UBI_STORAGE=640 LEDGER_PORT=9911 \
       VM_EXTEND_LEAD_SEC=1800 bash -c 'echo $$ > <pid file>; exec bun quick/laneb/r3/screen.ts run <work> > <run log> 2>&1'
     LEDGER=<r3a-screen.jsonl> bun quick/laneb/r3/screen.ts analyze <work>
 
-<pinned runner> is the Captain drive's handoffs/GEVA-161/pins/ubi-runner.sh, as a path on the run thread's machine. The run command's first step checks it: if its sha256 differs or it is not executable, the command stops before `screen.ts run` starts, so nothing binds r3a-screen. The run record repeats the check after run exits. <pid file> and <run log> sit beside <work>, outside it, under ~/.capy/work.
+<pinned runner> is the Captain drive's handoffs/GEVA-161/pins/ubi-runner.sh, as a path on the run thread's machine. The run command's first step copies it to a read-only file on that machine and checks the copy: if its sha256 differs or it is not executable, the command stops before `screen.ts run` starts, so nothing binds r3a-screen. launch.sh then runs only that copy, which no Drive edit or sync reaches during the run. The run record repeats the check on the copy after run exits. <pid file> and <run log> sit beside <work>, outside it, under ~/.capy/work.
 
 CONCURRENT, UBI_SIZE, LEDGER_PORT and VM_EXTEND_LEAD_SEC equal the pin's defaults (screen.ts:129, launch.sh:145, :33 and :62), and the commands set them anyway. Three settings replace a default on purpose:
 
