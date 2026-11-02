@@ -5,7 +5,10 @@
 // agent-side config, an early TestMain, a weakened helper, a go.mod edit and a patch that does not apply, none of
 // which passes a hidden test it should fail, beside honest fixes that pass. Also: the regression list grades only once
 // frozen, only a run Docker never started has no verdict, and a tree an image plugin imports through an editable
-// install, or one site.py imports through a .pth, still fails when it exits or breaks at that import. Keyless: no model call; the images install pinned, hashed packages at build time.
+// install, or one site.py imports through a .pth, still fails when it exits or breaks at that import. L2 leaves out
+// installed third-party code and standard libraries but still fails a gold line in the repository or in an installed copy
+// of the project, and V6 passes a restored file gold leaves alone (GST-957). Keyless: no model call; the images install
+// pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { appendFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -308,6 +311,66 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     const r = checkTask({ taskDir: badDir, work: join(tmp.dir, "work-bad"), runs: 1, mechanical: true });
     expect(r.verdict).toBe("invalid");
     expect(r.rules.filter((x) => !x.pass).map((x) => x.rule.split(" ")[0]).sort()).toEqual(["L2", "V2"]);
+  }, LONG);
+
+  test("L2 leaves out generic gold lines in installed packages and Python's standard library, and fails one in an installed copy of the project", () => {
+    const dir = join(tmp.dir, "out/l2-installed");
+    cpSync(k1Dir, dir, { recursive: true });
+    const t = readTask(dir);
+    appendFileSync(join(dir, "tests/leak-needles.txt"), "def pytest_pycollect_makemodule(module_path: Path, parent) -> Module:\n    def iterencode(self, o, _one_shot=False):\n");
+    saveTask(dir, t);
+    const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-l2-installed"), runs: 1, mechanical: true });
+    expect(rule(r, "L2").pass).toBe(true);
+    expect(rule(r, "L2").detail).toContain("outside installed third-party code");
+    expect(r.verdict).toBe("valid");
+    const ownDir = join(tmp.dir, "out/l2-own");
+    cpSync(dir, ownDir, { recursive: true });
+    const own = readTask(ownDir);
+    own.repo = "fixture/iniconfig";
+    appendFileSync(join(ownDir, "tests/leak-needles.txt"), "    def lineof(self, name: str) -> int | None:\n");
+    saveTask(ownDir, own);
+    const o = checkTask({ taskDir: ownDir, work: join(tmp.dir, "work-l2-own"), runs: 1, mechanical: true });
+    expect(rule(o, "L2").pass).toBe(false);
+    expect(rule(o, "L2").detail).toStartWith("gold lines in /usr/local/lib/python3.12/site-packages/iniconfig/");
+    expect(rule(o, "L2").detail).not.toContain("_pytest");
+  }, LONG);
+
+  test("L2 leaves out Go's standard library, and still fails gold lines in committed vendored and dependency-named dirs", () => {
+    const vendored = {
+      "third_party/pad/pad.go": 'package pad\n\n// Pad left-pads s with spaces to width n.\nfunc Pad(s string, n int) string {\n\tfor len(s) < n {\n\t\ts = " " + s\n\t}\n\treturn s\n}\n',
+      "node_modules/leftpad/index.js": "module.exports = function leftPad(text, width) { return text.padStart(width); };\n",
+      ".venv/lib/python3.12/site-packages/padlib/core.py": "def left_pad(text, width):\n    return text.rjust(width)\n",
+    };
+    const g = clampyRepo(tmp.dir, GO_IMAGE, "clampy-vendored", vendored);
+    const { dir, task: t } = buildTask(g.spec, g.repo, join(tmp.dir, "out/clampy-vendored"));
+    appendFileSync(join(dir, "tests/leak-needles.txt"), "func (b *Builder) WriteString(s string) (int, error) {\n");
+    saveTask(dir, t);
+    const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-l2-go"), runs: 1, mechanical: true });
+    expect(rule(r, "L2").pass).toBe(true);
+    expect(r.verdict).toBe("valid");
+    appendFileSync(join(dir, "tests/leak-needles.txt"), "func Pad(s string, n int) string {\nmodule.exports = function leftPad(text, width) { return text.padStart(width); };\ndef left_pad(text, width):\n");
+    saveTask(dir, t);
+    const bad = checkTask({ taskDir: dir, work: join(tmp.dir, "work-l2-go-bad"), runs: 1, mechanical: true });
+    expect(rule(bad, "L2").pass).toBe(false);
+    expect(rule(bad, "L2").detail).toBe("gold lines in /testbed/.venv/lib/python3.12/site-packages/padlib/core.py, /testbed/node_modules/leftpad/index.js, /testbed/third_party/pad/pad.go");
+  }, LONG);
+
+  test("V6 passes a restored release-automation test gold leaves alone, and fails a restored file gold changes that names a release file", () => {
+    const dir = join(tmp.dir, "out/v6");
+    cpSync(k1Dir, dir, { recursive: true });
+    const t = readTask(dir);
+    writeFileSync(join(dir, "tests/restore/tests/test_release.py"), 'def test_release_notes():\n    assert "CHANGELOG.md".endswith(".md")\n');
+    appendFileSync(join(dir, "tests/restore.list"), "tests/test_release.py\n");
+    saveTask(dir, t);
+    const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-v6"), runs: 1, mechanical: true });
+    expect(rule(r, "V6").pass).toBe(true);
+    expect(r.verdict).toBe("valid");
+    appendFileSync(join(dir, "tests/restore/tests/test_percent.py"), "\n\n# The release notes live in CHANGELOG.md.\n");
+    saveTask(dir, t);
+    const bad = checkTask({ taskDir: dir, work: join(tmp.dir, "work-v6-bad"), runs: 1, mechanical: true });
+    expect(rule(bad, "V6").pass).toBe(false);
+    expect(rule(bad, "V6").detail).toContain("tests/test_percent.py");
+    expect(rule(bad, "V6").detail).not.toContain("test_release.py");
   }, LONG);
 
   for (const [version, goImage] of [["1.23", GO_IMAGE], ["1.25", GO_IMAGE_125]] as const) {

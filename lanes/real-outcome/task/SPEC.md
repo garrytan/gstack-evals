@@ -160,7 +160,7 @@ from the tree, which would let the tree rewrite reports. A Docker failure after 
 | Rule | Passes when |
 |---|---|
 | L1 history | Refs are `main` (and `change` for K4) at the recorded commits; no remotes, tags, reflog, stash or unreachable objects; nothing beyond base's ancestry; HEAD is `start_ref` |
-| L2 gold lines | No line in leak-needles.txt appears anywhere in the image's filesystem, installed packages included |
+| L2 gold lines | No line in leak-needles.txt appears in the image's filesystem outside installed third-party code: dependency dirs at any depth (`.venv`, `venv`, `.tox`, `__pypackages__`, `node_modules`, `site-packages`, `dist-packages`), Python's `lib/pythonX.Y`, the uv cache (`.cache/uv`), and Go's `/usr/local/go` and module cache (`go/pkg/mod`). A file git tracks in the repository always counts, vendored and committed dependency dirs included. So does a path in those locations that names the project itself (its repository, Go module, top-level package or declared distribution name), because a fixed copy of the project is a leak |
 | L3 new test files | No test file that is new at gold exists in the image |
 | L4 image metadata | The image's config and history name no upstream change, fix or revert id and no pull request link |
 | L5 clean start | `git status` in the image is empty |
@@ -171,7 +171,7 @@ from the tree, which would let the tree rewrite reports. A Docker failure after 
 | V3 | K1: the introducing change fails an escaped-defect test at assertion level |
 | V4 | Every missing name a hidden test hits at base is named in the statement, and the auditor's V4 record passes |
 | V5 | The auditor's V5 record passes |
-| V6 | The starting tree fails a required test (not for decoys); gold with VERSION, CHANGELOG and TODOS edits still passes; no restored file names them |
+| V6 | The starting tree fails a required test (not for decoys); gold with VERSION, CHANGELOG and TODOS edits still passes; no restored file is a release file, and no restored file gold adds or changes names one. A restored file gold leaves alone, such as a release-automation test, may name them: the release-edit run grades it |
 | V7 | Every run, base and starting tree included, had no network, finished inside `verifier_sec`, was not killed past the output buffer and left `/out` with room (rule 4), so no stopped run feeds the regression list or V9 |
 | V8 | The licence is permissive, `upstream/LICENSE` reads as it and matches the image's licence file |
 | V9 | K4: the replay branch is base plus exactly the change; a replay fails an escaped-defect test at assertion level, a decoy passes every required test as given, and no test that passes at base fails in every decoy run |
