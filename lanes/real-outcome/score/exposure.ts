@@ -28,7 +28,29 @@ export function isGstackSkill(skill: string, gstackSkills: ReadonlySet<string>):
   return /gstack/i.test(bare) || gstackSkills.has(bare) || gstackSkills.has(bare.slice(bare.indexOf(":") + 1));
 }
 
+/** Whether a skill name cut off by a torn line could be gstack's: it starts one of the pinned tree's skill names (with
+ * or without a plugin prefix). The conservative reading for contamination. */
+const isGstackPrefix = (cut: string, gstackSkills: ReadonlySet<string>): boolean => {
+  const bare = cut.replace(/^\//, "");
+  return [bare, bare.slice(bare.indexOf(":") + 1)].some((p) => [...gstackSkills].some((s) => s.startsWith(p)));
+};
+
 const text = (x: unknown): string => (typeof x === "string" ? x : JSON.stringify(x ?? ""));
+
+/** JSON text with its string escapes decoded, and control characters read as a space, so a path after an escaped
+ * newline or tab reads as it does after the character itself. */
+const unescaped = (json: string): string =>
+  json.replace(/\\(?:u([0-9a-fA-F]{4})|(.))/g, (_, u: string | undefined, c: string) => (u ? String.fromCharCode(parseInt(u, 16)) : "bfnrt".includes(c) ? " " : c)).replace(/[\u0000-\u001f]/g, " ");
+
+/** The first gstack install or Capy drive path that JSON text names, read as written and with its escapes decoded. The
+ * record scan and the torn-tail scan both read through it, so the same text reads the same whole or torn. */
+function pathIn(json: string): string | null {
+  for (const s of [json, unescaped(json)]) {
+    const m = s.match(DRIVE_PATH) ?? s.match(GSTACK_PATH);
+    if (m) return m[0].trim();
+  }
+  return null;
+}
 
 /** tornTail is the raw text of a torn last transcript line the records leave out: it is still scanned for a gstack or
  * drive path and a Skill call naming a gstack skill. */
@@ -69,21 +91,21 @@ export function exposureCheck(records: readonly unknown[], gstackSkills: readonl
           if (isGstackSkill(n, skills)) add("skill_load", n, phase);
           else flag("other_skill", "loaded: " + n, phase);
         }
-        if (DRIVE_PATH.test(input) || GSTACK_PATH.test(input)) add("path_read", (b.name ?? "?") + ": " + input, phase);
+        if (pathIn(JSON.stringify(b.input ?? "")) !== null) add("path_read", (b.name ?? "?") + ": " + input, phase);
         else if (/gstack/i.test(input)) flag("gstack_mention", (b.name ?? "?") + ": " + input, phase);
       } else if (b?.type === "tool_result") {
-        const m = text(b.content).match(DRIVE_PATH) ?? text(b.content).match(GSTACK_PATH);
-        if (m) add("path_seen", "a tool result names " + m[0].trim(), phase);
+        const path = pathIn(JSON.stringify(b.content ?? ""));
+        if (path !== null) add("path_seen", "a tool result names " + path, phase);
       }
     }
   }
   if (tornTail !== null) {
-    const decoded = tornTail.replace(/\\(["\\/bfnrt])/g, (_, c: string) => ("bfnrt".includes(c) ? " " : c));
-    const path = tornTail.match(DRIVE_PATH) ?? tornTail.match(GSTACK_PATH) ?? decoded.match(DRIVE_PATH) ?? decoded.match(GSTACK_PATH);
-    if (path) add("torn_tail", "the dropped torn line names " + path[0].trim(), null);
-    const loaded = [...tornTail.matchAll(/"name"\s*:\s*"Skill"[\s\S]*?"(?:skill|command|name)"\s*:\s*"([^"]*)/g)].map((m) => m[1]).filter((n) => isGstackSkill(n, skills));
-    for (const n of loaded) add("torn_tail", "the dropped torn line loads " + n, null);
-    if (!path && !loaded.length && /gstack/i.test(tornTail)) flag("gstack_mention", "the dropped torn line: " + tornTail, null);
+    const path = pathIn(tornTail);
+    if (path !== null) add("torn_tail", "the dropped torn line names " + path, null);
+    const loads = [...tornTail.matchAll(/"name"\s*:\s*"Skill"[\s\S]*?"(?:skill|command|name)"\s*:\s*"([^"]*)/g)].map((m) => ({ n: m[1], cut: m.index + m[0].length === tornTail.length }));
+    const gstack = loads.filter(({ n, cut }) => isGstackSkill(n, skills) || (cut && isGstackPrefix(n, skills)));
+    for (const { n } of gstack) add("torn_tail", isGstackSkill(n, skills) ? "the dropped torn line loads " + n : "the dropped torn line loads a skill cut short at " + n + ", the start of a gstack skill name", null);
+    if (path === null && !gstack.length && /gstack/i.test(tornTail)) flag("gstack_mention", "the dropped torn line: " + tornTail, null);
   }
   out.contaminated = out.evidence.length > 0;
   return out;

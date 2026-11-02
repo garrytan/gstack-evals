@@ -157,9 +157,9 @@ function controlShare(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, mo
   return xs.length ? xs.reduce((s, o) => s + (o.shipped_clean ?? 0), 0) / xs.length : null;
 }
 
-/** One look at the primary (shipped clean), for one reading (with or without truncated trials). crossedBefore: the interim
- * look crossed its boundary and the truncation guard refused the stop, which counts as a crossing, so this look cannot
- * call equivalence. */
+/** One look at the primary (shipped clean), for one reading (with or without truncated trials). crossedBefore: a reading
+ * crossed its boundary at the interim look and the trial went on, which counts as a crossing, so this look cannot call
+ * equivalence. */
 function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string, which: "interim" | "final", tasks: ReadonlySet<string>, truncated: boolean, cluster: Cluster, crossedBefore = false): LookResult {
   const boundary = which === "interim" ? cfg.boundaries.interim : cfg.boundaries.final;
   const reading = compare(outcomes, { metric: "shipped_clean", value: metricOf("shipped_clean"), model, tasks, cluster, truncated, boundary }, cfg);
@@ -172,7 +172,7 @@ function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: str
   if (which === "interim") return { ...base, verdict: "continue", note: disagree };
   const equivalent = !x.crossed && within(reading?.ci90 ?? null, cfg.margin);
   if (equivalent && !crossedBefore) return { ...base, verdict: "same_within_margin", note: null };
-  return { ...base, verdict: "not_distinguished", note: equivalent ? "the interim look crossed its boundary and the truncation guard refused the stop, so the final look cannot call equivalence" : disagree };
+  return { ...base, verdict: "not_distinguished", note: equivalent ? "a reading crossed its boundary at the interim look and the trial went on, so the final look cannot call equivalence" : disagree };
 }
 
 export interface Primary {
@@ -205,12 +205,12 @@ function truncShare(outcomes: readonly TrialOutcome[], model: string, arm: strin
 function primary(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string): Primary {
   const half = new Set(cfg.task_order.slice(0, Math.floor(cfg.task_order.length / 2)));
   const all = new Set(cfg.task_order);
-  const at = (which: "interim" | "final", tasks: ReadonlySet<string>, crossedBefore = false) => {
+  const at = (which: "interim" | "final", tasks: ReadonlySet<string>, crossedBefore = { withT: false, withoutT: false, task: false }) => {
     const control = truncShare(outcomes, model, cfg.control, tasks), treatment = truncShare(outcomes, model, cfg.treatment, tasks);
     return {
-      withT: look(outcomes, cfg, model, which, tasks, true, "repo", crossedBefore),
-      withoutT: look(outcomes, cfg, model, which, tasks, false, "repo", crossedBefore),
-      task: look(outcomes, cfg, model, which, tasks, true, "task", crossedBefore),
+      withT: look(outcomes, cfg, model, which, tasks, true, "repo", crossedBefore.withT),
+      withoutT: look(outcomes, cfg, model, which, tasks, false, "repo", crossedBefore.withoutT),
+      task: look(outcomes, cfg, model, which, tasks, true, "task", crossedBefore.task),
       share: { control, treatment, tripped: control > cfg.truncation_guard || treatment > cfg.truncation_guard },
     };
   };
@@ -218,8 +218,9 @@ function primary(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: 
   const interim = at("interim", half);
   const blocked = interim.share.tripped && interim.withT.verdict !== interim.withoutT.verdict;
   const stopped = interim.withT.verdict !== "continue" && !blocked;
-  const refusedCrossing = blocked && (interim.withT.verdict === "treatment_better" || interim.withT.verdict === "treatment_worse");
-  const final = cfg.look === "final" && !stopped ? at("final", all, refusedCrossing) : null;
+  const crossed = (r: LookResult) => r.verdict === "treatment_better" || r.verdict === "treatment_worse";
+  const either = crossed(interim.withT) || crossed(interim.withoutT);
+  const final = cfg.look === "final" && !stopped ? at("final", all, { withT: either, withoutT: either, task: either || crossed(interim.task) }) : null;
   const notes = blocked ? [guardNote("interim", interim.withT, interim.withoutT)] : [];
   let verdict: Verdict = stopped ? interim.withT.verdict : "continue";
   if (!final && !blocked && interim.withT.note) notes.push(interim.withT.note);
