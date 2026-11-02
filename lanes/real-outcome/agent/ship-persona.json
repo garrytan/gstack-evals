@@ -1,0 +1,12 @@
+{
+  "description": "The real-outcome lane's simulated user (plan open item 4): follows the agent's recommendation, holds shipping until the ship turn, and answers a prose question with the same line a bounded number of times per turn.",
+  "recommended_markers": [
+    "(recommended)",
+    "recommended"
+  ],
+  "fallback": "Go with your recommendation.",
+  "hold": "Not yet. Keep working; I'll tell you when to ship.",
+  "ship_words": "\\b(ship|shipping|push|pushing|commit|committing|pull request|PR|merge|merging|deploy|release|publish)\\b",
+  "asks_user": "\\b(should I|shall I|would you like|do you want|want me to|let me know|which (option|approach|one)|please confirm|can you confirm|okay to|ok to)\\b",
+  "prose_replies_per_turn": 3
+}

@@ -1,0 +1,42 @@
+{
+  "$comment": "The real-outcome lane's arms (plan 2026-11-01-geva-87, section 5 and open items 3, 5 and 7). tests/real-outcome/arms.test.ts pins every turn text by sha256. limits are P0's starting allowances, well above the top of the cost range; the prereg freezes R1's per-arm limits from the pilot.",
+  "build_suffix": "Work in this repository. Implement this, and make sure it works. Don't stop to ask; I'll tell you when to ship.",
+  "arms": {
+    "none": {
+      "install": "none",
+      "turn2": "Ship it: commit, push this branch to origin and open a pull request with gh.",
+      "replay": "{description}\n\nShip it: commit, push this branch to origin and open a pull request with gh.",
+      "limits": {
+        "session_cap_usd": 40,
+        "wall_limit_sec": 10800,
+        "max_turns": 1000,
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
+      }
+    },
+    "gstack": {
+      "install": "gstack",
+      "turn2": "/ship",
+      "replay": "/ship\n\n{description}",
+      "limits": {
+        "session_cap_usd": 40,
+        "wall_limit_sec": 10800,
+        "max_turns": 1000,
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
+      }
+    },
+    "gstack-untold": {
+      "install": "gstack",
+      "turn2": "Ship it: commit, push this branch to origin and open a pull request with gh.",
+      "replay": "{description}\n\nShip it: commit, push this branch to origin and open a pull request with gh.",
+      "limits": {
+        "session_cap_usd": 40,
+        "wall_limit_sec": 10800,
+        "max_turns": 1000,
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
+      }
+    }
+  }
+}

@@ -1004,6 +1004,42 @@ export const CODES = {
     fix: "Report the LOSS with its false-alarm reading and no claim. Adjudicate any unadjudicated must-fix finding on the decoys; never widen the margin after the run.",
     owner: "U13",
   },
+  E_REAL_SANDBOX_SETUP: {
+    exit: 2,
+    meaning: "The real-outcome ship sandbox could not start or could not open a trial: git (with http-backend) or jq is missing, the sidecar could not listen, the task's bundle does not hold the base commit, the base tree holds project-local Claude Code configuration (a .claude/ directory or .mcp.json, which would give the none arm a skill, plugin or MCP route), or the in-container prep failed. No model was called for the trial.",
+    fix: "Read the message. Install git and jq on the sidecar's host, or fix the task directory (B2) so its image's base branch is at base_commit. A repository with project-local Claude Code configuration is not eligible for this lane; drop it at mining.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_REAL_SANDBOX_EGRESS: {
+    exit: 2,
+    meaning: "The trial container's IP-and-port egress allowlist could not be applied or did not verify: the nftables helper failed, the table read back differs from the one written, an allowed endpoint was unreachable, or a denied probe got through. The agent never started.",
+    fix: "Check that Docker can run the pinned helper image with NET_ADMIN on the container's network namespace and that the proxy and sidecar listen on the allowed address and ports. Never run a trial without the rules.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_REAL_SANDBOX_RECORD: {
+    exit: 2,
+    meaning: "A trial's shipment record could not be written or copied out, or its journal does not replay to the origin's refs (status rig_error). The trial's outcome is unknown: it is infra, never a fail for the arm.",
+    fix: "Read the record's rig_errors and the sidecar's journal for the trial. A journal_mismatch means something changed the origin outside the sidecar; find it before any counted run.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_REAL_ARM_BUILD: {
+    exit: 2,
+    meaning: "A real-outcome arm (none, gstack told or gstack untold) could not be built: the pinned gstack commit or its tree id did not verify, gstack's setup failed, the installed tree reports another version than the pin, or the tree has no question registry to set to auto-decide.",
+    fix: "Fetch the pinned gstack commit into a local checkout (git -C ~/.local/share/gstack fetch origin <sha>), then rebuild with bun lanes/real-outcome/arms/build.ts. Re-pin gstack only in a new preregistration.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U10",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
