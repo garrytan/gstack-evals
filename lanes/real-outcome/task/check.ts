@@ -44,11 +44,11 @@ export interface CheckOptions {
 
 const RELEASE = /\b(VERSION|CHANGELOG|TODOS)\b/;
 
-/** Where an image keeps installed third-party code: dependency dirs at any depth, Python's lib/pythonX.Y (its standard
- * library and site-packages), the uv cache, and Go's toolchain and module cache. */
-const INSTALLED = new RegExp("(?<=^|/)(?:" + [...INSTALL_DIRS.filter((d) => d !== ".git").map((d) => d.replace(".", "\\.")), "site-packages", "dist-packages", "lib/python\\d[^/]*", "\\.cache/uv", "go/pkg/mod", "usr/local/go"].join("|") + ")/", "g");
+/** Where an image keeps installed third-party code: dependency dirs at any depth, site-packages and dist-packages, the uv
+ * cache, and Go's toolchain and module cache. Python's standard library is scanned like the rest of the image. */
+const INSTALLED = new RegExp("(?<=^|/)(?:" + [...INSTALL_DIRS.filter((d) => d !== ".git").map((d) => d.replace(".", "\\.")), "site-packages", "dist-packages", "\\.cache/uv", "go/pkg/mod", "usr/local/go"].join("|") + ")/", "g");
 
-const normName = (s: string): string => s.toLowerCase().replace(/[-_.]+/g, "_");
+const normName = (s: string): string => s.toLowerCase().replace(/[-_.]+/g, "_").replace(/^_+/, "");
 const namesProject = (part: string, name: string): boolean => {
   const p = normName(part.replace(/@.*$/, "").replace(/\.(dist-info|egg-info|egg-link|pth|pyi?)$/, ""));
   const n = normName(name);
@@ -56,12 +56,19 @@ const namesProject = (part: string, name: string): boolean => {
 };
 
 /** The names an installed copy of the task's own project carries: the repository's name, its Go module, its top-level
- * Python packages (dirs holding __init__.py at the root or under src/, test dirs aside) and the distribution or package
- * name its pyproject.toml, setup.cfg or package.json declares. */
+ * Python packages and the distribution or package name its pyproject.toml, setup.cfg or package.json declares. A
+ * top-level package is a dir holding __init__.py at the root, under src/, or one level down in a dir that holds none
+ * (python/<pkg>, packages/<pkg>); test and vendored dirs aside. packages lists the __init__.py files one and two dirs
+ * deep in the image's checkout. */
 export function projectNames(t: Pick<TaskJson, "repo" | "runner">, packages: string[], manifests: Record<string, string>): string[] {
   const names = [t.repo.slice(t.repo.lastIndexOf("/") + 1)];
   if (t.runner.kind === "go") names.push(t.runner.module);
-  for (const p of packages) if (!isTestPath(p)) names.push(p.split("/").at(-2)!);
+  for (const p of packages) {
+    const [top, pkg] = p.split("/");
+    if (isTestPath(p) || classifyPath(p) === "vendored") continue;
+    if (pkg === "__init__.py") names.push(top);
+    else if (top === "src" || !packages.includes(top + "/__init__.py")) names.push(pkg);
+  }
   const parse = (text: string | undefined, read: (text: string) => unknown) => {
     try {
       const name = text === undefined ? undefined : read(text);
@@ -79,14 +86,21 @@ export function projectNames(t: Pick<TaskJson, "repo" | "runner">, packages: str
 
 /** L2's hits split into leaks and installed third-party code. A hit is installed code when it sits below an install
  * location and no path part below that location names the project: an installed or vendored copy of the project itself
- * stays a leak. A file git tracks in the repository is always a leak, whatever its directory is called. */
+ * stays a leak. Leading underscores don't count (setuptools/_distutils names distutils), and a dotted name also matches
+ * consecutive parts (jaraco.functools names jaraco/functools). A file git tracks in the repository is always a leak,
+ * whatever its directory is called. */
 export function sortHits(hits: string[], own: string[], tracked: string[]): { leaks: string[]; installed: string[] } {
   const inRepo = new Set(tracked.map((p) => REPO_DIR + "/" + p));
   const isInstalled = (hit: string): boolean => {
     const at = [...hit.matchAll(INSTALLED)].at(-1);
     if (inRepo.has(hit) || !at) return false;
     const rest = hit.slice(at.index + at[0].length).replace(/!([a-z])/g, (_, c: string) => c.toUpperCase());
-    return !own.some((name) => (name.includes("/") ? ("/" + rest).includes("/" + name + "/") || ("/" + rest).includes("/" + name + "@") : rest.split("/").some((part) => namesProject(part, name))));
+    const parts = rest.split("/");
+    return !own.some((name) => {
+      if (name.includes("/")) return ("/" + rest).includes("/" + name + "/") || ("/" + rest).includes("/" + name + "@");
+      const pieces = name.split(".");
+      return parts.some((part, i) => namesProject(part, name) || (pieces.length > 1 && pieces.every((piece, k) => i + k < parts.length && namesProject(parts[i + k], piece))));
+    });
   };
   const installed = new Set(hits.filter(isInstalled));
   return { leaks: hits.filter((h) => !installed.has(h)), installed: [...installed] };
@@ -148,7 +162,7 @@ export function checkTask(o: CheckOptions): CheckResult {
       "echo '== new_tests'; for p in " + quoted(t.new_test_files) + "; do [ -e \"$p\" ] && echo \"$p\"; done",
       "echo '== licence'; for f in LICENSE LICENSE.md LICENSE.txt LICENCE LICENCE.md COPYING; do [ -f \"$f\" ] && sha256sum \"$f\" && break; done",
       "echo '== lockfile'; " + (t.install.lockfile ? "sha256sum " + quoted([t.install.lockfile]) : "true"),
-      "echo '== packages'; ls -d */__init__.py src/*/__init__.py 2>/dev/null",
+      "echo '== packages'; ls -d */__init__.py */*/__init__.py 2>/dev/null",
       "echo '== manifests'; for f in pyproject.toml setup.cfg package.json; do [ -f \"$f\" ] && echo \"$f $(base64 -w0 \"$f\")\"; done",
       ...(t.replay ? ["echo '== replay'; git rev-parse " + t.replay.commit + "^1; git diff --binary --full-index --no-renames " + t.base_commit + " " + t.replay.commit + " | sha256sum"] : []),
       "echo '== end'",

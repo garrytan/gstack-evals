@@ -6,9 +6,9 @@
 // which passes a hidden test it should fail, beside honest fixes that pass. Also: the regression list grades only once
 // frozen, only a run Docker never started has no verdict, and a tree an image plugin imports through an editable
 // install, or one site.py imports through a .pth, still fails when it exits or breaks at that import. L2 leaves out
-// installed third-party code and standard libraries but still fails a gold line in the repository or in an installed copy
-// of the project, and V6 passes a restored file gold leaves alone (GST-957). Keyless: no model call; the images install
-// pinned, hashed packages at build time.
+// installed third-party code and Go's standard library but still fails a gold line in the repository or in an installed
+// copy of the project, and V6 passes a restored file gold leaves alone (GST-957). Keyless: no model call; the images
+// install pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { appendFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -313,11 +313,11 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(r.rules.filter((x) => !x.pass).map((x) => x.rule.split(" ")[0]).sort()).toEqual(["L2", "V2"]);
   }, LONG);
 
-  test("L2 leaves out generic gold lines in installed packages and Python's standard library, and fails one in an installed copy of the project", () => {
+  test("L2 leaves out generic gold lines in installed packages, and fails one in an installed copy of the project", () => {
     const dir = join(tmp.dir, "out/l2-installed");
     cpSync(k1Dir, dir, { recursive: true });
     const t = readTask(dir);
-    appendFileSync(join(dir, "tests/leak-needles.txt"), "def pytest_pycollect_makemodule(module_path: Path, parent) -> Module:\n    def iterencode(self, o, _one_shot=False):\n");
+    appendFileSync(join(dir, "tests/leak-needles.txt"), "def pytest_pycollect_makemodule(module_path: Path, parent) -> Module:\n");
     saveTask(dir, t);
     const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-l2-installed"), runs: 1, mechanical: true });
     expect(rule(r, "L2").pass).toBe(true);

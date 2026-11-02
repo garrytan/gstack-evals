@@ -15,7 +15,7 @@ const PYTEST = { kind: "pytest", python: "python3", config: "pyproject.toml" } a
 describe("L2 scope", () => {
   const own = projectNames({ repo: "fixture/calc", runner: PYTEST }, ["calc/__init__.py", "tests/__init__.py"], { "pyproject.toml": '[project]\nname = "calc-fixture"\nversion = "0.1.0"\n' });
 
-  test("generic gold lines in installed third-party code and standard libraries are not leaks", () => {
+  test("generic gold lines in installed third-party code and Go's standard library are not leaks", () => {
     const hits = [
       "/root/.cache/uv/archive-v0/kq3xYz/requests/utils.py",
       "/root/.cache/uv/sdists-v9/pypi/attrs/24.2.0/AbC/src/attrs-24.2.0/src/attr/_make.py",
@@ -28,7 +28,6 @@ describe("L2 scope", () => {
       "/usr/local/go/test/fixedbugs/issue1.go",
       "/go/pkg/mod/golang.org/x/text@v0.14.0/cases/map.go",
       "/root/go/pkg/mod/cache/download/golang.org/x/text/@v/v0.14.0.mod",
-      "/usr/local/lib/python3.12/json/encoder.py",
       "/usr/lib/python3/dist-packages/yaml/constructor.py",
       "/testbed/.tox/py312/lib/python3.12/site-packages/six.py",
     ];
@@ -52,6 +51,32 @@ describe("L2 scope", () => {
       "/testbed/node_modules/calc/index.js",
     ];
     expect(sortHits(hits, own, [])).toEqual({ leaks: hits, installed: [] });
+  });
+
+  test("Python's standard library is scanned, so a gold line there is a leak, a renamed copy of the project included", () => {
+    const zipp = projectNames({ repo: "jaraco/zipp", runner: PYTEST }, ["zipp/__init__.py"], {});
+    const tomli = projectNames({ repo: "hukkin/tomli", runner: PYTEST }, ["src/tomli/__init__.py"], {});
+    expect(sortHits(["/usr/local/lib/python3.12/json/encoder.py"], own, [])).toEqual({ leaks: ["/usr/local/lib/python3.12/json/encoder.py"], installed: [] });
+    expect(sortHits(["/usr/local/lib/python3.13/zipfile/_path/__init__.py"], zipp, [])).toEqual({ leaks: ["/usr/local/lib/python3.13/zipfile/_path/__init__.py"], installed: [] });
+    expect(sortHits(["/usr/local/lib/python3.11/tomllib/_parser.py"], tomli, [])).toEqual({ leaks: ["/usr/local/lib/python3.11/tomllib/_parser.py"], installed: [] });
+  });
+
+  test("a copy under a leading underscore, or along a dotted name's path parts, still names the project", () => {
+    const distutils = projectNames({ repo: "pypa/distutils", runner: PYTEST }, ["distutils/__init__.py"], {});
+    const pytest = projectNames({ repo: "pytest-dev/pytest", runner: PYTEST }, [], {});
+    const jaraco = projectNames({ repo: "jaraco/jaraco.functools", runner: PYTEST }, [], { "pyproject.toml": '[project]\nname = "jaraco.functools"\n' });
+    expect(sortHits(["/usr/local/lib/python3.12/site-packages/setuptools/_distutils/core.py"], distutils, []).leaks).toEqual(["/usr/local/lib/python3.12/site-packages/setuptools/_distutils/core.py"]);
+    expect(sortHits(["/usr/local/lib/python3.12/site-packages/_pytest/python.py"], pytest, []).leaks).toEqual(["/usr/local/lib/python3.12/site-packages/_pytest/python.py"]);
+    const mine = ["/usr/local/lib/python3.12/site-packages/jaraco/functools/__init__.py", "/usr/local/lib/python3.12/site-packages/setuptools/_vendor/jaraco/functools/__init__.py"];
+    const other = ["/usr/local/lib/python3.12/site-packages/jaraco/text/__init__.py", "/usr/local/lib/python3.12/site-packages/jaraco/functools_extra/core.py"];
+    expect(sortHits([...mine, ...other], jaraco, [])).toEqual({ leaks: mine, installed: other });
+    expect(sortHits(mine, projectNames({ repo: "o/jaraco-functools", runner: PYTEST }, [], {}), []).leaks).toEqual([]);
+  });
+
+  test("a top-level package one level down in a plain directory names the project, test and vendored dirs aside", () => {
+    const mono = projectNames({ repo: "o/mono", runner: PYTEST }, ["pkg/__init__.py", "python/widget/__init__.py", "pkg/sub/__init__.py", "src/calc/__init__.py", "tests/unit/__init__.py", "third_party/six/__init__.py"], {});
+    expect(mono.sort()).toEqual(["calc", "mono", "pkg", "widget"]);
+    expect(sortHits(["/usr/local/lib/python3.12/site-packages/widget/core.py", "/usr/local/lib/python3.12/site-packages/six.py"], mono, [])).toEqual({ leaks: ["/usr/local/lib/python3.12/site-packages/widget/core.py"], installed: ["/usr/local/lib/python3.12/site-packages/six.py"] });
   });
 
   test("a project whose name ends in a digit still matches its own installed copy, with or without a version", () => {
