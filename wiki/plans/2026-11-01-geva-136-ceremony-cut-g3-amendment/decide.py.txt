@@ -1,0 +1,70 @@
+# Ceremony-cut verdict (wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg, section 6). Reads the outputs of
+# ceremony-tb2.ts (--json), noloss score for variant-vs-control (--out), review-cost.py (--json) and exposure.py (--json,
+# one per lane), applies the frozen gates, Holm-adjusts the three LOSS tests and prints one verdict per model:
+# CUT (take the ceremony out of unattended renders; no-loss shown), KEEP (keep it; the cut lost quality) or FIX-METHOD
+# (this eval cannot tell). It runs nothing and reads no transcript. G3 is as amended by
+# wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment: a variant session whose start line the session cut with its own pipe or
+# redirect, run with --render unattended, keeping UNATTENDED_SESSION: true and showing RENDER_KIND: unattended nowhere (exposure.py's
+# start_line_cut_render), is not observable and leaves the count, and a
+# SESSION_KIND mismatch fails G3 like a RENDER_KIND_MISMATCH line. A variant session counts as printing RENDER_KIND: unattended only
+# when a start-line call's own result holds that line (start_line_render_kind).
+# Usage: python3 decide.py --tb2 F --review-score F --review-cost F --exposure-review F --exposure-tb2 F [--arms JSON]
+import json, sys
+a = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+arms = json.loads(a.get('--arms', '{"tb2": {"control": "control", "variant": "variant"}, "review": {"control": "control", "variant": "variant"}}'))
+OPUS, PARTICLE = 'claude-opus-5-5', 'particle-1'
+ALPHA, BODY_DROP, RENDER_SHARE, GRADED_SHARE, REPS, TASKS, ORACLE_EXCLUDED = 0.05, 2000, 0.95, 0.90, 3, 37, ()
+tb2 = json.load(open(a['--tb2'])); score = json.load(open(a['--review-score'])); rc = json.load(open(a['--review-cost']))
+ex = {'review': json.load(open(a['--exposure-review'])), 'tb2': json.load(open(a['--exposure-tb2']))}
+z = tb2['zero']
+cell = lambda m, r: next(c for c in z['cells'] if c['model'] == m and c['arm'] == r)
+vc = lambda m: next(c for c in z['contrasts'] if c['model'] == m and c['contrast'] == 'variant - control')
+def expo(lane, model, role):
+    hits = [r for r in ex[lane] if r['arm'] == arms[lane][role] and model in r['model'].replace('particle-ai_', '')]
+    return hits[0] if hits else None
+gates, notes, g3_read = {}, [], {}
+def gate(name, ok, why):
+    gates[name] = bool(ok)
+    if not ok: notes.append(name + ': ' + why)
+def g3(name, ev, ec):
+    if not (ev and ec): return gate(name, False, 'no exposure row for the control or variant arm')
+    seen, ctl = ev['start_line'] - ev['start_line_cut_render'], ec['start_line'] - ec['start_line_cut']
+    rk, sk = (sum(x[k] for x in (ev, ec)) for k in ('render_kind_mismatch', 'session_kind_mismatch'))
+    g3_read[name] = (f"variant {ev['start_line_render_kind']} of {seen} counted start-line sessions printed RENDER_KIND: unattended, {ev['start_line_cut_render']} more cut by the session"
+                     + (' (variant half not observable)' if seen == 0 else '') + f"; control {ec['render_kind_unattended']} printed it, {ctl} uncut start-line sessions"
+                     + (' (control half not observable)' if ctl == 0 else '') + f"; mismatch sessions: {rk} RENDER_KIND_MISMATCH, {sk} SESSION_KIND")
+    gate(name, ev['start_line_render_kind'] >= RENDER_SHARE * seen and ec['render_kind_unattended'] == 0 and rk + sk == 0, g3_read[name])
+for m in (OPUS, PARTICLE):
+    c, v = cell(m, 'control'), cell(m, 'variant')
+    gate('G2 body load, TB2 ' + m, v['firstMedian'] <= c['firstMedian'] - BODY_DROP, f"variant median {v['firstMedian']} vs control {c['firstMedian']}")
+    planned = REPS * (TASKS - len(ORACLE_EXCLUDED))
+    for role, x in (('control', c), ('variant', v)): gate('G4 coverage, TB2 ' + m + ' ' + role, x['graded'] >= GRADED_SHARE * planned, f"{x['graded']} graded of {planned} planned ({REPS} replicates of {TASKS} frozen tasks less {len(ORACLE_EXCLUDED)} oracle exclusions; {vc(m)['tasks']} paired tasks)")
+    g3('G3 render kind, TB2 ' + m, expo('tb2', m, 'variant'), expo('tb2', m, 'control'))
+rcv, rcc = rc['arms']['variant']['first_request_tokens'], rc['arms']['control']['first_request_tokens']
+gate('G2 body load, review', rcv['median'] <= rcc['median'] - BODY_DROP, f"variant median {rcv['median']} vs control {rcc['median']}")
+g3('G3 render kind, review', expo('review', OPUS, 'variant'), expo('review', OPUS, 'control'))
+rv = score.get('result') or {}
+gate('G4 coverage, review', rv.get('verdict') is not None, 'noloss gave no verdict: ' + str(rv.get('no_verdict_reason')))
+fam = [('TB2 ' + OPUS, vc(OPUS)['pAtOrAbove0']), ('review', rv.get('p_loss')), ('TB2 ' + PARTICLE, vc(PARTICLE)['pAtOrAbove0'])]
+live = sorted([(p, k) for k, p in fam if p is not None])
+holm, run = {}, 0.0
+for i, (p, k) in enumerate(live):
+    run = max(run, min(1.0, (len(live) - i) * p)); holm[k] = run
+loss = {k: holm.get(k, 1.0) < ALPHA for k, _ in fam}
+def verdict(model, readings):
+    g = [k for k in gates if model in k or (model == OPUS and k.endswith('review'))]
+    if not all(gates[k] for k in g): return 'FIX-METHOD', 'no', 'a gate failed: ' + '; '.join(n for n in notes if any(n.startswith(x) for x in g))
+    if any(loss[r] for r in readings): return 'KEEP', 'no', 'LOSS after Holm in ' + ', '.join(r for r in readings if loss[r])
+    c = vc(model)
+    if c['verdict'] == 'NO_LOSS': return 'CUT', 'yes', f"TB2 variant minus control {100*c['point']:+.1f} pp, 90% CI lower end {100*c['lo90']:+.1f} above -{c['margin']}, size {c['size']:.3f}"
+    return 'FIX-METHOD', 'no', f"no LOSS and no NO_LOSS: TB2 {c['verdict']} (90% CI lower end {100*c['lo90']:+.1f}, margin {c['margin']}, size {c['size']:.3f})"
+out = {'gates': gates, 'gate_notes': notes, 'g3': g3_read, 'loss_holm': holm, 'loss': loss,
+       'verdicts': {OPUS: verdict(OPUS, ['TB2 ' + OPUS, 'review']), PARTICLE: verdict(PARTICLE, ['TB2 ' + PARTICLE])},
+       'cost': {'tb2': [x for x in z['cost'] if x['ratio'] == 'variant / control'], 'review': [x for x in rc['ratios'] if x['ratio'] == 'variant / control'], 'mechanical_tb2': tb2.get('mechanical')}}
+for m, (v, nl, why) in out['verdicts'].items(): print(f'{m}: {v}, no-loss {nl}. {why}')
+for k, p in holm.items(): print(f'LOSS test {k}: Holm-adjusted p {p:.4f}' + (' (LOSS)' if loss[k] else ''))
+for n in notes: print('gate failed: ' + n)
+for k, v in g3_read.items(): print(f'{k}: {v}')
+for x in out['cost']['tb2']: print(f"TB2 {x['model']} cost per trial, variant/control: {x['perTrial']['point']:.3f} [{x['perTrial']['lo95']:.3f}, {x['perTrial']['hi95']:.3f}]")
+for x in out['cost']['review']: print(f"review cost per unit-pass, variant/control: {x['point']:.3f} [{x['lo95']:.3f}, {x['hi95']:.3f}]")
+if '--json' in a: json.dump(out, open(a['--json'], 'w'), indent=1)
