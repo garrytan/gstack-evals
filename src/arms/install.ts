@@ -33,13 +33,23 @@
 //   (less hooks) and the router's routing text, and every other body becomes prose of the same o200k token count. For a
 //   plugin arm (pstack) the same is done under the plugin's skills/, and the plugin keeps only its manifest
 //   (.claude-plugin/plugin.json): no playbooks, scripts, references or agents.
+// - A gstack stack arm may be served from a render (ArmSpec render, Claude Code only). After gstack's setup the install
+//   runs bin/gstack-modules render --host claude --loadout full (plus --session-kind unattended for an unattended render)
+//   into ~/.claude/gstack-render (RENDER_DIR) in the builder, whose HOME is the trial's, so the render's section pointers
+//   resolve in the trial. Each rendered skill's SKILL.md and sections entry in ~/.claude/skills/<skill>/ then links into
+//   the render, and every other entry stays setup's. The install fails (E_IMAGE_BUILD) for a rendered skill with no
+//   served folder, a render lock (loadout.lock.json) of another session_kind, or a served review or investigate SKILL.md
+//   that is not the render's or whose start line carries --render unattended in an interactive render or lacks it in an
+//   unattended one. Provenance records the lock's fields and its sha256.
+// - Provenance names a stack's source by kind, local-git (a local repository, verified by the commit's tree id), never
+//   by its path on this machine (GST-837).
 // - The target skill is the folder under the host's skills directory whose SKILL.md (links followed inside the tree)
 //   names it in its front matter. Its roots are every path that reaches that folder.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
-import { chmodSync, closeSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, posix } from "node:path";
+import { chmodSync, closeSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_SEED, placeboSkill } from "../../quick/laneb/arms/placebo/placebo.ts";
 import { SKILL_DIRS } from "../adapters/host.ts";
@@ -100,6 +110,9 @@ export const PLACEBO_GENERATOR = fileURLToPath(new URL("../../quick/laneb/arms/p
 
 /** The installer a stack arm runs when it names none: gstack's own setup for the host, without the browser. */
 export const stackInstall = (host: Host): string => "./setup --host " + host + " --no-browser -q";
+
+/** Where a rendered gstack arm's render sits, relative to HOME: outside the skills directory, so the host never registers it. */
+export const RENDER_DIR = ".claude/gstack-render";
 
 const sha = (text: string | Buffer): string => createHash("sha256").update(text).digest("hex");
 const cleanEnv = (): Record<string, string> => Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !e[0].startsWith("GIT_")));
@@ -466,7 +479,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
     if (!t) trees.set(id, (t = { ...stackTree(ref, o.sources, dir), dir }));
     return t;
   };
-  const install = (ref: StackRef, folder: string | null | undefined, command: string, label: string) => {
+  const install = (ref: StackRef, folder: string | null | undefined, command: string, label: string, render?: "interactive" | "unattended") => {
     const src = join(work, "stage-" + randomBytes(6).toString("hex"));
     cpSync(extract(ref).dir, src, { recursive: true, verbatimSymlinks: true });
     if (folder !== undefined) {
@@ -475,12 +488,23 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
     }
     dropFixtures(src);
     const name = checkoutName(ref);
-    const keep = kept(o.host, name);
+    const keep = [...kept(o.host, name), ...(render ? [RENDER_DIR] : [])];
     const srcTree = dirTreeSha256(src);
     const key = sha(JSON.stringify({ recipe: INSTALL_RECIPE, src: srcTree, host: o.host, name, command, keep, runner: o.runner.id }));
     return cached(o.state, key, { src_tree_sha256: srcTree, host: o.host, name, command, runner: o.runner.id }, (home) => {
       const failed = o.runner.run(src, { name, command, keep, out: home, log: join(o.state, "installs", key.slice(0, 32) + ".log") });
       if (failed) throw new InstallError("E_IMAGE_BUILD", "installing " + label + " for " + o.host + " with `" + command + "` failed: " + failed);
+      if (render) for (const s of readdirSync(join(home, RENDER_DIR)).sort()) {
+        if (!existsSync(join(home, RENDER_DIR, s, "SKILL.md"))) continue;
+        const served = join(home, SKILL_DIRS.claude, s);
+        if (!lstatSync(served, { throwIfNoEntry: false })?.isDirectory()) throw new InstallError("E_IMAGE_BUILD", "installing " + label + ": the render holds skill " + s + ", which has no served folder ~/" + SKILL_DIRS.claude + "/" + s);
+        for (const p of [served, join(home, RENDER_DIR, s)]) if (relative(realpathSync(home), realpathSync(p)).split("/")[0] === "..") throw new InstallError("E_IMAGE_BUILD", "installing " + label + ": ~/" + relative(home, p) + " resolves outside the install tree through a symlink, so the render is not served from it");
+        for (const entry of ["SKILL.md", "sections"]) {
+          if (!existsSync(join(home, RENDER_DIR, s, entry))) continue;
+          rmSync(join(served, entry), { recursive: true, force: true });
+          symlinkSync(relative(served, join(home, RENDER_DIR, s, entry)), join(served, entry));
+        }
+      }
       canonicalize(home, o.runner.home);
     }, o.hold);
   };
@@ -519,7 +543,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         const ref = arm.base!;
         const command = stackInstall(o.host);
         const t = extract(ref);
-        const base = { repo: ref.repo, sha: ref.sha, source: t.source, git_tree: t.git_tree, tree_sha256: t.tree_sha256 };
+        const base = { repo: ref.repo, sha: ref.sha, source: "local-git", git_tree: t.git_tree, tree_sha256: t.tree_sha256 };
         const none = install(ref, null, command, ref.repo + "@" + ref.sha.slice(0, 12) + " without " + o.skill);
         const first = { src: none.dir, dest: "" };
         if (arm.dir === null) {
@@ -540,8 +564,23 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
         const kind = stackKind(arm.stack);
         const command = arm.install[o.host] ?? (kind ? kind.install[o.host] : stackInstall(o.host));
         if (!command) throw new InstallError("E_USAGE", "arm " + arm.name + ": " + kind!.name + " has no installer for " + o.host + "; it installs on " + Object.keys(kind!.install).join(" and "));
+        if (arm.render && (o.host !== "claude" || kind)) throw new InstallError("E_USAGE", "arm " + arm.name + ": a render serves a gstack stack on claude only");
+        const run = arm.render ? command + "; bin/gstack-modules render --host claude --loadout full" + (arm.render === "unattended" ? " --session-kind unattended" : "") + " --out-dir \"$HOME/" + RENDER_DIR + "\"" : command;
         const t = extract(arm.stack);
-        const full = install(arm.stack, undefined, command, arm.stack.repo + "@" + arm.stack.sha.slice(0, 12) + (arm.stack.path ? ":" + arm.stack.path : ""));
+        const full = install(arm.stack, undefined, run, arm.stack.repo + "@" + arm.stack.sha.slice(0, 12) + (arm.stack.path ? ":" + arm.stack.path : ""), arm.render);
+        let render: Record<string, unknown> | null = null;
+        if (arm.render) {
+          const lockRel = resolveIn(full.dir, RENDER_DIR + "/loadout.lock.json");
+          const lockBytes = isFile(full.dir, lockRel) ? readFileSync(join(full.dir, lockRel)) : null;
+          const lock = lockBytes ? (JSON.parse(lockBytes.toString("utf8")) as { session_kind?: unknown; spec?: unknown; spec_sha256?: unknown; gstack_version?: unknown; files?: unknown[]; total_bytes?: unknown }) : null;
+          if (lock?.session_kind !== arm.render) throw new InstallError("E_IMAGE_BUILD", "arm " + arm.name + ": ~/" + RENDER_DIR + "/loadout.lock.json " + (lock ? "carries session_kind " + JSON.stringify(lock.session_kind ?? null) : "is missing") + ", not the requested " + arm.render);
+          for (const s of ["review", "investigate"]) {
+            const servedMd = resolveIn(full.dir, skillsDir + "/" + s + "/SKILL.md");
+            const start = isFile(full.dir, servedMd) && servedMd === resolveIn(full.dir, RENDER_DIR + "/" + s + "/SKILL.md") ? readFileSync(join(full.dir, servedMd), "utf8").split("\n").find((l) => l.includes("gstack-skill-start --skill")) : undefined;
+            if (start === undefined || start.includes("--render unattended") !== (arm.render === "unattended")) throw new InstallError("E_IMAGE_BUILD", "arm " + arm.name + ": the served ~/" + skillsDir + "/" + s + "/SKILL.md " + (start === undefined ? "is not the render's or has no gstack-skill-start line" : "start line " + JSON.stringify(start.trim()) + (arm.render === "unattended" ? " lacks" : " carries") + " --render unattended in an " + arm.render + " render"));
+          }
+          render = { session_kind: lock.session_kind, spec: lock.spec, spec_sha256: lock.spec_sha256, gstack_version: lock.gstack_version, files: lock.files?.length ?? null, total_bytes: lock.total_bytes, lock_sha256: sha(lockBytes!) };
+        }
         const layers: Layer[] = [{ src: full.dir, dest: "" }];
         const digests = [digestOf(layers[0]!, full.tree_sha256)];
         const files = Object.entries(o.host === "claude" ? (kind?.files ?? {}) : {}).map(([dest, src]) => ({ dest, src, sha256: sha(readFileSync(src)) }));
@@ -557,7 +596,7 @@ export function installArms(o: { host: Host; arms: readonly ArmSpec[]; skill: st
           digests.push(digestOf(layers[1]!, added.tree_sha256));
         }
         const plugins = kind?.plugin ? [".local/share/" + kind.name] : [];
-        done.push({ name: arm.name, layers, tree_sha256: sha(digests.join("\n")), skill: need(arm.name, full.dir, plugins), gstack: gstackIn(full.dir), plugins, provenance: { kind: "stack", stack: { repo: arm.stack.repo, sha: arm.stack.sha, ...(arm.stack.path ? { path: arm.stack.path } : {}), source: t.source, git_tree: t.git_tree, tree_sha256: t.tree_sha256 }, install: { command, runner: o.runner.id, tree_sha256: full.tree_sha256 }, ...(files.length ? { files: Object.fromEntries(files.map((f) => [f.dest, f.sha256])) } : {}) } });
+        done.push({ name: arm.name, layers, tree_sha256: sha(digests.join("\n")), skill: need(arm.name, full.dir, plugins), gstack: gstackIn(full.dir), plugins, provenance: { kind: "stack", stack: { repo: arm.stack.repo, sha: arm.stack.sha, ...(arm.stack.path ? { path: arm.stack.path } : {}), source: "local-git", git_tree: t.git_tree, tree_sha256: t.tree_sha256 }, install: { command: run, runner: o.runner.id, tree_sha256: full.tree_sha256 }, ...(render ? { render } : {}), ...(files.length ? { files: Object.fromEntries(files.map((f) => [f.dest, f.sha256])) } : {}) } });
         fulls.set(arm.name, full.dir);
       } else {
         const of = done.find((d) => d.name === arm.of);

@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
+import { ALLOWANCE_SPENT, claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
+import { loadReaderMap, readerUsage, readTranscript } from "../../src/trial/review/readers.ts";
 import { priceRequest, usageCost } from "../../src/runner/pricing/prices.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "../../src/runner/proxy/metering-proxy.ts";
 import { trialEnv } from "../../src/trial/env.ts";
@@ -21,8 +22,9 @@ afterEach(() => {
 });
 
 const MODEL = "claude-haiku-5-5";
+const READER_MAP = join(import.meta.dir, "..", "..", "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
 
-async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void } = {}) {
+async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void; options?: Pick<ClaudeCodeOptions, "systemPrompt" | "maxTurns" | "capStops"> } = {}) {
   const h = harness(script, { ...(o.capMicros === undefined ? {} : { capMicros: o.capMicros }), ...(o.env ? { env: o.env } : {}) });
   open.push(h);
   const model = o.model ?? MODEL;
@@ -30,7 +32,7 @@ async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: stri
   const binding = h.bind(model, provider);
   const home = join(h.dir, "home");
   o.setupHome?.(home);
-  const driver = claudeCodeDriver({ model, provider, proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, ...(o.entry ? { entry: o.entry } : {}), skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), query: query as never });
+  const driver = claudeCodeDriver({ model, provider, proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, ...(o.entry ? { entry: o.entry } : {}), skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), query: query as never, ...o.options });
   const session = h.session(join(h.dir, "work", "t"), home, driver.env!);
   const outcome = await driver.run(session, { id: "t", prompt: o.prompt ?? "Help me think about my idea." }, 120_000);
   const meter = await h.proxy.finalize(binding.meter_id);
@@ -515,3 +517,195 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-748: model output on the real pinned CLI (
     expect(r).toEqual({ termination: { kind: "completed" }, model_output: true, turns: ["Partial review of the pl", "Done."] });
   }, 180_000);
 });
+
+// Value: protects=GEVA-109's per-arm system prompt and the run's turn cap on the pinned Agent SDK: sdk-default sends what no option sends (the SDK's initialize systemPrompt [""]), claude-code-preset sends the SDK's preset, and the cap reaches the CLI's argv; fails_when=sdk-default passes any systemPrompt option, the preset is dropped, or --max-turns is not the configured number; why_new=GEVA-108 runs control-preset and control-sdk-default in one invocation; seam=the driver's query options, the real SDK's initialize request
+describe("GEVA-109: system prompt and turn cap on the pinned Agent SDK against a stub CLI (keyless)", () => {
+  const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
+  const record = async (o: { systemPrompt?: "sdk-default" | "claude-code-preset"; maxTurns?: number }) => {
+    const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
+    const file = join(out, "record.ndjson");
+    const session = {
+      exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
+      spawn: (argv: string[], env: Record<string, string>) => (argv[0] === "true" ? spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...env, PATH: process.env.PATH ?? "", STUB_MODE: "content", STUB_CONTENT: JSON.stringify([{ type: "text", text: "done" }]), STUB_RECORD: file }, stdio: ["pipe", "pipe", "pipe"] })),
+      stop: () => {},
+    };
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, ...o });
+    const outcome = await driver.run(session as never, { id: "t", prompt: "Go." }, 20_000);
+    const lines = readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const { request_id: _id, ...init } = lines.find((l) => l.request?.subtype === "initialize")!;
+    return { outcome, argv: lines[0].argv as string[], init, recorded: JSON.parse(readFileSync(join(out, "init.json"), "utf8")).system_prompt };
+  };
+  test("sdk-default sends the SDK's empty system prompt, the preset sends claude_code, and the cap reaches the CLI", async () => {
+    const plain = await record({});
+    const explicit = await record({ systemPrompt: "sdk-default" });
+    const preset = await record({ systemPrompt: "claude-code-preset", maxTurns: 7 });
+    expect(plain.outcome.termination).toEqual({ kind: "completed" });
+    expect(plain.init.request.systemPrompt).toEqual([""]);
+    expect([explicit.argv, explicit.init]).toEqual([plain.argv, plain.init]);
+    expect([plain.recorded, explicit.recorded, preset.recorded]).toEqual(["sdk-default", "sdk-default", "claude-code-preset"]);
+    expect([plain.argv.filter((a) => a.startsWith("--max-turns")), preset.argv.filter((a) => a.startsWith("--max-turns"))]).toEqual([["--max-turns=60"], ["--max-turns=7"]]);
+    expect(preset.argv.filter((a) => !plain.argv.includes(a))).toEqual(["--max-turns=7"]);
+    const { systemPrompt: _empty, ...rest } = plain.init.request;
+    expect(preset.init.request).toEqual(rest);
+  }, 60_000);
+  test("sessionKind unattended adds GSTACK_SESSION_KIND to the agent env, and unset adds none", () => {
+    const base = { model: MODEL, provider: "anthropic" as const, proxy: { baseUrl: "http://p", slot: "s", token: "t" } };
+    expect(claudeCodeEnv(base).GSTACK_SESSION_KIND).toBeUndefined();
+    expect(claudeCodeEnv({ ...base, sessionKind: "unattended" }).GSTACK_SESSION_KIND).toBe("unattended");
+  });
+});
+
+// Value: protects=GEVA-109 on the real CLI: under claude-code-preset the first model request carries Claude Code's system guidance, under sdk-default only the SDK's short blocks, and a configured turn cap ends a session the way an error_max_turns result does; fails_when=the preset never reaches the request, sdk-default grows a system prompt, or the cap is ignored; why_new=GEVA-108 runs both system prompts in one invocation; seam=the driver's options through the pinned SDK into CLI 2.1.314
+describe.skipIf(!HAS_CLAUDE_CLI)("GEVA-109: system prompt and turn cap on the real CLI", () => {
+  const text: Script = () => [{ type: "text", text: "FINAL: done." }];
+  const system = (r: Awaited<ReturnType<typeof run>>) => {
+    const first = r.h.upstream.find((u) => new URL(u.url).pathname.endsWith("/v1/messages") && JSON.stringify(u.body.messages ?? []).includes("Go."))!;
+    return (first.body.system as { text: string }[]).map((b) => b.text);
+  };
+  test("claude-code-preset sends Claude Code's guidance; sdk-default sends only the SDK's two short blocks", async () => {
+    const plain = system(await run(text, { prompt: "Go.", options: { systemPrompt: "sdk-default" } }));
+    const preset = system(await run(text, { prompt: "Go.", options: { systemPrompt: "claude-code-preset" } }));
+    expect(plain.length).toBe(2);
+    expect(plain[1]).toBe("You are a Claude agent, built on Anthropic's Claude Agent SDK.");
+    expect(plain.join("").length).toBeLessThan(500);
+    expect(preset.join("").length).toBeGreaterThan(5000);
+  }, 240_000);
+  test("a configured turn cap reaches the CLI and ends the session as error_max_turns", async () => {
+    let n = 0;
+    const loop: Script = () => [{ type: "tool_use", id: "toolu_loop" + n++, name: "Bash", input: { command: "true" } }];
+    const r = await run(loop, { prompt: "Go.", options: { maxTurns: 2 } });
+    const result = r.lines("transcript.ndjson").filter((m) => m.type === "result").at(-1);
+    const asked = r.h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/messages") && JSON.stringify(u.body.messages ?? []).includes("toolu_loop") === false && JSON.stringify(u.body.messages ?? []).includes("Go.")).length;
+    const calls = r.h.upstream.filter((u) => new URL(u.url).pathname.endsWith("/v1/messages") && JSON.stringify(u.body.messages ?? []).includes("Go.")).length;
+    expect([result.subtype, asked, calls]).toEqual(["error_max_turns", 1, 2]);
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+  }, 240_000);
+});
+
+// Value: protects=the R2 build's cap stops and reader rows on the pinned Agent SDK (R48 follow-ups prereg, section 3.6; GEVA-116's note on #119): with capStops a session the turn cap ends is turn_cap and one the slot's allowance stops is allowance_stop, without it both keep today's records (completed, and a missing E_ALLOWANCE cell), another E_ALLOWANCE refusal stays a missing cell, and the transcript the driver writes names each subagent launch for readerUsage; fails_when=error_max_turns stays completed under capStops, a default run's record changes, a model-allowlist refusal reads as an allowance stop, or the SDK drops the launch, task_started or task_notification messages; why_new=R2 runs --max-turns 200 and a $40 allowance; seam=the driver's result and API error branches through the real SDK 0.3.314, and the real metering proxy's refusal text; no_claim=the real CLI, which the describe below covers
+describe("R2 build: cap stops and reader launches on the pinned Agent SDK against a stub CLI (keyless)", () => {
+  const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
+  const stub = async (env: Record<string, string>, o: Partial<Pick<ClaudeCodeOptions, "maxTurns" | "capStops">> = {}) => {
+    const out = mkdtempSync(join(tmpdir(), "stub-cli-"));
+    const file = join(out, "record.ndjson");
+    const session = {
+      exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
+      spawn: (argv: string[], e: Record<string, string>) => (argv[0] === "true" ? spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...e, PATH: process.env.PATH ?? "", STUB_RECORD: file, ...env }, stdio: ["pipe", "pipe", "pipe"] })),
+      stop: () => {},
+    };
+    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, ...o });
+    const outcome = await driver.run(session as never, { id: "t", prompt: "Go." }, 20_000);
+    const argv = JSON.parse(readFileSync(file, "utf8").split("\n")[0]!).argv as string[];
+    return { outcome, argv, transcript: readTranscript(readFileSync(join(out, "transcript.ndjson"), "utf8")) };
+  };
+  /** The metering proxy's own refusal for a call, as the CLI prints it: "API Error: <status> <problem body>". */
+  const refusal = async (o: { allowance: number; model?: string }) => {
+    const h = harness(() => [{ type: "text", text: "ok" }]);
+    open.push(h);
+    const b = h.proxy.bind({ cell: { run_id: "run-test", arm: "after", task: "t", model: MODEL, trial: 0, attempt: 1 }, models: ["anthropic:" + MODEL], allowance_micros: o.allowance });
+    const res = await fetch(h.baseUrl + "/" + b.slot + "/anthropic/v1/messages", { method: "POST", headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", authorization: "Bearer " + b.token }, body: JSON.stringify({ model: o.model ?? MODEL, max_tokens: 1024, messages: [{ role: "user", content: "hi" }] }) });
+    return { status: res.status, text: "API Error: " + res.status + " " + (await res.text()) };
+  };
+
+  test("the turn cap ends a capStops session as turn_cap and a default one as completed, as today", async () => {
+    const capped = await stub({ STUB_MODE: "turns" }, { maxTurns: 3, capStops: true });
+    const today = await stub({ STUB_MODE: "turns" }, { maxTurns: 3 });
+    expect(capped.argv.filter((a) => a.startsWith("--max-turns"))).toEqual(["--max-turns=3"]);
+    expect(capped.transcript.filter((m) => m.type === "assistant").length).toBe(3);
+    expect(capped.transcript.at(-1)).toMatchObject({ type: "result", subtype: "error_max_turns" });
+    expect(capped.outcome.termination).toEqual({ kind: "turn_cap" });
+    expect(today.outcome.termination).toEqual({ kind: "completed" });
+    const { termination: _a, ...rest } = capped.outcome;
+    const { termination: _b, ...base } = today.outcome;
+    expect(rest).toEqual(base);
+  }, 60_000);
+
+  test("the slot's allowance stops a capStops session as allowance_stop; a default one stays a missing E_ALLOWANCE cell, and so does any other E_ALLOWANCE refusal", async () => {
+    const spent = await refusal({ allowance: 100 });
+    expect(spent.status).toBe(402);
+    expect(spent.text).toMatch(ALLOWANCE_SPENT);
+    const allowlist = await refusal({ allowance: 50_000_000, model: "claude-opus-5-5" });
+    expect(allowlist.status).toBe(403);
+    expect(allowlist.text).toContain("E_ALLOWANCE");
+    const run = (r: { status: number; text: string }, capStops?: boolean) => stub({ STUB_MODE: "apierror", STUB_API_ERROR: r.text, STUB_API_STATUS: String(r.status) }, capStops ? { capStops } : {});
+    const capped = await run(spent, true);
+    const today = await run(spent);
+    expect(capped.outcome.termination).toEqual({ kind: "allowance_stop" });
+    expect(today.outcome.termination).toEqual({ kind: "missing", code: "E_ALLOWANCE" });
+    expect((await run(allowlist, true)).outcome.termination).toEqual({ kind: "missing", code: "E_ALLOWANCE" });
+    const { termination: _a, ...rest } = capped.outcome;
+    const { termination: _b, ...base } = today.outcome;
+    expect(rest).toEqual(base);
+  }, 60_000);
+
+  test("the SDK passes each Agent launch, task_started and task_notification into the transcript, so readerUsage names the readers", async () => {
+    const map = loadReaderMap(READER_MAP) as Exclude<ReturnType<typeof loadReaderMap>, { problem: string }>;
+    const specialist = (name: string) => "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/" + name + ".md, then run the diff.";
+    const agents = [
+      { id: "tu_test", prompt: specialist("testing"), started: true, tokens: 1200 },
+      { id: "tu_api", prompt: specialist("api-contract"), started: true, tokens: 900 },
+      { id: "tu_state", prompt: specialist("state-machines"), started: true },
+      { id: "tu_adv", prompt: "Read the diff for this branch. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production.", started: true, tokens: 700 },
+      { id: "tu_refused", prompt: specialist("security"), started: false },
+    ];
+    const r = await stub({ STUB_MODE: "agents", STUB_AGENTS: JSON.stringify(agents), STUB_FINAL: "done" });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(readerUsage(r.transcript, map.map)).toEqual([
+      { reader: "adversarial-native", launches: 1, total_tokens: 700 },
+      { reader: "api-contract", launches: 1, total_tokens: 900 },
+      { reader: "state-machines", launches: 1, total_tokens: null },
+      { reader: "testing", launches: 1, total_tokens: 1200 },
+    ]);
+    const none = await stub({ STUB_MODE: "agents", STUB_AGENTS: "[]", STUB_FINAL: "done" });
+    expect(readerUsage(none.transcript, map.map)).toEqual([]);
+  }, 60_000);
+});
+
+// Value: protects=the same cap stops and reader launches on the real CLI 2.1.314 behind the real metering proxy: the slot's allowance refuses a call and the session ends as allowance_stop under capStops; Agent launches stream task_started, subagent messages and task_notification usage that readerUsage reads; fails_when=the CLI rewords the refusal past ALLOWANCE_SPENT, retries it, or stops streaming subagent messages; why_new=the #101 and #106 lesson (test against the real pinned binaries); seam=CLI 2.1.314 and MeteringProxy; no_claim=a real model
+describe.skipIf(!HAS_CLAUDE_CLI)("R2 build: cap stops and reader launches on the real CLI", () => {
+  test("the turn cap ends a capStops session as turn_cap", async () => {
+    let n = 0;
+    const loop: Script = () => [{ type: "tool_use", id: "toolu_cap" + n++, name: "Bash", input: { command: "true" } }];
+    const r = await run(loop, { prompt: "Go.", options: { maxTurns: 2, capStops: true } });
+    expect(r.lines("transcript.ndjson").filter((m) => m.type === "result").at(-1).subtype).toBe("error_max_turns");
+    expect(r.outcome.termination).toEqual({ kind: "turn_cap" });
+  }, 240_000);
+
+  test("the slot's allowance ends a capStops session as allowance_stop", async () => {
+    let n = 0;
+    const loop: Script = () => [{ type: "tool_use", id: "toolu_spend" + n++, name: "Bash", input: { command: "true" } }];
+    const h = harness(loop);
+    open.push(h);
+    const model = "claude-opus-5-5";
+    const b = h.proxy.bind({ cell: { run_id: "run-test", arm: "after", task: "t", model, trial: 0, attempt: 1 }, models: ["anthropic:" + model], allowance_micros: 1_000_000 });
+    const driver = claudeCodeDriver({ model, provider: "anthropic", proxy: { baseUrl: h.baseUrl, slot: b.slot, token: b.token }, skill: null, out: join(h.dir, "host"), query: query as never, capStops: true });
+    const outcome = await driver.run(h.session(join(h.dir, "work", "t"), join(h.dir, "home"), driver.env!), { id: "t", prompt: "Go." }, 120_000);
+    expect(outcome.termination).toEqual({ kind: "allowance_stop" });
+    expect(outcome.agent_turns).toBeLessThan(60);
+    const refusals = readFileSync(join(h.dir, "journal.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.kind === "refusal");
+    expect(refusals.map((l) => l.code)).toEqual(["E_ALLOWANCE"]);
+    expect(refusals[0].reason).toMatch(ALLOWANCE_SPENT);
+  }, 240_000);
+
+  test("Agent launches reach the transcript with their task usage, and readerUsage names them", async () => {
+    const map = loadReaderMap(READER_MAP) as Exclude<ReturnType<typeof loadReaderMap>, { problem: string }>;
+    const script: Script = (t) => {
+      const first = t.users[0] ?? "";
+      if (first.includes("specialist code reviewer")) return [{ type: "text", text: "NO FINDINGS" }];
+      if (first.includes("chaos engineer")) return [{ type: "text", text: "Recommendation: Ship as-is because nothing fails." }];
+      if (first.includes("Explore")) return [{ type: "text", text: "Found it." }];
+      if (!t.results.has("toolu_t")) return [
+        { type: "tool_use", id: "toolu_t", name: "Agent", input: { description: "testing specialist", prompt: "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/testing.md", subagent_type: "general-purpose" } },
+        { type: "tool_use", id: "toolu_a", name: "Agent", input: { description: "adversarial", prompt: "Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production.", subagent_type: "general-purpose" } },
+        { type: "tool_use", id: "toolu_o", name: "Agent", input: { description: "look around", prompt: "Explore the repository layout.", subagent_type: "general-purpose" } },
+      ];
+      return [{ type: "text", text: "FINAL: done." }];
+    };
+    const r = await run(script, { model: "claude-opus-5-5", prompt: "Go." });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    const readers = readerUsage(r.lines("transcript.ndjson"), map.map);
+    expect(readers.map((u) => [u.reader, u.launches])).toEqual([["adversarial-native", 1], ["other", 1], ["testing", 1]]);
+    expect(readers.every((u) => typeof u.total_tokens === "number" && u.total_tokens > 0)).toBe(true);
+  }, 240_000);
+});
+

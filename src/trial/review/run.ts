@@ -16,6 +16,22 @@
 //   judgments.tsv, so it is raw and judge-packet can read it. <out>/units.json, parses.tsv and refusals.tsv sit beside.
 // - Receipts never sit on a volatile path (E_RECEIPTS_VOLATILE); with GSTACK_EVALS_EPHEMERAL=1 they are copied to
 //   GSTACK_EVALS_RECEIPTS before the run returns.
+// - An arm may set its sessions' system prompt (systemPrompt, sdk-default when unset) and its told prefix (toldPrefix): on
+//   code units in place of TOLD_PREFIX's, on plan units in place of a gstack plan arm's command (plan-told.ts), and any
+//   other plan arm's prefix is refused before any session. The run may set the turn cap (maxTurns) and
+//   GSTACK_SESSION_KIND=unattended for every arm (sessionKind). A setting off its default joins the session key's task,
+//   so a default run keeps today's keys. arm.json records the system prompt in arm_provenance, and an overridden prefix
+//   with its sha256 in told, on either kind of unit.
+//   terminations (the driver's capStops): turn_cap and allowance_stop. A capped
+//   session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts against its own arm: capped.ts reads
+//   its findings from the latest main-agent text block in its transcript.ndjson whose last json block parses as findings
+//   (never an AskUserQuestion's question), and with no such block, or no readable transcript, it is missing, scored as
+//   finding nothing. The session key's verifier then also covers capped.ts, and arm.json counts
+//   cap stops in cap_stops with the units they hit and capped.ts's sha256; diagnostics names each capped session with its
+//   settled metered spend. Only then does the allowance join the session key. A run without capStops, whatever its turn
+//   cap or allowance, and every plan unit, keeps today's records and keys.
+// - A run with a reader map (readers.ts) records each code session's readers from its transcript in the journal and
+//   writes them to cost.tsv as reader:<name> rows; arm.json names the map's sha256 in reader_map_sha256.
 // - Plan units (input.plan; plan.ts) change the prompt, the parser, the user and the failed-pass rule, and refuse a cell
 //   that keeps a voice, since a plan arm runs no second model.
 // - A plan session scores by planScore. After the model produced output (the record's model_output: non-empty text or
@@ -36,6 +52,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
+import { MAX_TURNS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { hostDriver } from "../../adapters/host.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
@@ -48,8 +65,11 @@ import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatile
 import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
+import { CAPPED_PARSER_SHA256, cappedParse, mainAgentTexts } from "./capped.ts";
 import { PARSER_SHA256, parseFindings, renderFindings, type ParseOutcome } from "./findings.ts";
-import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, planArmLine, parsePlanSession, planPrompt, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
+import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
+import { planNoPrefixProblem, planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
+import { readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
 import type { UnitRef } from "./unit.ts";
 
@@ -74,6 +94,10 @@ export interface ReviewArm {
   name: string;
   /** A told arm for code units, a plan arm for plan units. */
   told: ToldArm | PlanArm;
+  /** The session's system prompt; sdk-default when unset. */
+  systemPrompt?: SystemPrompt;
+  /** The told prefix: in place of TOLD_PREFIX's on code units, in place of a gstack plan arm's command on plan units. */
+  toldPrefix?: string;
 }
 
 export interface ReviewRunInput {
@@ -114,6 +138,14 @@ export interface ReviewRunInput {
   plan?: { lens: PlanLens };
   /** The models each named arm runs on; an arm not named runs on every model. */
   armModels?: Readonly<Record<string, readonly string[]>>;
+  /** The most model turns a session may take; the driver's MAX_TURNS when unset. */
+  maxTurns?: number;
+  /** GSTACK_SESSION_KIND=unattended in every arm's agent env; unset, none is set. */
+  sessionKind?: "unattended";
+  /** The reader map for reader rows (code units on host claude); unset, no reader rows. */
+  readers?: { map: ReaderMap; sha256: string };
+  /** Record code sessions' cap stops as turn_cap and allowance_stop, scored against their own arm; unset, today's records. */
+  capStops?: boolean;
   env?: Env;
 }
 
@@ -133,6 +165,8 @@ export interface ReviewEntry {
   cost: MeterCost | null;
   /** Plan units: the review mode the session's gstack mode handoff named, or null. */
   ceo_mode?: CeoMode | null;
+  /** The session's readers, when the run has a reader map. */
+  readers?: ReaderUsage[];
 }
 
 export interface ReviewRun {
@@ -236,7 +270,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const receipts = [join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
+  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
@@ -256,10 +290,19 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (micros === null) throw new Error("E_MODEL_POLICY: " + model + " has no price row, so its session allowance is unknown");
     return micros;
   };
+  const capStops = !plan && o.capStops === true;
+  const readers = !plan && o.host === "claude" ? (o.readers ?? null) : null;
   const prefs = new Map<string, string | null>();
   if (plan) for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
     const voice = rig.cells?.[arm.name]?.[model]?.codex?.model;
     if (voice) throw new Error("E_USAGE: plan units run no second model, but arm " + arm.name + "'s cell on " + model + " keeps the voice " + voice + "; build the rig's cells without voices");
+  }
+  if (plan && o.arms.some((a) => a.told === "placebo") && o.arms.some((a) => a.name === "gstack" && a.toldPrefix !== undefined)) throw new Error("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
+  for (const arm of plan ? o.arms : []) {
+    const refused = arm.toldPrefix === undefined ? null : planPrefixProblem(arm.told as PlanArm, plan!.lens, arm.toldPrefix);
+    if (refused) throw new Error("E_USAGE: arm " + arm.name + ": --told-prefix: " + refused);
+    const lone = planNoPrefixProblem(arm.name, arm.told as PlanArm, arm.toldPrefix);
+    if (lone) throw new Error("E_USAGE: " + lone);
   }
   for (const arm of plan ? o.arms : []) {
     const install = rig.arms[arm.name]!;
@@ -273,10 +316,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (text === null) throw new Error("E_USAGE: arm " + arm.name + "'s gstack tree has no question registry (scripts/question-registry.ts), so its questions cannot be set to auto-decide");
     prefs.set(arm.name, text);
   }
-  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planPrompt(arm.told as PlanArm, plan.lens) : toldPrompt(arm.told as ToldArm, unit.base_branch) });
+  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: plan ? planToldPrompt(arm.told as PlanArm, plan.lens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: plan ? PLAN_PARSER_SHA256 : capStops ? PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 : PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -319,19 +362,26 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const home = sandbox.homePath(dir);
     const install = rig.arms[arm.name]!;
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
-    const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm);
+    const name = plan ? planSkill(arm.told as PlanArm, plan.lens) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(capStops ? { capStops } : {}) });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
     trial.record.cost_micros = meter.micros;
-    const parse = plan ? parsePlanSession(trial.record) : parseFindings(trial.record);
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}) };
-    entries.set(reviewCellId(cell), entry);
     const kind = trial.record.termination.kind;
+    const capStopped = !plan && (kind === "turn_cap" || kind === "allowance_stop");
+    let transcript = "";
+    try {
+      transcript = readers || capStopped ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
+    } catch {
+      transcript = "";
+    }
+    const parse = plan ? parsePlanSession(trial.record) : capStopped ? cappedParse(mainAgentTexts(transcript)) : parseFindings(trial.record);
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
+    entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
     progress = recordSession(progress, cellName(cell), plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
@@ -373,6 +423,8 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const diagnostics: string[] = [];
     const modes: Record<string, number> = {};
     let withoutText = 0;
+    const capped = { turn_cap: 0, allowance_stop: 0 };
+    const cappedUnits = new Set<string>();
     const sessions: CostSession[] = [];
     const refused: CellRefusals = { arm_id: id, arm: arm.name, model, sessions: 0, requests: 0, refused: 0 };
     for (const unit of o.units) {
@@ -388,6 +440,11 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
+        if (ended === "turn_cap" || ended === "allowance_stop") {
+          capped[ended]++;
+          cappedUnits.add(unit.unit.id);
+          diagnostics.push(note + "; ended " + ended + ", settled spend " + (e.record.cost_micros === null ? "unavailable" : "$" + (e.record.cost_micros / 1_000_000).toFixed(6)) + ", " + (e.parse.kind === "findings" ? "scored on the findings it wrote before the stop" : "scored as finding nothing"));
+        }
         if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
         if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
         else if (score === "gap") gaps.push(note + (!plan || (ended !== "arm_failure" && ended !== "timeout" && ended !== "completed") ? "" : e.record.model_output !== false ? " with no model_output recorded" : ended === "completed" ? " and no model output" : " before any model output"));
@@ -397,7 +454,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
           modeRows.push([id, arm.name, model, unit.unit.id, String(pass), e.ceo_mode ?? "unstated"].join("\t"));
         }
         if (e.parse.kind === "findings") for (const f of plan ? renderPlanFindings((e.parse as Extract<PlanParse, { kind: "findings" }>).findings, pass) : renderFindings((e.parse as Extract<ParseOutcome, { kind: "findings" }>).findings, pass, "/work/" + unit.task)) lines.push(JSON.stringify(f));
-        sessions.push({ pr: unit.unit.id, pass, wall_ms: e.record.wall_ms, cost: e.cost });
+        sessions.push({ pr: unit.unit.id, pass, wall_ms: e.record.wall_ms, cost: e.cost, ...(readers ? { readers: e.readers ?? [] } : {}) });
         refused.sessions++;
         refused.requests += e.cost?.all.requests ?? 0;
         refused.refused += e.cost?.refused ?? 0;
@@ -416,9 +473,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(diagnostics.length ? { diagnostics } : {}), ...(source ? { source } : {}),
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
-      told: plan ? { arm: arm.told, lens: plan.lens, line: planArmLine(arm.told as PlanArm, plan.lens), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: TOLD_PREFIX[arm.told as ToldArm], template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
+      told: plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: provenance, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
+      ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);

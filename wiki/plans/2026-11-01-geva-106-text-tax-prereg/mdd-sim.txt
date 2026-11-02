@@ -1,0 +1,11 @@
+input: 37 tasks x 3 replicates; none 92/111, placebo 81/111; placebo minus none -9.91 points
+variance of per-task differences 670.7 points^2 = between-task effect 160.2 + within-task sampling 510.5 (W = 1531.5 per replicate)
+seed 20261101, 1000 simulated datasets x 1000 bootstrap resamples per effect size, effect grid 0.25 points, T1 confirmed when the 95% percentile interval's upper end is below 0
+| r | MDD replicate-only 2.8 x 4.08 x sqrt(3/r) | MDD analytic with task variance | MDD simulated, tasks fixed | power at -10, tasks fixed | MDD simulated, tasks resampled |
+|---|---|---|---|---|---|
+| 3 | 11.4 | 11.9 | 11.6 | 67.5% | 11.8 |
+| 4 | 9.9 | 10.7 | 10.4 | 77.2% | 10.7 |
+| 5 | 8.9 | 9.9 | 9.1 | 87.9% | 9.6 |
+| 6 | 8.1 | 9.4 | 8.6 | 90.2% | 8.7 |
+| 7 | 7.5 | 9.0 | 7.9 | 92.5% | 8.7 |
+| 8 | 7.0 | 8.6 | 7.9 | 95.7% | 8.2 |

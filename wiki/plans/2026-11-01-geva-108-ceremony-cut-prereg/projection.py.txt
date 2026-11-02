@@ -1,0 +1,28 @@
+# Ceremony-cut spend projection (prereg section 9). Per-session cost from #108 (review, Opus) and #109 (TB2) at the
+# same price table, plus two adjustments: the render cut (mechanical, from the byte difference at 2.2 bytes per token)
+# and the Claude Code preset system prompt (PRESET tokens per request: written once, read on each later request).
+# Usage: python3 projection.py [preset_tokens]
+import json, sys
+PRESET = int(sys.argv[1]) if len(sys.argv) > 1 else 1926
+P = {'opus': dict(i=4, o=20, r=0.2, w=5), 'particle': dict(i=0.1, o=1, r=0.003, w=0.1)}
+def add(model, tokens, req):  # dollars for tokens written once and read on req-1 later requests
+    p = P[model]; return tokens * (p['w'] + p['r'] * max(req - 1, 0)) / 1e6
+cut_review, cut_inv = round((59000 - 47398) / 2.2), round((29973 - 19645) / 2.2)
+cells = {
+ 'review control':     dict(base=1.015, req=17.8, n=66, model='opus', cut=0),
+ 'review variant':     dict(base=1.015, req=17.8, n=66, model='opus', cut=cut_review),
+ 'review none':        dict(base=0.690, req=15.5, n=66, model='opus', cut=0),
+ 'review control-sdk': dict(base=1.015, req=17.8, n=33, model='opus', cut=0, sdk=True),
+ 'tb2 opus control':   dict(base=0.275, req=7.3, n=111, model='opus', cut=0),
+ 'tb2 opus variant':   dict(base=0.275, req=7.3, n=111, model='opus', cut=cut_inv),
+ 'tb2 opus none':      dict(base=0.145, req=6.1, n=111, model='opus', cut=0),
+ 'tb2 particle control': dict(base=0.081, req=18.9, n=111, model='particle', cut=0),
+ 'tb2 particle variant': dict(base=0.081, req=18.9, n=111, model='particle', cut=cut_inv),
+ 'tb2 particle none':    dict(base=0.072, req=19.6, n=111, model='particle', cut=0),
+}
+rows = []
+for k, c in cells.items():
+    per = c['base'] - add(c['model'], c['cut'], c['req']) + (0 if c.get('sdk') else add(c['model'], PRESET, c['req']))
+    rows.append((k, c['n'], round(per, 4), round(per * c['n'], 2)))
+tot = sum(r[3] for r in rows)
+print(json.dumps(dict(preset_tokens=PRESET, cut_tokens=dict(review=cut_review, investigate=cut_inv), rows=rows, cells_total=round(tot, 2)), indent=1))

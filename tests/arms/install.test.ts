@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -341,5 +342,75 @@ describe("arm installs on a real host (src/arms/install.ts)", () => {
     for (const run of ["../../../canary", "..", ".", "a/b", "", null, 123, ["ok"]]) expect(stop(() => runHold(state, run as string))).toBe("E_USAGE");
     expect(readFileSync(join(root, "canary"), "utf8")).toBe("keep\n");
     for (const label of ["demo", "", "_", "評価"]) expect(runHold(state, newRunId(label)).entries).toEqual([]);
+  });
+});
+
+// Value: protects=GEVA-109's rendered gstack arm and GST-837: the render is served for each rendered skill and nothing else moves, a rendered skill with no served folder or a lock of another session_kind fails the install, two arms on one ref and render install the same tree, and provenance names no machine path; fails_when=a served SKILL.md is setup's, a check passes a wrong render, or provenance carries the source's path; why_new=GEVA-108 point 1, 2 and 4; seam=installArms' stack branch with the local installer
+describe("GEVA-109: a rendered gstack arm (keyless, local installer)", () => {
+  const fake = (o: { lockKind?: string; drop?: string; escape?: string; failSetup?: boolean; lockLink?: string } = {}) => {
+    const root = scratch("render-src");
+    const skills = ["review", "investigate", "other"];
+    for (const s of skills) {
+      mkdirSync(join(root, s, "sections"), { recursive: true });
+      writeFileSync(join(root, s, "SKILL.md"), "---\nname: " + s + "\n---\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"" + s + "\"\n");
+      writeFileSync(join(root, s, "sections", "a.md"), "setup\n");
+      writeFileSync(join(root, s, "checklist.md"), "setup\n");
+    }
+    writeFileSync(join(root, "setup"), "#!/bin/sh\nset -e\n" + (o.failSetup ? "exit 3\n" : "") + (o.escape ? "mkdir -p \"$HOME/.claude\"; ln -s " + JSON.stringify(o.escape) + " \"$HOME/.claude/skills\"\n" : "") + "for s in " + skills.filter((s) => s !== o.drop).join(" ") + "; do mkdir -p \"$HOME/.claude/skills/$s\"; for f in SKILL.md sections checklist.md; do ln -s \"$PWD/$s/$f\" \"$HOME/.claude/skills/$s/$f\"; done; done\n");
+    mkdirSync(join(root, "bin"));
+    writeFileSync(join(root, "bin", "gstack-modules"), "#!/bin/sh\nkind=interactive; flag=; prev=\nfor a; do case \"$prev\" in --session-kind) kind=$a;; --out-dir) out=$a;; esac; prev=$a; done\n[ \"$kind\" = unattended ] && flag=' --render unattended'\nfor s in " + skills.join(" ") + "; do mkdir -p \"$out/$s/sections\"; printf -- '---\\nname: %s\\n---\\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"%s\"%s\\n' \"$s\" \"$s\" \"$flag\" > \"$out/$s/SKILL.md\"; echo rendered > \"$out/$s/sections/a.md\"; done\nprintf '{\"session_kind\":\"%s\",\"spec\":\"full@%s\",\"spec_sha256\":\"s\",\"gstack_version\":\"1\",\"total_bytes\":3,\"files\":[{},{}]}' \"" + (o.lockKind ?? "$kind") + "\" \"$kind\" > \"$out/loadout.lock.json\"\n" + (o.lockLink ? "rm -f \"$out/loadout.lock.json\"; ln -s " + JSON.stringify(o.lockLink) + " \"$out/loadout.lock.json\"\n" : ""));
+    chmodSync(join(root, "setup"), 0o755);
+    chmodSync(join(root, "bin", "gstack-modules"), 0o755);
+    return { root, sha: commitAll(root) };
+  };
+  const arm = (name: string, sha: string, render: "interactive" | "unattended") => ({ name, kind: "stack" as const, stack: { repo: "garrytan/gstack", sha }, install: {}, render });
+  const run = (src: { root: string; sha: string }, arms: ReturnType<typeof arm>[]) => installArms({ host: "claude", arms, skill: "review", base: null, sources: [src.root], runner: localInstaller(scratch("runner")), state: scratch("state") });
+  const stopped = (f: () => unknown) => {
+    try {
+      f();
+    } catch (e) {
+      return (e as InstallError).code + " " + (e as Error).message;
+    }
+    return "no error";
+  };
+  test("each rendered skill's SKILL.md and sections are served from the render; everything else stays setup's", () => {
+    const src = fake();
+    for (const kind of ["interactive", "unattended"] as const) {
+      const [a, b] = run(src, [arm("one", src.sha, kind), arm("two", src.sha, kind)]);
+      const dir = a!.layers[0]!.src;
+      expect(b!.tree_sha256).toBe(a!.tree_sha256);
+      expect(readlinkSync(join(dir, ".claude/skills/review/SKILL.md"))).toBe("../../gstack-render/review/SKILL.md");
+      expect(readlinkSync(join(dir, ".claude/skills/other/sections"))).toBe("../../gstack-render/other/sections");
+      expect(readlinkSync(join(dir, ".claude/skills/review/checklist.md"))).toContain(".local/share/gstack/review/checklist.md");
+      expect(readFileSync(join(dir, ".claude/skills/investigate/SKILL.md"), "utf8").includes("--render unattended")).toBe(kind === "unattended");
+      const p = a!.provenance as { stack: Record<string, unknown>; render: Record<string, unknown>; install: { command: string } };
+      expect(p.stack.source).toBe("local-git");
+      expect(p.render).toEqual({ session_kind: kind, spec: "full@" + kind, spec_sha256: "s", gstack_version: "1", files: 2, total_bytes: 3, lock_sha256: createHash("sha256").update(readFileSync(join(dir, ".claude/gstack-render/loadout.lock.json"))).digest("hex") });
+      expect(p.install.command).toContain("bin/gstack-modules render --host claude --loadout full" + (kind === "unattended" ? " --session-kind unattended" : "") + " --out-dir");
+      expect(JSON.stringify(a!.provenance)).not.toContain(tmpdir());
+    }
+  });
+  test("a rendered skill with no served folder, or a lock of another session_kind, fails the install", () => {
+    const dropped = fake({ drop: "other" });
+    expect(stopped(() => run(dropped, [arm("c", dropped.sha, "interactive")]))).toMatch(/^E_IMAGE_BUILD .*the render holds skill other, which has no served folder ~\/\.claude\/skills\/other/);
+    const wrong = fake({ lockKind: "interactive" });
+    expect(stopped(() => run(wrong, [arm("v", wrong.sha, "unattended")]))).toMatch(/^E_IMAGE_BUILD E_IMAGE_BUILD: arm v: ~\/\.claude\/gstack-render\/loadout\.lock\.json carries session_kind "interactive", not the requested unattended/);
+  });
+  // Value: protects=the render rewiring never removes or replaces files outside the install tree; fails_when=an installer's ancestor symlink (~/.claude/skills pointing elsewhere) lets the rewire delete and relink the outside SKILL.md and sections; why_new=#119 /ship outside voice, finding 1; seam=installArms' render rewire with the local installer
+  test("a served skills folder that resolves outside the install tree fails the install and leaves the outside files alone", () => {
+    const outside = scratch("render-outside");
+    const escaped = fake({ escape: outside });
+    expect(stopped(() => run(escaped, [arm("e", escaped.sha, "unattended")]))).toMatch(/^E_IMAGE_BUILD .*resolves outside the install tree through a symlink/);
+    expect(readlinkSync(join(outside, "review", "SKILL.md"))).not.toContain("gstack-render");
+    expect(readFileSync(join(outside, "review", "sections", "a.md"), "utf8")).toBe("setup\n");
+  });
+  // Value: protects=a failed setup fails a rendered install with its installer error, and the render's lock is never read through a link out of the tree; fails_when="setup && render" under set -e hides the setup's exit, or an absolute lock link lets the host's own file pass the lock check; why_new=#119 /ship adversarial findings 2 and 3; seam=installArms' render branch with the local installer
+  test("a rendered install fails on a failed setup, and a lock linked out of the tree counts as missing", () => {
+    const failing = fake({ failSetup: true });
+    expect(stopped(() => run(failing, [arm("f", failing.sha, "interactive")]))).toMatch(/^E_IMAGE_BUILD .*failed: the installer exited 3/);
+    const hostLock = join(scratch("render-host-lock"), "loadout.lock.json");
+    writeFileSync(hostLock, JSON.stringify({ session_kind: "interactive", spec: "full@interactive", spec_sha256: "s", gstack_version: "1", total_bytes: 3, files: [] }));
+    const linked = fake({ lockLink: hostLock });
+    expect(stopped(() => run(linked, [arm("l", linked.sha, "interactive")]))).toMatch(/^E_IMAGE_BUILD .*loadout\.lock\.json is missing, not the requested interactive/);
   });
 });
