@@ -510,6 +510,22 @@ describe("paired analysis", () => {
     expect(a.note).toContain("cannot call equivalence");
   });
 
+  test("a patch_not_applied count above zero prints a rig-health warning under the verdict and does not withhold the verdict", () => {
+    const fair = () => panel({ tasks: 4, trials: 1, control: () => ({ clean: 0.5, defective: 0.5 }), treatment: () => ({ clean: 0.5, defective: 0.5 }) });
+    const data = fair();
+    const i = data.findIndex((x) => x.trees.shipped !== null);
+    data[i] = { ...data[i], trees: { ...data[i].trees, shipped: { ...data[i].trees.shipped, applied: false } as TreeGrade } };
+    const a = analyze(data, config({ n: 4 }));
+    expect(a.patch_not_applied).toBe(1);
+    const md = renderMarkdown(a).split("\n");
+    const verdict = md.findIndex((l) => l.startsWith("Verdict: **" + a.verdict + "**"));
+    expect(verdict).toBeGreaterThan(-1);
+    expect(md[verdict + 2]).toBe("**Rig-health warning:** patches the verifier could not apply: 1 (a rig bug for B7, not a result). The scorer does not withhold the verdict for it.");
+    const clean = analyze(fair(), config({ n: 4 }));
+    expect(clean.verdict).toBe(a.verdict);
+    expect(renderMarkdown(clean)).not.toContain("Rig-health warning");
+  });
+
   test("patch_not_applied counts every unapplied shipped patch and K4 final patch, whatever exclusion the trial got", () => {
     const unapplied = { ...graded(false), applied: false } as TreeGrade;
     const contaminated: Exposure = { contaminated: true, evidence: [{ kind: "path_read", detail: "~/.claude/skills", phase: "build" }], flags: [], messages: 1 };
