@@ -1,0 +1,392 @@
+[
+  {
+    "unit": "S03",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S03-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S03-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S07",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S07-F1",
+        "check": "ok",
+        "instruction": "Exclusion line in Service design reads as a scope decision, not an admission; accepted."
+      },
+      {
+        "id": "S07-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S10",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S10-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S10-F2",
+        "check": "ok",
+        "instruction": "The explicit 'will not wait for outcomes' sentence states the rule; accepted as a plan decision, not an admission."
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S14",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S14-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S14-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S17",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S17-F1",
+        "check": "ok",
+        "instruction": "The 'retain the present listing-status update process' sentence is the concrete plan decision T2 requires; accepted."
+      },
+      {
+        "id": "S17-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S21",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S21-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S21-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "P03",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "P03-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "P03-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "P04",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "P04-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "P04-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S04",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S04-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S04-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S08",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S08-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S08-F2",
+        "check": "ok",
+        "instruction": "Sale is a separate contract signed in week two, so it still needs its own case if Cratebeam is dropped; independence accepted."
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S11",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S11-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S11-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S15",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S15-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S15-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S18",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S18-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S18-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "S22",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S22-F1",
+        "check": "ok",
+        "instruction": "Signpost removed: the provider.md sentence is now neutral."
+      },
+      {
+        "id": "S22-F2",
+        "check": "ok",
+        "instruction": "Independence holds: the Monthpack signing migration keeps the late week-eight entitlement review even if BudgetRoom is dropped."
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no unintended extra CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "D03",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no real CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "D04",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no real CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "D07",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no real CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "D11",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no real CEO-level flaw found. Baseline figure now matches the context."
+      }
+    ]
+  },
+  {
+    "unit": "D12",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no real CEO-level flaw found."
+      }
+    ]
+  },
+  {
+    "unit": "D08",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": "No echo terms; no real CEO-level flaw found."
+      }
+    ]
+  }
+]

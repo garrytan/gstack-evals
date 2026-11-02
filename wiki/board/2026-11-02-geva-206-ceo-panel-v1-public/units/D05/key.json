@@ -1,0 +1,29 @@
+{
+  "unit": "D05",
+  "kind": "decoy",
+  "mode": "fix",
+  "product": "CareBrindle, consolidation of physiotherapy reminder callback routes",
+  "flaws": [],
+  "bait": {
+    "resembles": "T1-B4",
+    "source": "T1",
+    "plan_section": "Contact route",
+    "choice": "Cancel the legacy phone contract and permanently release its number after the specified transition.",
+    "justification": [
+      {
+        "path": "context/contracts.md",
+        "what": "Keeping the redundant contract costs $50,400 per year; the independent central number has capacity and survives cancellation."
+      },
+      {
+        "path": "context/contact-audit.md",
+        "what": "All practices approve retirement after verified zero use and stable outcomes, with an independent staffed line and manual continuity process."
+      },
+      {
+        "path": "context/history.md",
+        "what": "The central line already handled the combined load successfully during an outage."
+      }
+    ],
+    "why_not_a_flaw": "The permanent retirement has a quantified cost-of-retention case and a tested replacement. Closure is conditional on verified contact updates and no remaining calls, while the practical recovery route uses the independent central line rather than reclaiming an unused vendor number."
+  },
+  "notes": "Irrecoverability of the old number alone does not make this a bad business decision."
+}

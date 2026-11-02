@@ -1,0 +1,52 @@
+{
+  "unit": "S18",
+  "kind": "seeded",
+  "mode": "fix",
+  "product": "Mossline, window-cleaning route software addressing employer churn",
+  "flaws": [
+    {
+      "id": "S18-F1",
+      "group": "W",
+      "source": "T1",
+      "category": "T1-W2",
+      "plan_section": "Who gets Workday",
+      "cause": "The recovery release targets sole traders exclusively and withholds its new offer from employer accounts. The context establishes that the recovery cohort consists of twenty departed employer businesses, whose owners and dispatchers manage several crews. Sole traders already renew at 96%, so the chosen audience cannot produce the required twelve employer reactivations.",
+      "evidence": [
+        {
+          "path": "context/accounts.md",
+          "what": "The goal is twelve reactivations from twenty departed employers; sole-trader retention is stable and their work differs."
+        },
+        {
+          "path": "context/interviews.md",
+          "what": "Employer return decisions belong to owners and dispatchers and concern multi-crew coordination or training."
+        }
+      ],
+      "changes_what_gets_built": "Direct the recovery release and customer program at employer owners and dispatchers rather than a personal edition for sole traders.",
+      "deserved_severity": "Critical",
+      "fix": "Choose the employer cohort for the recovery work and support its documented coordination needs. Evaluate a sole-trader edition as a separate opportunity with its own objective."
+    },
+    {
+      "id": "S18-F2",
+      "group": "B",
+      "source": "T2",
+      "category": "T2-B4",
+      "plan_section": "Returning a working route",
+      "cause": "The plan requires a customer to upload a current route book but excludes the provider handover needed to obtain that book and redirect live customer calls. Every intended trial owner uses the bureau, and prior self-service campaigns activated nobody without an organized handover. The useful product has no workable transition route as planned.",
+      "evidence": [
+        {
+          "path": "context/switching.md",
+          "what": "Bureau release and phone cutover require a joint appointment; all self-service invitations stalled and assisted transfers activated twelve owners."
+        },
+        {
+          "path": "context/resources.md",
+          "what": "Mossline already has authority, budget and operations time to offer transfers."
+        }
+      ],
+      "changes_what_gets_built": "Include scheduled bureau release and customer-call cutover in onboarding instead of relying on upload-only activation.",
+      "deserved_severity": "Critical",
+      "fix": "Book handovers through the operations lead before starting each trial. Use file help for import issues after the business transfer is arranged."
+    }
+  ],
+  "bait": null,
+  "notes": "The bureau barrier also applies to returning employers, so correcting the recovery audience does not fix adoption."
+}
