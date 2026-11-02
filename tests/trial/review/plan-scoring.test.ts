@@ -257,7 +257,7 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
   // Value: protects=rule 1: the wall-clock limit after tool-call-only output is a miss; fails_when=the timeout stops the arm or completes it; why_new=GST-737 rule 1; seam=the driver's timer, planScore; no_claim=none beyond protects
   test("rule 1: a tool-call-only session that times out is a miss", () => {
     expect(record("tooltimeout")).toEqual({ termination: { kind: "timeout" }, model_output: true, turns: 0 });
-    expect([armJson("tooltimeout").status, armJson("tooltimeout").diagnostics]).toEqual(["complete", [note("incomplete, the session ended timeout; scored as finding nothing")]]);
+    expect([armJson("tooltimeout").status, armJson("tooltimeout").diagnostics]).toEqual(["complete", [note("missing; ended timeout in turn 1, settled spend $0.000000, scored as finding nothing")]]);
   });
 
   // Value: protects=rule 3: the CLI crashing before any model output is a coverage gap that stops the arm, and the gap says so; fails_when=it scores as a miss; why_new=GST-737 rule 3; seam=planScore; no_claim=none beyond protects

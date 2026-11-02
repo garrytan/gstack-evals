@@ -137,7 +137,7 @@ describe("B7: the R1a frozen rules, keyless, on the B5 panel's shape", () => {
     }
     const diag = (c: string) => JSON.parse(readFileSync(join(out, "arms", c, "arm.json"), "utf8")).diagnostics;
     const [u5, u7, u9] = Object.keys(FAILED);
-    expect(diag(id("gstack", OPUS))).toEqual([u5 + " pass 2: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing", u7 + " pass 3: incomplete, the session ended timeout; scored as finding nothing"]);
+    expect(diag(id("gstack", OPUS))).toEqual([u5 + " pass 2: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing", u7 + " pass 3: missing; ended timeout in turn 1, settled spend $0.000000, scored as finding nothing"]);
     expect(diag(id("lens", OPUS))).toEqual([u9 + " pass 1: missing; scored as finding nothing"]);
     expect(cells.filter((c) => diag(c))).toEqual([id("gstack", OPUS), id("lens", OPUS)]);
   }, 300_000);
