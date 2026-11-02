@@ -239,7 +239,7 @@ export function derive(o: DeriveOptions): DeriveResult {
     const before = a.status ?? "complete";
     const gaps = a.coverage_gaps ?? [];
     const left = gaps.filter((g) => !dropped.has(gapUnit(g)?.id ?? ""));
-    if (before === "stopped") a.status = gaps.length && !left.length && Number((a.parse_outcomes as { not_run?: number } | undefined)?.not_run ?? 0) === 0 ? "complete" : "stopped";
+    if (before === "stopped") a.status = a.untested === undefined && gaps.length && !left.length && Number((a.parse_outcomes as { not_run?: number } | undefined)?.not_run ?? 0) === 0 ? "complete" : "stopped";
     if (left.length) a.coverage_gaps = left;
     else delete a.coverage_gaps;
     a.suite = o.id;

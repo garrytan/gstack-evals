@@ -196,6 +196,15 @@ const unknownValue = (v: string | undefined) => v === undefined || v === "" || v
  * Validates an arm's files against a suite. files maps a path inside the arm dir (arm.json, judgments.tsv, cost.tsv,
  * findings/<unit>.jsonl) to its bytes. Throws ContractError with every problem found.
  */
+/** Why an arm gets no judge packet, join or score: review-units' read audit marked it untested (E_ARM_CONTAMINATED); else null. */
+export function untestedProblem(files: Map<string, Buffer>): string | null {
+  const text = files.get("arm.json");
+  if (!text) return null;
+  const arm = JSON.parse(text.toString("utf8")) as { id?: unknown; untested?: { reason?: unknown } };
+  if (!arm.untested) return null;
+  return "E_ARM_CONTAMINATED arm " + String(arm.id) + " is untested (" + String(arm.untested.reason ?? "a contaminated read") + "), so it gets no judge packet, join or score; rerun the arm clean";
+}
+
 export function parseArm(files: Map<string, Buffer>, suite: Suite, suiteSha256: string | null = null): Arm {
   const problems: Problem[] = [];
   const add = (code: ContractCode, where: string, message: string, fix: string) => problems.push({ code, where, message, fix });

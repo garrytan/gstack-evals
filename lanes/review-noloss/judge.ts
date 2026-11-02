@@ -25,7 +25,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
-import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, RULINGS, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
+import { ADJUDICATION_COLUMNS, ADJUDICATION_VERSION, JUDGMENT_COLUMNS, mapSeverity, matchedBlockers, parseArm, RULINGS, untestedProblem, type Arm, type Finding, type Mapped, type Outcome, type Ruling } from "./contract.ts";
 import { ScoreError } from "./score.ts";
 import { isPlanCase } from "../review-replay/catalog/catalog.ts";
 import { holdsSealed, insideRepo, sealedAs, sha256, suiteCases, unitRef, type Suite, type Unit } from "./suite.ts";
@@ -521,6 +521,8 @@ function adjudicationJoin(o: JoinInput, key: JudgeKey, unjudged: ReturnType<type
     files.delete("ingest.json");
     files.set("adjudication.tsv", Buffer.from(rows.join("\n") + "\n"));
     parseArm(files, suite, o.suiteSha256);
+    const untested = untestedProblem(files);
+    if (untested) throw new Error(untested);
     written.set(a.arm.arm.id, files);
   }
   const k = kappa([...secondSet].map((s) => [primary.rulings.get(s)!, second.rulings.get(s)!] as [Ruling, Ruling]), RULINGS);
@@ -588,6 +590,8 @@ export function judgeJoin(o: JoinInput): JoinResult {
     files.delete("ingest.json");
     files.set("judgments.tsv", Buffer.from(rows.join("\n") + "\n"));
     parseArm(files, suite, o.suiteSha256);
+    const untested = untestedProblem(files);
+    if (untested) throw new Error(untested);
     written.set(arm.arm.id, files);
   }
   const k = kappa([...secondSet].flatMap((s) => [...first.get(s)!].map(([ck, c]) => [c.outcome, secondCells.get(s)!.get(ck)!.outcome] as [Outcome, Outcome])), ["F", "D", "M"]);
