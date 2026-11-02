@@ -41,7 +41,7 @@ Unpublished. Publication waits on the claim check by a cross-family reviewer and
 
 ## What we found
 
-gstack's ceremony cut (I1) takes the operational ceremony (shared preamble, question tuning, telemetry, learnings, Aside, queue status, brain sync) out of the skill text that unattended sessions load. On Opus 5.5 the frozen rule gives FIX-METHOD. The review lane has no verdict, because its control arm lost one session to an upstream error, and the coverage gate needs a verdict there. The TB2 cell beside it shows a loss: the unattended render passed 82.9% of 111 trials against the full render's 88.3%, -5.4 points (90% CI -9.9 to -1.8), and its LOSS test fires after Holm's adjustment (p 0.042). Had every gate held, the same rule would have said KEEP. The cut saves 9% per Opus TB2 trial (ratio 0.910, 95% CI 0.842 to 1.012) and 8% per review unit-pass (0.920, 0.871 to 0.972).
+gstack's ceremony cut (I1) takes the operational ceremony (shared preamble, question tuning, telemetry, learnings, Aside, queue status, brain sync) out of the skill text that unattended sessions load. On Opus 5.5 the frozen rule gives FIX-METHOD. The review lane has no verdict, because its control arm lost one session to an upstream error, and the coverage gate needs a verdict there. The TB2 cell beside it shows a loss: the unattended render passed 82.9% of 111 trials against the full render's 88.3%, -5.4 points (90% CI -9.9 to -1.8), and its LOSS test fires after Holm's adjustment (p 0.042). Had every gate held, the same rule would have said KEEP. The cut costs 9% less per Opus TB2 trial, though that interval includes no saving (ratio 0.910, 95% CI 0.842 to 1.012), and 8% less per review unit-pass (0.920, 0.871 to 0.972). The title gives the Opus loss with its 95% interval, the stricter one, and particle-1's no-loss reading with the 90% interval that the no-loss rule reads.
 
 On particle-1 the rule gives CUT with no-loss yes: 78.4% against 75.7%, +2.7 points (90% CI -3.6 to +9.0, margin 10), at 0.703 times the cost per trial (0.569 to 0.874). The prereg makes the Opus verdict the answer to I1 and reports particle-1's beside it as a caution for small models, so the unattended render does not meet its ship condition for Opus sessions.
 
@@ -300,7 +300,7 @@ Four TB2 sessions, two per model, opened a reservation of one session cap each a
 1. **The unattended render doesn't meet its ship condition for Opus.** Section 1 ships gstack PR #3818 only on CUT with no-loss yes, and rule 6 makes the Opus verdict the answer to I1. The Captain carries this to GStack Minder.
 2. **Read the four Opus tasks before any rerun.** feal-differential-cryptanalysis, model-extraction-relu-logits, polyglot-rust-c and query-optimize lost passes in the variant. A cut that also changes which steps Opus runs (start line 103 against 14) is not the plain text diet I1 assumed, so the next step is to read those transcripts side by side.
 3. **Freeze an UPSTREAM rule before rerunning review.** One upstream error voided the review lane, as GEVA-131's lesson in CREW warns. A rerun also needs blockers the no-gstack arm can reach.
-4. **The saving is real and small on Opus.** About 9% per TB2 trial and 8% per review unit-pass, of which the mechanical part is $0.028 and $0.043. On particle-1 it is 30%.
+4. **The saving is small on Opus, and on TB2 it is not shown.** About 8% per review unit-pass (95% CI 0.871 to 0.972) and 9% per TB2 trial, whose interval (0.842 to 1.012) includes no saving. The mechanical part is $0.028 per TB2 trial and $0.043 per review unit-pass. On particle-1 the saving is 30%.
 
 ## Limits and threats
 
@@ -333,7 +333,7 @@ Nothing is sealed. TB2 is public at 69671fba, and stacks-r1 is published with it
 
 ## X hook (draft)
 
-> We tested gstack's ceremony cut: the same skills without their housekeeping text, in unattended sessions. On Opus 5.5 it lost 5.4 points on 37 Terminal-Bench 2 tasks (95% CI -10.8 to -0.9) while saving 9% per trial, so it doesn't ship for Opus. On particle-1 it showed no loss (within a 10-point margin) and cost 30% less. Our review lane gave no answer: one provider error voided an arm.
+> We tested gstack's ceremony cut: the same skills without their housekeeping text, in unattended sessions. On Opus 5.5 it lost 5.4 points on 37 Terminal-Bench 2 tasks (95% CI -10.8 to -0.9) and cost 9% less per trial (not significant), so it doesn't ship for Opus. On particle-1 it showed no loss (within a 10-point margin) and cost 30% less. Our review lane gave no answer: one provider error voided an arm.
 
 ## Claim check
 
