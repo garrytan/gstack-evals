@@ -48,6 +48,32 @@ describe("review-units arguments (keyless)", () => {
     removeTree(join(out, ".."));
   });
 
+  // Value: protects=R56-1 at the command: a gstack arm's prefix may open with /ship and the dry run shows that told command, while a prefix that opens with no command the arm declares (another gstack skill, another stack's command, /ship on pstack) and any prefix on the none arm are still refused before anything is built; fails_when=the /ship prefix is refused, or the check lets an undeclared command through; why_new=GEVA-195's finding at 176fdc7 (GST-1021); seam=main's --told-prefix check; no_claim=the install target and the session, which told-identity.test.ts covers
+  test("a gstack arm's told prefix may open with /ship, and only with a command the arm declares", async () => {
+    const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
+    const run = async (argv: string[]) => {
+      const io = collect();
+      const code = await main(argv, io, {});
+      return { code, ...io.text() };
+    };
+    const file = (name: string, text: string) => {
+      writeFileSync(out + "-" + name, text);
+      return out + "-" + name;
+    };
+    const ship = "/ship Run only the review panel and stop before any fix.";
+    const dry = await run([...base(out), "--arms", "none", GSTACK.replace(/^gstack/, "ship-panel"), "--told-prefix", "ship-panel=" + file("ship.txt", ship + "\n"), "--dry-run"]);
+    expect([dry.code, dry.err]).toEqual([0, ""]);
+    expect(dry.out).toContain("arms: none (told none), ship-panel (told gstack, " + JSON.stringify(ship) + ")");
+    for (const [arm, spec, text, opens] of [["gstack", GSTACK, "/investigate Look hard.", "/review or /ship"], ["gstack", GSTACK, "/pstack:interrogate Look hard.", "/review or /ship"], ["pstack", PSTACK, "/ship Look hard.", "/pstack:interrogate"]] as const) {
+      const r = await run([...base(out), "--arms", spec, "--told-prefix", arm + "=" + file(arm + ".txt", text), "--dry-run"]);
+      expect([r.code, r.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: --told-prefix " + arm + " opens with " + text.split(" ")[0] + ", but the arm's told command opens with " + opens]);
+    }
+    const none = await run([...base(out), "--arms", "none", "--told-prefix", "none=" + file("none.txt", ship), "--dry-run"]);
+    expect([none.code, none.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: arm none runs no told command, so it takes no --told-prefix"]);
+    expect(existsSync(out)).toBe(false);
+    removeTree(join(out, ".."));
+  });
+
   // Value: protects=a resume that gives other run settings than the run recorded is refused before anything runs, and run.json keeps the settings its sessions used; fails_when=a mismatched resume overwrites run.json or proceeds; why_new=Capy review of #119 (a rejected resume rewrote max_turns and session_kind); seam=main's resume check; no_claim=the Docker rig
   test("a resume with other run settings is refused and leaves run.json as it was", async () => {
     const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");

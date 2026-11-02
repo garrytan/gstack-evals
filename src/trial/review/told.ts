@@ -4,7 +4,8 @@
 // from src/arms/stacks.ts where listed). The preregistration freezes TOLD_SHA256, the sha256 of TOLD_TEMPLATE; a test
 // pins it, so any edit to the text fails until the test is changed on purpose. An arm may take its own prefix in place of
 // TOLD_PREFIX's (review-units --told-prefix); the template, and so TOLD_SHA256, stays the same, and an arm without one
-// gets TOLD_PREFIX's.
+// gets TOLD_PREFIX's. That prefix opens with one of the commands TOLD_COMMANDS declares for the arm: its own, and for gstack
+// also /ship, whose review panel R56-1 tests. The arm's target skill is the one its prefix's command names (toldSkill).
 import { createHash } from "node:crypto";
 import { stackKind, STACKS } from "../../arms/stacks.ts";
 import type { ArmSpec } from "../../types.ts";
@@ -37,6 +38,14 @@ export const TOLD_PREFIX: Readonly<Record<ToldArm, string>> = {
   gstack: "/review",
   pstack: stackTold("pstack"),
   tstack: stackTold("tstack") + " Run one review round and stop before any fix.",
+};
+
+/** The commands an arm's told prefix may open with: TOLD_PREFIX's own first, then any other the arm declares. */
+export const TOLD_COMMANDS: Readonly<Record<ToldArm, readonly string[]>> = {
+  none: [],
+  gstack: ["/review", "/ship"],
+  pstack: [stackTold("pstack")],
+  tstack: [stackTold("tstack")],
 };
 
 export function toldPrompt(arm: ToldArm, base: string, prefix: string = TOLD_PREFIX[arm]): string {

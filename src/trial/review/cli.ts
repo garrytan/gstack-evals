@@ -24,7 +24,7 @@ import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, ty
 import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_ASK, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
 import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine } from "./plan-told.ts";
 import { loadReaderMap } from "./readers.ts";
-import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
+import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
 type Env = Record<string, string | undefined>;
@@ -49,8 +49,8 @@ export const REVIEW_UNITS_HELP = [
   "--sealed-root names the directory outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
-  "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command) in place",
-  "of the frozen one. With --plan only a gstack arm takes one: the file's line opens with the lens's command, and the arm's",
+  "--told-prefix gives a code arm's told command the text of a file (one line that opens with the arm's own command, or for a",
+  "gstack arm with /ship) in place of the frozen one, and the arm installs the skill that command names. With --plan only a gstack arm takes one: the file's line opens with the lens's command, and the arm's",
   "line becomes that line, a space and \"" + PLAN_ASK + "\". --render serves a gstack stack arm from",
   "its own gstack-modules render of that session kind. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
   "--session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's agent env, none included; left out, no arm",
@@ -224,7 +224,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (prefix !== undefined) {
       if (told === "none") throw new Usage("arm " + a.name + " runs no told command, so it takes no --told-prefix");
       if (!/^\/\S+( [^\n]*)?$/.test(prefix)) throw new Usage("--told-prefix " + a.name + ": the prefix must be one line that opens with the arm's command, such as " + JSON.stringify(TOLD_PREFIX[told]));
-      if (prefix.split(" ")[0] !== TOLD_PREFIX[told].split(" ")[0]) throw new Usage("--told-prefix " + a.name + " opens with " + prefix.split(" ")[0] + ", but the arm's told command opens with " + TOLD_PREFIX[told].split(" ")[0]);
+      if (!TOLD_COMMANDS[told].includes(prefix.split(" ")[0]!)) throw new Usage("--told-prefix " + a.name + " opens with " + prefix.split(" ")[0] + ", but the arm's told command opens with " + TOLD_COMMANDS[told].join(" or "));
     }
     return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
@@ -262,7 +262,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     ids.set(id, pair);
   }
   const skills = Object.fromEntries(arms.flatMap((a) => {
-    const skill = lens ? planSkill(a.told as Parameters<typeof planSkill>[0], lens) : toldSkill(a.told as Parameters<typeof toldSkill>[0]);
+    const skill = lens ? planSkill(a.told as Parameters<typeof planSkill>[0], lens) : toldSkill(a.told as Parameters<typeof toldSkill>[0], a.toldPrefix);
     return skill ? [[a.name, skill]] : [];
   }));
   const passes = Number(one("--passes") ?? "1");
