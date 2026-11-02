@@ -253,6 +253,8 @@ step item init_items "$LR/record" $CAPS
 for p in $CAPS; do it=${p%%:*}; step 'lease_id|state|E_' sh -c "$L lease --item $it --run rr-dry-$it --amount ${p#*:} $LG --json | tee $LR/$it.json"; step 'settle|E_' $L settle --lease "$(jq -r .lease_id "$LR/$it.json")" $LG; done
 step 'E_' $L lease --item rr-grid-full --run rr-dry-again --amount 1 $LG
 step '^(item|pause|E_)' python3 "$W/bin/rr-pause.py" "$LR/record" rr-grid-full 4
+echo "# A judge batch with a \$100 worst case on rr-judge-adjudicate: its lease would reserve the item's whole remaining cap."
+step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LR/record" rr-judge-adjudicate 1 100
 
 echo; echo "## The pause rule on a temporary ledger, then the pause through review-units' spend cap (section 8)"
 LP=$W/pause; mkdir -p "$LP"; LQ="--ledger $LP/ledger.sqlite --ledger-record $LP/record"
@@ -261,6 +263,8 @@ step 'lease_id|E_' $L lease --item rr-grid-none --run rr-dry-grid-none --amount 
 step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-grid-full 4
 step 'lease_id|E_' $L lease --item rr-grid-full --run rr-dry-grid-full --amount 1710 $LQ --json
 step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-grid-full 4
+echo "# The same \$100 judge batch at \$150 of headroom: refused, since its lease would reserve the item's \$1,130."
+step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-judge-adjudicate 1 100
 echo "# The launch with that spend cap (150) stops before any session; the Captain's word resumes the same run with a larger cap."
 step '^(stub run|CAP_STOP|E_)' ST "$S" "$W/run/pause" none pause --cap 150
 step . sh -c "jq -c '{id, status, parse_outcomes}' $W/run/pause/arms/*/arm.json; echo sessions journaled: \$(cat $W/run/pause/cells.ndjson 2>/dev/null | wc -l)"

@@ -6,11 +6,14 @@
 # is both, as readItem counts it. It prints the headroom, $4,500 less settled less reserved over the seven items, and the
 # next launch's spend cap: the smaller of the item's cap less its committed spend and the headroom. It exits 3, the
 # pause, when the headroom is below one launch round's worst case: parallel x $40 for a review-units launch (one arm, so
-# a round is parallel sessions at the allowance), or the judge batch's printed worst case when that is given.
+# a round is parallel sessions at the allowance). For a judge launch it is the larger of the batch's printed worst case
+# and the item's cap less its committed spend: judge-run at 715f837 opens its lease with no amount, and the ledger then
+# reserves all the item has left (src/runner/ledger/ledger.ts: amount_micros ?? left).
 # Exit 0 to launch, 3 to pause and report to the Captain, 5 on bad input.
 # Usage: python3 rr-pause.py <record dir> <next item> <parallel> [<round worst case in dollars>]
 import json, os, re, sys
 
+JUDGE = {"rr-pilot-judge", "rr-judge-match", "rr-judge-adjudicate"}
 ITEMS = ["rr-pilot-none", "rr-smoke-full", "rr-pilot-judge", "rr-grid-none", "rr-grid-full", "rr-judge-match", "rr-judge-adjudicate"]
 LIMIT, ALLOWANCE = 4500 * 10**6, 40 * 10**6
 FILE = re.compile(r"^(approval|lease|close)-(\d{4})\.json$")
@@ -46,11 +49,17 @@ try:
     cap, s, r = state[nxt]
     if cap is None:
         raise ValueError("item %s has no approval on record" % nxt)
-    spend = min(cap - s - r, head)
+    left = cap - s - r
+    if nxt in JUDGE:
+        rnd = max(rnd if len(sys.argv) > 4 else 0, left)
+    spend = min(left, head)
     print("pause: settled %s and reserved %s over the seven items; headroom %s of $4500.00; one round of %s costs at most %s" % (usd(settled), usd(reserved), usd(head), nxt, usd(rnd)))
     if head < rnd:
         print("pause: STOP. The headroom is below one round's worst case: launch nothing, report to the Captain, and resume only on the Captain's word.")
         sys.exit(3)
+    if nxt in JUDGE:
+        print("pause: launch the judge batch on %s; its lease reserves the item's %s left, which fits the headroom" % (nxt, usd(left)))
+        sys.exit(0)
     print("pause: launch %s with --spend-cap %.2f (the smaller of the item's %s left and the headroom)%s" % (nxt, spend / 1e6, usd(cap - s - r), "; that is below one round, so review-units stops with CAP_STOP before a session" if spend < rnd else ""))
 except SystemExit:
     raise
