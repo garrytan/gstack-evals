@@ -379,17 +379,18 @@ function markerUnits(text: string, path: string, drop: (line: number, code: stri
 const PARAMETRIZE = /^\s*@[\w.]*\bparametrize\s*\(/;
 const WRAPPING = /^\s*pytestmark\b|\bpytest\.(?:skip|xfail|importorskip)\s*\(|\braise\s+unittest\.SkipTest\b/;
 
-/** The parts of text between its commas outside brackets and strings, trimmed, without the empty part a trailing comma
- * leaves. */
+/** The parts of text between its commas outside brackets and strings, with each string's contents dropped (its quotes
+ * kept), trimmed, without the empty part a trailing comma leaves. A string may span lines. */
 const commaParts = (text: string): string[] => {
   const parts = [""];
   let depth = 0;
   let quote = "";
   for (let i = 0; i < text.length; i++) {
-    let c = text[i];
+    const c = text[i];
     if (quote) {
-      if (c === "\\") c += text[++i] ?? "";
+      if (c === "\\") i++;
       else if (c === quote) quote = "";
+      if (quote) continue;
     } else if (c === "," && depth === 0) {
       parts.push("");
       continue;
@@ -408,7 +409,7 @@ function everyCaseSkipped(code: string): boolean {
   const values = args.find((a) => /^argvalues\s*=/.test(a))?.replace(/^argvalues\s*=\s*/, "") ?? args.filter((a) => !/^\w+\s*=/.test(a))[1];
   if (!values || !/^[[(][\s\S]*[\])]$/.test(values)) return false;
   const cases = commaParts(values.slice(1, -1));
-  return cases.length > 0 && cases.every((c) => /^(?:pytest\.)?param\s*\(/.test(c) && any(SKIP_MARKERS, unquoted(c)));
+  return cases.length > 0 && cases.every((c) => /^(?:pytest\.)?param\s*\(/.test(c) && any(SKIP_MARKERS, c));
 }
 
 type TestState = { name: string; skip: boolean; focus: boolean };
