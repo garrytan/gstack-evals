@@ -18,7 +18,8 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 25, not 10: on 2026-11-02 the ~1,800-test keyless run took 7.9 to 9.5 minutes and two PR runs were cancelled at the 10-minute limit.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
