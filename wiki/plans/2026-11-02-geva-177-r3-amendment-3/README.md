@@ -15,6 +15,7 @@ links:
 attachments:
   - fb1d306bb6f88aa8445ce778ae4bc7f04ea61377c90de467d204d04608f8123b  drop-list.py.txt
   - f4f96462e696cf430daf9420eb73668171856f7a8f5d28142ef08e7802618f8c  dry-run-a3.sh.txt
+  - f218bd43f3cb049b892df0e71e270edd09b60e077319bbf526ece3c90d186f8e  dry-run-a3.txt
   - d5ca541e2728981b7bd2b6198ee02e1526ba66cec8ab6856adc7c93d81c2698a  openrouter-gpt-6.1-sol.json
   - 57fffa37a1002fb4466e349ac053b92b7d6a11baa08cd7c6401fc08f1d84ec1b  oracle-pass.sh.txt
   - cec76258c85587a842cb41ad7b57416cdf4dee78b2bbc13055d30b8d9b2ca5b9  oracle-preflight.sh.txt
@@ -109,19 +110,36 @@ These do change, and are read at 91 from here on:
 
 The band can't shrink at 8ad436d or at ddc2cda without a code change. Both pins hard-code it: materialize.ts holds the band's sha256 (R3_BAND_SHA256, materialize.ts:165), `screen.ts prepare` runs the screen on every band task (it passes TASKS only to the pilot), prepare-run.ts writes the screen's oracle.json from the same task list, and analyze() plans the screen's coverage over every band task. So at either pin a dropped task would either fail the oracle gate again (ORACLE=1) or run a paid trial whose certain failure admission would count (ORACLE unset).
 
-The Captain ruled option A on 2026-11-02: the drop list lives in code, in GEVA-176's GST-941 pull request, and Opus's attempt 3 and Sol both pin at that pull request's merge commit, **<PENDING: GST-941 merge commit>**. That build adds:
+The Captain ruled option A on 2026-11-02: the drop list lives in code, in GEVA-176's GST-941 pull request, and Opus's attempt 3 and Sol both pin at that pull request's merge commit, **73042c56a0107eab47ff66dd8804983931d22b7c** (73042c5, #142 squash-merged from its head 4ed05a2). That build adds:
 
-- a committed drop list (ids, reasons and evidence digests from section 3), pinned by sha256 in code. Its tasks are left out of the screen, the screen's oracle job and analyze's coverage. swebv-r3.txt, its sha256 5d555f1f... and the seed-20261101 pilot draw stay as they are;
+- a committed drop list (ids, reasons and evidence digests from section 3), quick/laneb/tasks/swebv-r3-drop.json, byte-identical to r3-drop-list.json and pinned by its sha256 1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc as R3_DROP_SHA256 (materialize.ts:187). Its tasks are left out of the screen, the screen's oracle job and analyze's coverage. swebv-r3.txt, its sha256 5d555f1f... and the seed-20261101 pilot draw stay as they are;
 - an image pre-pull in vm-run.sh before the oracle gate, with the same wait rule as section 2's rule 3, so one refused pull can't end a run the way it ended attempt 2. ORACLE=1 stays on;
 - GST-941's route-check fixes, which must land before r3a-sol's first paid step (Captain ruling on #134's notes).
 
 Opus moves off 8ad436d for the drop list and the pre-pull above. Opus's entry in screen.ts's R3A table (item, cap, ledger port, parts and printed lines) is as #121 wrote it, at ddc2cda and at the pin (#134's blast radius), and #112's r3-dry.ts still prints its 135 R3 lines byte for byte (section 9).
 
-r3.test.ts is byte-identical to 8ad436d's at ddc2cda but not at the pin. GST-941's test-only commit e199f57a7f0885d32748009ec30a3d442a5142e5 changes r3.test.ts and r3-sol.test.ts so their screen fixtures and counts derive from the screened set (screen.ts's screenIds(), the band less the drop list: 93 with an empty list, 91 with the committed one) instead of the hard-coded 93, 92, 84 and 103. Each assertion still checks the same property. e199f57 is the only GST-941 commit that touches r3.test.ts.
+r3.test.ts is byte-identical to 8ad436d's at ddc2cda but not at the pin. GST-941's test-only commit e199f57 (e199f57a7f0885d32748009ec30a3d442a5142e5) on the #142 branch, squashed into 73042c5, changes r3.test.ts and r3-sol.test.ts so their screen fixtures and counts derive from the screened set (screen.ts's screenIds(), the band less the drop list: 93 with an empty list, 91 with the committed one) instead of the hard-coded 93, 92, 84 and 103. Each assertion still checks the same property. It is the only commit on the #142 branch that touches r3.test.ts, and the pin's r3.test.ts differs from ddc2cda's by exactly its patch.
 
 What Opus gains from #134 is #121's two notes, which the Captain ruled apply to every model: run() stops before the pilot when the screen is already incomplete, and analyze() removes admitted.txt and r3b-tasks.txt before it reads plan.json. Neither moves an outcome: #133 section 4 already made an incomplete screen an incomplete R3a.
 
-Digests at the pin: <PENDING: dry-run-a3.txt's digest step>.
+Digests at the pin, from the export under quick/laneb (dry-run-a3.txt's first section). The archive reports commit id 73042c56a0107eab47ff66dd8804983931d22b7c, and the export's 1214-file list (sha256 1050ef2d6b7496b0237ae73277cda283d3262b73028533a4ac47bcd54b22f2a1) is identical to `git ls-tree -r` of the pin.
+
+```
+e03edc2bbb3b82d72e4b86b7659011b3222b0d13ca0005d6dace6cae580a83b4  r3/screen.ts
+98db9f1310ae3f0e7631ce8666368d2bcc579412636a417b2c4a3e090eae2f4f  r3/exposure.ts
+b67f58029d03437e47f92a4eb48a7ee80138c70e305950b5b2c75e26a35e5339  r3/route-check.ts
+ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38  runner/launch.sh
+6d9842d36c07e3e7168bf8dc800b2ee5f529e9b536e7555785b920d92b89af45  runner/vm-run.sh
+9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33  runner/ledger.ts
+e3c52bcb77ebc8d7ed6f46f3f9a3da400a4b09c6e593d9bc7c241578d62eae2e  runner/materialize.ts
+52b4e8ba5a4878d7633081676495ffe8e83c35cb334e0462fc6173301515e17c  runner/prepare-run.ts
+6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d  analysis/analyze.ts
+387812b219ec229f4a6d19954f68bf71ea608ec49db310278cc98643c1339a05  config/cells.r3.json
+4f54fff079f21a0e4e7f962431015a9ca316656f96a82f5cc8744fcada77ee9a  config/proxy.json
+5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67  tasks/swebv-r3.txt
+61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5  tasks/swebv-r3.json
+1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc  tasks/swebv-r3-drop.json
+```
 
 ## 6. Opus 5.5, attempt 3 (r3a-screen-a3)
 
@@ -156,7 +174,14 @@ After each run, the run thread runs handoffs/GEVA-162/scan.py (sha256 6318e5aef9
 
 ## 9. Dry run
 
-<PENDING: dry-run-a3.txt at the pin>
+dry-run-a3.sh.txt ran at 73042c5 with the committed drop list (the Captain drive's handoffs/GEVA-177/r3-drop-list.json, byte-identical to the pin's swebv-r3-drop.json) on 2026-11-02 and exited 0 in 202 s. Its output is dry-run-a3.txt. Step by step:
+
+1. **The export is the pin.** The git archive of 73042c5 reports that commit id. The export holds 1214 files, sits outside any git work tree (git exits 128), and its file list is identical to the pin's. Section 5's digests come from it.
+2. **Dependencies, task set, arm tars and the drop list.** `bun install --frozen-lockfile` passes, Harbor is at f3a5a923, swebv_r3.py finds 93 tasks matching swebv-r3.json, and the three arm tars match their pinned sha256. The drop list hashes to 1f801fb3..., its sorted dropped ids to cdf1d975..., and it names 91 kept tasks with ids sha256 2a2cfc68....
+3. **Both models prepare from the export** on temporary ledgers (r3a-screen at $150, r3a-sol at $140; Sol with a fixture route record marked dry run only), with ORACLE=1. For each model, `screen.ts prepare` reports a 91-task screen. jobtasks.py shows screen/job.json and screen/oracle.json each listing 91 tasks with ids sha256 2a2cfc68... and no dropped task, and the pilot's 10 tasks hold no dropped task and match attempt 2's. #137's preflight.sh.txt packs the runner dir and both run dirs and prints `run may bind`.
+4. **#112's R3 lines.** #112's r3-dry.ts, with the export as TAG, runs its nine scenarios, and its 135 R3 lines are identical to #112's dry-run.txt, 135 of 135. r3-dry.ts imports only the pin's ledger.ts and analyze.ts, which GST-941 leaves unchanged, and simulates its own screen over the 93-task band file, so its lines don't depend on the drop list.
+5. **#133's caps.** r3a-caps.ts at the export prints 17 lines, all 17 found in #133's dry-run-r3.txt.
+6. **Keyless tests.** r3.test.ts, r3-sol.test.ts, launch.test.ts and vm-run.test.ts at the export: 155 pass, 0 fail.
 
 ## 10. Commands
 
