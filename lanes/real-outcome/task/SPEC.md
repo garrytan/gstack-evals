@@ -61,9 +61,9 @@ The rig (B4) reads `repo_dir`, `base_branch`, `base_commit`, `kind`, `start_ref`
 
 Test ids. pytest: `<file>.py::<name>`, as pytest prints node ids from the repository root. Go:
 `<package dir>::<TopLevelTest>`, with `.` for the root package. `functional` are the change's own tests,
-`escaped_defect` the later fix's tests (K1 and K4 replays), and `regression` the tests that pass at base and in every
-gold run. For K4, `check` grades base by applying the reverse of the replay commit to the starting tree, and a test that
-passes at the starting tree and in every gold run counts too, so the change's own passing tests stay required. Leave `regression` empty and name `regression_scope` (test files or package dirs); `check
+`escaped_defect` the later fix's tests (K1 and K4 replays), and `regression` the tests that pass at base or at the
+starting tree, and in every gold run. For K1 to K3 the starting tree is base. For K4, `check` grades base by applying the
+reverse of the replay commit to the starting tree. Leave `regression` empty and name `regression_scope` (test files or package dirs); `check
 --freeze-regression` derives the list, records gold-flaky tests in `quarantine` and writes `regression_frozen`, a
 sha256 over the scope and both lists. Until then, or once any of the three changes, `check` prints `verdict: valid,
 regression not frozen` and exits 1, and `verify` refuses the task with E_REAL_TASK_FORMAT. A grader takes its required
