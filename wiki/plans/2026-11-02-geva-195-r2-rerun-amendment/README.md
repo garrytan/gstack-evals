@@ -15,11 +15,11 @@ links:
   - 2026-10-31-geva-76-stacks-round-1-prereg
 attachments:
   - d74c0bee01a73674fe92de8603cf07c000f3fc469917752fef841c037feaf9db  comparisons.rr.json
-  - ef8e41a1564084afa82b51776c32903a56d439617c03e4fd90f8262f26707199  dry-run-rr.sh.txt
-  - 65706aa9dcf63ea23bed81321798284d09fddec5eb072338be6ceea2eb7fc136  dry-run-rr.txt
+  - fde146cb5b64653fffd1d82e2bb1bf9cce0ef5b646359cdb8df6c534b7320388  dry-run-rr.sh.txt
+  - 37ed892f6701ad36be4fb033734e418ff6ae5b55ebe7ff7aa51bf25d5b63067c  dry-run-rr.txt
   - 21093ca9fc8c1744b2e418c3a6cc1110601b213da77f340fa962808b90a31528  power-rr.py.txt
   - a17fc2c08073053c225258af9448f3e520cfd03cfa7f23593e0750646587051d  reader-map-gstack-5209e9262d80.json
-  - 4dcdb6a37dc596803128576af306b845f94e02d2903409733789d2123c25d272  rr-admit.py.txt
+  - 4eae3ffd96a2cdde5a13997136bd01328239510288d694f9f33f51f52b03cdcc  rr-admit.py.txt
   - 45c5f92089a95de130dcfef3e5273a886cc0a6470041d415960cce4e83602324  rr-decide.py.txt
   - 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548  rr-gate.py.txt
   - cc708fa60c0c354bc48a6ca54117dcc3357b272a5f5bc9e880c0d4ed7ebb92c3  rr-held.py.txt
@@ -127,7 +127,7 @@ The pilot answers one question before any grid: does plain Opus 5.5 sit clearly 
 
 **The run.** The none arm, 1 pass on all 33 units, at the pins above, on item rr-pilot-none. Its source arm (id none-pilot) goes through the same ingest, scrub, blinding and one matching batch as the grid (section 7), on item rr-pilot-judge. No adjudication runs; the pass line reads blocking recall only.
 
-**The pass line** (rr-admit.py, attached). First `noloss derive --drop-gaps` on the judged pilot arm; if that drops more than 3 units, the pilot is incomplete and goes to the Captain with no admission. So is a pilot whose review-units arm left any session not run (arm.json parse_outcomes.not_run above 0) or stopped for any reason other than coverage gaps, which the drop rule handles: it is incomplete, gets no admission and goes to the Captain, so an interrupted pilot can never pass. rr-admit.py checks this first, from the pilot run's own arm.json, and exits 4. Then blocking recall on the remaining blockers, with a PR-clustered 95% percentile bootstrap (10,000 draws, seed 20261031). **The pilot passes when the interval's lower bound is above 0 and its upper bound plus the MDD is at most 100 points.** The MDD is the larger of two, both from power-rr.py's method on the derived suite's clusters at the grid's 2 passes: the MDD at the pilot's point estimate, and the MDD at the planning control rate of 7.1% (section 1, 16 points on all 33 units). The second keeps a pilot at the ceiling from passing: at 100% recall the interval is [100, 100] and the MDD at the point estimate is 0. A fail stops the rerun on this set: the run thread reports the numbers to the Captain, and no grid runs.
+**The pass line** (rr-admit.py, attached). First `noloss derive --drop-gaps` on the judged pilot arm; if that drops more than 3 units, the pilot is incomplete and goes to the Captain with no admission. So is a pilot whose review-units arm left any session not run (arm.json parse_outcomes.not_run above 0) or stopped for any reason other than coverage gaps, which the drop rule handles: it is incomplete, gets no admission and goes to the Captain, so an interrupted pilot can never pass. rr-admit.py checks this first, from the pilot run's own arm.json, and exits 4. It also reads the pilot run's saved stderr, <dir>/rr-pilot-none.stderr from the run commands below, and exits 4 when that log is missing, empty or unreadable, has no closing review-units exit line, or carries any stop line whose code is not E_COVERAGE_GAP, such as a proxy CAP_STOP. Then blocking recall on the remaining blockers, with a PR-clustered 95% percentile bootstrap (10,000 draws, seed 20261031). **The pilot passes when the interval's lower bound is above 0 and its upper bound plus the MDD is at most 100 points.** The MDD is the larger of two, both from power-rr.py's method on the derived suite's clusters at the grid's 2 passes: the MDD at the pilot's point estimate, and the MDD at the planning control rate of 7.1% (section 1, 16 points on all 33 units). The second keeps a pilot at the ceiling from passing: at 100% recall the interval is [100, 100] and the MDD at the point estimate is 0. A fail stops the rerun on this set: the run thread reports the numbers to the Captain, and no grid runs.
 
 **Pilot sessions are admission data only and never enter the grid.** The grid's none-rr arm is a new review-units run with its own run id, in its own out dir, on its own item, and never resumes from the pilot's. No pilot finding, judgment or score is read by any grid step.
 
@@ -209,7 +209,8 @@ Each arm runs alone, one launch at a time (section 8), in its own out dir, on it
 
     # pilot and smoke
     gstack-evals review-units --suite $S --units all --arms none --passes 1 --system-prompt none=claude-code-preset \
-      $COMMON --item rr-pilot-none --spend-cap P --out <dir>/rr-pilot-none <step 5 flags>
+      $COMMON --item rr-pilot-none --spend-cap P --out <dir>/rr-pilot-none <step 5 flags> 2> <dir>/rr-pilot-none.stderr
+    echo "review-units exit $?" >> <dir>/rr-pilot-none.stderr
     gstack-evals review-units --suite $S --units garrytan/gbrain#7789@49eb4da5f7c8 garrytan/gstack#3475@fc69d3ff0bfe \
       garrytan/gstack#3507@8c021d124220 --arms gstack-full=$G --passes 1 --system-prompt gstack-full=claude-code-preset \
       --told-prefix gstack-full=<#129's folder>/told-gstack-full.txt $COMMON --item rr-smoke-full --spend-cap P \

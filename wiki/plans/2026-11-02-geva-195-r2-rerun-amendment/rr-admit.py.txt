@@ -11,9 +11,14 @@
 # Before all of that it reads the pilot run's own arm.json (review-units' output, before source, judging and derive).
 # When parse_outcomes.not_run is above 0, or the arm stopped with no coverage gap (a stop for any reason other than
 # coverage gaps), the pilot was interrupted: incomplete, it goes to the Captain with no admission (exit 4). An arm
-# stopped only for coverage gaps goes on to the drop rule.
+# stopped only for coverage gaps goes on to the drop rule. It then reads the pilot run's saved stderr (the README's run
+# step saves it as <dir>/rr-pilot-none.stderr and closes it with a "review-units exit N" line). review-units logs every
+# stop there as a line led by its code (src/trial/review/run.ts at 176fdc7) and exits 2 on any stop. The pilot is
+# incomplete too (exit 4) when that log is missing, empty or unreadable, has no closing exit line, carries a stop line
+# led by any code but E_COVERAGE_GAP (a proxy CAP_STOP above all), carries a line about a stop that no code leads, or
+# closes with an exit that does not match its stop lines (0 with none, 2 with some).
 # Exit 0 PASS, 3 FAIL, 4 incomplete, 5 bad input (never an outcome).
-# Usage: python3 rr-admit.py <derive.json> <derived suite json> <derived arm dir> <pilot run arm.json> [power-rr.py or power-rr.py.txt]
+# Usage: python3 rr-admit.py <derive.json> <derived suite json> <derived arm dir> <pilot run arm.json> <pilot run stderr log> [power-rr.py or power-rr.py.txt]
 import csv, importlib.machinery, importlib.util, json, math, os, re, sys
 
 PLAN = 0.071
@@ -90,12 +95,27 @@ def blocking_values(suite, arm_dir):
 
 
 try:
-    dj, sp, ad, ra = sys.argv[1:5]
-    power = sys.argv[5] if len(sys.argv) > 5 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "power-rr.py")
+    dj, sp, ad, ra, el = sys.argv[1:6]
+    power = sys.argv[6] if len(sys.argv) > 6 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "power-rr.py")
     run = json.load(open(ra))
     not_run, gaps = run["parse_outcomes"]["not_run"], len(run.get("coverage_gaps") or [])
     if not_run > 0 or (run["status"] != "complete" and gaps == 0):
         print("admission: incomplete: goes to the Captain, no admission. The pilot run %s has %d sessions not run and status %s with %d coverage gaps, so it was interrupted." % (run["id"], not_run, run["status"], gaps))
+        sys.exit(4)
+    try:
+        lines = [x for x in open(el, encoding="utf-8").read().splitlines() if x.strip()]
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    end = re.fullmatch(r"review-units exit (\d+)", lines[-1]) if lines else None
+    stops = [x for x in lines[:-1] if re.match(r"[A-Z][A-Z0-9_]*[A-Z0-9](?= |:|$)", x)]
+    loose = [x for x in lines[:-1] if x not in stops and re.search(r"stop", x, re.I)]
+    other = [x for x in stops if not x.startswith("E_COVERAGE_GAP ")]
+    bad = ("is missing, empty or unreadable" if not lines else "has no closing review-units exit line" if not end
+           else "carries the stop line %r" % other[0][:160] if other
+           else "carries a line about a stop that no code leads: %r" % loose[0][:160] if loose
+           else "closes with exit %s and %d stop lines" % (end.group(1), len(stops)) if end.group(1) != ("2" if stops else "0") else None)
+    if bad:
+        print("admission: incomplete: goes to the Captain, no admission. The pilot run's stderr log %s %s." % (el, bad))
         sys.exit(4)
     d = json.load(open(dj))
     dropped = [x["unit"] for x in d["dropped"]]
