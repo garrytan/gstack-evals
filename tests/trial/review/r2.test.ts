@@ -18,6 +18,7 @@ import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { loadReaderMap, READER_ROW, READERS_SHA256, readTranscript, type ReaderMap } from "../../../src/trial/review/readers.ts";
 import { CAPPED_PARSER_SHA256, cappedParse } from "../../../src/trial/review/capped.ts";
+import { HELD_PARSER_SHA256 } from "../../../src/trial/review/held.ts";
 import { PARSER_SHA256 } from "../../../src/trial/review/findings.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, unitTaskId } from "../../../src/trial/review/unit.ts";
@@ -68,6 +69,10 @@ const cells = {
   turns: { STUB_MODE: "turns" },
   turnsReview: { STUB_MODE: "turns", STUB_TURN_TEXTS: JSON.stringify({ 2: findings("The cache key drops the allowance."), 3: "One more check.\n\n```json\n{\"draft\": true}\n```\n" }) },
   spent: { STUB_MODE: "apierror", STUB_API_ERROR: SPENT, STUB_API_STATUS: "402" },
+  held: { STUB_MODE: "background", STUB_BG: JSON.stringify({ first: findings("The retry loop never backs off."), readers: [{ id: "tu_bg", delay: 300, kind: "local_bash" }] }), STUB_FINAL: "The background check finished; my findings above stand." },
+  heldBroken: { STUB_MODE: "background", STUB_BG: JSON.stringify({ first: "Revised.\n\n```json\n[{\"file\": \"src/a.ts\", \"line\": 1, \"severity\": \"CRITICAL\", \"claim\": \"x\", \"evidence\": \"y\",}]\n```\n", readers: [{ id: "tu_bg", delay: 300, kind: "local_bash" }] }), STUB_FINAL: "The background check finished; my findings above stand." },
+  hung: { STUB_MODE: "background", STUB_BG: JSON.stringify({ first: findings("The lock is never released."), readers: [{ id: "tu_hang", delay: null }] }) },
+  hungBare: { STUB_MODE: "background", STUB_BG: JSON.stringify({ readers: [{ id: "tu_hang", delay: null }] }) },
 } as const;
 
 /** The harness's local sandbox, with the stub as the CLI and each cell's stub settings in its env. */
@@ -149,7 +154,7 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       expect([full.status, none.status]).toEqual(["complete", "complete"]);
       expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }, { turn_cap: 0, allowance_stop: 1, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }]);
       expect(READERS_SHA256).toBe(new Bun.CryptoHasher("sha256").update(readFileSync(join(REPO_ROOT, "src/trial/review/readers.ts"))).digest("hex"));
-      expect(new Set([...journal.values()].map((e) => e.key.parts.verifier))).toEqual(new Set([keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256)]));
+      expect(new Set([...journal.values()].map((e) => e.key.parts.verifier))).toEqual(new Set([keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256)]));
       expect([full.coverage_gaps, none.coverage_gaps]).toEqual([undefined, undefined]);
       expect(full.diagnostics).toEqual([b + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing"]);
       expect(none.diagnostics).toEqual([b + " pass 1: missing; ended allowance_stop, settled spend $0.000000, scored as finding nothing"]);
@@ -259,6 +264,101 @@ describe("R2 build: a stub run through the run loop with the real driver and the
     expect(gone.findings).toEqual([[], []]);
   }, 240_000);
 
+  // Value: protects=GSTA-2's A1 and B1 rulings on #141 through the run loop with the real driver: a held code session whose report came before its background Bash landed is scored from that report and records the turn (scored_turn), a session that never waited records its final turn, and a reader that never lands ends at the background deadline as a gap whose session_end says whether a findings block existed; fails_when=the acknowledgement turn scores as finding nothing, the scored turn goes unrecorded, or a deadline session is scored or loses findings_block; why_new=the red team on #141; seam=runReviewUnits, held.ts and the driver on the pinned SDK with the stub CLI; no_claim=a real model
+  test("a held session is scored from its report and records that turn; a deadline is a gap that records whether a block existed", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "held", [b]: "hung" }, "none-r2": { [a]: "plain", [b]: "hungBare" } }, settings: { backgroundWaitS: 2 } });
+    try {
+      await runReviewUnits(run.input, run.rig);
+      const journal = [...readReviewJournal(run.out).values()];
+      const at = (name: string, unit: string) => journal.find((e) => e.cell.arm === name && e.cell.unit === unit)!;
+      const held = at("gstack-full", a);
+      expect([held.record.termination, held.record.turns.at(-1), held.parse.kind, held.scored_turn]).toEqual([{ kind: "completed" }, "The background check finished; my findings above stand.", "findings", { rule: "held", index: 0, of: 2 }]);
+      expect(held.record.session_end!.waited_ms).toBeGreaterThan(0);
+      expect([at("none-r2", a).parse.kind, at("none-r2", a).scored_turn?.rule]).toEqual(["findings", "final"]);
+      expect([arm(run.out, "gstack-full-opus").held_rescues, arm(run.out, "none-r2-opus").held_rescues]).toEqual([1, 0]);
+      for (const [name, block] of [["gstack-full", true], ["none-r2", false]] as const) {
+        const e = at(name, b);
+        expect([e.record.termination, e.parse.kind, e.record.session_end?.cause, e.record.session_end?.findings_block, e.scored_turn?.index]).toEqual([{ kind: "missing", code: "E_BACKGROUND_DEADLINE" }, "incomplete", "deadline", block, null]);
+        expect(JSON.stringify(arm(run.out, name + "-opus").coverage_gaps)).toContain("E_BACKGROUND_DEADLINE");
+      }
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
+  // Value: protects=GSTA-2's ruling B on #141 (fix-check 2): arm.json's held_rescues counts only held reads that parse as findings, so a held read whose block is malformed (a gap) is not counted as a rescue; fails_when=a malformed held read raises held_rescues; why_new=the fix-check reader on 8a4c909; seam=runReviewUnits' arm.json; no_claim=held.ts's rule (held.test.ts)
+  test("held_rescues counts a held read that scores findings and not one that scores malformed", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "held", [b]: "heldBroken" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { backgroundWaitS: 2 } });
+    try {
+      await runReviewUnits(run.input, run.rig);
+      const broken = [...readReviewJournal(run.out).values()].find((e) => e.cell.arm === "gstack-full" && e.cell.unit === b)!;
+      expect([broken.parse.kind, broken.scored_turn]).toEqual(["malformed", { rule: "held", index: 0, of: 2 }]);
+      expect([arm(run.out, "gstack-full-opus").held_rescues, arm(run.out, "none-r2-opus").held_rescues]).toEqual([1, 0]);
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
+  // Value: protects=GSTA-2's C1 ruling on #141 and the plumbing the specialist found untested: review-units always hands the driver its background wait (3600 s unless the run sets another), and only a wait off the default joins the session key, through its task part alone; fails_when=a run omits the wait (no hold), passes another value, or a wait off the default leaves the key unchanged; why_new=the testing specialist on #141; seam=runReviewUnits' hostDriver options and keyOf; no_claim=the CLI's parsing (cli.test.ts)
+  test("review-units always passes its background wait to the driver, and a wait off the default joins the session key", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const plan = { "gstack-full": { [a]: "plain", [b]: "plain" }, "none-r2": { [a]: "plain", [b]: "plain" } } as const;
+    const record = async (settings: Partial<ReviewRunInput>) => {
+      const run = stubRun({ prepared, plan, settings });
+      const waits: (number | undefined)[] = [];
+      const rig: HostRig = { ...run.rig, driver: (o) => (waits.push(o.backgroundWaitMs), hostDriver(o)) };
+      try {
+        await runReviewUnits(run.input, rig);
+        const journal = [...readReviewJournal(run.out).values()].sort((x, y) => (x.cell.arm + x.cell.unit).localeCompare(y.cell.arm + y.cell.unit));
+        return { waits, parts: journal.map((e) => e.key.parts) };
+      } finally {
+        run.h.proxy.stop();
+      }
+    };
+    const today = await record({});
+    const named = await record({ backgroundWaitS: 3_600 });
+    const sixty = await record({ backgroundWaitS: 60 });
+    expect([today.waits, named.waits, sixty.waits]).toEqual([[3_600_000, 3_600_000, 3_600_000, 3_600_000], [3_600_000, 3_600_000, 3_600_000, 3_600_000], [60_000, 60_000, 60_000, 60_000]]);
+    expect(named.parts).toEqual(today.parts);
+    expect(sixty.parts.map((p, i) => p.task !== today.parts[i]!.task)).toEqual([true, true, true, true]);
+    expect(sixty.parts.map(({ task: _, ...rest }) => rest)).toEqual(today.parts.map(({ task: _, ...rest }) => rest));
+  }, 240_000);
+
+  // Value: protects=C1 on #141 round 2: when a waited code session's transcript cannot be read, the run says so in its log and the session keeps the final-turn parse; fails_when=the fallback is silent; why_new=the round-2 specialist on #141; seam=runReviewUnits' transcript read; no_claim=why a transcript goes missing
+  test("an unreadable transcript on a held session is logged, and the session keeps its final-turn parse", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "held", [b]: "plain" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: {} });
+    const rig: HostRig = {
+      ...run.rig,
+      driver: (o) => {
+        const d = hostDriver(o);
+        return {
+          ...d,
+          async run(...args: Parameters<typeof d.run>) {
+            const r = await d.run(...args);
+            if ((r.session_end?.waited_ms ?? 0) > 0) rmSync(join(o.out, "transcript.ndjson"));
+            return r;
+          },
+        };
+      },
+    };
+    const lines: string[] = [];
+    try {
+      await runReviewUnits(run.input, rig, (l) => lines.push(l));
+      const held = [...readReviewJournal(run.out).values()].find((e) => e.cell.arm === "gstack-full" && e.cell.unit === a)!;
+      expect([held.parse.kind, held.scored_turn?.rule]).toEqual(["missing", "final"]);
+      expect(lines.filter((l) => l.includes("transcript.ndjson is unreadable"))).toEqual([expect.stringContaining(a)]);
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
   // Value: protects=GEVA-116's byte-for-byte line: a run at today's defaults (60 turns, the policy allowance, no reader map) records the same stub sessions as before the build: the turn cap as completed, the allowance as a missing E_ALLOWANCE cell, no cap_stops or reader_map_sha256 in arm.json and no reader rows; fails_when=a default run gains a cap kind, an arm.json field or a cost row; why_new=GEVA-116's note on #119; seam=runReviewUnits' capStops and readers gates
   test("a default run keeps today's records", async () => {
     const { prepared } = twoUnits();
@@ -268,7 +368,7 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       await runReviewUnits(run.input, run.rig);
       const journal = [...readReviewJournal(run.out).values()];
       expect(journal.map((e) => [e.cell.arm, e.cell.unit, e.record.termination]).sort()).toEqual([["gstack-full", a, { kind: "completed" }], ["gstack-full", b, { kind: "completed" }], ["none-r2", a, { kind: "completed" }], ["none-r2", b, { kind: "missing", code: "E_ALLOWANCE" }]].sort() as never);
-      expect(journal.every((e) => !("readers" in e) && e.key.parts.verifier === keyPart(PARSER_SHA256))).toBe(true);
+      expect(journal.every((e) => !("readers" in e) && e.key.parts.verifier === keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256))).toBe(true);
       for (const id of ["gstack-full-opus", "none-r2-opus"]) {
         expect(Object.keys(arm(run.out, id)).filter((k) => k === "cap_stops" || k === "reader_map_sha256")).toEqual([]);
         expect(costRows(run.out, id).map((r) => r[1])).toEqual(["all", "all"]);

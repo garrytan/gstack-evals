@@ -16,7 +16,7 @@ import { judgeCheck } from "../skill-eval/contract/check.ts";
 import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
 import { FIXTURES_VAR, type ContractTask } from "../skill-eval/contract/tasks.ts";
 import type { Category } from "../usersim/classifier.ts";
-import type { Termination, TokenUsage, TrialRecord } from "../types.ts";
+import type { SessionEnd, Termination, TokenUsage, TrialRecord } from "../types.ts";
 import { removeTree, type CleanupOptions } from "./cleanup.ts";
 import { importDelta, PLACEHOLDER, snapshot, type Delta } from "./delta.ts";
 import { DELTA_VAR, trialEnv, TrialEnvError } from "./env.ts";
@@ -36,6 +36,8 @@ export interface AgentOutcome {
   signal?: string | null;
   /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout; set by drivers whose clock credits stalls. */
   credited_stall_ms?: number;
+  /** How the session ended against the background work it started; set by drivers that track it (Claude Code). */
+  session_end?: SessionEnd;
   opened: boolean | null;
   files_read: string[];
   asked: (Category | null)[];
@@ -146,7 +148,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     } finally {
       session.stop();
     }
-    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, credited_stall_ms: outcome.credited_stall_ms, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
+    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, credited_stall_ms: outcome.credited_stall_ms, session_end: outcome.session_end, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);
