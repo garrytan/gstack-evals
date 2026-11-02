@@ -284,6 +284,9 @@ describe("review-units --plan arguments (keyless)", () => {
     const def = JSON.parse(readFileSync(DEFAULT_POLICY, "utf8"));
     writeFileSync(rungPolicy, JSON.stringify({ ...def, models: { ...def.models, "claude-fable-5-1": { ...def.models["claude-fable-5-1"], rungs: ["planning-r1a"] } } }));
     expect((await run([...fable, "--policy", rungPolicy])).code).toBe(0);
+    const MAP = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
+    expect((await run([...base, "--arms", "none", "--plan", "ceo", "--reader-map", MAP])).err).toMatch(/^E_USAGE .*--reader-map runs on code units, not with --plan/);
+    expect((await run([...base, "--arms", "none", "--plan", "ceo", "--cap-stops"])).err).toMatch(/^E_USAGE .*--cap-stops runs on code units, not with --plan/);
     expect((await run([...base, "--plan", "eng", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan takes a lens: ceo/);
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", OPUS, "--out", out, "--source", "garrytan/gstack=/nowhere", "--plan", "ceo", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan needs a plan suite, and suite gsta167-14pr is noloss/);
     expect((await run([...base.slice(0, 2), ...base.slice(4), "--plan", "ceo", "--arms", "none"])).err).toMatch(/pass --sealed-root <dir>/);

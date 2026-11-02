@@ -23,6 +23,7 @@ import { PARSER_SHA256 } from "./findings.ts";
 import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, type PreparedUnit, type ReviewArm } from "./run.ts";
 import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_ASK, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
 import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine } from "./plan-told.ts";
+import { loadReaderMap } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -40,7 +41,7 @@ export const REVIEW_UNITS_HELP = [
   "    [--resume] [--repair <note>] [--dry-run]",
   "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
-  "    [--max-turns <n>] [--session-kind unattended]",
+  "    [--max-turns <n>] [--session-kind unattended] [--cap-stops] [--reader-map <file>]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
   "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
@@ -54,11 +55,19 @@ export const REVIEW_UNITS_HELP = [
   "its own gstack-modules render of that session kind. --max-turns caps each session's model turns (default " + MAX_TURNS + ").",
   "--session-kind unattended sets GSTACK_SESSION_KIND=unattended in every arm's agent env, none included; left out, no arm",
   "gets one.",
+  "",
+  "--allowance caps each session's spend in dollars (default: 1.6M input and 32k output tokens at the model's price).",
+  "--cap-stops, code units only, records a code session that the turn cap or the allowance ends as turn_cap or",
+  "allowance_stop, scored on the findings it wrote before the stop; left out, both caps keep today's records.",
+  "--reader-map writes each code session's readers (the subagents it",
+  "launched, named through a map pinned to one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json)",
+  "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit. run.json records the allowance and the map",
+  "when they are set.",
 ].join("\n");
 
-const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind"]);
+const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map"]);
 const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render"]);
-const BOOL = new Set(["--resume", "--dry-run"]);
+const BOOL = new Set(["--resume", "--dry-run", "--cap-stops"]);
 
 class Usage extends Error {}
 
@@ -210,6 +219,17 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     }
     return { name: a.name, told, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
   });
+  const mapFile = one("--reader-map");
+  const readerMap = mapFile === null ? null : loadReaderMap(mapFile);
+  if (readerMap && "problem" in readerMap) throw new Usage("--reader-map " + mapFile + ": " + readerMap.problem);
+  if (readerMap && lens) throw new Usage("--reader-map runs on code units, not with --plan");
+  const capStops = flags.has("--cap-stops");
+  if (capStops && lens) throw new Usage("--cap-stops runs on code units, not with --plan");
+  if (readerMap && "map" in readerMap) for (const a of specs) {
+    if (a.kind !== "stack" || toldArmOf(a) !== "gstack") continue;
+    const pin = readerMap.map.gstack;
+    if (a.stack.repo !== pin.repo || a.stack.sha !== pin.sha) throw new Usage("--reader-map " + mapFile + " is pinned to " + pin.repo + "@" + pin.sha + ", and arm " + a.name + " runs " + a.stack.repo + "@" + a.stack.sha + "; use a map for that commit");
+  }
   if (lens && specs.some((a) => a.kind === "placebo") && !specs.some((a) => a.name === "gstack")) throw new Usage("the placebo arm is generated from the gstack arm, so --arms needs gstack=<repo>@<sha> too");
   if (lens && specs.some((a) => a.kind === "placebo") && prefixes.has("gstack")) throw new Usage("the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
   const armModels = new Map<string, string[]>();
@@ -259,12 +279,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!branches.has(repo) && !DEFAULT_BRANCHES[repo]) throw new Usage("no base branch is known for " + repo + "; pass --base-branch " + repo + "=<name>");
   }
   let severityMap: Record<string, unknown> | undefined = lens ? Object.fromEntries(arms.map((a) => [a.name, PLAN_SEVERITY_MAP])) : undefined;
-  const mapFile = one("--severity-map");
-  if (mapFile) {
+  const severityFile = one("--severity-map");
+  if (severityFile) {
     try {
-      severityMap = JSON.parse(readFileSync(mapFile, "utf8"));
+      severityMap = JSON.parse(readFileSync(severityFile, "utf8"));
     } catch (e) {
-      throw new Usage("--severity-map " + mapFile + ": " + (e as Error).message);
+      throw new Usage("--severity-map " + severityFile + ": " + (e as Error).message);
     }
   }
   const out = resolve(one("--out")!);
@@ -273,9 +293,14 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const sealedSink = sealedSinkProblem({ id: suite.id, sealed: suite.sealed, sealedCatalogs }, env);
   if (sealedSink) throw new Usage(sealedSink);
   const runFile = join(out, "run.json");
-  const prior = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; max_turns?: number; session_kind?: string | null }) : null;
-  if (prior && ((prior.max_turns ?? MAX_TURNS) !== maxTurns || (prior.session_kind ?? null) !== sessionKind)) {
-    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with max turns " + (prior.max_turns ?? MAX_TURNS) + " and session kind " + (prior.session_kind ?? "not set") + ", and this resume gives " + maxTurns + " and " + (sessionKind ?? "not set") + "\n  fix: resume with the run's own --max-turns and --session-kind, or start a new run in a new --out");
+  const allowanceUsd = allowance === null ? null : allowance / 1_000_000;
+  const mapPin = readerMap && "map" in readerMap ? { file: mapFile!, sha256: readerMap.sha256, gstack: readerMap.map.gstack } : null;
+  const prior = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; max_turns?: number; session_kind?: string | null; allowance_usd?: number; reader_map?: { sha256: string } }) : null;
+  if (prior && ((prior.max_turns ?? MAX_TURNS) !== maxTurns || (prior.session_kind ?? null) !== sessionKind || (prior.allowance_usd ?? null) !== allowanceUsd || (prior.reader_map?.sha256 ?? null) !== (mapPin?.sha256 ?? null))) {
+    const r2 = prior.allowance_usd !== undefined || prior.reader_map !== undefined || allowanceUsd !== null || mapPin !== null;
+    const was = r2 ? "max turns " + (prior.max_turns ?? MAX_TURNS) + ", session kind " + (prior.session_kind ?? "not set") + ", allowance " + (prior.allowance_usd === undefined ? "default" : "$" + prior.allowance_usd) + " and reader map " + (prior.reader_map?.sha256 ?? "none") : "max turns " + (prior.max_turns ?? MAX_TURNS) + " and session kind " + (prior.session_kind ?? "not set");
+    const now = r2 ? maxTurns + ", " + (sessionKind ?? "not set") + ", " + (allowanceUsd === null ? "default" : "$" + allowanceUsd) + " and " + (mapPin?.sha256 ?? "none") : maxTurns + " and " + (sessionKind ?? "not set");
+    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with " + was + ", and this resume gives " + now + "\n  fix: resume with the run's own --max-turns, --session-kind, --allowance and --reader-map, or start a new run in a new --out");
     return 2;
   }
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
@@ -289,6 +314,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
+    if (capStops) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
+    if (mapPin) io.out("reader map " + mapPin.file + " (sha256 " + mapPin.sha256 + ", gstack " + mapPin.gstack.repo + "@" + mapPin.gstack.sha + ")");
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));
     return 0;
@@ -340,14 +367,14 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
   const runId = prior?.run_id ?? newRunId("review-units");
-  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind }, null, 2) + "\n");
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}) }, null, 2) + "\n");
   const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
   const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");
