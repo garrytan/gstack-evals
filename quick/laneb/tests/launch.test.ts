@@ -108,6 +108,114 @@ describe("launch.sh without an interrupt", () => {
   }, 60_000);
 });
 
+describe("launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS)", () => {
+  const vmRows = (r: ReturnType<typeof rig>) => readRows(r.ledgerPath).filter((x) => x.id === "p-vm");
+
+  test("the VM's hours are reserved before it starts and settled at metered hours once it is down", async () => {
+    const r = rig({ finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "4" });
+    const { code, events } = await runToEnd(r);
+    const rows = readRows(r.ledgerPath);
+    const reserve = rows.findIndex((x) => x.kind === "reserve" && x.id === "p-vm");
+    const settle = rows.findIndex((x) => x.kind === "settle" && x.id === "p-vm");
+    expect(rows[reserve]).toMatchObject({ usd_micros: toMicros(8) });
+    expect(settle).toBeGreaterThan(rows.findIndex((x) => x.kind === "settle" && x.id === "p-s-1"));
+    expect(rows[settle].usd_micros).toBeGreaterThanOrEqual(0);
+    expect(rows[settle].usd_micros).toBeLessThan(toMicros(0.1));
+    expect(events).toContain("down vm-1");
+    expect(new Ledger(r.ledgerPath, "laneb-quick").status().openIds).toEqual([]);
+    expect(code).toBe(0);
+  }, 60_000);
+
+  test("each next block is reserved before the current one runs out, and a refused block stops the batch as a cap stop", async () => {
+    // Blocks of 3.6 s at $3.6 on a $10 cap with $1 open: block 2 fits ($8.2 open), block 3 ($11.8) is refused.
+    const r = rig({});
+    Object.assign(r.env, { VM_USD_PER_HOUR: "3600", VM_RESERVE_HOURS: "0.001", VM_EXTEND_POLL_SEC: "0.2" });
+    const { code, stderr, events } = await runToEnd(r);
+    expect(readFileSync(join(r.run, "vm-cap-stop"), "utf8")).toContain("refused VM block 3 (p-vm-3");
+    expect(stderr).toContain("the ledger refused VM block 3 for laneb-quick; stopping the batch (cap stop)");
+    expect(events).toContain("ssh vm-1 touch work/run/STOP");
+    expect(events.indexOf("down vm-1")).toBeGreaterThan(events.indexOf("batch ended"));
+    const rows = vmRows(r).concat(readRows(r.ledgerPath).filter((x) => String(x.id).startsWith("p-vm-")));
+    expect(rows.filter((x) => x.kind === "reserve").map((x) => [x.id, x.usd_micros])).toEqual([["p-vm", toMicros(3.6)], ["p-vm-2", toMicros(3.6)]]);
+    const settles = rows.filter((x) => x.kind === "settle");
+    expect(settles.map((x) => x.id)).toEqual(["p-vm", "p-vm-2"]);
+    expect(settles[0]!.usd_micros).toBe(toMicros(3.6));
+    const vmUsd = settles.reduce((a, x) => a + x.usd_micros, 0) / 1e6;
+    expect(vmUsd).toBeGreaterThan(4);
+    expect(vmUsd).toBeLessThan(12);
+    expect(new Ledger(r.ledgerPath, "laneb-quick").status().openIds).toEqual([]);
+    expect(code).toBe(130);
+  }, 60_000);
+
+  test("a ledger service that can't be reached is retried, and stops the batch only once the current block runs out", async () => {
+    // Blocks of 3 s, the next one due 1 s ahead: block 2 is tried from 2 s on and block 1 runs out at 3 s.
+    const r = rig({});
+    Object.assign(r.env, { VM_USD_PER_HOUR: "36", VM_RESERVE_HOURS: "0.001", VM_EXTEND_POLL_SEC: "0.2" });
+    const proc = Bun.spawn(["bash", LAUNCH, r.run, "p-", "5"], { env: r.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 300 && !existsSync(join(r.vm, "started")); i++) await Bun.sleep(50);
+    Bun.spawnSync(["pkill", "-f", `serve --path ${r.ledgerPath}`]);
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 40_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    const stderr = await new Response(proc.stderr).text();
+    const retry = stderr.indexOf("launch.sh: VM block 2 reserve got HTTP 000 from the ledger service; retrying");
+    expect(retry).toBeGreaterThan(-1);
+    expect(stderr.indexOf("launch.sh: VM block 1 ran out with no reserve for block 2 (HTTP 000); stopping the batch")).toBeGreaterThan(retry);
+    expect(readFileSync(join(r.run, "vm-cap-stop"), "utf8")).toContain("the ledger service gave no answer (HTTP 000) before VM block 1 ran out");
+    expect(events(r)).toContain("ssh vm-1 touch work/run/STOP");
+    expect(vmRows(r).map((x) => x.kind)).toEqual(["reserve", "settle"]);
+    expect(code).toBe(130);
+  }, 60_000);
+
+  test("every open VM block the ledger holds is settled, recorded by the extender or not", async () => {
+    const r = rig({ finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "0.25", VM_RESERVE_HOURS: "4" });
+    new Ledger(r.ledgerPath, "laneb-quick").reserve("p-vm-2", toMicros(1));
+    const { code } = await runToEnd(r);
+    const settles = readRows(r.ledgerPath).filter((x) => x.kind === "settle" && String(x.id).startsWith("p-vm"));
+    expect(settles.map((x) => [x.id, String(x.kind_detail).replace(/[\d.]+ h at/, "N h at")])).toEqual([
+      ["p-vm", "VM hours: N h at $0.25/h, block 1 of 2"],
+      ["p-vm-2", "VM hours: N h at $0.25/h, block 2 of 2"],
+    ]);
+    expect(settles[1]!.usd_micros).toBe(0);
+    expect(new Ledger(r.ledgerPath, "laneb-quick").status().openIds).toEqual([]);
+    expect(code).toBe(0);
+  }, 60_000);
+
+  test("a VM reserve the ledger refuses is a cap stop: exit 9 and no VM", async () => {
+    const r = rig({ finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "5" });
+    const { code, stderr, events } = await runToEnd(r);
+    expect(stderr).toContain("no VM started (cap stop)");
+    expect(events.some((e) => e.startsWith("up"))).toBe(false);
+    expect(vmRows(r).filter((x) => x.kind === "reserve" || x.kind === "settle")).toEqual([]);
+    expect(code).toBe(9);
+  }, 60_000);
+
+  const notNumbers = "launch.sh: VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers";
+  for (const [rate, hours, message] of [["0,6", "4", notNumbers], ["$0.60", "4", notNumbers], ["0", "4", notNumbers], ["2", "4h", notNumbers], ["0.0000001", "4", "launch.sh: the VM block (0.0000001 $/h for 4 h) rounds to $0"]] as const) {
+    test(`a VM rate or block that isn't a positive number or rounds to $0 (${rate} $/h, ${hours} h) is refused before any reserve or VM`, async () => {
+      const r = rig({ finish: 0 });
+      Object.assign(r.env, { VM_USD_PER_HOUR: rate, VM_RESERVE_HOURS: hours });
+      const { code, stderr, events } = await runToEnd(r);
+      expect(stderr).toContain(message);
+      expect(events.some((e) => e.startsWith("up"))).toBe(false);
+      expect(vmRows(r)).toEqual([]);
+      expect(code).toBe(2);
+    }, 60_000);
+  }
+
+  test("a kept VM leaves its reserve open at the full amount and says how to settle it", async () => {
+    const r = rig({ failPull: true, finish: 0 });
+    Object.assign(r.env, { VM_USD_PER_HOUR: "2", VM_RESERVE_HOURS: "4" });
+    const { code, stderr } = await runToEnd(r);
+    expect(stderr).toContain("The VM reserve p-vm stays open");
+    expect(vmRows(r).map((x) => x.kind)).toEqual(["reserve"]);
+    expect(code).toBe(7);
+  }, 60_000);
+});
+
 describe("launch.sh on interrupt", () => {
   test("not_started x interrupt: an interrupt before the batch starts exits 130, writes no STOP and destroys the VM", async () => {
     const r = rig({ slowBootstrap: true });

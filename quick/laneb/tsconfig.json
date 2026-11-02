@@ -11,5 +11,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "include": ["runner/**/*.ts", "analysis/**/*.ts", "tests/**/*.ts", "arms/**/*.ts"]
+  "include": ["runner/**/*.ts", "analysis/**/*.ts", "tests/**/*.ts", "arms/**/*.ts", "r3/**/*.ts"]
 }

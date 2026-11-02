@@ -201,6 +201,9 @@ type Session = {
   settled: boolean;
   meta: Record<string, unknown>;
   ledgerReserved: boolean;
+  cmdExpanded?: boolean;
+  cmdNames?: string[];
+  firstReqPromptTokens?: number;
 };
 
 type OpenBody = { trial: string; model: string; cap_usd: number; meta?: Record<string, unknown>; open_key?: unknown };
@@ -245,6 +248,7 @@ export function startProxy(opts: ProxyOptions) {
   const summary = (s: Session) => ({
     id: s.id, trial: s.trial, model: s.model, cap_micros: s.capMicros, spent_micros: s.spentMicros, usage: s.usage,
     requests: s.requests, ok_responses: s.okResponses, refused: s.refused, refused_budget: s.refusedBudget, requested_models: s.requestedModels, open: s.open, opened_at: s.openedAt, closed_at: s.closedAt, settled: s.settled, meta: s.meta,
+    cmd_expanded: s.cmdExpanded ?? null, cmd_names: s.cmdNames ?? null, first_req_prompt_tokens: s.firstReqPromptTokens ?? null,
   });
 
   // Stop admission, let in-flight requests finish for closeWaitMs, then abort the rest and charge each its worst case,
@@ -455,6 +459,17 @@ export function startProxy(opts: ProxyOptions) {
         }
       }
       if (!s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      // Body-load probe (from tag laneb-stacks-1-runner): on the session's first forwarded request, record whether the CLI
+      // expanded a slash command (the messages carry "<command-name>", so a skill body was injected), which commands it
+      // expanded, and that request's token bound. Only the messages are searched: Claude Code's Skill tool description also
+      // names <command-name>. Cost accounting is untouched.
+      if (s.cmdExpanded === undefined) {
+        const messages = JSON.stringify(body.messages ?? []);
+        s.cmdExpanded = messages.includes("<command-name>");
+        s.cmdNames = [...new Set([...messages.matchAll(/<command-name>\/?([^<]{1,100})<\/command-name>/g)].map((m) => m[1]))];
+        s.firstReqPromptTokens = inputTokens;
+        log({ event: "body_load_probe", session: s.id, cmd_expanded: s.cmdExpanded, cmd_names: s.cmdNames, first_req_prompt_tokens: inputTokens });
+      }
       if (route.count_tokens === "forward" && !counted && hasMedia([body.messages, body.system])) {
         log({ event: "count_failed_media", session: s.id, input_tokens_bound: inputTokens, max_tokens: body.max_tokens });
         return anthropicError(529, "overloaded_error", "laneb proxy: token count unavailable, retry");

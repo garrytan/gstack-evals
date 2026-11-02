@@ -1,0 +1,10 @@
+{
+  "run": "D",
+  "models": ["claude-opus-5-5", "particle-1", "gpt-6.1-sol"],
+  "setting": "claude-code-preset",
+  "contrast": { "setting": "sdk-default", "models": ["claude-opus-5-5"] },
+  "d2": "pooled",
+  "d3": "per-model",
+  "task_count": 37,
+  "mdd": { "d2_per_model": "22.3 to 25.8", "d2_pooled": { "3": "7.5 to 10.3", "2": "10.8 to 13.0" }, "d3_per_model": "10.9 to 15.4" }
+}

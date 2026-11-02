@@ -1,0 +1,16 @@
+{
+ "note": "Fixture for r3.test.ts: a synthetic SWE-bench-shaped task in Harbor's layout, with its digest (materialize.ts treeDigest).",
+ "band_sha256": "ce8f1dccd0b8400d878738701ac3457d65f5f33f771a2794660d9e65f03b77b8",
+ "tasks": [
+  {
+   "task_id": "demo__demo-1",
+   "registry": {
+    "git_url": "fixture",
+    "git_commit_id": "fixture",
+    "path": "demo__demo-1"
+   },
+   "digest": "sha256:aae3d8e0a3f016ea8983b93b5b401abfc0a1158bf6fa7659789d35fd5b3c3692",
+   "digest_files": 6
+  }
+ ]
+}

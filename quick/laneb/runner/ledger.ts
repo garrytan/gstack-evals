@@ -159,11 +159,25 @@ if (import.meta.main) {
     }
     const out = reconcile(new Ledger(args.path, args.item), readRows(args.sessions) as any[], args.prefix);
     console.log(JSON.stringify({ settled: out.settled.length, settled_usd: fromMicros(out.settled.reduce((x, r) => x + r.usd_micros, 0)), left_open: out.leftOpen }));
+  } else if (cmd === "reserve" || cmd === "settle") {
+    // One-off reserves such as launch.sh's first VM block: unlike the class, the CLI refuses an id the item already holds.
+    if (!args.path || !args.item || !args.id || !/^\d+(\.\d+)?$/.test(args.usd ?? "")) {
+      console.error(`E_USAGE usage: bun ledger.ts ${cmd} --path <jsonl> --item <name> --id <id> --usd <amount> [--detail <text>]`);
+      process.exit(2);
+    }
+    const ledger = new Ledger(args.path, args.item);
+    const meta = args.detail ? { kind_detail: args.detail } : {};
+    const out = cmd === "reserve" ? ledger.reserve(args.id, toMicros(Number(args.usd)), meta) : ledger.settle(args.id, toMicros(Number(args.usd)), meta);
+    const reused = "existing" in out && out.existing;
+    console.log(JSON.stringify(reused ? { ok: false, reason: "id already reserved" } : out));
+    process.exit(out.ok && !reused ? 0 : 3);
+  } else if (cmd === "open") {
+    for (const id of new Ledger(args.path, args.item).status().openIds) console.log(id);
   } else if (cmd === "status") {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("E_USAGE usage: bun ledger.ts serve|status|reconcile --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status|open|reconcile|reserve|settle --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>]");
     process.exit(2);
   }
 }
