@@ -70,7 +70,6 @@ describe("L2 scope", () => {
     const mine = ["/usr/local/lib/python3.12/site-packages/jaraco/functools/__init__.py", "/usr/local/lib/python3.12/site-packages/setuptools/_vendor/jaraco/functools/__init__.py"];
     const other = ["/usr/local/lib/python3.12/site-packages/jaraco/text/__init__.py", "/usr/local/lib/python3.12/site-packages/jaraco/functools_extra/core.py"];
     expect(sortHits([...mine, ...other], jaraco, [])).toEqual({ leaks: mine, installed: other });
-    expect(sortHits(mine, projectNames({ repo: "o/jaraco-functools", runner: PYTEST }, [], {}), []).leaks).toEqual([]);
   });
 
   test("only a package at the root or under src/ names the project, so a generic dir further down leaves installed code alone", () => {
@@ -83,6 +82,49 @@ describe("L2 scope", () => {
     ];
     expect(sortHits(hits, deep, [])).toEqual({ leaks: [], installed: hits });
     expect(deep.sort()).toEqual(["calc", "fixture", "proj"]);
+  });
+
+  test("a virtualenv-shaped dir holds installed code only under its site-packages or dist-packages, so a Python installed there has its standard library scanned", () => {
+    const zipp = projectNames({ repo: "jaraco/zipp", runner: PYTEST }, ["zipp/__init__.py"], {});
+    const stdlib = ["/opt/venv/lib/python3.12/zipfile/_path/__init__.py", "/testbed/.venv/lib/python3.12/json/encoder.py", "/testbed/.tox/py312/lib/python3.12/zipfile/_path/glob.py"];
+    const other = [
+      "/opt/venv/lib/python3.12/site-packages/requests/utils.py",
+      "/opt/venv/lib/python3.12/dist-packages/yaml/constructor.py",
+      "/opt/venv/bin/activate",
+      "/testbed/__pypackages__/3.12/lib/attr/_make.py",
+    ];
+    expect(sortHits([...stdlib, ...other], zipp, [])).toEqual({ leaks: stdlib, installed: other });
+  });
+
+  test("a name splits on hyphens, underscores and dots across consecutive path parts, so jaraco-functools names jaraco/functools", () => {
+    const mine = ["/usr/local/lib/python3.12/site-packages/jaraco/functools/__init__.py", "/usr/local/lib/python3.12/site-packages/setuptools/_vendor/jaraco/functools/__init__.py"];
+    const other = ["/usr/local/lib/python3.12/site-packages/jaraco/text/__init__.py", "/usr/local/lib/python3.12/site-packages/jaraco/functools_extra/core.py"];
+    for (const name of ["jaraco-functools", "jaraco_functools", "jaraco.functools"]) {
+      const declared = projectNames({ repo: "o/r", runner: PYTEST }, [], { "pyproject.toml": '[project]\nname = "' + name + '"\n' });
+      expect(sortHits([...mine, ...other], declared, [])).toEqual({ leaks: mine, installed: other });
+    }
+    expect(sortHits(mine, projectNames({ repo: "o/jaraco-functools", runner: PYTEST }, [], {}), []).leaks).toEqual(mine);
+  });
+
+  test("leading underscores are dropped only from a name of 5 characters or more, so io and json leave _io and _json alone", () => {
+    const short = projectNames({ repo: "o/json", runner: PYTEST }, ["io/__init__.py"], {});
+    const stubs = ["/usr/local/lib/python3.12/site-packages/mypy/typeshed/stdlib/_io.pyi", "/usr/local/lib/python3.12/site-packages/mypy/typeshed/stdlib/_json.pyi"];
+    expect(sortHits(stubs, short, [])).toEqual({ leaks: [], installed: stubs });
+    const click = projectNames({ repo: "pallets/click", runner: PYTEST }, [], {});
+    expect(sortHits(["/usr/local/lib/python3.12/site-packages/pkg/_click/core.py"], click, []).leaks).toEqual(["/usr/local/lib/python3.12/site-packages/pkg/_click/core.py"]);
+    const distutils = projectNames({ repo: "pypa/distutils", runner: PYTEST }, ["distutils/__init__.py"], {});
+    expect(sortHits(["/usr/local/lib/python3.12/site-packages/setuptools/_distutils/core.py"], distutils, []).leaks).toEqual(["/usr/local/lib/python3.12/site-packages/setuptools/_distutils/core.py"]);
+  });
+
+  test("a vendored package at the root or under src/ names nothing, so installed vendor and third_party dirs stay installed", () => {
+    const names = projectNames({ repo: "o/proj", runner: PYTEST }, ["proj/__init__.py", "vendor/__init__.py", "third_party/__init__.py", "src/vendor/__init__.py"], {});
+    expect(names.sort()).toEqual(["proj"]);
+    const hits = [
+      "/usr/local/lib/python3.12/site-packages/pip/_vendor/rich/text.py",
+      "/usr/local/lib/python3.12/site-packages/grpc/third_party/upb/x.py",
+      "/usr/local/go/src/vendor/golang.org/x/net/route/route.go",
+    ];
+    expect(sortHits(hits, names, [])).toEqual({ leaks: [], installed: hits });
   });
 
   test("a project whose name ends in a digit still matches its own installed copy, with or without a version", () => {

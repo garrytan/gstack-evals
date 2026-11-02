@@ -45,10 +45,17 @@ export interface CheckOptions {
 const RELEASE = /\b(VERSION|CHANGELOG|TODOS)\b/;
 
 /** Where an image keeps installed third-party code: dependency dirs at any depth, site-packages and dist-packages, the uv
- * cache, and Go's toolchain and module cache. Python's standard library is scanned like the rest of the image. */
+ * cache, and Go's toolchain and module cache. Python's standard library is scanned like the rest of the image, also when
+ * Python sits in a virtualenv-shaped dir (.venv, venv, .tox): there lib/pythonX.Y counts only under its site-packages or
+ * dist-packages. */
 const INSTALLED = new RegExp("(?<=^|/)(?:" + [...INSTALL_DIRS.filter((d) => d !== ".git").map((d) => d.replace(".", "\\.")), "site-packages", "dist-packages", "\\.cache/uv", "go/pkg/mod", "usr/local/go"].join("|") + ")/", "g");
+const VENVS = [".venv/", "venv/", ".tox/"];
 
-const normName = (s: string): string => s.toLowerCase().replace(/[-_.]+/g, "_").replace(/^_+/, "");
+const normName = (s: string): string => {
+  const n = s.toLowerCase().replace(/[-_.]+/g, "_");
+  const bare = n.replace(/^_/, "");
+  return bare.length >= 5 ? bare : n;
+};
 const namesProject = (part: string, name: string): boolean => {
   const p = normName(part.replace(/@.*$/, "").replace(/\.(dist-info|egg-info|egg-link|pth|pyi?)$/, ""));
   const n = normName(name);
@@ -56,15 +63,15 @@ const namesProject = (part: string, name: string): boolean => {
 };
 
 /** The names an installed copy of the task's own project carries: the repository's name, its Go module, its top-level
- * Python packages (dirs holding __init__.py at the root or under src/, test dirs aside) and the distribution or package
- * name its pyproject.toml, setup.cfg or package.json declares. A package further down, such as docs/_ext, names nothing,
- * because a generic name like ext or app would turn installed code that carries it into a leak. */
+ * Python packages (dirs holding __init__.py at the root or under src/, test and vendored dirs aside) and the
+ * distribution or package name its pyproject.toml, setup.cfg or package.json declares. A package further down, such as
+ * docs/_ext, names nothing, because a generic name like ext or app would turn installed code that carries it into a leak. */
 export function projectNames(t: Pick<TaskJson, "repo" | "runner">, packages: string[], manifests: Record<string, string>): string[] {
   const names = [t.repo.slice(t.repo.lastIndexOf("/") + 1)];
   if (t.runner.kind === "go") names.push(t.runner.module);
   for (const p of packages) {
     const pkg = /^(?:src\/)?([^/]+)\/__init__\.py$/.exec(p)?.[1];
-    if (pkg && !isTestPath(p)) names.push(pkg);
+    if (pkg && !isTestPath(p) && classifyPath(p) !== "vendored") names.push(pkg);
   }
   const parse = (text: string | undefined, read: (text: string) => unknown) => {
     try {
@@ -83,19 +90,20 @@ export function projectNames(t: Pick<TaskJson, "repo" | "runner">, packages: str
 
 /** L2's hits split into leaks and installed third-party code. A hit is installed code when it sits below an install
  * location and no path part below that location names the project: an installed or vendored copy of the project itself
- * stays a leak. Leading underscores don't count (setuptools/_distutils names distutils), and a dotted name also matches
- * consecutive parts (jaraco.functools names jaraco/functools). A file git tracks in the repository is always a leak,
- * whatever its directory is called. */
+ * stays a leak. Leading underscores don't count once 5 characters remain (setuptools/_distutils names distutils, _json
+ * doesn't name json), and a name split on hyphens, underscores and dots also matches consecutive parts (jaraco-functools
+ * names jaraco/functools). A file git tracks in the repository is always a leak, whatever its directory is called. */
 export function sortHits(hits: string[], own: string[], tracked: string[]): { leaks: string[]; installed: string[] } {
   const inRepo = new Set(tracked.map((p) => REPO_DIR + "/" + p));
   const isInstalled = (hit: string): boolean => {
     const at = [...hit.matchAll(INSTALLED)].at(-1);
     if (inRepo.has(hit) || !at) return false;
     const rest = hit.slice(at.index + at[0].length).replace(/!([a-z])/g, (_, c: string) => c.toUpperCase());
+    if (VENVS.includes(at[0]) && /(?:^|\/)lib(?:64)?\/python\d[^/]*\//.test(rest)) return false;
     const parts = rest.split("/");
     return !own.some((name) => {
       if (name.includes("/")) return ("/" + rest).includes("/" + name + "/") || ("/" + rest).includes("/" + name + "@");
-      const pieces = name.split(".");
+      const pieces = name.split(/[-_.]+/).filter(Boolean);
       return parts.some((part, i) => namesProject(part, name) || (pieces.length > 1 && pieces.every((piece, k) => i + k < parts.length && namesProject(parts[i + k], piece))));
     });
   };
