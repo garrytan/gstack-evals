@@ -47,6 +47,14 @@ describe("workflow hygiene", () => {
     }
   });
 
+  test("runs pull_request_target and allow-unsafe-pr-checkout only in sealed.yml", () => {
+    for (const f of files.filter((f) => f !== "sealed.yml")) {
+      const on = workflows[f]!.on;
+      const triggers = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(on ?? {});
+      expect([f, triggers.includes("pull_request_target"), steps(f).some((s) => s.with?.["allow-unsafe-pr-checkout"] !== undefined)]).toEqual([f, false, false]);
+    }
+  });
+
   test("runs no merge train while a dispatch runs the head's workflow (GST-254)", () => {
     const policy = JSON.parse(readFileSync(join(root, ".gstack", "ship-policy.json"), "utf8")) as Record<string, unknown>;
     expect(policy.train).toBeUndefined();
