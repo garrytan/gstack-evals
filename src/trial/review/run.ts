@@ -490,7 +490,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const ended = e.record.termination.kind;
         if (e.scored_turn?.rule === "held" && e.parse.kind === "findings") held++;
         const stop = plan ? planStop(e.record) : ended === "turn_cap" || ended === "allowance_stop" ? ended : null;
-        const turn = (e.record as { follow_up?: { sent: boolean } }).follow_up?.sent ? 2 : 1;
+        const turn = e.record.follow_up?.sent ? 2 : 1;
         paid += e.record.cost_micros ?? 0;
         if (stop) {
           capped[stop]++;

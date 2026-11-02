@@ -157,7 +157,7 @@ describe("GEVA-203: the follow-up and preflight on the pinned Agent SDK against 
   }, 60_000);
 
   test("preflight: exit 0 runs the session; a non-zero exit or a timeout ends it as a missing cell with its code before any CLI spawn, and logs why", async () => {
-    const code = "E_ISOLATION_UNSAFE" as const;
+    const code = "E_CLEAN_ROOM" as const;
     const ok = await stub([{ content: text("Done.") }], { preflight: { command: "true", code } }, { exec: sh });
     expect([ok.outcome.termination, ok.spawned, ok.execs]).toEqual([{ kind: "completed" }, 1, [{ command: "true", ms: 30_000 }]]);
     const refused = await stub([{ content: text("Done.") }], { preflight: { command: "echo found /home/agent/.capy; exit 3", code }, followUp: FOLLOW_UP }, { exec: sh });
