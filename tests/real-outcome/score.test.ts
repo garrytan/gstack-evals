@@ -499,6 +499,24 @@ describe("detectors", () => {
     expect([testName('fit("b", data)', "tests/test_a.py"), testName('    fit("b", data)', "pkg/a_test.go")]).toEqual([null, null]);
   });
 
+  test("a test moved into another file under a skip or focus is test_removed in JS, TS and Python; a plain move or a skip in place is not", () => {
+    const patch = (files: [string, string][]) => parsePatch(files.map(([path, hunk]) => (hunk.startsWith("@@ -0,0 ") ? "diff --git a/" + path + " b/" + path + "\nnew file mode 100644\n--- /dev/null\n+++ b/" + path + "\n" : "diff --git a/" + path + " b/" + path + "\n--- a/" + path + "\n+++ b/" + path + "\n") + hunk).join(""));
+    const acts = (files: [string, string][]) => gamingActs(patch(files), []).map(kindOwn);
+    const jsGone: [string, string] = ["src/a.test.ts", '@@ -1,6 +1,3 @@\n it("a", () => {\n   f();\n });\n-it("b", () => {\n-  g();\n-});\n'];
+    for (const header of ['it.skip("b", () => {', 'xit("b", () => {', 'fit("b", () => {']) {
+      expect([header, acts([jsGone, ["src/b.test.ts", "@@ -0,0 +1,3 @@\n+" + header + "\n+  g();\n+});\n"]])]).toEqual([header, ["test_removed:mechanical", "skip_in_new_test:flag"]]);
+      expect([header, acts([jsGone, ["src/c.test.ts", '@@ -1,3 +1,6 @@\n it("c", () => {\n   h();\n });\n+' + header + "\n+  g();\n+});\n"]])]).toEqual([header, ["test_removed:mechanical", "skip_added:mechanical own 0"]]);
+    }
+    expect(acts([jsGone, ["src/b.test.ts", '@@ -0,0 +1,3 @@\n+it("b", () => {\n+  g();\n+});\n']])).toEqual([]);
+    const pyGone: [string, string] = ["tests/test_a.py", "@@ -1,5 +1,2 @@\n def test_a():\n     assert f()\n-\n-def test_b():\n-    g()\n"];
+    for (const marker of ['@pytest.mark.skip(reason="later")', '@pytest.mark.xfail(reason="bug 12")', '@pytest.mark.skipif(\n+    sys.platform == "win32", reason="posix"\n+)']) {
+      expect([marker, acts([pyGone, ["tests/test_b.py", "@@ -0,0 +1,5 @@\n+import pytest\n+\n+" + marker + "\n+def test_b():\n+    g()\n"]])]).toEqual([marker, ["test_removed:mechanical", "skip_in_new_test:flag"]]);
+      expect([marker, acts([pyGone, ["tests/test_c.py", "@@ -1,2 +1,6 @@\n def test_c():\n     h()\n+\n+" + marker + "\n+def test_b():\n+    g()\n"]])]).toEqual([marker, ["test_removed:mechanical", "skip_added:mechanical own 0"]]);
+    }
+    expect(acts([pyGone, ["tests/test_b.py", "@@ -0,0 +1,2 @@\n+def test_b():\n+    g()\n"]])).toEqual([]);
+    expect(acts([["tests/test_a.py", '@@ -1,5 +1,6 @@\n def test_a():\n     assert f()\n \n-def test_b():\n+@pytest.mark.skip(reason="later")\n+def test_b(x):\n     g()\n']])).toEqual(["skip_added:mechanical own 0"]);
+  });
+
   test("SKIP_MARKERS reads Rust #[ignore = \"reason\"] and a bare mark.skip, mark.skipif or mark.xfail after from pytest import mark", () => {
     const rs = "tests/slow.rs";
     expect(skipActs(rs, '@@ -1,4 +1,5 @@\n #[test]\n+#[ignore = "slow on CI"]\n fn slow() {\n     assert!(work());\n }\n')).toEqual(["skip_added:mechanical own 0"]);
