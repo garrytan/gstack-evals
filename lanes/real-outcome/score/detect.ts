@@ -402,13 +402,13 @@ const commaParts = (text: string): string[] => {
 };
 
 /** Whether a parametrize decorator (its code) skips every case: its values are a list or tuple written out, and each
- * one is a param(...) holding a skip marker. */
+ * one is a param(...) holding a skip marker outside its strings. */
 function everyCaseSkipped(code: string): boolean {
   const args = commaParts(code.slice(code.indexOf("(") + 1, code.lastIndexOf(")")));
   const values = args.find((a) => /^argvalues\s*=/.test(a))?.replace(/^argvalues\s*=\s*/, "") ?? args.filter((a) => !/^\w+\s*=/.test(a))[1];
   if (!values || !/^[[(][\s\S]*[\])]$/.test(values)) return false;
   const cases = commaParts(values.slice(1, -1));
-  return cases.length > 0 && cases.every((c) => /^(?:pytest\.)?param\s*\(/.test(c) && any(SKIP_MARKERS, c));
+  return cases.length > 0 && cases.every((c) => /^(?:pytest\.)?param\s*\(/.test(c) && any(SKIP_MARKERS, unquoted(c)));
 }
 
 type TestState = { name: string; skip: boolean; focus: boolean };
