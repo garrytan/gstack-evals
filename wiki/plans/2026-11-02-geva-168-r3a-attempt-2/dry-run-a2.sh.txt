@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# R3a attempt 2 dry run (GEVA-168), keyless. It builds a non-git export of 8ad436d with git archive and shows the export
+# is the pin: the archive's commit id, the R3 amendment's section 1 digests, and a file list (mode, git blob id, path)
+# identical to git ls-tree -r 8ad436d. It installs the locked dependencies, rechecks the task set and the arm tars,
+# prepares attempt 2's work dir from the export on a temporary ledger and compares it with attempt 1's, runs the pack
+# preflight (preflight.sh.txt) on every directory launch.sh syncs, and reruns #112's r3-dry.ts with the export as TAG in
+# all ten scenarios, checking its R3 lines byte for byte against #112's dry-run.txt. No step calls a model or starts a
+# VM, and API keys are unset first. fetch_registry.py reads Harbor Hub's public registry over the network.
+# Usage: G=<gstack-evals git checkout holding 8ad436d> SWEBV=<harbor-datasets checkout left by swebv_r3.py --checkout>
+#   ARMS=<the three arm tars> A1=<attempt 1's prepared work dir> R=<read-only copy of the pinned ubi-runner.sh>
+#   HARBOR_DIR=<harbor checkout at f3a5a92> bash dry-run-a2.sh.txt <empty work dir>
+# Paths print as $W, $G, $SWEBV, $ARMS, $A1, $R and $HARBOR_DIR.
+set -u
+PIN=8ad436dc3403e3061440711dfe1d78cc59d7a7f9
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+D=$(cd "$(dirname "$0")" && pwd)
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+E=$W/export
+mkdir -p "$W/log" "$W/bin" "$W/laneb" "$W/r3"
+HIDE="s#$W#\$W#g; s#$G#\$G#g; s#$SWEBV#\$SWEBV#g; s#$ARMS#\$ARMS#g; s#$A1#\$A1#g; s#$R#\$R#g; s#$HARBOR_DIR#\$HARBOR_DIR#g; s#$D#\$D#g"
+n=0
+# step <grep pattern for the lines to show> <command...>: runs it, keeps its full output in log/, shows matching lines.
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*" | sed "$HIDE"
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}" | sed "$HIDE"
+  echo "exit $c (log/$n.txt)"
+}
+KEEP='^(r3|admission|R3|particle|cell|contrast|procedure|contamination|gap)'
+
+cat > "$W/bin/filelist.py" <<'EOF'
+# filelist.py <git checkout> <commit> <export root> <out dir>: the commit's tree as "mode blob id<TAB>path" lines (git
+# ls-tree -r) and the same lines computed from the export's files, both sorted by path bytes, with each list's sha256.
+import hashlib, os, stat, subprocess, sys
+g, commit, root, out = sys.argv[1:5]
+tree = []
+for e in subprocess.run(["git", "-C", g, "ls-tree", "-r", "-z", commit], check=True, capture_output=True).stdout.split(b"\0"):
+    if e:
+        meta, path = e.split(b"\t", 1)
+        mode, kind, oid = meta.split(b" ")
+        tree.append((path, b"%s %s %s\t%s" % (mode, kind, oid, path)))
+exp = []
+for d, dirs, files in os.walk(root.encode()):
+    for f in files:
+        p = os.path.join(d, f)
+        rel = os.path.relpath(p, root.encode())
+        st = os.lstat(p)
+        if stat.S_ISLNK(st.st_mode):
+            mode, data = b"120000", os.readlink(p)
+        else:
+            mode = b"100755" if st.st_mode & stat.S_IXUSR else b"100644"
+            data = open(p, "rb").read()
+        oid = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest().encode()
+        exp.append((rel, b"%s blob %s\t%s" % (mode, oid, rel)))
+for name, rows in (("tree", tree), ("export", exp)):
+    body = b"".join(line + b"\n" for _, line in sorted(rows))
+    open(os.path.join(out, name + ".txt"), "wb").write(body)
+    print(f"{name}: {len(rows)} files, list sha256 {hashlib.sha256(body).hexdigest()}")
+EOF
+cat > "$W/bin/section1.sha256" <<'EOF'
+c7a11aff14d42735066b00749cf43b905d2df1a9f95ccdbb48b7c078cf568eb0  quick/laneb/r3/screen.ts
+98db9f1310ae3f0e7631ce8666368d2bcc579412636a417b2c4a3e090eae2f4f  quick/laneb/r3/exposure.ts
+ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38  quick/laneb/runner/launch.sh
+7c149a38a54f4f52aa3b1e3f660b14bdb2b705c0262c968bea520e236667088a  quick/laneb/runner/vm-run.sh
+9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33  quick/laneb/runner/ledger.ts
+6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d  quick/laneb/analysis/analyze.ts
+7fe70d5ee4f55cd1efab783f08543192873ec1bd0ff071706df0d5d444ac5dbf  quick/laneb/config/cells.r3.json
+ba3927b68624958714c2fee7ac19836181c76a8bbabe148fbfdddce3d169c474  quick/laneb/config/proxy.json
+5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67  quick/laneb/tasks/swebv-r3.txt
+61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5  quick/laneb/tasks/swebv-r3.json
+EOF
+cat > "$W/bin/arms.sha256" <<'EOF'
+28bfc18d5e55f7146332eebf8c86b873a8f60043a43027ef18930414e0878419  gstack.tar.gz
+6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5  none.tar.gz
+c181857c01a7ee8d8c4434845c14b74a879bb7b6e6f4aa5ac328bfe3ccd3025b  placebo.tar.gz
+EOF
+cat > "$W/bin/approve.ts" <<'EOF'
+const { Ledger } = await import(process.argv[2] + "/quick/laneb/runner/ledger.ts");
+new Ledger(process.env.LEDGER!, "r3a-screen").approve(150, { words: "Dry run: a temporary ledger, no spend", by: "GEVA-168", source: "dry run" });
+EOF
+cat > "$W/bin/manifest-diff.py" <<'EOF'
+# manifest-diff.py <a1 manifest> <a2 manifest>: the top-level keys whose values differ, with both values for short ones.
+import json, sys
+a, b = (json.load(open(p)) for p in sys.argv[1:3])
+for k in sorted(set(a) | set(b)):
+    if a.get(k) != b.get(k):
+        print(f"{k}: attempt 1 {json.dumps(a.get(k))[:80]} | attempt 2 {json.dumps(b.get(k))[:80]}")
+print("other keys identical:", len(set(a) | set(b)) - sum(a.get(k) != b.get(k) for k in set(a) | set(b)))
+EOF
+
+echo "## The export is the pin"
+step . sh -c "git -C $G archive --format=tar $PIN > $W/pin.tar && git get-tar-commit-id < $W/pin.tar"
+step . sh -c "mkdir $E && tar -xf $W/pin.tar -C $E && find $E -type f -o -type l | wc -l"
+step . sh -c "git -C $E rev-parse --is-inside-work-tree; echo git exit \$?"
+step . python3 "$W/bin/filelist.py" "$G" "$PIN" "$E" "$W"
+step . sh -c "cmp $W/tree.txt $W/export.txt && echo 'file list identical to git ls-tree -r $PIN'"
+step . sh -c "cd $E && sha256sum -c $W/bin/section1.sha256"
+
+echo; echo "## Dependencies, task set and arm tars"
+step '^bun|installed|error' sh -c "cd $E && bun install --frozen-lockfile"
+step . git -C "$HARBOR_DIR" rev-parse HEAD
+step . sh -c "cd $E/quick/laneb/tasks && HARBOR_DIR=$HARBOR_DIR python3 fetch_registry.py | cut -c1-160"
+step '^ok|differ|Error' sh -c "cd $E/quick/laneb/tasks && python3 swebv_r3.py --checkout $SWEBV"
+step . sh -c "cd $ARMS && sha256sum -c $W/bin/arms.sha256"
+
+echo; echo "## Prepare from the export on a temporary ledger, against attempt 1's prepared work dir"
+step . sh -c "LEDGER=$W/ledger.jsonl bun $W/bin/approve.ts $E && wc -l < $W/ledger.jsonl"
+step . sh -c "cd $E && LEDGER=$W/ledger.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/work"
+step . sh -c "cmp $A1/plan.json $W/work/plan.json && echo plan.json identical"
+step . sh -c "for p in screen pilot; do diff -r -x manifest.json -x ledger-service.log $A1/\$p $W/work/\$p && echo \$p: run dir identical apart from manifest.json; done"
+step . sh -c "for p in screen pilot; do echo \$p; python3 $W/bin/manifest-diff.py $A1/\$p/manifest.json $W/work/\$p/manifest.json; done"
+
+echo; echo "## Pack preflight on every directory launch.sh syncs"
+step . grep -n '"\$S" sync' "$E/quick/laneb/runner/launch.sh"
+step . bash "$D/preflight.sh.txt" "$R" "$E" "$W/work"
+
+echo; echo "## #112's r3-dry.ts with the export as TAG"
+PD=$E/wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg
+cp "$PD/r3-dry.ts.txt" "$W/bin/r3-dry.ts"
+step . sh -c "cd $PD && sha256sum r3-dry.ts.txt dry-run.txt"
+for ic in r3a-screen:150 r3b-opus:450 r3b-particle:100; do
+  i=${ic%%:*}; c=${ic##*:}
+  printf '{"ts":"1970-01-01T00:00:00.000Z","item":"%s","kind":"approval","id":"%s-approval","usd_micros":%d,"cap_micros":%d,"words":"Dry run: keyless items at the frozen caps, no spend","by":"GEVA-101"}\n' "$i" "$i" "$((c * 1000000))" "$((c * 1000000))" > "$W/laneb/$i.jsonl"
+done
+first=$((n + 1))
+for s in lift small nolift gatefail saturated pilotfail screenstop opusstop partstop infra; do
+  echo; echo "# R3 scenario $s"
+  SHOW=30 step "$KEEP" env TAG="$E" bun "$W/bin/r3-dry.ts" "$E/quick/laneb/tasks/swebv-r3.txt" "$W/laneb" "$W/r3/$s" $s
+done
+last=$n
+echo; echo "## Byte for byte: these R3 lines against #112's dry-run.txt"
+awk 'f; /^## R3:/ { f = 1 }' "$PD/dry-run.txt" | grep -E -- "$KEEP" > "$W/r3/want.txt"
+for i in $(seq "$first" "$last"); do grep -E -- "$KEEP" "$W/log/$i.txt"; done > "$W/r3/got.txt"
+step . sh -c "wc -l < $W/r3/want.txt; wc -l < $W/r3/got.txt; diff $W/r3/want.txt $W/r3/got.txt && echo 'R3 lines identical:' \$(wc -l < $W/r3/got.txt) of \$(wc -l < $W/r3/want.txt)"
+echo; echo "## Done"

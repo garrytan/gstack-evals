@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# R3a attempt 2 pack preflight (GEVA-168). Before screen.ts run can bind the item, the read-only copy of the pinned
+# ubi-runner.sh packs every directory launch.sh syncs to a VM (launch.sh:152-153): the export's quick/laneb/runner
+# (launch.sh's $here) and each part's run dir (screen and pilot). Each must exist, sit outside any git work tree, and
+# pack with exit 0 into a readable archive. It exits 0 only when all three pass. Keyless; it starts no VM.
+# Usage: bash preflight.sh <read-only runner copy> <export root> <work dir>
+set -u
+R=$1 E=$2 W=$3
+echo "e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8  $R" | sha256sum -c --quiet - \
+  || { echo "preflight: $R is not the pinned runner; do not run"; exit 1; }
+[ -x "$R" ] && [ ! -w "$R" ] || { echo "preflight: $R is not a read-only executable; do not run"; exit 1; }
+fail=0
+for d in "$E/quick/laneb/runner" "$W/screen" "$W/pilot"; do
+  if [ ! -d "$d" ]; then echo "preflight FAIL $d: missing"; fail=1; continue; fi
+  if git -C "$d" rev-parse --is-inside-work-tree > /dev/null 2>&1; then echo "preflight FAIL $d: inside a git work tree"; fail=1; continue; fi
+  n=$(set -o pipefail; "$R" pack "$d" | tar -tzf - | wc -l)
+  rc=$?
+  if [ "$rc" -ne 0 ] || [ "$n" -lt 2 ]; then echo "preflight FAIL $d: pack exit $rc"; fail=1; else echo "preflight ok $d: pack exit 0, $n entries"; fi
+done
+if [ "$fail" = 0 ]; then echo "preflight: all 3 directories pack; run may bind"; else echo "preflight: FAILED; do not run"; fi
+exit "$fail"
