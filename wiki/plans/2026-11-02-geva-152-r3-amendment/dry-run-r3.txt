@@ -1,0 +1,356 @@
+## Pins
+
+$ git -C $B log -1 --format=r3 build %H %s
+r3 build 8ad436dc3403e3061440711dfe1d78cc59d7a7f9 laneb: R3 harness: SWE-bench Verified task set, told arms, VM hours on the ledger, exposure export and screen (GEVA-114) (#121)
+exit 0 (log/1.txt)
+
+$ sh -c git -C $B status --porcelain | wc -l
+0
+exit 0 (log/2.txt)
+
+$ sh -c cd $PD && sha256sum r3-band.py.txt r3-dry.ts.txt dry-run.txt
+6db889579b2faff1dab4d5f6864f5b4ebb040056d683808ab05713a2958dd210  r3-band.py.txt
+2fcd024d11074a4692816ea5bd9bf94ae90e77b45d4fe345612c060597cce7ec  r3-dry.ts.txt
+1dff5530ea0e698a306595bcce4be7c6c606cea71292903441a5f3c87ab8299c  dry-run.txt
+exit 0 (log/3.txt)
+
+$ sh -c cd $B && sha256sum quick/laneb/runner/ledger.ts quick/laneb/analysis/analyze.ts quick/laneb/tasks/prescreen_swebv.py quick/laneb/r3/screen.ts quick/laneb/r3/exposure.ts quick/laneb/runner/launch.sh quick/laneb/runner/vm-run.sh quick/laneb/runner/proxy.ts quick/laneb/config/proxy.json quick/laneb/config/cells.r3.json quick/laneb/tasks/swebv-r3.txt quick/laneb/tasks/swebv-r3.json
+9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33  quick/laneb/runner/ledger.ts
+6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d  quick/laneb/analysis/analyze.ts
+b54dc28783bf15141d1fba6c3fe2a5f2e596c273a8cc300377f3f3e6ee9b0357  quick/laneb/tasks/prescreen_swebv.py
+c7a11aff14d42735066b00749cf43b905d2df1a9f95ccdbb48b7c078cf568eb0  quick/laneb/r3/screen.ts
+98db9f1310ae3f0e7631ce8666368d2bcc579412636a417b2c4a3e090eae2f4f  quick/laneb/r3/exposure.ts
+ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38  quick/laneb/runner/launch.sh
+7c149a38a54f4f52aa3b1e3f660b14bdb2b705c0262c968bea520e236667088a  quick/laneb/runner/vm-run.sh
+af8fd9af8261a64ea86ecf20dff76fe1591e7715fec26e710ba352d4b0c995bb  quick/laneb/runner/proxy.ts
+ba3927b68624958714c2fee7ac19836181c76a8bbabe148fbfdddce3d169c474  quick/laneb/config/proxy.json
+7fe70d5ee4f55cd1efab783f08543192873ec1bd0ff071706df0d5d444ac5dbf  quick/laneb/config/cells.r3.json
+5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67  quick/laneb/tasks/swebv-r3.txt
+61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5  quick/laneb/tasks/swebv-r3.json
+exit 0 (log/4.txt)
+
+## Ledger items at their frozen caps (section 5 of the prereg), as the prereg's items.ts writes them
+lane b item r3a-screen at $150
+lane b item r3b-opus at $450
+lane b item r3b-particle at $100
+
+## R3: the in-band set and every frozen rule on synthetic trials, at the build pin (section 4 of the prereg)
+
+$ python3 $W/bin/r3-band.py $SWEBV $W/r3/band.txt
+band: 93 of 500 tasks solved 1 or 2 of 3 times by the frontier triple; sha256 5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67
+band cost: Opus 4.6 mini-SWE-agent per task median $0.483, mean $0.820
+exit 0 (log/5.txt)
+
+$ cmp $W/r3/band.txt $B/quick/laneb/tasks/swebv-r3.txt
+exit 0 (log/6.txt)
+
+$ python3 $W/bin/r3-plan-costs.py $SWEBV $W/r3/band.txt
+plan cost 20260217_mini-v2.0.0_claude-4-6-opus: band mean $0.820, median $0.483 over 93 tasks
+plan cost 20260217_mini-v2.0.0_claude-4-5-opus-high: band mean $0.999, median $0.785 over 93 tasks
+plan cost 20260217_mini-v2.0.0_gpt-5-2-high: band mean $0.596, median $0.482 over 93 tasks
+plan figures per none trial: Opus $0.820; Sol low $0.410 (Opus x 0.5, Sol's price over Opus 5.5's), central $0.596 (GPT-5.2 high's mean), high $0.848 (Opus x 0.150 / 0.145, Run D's Sol-to-Opus ratio)
+exit 0 (log/7.txt)
+
+# R3 scenario lift
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/lift lift
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.73 of $150, open reserves 0
+admission: 41 of 91 graded in-band tasks unsolved by Opus 5.5 none (2 infra); pilot exposure 8 of 9 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.76, told $1.22; projection r3b-opus $244, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $266.60 of $450, open reserves 0
+r3b-particle: settled $72.96 of $100, open reserves 0
+cell claude-opus-5-5 none: 121 trials on 41 tasks, pass 29.3% [20.3, 39.0], cost $90.93
+cell claude-opus-5-5 gstack: 118 trials on 41 tasks, pass 49.2% [39.4, 58.9], cost $166.41
+cell particle-1 none: 121 trials on 41 tasks, pass 17.9% [11.4, 25.2], cost $18.22
+cell particle-1 gstack: 121 trials on 41 tasks, pass 23.6% [15.4, 32.5], cost $34.26
+cell particle-1 placebo: 115 trials on 41 tasks, pass 12.6% [6.9, 19.1], cost $18.21
+contrast claude-opus-5-5 gstack - none: 19.9 points [95% CI 10.2, 30.5] on 41 tasks
+contrast particle-1 gstack - none: 5.7 points [95% CI -4.9, 16.3] on 41 tasks
+contrast particle-1 gstack - placebo: 11.0 points [95% CI 1.2, 21.1] on 41 tasks
+contrast particle-1 placebo - none: -5.3 points [95% CI -14.2, 3.3] on 41 tasks
+gap: particle-1 told closes 0.50 of the Opus none gap [-0.80, 2.29]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 111 of 118 graded Opus told trials (94.1 percent; the gate needs 90)
+R3 outcome: KEEP. Told /investigate lifts Opus 5.5 by 19.9 points [10.2, 30.5].
+exit 0 (log/8.txt)
+
+# R3 scenario small
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/small small
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.24 of $150, open reserves 0
+admission: 42 of 93 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 42 tasks; measured cost per trial none $0.74, told $1.44; projection r3b-opus $274, r3b-particle $57 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $280.10 of $450, open reserves 0
+r3b-particle: settled $73.64 of $100, open reserves 0
+cell claude-opus-5-5 none: 123 trials on 42 tasks, pass 31.3% [23.0, 39.3], cost $91.25
+cell claude-opus-5-5 gstack: 123 trials on 42 tasks, pass 35.3% [26.2, 44.8], cost $182.72
+cell particle-1 none: 124 trials on 42 tasks, pass 16.7% [9.5, 24.6], cost $18.03
+cell particle-1 gstack: 124 trials on 42 tasks, pass 20.2% [12.3, 29.0], cost $36.91
+cell particle-1 placebo: 125 trials on 42 tasks, pass 12.7% [7.1, 18.3], cost $17.77
+contrast claude-opus-5-5 gstack - none: 4.0 points [95% CI -7.1, 15.5] on 42 tasks
+contrast particle-1 gstack - none: 3.6 points [95% CI -6.7, 14.3] on 42 tasks
+contrast particle-1 gstack - placebo: 7.5 points [95% CI -2.4, 17.5] on 42 tasks
+contrast particle-1 placebo - none: -4.0 points [95% CI -13.5, 4.8] on 42 tasks
+gap: particle-1 told closes 0.24 of the Opus none gap [-0.73, 1.00]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 115 of 123 graded Opus told trials (93.5 percent; the gate needs 90)
+R3 outcome: FIX-METHOD. The lift (4.0 points) is inside the interval's reach of zero; MDD at 42 tasks is 14.1 points.
+exit 2 (log/9.txt)
+
+# R3 scenario nolift
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/nolift nolift
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.26 of $150, open reserves 0
+admission: 42 of 93 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 42 tasks; measured cost per trial none $0.76, told $1.42; projection r3b-opus $276, r3b-particle $57 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $276.66 of $450, open reserves 0
+r3b-particle: settled $75.65 of $100, open reserves 0
+cell claude-opus-5-5 none: 124 trials on 42 tasks, pass 33.3% [23.8, 42.1], cost $93.96
+cell claude-opus-5-5 gstack: 126 trials on 42 tasks, pass 32.5% [23.0, 42.9], cost $181.79
+cell particle-1 none: 122 trials on 42 tasks, pass 17.9% [11.1, 25.0], cost $18.63
+cell particle-1 gstack: 123 trials on 42 tasks, pass 15.1% [7.9, 23.4], cost $36.82
+cell particle-1 placebo: 123 trials on 42 tasks, pass 16.7% [9.5, 24.6], cost $18.10
+contrast claude-opus-5-5 gstack - none: -0.8 points [95% CI -11.1, 9.5] on 42 tasks
+contrast particle-1 gstack - none: -2.8 points [95% CI -11.9, 6.3] on 42 tasks
+contrast particle-1 gstack - placebo: -1.6 points [95% CI -11.1, 7.9] on 42 tasks
+contrast particle-1 placebo - none: -1.2 points [95% CI -9.9, 7.1] on 42 tasks
+gap: particle-1 told closes -0.18 of the Opus none gap [-1.21, 0.41]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 118 of 126 graded Opus told trials (93.7 percent; the gate needs 90)
+R3 outcome: CUT-CANDIDATE. Told /investigate gave Opus 5.5 no lift (-0.8 points); to Garry with this record.
+exit 1 (log/10.txt)
+
+# R3 scenario gatefail
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/gatefail gatefail
+r3a-screen: 93 screen trials, 10 pilot trials, settled $96.33 of $150, open reserves 0
+admission: 41 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.72, told $1.53; projection r3b-opus $278, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $269.82 of $450, open reserves 0
+r3b-particle: settled $70.76 of $100, open reserves 0
+cell claude-opus-5-5 none: 122 trials on 41 tasks, pass 25.2% [17.9, 33.3], cost $91.91
+cell claude-opus-5-5 gstack: 123 trials on 41 tasks, pass 48.0% [38.2, 57.7], cost $176.94
+cell particle-1 none: 121 trials on 41 tasks, pass 10.6% [4.9, 17.1], cost $17.87
+cell particle-1 gstack: 121 trials on 41 tasks, pass 20.3% [12.2, 29.3], cost $34.01
+cell particle-1 placebo: 122 trials on 41 tasks, pass 15.4% [8.9, 22.8], cost $17.96
+contrast claude-opus-5-5 gstack - none: 22.8 points [95% CI 9.8, 35.0] on 41 tasks
+contrast particle-1 gstack - none: 9.8 points [95% CI 0.8, 19.5] on 41 tasks
+contrast particle-1 gstack - placebo: 4.9 points [95% CI -4.9, 16.3] on 41 tasks
+contrast particle-1 placebo - none: 4.9 points [95% CI -2.4, 12.2] on 41 tasks
+gap: particle-1 told closes 0.67 of the Opus none gap [0.05, 1.78]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 67 of 123 graded Opus told trials (54.5 percent; the gate needs 90)
+R3 outcome: none (procedure gate failed). FIX-METHOD to the Captain.
+exit 4 (log/11.txt)
+
+# R3 scenario saturated
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/saturated saturated
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.61 of $150, open reserves 0
+admission: 9 of 91 graded in-band tasks unsolved by Opus 5.5 none (2 infra); pilot exposure 10 of 10 graded told trials
+R3 outcome: STOP (saturation). Only 9 in-band tasks are unsolved by Opus 5.5 with no skill, fewer than 30, so told /investigate can't be tested on Opus 5.5 on SWE-bench Verified. This report is the finding; R3b does not start.
+exit 5 (log/12.txt)
+
+# R3 scenario pilotfail
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/pilotfail pilotfail
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.89 of $150, open reserves 0
+admission: 41 of 91 graded in-band tasks unsolved by Opus 5.5 none (2 infra); pilot exposure 4 of 10 graded told trials
+R3 outcome: STOP (FIX-METHOD). Told /investigate ran its procedure in 4 of 10 pilot trials, under 7; R3b does not start.
+exit 6 (log/13.txt)
+
+# R3 scenario screenstop
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/screenstop screenstop
+r3a-screen: 36 screen trials, 0 pilot trials, settled $40.60 of $150, open reserves 1
+R3 outcome: none (incomplete: r3a-screen refused claude-opus-5-5|none|django__django-15957|1 (cap)). R3a stopped at its cap, so R3b does not start; the Captain gets the record.
+exit 4 (log/14.txt)
+
+# R3 scenario opusstop
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/opusstop opusstop
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.50 of $150, open reserves 0
+admission: 41 of 90 graded in-band tasks unsolved by Opus 5.5 none (3 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.74, told $1.40; projection r3b-opus $264, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $56.42 of $450, open reserves 1
+r3b-particle: settled $73.38 of $100, open reserves 0
+cell claude-opus-5-5 none: 24 trials on 8 tasks, pass 16.7% [4.2, 29.2], cost $18.98
+cell claude-opus-5-5 gstack: 22 trials on 8 tasks, pass 50.0% [29.2, 70.8], cost $34.00
+cell particle-1 none: 119 trials on 41 tasks, pass 15.9% [9.8, 22.4], cost $19.10
+cell particle-1 gstack: 121 trials on 41 tasks, pass 22.0% [13.8, 30.9], cost $34.91
+cell particle-1 placebo: 119 trials on 41 tasks, pass 7.3% [3.3, 12.2], cost $17.51
+contrast claude-opus-5-5 gstack - none: 33.3 points [95% CI 12.5, 50.0] on 8 tasks
+contrast particle-1 gstack - none: 6.1 points [95% CI -2.4, 15.0] on 41 tasks
+contrast particle-1 gstack - placebo: 14.6 points [95% CI 4.1, 25.2] on 41 tasks
+contrast particle-1 placebo - none: -8.5 points [95% CI -15.1, -2.0] on 41 tasks
+gap: particle-1 told closes NaN of the Opus none gap [-2.00, 8.00]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 21 of 22 graded Opus told trials (95.5 percent; the gate needs 90)
+R3 outcome: none (incomplete: r3b-opus refused claude-opus-5-5|none|django__django-11790|1 (cap)). The Captain gets the record; no rerun to change a verdict.
+exit 4 (log/15.txt)
+
+# R3 scenario partstop
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/partstop partstop
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.89 of $150, open reserves 0
+admission: 41 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra); pilot exposure 9 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.75, told $1.56; projection r3b-opus $285, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $275.49 of $450, open reserves 0
+r3b-particle: settled $19.03 of $100, open reserves 1
+particle-1: incomplete (r3b-particle refused particle-1|gstack|django__django-13590|1 (cap)). Its cells, contrasts and gap share are reported beside the result marked [incomplete] and decide nothing; the Opus 5.5 outcome below stands.
+cell claude-opus-5-5 none: 117 trials on 41 tasks, pass 30.5% [21.1, 40.7], cost $88.80
+cell claude-opus-5-5 gstack: 119 trials on 41 tasks, pass 43.1% [32.9, 53.3], cost $176.49
+cell particle-1 none: 34 trials on 12 tasks, pass 19.4% [8.3, 33.3], cost $4.99 [incomplete]
+cell particle-1 gstack: 33 trials on 11 tasks, pass 24.2% [9.1, 42.4], cost $9.67 [incomplete]
+cell particle-1 placebo: 32 trials on 11 tasks, pass 3.0% [0.0, 9.1], cost $4.20 [incomplete]
+contrast claude-opus-5-5 gstack - none: 12.6 points [95% CI 3.7, 22.0] on 41 tasks
+contrast particle-1 gstack - none: 3.0 points [95% CI -15.2, 21.2] on 11 tasks [incomplete]
+contrast particle-1 gstack - placebo: 21.2 points [95% CI 3.0, 39.4] on 11 tasks [incomplete]
+contrast particle-1 placebo - none: -18.2 points [95% CI -30.3, -6.1] on 11 tasks [incomplete]
+gap: particle-1 told closes 0.07 of the Opus none gap [-0.44, 0.45] [incomplete]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 113 of 119 graded Opus told trials (95.0 percent; the gate needs 90)
+R3 outcome: KEEP. Told /investigate lifts Opus 5.5 by 12.6 points [3.7, 22.0].
+exit 0 (log/16.txt)
+
+# R3 scenario infra
+
+$ env TAG=$B bun $W/bin/r3-dry.ts $W/r3/band.txt $W/laneb $W/r3/infra infra
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.78 of $150, open reserves 0
+admission: 41 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.77, told $1.40; projection r3b-opus $267, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $264.11 of $450, open reserves 0
+r3b-particle: settled $73.21 of $100, open reserves 0
+cell claude-opus-5-5 none: 120 trials on 41 tasks, pass 34.6% [26.4, 43.1], cost $84.54
+cell claude-opus-5-5 gstack: 106 trials on 40 tasks, pass 47.5% [35.8, 59.2], cost $153.87
+cell particle-1 none: 120 trials on 41 tasks, pass 19.5% [12.2, 27.6], cost $19.09
+cell particle-1 gstack: 123 trials on 41 tasks, pass 24.4% [17.1, 32.5], cost $35.37
+cell particle-1 placebo: 121 trials on 41 tasks, pass 17.5% [10.2, 25.2], cost $17.99
+contrast claude-opus-5-5 gstack - none: 12.1 points [95% CI -0.4, 24.6] on 40 tasks
+contrast particle-1 gstack - none: 4.9 points [95% CI -4.1, 13.8] on 41 tasks
+contrast particle-1 gstack - placebo: 6.9 points [95% CI -2.4, 17.1] on 41 tasks
+contrast particle-1 placebo - none: -2.0 points [95% CI -11.8, 6.5] on 41 tasks
+gap: particle-1 told closes 0.32 of the Opus none gap [-0.46, 1.03]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 104 of 106 graded Opus told trials (98.1 percent; the gate needs 90)
+R3 outcome: none (incomplete: infra over 10% in an Opus cell (none 2.4%, told 13.8%)). The Captain gets the record; no rerun to change a verdict.
+exit 4 (log/17.txt)
+
+## Byte for byte: this run's R3 lines against the prereg's dry-run.txt
+
+$ sh -c wc -l < $W/r3/want.txt; wc -l < $W/r3/got.txt; diff $W/r3/want.txt $W/r3/got.txt && echo 'R3 lines identical:' $(wc -l < $W/r3/got.txt) of $(wc -l < $W/r3/want.txt)
+135
+135
+R3 lines identical: 135 of 135
+exit 0 (log/18.txt)
+
+## R3a's caps against its own rules, at the real caps (section 7)
+
+$ env B=$B bun $W/bin/r3a-caps.ts $W/caps
+rules: 8 trials at a time, $4 reserved per session (Opus and Sol), VM at $0.60 an hour in $2.40 blocks, told = 1.9 x none
+VM plan: 2 blocks on the screen, 1 on the pilot (12 VM hours, $7.20, per model). VM wide: Opus 13 blocks ($31.20, at least #112's $30); Sol 13 with one for the route check
+Opus planning $0.82, VM plan: r3a-screen at $150, VM blocks $7.20: all 103 of 103 trials ran; peak commitment $118.58 at pilot trial 10; settled $99.04
+Opus planning $0.82, VM wide: r3a-screen at $150, VM blocks $31.20: all 103 of 103 trials ran; peak commitment $142.58 at pilot trial 10; settled $123.04
+Opus, every trial at its $4 allowance: r3a-screen at $150, VM blocks $7.20: STOP after 36 of 103 trials (ledger refused screen trial 37 of 93: settled $116.00 + open $32.80 + $4 > $150)
+Opus break-even, VM plan: every planned trial runs while the mean none trial costs at most $1.145 (told 1.9 x)
+Opus break-even, VM wide: every planned trial runs while the mean none trial costs at most $0.897 (told 1.9 x)
+Sol low $0.41, VM plan: r3a-sol at $140, VM blocks $7.20: all 105 of 105 trials ran; peak commitment $79.71 at pilot trial 10; settled $53.94
+Sol low $0.41, VM wide: r3a-sol at $140, VM blocks $31.20: all 105 of 105 trials ran; peak commitment $103.71 at pilot trial 10; settled $77.94
+Sol central $0.60, VM plan: r3a-sol at $140, VM blocks $7.20: all 105 of 105 trials ran; peak commitment $98.48 at pilot trial 10; settled $75.60
+Sol central $0.60, VM wide: r3a-sol at $140, VM blocks $31.20: all 105 of 105 trials ran; peak commitment $122.48 at pilot trial 10; settled $99.60
+Sol high $0.85, VM plan: r3a-sol at $140, VM blocks $7.20: all 105 of 105 trials ran; peak commitment $123.18 at pilot trial 10; settled $104.10
+Sol high $0.85, VM wide: r3a-sol at $140, VM blocks $31.20: STOP after 102 of 105 trials (ledger refused pilot trial 8 of 10: settled $102.35 + open $37.60 + $4 > $140)
+Sol high $0.85, route check retried (4 sessions), VM wide: r3a-sol at $140, VM blocks $31.20: STOP after 103 of 107 trials (ledger refused pilot trial 7 of 10: settled $104.05 + open $33.60 + $4 > $140)
+Sol, every trial at its $4 allowance: r3a-sol at $140, VM blocks $7.20: STOP after 33 of 105 trials (ledger refused screen trial 32 of 93: settled $104.00 + open $32.80 + $4 > $140)
+Sol break-even, VM plan: every planned trial runs while the mean none trial costs at most $1.020; with the route check retried, $1.000
+Sol break-even, VM wide: every planned trial runs while the mean none trial costs at most $0.777; with the route check retried, $0.762
+exit 0 (log/19.txt)
+
+## The rules the amendment pins, driven by the build's keyless tests at the pin
+
+$ sh -c cd $B && bun test quick/laneb/tests/r3.test.ts quick/laneb/tests/launch.test.ts quick/laneb/tests/vm-run.test.ts 2>&1
+(pass) launch.sh without an interrupt > pulled x no_interrupt: once vm-run.exit exists it pulls, counts, reconciles, destroys the VM and exits with the batch's code [127.60ms]
+(pass) launch.sh without an interrupt > not_started x no_interrupt: a failure before the batch starts destroys the VM and stops the ledger service [57.16ms]
+(pass) launch.sh without an interrupt > pull_failed x no_interrupt: vm-run.exit exists but the pull fails, so the VM is kept, the commands are printed and it exits 7 [110.47ms]
+(pass) launch.sh without an interrupt > a run dir that already holds pulled/ from an earlier launch is refused before any VM exists [5.65ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > the VM's hours are reserved before it starts and settled at metered hours once it is down [190.72ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > each next block is reserved before the current one runs out, and a refused block stops the batch as a cap stop [4774.89ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a ledger service that can't be reached is retried, and stops the batch only once the current block runs out [3113.40ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > every open VM block the ledger holds is settled, recorded by the extender or not [215.09ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a VM reserve the ledger refuses is a cap stop: exit 9 and no VM [44.98ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a VM rate or block that isn't a positive number or rounds to $0 (0,6 $/h, 4 h) is refused before any reserve or VM [23.17ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a VM rate or block that isn't a positive number or rounds to $0 ($0.60 $/h, 4 h) is refused before any reserve or VM [24.13ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a VM rate or block that isn't a positive number or rounds to $0 (0 $/h, 4 h) is refused before any reserve or VM [23.97ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a VM rate or block that isn't a positive number or rounds to $0 (2 $/h, 4h h) is refused before any reserve or VM [22.65ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a VM rate or block that isn't a positive number or rounds to $0 (0.0000001 $/h, 4 h) is refused before any reserve or VM [27.10ms]
+(pass) launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS) > a kept VM leaves its reserve open at the full amount and says how to settle it [122.47ms]
+(pass) launch.sh on interrupt > not_started x interrupt: an interrupt before the batch starts exits 130, writes no STOP and destroys the VM [2049.84ms]
+(pass) launch.sh on interrupt > stops the batch, keeps the ledger up until sessions close, pulls, reconciles, then destroys the VM [541.87ms]
+(pass) launch.sh on interrupt > keeps the VM and prints the pull commands when the pull fails [511.69ms]
+(pass) launch.sh on interrupt > still stops the batch, pulls and destroys the VM when stderr is a broken pipe [420.65ms]
+(pass) launch.sh when the batch connection drops > keeps the VM and pulls nothing while vm-run.sh has not finished [85.32ms]
+(pass) launch.sh when the batch connection drops > not_finished x interrupt: an interrupt after the drop writes STOP, pulls nothing, keeps the VM and exits 130 [3093.90ms]
+(pass) R3 task set > the committed list is the prereg's 93 ids and every one has a digest, in order [0.50ms]
+(pass) R3 task set > a list whose bytes differ from the prereg's, or digests out of its order, are refused [0.45ms]
+(pass) R3 task set > one task materializes offline from a fixture with the right digest, keeping the dataset's timeouts [2.08ms]
+(pass) R3 task set > a task directory that differs from its digest is refused before it is materialized [0.81ms]
+(pass) R3 task set > prepare-run refuses an unknown task set and a task outside R3's list [35.64ms]
+(pass) R3 arms > told and placebo are told /investigate, none is told nothing, and every arm runs on claude-code-preset [0.52ms]
+(pass) R3 arms > the prompt builder opens a told prompt with /investigate and leaves an untold one as the wrapper [10.52ms]
+(pass) R3 arms > the R3 arm manifests pin #109's none, gstack and placebo tars [0.14ms]
+(pass) R3 arms > every R3 arm, under the real pinned Agent SDK, sends its prompt with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 and the preset [1068.78ms]
+(pass) R3 ledger > a reserve per trial at its allowance, a settle at metered cost, VM hours on the same item, and a refusal at the cap [109.52ms]
+(pass) R3 ledger > the screen binds its item: a ledger with any reserve, or a cap other than $150, is refused [1.58ms]
+(pass) R3 procedure gate and classification > the gate's patterns on transcripts that pass and fail [2.02ms]
+(pass) R3 procedure gate and classification > graded needs a reward and a model response; anything else is infra (GSTA-2 ruling) [2.40ms]
+(pass) R3 screen and admission > the pilot draw is r3-dry.ts's: 10 band tasks, seed 20261101 [0.68ms]
+(pass) R3 screen and admission > admission passes, stops at saturation, and stops when the pilot shows the procedure in under 7 [84.56ms]
+(pass) R3 screen and admission > the screen writes the admitted list, the pilot exposure, the measured costs and the projection [36.37ms]
+(pass) R3 screen and admission > a trial with no result.json is infra, and admission counts it as one [33.48ms]
+(pass) R3 screen and admission > a planned task with no trial makes R3a incomplete and admits nothing [33.19ms]
+(pass) R3 screen and admission > a trial directory that can't be attributed makes R3a incomplete and admits nothing [32.47ms]
+(pass) R3 screen and admission > a second trial for a task makes R3a incomplete and admits nothing [32.89ms]
+(pass) R3 screen and admission > a trial outside the band makes R3a incomplete and admits nothing [33.20ms]
+(pass) R3 screen and admission > a screen trial in the wrong arm makes R3a incomplete and admits nothing [33.74ms]
+(pass) R3 screen and admission > an all-infra screen makes R3a incomplete and admits nothing [33.44ms]
+(pass) R3 screen and admission > 10 infra screen trials of 93 makes R3a incomplete and admits nothing [33.20ms]
+(pass) R3 screen and admission > 2 infra pilot trials of 10 makes R3a incomplete and admits nothing [32.47ms]
+(pass) R3 screen and admission > 9 infra screen trials of 93 and 1 infra pilot trial of 10 go on to admission [33.05ms]
+(pass) R3 screen and admission > an empty screen cap-stop.json makes R3a incomplete and admits nothing [34.85ms]
+(pass) R3 screen and admission > an empty screen proxy-status-end.json makes R3a incomplete and admits nothing [31.82ms]
+(pass) R3 screen and admission > an unparseable pilot proxy-status-end.json makes R3a incomplete and admits nothing [31.99ms]
+(pass) R3 screen and admission > a truncated last line in screen proxy-sessions.jsonl makes R3a incomplete and admits nothing [31.94ms]
+(pass) R3 screen and admission > an empty pilot proxy-sessions.jsonl makes R3a incomplete and admits nothing [31.53ms]
+(pass) R3 screen and admission > an empty screen.launch-exit makes R3a incomplete and admits nothing [33.04ms]
+(pass) R3 screen and admission > a non-integer pilot.launch-exit makes R3a incomplete and admits nothing [31.12ms]
+(pass) R3 screen and admission > a reanalysis that ends incomplete leaves no admitted.txt or r3b-tasks.txt from an earlier analysis [47.96ms]
+(pass) R3 screen and admission > run binds the item before its first spend: a second run, from this work dir or another, is refused [122.91ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve (0,6 $/h, default h) before it binds the item [10.61ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve ($0.60 $/h, default h) before it binds the item [10.54ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve (0 $/h, default h) before it binds the item [10.25ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve (2 $/h, 4h h) before it binds the item [9.93ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve (0.0000001 $/h, 4 h) before it binds the item [10.28ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve (2 $/h, 0.0005 h) before it binds the item [10.04ms]
+(pass) R3 screen and admission > run refuses a VM rate or block it can't reserve (2 $/h, 100 h) before it binds the item [10.37ms]
+(pass) R3 screen and admission > a cap refusal (status) makes R3a incomplete and admits nothing [31.60ms]
+(pass) R3 screen and admission > a cap refusal (trial) makes R3a incomplete and admits nothing [32.42ms]
+(pass) R3 screen and admission > a cap refusal (vm) makes R3a incomplete and admits nothing [32.47ms]
+(pass) R3 screen and admission > a cap refusal (vm-block) makes R3a incomplete and admits nothing [33.22ms]
+(pass) R3 body-load probe > the first request's slash-command expansion lands in the session row with the command's name [3.55ms]
+(pass) R3 body-load probe > <command-name> outside the messages, as in the Skill tool's description, is not an expansion [0.72ms]
+(pass) analyze() and the Ledger on r3-dry.ts's fixture trials print the contrasts the prereg's dry run printed at the tag [3647.66ms]
+(pass) vm-run.sh before the paid batch > the oracle gate needs a reward-1 trial for every task, a task with no trial included [29.54ms]
+(pass) vm-run.sh before the paid batch > with every task passing, a metering proxy that never turns healthy stops the run before Harbor [611.02ms]
+(pass) vm-run.sh before the paid batch > every exit leaves out/vm-run.exit with its exit code, early exits included [638.10ms]
+(pass) vm-run.sh before the paid batch > a stop request written before the paid run keeps it from starting [18.17ms]
+(pass) vm-run.sh before the paid batch > a run with no oracle job that stops before the paid run still leaves an empty jobs dir for launch.sh to pull [7.35ms]
+(pass) vm-run.sh during the paid batch > a stop request reaches the running Harbor as one SIGINT; the sessions are closed and the exit code recorded [135.85ms]
+(pass) vm-run.sh during the paid batch > a SIGTERM to vm-run.sh records exit code 143 once Harbor returns, and the sessions are closed [330.66ms]
+(pass) vm-run.sh during the paid batch > with STOP_ON_CAP, a latched cap stop reaches the running Harbor as one SIGINT and out/cap-stop.json records it [139.06ms]
+(pass) vm-run.sh during the paid batch > without STOP_ON_CAP, a latched cap stop leaves Harbor running [1150.31ms]
+ 79 pass
+ 0 fail
+Ran 79 tests across 3 files. [24.60s]
+exit 0 (log/20.txt)
+
+## Done

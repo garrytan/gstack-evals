@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+# R3 amendment, section 6.5: the per-trial planning figures for R3a. Reads the three frontier runs r3-band.py reads, at the
+# same SWE-bench/experiments pin, and prints each run's mean and median cost on the 93 band tasks. Opus 4.6's mean is
+# #112's Opus figure, and GPT-5.2 high's mean is Sol's central figure. Keyless.
+# Usage: python3 r3-plan-costs.py <SWE-bench/experiments checkout> <band list>
+import json, os, statistics, sys
+
+exp, band_path = sys.argv[1:3]
+band = open(band_path).read().split()
+runs = ["20260217_mini-v2.0.0_claude-4-6-opus", "20260217_mini-v2.0.0_claude-4-5-opus-high", "20260217_mini-v2.0.0_gpt-5-2-high"]
+mean = {}
+for s in runs:
+    d = json.load(open(os.path.join(exp, "evaluation/verified", s, "per_instance_details.json")))
+    c = [d[i].get("cost") or 0 for i in band]
+    mean[s] = statistics.mean(c)
+    print("plan cost %s: band mean $%.3f, median $%.3f over %d tasks" % (s, mean[s], statistics.median(c), len(c)))
+opus = mean[runs[0]]
+print("plan figures per none trial: Opus $%.3f; Sol low $%.3f (Opus x 0.5, Sol's price over Opus 5.5's), central $%.3f (GPT-5.2 high's mean), high $%.3f (Opus x 0.150 / 0.145, Run D's Sol-to-Opus ratio)" % (opus, opus * 0.5, mean[runs[2]], opus * 0.150 / 0.145))

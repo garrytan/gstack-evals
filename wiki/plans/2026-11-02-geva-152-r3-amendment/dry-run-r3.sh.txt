@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# R3 amendment dry run: the R3 section of the GEVA-101 prereg's dry-run.sh, rerun keyless at the R3 build pin (#121's
+# merge commit) instead of tag laneb-stacks-1-runner, then a byte-for-byte check of its R3 lines against the prereg's
+# dry-run.txt, then the build's own keyless tests at the pin, which drive the rules the amendment pins (GSTA-2's three
+# rulings, the five edge rules and 301d8d3's refusals) through r3/screen.ts, r3/exposure.ts, runner/launch.sh,
+# runner/vm-run.sh and the real pinned Agent SDK with a stub CLI, and a replay of R3a's planned order on the pin's real
+# Ledger at the real caps (r3a-caps.ts). r3-plan-costs.py prints the planning figures. No step calls a model or starts a VM. API keys are
+# unset first.
+# Usage: B=<gstack-evals checkout at the build pin, with node_modules> SWEBV=<SWE-bench/experiments checkout with
+#   evaluation/verified/2026021*/per_instance_details.json> bash dry-run-r3.sh <empty work dir>
+# The prereg's attachments are read from B's wiki/, or from PD when it is set. Paths print as $W, $PD, $SWEBV and $B.
+set -u
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+PD=${PD:-$B/wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg}
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+mkdir -p "$W/log" "$W/bin" "$W/laneb" "$W/r3"
+for f in r3-band.py r3-dry.ts; do cp "$PD/$f.txt" "$W/bin/$f"; done
+D=$(cd "$(dirname "$0")" && pwd)
+for f in r3a-caps.ts r3-plan-costs.py; do cp "$D/$f.txt" "$W/bin/$f"; done
+HIDE="s#$W#\$W#g; s#$PD#\$PD#g; s#$D#\$D#g; s#$SWEBV#\$SWEBV#g; s#$B#\$B#g"
+n=0
+# step <grep pattern for the lines to show> <command...>: runs it, keeps its full output in log/, shows matching lines.
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*" | sed "$HIDE"
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}" | sed "$HIDE"
+  echo "exit $c (log/$n.txt)"
+}
+KEEP='^(r3|admission|R3|particle|cell|contrast|procedure|contamination|gap)'
+
+echo "## Pins"
+step . git -C "$B" log -1 --format='r3 build %H %s'
+step . sh -c "git -C $B status --porcelain | wc -l"
+step . sh -c "cd $PD && sha256sum r3-band.py.txt r3-dry.ts.txt dry-run.txt"
+step . sh -c "cd $B && sha256sum quick/laneb/runner/ledger.ts quick/laneb/analysis/analyze.ts quick/laneb/tasks/prescreen_swebv.py quick/laneb/r3/screen.ts quick/laneb/r3/exposure.ts quick/laneb/runner/launch.sh quick/laneb/runner/vm-run.sh quick/laneb/runner/proxy.ts quick/laneb/config/proxy.json quick/laneb/config/cells.r3.json quick/laneb/tasks/swebv-r3.txt quick/laneb/tasks/swebv-r3.json"
+
+echo; echo "## Ledger items at their frozen caps (section 5 of the prereg), as the prereg's items.ts writes them"
+for ic in r3a-screen:150 r3b-opus:450 r3b-particle:100; do
+  i=${ic%%:*}; c=${ic##*:}
+  printf '{"ts":"1970-01-01T00:00:00.000Z","item":"%s","kind":"approval","id":"%s-approval","usd_micros":%d,"cap_micros":%d,"words":"Dry run: keyless items at the frozen caps, no spend","by":"GEVA-101"}\n' "$i" "$i" "$((c * 1000000))" "$((c * 1000000))" > "$W/laneb/$i.jsonl"
+  echo "lane b item $i at \$$c"
+done
+
+echo; echo "## R3: the in-band set and every frozen rule on synthetic trials, at the build pin (section 4 of the prereg)"
+step '^band' python3 "$W/bin/r3-band.py" "$SWEBV" "$W/r3/band.txt"
+step . cmp "$W/r3/band.txt" "$B/quick/laneb/tasks/swebv-r3.txt"
+step '^plan' python3 "$W/bin/r3-plan-costs.py" "$SWEBV" "$W/r3/band.txt"
+first=$((n + 1))
+for s in lift small nolift gatefail saturated pilotfail screenstop opusstop partstop infra; do
+  echo; echo "# R3 scenario $s"
+  SHOW=30 step "$KEEP" env TAG="$B" bun "$W/bin/r3-dry.ts" "$W/r3/band.txt" "$W/laneb" "$W/r3/$s" $s
+done
+last=$n
+
+echo; echo "## Byte for byte: this run's R3 lines against the prereg's dry-run.txt"
+awk 'f; /^## R3:/ { f = 1 }' "$PD/dry-run.txt" | grep -E -- "$KEEP" > "$W/r3/want.txt"
+for i in $(seq "$first" "$last"); do grep -E -- "$KEEP" "$W/log/$i.txt"; done > "$W/r3/got.txt"
+step . sh -c "wc -l < $W/r3/want.txt; wc -l < $W/r3/got.txt; diff $W/r3/want.txt $W/r3/got.txt && echo 'R3 lines identical:' \$(wc -l < $W/r3/got.txt) of \$(wc -l < $W/r3/want.txt)"
+
+echo; echo "## R3a's caps against its own rules, at the real caps (section 7)"
+SHOW=40 step . env B="$B" bun "$W/bin/r3a-caps.ts" "$W/caps"
+
+echo; echo "## The rules the amendment pins, driven by the build's keyless tests at the pin"
+SHOW=200 step '^\(pass\)|^\(fail\)|^ *[0-9]+ (pass|fail|skip)|^Ran ' sh -c "cd $B && bun test quick/laneb/tests/r3.test.ts quick/laneb/tests/launch.test.ts quick/laneb/tests/vm-run.test.ts 2>&1"
+echo; echo "## Done"
