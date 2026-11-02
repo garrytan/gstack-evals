@@ -84,8 +84,8 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--told-prefix <arm>=<file>`, repeatable. On code units the file's one line replaces the arm's told command (for
   example R2's full-procedure /review line); it must open with the arm's own command. The template and TOLD_SHA256 stay
   the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
-  command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
-  for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
+  command and plan.md (/plan-ceo-review plan.md) and add words after them, and the arm sends that line verbatim as its
+  turn 1. A prefix that adds nothing, starts or ends with whitespace, or has a control character (a CR, tab or
   BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
   one). none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo
   runs, since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
@@ -145,30 +145,54 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
 
 ## Plan units
 
-`--plan ceo` runs plan units from a plan suite (planning lane plan wiki/plans/2026-10-31-geva-79-planning-lane-plan,
-B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what differs:
+`--plan <lens>` (ceo, eng, devex or design) runs plan units from a plan suite (panel v3 plan
+wiki/plans/2026-11-02-geva-165-planning-panel-v3-plan, sections 4 and 5), with `--sealed-root` when the suite is
+sealed. plan.ts holds what differs:
 
-- Arms: `none` ("Review this plan for problems."), `gstack=<gstack repo>@<sha>` (`/plan-ceo-review` and that line),
-  `lens` (the lens line from the skill's description, then that line), `placebo` (Lane B's placebo tree generated
-  from the gstack arm, with the gstack line) and `gstack-auto=<gstack repo>@<sha>`, a frozen placeholder for
-  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
-  `gstack-<suffix>` (not gstack-auto) is a second gstack arm, such as a forced-procedure arm, and needs its
-  own `--told-prefix`. `--arm-models
-  <arm>=<model>[,<model>]` limits an arm to some of `--models`, so lens runs only on Opus and placebo only on particle-1.
-- TOLD_PLAN_TEMPLATE, pinned by TOLD_PLAN_SHA256, asks for a `plan-findings` fence with severity (Critical, High,
-  Medium, Low), section, line, claim, evidence and fix. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
+- Arms and turn 1: each lens has a skill, a command and a lens line taken from the skill's description at gstack
+  v1.93.17.0. Turn 1 has no format words. `none` sends PLAN_ASK ("Review plan.md for problems."), `lens` the lens line
+  and PLAN_ASK, and `gstack=<gstack repo>@<sha>` and `placebo` (Lane B's placebo tree generated from the gstack arm)
+  the command and `plan.md`. `gstack-auto=<gstack repo>@<sha>` is a frozen placeholder for GST-537's /autoplan that
+  refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named `gstack-<suffix>` (not gstack-auto)
+  is a second gstack arm and needs a `--told-prefix`: one line that opens with the command and `plan.md`, adds words,
+  and goes out verbatim. `--arm-models <arm>=<model>[,<model>]` limits an arm to some of `--models`.
+- Two turns: once turn 1 completes, the driver sends PLAN_TURN2_TEXT, pinned by PLAN_TURN2_SHA256, in the same
+  session. It asks for every problem found and a `plan-findings` fence with severity (Critical, High, Medium, Low),
+  section, line, claim, evidence and fix. Turn 2 has its own clock (300 s) and turn cap (5). Every plan session key
+  carries PLAN_TURN2_SHA256 and the allowance. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
 - A plan unit installs and tests nothing: its tree is the repository, with the same history check.
-- Every arm runs with the rec user: each question gets "Go with your recommendation.", one that offers another skill or
-  review, or to promote or commit docs, gets "No, not now.", and the simulator's binding rules still refuse gated
-  effects. No model answers for the user. An arm that installs gstack gets every question in its registry set to
+- Every arm runs with the rec user: each question gets "Go with your recommendation." A question that offers another
+  skill or review (by slash command or phrase, not counting the lens's own) or to promote or commit docs gets "No, not
+  now." A mode, scope-gate or Step 0 question (the mode rule, built from each lens's Step 0 and mode names in the
+  pinned skills) gets the recommendation before those rules run, and its answer is marked a choice: it only picks
+  among the question's options, so the simulator passes it even when the question names /ship or a commit (GST-925).
+  Every other answer still goes through the binding rules that refuse gated effects. REC_USER_SHA256 covers the
+  persona, the replies, each lens's decline rule, the docs rule and the mode rule. No model answers for the user. An
+  arm that installs gstack gets every question in its registry set to
   never-ask (auto-decide) in the trial's throwaway state root, written over any preferences file the unit's tree ships;
   arm.json records that file's sha256 as `question_preferences_sha256`.
+- Stops (section 5): every plan session runs with cap stops, so `--cap-stops` changes nothing with `--plan`. A turn
+  cap or allowance stop in either turn, or a timeout after model output, is scored like a turn cap: the findings in
+  the latest main-agent text in transcript.ndjson whose last `plan-findings` block parses (capped.ts), else a miss.
+  arm.json counts them in `stops` (turn_cap, allowance_stop, timeout, turn_2, units), with a diagnostic and the
+  settled spend per session. `<out>/terminations.tsv` lists each session's termination, turn, model output, score and
+  findings.
+- Clean room: before the lease, review-units runs clean-room.ts's script in each none and lens image with each unit
+  tree mounted read-only. A hit (a .capy drive, ~/.local/share/gstack, ~/.claude/skills, a unit's .claude/skills, or
+  an AGENTS.md or CLAUDE.md naming gstack) stops the run with E_CLEAN_ROOM (exit 2), naming the arm, the image digest
+  and the paths, before any spend. Each none and lens session runs the same script before the CLI starts; a refusal is
+  a coverage gap that is not journaled, so `--resume` reruns it.
+- Read audit: audit.ts scans every tool call in each session's transcript and logs each touch of a gstack skill file,
+  ~/.local/share/gstack, a .capy path or a gstack-* command. A non-error touch under .capy in any arm, or of gstack in
+  a none or lens arm, makes the arm untested: arm.json is stopped with an `untested` block (sessions, paths, paid
+  spend), the run stops with E_ARM_CONTAMINATED, and review-units exits 4. judge-packet and judge-join refuse an
+  untested arm, derive never completes one, and score treats it as stopped.
 - No second model: --plan builds every cell without its Codex voice (gstack's config gets codex_reviews disabled and the
   cell tree records it), the run refuses a cell that keeps one, the slot admits only the driver model and arm.json lists
   the driver alone.
 - The parser reads the last `plan-findings` block in any assistant turn, and nothing else: no file the session wrote
   and no subagent's text. A malformed or missing block is scored as finding nothing and listed in arm.json
-  `diagnostics`, and so is a pass that, after the model produced output, timed out, ended by the arm's own CLI failing,
+  `diagnostics`, and so is a pass that, after the model produced output, ended by the arm's own CLI failing,
   or completed with no text turn. arm.json counts per arm, as `completed_without_text`, every miss whose session
   completed with no text from the main agent (no turn, or only AskUserQuestion questions, which parse as missing), so
   an arm that answers only through files shows. Model output is the session record's `model_output`: any non-empty assistant text or
