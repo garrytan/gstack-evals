@@ -62,6 +62,16 @@ export interface VerifyOptions {
   cpus?: number;
 }
 
+/** Reads one /out file in the container holding /out; exit 3 when the tree left no regular file there it can read. */
+export const READ_OUT = '[ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] || exit 3; exec cat -- "$1"';
+
+/** One /out file's text from READ_OUT: null when the tree left no regular file it can read (exit 3, the tree's
+ * outcome), undefined when the verifier itself could not read it (any other exit), so the run has no verdict. */
+export const outText = (f: { status: number; stdout: string }): string | null | undefined => (f.status === 0 ? f.stdout : f.status === 3 ? null : undefined);
+
+/** A run that timed out, left /out full or was killed past the output buffer: it passes nothing. */
+export const stopped = (r: RunRecord): boolean => r.timed_out || r.out_full || r.killed;
+
 /** Why a run has no verdict for the tree, or null when it has one. A run that never printed RUN_STARTED and did not
  * time out was never graded: Docker could not start the container or its sh entrypoint (exit 125 to 127). The
  * entrypoint prints RUN_STARTED before it execs python or go, so no interpreter, start-up hook (site.py, a .pth, a
@@ -153,8 +163,10 @@ export function verifyTree(o: VerifyOptions): TreeResult {
         if (space.status !== 0) throw noVerdict("/out could not be read", space);
         const [blocks, inodes] = space.stdout.trim().split(" ").map(Number);
         const read = (file: string): string | null => {
-          const f = docker(["exec", out, "sh", "-c", '[ -f "$1" ] && [ ! -L "$1" ] || exit 3; exec cat -- "$1"', "sh", "/out/" + file], { timeoutMs: 120000 });
-          return f.status === 0 ? f.stdout : null;
+          const f = docker(["exec", out, "sh", "-c", READ_OUT, "sh", "/out/" + file], { timeoutMs: 120000 });
+          const text = outText(f);
+          if (text === undefined) throw noVerdict("/out/" + file + " could not be read", f);
+          return text;
         };
         const record = read("record.jsonl") ?? "";
         const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, read("stderr.txt") ?? "", r.module);
@@ -177,5 +189,5 @@ export const idResults = (tree: TreeResult, id: string): TestResult[] => tree.ru
 /** Whether every required id passed in every run. Nothing required passes nothing, and a run that timed out, left /out
  * full or was killed past the output buffer fails whatever its record says. */
 export function allPass(tree: TreeResult, ids: string[]): boolean {
-  return tree.runs.length > 0 && ids.length > 0 && tree.runs.every((r) => !r.timed_out && !r.out_full && !r.killed) && ids.every((id) => idResults(tree, id).every((r) => r.status === "pass"));
+  return tree.runs.length > 0 && ids.length > 0 && tree.runs.every((r) => !stopped(r)) && ids.every((id) => idResults(tree, id).every((r) => r.status === "pass"));
 }

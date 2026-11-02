@@ -3,12 +3,12 @@
 // builder's output and readTask's tamper checks, and prepare.sh's restore rules run on host directories.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
 import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, regressionDigest, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
-import { allPass, PYTEST_ENTRY, requiredTests, RUN_STARTED, runInfra, type RunRecord, type TreeResult } from "../../lanes/real-outcome/task/verify.ts";
+import { allPass, outText, PYTEST_ENTRY, READ_OUT, requiredTests, RUN_STARTED, runInfra, type RunRecord, type TreeResult } from "../../lanes/real-outcome/task/verify.ts";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { isProtectedPath } from "../../lanes/real-outcome/mine/paths.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
@@ -320,6 +320,21 @@ describe("what a grader grades", () => {
     expect(allPass(tree([run(), run({ timed_out: true })]), [id])).toBe(false);
     expect(allPass(tree([run({ out_full: true })]), [id])).toBe(false);
     expect(allPass(tree([run(), run({ killed: true })]), [id])).toBe(false);
+  });
+
+  test("an /out file the tree left missing, irregular or unreadable reads as absent; a read the verifier could not make has no verdict", () => {
+    expect(outText({ status: 0, stdout: "x\n" })).toBe("x\n");
+    expect(outText({ status: 3, stdout: "" })).toBeNull();
+    for (const status of [1, 125, 126, 127, 137]) expect(outText({ status, stdout: "" })).toBeUndefined();
+    const dir = join(tmp.dir, "read-out");
+    mkdirSync(join(dir, "dir"), { recursive: true });
+    writeFileSync(join(dir, "record.jsonl"), "x\n");
+    writeFileSync(join(dir, "unreadable"), "x\n");
+    chmodSync(join(dir, "unreadable"), 0o000);
+    symlinkSync("record.jsonl", join(dir, "link"));
+    const read = (file: string) => spawnSync("sh", ["-c", READ_OUT, "sh", join(dir, file)], { encoding: "utf8" });
+    expect(read("record.jsonl")).toMatchObject({ status: 0, stdout: "x\n" });
+    for (const file of ["missing", "dir", "link", ...(process.getuid?.() === 0 ? [] : ["unreadable"])]) expect(read(file).status).toBe(3);
   });
 });
 

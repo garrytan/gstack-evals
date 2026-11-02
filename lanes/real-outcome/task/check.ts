@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { docker, dockerRun } from "./docker.ts";
 import { detectLicence, installProblem, keysInEnv, readTask, regressionFrozen, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
 import { resultFor, type TestResult } from "./record.ts";
-import { allPass, idResults, verifyTree, type TreeResult } from "./verify.ts";
+import { allPass, idResults, stopped, verifyTree, type TreeResult } from "./verify.ts";
 
 export interface Rule {
   rule: string;
@@ -161,8 +161,8 @@ export function checkTask(o: CheckOptions): CheckResult {
     return n > 0 && n < gold.runs.length;
   });
   const v1 = allPass(gold, required);
-  const stopped = gold.runs.filter((r) => r.timed_out || r.out_full || r.killed).length;
-  add("V1 gold passes every hidden test", v1, (v1 ? required.length + " tests passed in " + gold.runs.length + " of " + gold.runs.length + " runs in random order" : required.length === 0 ? "no required tests" : "failing or flaky: " + describe(gold, required.filter((id) => !passesIn(gold, id))) + (stopped ? "; runs that timed out, filled /out or were killed: " + stopped : "")) + (flaky.length ? "; flaky: " + flaky.join(", ") : "") + (quarantine.length ? "; quarantined regression tests: " + quarantine.length : ""));
+  const goldStopped = gold.runs.filter(stopped).length;
+  add("V1 gold passes every hidden test", v1, (v1 ? required.length + " tests passed in " + gold.runs.length + " of " + gold.runs.length + " runs in random order" : required.length === 0 ? "no required tests" : "failing or flaky: " + describe(gold, required.filter((id) => !passesIn(gold, id))) + (goldStopped ? "; runs that timed out, filled /out or were killed: " + goldStopped : "")) + (flaky.length ? "; flaky: " + flaky.join(", ") : "") + (quarantine.length ? "; quarantined regression tests: " + quarantine.length : ""));
 
   const firstStart = (id: string) => resultFor(start.runs[0].parsed, id);
   if (t.kind !== "K4") {
@@ -194,7 +194,8 @@ export function checkTask(o: CheckOptions): CheckResult {
 
   const all = trees.flatMap((tr) => tr.runs);
   const slowest = Math.max(...all.map((r) => r.wall_ms));
-  add("V7 offline and inside the time limit", all.every((r) => !r.timed_out) && slowest <= t.limits.verifier_sec * 1000, "every run had --network none; slowest " + (slowest / 1000).toFixed(1) + "s of " + t.limits.verifier_sec + "s");
+  const halted = trees.flatMap((tr) => tr.runs.filter(stopped).map((r) => tr.label + " " + (r.timed_out ? "timed out" : r.killed ? "killed" : "filled /out")));
+  add("V7 offline and inside the time and output limits", halted.length === 0 && slowest <= t.limits.verifier_sec * 1000, "every run had --network none; slowest " + (slowest / 1000).toFixed(1) + "s of " + t.limits.verifier_sec + "s" + (halted.length ? "; stopped runs: " + halted.join(", ") : ""));
 
   if (t.replay) {
     const replayLines = section(repo, "replay");

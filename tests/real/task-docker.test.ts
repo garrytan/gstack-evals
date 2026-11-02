@@ -272,6 +272,21 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     }
   }, LONG);
 
+  test("a starting tree whose run the verifier killed fails V7, so its record derives nothing", () => {
+    const dir = join(tmp.dir, "out/start-floods");
+    cpSync(k1Dir, dir, { recursive: true });
+    const t = readTask(dir);
+    appendFileSync(join(dir, "tests/restore/tests/test_percent.py"), "\n\nimport atexit\nimport os\n\n\ndef _flood():\n    while True:\n        os.write(1, b'x' * (1 << 20))\n\n\nif not hasattr(fmt, \"percent\") or fmt.percent(0.5) != \"50.0%\":\n    atexit.register(_flood)\n");
+    saveTask(dir, t);
+    const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-start-floods"), runs: 1, mechanical: true });
+    const start = r.trees.find((t) => t.label === "start")!;
+    expect(start.runs[0]).toMatchObject({ killed: true, timed_out: false, out_full: false });
+    expect(rule(r, "V1").pass).toBe(true);
+    expect(rule(r, "V7").pass).toBe(false);
+    expect(rule(r, "V7").detail).toContain("start killed");
+    expect(r.verdict).toBe("invalid");
+  }, LONG);
+
   test("a functional test that passes at base breaks V2, and a planted gold line breaks L2", () => {
     const badDir = join(tmp.dir, "out/bad");
     cpSync(k1Dir, badDir, { recursive: true });
