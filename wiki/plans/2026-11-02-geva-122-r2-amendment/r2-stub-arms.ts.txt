@@ -1,0 +1,128 @@
+// R2 amendment dry run: R2's two arms as a stub run's real driver output (the prereg's done line, section 3.6). Every
+// record here is written by the R2 build's run loop (runReviewUnits) with the real Claude Code driver and the pinned
+// Agent SDK, whose CLI is the build's stub (tests/adapters/fixtures/stub-cli.cjs), under R2's settings: claude-code-preset
+// on both arms, gstack-full's frozen told prefix, 200 turns, a $40 allowance, cap stops on (capStops: true, the CLI's --cap-stops) and the build's reader map. Keyless: the
+// stub answers every model call, and the metering proxy is the test harness's. The 19 units keep their suite ids, heads
+// and bases, but every session runs on one synthetic repo, since the stub reads no code. In every unit both arms' final
+// answers carry one CRITICAL finding on each blocking blocker's first path, worded with ordinary review words (A1), so
+// the fake judge's rates decide who found it. gstack-full launches the testing, api-contract and state-machines
+// specialists and the adversarial pass in every unit (scenario pass), or the three specialists alone in 7 of the 19
+// (scenario fail). none-r2 launches nothing; it is review-units' none arm, as R2's none-r2 run gives it (--arms none).
+// Scenarios cap2 and cap3 are scenario pass with cap-stopped sessions, which the build scores against their own arm (the
+// amendment, section 3). In cap2, none-r2 has 2: the turn cap ends its session on the suite's first unit after it wrote
+// its final review at turn 2, and the slot's allowance stops its session on the second unit before any review, as the
+// proxy refuses a call it can't hold. gstack-full has 1: the turn cap ends its session on the third unit with no review
+// and no readers. In cap3, gstack-full has 3 (the first three units: turn cap, allowance, turn cap) and none-r2 none.
+// Writes <out>/arms/gstack-full-opus and <out>/arms/none-opus, as R2's two runs do.
+// Usage: B=<gstack-evals at the build pin> bun r2-stub-arms.ts <stacks-r1-out19.json> <out dir> <pass|fail|cap2|cap3>
+import { createHash } from "node:crypto";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const B = process.env.B!;
+const [suitePath, out, scen] = process.argv.slice(2) as [string, string, string];
+if (!B || !suitePath || !out || !["pass", "fail", "cap2", "cap3"].includes(scen)) throw new Error("usage: B=<build checkout> bun r2-stub-arms.ts <suite json> <out dir> <pass|fail|cap2|cap3>");
+if (existsSync(out)) throw new Error("E_R2_OUT " + out + " exists");
+const { runReviewUnits } = await import(B + "/src/trial/review/run.ts");
+const { loadReaderMap } = await import(B + "/src/trial/review/readers.ts");
+const { buildUnitRepo, unitTaskId } = await import(B + "/src/trial/review/unit.ts");
+const { dirTreeSha256 } = await import(B + "/src/trial/cache.ts");
+const { DEFAULT_POLICY, loadPolicy } = await import(B + "/src/skill-eval/cli/policy.ts");
+const { harness } = await import(B + "/tests/adapters/harness.ts");
+const { sourceRepo } = await import(B + "/tests/trial/review/helpers.ts");
+
+const STUB = join(B, "tests", "adapters", "fixtures", "stub-cli.cjs");
+const MAP = join(B, "src", "trial", "review", "reader-maps");
+const mapFile = join(MAP, readFileSync(join(B, "src", "trial", "review", "README.md"), "utf8").match(/reader-maps\/(gstack-[0-9a-f]{12}\.json)/)![1]!);
+const loaded = loadReaderMap(mapFile);
+const PREFIX = "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed.";
+const suiteText = readFileSync(suitePath);
+const suite = JSON.parse(suiteText.toString());
+
+const specialist = (name: string) => "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/" + name + ".md, then run DIFF_BASE=$(git merge-base origin/main HEAD) && git diff \"$DIFF_BASE\" to get the full diff.";
+const ADVERSARIAL = "Read the diff for this branch. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production.";
+const ARMY = [
+  { id: "tu_testing", prompt: specialist("testing"), started: true, tokens: 41000 },
+  { id: "tu_api", prompt: specialist("api-contract"), started: true, tokens: 38000 },
+  { id: "tu_state", prompt: specialist("state-machines"), started: true, tokens: 36000 },
+];
+const ADV = { id: "tu_adv", prompt: ADVERSARIAL, started: true, tokens: 52000 };
+const WORDS = ["This breaks the API contract for existing callers", "The data migration leaves old rows behind", "The state machines here miss a transition"];
+const answer = (u: { id: string; blockers?: Array<{ id: string; counts?: string; paths: string[]; line?: number }> }) => {
+  const at = suite.units.findIndex((x: { id: string }) => x.id === u.id);
+  const found = (u.blockers ?? []).filter((b) => b.counts === "blocking").map((b, i) => ({ file: b.paths[0], line: b.line ?? 1, severity: "CRITICAL", claim: WORDS[(at + i) % WORDS.length] + " (dry-run fixture finding on blocker " + b.id + "; not a review finding).", evidence: "fixture" }));
+  return "Review done.\n\n```json\n" + JSON.stringify(found) + "\n```\n";
+};
+const noAdv = new Set(scen === "fail" ? suite.units.slice(0, 7).map((u: { id: string }) => u.id) : []);
+const SPENT = 'API Error: 402 {"type":"https://github.com/garrytan/gstack-evals/blob/main/docs/errors.md#e_allowance","title":"E_ALLOWANCE","status":402,"code":"E_ALLOWANCE","detail":"E_ALLOWANCE: metering proxy: the slot\'s allowance of $40.000000 cannot hold this call\'s worst case of $1.120000 ($39.100000 already committed)"}';
+const cell = (arm: string, unitId: string): Record<string, string> => {
+  const u = suite.units.find((x: { id: string }) => x.id === unitId);
+  const at = suite.units.findIndex((x: { id: string }) => x.id === unitId);
+  const caps: Record<string, string[]> = scen === "cap2" ? { none: ["review", "spent"], "gstack-full": ["", "", "turns"] } : scen === "cap3" ? { "gstack-full": ["turns", "spent", "turns"] } : {};
+  const capped = caps[arm]?.[at];
+  if (capped === "turns") return { STUB_MODE: "turns" };
+  if (capped === "review") return { STUB_MODE: "turns", STUB_TURN_TEXTS: JSON.stringify({ 2: answer(u) }) };
+  if (capped === "spent") return { STUB_MODE: "apierror", STUB_API_ERROR: SPENT, STUB_API_STATUS: "402" };
+  const agents = arm === "gstack-full" ? (noAdv.has(unitId) ? ARMY : [...ARMY, ADV]) : [];
+  return { STUB_MODE: "agents", STUB_AGENTS: JSON.stringify(agents), STUB_FINAL: answer(u) };
+};
+
+function stubSandbox(env: (task: string) => Record<string, string>) {
+  const run = (command: string, cwd: string, e: Record<string, string>, timeout: number) => {
+    const r = spawnSync("sh", ["-c", command], { cwd, env: e, timeout, encoding: "utf8" });
+    return { exitCode: r.status ?? 1, timedOut: false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  };
+  return {
+    isolation: "process",
+    workPath: (work: string) => work,
+    fixturesPath: (fixtures: string) => fixtures,
+    homePath: (dir: string) => join(dir, "home"),
+    step: (_role: string, command: string, _task: string, o: { work: string; env: Record<string, string>; timeoutMs: number }) => run(command, o.work, o.env, o.timeoutMs),
+    agent(task: string, o: { work: string; env: Record<string, string> }) {
+      mkdirSync(o.env.HOME!, { recursive: true });
+      return {
+        exec: (command: string, timeoutMs: number) => run(command, o.work, o.env, timeoutMs),
+        spawn: (argv: string[], extra: Record<string, string> = {}) => (argv[0] === "claude" ? spawn(process.execPath, [STUB, ...argv.slice(1)], { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? "", ...extra, ...env(task) }, stdio: ["pipe", "pipe", "pipe"] }) : spawn(argv[0]!, argv.slice(1), { cwd: o.work, env: { ...o.env, PATH: process.env.PATH ?? "", ...extra }, stdio: ["pipe", "pipe", "pipe"] })),
+        stop() {},
+      };
+    },
+  };
+}
+
+const s = sourceRepo();
+const tree = join(mkdtempSync(join(tmpdir(), "gse-r2dry-")), "repo");
+const synthetic = { id: "garrytan/gstack#1@" + s.head.slice(0, 12), repo: "garrytan/gstack", pr: 1, head: s.head, base: s.base };
+const repo = buildUnitRepo({ unit: synthetic, source: s.root, dest: tree });
+const treeSha = dirTreeSha256(tree);
+const prepared = suite.units.map((u: { id: string; repo: string; pr: number; head: string; base: string }) => {
+  const unit = { id: u.id, repo: u.repo, pr: u.pr, head: u.head, base: u.base };
+  return { unit, task: unitTaskId(unit), base_branch: repo.base_branch, merge_base: repo.merge_base, tree, tree_sha256: treeSha, instructions: repo.instructions };
+});
+const byTask = new Map(prepared.map((p: { task: string; unit: { id: string } }) => [p.task, p.unit.id]));
+const h = harness(() => [{ type: "text", text: "ok" }]);
+const rig = {
+  baseUrl: h.baseUrl, network: null, imageDigest: null,
+  bind: async (request: unknown) => h.proxy.bind(request),
+  finalize: (m: unknown) => h.proxy.finalize(m),
+  arms: { "gstack-full": { tree_sha256: "gstack-tree", skill: null, gstack: null, plugins: [], provenance: { kind: "stack", stack: { repo: loaded.map.gstack.repo, sha: loaded.map.gstack.sha, source: "local-git" } } }, none: { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] } },
+  sandbox: (arm: string) => stubSandbox((task) => cell(arm, byTask.get(task) as string)),
+  judgeSandbox: () => stubSandbox(() => ({})),
+  egress: () => ({ open: false, detail: "dry-run stub rig" }),
+  close: async () => ({ committed: 0, unknown: 0, lease_id: null }),
+  recovery: null,
+};
+const policy = loadPolicy(DEFAULT_POLICY);
+try {
+  const run = await runReviewUnits({
+    host: "claude", suite: { id: suite.id, sha256: createHash("sha256").update(suiteText).digest("hex"), sealed: false }, units: prepared,
+    arms: [{ name: "gstack-full", told: "gstack", toldPrefix: PREFIX, systemPrompt: "claude-code-preset" }, { name: "none", told: "none", systemPrompt: "claude-code-preset" }],
+    models: ["claude-opus-5-5"], passes: 1, parallel: 4, timeoutS: 120, cap: 1_000_000_000, runId: "r2-dry-" + scen, out, date: "2026-11-01", policy,
+    keyBase: { image_digest: null, recipe: "dry-run", host_version: null, adapter_sha256: "dry-run", isolation: "process" }, journal: join(h.dir, "journal.ndjson"), env: {},
+    maxTurns: 200, allowanceMicros: 40_000_000, capStops: true, readers: { map: loaded.map, sha256: loaded.sha256 },
+  }, rig, (line: string) => console.error(line));
+  console.log("stub run " + scen + ": " + run.armDirs.length + " arms, stops " + (run.stops.map((x: { code: string }) => x.code).join(", ") || "none") + ", reader map " + mapFile.split("/").pop() + " sha256 " + loaded.sha256);
+} finally {
+  h.proxy.stop();
+}

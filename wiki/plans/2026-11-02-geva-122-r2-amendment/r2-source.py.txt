@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+# R2 source arms (the R2 amendment, section 4). review-units names each arm <arm>-<model tag>, so R2's runs write
+# arms/gstack-full-opus and arms/none-r2-opus, while comparisons.r2.json scores gstack-full against none-r2. This copies one
+# arm dir from a run to a source dir under the comparisons' id. It sets arm.json's id and nothing else: findings/,
+# cost.tsv and every other arm.json field stay byte for byte. It refuses an existing destination, an arm dir without
+# arm.json, cost.tsv or findings/, and an arm.json whose id is not the run arm id it was given.
+# Exit 0 when copied, 5 on bad input.
+# Usage: python3 r2-source.py <run out dir>/arms/<run arm id> <run arm id> <source arm id> <dest dir>
+import json, os, shutil, sys
+
+try:
+    src, run_id, source_id, dest = sys.argv[1:5]
+    if os.path.exists(dest):
+        raise ValueError(dest + " exists")
+    for need in ("arm.json", "cost.tsv", "findings"):
+        if not os.path.exists(os.path.join(src, need)):
+            raise ValueError(src + " has no " + need)
+    arm = json.load(open(os.path.join(src, "arm.json")))
+    if arm.get("id") != run_id:
+        raise ValueError("arm.json id is %r, not %r" % (arm.get("id"), run_id))
+    shutil.copytree(src, dest)
+    arm["id"] = source_id
+    with open(os.path.join(dest, "arm.json"), "w") as w:
+        w.write(json.dumps(arm, indent=2, ensure_ascii=False) + "\n")
+    print("source arm %s from %s: %d findings files, %d cost rows, status %s" % (source_id, run_id, len(os.listdir(os.path.join(dest, "findings"))), sum(1 for _ in open(os.path.join(dest, "cost.tsv"))) - 1, arm.get("status")))
+except Exception as e:
+    print("E_R2_SOURCE %s: %s" % (type(e).__name__, e))
+    sys.exit(5)

@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# R2 amendment dry run: the R2 section of the GEVA-101 prereg's dry-run.sh, rerun keyless with R2's fixture arms replaced
+# by a stub run's real driver output (r2-stub-arms.ts, the R2 build's run loop and driver at the build pin), R2's source
+# step (r2-source.py), the amendment's blind.py (A1) and r1-exposure.py (B1), and R2's cap rule (r2-caps.py) with its
+# complete-case sensitivity. No step calls a model: judging runs the pinned judge-run in process against the prereg's
+# fake provider (judge-fake.ts). One ledger lease per frozen run, on temporary ledgers. API keys are unset first.
+# Usage: R=<gstack-evals at 715f837> B=<gstack-evals at the build pin> REV=<GEVA-89 archive judge dir> GSRC=<gstack clone>
+#   GBSRC=<gbrain clone> bash dry-run-r2.sh <empty work dir>
+# The prereg's attachments are read from B's wiki/ (main's), or from PD when it is set; B needs its node_modules. Paths
+# print as $W, $R, $B, $D, $PD, $REV, $GSRC and $GBSRC.
+set -u
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+D=$(cd "$(dirname "$0")" && pwd)
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+PD=${PD:-$B/wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg}
+G="$R/bin/gstack-evals noloss"
+L="$R/bin/gstack-evals ledger"
+export R
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+mkdir -p "$W/log" "$W/bin" "$W/prereg"
+for f in items.ts judge-fake.ts r2-decide.py blind.py r1-exposure.py; do cp "$PD/$f.txt" "$W/prereg/$f"; done
+for f in items.ts judge-fake.ts r2-decide.py; do cp "$PD/$f.txt" "$W/bin/$f"; done
+cp "$PD/comparisons.r2.json" "$W/bin/"
+for f in blind.py r1-exposure.py r2-source.py r2-caps.py r2-stub-arms.ts; do cp "$D/$f.txt" "$W/bin/$f"; done
+HIDE="s#$W#\$W#g; s#$PD#\$PD#g; s#$D#\$D#g; s#$REV#\$REV#g; s#$GSRC#\$GSRC#g; s#$GBSRC#\$GBSRC#g; s#$R#\$R#g; s#$B#\$B#g"
+n=0
+# step <grep pattern for the lines to show> <command...>: runs it, keeps its full output in log/, shows matching lines.
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*" | sed "$HIDE"
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}" | sed "$HIDE"
+  echo "exit $c (log/$n.txt)"
+}
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+
+echo "## Pins"
+step . git -C "$R" log -1 --format='rig %H %s'
+step . sh -c "git -C $R status --porcelain | wc -l"
+step . git -C "$B" log -1 --format='build %H %s'
+step . sh -c "git -C $B status --porcelain | wc -l"
+step . sh -c "cd $PD && sha256sum items.ts.txt judge-fake.ts.txt r2-decide.py.txt blind.py.txt r1-exposure.py.txt comparisons.r2.json"
+step . sh -c "cd $D && sha256sum blind.py.txt r1-exposure.py.txt r2-source.py.txt r2-caps.py.txt r2-stub-arms.ts.txt"
+step . sh -c "cd $B && sha256sum src/trial/review/reader-maps/*.json && jq -c .gstack src/trial/review/reader-maps/*.json"
+
+echo; echo "## Ledger items at their frozen caps (prereg section 5)"
+step '^review item r2' bun "$W/bin/items.ts" "$W/record" "$W/laneb"
+
+echo; echo "## R2: the 19-unit suite (prereg section 3.1)"
+mkdir -p "$W/r2"
+(echo unit; jq -r '.units[].id' "$R/lanes/review-noloss/suites/gsta167-14pr.json") > "$W/r2/cohort14.tsv"
+step . sha256sum "$W/r2/cohort14.tsv"
+step '^(derive|suite|E_)|units|blocking' $G derive --suite "$P/stacks-r1.json" --comparisons "$REV/comparisons.stacks-r1.nopstack.json" --id stacks-r1-out19 --out "$W/r2/suite" --root "$REV/final/arms" --drop-file "$W/r2/cohort14.tsv"
+S2=$W/r2/suite/stacks-r1-out19.json
+step . sha256sum "$S2"
+
+echo; echo "## R2's arms from a stub run of the R2 build: the real driver and run loop under R2's settings"
+for s in pass fail; do step '^(stub run|E_)' env B="$B" bun "$W/bin/r2-stub-arms.ts" "$S2" "$W/r2/run-$s" "$s"; done
+step . sh -c "jq -c '{id, status, system_prompt: .arm_provenance.system_prompt, told_prefix_sha256: .told.prefix_sha256, cap_stops, reader_map_sha256, parse_outcomes}' $W/r2/run-pass/arms/*/arm.json"
+for p in gstack-full:gstack-full-opus none-r2:none-opus; do a=${p%%:*}; b=${p#*:}; step '^(source|E_)' python3 "$W/bin/r2-source.py" "$W/r2/run-pass/arms/$b" "$b" "$a" "$W/r2src/$a"; done
+step '^(source|E_)' python3 "$W/bin/r2-source.py" "$W/r2/run-fail/arms/gstack-full-opus" gstack-full-opus gstack-full "$W/r2src-fail/gstack-full"
+step '^(source|E_)' python3 "$W/bin/r2-source.py" "$W/r2/run-pass/arms/none-opus" none-r2 none-r2 "$W/r2src-x"
+step . sh -c "cut -f1-3,12 $W/r2src/gstack-full/cost.tsv | head -6"
+
+echo; echo "## A1: blinding. The prereg's blind.py on a copy, then the amendment's on the arms R2 judges."
+cp -r "$W/r2src" "$W/r2src-prereg-blind"
+step '^(reader|gstack|none|E_)' python3 "$W/prereg/blind.py" "$S2" "$W/r2src-prereg-blind/gstack-full" "$W/r2src-prereg-blind/none-r2"
+step '^(reader|gstack|none|E_)' python3 "$W/bin/blind.py" "$S2" "$W/r2src/gstack-full" "$W/r2src/none-r2"
+step . sh -c "cat $W/r2src-prereg-blind/none-r2/findings/*.jsonl | jq -r .summary | cut -c1-60 | sort | uniq -c"
+step . sh -c "cat $W/r2src/none-r2/findings/*.jsonl | jq -r .summary | cut -c1-60 | sort | uniq -c"
+for a in gstack-full none-r2; do step 'ingested|published|E_' $G ingest "$W/r2src/$a" --suite "$S2" --root "$W/r2/raw"; done
+
+echo; echo "## The procedure gate (prereg section 3.3) on the stub run's reader rows, and B1"
+step '^(exposure|gate|E_)' python3 "$W/bin/r1-exposure.py" "$S2" "$W/r2src/gstack-full"
+step '^(exposure|gate|E_)' python3 "$W/bin/r1-exposure.py" "$S2" "$W/r2src-fail/gstack-full"
+echo; echo "# B1: a reader row whose pr isn't a suite unit id (gstack#N, the owner dropped), one with a blank pass, and the wrong"
+echo "# suite. Each is bad input: exit 5, never a gate result. The prereg's gate gives exit 3 or 0 on the same input."
+for c in pr pass; do
+  X=$W/r2src-b1-$c/gstack-full; mkdir -p "$W/r2src-b1-$c"; cp -r "$W/r2src/gstack-full" "$X"
+  if [ $c = pr ]; then awk -F'\t' -v OFS='\t' 'NR > 1 && $2 ~ /^reader:/ { sub(/^[^\/]*\//, "", $1) } { print }' "$W/r2src/gstack-full/cost.tsv" > "$X/cost.tsv"
+  else awk -F'\t' -v OFS='\t' 'NR > 1 && $2 == "reader:adversarial-native" && !done { $3 = ""; done = 1 } { print }' "$W/r2src/gstack-full/cost.tsv" > "$X/cost.tsv"; fi
+  step '^(exposure|gate|E_)' python3 "$W/prereg/r1-exposure.py" "$S2" "$X"
+  step '^(exposure|gate|E_)' python3 "$W/bin/r1-exposure.py" "$S2" "$X"
+done
+step '^(exposure|gate|E_)' python3 "$W/prereg/r1-exposure.py" "$R/lanes/review-noloss/suites/gsta167-14pr.json" "$W/r2src/gstack-full"
+step '^(exposure|gate|E_)' python3 "$W/bin/r1-exposure.py" "$R/lanes/review-noloss/suites/gsta167-14pr.json" "$W/r2src/gstack-full"
+
+echo; echo "# R2's sessions: one lease per frozen run, none-r2 on r2a-grid and gstack-full on r2b-grid; a bound item refuses a second run."
+mkdir -p "$W/r2/grid"; cp -r "$W/record" "$W/r2/grid/record"
+LG="--ledger $W/r2/grid/ledger.sqlite --ledger-record $W/r2/grid/record"
+for pair in r2a-grid:r2-none:25 r2b-grid:r2-full:325; do IFS=: read -r it run amt <<< "$pair"; step 'lease_id|state|E_' sh -c "$L lease --item $it --run $run --amount $amt $LG --json | tee $W/r2/grid/$run.json"; done
+step 'E_' $L lease --item r2b-grid --run r2-full-again --amount 1 $LG
+for run in r2-none r2-full; do step 'settle|E_' $L settle --lease "$(jq -r .lease_id "$W/r2/grid/$run.json")" $LG; done
+
+# judge_round <round> <scenario> <FAKE_RATES>: as the prereg's dry-run.sh.
+judge_round() {
+  local X=$W/$1/$2; local SID; SID=$(jq -r .id "$SUITE")
+  mkdir -p "$X"; cp -r "$W/record" "$X/record"
+  step 'packet|E_' $G judge-packet --suite "$SUITE" $(arms $RAWR $ARMS) --seed 20261031 --out "$X/match" --key "$X/match-key.json"
+  local J="--suite $SUITE --packets $X/match --key $X/match-key.json $(arms $RAWR $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record"
+  step '^(worst case|item )|E_' $G judge-run $J --item $1-judge-match --out "$X/judge-match" --dry-run
+  FAKE_RATES=$3 step '^(judge-run|E_)|unjudged' bun "$W/bin/judge-fake.ts" $J --item $1-judge-match --out "$X/judge-match" --concurrency 4
+  step 'lease|state|E_' sh -c "jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $X/judge-match/run.json"
+  step 'judge-join|E_' $G judge-join --suite "$SUITE" --key "$X/match-key.json" --reply "$X/judge-match/primary.json" --second "$X/judge-match/second.json" --third "$X/judge-match/third.json" $(arms $RAWR $ARMS) --out "$X/judge-match/joined"
+  for a in $ARMS; do step 'published|E_' $G ingest "$X/judge-match/joined/$a" --suite "$SUITE" --root "$X/judged"; done
+  step 'packet|E_' $G judge-packet --suite "$SUITE" $(arms $X/judged/$SID $ARMS) --seed 20261031 --out "$X/adj" --key "$X/adj-key.json" --adjudicate
+  local A="--suite $SUITE --packets $X/adj --key $X/adj-key.json $(arms $X/judged/$SID $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC"
+  step '^(worst case|item )|E_' $G judge-run $A --item $1-judge-adjudicate --out "$X/judge-adj" --dry-run
+  echo; echo "# A bound item refuses a second run: the matching run bound $1-judge-match."
+  FAKE_RATES=$3 step 'E_' bun "$W/bin/judge-fake.ts" $A --item $1-judge-match --out "$X/judge-adj-on-match-item"
+  FAKE_RATES=$3 step '^(judge-run|unverifiable|E_)' bun "$W/bin/judge-fake.ts" $A --item $1-judge-adjudicate --out "$X/judge-adj" --concurrency 4
+  step 'judge-join|E_' $G judge-join --suite "$SUITE" --key "$X/adj-key.json" --reply "$X/judge-adj/primary.json" --second "$X/judge-adj/second.json" --third "$X/judge-adj/third.json" $(arms $X/judged/$SID $ARMS) --out "$X/judge-adj/joined"
+  for a in $ARMS; do step 'published|E_' $G ingest "$X/judge-adj/joined/$a" --suite "$SUITE" --root "$X/final"; done
+  step 'committed|settled|open|E_' $L status --ledger "$X/ledger.sqlite" --ledger-record "$X/record"
+  for id in $IDS; do
+    local v r; v=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .variant' "$COMP"); r=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .reference' "$COMP")
+    step '^([A-Za-z0-9-]+ vs [a-z0-9-]+ at a |verdict|false blockers|E_)' $G score --suite "$SUITE" --root "$X/final" --prereg "$COMP" --variant $v --reference $r --out "$X/score-$id.json"
+  done
+  step '^(recall|new|idea|E_)' $G secondary --suite "$SUITE" --root "$X/final" --variant $VAR --reference $REF --seed 20261031
+  $DECIDE "$X" "$SID"
+}
+incomplete() { jq '.result.no_verdict_reason = "a judgment has coverage incomplete" | .result.verdict = null' "$1" > "$2"; }
+variant() { jq "$2" "$1" > "$3"; }
+r2_decide() { step '^(R2|exposure|gate|E_)' python3 "$W/bin/r2-decide.py" "${3:-$1/score-gstack-full-vs-none.json}" "${4:-$W/r2src/gstack-full}" "$S2"; }
+SUITE=$S2; RAWR=$W/r2/raw/stacks-r1-out19; ARMS="gstack-full none-r2"; COMP=$W/bin/comparisons.r2.json; IDS=gstack-full-vs-none; VAR=gstack-full; REF=none-r2; DECIDE=r2_decide
+echo; echo "## R2 judging, scenario 1: fake answers that favour gstack-full"
+judge_round r2 lift "gstack-full=90,none-r2=10"
+echo; echo "## R2 judging, scenario 2: fake answers with no lift (the kill rule)"
+judge_round r2 nolift "gstack-full=10,none-r2=50"
+echo; echo "## R2 judging, scenario 3: fake answers with a lift the interval can't show (FIX-METHOD)"
+judge_round r2 small "${R2SMALL:-gstack-full=35,none-r2=25}"
+echo; echo "# R2 with the procedure gate failing on scenario 1's scores: no outcome."
+r2_decide "$W/r2/lift" stacks-r1-out19 "" "$W/r2src-fail/gstack-full"
+echo; echo "# R2 with an arm stopped (reference status stopped) on scenario 1's scores: no outcome."
+variant "$W/r2/lift/score-gstack-full-vs-none.json" '.reference.status = "stopped"' "$W/r2/lift/score-stopped.json"
+r2_decide "$W/r2/lift" stacks-r1-out19 "$W/r2/lift/score-stopped.json"
+echo; echo "# R2 with a null interval (ci95 null) on scenario 1's scores: no outcome."
+variant "$W/r2/lift/score-gstack-full-vs-none.json" '.result.ci95 = null' "$W/r2/lift/score-noci.json"
+r2_decide "$W/r2/lift" stacks-r1-out19 "$W/r2/lift/score-noci.json"
+echo; echo "# R2 with a score file that doesn't exist: an error (exit 5), never an outcome."
+r2_decide "$W/r2/lift" stacks-r1-out19 "$W/r2/lift/no-such-score.json"
+echo; echo "# R2 with a judgment marked coverage incomplete on scenario 1's scores: no outcome."
+incomplete "$W/r2/lift/score-gstack-full-vs-none.json" "$W/r2/lift/score-incomplete.json"
+r2_decide "$W/r2/lift" stacks-r1-out19 "$W/r2/lift/score-incomplete.json"
+echo; echo "# B1 through r2-decide.py on scenario 1's scores: a malformed reader row is an error (exit 5), never an outcome."
+r2_decide "$W/r2/lift" stacks-r1-out19 "" "$W/r2src-b1-pr/gstack-full"
+echo; echo "## Cap stops (amendment section 3): a capped session is scored against its own arm, with a coverage rule"
+echo; echo "# cap2: none-r2 has 2 capped sessions (one wrote its review before the turn cap, one stopped at the allowance with"
+echo "# none) and gstack-full 1 (no review, no readers). Both arms stay complete; the cap rule passes and the verdict stands."
+step '^(stub run|E_)' env B="$B" bun "$W/bin/r2-stub-arms.ts" "$S2" "$W/r2/run-cap2" cap2
+step . sh -c "jq -c '{id, status, cap_stops, coverage_gaps, diagnostics}' $W/r2/run-cap2/arms/*/arm.json"
+step . sh -c "cat $W/r2/run-cap2/cells.ndjson | jq -c 'select(.record.termination.kind != \"completed\") | {arm: .cell.arm, unit: .cell.unit, termination: .record.termination}' | sort -u"
+for p in gstack-full:gstack-full-opus none-r2:none-opus; do a=${p%%:*}; b=${p#*:}; step '^(source|E_)' python3 "$W/bin/r2-source.py" "$W/r2/run-cap2/arms/$b" "$b" "$a" "$W/r2src-cap2/$a"; done
+step '^(reader|gstack|none|E_)' python3 "$W/bin/blind.py" "$S2" "$W/r2src-cap2/gstack-full" "$W/r2src-cap2/none-r2"
+for a in gstack-full none-r2; do step 'ingested|published|E_' $G ingest "$W/r2src-cap2/$a" --suite "$S2" --root "$W/r2-cap2/raw"; done
+RAWR=$W/r2-cap2/raw/stacks-r1-out19; DECIDE=:
+judge_round r2 cap2 "gstack-full=90,none-r2=10"
+echo; echo "# cap2's cap rule (read first), then r2-decide.py's verdict, then the complete-case sensitivity on the units neither arm capped."
+step '^(cap|complete|R2|E_)' python3 "$W/bin/r2-caps.py" "$S2" "$W/r2src-cap2/gstack-full" "$W/r2src-cap2/none-r2" "$W/r2/cap2/caps-drop.tsv"
+step . cat "$W/r2/cap2/caps-drop.tsv"
+r2_decide "$W/r2/cap2" stacks-r1-out19 "" "$W/r2src-cap2/gstack-full"
+step '^(derive|suite|E_)|units|blocking|dropped' $G derive --suite "$S2" --comparisons "$W/bin/comparisons.r2.json" --id stacks-r1-out19-cc --out "$W/r2/cap2/cc" --root "$W/r2/cap2/final" --drop-file "$W/r2/cap2/caps-drop.tsv"
+step . sh -c "jq -r '\"derived suite \" + .id + \": \" + (.units | length | tostring) + \" units, \" + ([.units[].blockers[] | select(.counts == \"blocking\")] | length | tostring) + \" blocking blockers\"' $W/r2/cap2/cc/stacks-r1-out19-cc.json"
+step '^([A-Za-z0-9-]+ vs [a-z0-9-]+ at a |verdict|false blockers|E_)' $G score --suite "$W/r2/cap2/cc/stacks-r1-out19-cc.json" --root "$W/r2/cap2/cc/arms" --prereg "$W/r2/cap2/cc/comparisons.stacks-r1-out19-cc.json" --variant gstack-full --reference none-r2 --out "$W/r2/cap2/cc/score-cc.json"
+echo; echo "# cap3: gstack-full has 3 capped sessions. The cap rule gives no outcome (exit 4), and r2-decide.py is not consulted."
+step '^(stub run|E_)' env B="$B" bun "$W/bin/r2-stub-arms.ts" "$S2" "$W/r2/run-cap3" cap3
+step . sh -c "jq -c '{id, status, cap_stops, coverage_gaps}' $W/r2/run-cap3/arms/*/arm.json"
+for p in gstack-full:gstack-full-opus none-r2:none-opus; do a=${p%%:*}; b=${p#*:}; step '^(source|E_)' python3 "$W/bin/r2-source.py" "$W/r2/run-cap3/arms/$b" "$b" "$a" "$W/r2src-cap3/$a"; done
+mkdir -p "$W/r2/cap3"
+step '^(cap|complete|R2|E_)' python3 "$W/bin/r2-caps.py" "$S2" "$W/r2src-cap3/gstack-full" "$W/r2src-cap3/none-r2" "$W/r2/cap3/caps-drop.tsv"
+echo; echo "## Done"

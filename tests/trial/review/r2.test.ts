@@ -16,7 +16,7 @@ import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
-import { loadReaderMap, READER_ROW, readTranscript, type ReaderMap } from "../../../src/trial/review/readers.ts";
+import { loadReaderMap, READER_ROW, READERS_SHA256, readTranscript, type ReaderMap } from "../../../src/trial/review/readers.ts";
 import { CAPPED_PARSER_SHA256, cappedParse } from "../../../src/trial/review/capped.ts";
 import { PARSER_SHA256 } from "../../../src/trial/review/findings.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
@@ -148,7 +148,8 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       const none = arm(run.out, "none-r2-opus");
       expect([full.status, none.status]).toEqual(["complete", "complete"]);
       expect([full.cap_stops, none.cap_stops]).toEqual([{ turn_cap: 1, allowance_stop: 0, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }, { turn_cap: 0, allowance_stop: 1, units: [b], parser_sha256: CAPPED_PARSER_SHA256 }]);
-      expect(new Set([...journal.values()].map((e) => e.key.parts.verifier))).toEqual(new Set([keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256)]));
+      expect(READERS_SHA256).toBe(new Bun.CryptoHasher("sha256").update(readFileSync(join(REPO_ROOT, "src/trial/review/readers.ts"))).digest("hex"));
+      expect(new Set([...journal.values()].map((e) => e.key.parts.verifier))).toEqual(new Set([keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256)]));
       expect([full.coverage_gaps, none.coverage_gaps]).toEqual([undefined, undefined]);
       expect(full.diagnostics).toEqual([b + " pass 1: missing; ended turn_cap, settled spend $0.000000, scored as finding nothing"]);
       expect(none.diagnostics).toEqual([b + " pass 1: missing; ended allowance_stop, settled spend $0.000000, scored as finding nothing"]);

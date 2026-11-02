@@ -18,6 +18,10 @@
 // all row (READER_ROW pins the format), meter_source reader-counter and every other cost column unavailable.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+/** sha256 of this file. readTranscript feeds capped.ts's read rule, so a cap-stops run's session key covers it. */
+export const READERS_SHA256 = createHash("sha256").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex");
 
 export interface ReaderMap {
   schema_version: 1;

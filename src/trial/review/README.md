@@ -104,7 +104,8 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 run.json records max_turns and session_kind, and allowance_usd and reader_map (its sha256 and gstack commit) when they
 are set. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
 (E_CACHE_STALE). A setting off its default also joins the session key, so a cell run under another value is never
-reused.
+reused. The allowance is the exception: it joins the key only in a --cap-stops run (below), and otherwise only the
+run.json check refuses a resume under another allowance.
 
 ## Cap stops and reader rows (R2 build)
 
@@ -118,10 +119,10 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
   such block, or no readable transcript, it is a missing pass, scored as finding nothing. arm.json counts them
   in `cap_stops: {turn_cap, allowance_stop, units, parser_sha256}`, where units names each unit a cap stop hit and
   parser_sha256 is capped.ts's (the read rule), and diagnostics names each session with its settled metered spend. In
-  such a run the session key's verifier is the findings parser's sha256 and capped.ts's, so a change to either refuses
-  its cached cells, and the allowance joins the key. A run without `--cap-stops`, whatever its `--max-turns` and
-  `--allowance`, and every plan unit, keeps today's records and keys: the turn cap ends a session as completed, and the
-  allowance as a missing cell (E_ALLOWANCE).
+  such a run the session key's verifier is the findings parser's sha256, capped.ts's and readers.ts's (whose
+  readTranscript feeds the read rule), so a change to any of them refuses its cached cells, and the allowance joins the
+  key. A run without `--cap-stops`, whatever its `--max-turns` and `--allowance`, and every plan unit, keeps today's
+  records and keys: the turn cap ends a session as completed, and the allowance as a missing cell (E_ALLOWANCE).
 - The allowance binds worst-case committed spend, including the reservations of calls still in flight, so a session that
   runs calls in parallel can stop below its allowance.
 - **Reader rows.** With `--reader-map`, each code session's readers go to the journal and to cost.tsv as
