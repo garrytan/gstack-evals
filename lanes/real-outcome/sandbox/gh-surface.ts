@@ -7,29 +7,55 @@ import { dirname, join, resolve } from "node:path";
 
 /** The shapes gh.ts serves. pr merge is served as a refusal; gh api is classified by its method and path (SERVED_API). */
 export const SERVED: readonly string[] = ["auth status", "repo view", "pr create", "pr view", "pr list", "pr edit", "pr ready", "pr close", "pr reopen", "pr comment", "pr diff", "pr checks", "pr merge", "issue create", "issue list", "issue view", "issue comment", "run list", "run view", "workflow run"];
-const REPO = String.raw`repos\/(?:\$\{?\w+\}?|[^/\s]+\/[^/\s]+)`;
-const NUM = String.raw`(?:\d+|\$\w+|\$\{[^}\s]+\}|\{\w+\}|<\w+>)`;
-/** The REST calls apiCmd in gh.ts answers, by method, with any owner, repo, number or ref, shell variables included. Every other method and path is unserved, graphql included. */
+const VAR = String.raw`\$\{?\w+\}?`;
+const REPO = String.raw`repos\/(?:${VAR}|(?:\{owner\}|${VAR})\/(?:\{repo\}|${VAR}))`;
+const NUM = String.raw`(?:\d+|\$\w+|\$\{[^}\s]+\})`;
+/** The REST calls apiCmd in gh.ts answers, by method: the repo as {owner}/{repo} or shell variables, a number as digits or a shell variable, any ref. Every other method and path is unserved, graphql included. */
 const SERVED_API = new Map<string, RegExp>([
   ["GET", new RegExp(String.raw`^(?:rate_limit|user|${REPO}(?:\/pulls|\/pulls\/${NUM}(?:\/merge)?|\/(?:pulls|issues)\/${NUM}\/(?:reviews|requested_reviewers|comments)|\/commits\/[^/\s]+(?:\/check-runs|\/status|\/statuses)?)?)$`)],
   ["PATCH", new RegExp(String.raw`^${REPO}\/pulls\/${NUM}$`)],
   ["PUT", new RegExp(String.raw`^${REPO}\/(?:pulls|issues)\/${NUM}\/merge$`)],
   ["POST", new RegExp(String.raw`^${REPO}\/(?:pulls|issues)\/${NUM}\/comments(?:\/${NUM}\/replies)?$`)],
 ]);
-const API_PATH = /(?:^|[\s"'`,[(])\/?(graphql|rate_limit|user|repos\/[^\s"'`,\])?]+)/;
+const API_PATH = /^\/?(graphql|rate_limit|user|repos\/[^\s"'`,\])?]+)/;
 
 const GROUPS = "pr|repo|api|auth|issue|run|release|workflow|search|label|secret|gist|browse|status|cache|extension|project|ruleset|attestation";
 const TEXT = new RegExp("\\bgh (" + GROUPS + ")\\b(?: (--?[a-z]|[a-z][a-z-]*\\b))?", "g");
 const ARRAY = new RegExp("\\[\\s*[\"'](" + GROUPS + ")[\"']\\s*(?:,\\s*[\"']([a-z][a-z-]*)[\"'])?", "g");
 
-/** The method gh api sends, by gh's rule, which apiCmd follows: --method or -X when given, else POST when the call adds a field or an input file, else GET. */
-function apiMethod(call: string): string {
-  const words = call.split(/[\s"'`,=]+/);
-  for (const [i, w] of words.entries()) {
-    if (w === "-X" || w === "--method") return (words[i + 1] || "?").toUpperCase();
-    if (/^-X./.test(w)) return w.slice(2).toUpperCase();
+/** One gh api call's arguments after "api". In prose, continuations are joined and words split on whitespace outside quotes,
+ * up to an unquoted backtick, |, ;, &, ) or the line end; in an argv array, each element, quoted or not, is one argument. */
+function apiArgs(rest: string, prose: boolean): string[] {
+  const text = prose ? rest.replace(/\\\r?\n/g, " ") : rest.slice(1);
+  const args: string[] = [];
+  let arg = "", open = false, quote = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (quote) {
+      if (c === "\n" && quote !== "`") break;
+      if (c === "\\" && !(prose && quote === "'")) arg += text[++i] ?? "";
+      else if (c === quote) quote = "";
+      else arg += c;
+    } else if (prose ? /[\n`|;&)]/.test(c) : c === "]") break;
+    else if (c === "'" || c === '"' || (!prose && c === "`")) [quote, open] = [c, true];
+    else if (prose ? /\s/.test(c) : /[\s,]/.test(c)) {
+      if (open) args.push(arg);
+      [arg, open] = ["", false];
+    } else [arg, open] = [arg + c, true];
   }
-  return words.some((w) => /^(?:-[fF]|--(?:raw-)?field$|--input$)/.test(w)) ? "POST" : "GET";
+  if (open) args.push(arg);
+  return args;
+}
+
+/** The method gh api sends, by gh's rule, which apiCmd follows: --method or -X when given, else POST when the call adds a field or an input file, else GET.
+ * Each flag counts only as its own argument (-X PUT, --method PUT, -XPUT, --method=PUT), never inside another argument's value. */
+function apiMethod(args: string[]): string {
+  for (const [i, a] of args.entries()) {
+    if (a === "-X" || a === "--method") return (args[i + 1] || "?").toUpperCase();
+    const set = a.match(/^(?:-X|--method=)(.+)$/);
+    if (set) return set[1]!.toUpperCase();
+  }
+  return args.some((a) => /^(?:-[fF]|--field|--raw-field|--input)(?:$|=)|^-[fF]./.test(a)) ? "POST" : "GET";
 }
 
 export interface SurfaceRow {
@@ -61,8 +87,9 @@ export function ghSurface(tree: string): SurfaceRow[] {
         let served = SERVED.includes(shape);
         if (m[1] === "api") {
           const rest = text.slice(m.index! + m[0].indexOf("api") + 3);
-          const path = rest.split(re === TEXT ? "\n" : "]")[0]!.match(API_PATH)?.[1];
-          const method = apiMethod(re === TEXT ? rest.replace(/\\\r?\n/g, " ").split(/[\n`|;&)]/)[0]! : rest.split("]")[0]!);
+          const args = apiArgs(rest, re === TEXT);
+          const path = args.map((a) => a.match(API_PATH)?.[1]).find((p) => p !== undefined);
+          const method = apiMethod(args);
           shape = ["api", method === "GET" ? "" : method, path ?? ""].filter(Boolean).join(" ");
           served = path !== undefined && SERVED_API.get(method)?.test(path) === true;
         }

@@ -56,6 +56,8 @@ test("gh api rows name their method and are served only where the sidecar's apiC
     ["api", "-X", "GET", "repos/{owner}/{repo}/pulls", "-f", "state=open"],
     ["api", "repos/{owner}/{repo}/commits/0123abc/check-runs"],
     ["api", "repos/{owner}/{repo}"],
+    ["api", "repos/{owner}/{repo}/pulls/1/reviews", "-f", "body=Use -X GET for reads", "-f", "event=COMMENT"],
+    ["api", "repos/{owner}/{repo}/issues/1/comments", "-f", "body=Use -X DELETE to remove it"],
   ];
   const helpers = calls.map((_, i) => "lib/c" + i + ".ts");
   put("ship/SKILL.md", "Then run gstack-calls.\n");
@@ -72,7 +74,7 @@ test("gh api rows name their method and are served only where the sidecar's apiC
     return { argv: argv.join(" "), served: row?.served, sidecar: !events.some((e) => e.type === "rig_error") };
   });
   expect(got.filter((g) => g.served !== g.sidecar)).toEqual([]);
-  expect(got.map((g) => g.served)).toEqual([false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true]);
+  expect(got.map((g) => g.served)).toEqual([false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, false, true]);
   expect(rows.map((r) => r.shape)).toContain("api POST repos/{owner}/{repo}/pulls/1/reviews");
   expect(rows.map((r) => r.shape)).toContain("api PATCH repos/{owner}/{repo}/pulls/1");
   expect(rows.map((r) => r.shape)).toContain("api repos/{owner}/{repo}/pulls/1/reviews");
@@ -91,4 +93,27 @@ test("in prose, a gh api call's method is read past shell line continuations and
 
 test("a tree without ship/SKILL.md is refused", () => {
   expect(() => ghSurface(join(tree, "nowhere"))).toThrow("holds no ship/SKILL.md");
+});
+
+test("in prose, quoted values never pose as method flags, and a continued call keeps its path", () => {
+  put("ship/SKILL.md", "Post `gh api repos/{owner}/{repo}/pulls/$PR/reviews -f 'body=Use -X GET for reads' -f event=COMMENT`, read `gh api repos/{owner}/{repo}/pulls/$PR --jq '.a | .b' -X DELETE` and comment with `gh api repos/{owner}/{repo}/issues/$PR/comments -f \"body=Use -X DELETE to remove it\"`.\n\n```\ngh api -X PATCH \\\n  repos/{owner}/{repo}/pulls/$PR \\\n  -f title=t\n```\n");
+  for (const path of ["ship/sections", "bin", "lib"]) rmSync(join(tree, path), { recursive: true, force: true });
+  expect(Object.fromEntries(ghSurface(tree).map((r) => [r.shape, r.served]))).toEqual({
+    "api POST repos/{owner}/{repo}/pulls/$PR/reviews": false,
+    "api DELETE repos/{owner}/{repo}/pulls/$PR": false,
+    "api POST repos/{owner}/{repo}/issues/$PR/comments": true,
+    "api PATCH repos/{owner}/{repo}/pulls/$PR": true,
+  });
+});
+
+test("a gh api repo is served only as {owner}/{repo} or a shell variable, and a number only as digits or a shell variable", () => {
+  put("ship/SKILL.md", "Never `gh api repos/{owner}/{repo}/pulls/{number}/comments`, `gh api repos/{owner}/{repo}/issues/<n>/comments` or `gh api repos/someone/else/pulls/1`. Use `gh api repos/$OWNER/$REPO/pulls/7` or `gh api repos/${repo}/pulls/${n}`.\n");
+  for (const path of ["ship/sections", "bin", "lib"]) rmSync(join(tree, path), { recursive: true, force: true });
+  expect(Object.fromEntries(ghSurface(tree).map((r) => [r.shape, r.served]))).toEqual({
+    "api repos/{owner}/{repo}/pulls/{number}/comments": false,
+    "api repos/{owner}/{repo}/issues/<n>/comments": false,
+    "api repos/someone/else/pulls/1": false,
+    "api repos/$OWNER/$REPO/pulls/7": true,
+    "api repos/${repo}/pulls/${n}": true,
+  });
 });

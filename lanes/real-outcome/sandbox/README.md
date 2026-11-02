@@ -23,7 +23,7 @@ Prep puts the stub first on PATH, points origin at the sidecar with the trial's 
 
 A base tree holding `.claude/` or `.mcp.json` is refused at open, so no task brings project-local skills, plugins, settings or MCP servers into either arm. `CLAUDE.md`, `CLAUDE.local.md` and `AGENTS.md` are recorded and left in place: both arms read them alike.
 
-`gstack-evals real sandbox gh-surface <gstack tree>` lists every gh shape the tree's /ship can reach and whether the sidecar serves it. A `gh api` row names its method unless it is GET, and counts as served only where the sidecar answers that method and path. The scan reads prose too, so it over-reports; at gstack 1.92.35.0 its unserved rows are prose matches and merge-queue paths a trial never takes. P0's recorded trace settles the surface.
+`gstack-evals real sandbox gh-surface <gstack tree>` lists every gh shape the tree's /ship can reach and whether the sidecar serves it. A `gh api` row names its method unless it is GET, and counts as served only where the sidecar answers that method and path, with the repo as `{owner}/{repo}` or shell variables and a number as digits or a shell variable. The scan reads prose too, so it over-reports; at gstack 1.92.35.0 its unserved rows are prose matches and merge-queue paths a trial never takes. P0's recorded trace settles the surface.
 
 ## Tests
 

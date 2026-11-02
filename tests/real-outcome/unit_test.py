@@ -289,7 +289,7 @@ def test_close_sandbox_places_the_shipment_record_only_after_its_sha256_matches(
     import hashlib
     side = Path(tempfile.mkdtemp())
     files = {"record": side / "shipment.json", "journal": side / "journal.jsonl", "bundle": side / "shipped.bundle"}
-    files["record"].write_text('{"status": "none"}\n')
+    files["record"].write_text('{"status": "none", "shipped_head": null, "rig_errors": []}\n')
     files["journal"].write_text('{"type": "open"}\n')
     files["bundle"].write_bytes(b"bundle")
     record = {"status": "none", "shipped_head": None, "rig_errors": []}
@@ -311,6 +311,22 @@ def test_close_sandbox_places_the_shipment_record_only_after_its_sha256_matches(
         assert (evdir / "shipment.json").read_bytes() == files["record"].read_bytes()
         assert info["record_sha256"] == good and info["files"] == {"record": "shipment.json", "journal": "journal.jsonl", "bundle": "shipped.bundle"}, info
         assert sorted(p.name for p in evdir.iterdir()) == ["journal.jsonl", "shipment.json", "shipped.bundle"]
+
+
+def test_close_sandbox_reports_the_record_it_placed_not_the_http_copy():
+    import hashlib
+    side = Path(tempfile.mkdtemp())
+    files = {"record": side / "shipment.json", "journal": side / "journal.jsonl", "bundle": side / "shipped.bundle"}
+    files["record"].write_text('{"status": "none", "shipped_head": null, "rig_errors": [{"kind": "gh_unknown"}]}\n')
+    files["journal"].write_text('{"type": "open"}\n')
+    files["bundle"].write_bytes(b"bundle")
+    sha = hashlib.sha256(files["record"].read_bytes()).hexdigest()
+    evdir = Path(tempfile.mkdtemp())
+    agent = ra.RealAgent.__new__(ra.RealAgent)
+    agent._sidecar = lambda path, body, timeout=120: {"record": {"status": "shipped", "shipped_head": "abc123", "rig_errors": []}, "record_sha256": sha, "files": {k: str(v) for k, v in files.items()}}
+    agent._evaluator_dir = lambda: evdir
+    info = agent._close_sandbox("t1", "agent_finished", lambda e: None)
+    assert (info["status"], info["shipped_head"], info["rig_errors"]) == ("none", None, ["gh_unknown"]), info
 
 
 def main():
