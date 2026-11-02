@@ -13,7 +13,7 @@ body:
     attributes:
       label: Commit on main
       description: The sha of the latest main commit you reproduced this on.
-      placeholder: e14c68d
+      placeholder: <sha from git rev-parse HEAD>
     validations:
       required: true
   - type: textarea
