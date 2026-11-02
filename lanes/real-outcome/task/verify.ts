@@ -62,8 +62,14 @@ export interface VerifyOptions {
   cpus?: number;
 }
 
-/** Reads one /out file in the container holding /out; exit 3 when the tree left no regular file there it can read. */
-export const READ_OUT = '[ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] || exit 3; exec cat -- "$1"';
+/** The most READ_OUT reads of one /out file: well under the docker client's 256 MiB output buffer and no larger than
+ * /out. A sparse file takes no /out block, so the tree can give one any apparent size; a file past this cap is the
+ * tree's doing and reads as absent, so the read never dies at the buffer or the timeout. */
+export const OUT_READ_BYTES = 64 * 1024 * 1024;
+
+/** Reads one /out file in the container holding /out; exit 3 when the tree left no regular file there it can read, or one
+ * whose apparent size passes OUT_READ_BYTES. A stat the verifier could not make exits 1. */
+export const READ_OUT = '[ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] || exit 3; s=$(stat -c %s -- "$1") || exit 1; [ "$s" -gt ' + OUT_READ_BYTES + " ] && exit 3; exec head -c " + OUT_READ_BYTES + ' -- "$1"';
 
 /** One /out file's text from READ_OUT: null when the tree left no regular file it can read (exit 3, the tree's
  * outcome), undefined when the verifier itself could not read it (any other exit), so the run has no verdict. */

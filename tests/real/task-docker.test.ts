@@ -253,6 +253,17 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(grade("after-fill", { ...intro, "calc/fmt.py": fixed }).pass).toBe(true);
   }, LONG);
 
+  test("a tree that leaves a sparse /out record past the read cap fails its own run; a sparse record under the cap still grades", () => {
+    const sparse = (size: string) => "import atexit\nimport os\n\n\ndef _sparse():\n    os.truncate('/out/record.jsonl', " + size + ")\n\n\natexit.register(_sparse)\n";
+    for (const size of ["100 << 30", "100 << 20"]) {
+      const g = grade("sparse-record-" + size.replace(" << ", "-"), { ...intro, "calc/fmt.py": sparse(size) + fixed });
+      expect(g.tree.runs[0]).toMatchObject({ timed_out: false, out_full: false, killed: false });
+      expect(g.half.status).toBe("missing");
+      expect(g.pass).toBe(false);
+    }
+    expect(grade("sparse-record-small", { ...intro, "calc/fmt.py": sparse("1 << 20") + fixed }).pass).toBe(true);
+  }, LONG);
+
   test("a run whose output passes the docker client's buffer fails whatever its record says, and leaves no container or volume behind", () => {
     const list = (what: string[]) => docker([...what, "-q", "--filter", "name=real-"]).stdout.split("\n").filter(Boolean);
     const before = [...list(["ps", "-a"]), ...list(["volume", "ls"])];

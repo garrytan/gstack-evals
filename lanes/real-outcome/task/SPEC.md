@@ -108,8 +108,10 @@ shell.
    none`, `--read-only` root, a tmpfs `/tmp`, no capabilities, no-new-privileges, a CPU quota and a memory cap.
    `/out`, where the run writes its record, is a tmpfs volume of 256 MiB and 1024 inodes. A second container from the
    same image holds it open, and after the run the host reads the record through that container, regular files only,
-   so nothing a run writes to `/out` reaches the host disk. A file the run left missing, irregular or unreadable reads
-   as absent (the tree's outcome); a read the verifier itself could not make has no verdict (E_REAL_TASK_DOCKER).
+   so nothing a run writes to `/out` reaches the host disk. A file the run left missing, irregular or unreadable, or
+   whose apparent size passes the 64 MiB read cap, reads as absent (the tree's outcome); the cap counts a sparse file's
+   apparent size, which takes no `/out` space. A read the verifier itself could not make has no verdict
+   (E_REAL_TASK_DOCKER).
    pytest runs through `vrun.py`, which an sh entrypoint execs after it prints the start line (step 5). vrun.py imports
    pytest and the image's pytest11 plugins while only the image's paths are on `sys.path`, then runs with plugin
    autoload off, so no module or dist-info in the tree loads as a plugin. An editable install in the image can still

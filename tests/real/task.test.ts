@@ -3,12 +3,12 @@
 // builder's output and readTask's tamper checks, and prepare.sh's restore rules run on host directories.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
 import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, regressionDigest, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
-import { allPass, outText, PYTEST_ENTRY, READ_OUT, requiredTests, RUN_STARTED, runInfra, type RunRecord, type TreeResult } from "../../lanes/real-outcome/task/verify.ts";
+import { allPass, OUT_READ_BYTES, outText, PYTEST_ENTRY, READ_OUT, requiredTests, RUN_STARTED, runInfra, type RunRecord, type TreeResult } from "../../lanes/real-outcome/task/verify.ts";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { isProtectedPath } from "../../lanes/real-outcome/mine/paths.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
@@ -335,6 +335,21 @@ describe("what a grader grades", () => {
     const read = (file: string) => spawnSync("sh", ["-c", READ_OUT, "sh", join(dir, file)], { encoding: "utf8" });
     expect(read("record.jsonl")).toMatchObject({ status: 0, stdout: "x\n" });
     for (const file of ["missing", "dir", "link", ...(process.getuid?.() === 0 ? [] : ["unreadable"])]) expect(read(file).status).toBe(3);
+  });
+
+  test("an /out file whose apparent size passes the read cap reads as absent; one at the cap reads in full", () => {
+    const dir = join(tmp.dir, "read-out-cap");
+    mkdirSync(dir, { recursive: true });
+    const read = (size: number) => {
+      const file = join(dir, "record-" + size);
+      writeFileSync(file, "");
+      truncateSync(file, size);
+      return spawnSync("sh", ["-c", READ_OUT, "sh", file], { encoding: "utf8", maxBuffer: 2 * OUT_READ_BYTES });
+    };
+    for (const size of [OUT_READ_BYTES + 1, 100 * 2 ** 30]) expect(read(size)).toMatchObject({ status: 3, stdout: "" });
+    const at = read(OUT_READ_BYTES);
+    expect(at.status).toBe(0);
+    expect(at.stdout.length).toBe(OUT_READ_BYTES);
   });
 });
 
