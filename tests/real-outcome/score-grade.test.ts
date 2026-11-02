@@ -48,6 +48,8 @@ beforeAll(() => {
 });
 afterAll(() => tmp?.cleanup());
 
+const INIT = { type: "SystemMessage", subtype: "init", data: { skills: [], slash_commands: [] } };
+const READ_SKILL = { type: "AssistantMessage", phase: "build", content: [{ type: "tool_use", id: "1", name: "Read", input: { file_path: "/root/.claude/skills/ship/SKILL.md" } }] };
 let n = 0;
 interface TrialOpts { task: "k1" | "k4"; edit?: string | null; draft?: boolean; turn1?: string | null; final?: string | null; messages?: unknown[]; arm?: string; summary?: boolean; tamper?: boolean }
 /** One trial's evaluator folder, the way the sidecar and agent leave it: an origin seeded with base, the agent's pushed
@@ -75,7 +77,7 @@ function trial(o: TrialOpts): string {
   if (o.summary !== false) writeFileSync(join(ev, "real-summary.json"), JSON.stringify({ trial: "tr-" + n, arm: o.arm ?? "none", termination: "completed", skill_calls: { build: [] }, proxy: { spent_micros: 1500000, refused: 0 } }));
   if (o.turn1 !== undefined && o.turn1 !== null) writeFileSync(join(ev, "turn1.patch"), o.turn1);
   if (o.final !== undefined && o.final !== null) writeFileSync(join(ev, "final.patch"), o.final);
-  writeFileSync(join(ev, "sdk-messages.jsonl"), (o.messages ?? []).map((m) => JSON.stringify(m)).join("\n"));
+  writeFileSync(join(ev, "sdk-messages.jsonl"), (o.messages ?? [INIT]).map((m) => JSON.stringify(m)).join("\n"));
   return ev;
 }
 
@@ -156,6 +158,47 @@ describe("scoring one trial", () => {
     expect(e.trees.shipped).toBeNull();
     expect(calls.map((c) => c.label)).not.toContain("shipped");
     expect(classifyTrial(e).status).toBe("infra");
+  });
+
+  test("a bare arm with no session record is infra, never clean: no transcript, no records, or no init message", () => {
+    for (const body of [null, "", JSON.stringify({ type: "AssistantMessage", phase: "build", content: [] })]) {
+      const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+      if (body === null) rmSync(join(ev, "sdk-messages.jsonl"));
+      else writeFileSync(join(ev, "sdk-messages.jsonl"), body);
+      const e = run(ev, "k1");
+      expect(e.infra_reason).toBe("no session record to check exposure");
+      expect(classifyTrial(e).status).toBe("infra");
+    }
+    expect(run(trial({ task: "k1", edit: null, arm: "gstack", messages: [] }), "k1").infra_reason).toBeNull();
+  });
+
+  test("a torn last line of the transcript is dropped and recorded, the records before it graded; a torn line before the last makes the trial infra", () => {
+    const tail = trial({ task: "k1", edit: "git apply ../gold.patch" });
+    writeFileSync(join(tail, "sdk-messages.jsonl"), JSON.stringify(INIT) + "\n" + JSON.stringify(READ_SKILL) + "\n" + '{"type":"Assis');
+    const t = run(tail, "k1");
+    expect([t.torn_tail, t.infra_reason, t.exposure.messages, t.exposure.contaminated]).toEqual([true, null, 2, true]);
+    expect(classifyTrial(t).status).toBe("contaminated");
+    const mid = trial({ task: "k1", edit: "git apply ../gold.patch" });
+    writeFileSync(join(mid, "sdk-messages.jsonl"), JSON.stringify(INIT) + "\n" + '{"type":"Assis' + "\n" + JSON.stringify(INIT) + "\n");
+    const m = run(mid, "k1");
+    expect([m.torn_tail, m.infra_reason]).toEqual([false, "sdk-messages.jsonl line 2 is not JSON"]);
+    expect(classifyTrial(m).status).toBe("infra");
+  });
+
+  test("a cap-killed session with a torn tail keeps its session_cap outcome; without laneb-summary.json it is infra", () => {
+    const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+    const summary = JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8"));
+    writeFileSync(join(ev, "real-summary.json"), JSON.stringify({ ...summary, termination: "error_result", proxy: { spent_micros: 5000000, refused: 4 } }));
+    writeFileSync(join(ev, "laneb-summary.json"), JSON.stringify({ wall_s: 900, session: { refused: 4, refused_budget: 2 } }));
+    writeFileSync(join(ev, "sdk-messages.jsonl"), JSON.stringify(INIT) + "\n" + '{"type":"Assistant');
+    const e = run(ev, "k1");
+    expect([e.torn_tail, e.proxy_refused_budget, e.infra_reason]).toEqual([true, 2, null]);
+    const o = classifyTrial(e);
+    expect([o.termination, o.truncated, o.status, o.category]).toEqual(["session_cap", true, "scored", "shipped_clean"]);
+    rmSync(join(ev, "laneb-summary.json"));
+    const missing = run(ev, "k1");
+    expect(missing.proxy_refused_budget).toBeNull();
+    expect(classifyTrial(missing).status).toBe("infra");
   });
 
   test("a none-arm trial that read a gstack skill is contaminated", () => {

@@ -80,8 +80,12 @@ export interface TrialEvidence {
   bare: boolean;
   /** real-summary.json's termination, else the shipment record's close_reason; null when neither exists. */
   termination: string | null;
-  /** Requests the metering proxy refused for the session's cap. */
-  proxy_refused: number;
+  /** Requests the metering proxy refused for the session's cap: laneb-summary.json's session.refused_budget, null when
+   * that record or field is missing (never read as zero). */
+  proxy_refused_budget: number | null;
+  /** The last line of sdk-messages.jsonl was torn (a session killed mid-write) and dropped; everything read the records
+   * before it. */
+  torn_tail: boolean;
   shipment: { status: ShipmentStatus; shipped_head: string | null; held_head: string | null; selected_pr: number | null; close_reason: string } | null;
   /** Why the trial's records can't be scored (a bundle whose sha256 does not match the record, a missing file), or null. */
   infra_reason: string | null;
@@ -155,10 +159,13 @@ const clean = (g: TreeGrade | null): Bit | null => (g && g.status === "graded" ?
 
 /** The trial's termination reason as the taxonomy reads it: an error result after the proxy refused requests for the
  * session's cap is the cap (a limit), not a crash. */
-export function terminationOf(e: Pick<TrialEvidence, "termination" | "shipment" | "proxy_refused">): string {
+export function terminationOf(e: Pick<TrialEvidence, "termination" | "shipment" | "proxy_refused_budget">): string {
   const reason = e.termination ?? e.shipment?.close_reason ?? "unclosed";
-  return reason === "error_result" && e.proxy_refused > 0 ? "session_cap" : reason;
+  return reason === "error_result" && (e.proxy_refused_budget ?? 0) > 0 ? "session_cap" : reason;
 }
+
+/** The infra reason for a shipped head the verifier could not patch onto its tree: a rig mismatch, never the arm's change. */
+export const NOT_APPLIED = "the verifier could not apply the shipped patch";
 
 export function classifyTrial(e: TrialEvidence, taxonomy: Taxonomy = DEFAULT_TAXONOMY): TrialOutcome {
   const family = familyOf(e.kind, e.role);
@@ -180,6 +187,7 @@ export function classifyTrial(e: TrialEvidence, taxonomy: Taxonomy = DEFAULT_TAX
   };
   if (e.bare && e.exposure.contaminated) return { ...base, status: "contaminated", reason: e.exposure.evidence.map((x) => x.kind + ": " + x.detail).join("; ").slice(0, 500) };
   const infra = (reason: string): TrialOutcome => ({ ...base, status: "infra", reason });
+  if (termination === "error_result" && e.proxy_refused_budget === null) return infra("laneb-summary.json has no session.refused_budget, so a cap stop cannot be told from a crash");
   if (term_class === "infra") return infra("termination " + termination);
   if (e.infra_reason) return infra(e.infra_reason);
   const s = e.shipment;
@@ -193,6 +201,7 @@ export function classifyTrial(e: TrialEvidence, taxonomy: Taxonomy = DEFAULT_TAX
     if (!s.shipped_head) return infra("shipment status " + s.status + " names no shipped head");
     if (!g) return infra("the shipped head was not graded");
     if (g.status === "no_verdict") return infra("the verifier has no verdict on the shipped head: " + g.reason);
+    if (!g.applied) return infra(NOT_APPLIED);
     pass = g.pass;
     failed = g.failed;
   }

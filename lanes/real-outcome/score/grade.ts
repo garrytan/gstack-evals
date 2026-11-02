@@ -119,10 +119,26 @@ export function scoreTrial(opts: GradeOptions): TrialEvidence {
   const skills = o.gstackSkills ?? (readJson(GSTACK_MANIFEST) as { skills: { names: string[] } }).skills.names;
   const shipment = readJson(ev("shipment.json")) as ShipmentRecord | null;
   if (shipment && shipment.schema !== "real-outcome/shipment/v1") throw new ScoreError("E_REAL_SCORE_INPUT", ev("shipment.json") + " is not a real-outcome/shipment/v1 record");
-  const messages = (readText(ev("sdk-messages.jsonl")) ?? "").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as unknown);
-  const lanebSummary = readJson(ev("laneb-summary.json")) as { wall_s?: number } | null;
+  const lines = (readText(ev("sdk-messages.jsonl")) ?? "").split("\n");
+  const last = lines.findLastIndex((l) => l.trim() !== "");
+  const messages: unknown[] = [];
+  let torn_tail = false;
+  let tornAt: number | null = null;
+  lines.forEach((l, i) => {
+    if (!l.trim()) return;
+    try {
+      messages.push(JSON.parse(l));
+    } catch {
+      if (i === last) torn_tail = true;
+      else tornAt ??= i + 1;
+    }
+  });
+  const lanebSummary = readJson(ev("laneb-summary.json")) as { wall_s?: number; session?: { refused_budget?: number | null } | null } | null;
   let infra_reason: string | null = null;
   if (shipment && shipment.trial !== (summary as { trial?: string } | null)?.trial && summary && (summary as { trial?: string }).trial) infra_reason = "shipment.json and real-summary.json name different trials";
+  if (tornAt !== null) infra_reason ??= "sdk-messages.jsonl line " + tornAt + " is not JSON";
+  const isInit = (m: unknown) => (m as { type?: string; subtype?: string }).type === "SystemMessage" && (m as { subtype?: string }).subtype === "init";
+  if (armInfo.install === "none" && !messages.some(isInit)) infra_reason ??= "no session record to check exposure";
 
   const repo = new Scratch(join(o.work, "repo.git"));
   repo.must(["fetch", "-q", join(o.taskDir, "environment/task.bundle"), "+refs/heads/*:refs/task/*"], "fetching the task bundle");
@@ -185,7 +201,8 @@ export function scoreTrial(opts: GradeOptions): TrialEvidence {
     arm,
     bare: armInfo.install === "none",
     termination: summary?.termination ?? shipment?.close_reason ?? null,
-    proxy_refused: summary?.proxy?.refused ?? 0,
+    proxy_refused_budget: typeof lanebSummary?.session?.refused_budget === "number" ? lanebSummary.session.refused_budget : null,
+    torn_tail,
     shipment: shipment ? { status: shipment.status, shipped_head: shipment.shipped_head, held_head: shipment.held_head, selected_pr: shipment.selected_pr, close_reason: shipment.close_reason } : null,
     infra_reason,
     trees: { shipped: infra_reason ? null : graded("shipped", shippedPatch), held: graded("held", held ? repo.diff(start, held) : null), turn1: graded("turn1", turn1Patch), final: graded("final", finalPatch) },

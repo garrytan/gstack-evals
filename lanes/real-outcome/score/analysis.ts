@@ -4,7 +4,7 @@
 // readings and the verdict out. Models are input (org R54): nothing here names one. Built on src/runner/stats: the
 // cluster bootstrap, the sign-flip test and Holm.
 import { clusteredPairedDelta, holmAdjusted, type PairedItem } from "../../../src/runner/stats/paired.ts";
-import { classifyTrial, DEFAULT_TAXONOMY, ScoreError, type Taxonomy, type TrialEvidence, type TrialOutcome } from "./outcome.ts";
+import { classifyTrial, DEFAULT_TAXONOMY, NOT_APPLIED, ScoreError, type Taxonomy, type TrialEvidence, type TrialOutcome } from "./outcome.ts";
 import { Z_FINAL, Z_INTERIM } from "./power.ts";
 
 export const CONFIG_SCHEMA = "real-outcome/analysis-config/v1";
@@ -404,6 +404,8 @@ export interface Analysis {
   trials: { total: number; analysed: number; ignored: Record<string, number> };
   /** Build trials whose task is not in task_order, left out of every build reading (a config error for the primary model). */
   outside_order: Record<string, number>;
+  /** Trials made infra because the verifier could not apply the shipped patch: a rig bug for B7 to chase, never a result. */
+  patch_not_applied: number;
   verdict: Verdict;
   note: string | null;
   cut: Cut;
@@ -450,6 +452,7 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
   return {
     schema: ANALYSIS_SCHEMA, config: cfg, taxonomy: taxonomy.version,
     trials: { total: evidence.length, analysed: outcomes.length, ignored }, outside_order,
+    patch_not_applied: outcomes.filter((o) => o.status === "infra" && o.reason === NOT_APPLIED).length,
     verdict: main.primary.verdict, note: main.primary.note,
     cut: cutRule(outcomes, cfg, main.primary, main.secondaries, main.replay),
     models,
@@ -465,7 +468,7 @@ const row = (r: Reading | null, extra = ""): string =>
 /** A plain report of the analysis, in percentage points. */
 export function renderMarkdown(a: Analysis): string {
   const c = a.config;
-  const out: string[] = ["# Real-outcome analysis (" + c.look + " look)", "", "Treatment " + c.treatment + " against control " + c.control + ". Primary model " + c.primary_model + "; models " + c.models.join(", ") + ". Taxonomy " + a.taxonomy + ".", "", "Verdict: **" + a.verdict + "**" + (a.note ? " (" + a.note + ")" : "") + ". Cut track: " + a.cut.track + ". Safety: " + a.cut.safety + "." + (a.cut.readings.length ? " " + a.cut.readings.join("; ") + "." : "")];
+  const out: string[] = ["# Real-outcome analysis (" + c.look + " look)", "", "Treatment " + c.treatment + " against control " + c.control + ". Primary model " + c.primary_model + "; models " + c.models.join(", ") + ". Taxonomy " + a.taxonomy + ".", "", "Verdict: **" + a.verdict + "**" + (a.note ? " (" + a.note + ")" : "") + ". Cut track: " + a.cut.track + ". Safety: " + a.cut.safety + "." + (a.cut.readings.length ? " " + a.cut.readings.join("; ") + "." : ""), "", "Shipped patches the verifier could not apply: " + a.patch_not_applied + (a.patch_not_applied ? " (a rig bug for B7, not a result)." : ".")];
   const head = "| metric | tasks | control % | treatment % | difference, 95% interval | z | p |";
   for (const m of a.models) {
     const p = m.primary;
