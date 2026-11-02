@@ -88,7 +88,8 @@ const OUR_READ_ERRORS = new Set(["EACCES", "EIO", "EMFILE", "ENFILE", "ENOMEM", 
 // instead, so the check ends incomplete and counts no try (A1). loadR3Trial reads a JSON file it can't read as missing,
 // so judge reads config.json and result.json once itself, the error surfacing here, and hands loadR3Trial their bytes.
 // laneb-summary.json gives only wall_s, which no verdict reads, so judge doesn't read it. Only ENOENT and ENOTDIR mean
-// absent: a stat that fails for another reason is an error, not a missing file.
+// absent: a stat that fails for another reason is an error, not a missing file. main reads the proxy's sessions file the
+// same way, so an error there ends the check incomplete instead of judging a told part with no rows.
 const ifThere = <T>(read: () => T): T | null => {
   try {
     return read();
@@ -323,7 +324,7 @@ async function main(argv: string[]): Promise<number> {
         capStop = t?.cap_stop ?? null;
         infra = !t ? "the proxy is down (its /totals did not answer)" : capStop ? `the proxy latched a cap stop: ${capStop}` : null;
       }
-      const rows = existsSync(sessionsFile) ? readSessionRows([sessionsFile]) : [];
+      const rows = ifThere(() => readSessionRows([sessionsFile])) ?? [];
       Object.assign(s, judge(kind, exit, join(out, "jobs", job), rows, proxyConfig), { harbor_exit: exit, finished_at: new Date().toISOString(), proxy_cap_stop: capStop, infra });
       if (infra) rec.incomplete = `${kind} try ${n}: ${infra}`;
       save();
