@@ -422,7 +422,7 @@ describe("#121's notes", () => {
 // (it writes its pid to <STUB_LOG>.hang and waits to be stopped). hangkid hangs the same way with a child in Harbor's
 // process group (its pid in <STUB_LOG>.kid), and stubborn does too with both ignoring SIGTERM. badtrial writes a trial
 // whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), nomsgs leaves it out
-// (ENOENT), noread makes it unreadable (EACCES), and nolog makes the check's own log of the session a directory, so the
+// (ENOENT), noread makes it unreadable (EACCES), noeval makes the evaluator dir unsearchable (EACCES on stat), and nolog makes the check's own log of the session a directory, so the
 // check fails writing it. STUB_SLEEP holds every session that many ms.
 const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -464,6 +464,7 @@ const msgs = mode === "notool" ? [{ type: "AssistantMessage", content: [{ text: 
 if (mode === "dirmsgs") mkdirSync(join(d, "evaluator", "sdk-messages.jsonl"));
 else if (mode !== "nomsgs") writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), (mode === "badtrial" ? "null\\n" : "") + msgs.map((m) => JSON.stringify(m)).join("\\n") + "\\n");
 if (mode === "noread") chmodSync(join(d, "evaluator", "sdk-messages.jsonl"), 0);
+if (mode === "noeval") chmodSync(join(d, "evaluator"), 0);
 process.exit(mode === "latefail" ? 1 : 0);
 `;
 
@@ -573,7 +574,7 @@ describe("the route check's verdicts", () => {
     expect(j.reasons[0]).toContain("EISDIR");
   });
 
-  test.skipIf(process.getuid?.() === 0)("an unreadable config.json or result.json throws too; a trial file missing inside the trial dir (ENOENT) stays a failed try", () => {
+  test.skipIf(process.getuid?.() === 0)("an unreadable config.json or result.json, or an evaluator dir that can't be searched, throws too; a trial file missing inside the trial dir (ENOENT) stays a failed try", () => {
     const d = tmp("sol-judge-files-");
     const job = join(d, "job");
     writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
@@ -586,6 +587,9 @@ describe("the route check's verdicts", () => {
       expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
       chmodSync(join(dir, f), 0o644);
     }
+    chmodSync(join(dir, "evaluator"), 0);
+    expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
+    chmodSync(join(dir, "evaluator"), 0o755);
   });
 });
 
@@ -745,6 +749,15 @@ describe("route-check.ts failures on our side (A1)", () => {
     const again = await routeCheck(r);
     expect(again.code).toBe(4);
     expect(again.calls).toHaveLength(1);
+  }, 60_000);
+
+  test.skipIf(process.getuid?.() === 0)("a trial whose evaluator dir can't be searched (EACCES on stat, not a missing file) ends the check incomplete: no try counted", async () => {
+    const r = rig();
+    const { code, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=noeval" });
+    expect(code).toBe(4);
+    expect(calls).toHaveLength(1);
+    expect(rec).toMatchObject({ verdict: null, reason: null });
+    expect(rec!.incomplete).toStartWith("smoke try 1: the route check failed during the session: EACCES reading the trial: ");
   }, 60_000);
 
   test("a malformed trial and a directory where a trial file should be are the route's failures: each counts as a try", async () => {
