@@ -326,18 +326,18 @@ def check_minors(unit, key, heads, rep):
 
 def check_key(unit, files, heads, wave, kept, floor, rep):
     try:
-        key = json.loads(files.get("key.json", ""))
+        answer = json.loads(files.get("key.json", ""))
     except ValueError:
         rep.problem(unit, "key-json", "key.json does not parse")
         return None
-    if not isinstance(key, dict):
+    if not isinstance(answer, dict):
         rep.problem(unit, "key-json", "key.json is not an object")
         return None
-    if key.get("unit") != unit:
+    if answer.get("unit") != unit:
         rep.problem(unit, "key-field", "unit field differs from the folder name")
-    if key.get("wave") != wave:
+    if answer.get("wave") != wave:
         rep.problem(unit, "key-field", "wave field is not %s" % wave)
-    stratum, mode, kind = key.get("stratum"), key.get("mode"), key.get("kind")
+    stratum, mode, kind = answer.get("stratum"), answer.get("mode"), answer.get("kind")
     if stratum not in STRATA:
         rep.problem(unit, "key-field", "stratum must be one of %s" % ",".join(STRATA))
     if mode not in MODES:
@@ -345,15 +345,15 @@ def check_key(unit, files, heads, wave, kept, floor, rep):
     allowed = {"calibration": ("calibration",), "admission": ("panel",), "confirmatory": ("panel", "decoy")}[wave]
     if kind not in allowed:
         rep.problem(unit, "key-field", "kind must be %s in the %s wave" % (" or ".join(allowed), wave))
-        return key
-    check_minors(unit, key, heads, rep)
+        return answer
+    check_minors(unit, answer, heads, rep)
     if kind == "decoy":
-        bait = key.get("bait")
-        if "items" in key and key["items"]:
+        bait = answer.get("bait")
+        if "items" in answer and answer["items"]:
             rep.problem(unit, "key-decoy", "a decoy keys no items")
         if not isinstance(bait, dict):
             rep.problem(unit, "key-decoy", "a decoy needs bait")
-            return key
+            return answer
         if bait.get("resembles") not in KINDS or KINDS[bait["resembles"]][0] != stratum:
             rep.problem(unit, "key-decoy", "bait resembles must be a kind of this stratum")
         elif kept is not None and bait["resembles"] not in kept:
@@ -367,11 +367,11 @@ def check_key(unit, files, heads, wave, kept, floor, rep):
         jpaths = check_evidence(unit, "bait justification", bait.get("justification"), files, rep)
         if not any(p.startswith(("context/", "src/")) for p in jpaths):
             rep.problem(unit, "key-evidence", "bait justification needs a context/ or src/ path")
-        return key
-    items = key.get("items")
+        return answer
+    items = answer.get("items")
     if not isinstance(items, list):
         rep.problem(unit, "key-field", "items must be a list")
-        return key
+        return answer
     ids = [it.get("id") if isinstance(it, dict) else None for it in items]
     if ids != ["%s-%d" % (unit, i) for i in range(1, len(items) + 1)]:
         rep.problem(unit, "key-field", "item ids must run %s-1, %s-2 and on, in order" % (unit, unit))
@@ -386,7 +386,7 @@ def check_key(unit, files, heads, wave, kept, floor, rep):
         if len(items) != 4 or roles.count("anchor") != 1 or cands != want:
             rep.problem(unit, "key-recipe", "a calibration unit keys one item of each of its stratum's three kinds and one anchor")
         anchor_kind = [k for k, r in zip(kinds, roles) if r == "anchor"]
-        if anchor_kind and key.get("anchor_shape") not in (None, anchor_kind[0]):
+        if anchor_kind and answer.get("anchor_shape") not in (None, anchor_kind[0]):
             rep.problem(unit, "key-recipe", "anchor_shape differs from the anchor's item_kind")
     else:
         if len(items) != 3 or roles.count("candidate") != 3:
@@ -398,7 +398,7 @@ def check_key(unit, files, heads, wave, kept, floor, rep):
                 rep.problem(unit, "key-recipe", "items must span at least two kept kinds")
             if sum(1 for k in kinds if k in floor) > 1:
                 rep.problem(unit, "key-recipe", "at most one item of a floor kind")
-    return key
+    return answer
 
 
 def check_unit(unit_dir, wave, kept, floor, anywhere, headings, rep):
