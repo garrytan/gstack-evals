@@ -7,7 +7,7 @@ author: GEVA-108
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-01
-status: open
+status: superseded
 links:
   - 2026-10-31-geva-78-stacks-round-1-prereg-v2
   - 2026-11-01-geva-89-stacks-round-1-review-results
