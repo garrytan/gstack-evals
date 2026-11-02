@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { STACKS } from "../../../src/arms/stacks.ts";
 import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, TOLD_TEMPLATE, toldArmOf, toldPrompt, toldSkill } from "../../../src/trial/review/told.ts";
 
 describe("the frozen told prompt", () => {
@@ -45,5 +46,11 @@ describe("R56-1: the commands an arm declares", () => {
     expect(TOLD_COMMANDS).toEqual({ none: [], gstack: ["/review", "/ship"], pstack: ["/pstack:interrogate"], tstack: ["/sol-loop"] });
     for (const arm of ["gstack", "pstack", "tstack"] as const) expect(TOLD_COMMANDS[arm][0]).toBe(TOLD_PREFIX[arm].split(" ")[0]);
     expect([toldSkill("gstack", "/ship Run only the review panel."), toldSkill("gstack", "/review Look hard."), toldSkill("gstack")]).toEqual(["ship", "review", "review"]);
+  });
+
+  // Value: protects=TOLD_COMMANDS holds one word per command, the first word of a stack's told line, since the CLI compares a prefix's first word against it; fails_when=a stack's told line gains a second word and every prefix for that arm is refused; why_new=GEVA-197 /ship pass 1 (adversarial-native#5); seam=TOLD_COMMANDS; no_claim=none
+  test("every declared command is one word, a stack's the first word of its told line", () => {
+    for (const commands of Object.values(TOLD_COMMANDS)) for (const command of commands) expect(command).toMatch(/^\/\S+$/);
+    for (const arm of ["pstack", "tstack"] as const) expect(TOLD_COMMANDS[arm]).toEqual([STACKS.find((k) => k.name === arm)!.told.review.split(" ")[0]!]);
   });
 });

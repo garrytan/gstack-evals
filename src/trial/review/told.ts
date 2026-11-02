@@ -44,8 +44,8 @@ export const TOLD_PREFIX: Readonly<Record<ToldArm, string>> = {
 export const TOLD_COMMANDS: Readonly<Record<ToldArm, readonly string[]>> = {
   none: [],
   gstack: ["/review", "/ship"],
-  pstack: [stackTold("pstack")],
-  tstack: [stackTold("tstack")],
+  pstack: [stackTold("pstack").split(" ")[0]!],
+  tstack: [stackTold("tstack").split(" ")[0]!],
 };
 
 export function toldPrompt(arm: ToldArm, base: string, prefix: string = TOLD_PREFIX[arm]): string {

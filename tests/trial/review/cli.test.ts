@@ -74,6 +74,47 @@ describe("review-units arguments (keyless)", () => {
     removeTree(join(out, ".."));
   });
 
+  // Value: protects=a code arm's told prefix with a control character (CR from a CRLF file, tab, BOM) is refused with the character named, as plan prefixes are, while a plain prefix still runs; fails_when=a stray CR or BOM reaches the told line, or a plain prefix is refused; why_new=GEVA-197 /ship pass 1 (adversarial-native#6); seam=main's --told-prefix check through prefixControlProblem; no_claim=plan prefixes, which plan-told.test.ts covers
+  test("a code arm's told prefix with a control character is refused and names it", async () => {
+    const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
+    const run = async (argv: string[]) => {
+      const io = collect();
+      const code = await main(argv, io, {});
+      return { code, ...io.text() };
+    };
+    const file = (name: string, text: string) => {
+      writeFileSync(out + "-" + name, text);
+      return out + "-" + name;
+    };
+    for (const [name, text, why] of [["crlf", "/ship Look hard.\r\n", "a carriage return (U+000D) at character 17"], ["tab", "/review\tLook hard.", "a tab (U+0009) at character 8"], ["bom", "\ufeff/review Look hard.", "a byte order mark (U+FEFF) at character 1"], ["nul", "/review Look\u0000 hard.", "a control character (U+0000) at character 13"]] as const) {
+      const r = await run([...base(out), "--arms", GSTACK, "--told-prefix", "gstack=" + file(name + ".txt", text), "--dry-run"]);
+      expect([r.code, r.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: --told-prefix gstack: the prefix must be one line of plain text, but it has " + why]);
+    }
+    expect((await run([...base(out), "--arms", GSTACK, "--told-prefix", "gstack=" + file("plain.txt", "/ship Look hard.\n"), "--dry-run"])).code).toBe(0);
+    expect(existsSync(out)).toBe(false);
+    removeTree(join(out, ".."));
+  });
+
+  // Value: protects=--render on code units takes only a gstack arm told /review, since the install checks a render's start line only in the review and investigate skills, so a /ship arm's render would go unchecked; fails_when=a /ship arm takes --render, or a /review arm (default or prefixed) is refused it; why_new=GEVA-197 /ship pass 1 (adversarial-native#2, Captain GSTA-2 2026-11-02); seam=main's --render check; no_claim=the install's own check in src/arms/install.ts
+  test("--render on code units takes only an arm told /review", async () => {
+    const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
+    const run = async (argv: string[]) => {
+      const io = collect();
+      const code = await main(argv, io, {});
+      return { code, ...io.text() };
+    };
+    const file = (name: string, text: string) => {
+      writeFileSync(out + "-" + name, text);
+      return out + "-" + name;
+    };
+    const ship = await run([...base(out), "--arms", GSTACK, "--told-prefix", "gstack=" + file("ship.txt", "/ship Run only the review panel."), "--render", "gstack=unattended", "--dry-run"]);
+    expect([ship.code, ship.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: --render names arm gstack, whose told prefix opens with /ship; the install checks a render's start line only in the review and investigate skills, so --render takes only an arm told /review"]);
+    expect((await run([...base(out), "--arms", GSTACK, "--render", "gstack=unattended", "--dry-run"])).code).toBe(0);
+    expect((await run([...base(out), "--arms", GSTACK, "--told-prefix", "gstack=" + file("review.txt", "/review Look hard."), "--render", "gstack=unattended", "--dry-run"])).code).toBe(0);
+    expect(existsSync(out)).toBe(false);
+    removeTree(join(out, ".."));
+  });
+
   // Value: protects=a resume that gives other run settings than the run recorded is refused before anything runs, and run.json keeps the settings its sessions used; fails_when=a mismatched resume overwrites run.json or proceeds; why_new=Capy review of #119 (a rejected resume rewrote max_turns and session_kind); seam=main's resume check; no_claim=the Docker rig
   test("a resume with other run settings is refused and leaves run.json as it was", async () => {
     const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
@@ -169,6 +210,26 @@ describe("review-units R2 settings (keyless)", () => {
     expect([other.code, other.err.split("\n")[0]]).toEqual([2, "E_CACHE_STALE review-units: run review-units-r2 ran with max turns 200, session kind not set, allowance $40 and reader map none, and this resume gives 200, not set, $15 and none"]);
     expect((await run([...base(out), "--arms", "none", "--max-turns", "200", "--allowance", "40", "--reader-map", MAP, "--resume", "--dry-run"])).code).toBe(2);
     expect((await run([...base(out), "--arms", "none", "--max-turns", "200", "--allowance", "40", "--resume", "--dry-run"])).code).toBe(0);
+    removeTree(dirname(out));
+  });
+
+  // Value: protects=--reader-map runs only where every gstack arm is told /review, since the map names /review's readers and cost.tsv would misname a /ship arm's; fails_when=a /ship arm runs under a reader map, or a /review arm (default or prefixed) is refused one; why_new=GEVA-197 /ship pass 1 (adversarial-native#3, Captain GSTA-2 2026-11-02); seam=main's --reader-map check; no_claim=a /ship reader map, which does not exist
+  test("--reader-map is refused when a gstack arm is told anything but /review", async () => {
+    const MAP = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
+    const PINNED = "gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12";
+    const out = join(mkdtempSync(join(REPO_ROOT, ".review-units-cli-")), "out");
+    const run = async (argv: string[]) => {
+      const io = collect();
+      const code = await main(argv, io, {});
+      return { code, ...io.text() };
+    };
+    writeFileSync(out + "-ship.txt", "/ship Run only the review panel.");
+    writeFileSync(out + "-review.txt", "/review Look hard.");
+    const ship = await run([...base(out), "--arms", PINNED, "--told-prefix", "gstack-full=" + out + "-ship.txt", "--reader-map", MAP, "--dry-run"]);
+    expect([ship.code, ship.err.split("\n")[0]]).toEqual([2, "E_USAGE review-units: --reader-map " + MAP + " names /review's readers, and arm gstack-full's told prefix opens with /ship, so cost.tsv would misname its readers; leave out --reader-map for that arm's run"]);
+    expect((await run([...base(out), "--arms", PINNED, "--told-prefix", "gstack-full=" + out + "-review.txt", "--reader-map", MAP, "--dry-run"])).code).toBe(0);
+    expect((await run([...base(out), "--arms", PINNED, "--told-prefix", "gstack-full=" + out + "-ship.txt", "--dry-run"])).code).toBe(0);
+    expect(existsSync(out)).toBe(false);
     removeTree(dirname(out));
   });
 });
