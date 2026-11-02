@@ -103,7 +103,7 @@ export function runTier(o: { out: string; root?: string }): TierRecord {
   mkdirSync(out, { recursive: true });
   const junit = join(out, "junit.xml");
   const started = new Date().toISOString();
-  const r = spawnSync("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", c.run], { cwd: root, env: keylessEnv({ GATE_JUNIT: junit }), stdio: ["ignore", "inherit", "inherit"], timeout: TIER_TIMEOUT_MS });
+  const r = spawnSync("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", c.run], { cwd: root, env: keylessEnv({ GATE_JUNIT: junit, GSE_SLOW_CLI: "1" }), stdio: ["ignore", "inherit", "inherit"], timeout: TIER_TIMEOUT_MS });
   const cases = existsSync(junit) ? junitCases(readFileSync(junit, "utf8")) : [];
   const problems = judgeTier(cases, c.tests, r.status);
   const tree = checkout(root);

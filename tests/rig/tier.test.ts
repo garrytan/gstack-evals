@@ -65,7 +65,7 @@ describe("the Docker tier (U20)", () => {
     const junit = (body: string) => "<testsuites><testsuite name=\"tests/rig/x.test.ts\">" + body + "</testsuite></testsuites>";
     const manifest = (run: string) => JSON.stringify({ schema: 1, stages: { m0: [{ id: "unit", kind: "command", run: "true" }], m1b: [{ id: "docker-tier", kind: "junit", run, tests: ["tests/rig/x.test.ts"] }] }, gate_surface: ["gate/**"] });
     const write = (body: string, keyCheck = false) => {
-      const env = keyCheck ? 'test -z "$ANTHROPIC_API_KEY" && test -z "$SOME_TOKEN" && ' : "";
+      const env = keyCheck ? 'test -z "$ANTHROPIC_API_KEY" && test -z "$SOME_TOKEN" && test "$GSE_SLOW_CLI" = 1 && ' : "";
       writeFileSync(join(r.root, "gate", "manifest.json"), manifest(env + "printf '%s' '" + junit(body) + "' > \"$GATE_JUNIT\""));
       git(r.root, "add", "-A");
       git(r.root, "commit", "-qm", "manifest");
