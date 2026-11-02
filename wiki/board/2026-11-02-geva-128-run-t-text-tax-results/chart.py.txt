@@ -1,0 +1,31 @@
+import re
+import sys
+
+import matplotlib
+
+matplotlib.use("svg")
+import matplotlib.pyplot as plt
+
+plt.rcParams["svg.hashsalt"] = "geva128"
+plt.rcParams["svg.fonttype"] = "none"
+src = open(sys.argv[1]).read()
+rows = re.findall(r"^(particle-1|claude-haiku-5-5) (none|placebo-short|placebo): .*?pass ([\d.]+)% \[([\d.]+)%, ([\d.]+)%\].*?cost per trial \$([\d.]+)", src, re.M)
+arms = ["none", "placebo-short", "placebo"]
+models = ["particle-1", "claude-haiku-5-5"]
+fig, (a, b) = plt.subplots(1, 2, figsize=(10, 4), gridspec_kw={"width_ratios": [3, 2]})
+for i, m in enumerate(models):
+    for j, arm in enumerate(arms):
+        p, lo, hi, c = next((float(r[2]), float(r[3]), float(r[4]), float(r[5])) for r in rows if r[0] == m and r[1] == arm)
+        x = i * 4 + j
+        a.errorbar(x, p, yerr=[[p - lo], [hi - p]], fmt="o", color=f"C{j}", capsize=4, label=arm if i == 0 else None)
+        b.bar(x, c, color=f"C{j}")
+        b.text(x, c, f"${c:.3f}", ha="center", va="bottom", fontsize=8)
+for ax in (a, b):
+    ax.set_xticks([1, 5], ["particle-1", "Haiku 5.5 (no verdict, R54)"])
+a.set_ylabel("TB2 pass rate, % (95% CI)")
+a.set_ylim(50, 100)
+a.legend(loc="lower left")
+b.set_ylabel("metered $ per trial")
+fig.suptitle("Run T: 37 TB2 tasks x 5 replicates, 185 trials a cell")
+fig.tight_layout()
+fig.savefig(sys.argv[2], metadata={"Date": None})

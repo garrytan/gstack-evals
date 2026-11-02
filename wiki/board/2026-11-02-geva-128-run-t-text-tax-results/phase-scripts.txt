@@ -1,0 +1,373 @@
+===== scripts/prep.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T keyless prep (phase 0): runner tests, arm builds, TB2 pin, runner export, local Harbor.
+set -euo pipefail
+W=$HOME/.capy/work/rt
+R=/workspace/rt-runner
+D=<captain-drive>/handoffs/GSTA-30/arms
+echo "prep at $(git -C $R rev-parse HEAD), $(date -u +%FT%TZ)"
+cd $R && bun install --frozen-lockfile >/dev/null 2>&1 && echo "bun install ok"
+cd $R && (bun test quick/laneb 2>&1 | tail -4)
+cd $R && npx tsc --noEmit -p quick/laneb/tsconfig.json && echo "quick/laneb typecheck clean"
+A=$W/arms-src; mkdir -p $A
+cat $D/gstack-b93994689107.tar.gz.part-* > $A/gstack.tar.gz
+sha256sum $A/gstack.tar.gz $D/none-8bab483364e4.tar.gz $D/placebo-ff6b909d89d8.tar.gz
+gzip -dc $A/gstack.tar.gz > $A/gstack.tar; gzip -dc $D/none-8bab483364e4.tar.gz > $A/none.tar; gzip -dc $D/placebo-ff6b909d89d8.tar.gz > $A/placebo.tar
+sha256sum $A/gstack.tar $A/none.tar $A/placebo.tar
+cd $R/quick/laneb && bun arms/variants.ts --in $A --out $W/arms-built
+sha256sum $W/arms-built/*.tar
+T=$W/arms; mkdir -p $T
+cp $D/none-8bab483364e4.tar.gz $T/none.tar.gz
+cp $D/placebo-ff6b909d89d8.tar.gz $T/placebo.tar.gz
+gzip -n -9 -c $W/arms-built/placebo-short.tar > $T/placebo-short.tar.gz
+for a in none placebo-short placebo; do echo "$a tar sha256 $(gzip -dc $T/$a.tar.gz | sha256sum | cut -d' ' -f1) manifest $(jq -r .tar.sha256 $R/quick/laneb/arms/manifests/$a.json)"; done
+mkdir -p $W/ref
+if [ ! -d $W/ref/terminal-bench-2/.git ]; then git clone -q https://github.com/laude-institute/terminal-bench-2.git $W/ref/terminal-bench-2; fi
+git -C $W/ref/terminal-bench-2 checkout -q 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c && echo "TB2 at $(git -C $W/ref/terminal-bench-2 rev-parse HEAD)"
+rm -rf $W/runner-export && mkdir -p $W/runner-export && git -C $R archive laneb-texttax-2-runner quick/laneb | tar -x -C $W/runner-export && echo "runner-export from tag: $(find $W/runner-export -type f | wc -l) files"
+(cd $W/runner-export && diff -r quick/laneb $R/quick/laneb -x node_modules >/dev/null && echo "runner-export identical to worktree quick/laneb")
+command -v uv >/dev/null || { echo "no uv"; exit 3; }
+uv tool install --quiet --force "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" --with "claude-agent-sdk==0.2.174" && echo "harbor installed: $(harbor --version 2>/dev/null | head -1)"
+echo PREP_DONE
+
+===== scripts/grid-check.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T grid check (prereg section 8, first step): prepare-run keyless for the full grid,
+# one fresh run dir per batch, then check each cell's tar, told line and trial count.
+set -euo pipefail
+W=$HOME/.capy/work/rt
+R=/workspace/rt-runner/quick/laneb
+export TB2=$W/ref/terminal-bench-2 ORACLE=1
+TASKS37=$(jq -r '.tasks | map(select(. != "crack-7z-hash" and . != "adaptive-rejection-sampler" and . != "largest-eigenval")) | join(",")' $R/tasks/final.json)
+export TASKS=$TASKS37
+echo "tasks: $(echo $TASKS37 | tr ',' '\n' | wc -l)"
+mkdir -p $W/runs
+for spec in particle-1:t-particle:5 claude-haiku-5-5:t-haiku:5 deepseek-v4.1-flash-1017:t-deepseek:2; do
+  IFS=: read m d a <<< "$spec"
+  (cd /workspace/rt-runner && bun quick/laneb/runner/prepare-run.ts $W/runs/$d texttax-r1-$d $m none,placebo-short,placebo $W/arms $a 12 on)
+done
+echo GRID_PREPARED
+
+===== scripts/grid-check-2.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T grid check, part 2: per batch, the cells, tars, told lines and trial counts the prepared configs carry.
+set -euo pipefail
+W=$HOME/.capy/work/rt
+total=0
+for d in t-particle t-haiku t-deepseek; do
+  j=$W/runs/$d/job.json; m=$W/runs/$d/manifest.json
+  n=$(jq '.tasks|length' $j); a=$(jq '.n_attempts' $j); c=$(jq '.agents|length' $j); t=$((n*a*c)); total=$((total+t))
+  echo "$d: model $(jq -r '.agents[0].kwargs.upstream_model' $j) ($(jq -r '.agents[0].model_name' $j)), session cap \$$(jq -r '.agents[0].kwargs.session_cap_usd' $j), $n tasks x $c cells x $a attempts = $t trials, concurrent $(jq '.n_concurrent_trials' $j), git $(jq -r .git_head $m | cut -c1-7) dirty=$(jq -r .git_dirty $m)"
+  jq -r '.agents[] | "  \(.kwargs.arm): tar sha256 \(.kwargs.arm_sha256[0:12]) invoke=\(.kwargs.invoke) told=\((.kwargs.skill_map // {}) | to_entries | map(.value) | group_by(.) | map("/\(.[0]) x \(length)") | join(","))"' $j
+  for arm in none placebo-short placebo; do
+    want=$(jq -r .tar.sha256 /workspace/rt-runner/quick/laneb/arms/manifests/$arm.json); got=$(gzip -dc $W/runs/$d/arms/$arm.tar.gz | sha256sum | cut -d' ' -f1)
+    [ "$got" = "$want" ] && echo "  $arm tar in run dir matches arms/manifests/$arm.json" || { echo "  $arm MISMATCH $got vs $want"; exit 1; }
+  done
+  echo "  oracle.json: $(jq -r '.agents[0].name' $W/runs/$d/oracle.json), $(jq '.tasks|length' $W/runs/$d/oracle.json) tasks, $(jq .n_attempts $W/runs/$d/oracle.json) attempt"
+done
+echo "grid total: $total trials (prereg: 1,332)"
+[ $total = 1332 ] && echo GRID_CHECK_PASS || { echo GRID_CHECK_FAIL; exit 1; }
+
+===== scripts/route.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T route check (prereg section 8, first paid step): the tag's route-check.sh, unchanged, on this machine,
+# smoke task once per model, arm none, through Run T's proxy and the texttax-r1 ledger. Usage: route.sh [models]
+set -uo pipefail
+W=$HOME/.capy/work/rt
+export PREREG=0ffe8d0c231e3136d3c8cfade39bd75a30f4eb14 ITEM=texttax-r1 LEDGER=<captain-drive>/ledger/texttax-r1.jsonl
+export MODELS=${1:-'particle-1 claude-haiku-5-5 deepseek-v4.1-flash-1017'} OUT=$W/route-t${ROUTE_TRY:-1}
+export PATH="$HOME/.local/bin:$PATH"
+cd /workspace/rt-runner && timeout 3600 bash quick/laneb/runner/route-check.sh
+echo "route-check exit $?"
+
+===== scripts/ledger-sup.sh
+#!/usr/bin/env bash
+# GEVA-128: the one texttax-r1 ledger service on 9911 (from GEVA-89's ledger-sup.sh). It starts the tag's ledger.ts serve
+# only when nothing listens on 9911, so it never runs a second service on the file, and it ends when ledger.stop exists.
+W=$HOME/.capy/work/rt
+L=<captain-drive>/ledger/texttax-r1.jsonl
+cd $W/runner-export/quick/laneb/runner || exit 1
+while [ ! -e $W/ledger.stop ]; do
+  if ! ss -ltnH 'sport = :9911' | grep -q '127.0.0.1:9911'; then
+    echo "$(date -u +%FT%TZ) ledger-sup: starting the ledger service"
+    bun ledger.ts serve --path $L --item texttax-r1 --port 9911 --prereg 0ffe8d0c231e3136d3c8cfade39bd75a30f4eb14 &
+    wait $!
+    echo "$(date -u +%FT%TZ) ledger-sup: service exited $?"
+  fi
+  sleep 3
+done
+
+===== scripts/batch.sh
+#!/usr/bin/env bash
+# Operator controller for one Run T batch (GEVA-128), GEVA-93's batch.sh with its owner, runner path and TTL changed. From GEVA-89: It does what the tag's launch.sh does, with two changes
+# the Captain approved: vm-run.sh runs detached on the VM (so this controller can die and be re-attached), and the
+# ledger service is one shared process started separately on port 9911.
+# Usage: batch.sh start <run dir> <prefix> <batch cap usd>   |   batch.sh attach <run dir>
+set -uo pipefail
+S=<ubicloud-skill>/scripts/ubi-runner.sh
+RUNNER=$HOME/.capy/work/rt/runner-export/quick/laneb/runner
+state_root=${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner
+export UBI_OWNER=geva128 UBI_ALLOWED_STORAGE='320 600 640 1200'
+mode=$1
+run=$(cd "$2" && pwd)
+meta=$run.vm
+log() { echo "$(date -u +%FT%TZ) $*"; }
+if [ "$mode" = start ]; then
+  prefix=$3; cap=$4
+  [ -e "$meta" ] && { log "refusing: $meta exists"; exit 2; }
+  name=$(UBI_TTL_HOURS=${UBI_TTL_HOURS:-12} "$S" up -s standard-30 -S 600) || { log "up failed"; exit 3; }
+  echo "$name" > "$meta"
+  log "vm: $name"
+  if ! { "$S" sync "$name" "$RUNNER" work/runner && "$S" sync "$name" "$run" work/run && "$S" ssh "$name" 'bash work/runner/vm-bootstrap.sh'; }; then
+    log "setup failed before any trial; destroying $name"; "$S" down "$name"; exit 4
+  fi
+  { printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:-}"; printf 'OPENROUTER_API_KEY=%s\n' "${OPENROUTER_API_KEY:-}"; } | "$S" ssh "$name" 'umask 077; cat > ~/.laneb-keys'
+  printf '#!/bin/bash\numask 022\ncd ~\nbash work/runner/vm-run.sh work/run "$1" "$2" > work/vm-run.log 2>&1\necho $? > work/vm-run.exit\n' | "$S" ssh "$name" 'cat > work/detach.sh'
+else
+  name=$(cat "$meta")
+  prefix=""; cap=""
+fi
+. "$state_root/$name/env"
+key="$state_root/$name/key"
+SSHO=(-i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30)
+rsh() { timeout 120 ssh "${SSHO[@]}" "ubi@$IP" "$@"; }
+tunnel() {
+  while [ ! -e "$run.tunnel-stop" ]; do
+    ssh "${SSHO[@]}" -N -o ServerAliveInterval=30 -o ServerAliveCountMax=4 -o ExitOnForwardFailure=yes -R 127.0.0.1:9911:127.0.0.1:9911 "ubi@$IP" &
+    echo $! > "$run.tunnel-pid"; wait $!
+    [ -e "$run.tunnel-stop" ] || { echo "$(date -u +%FT%TZ) tunnel dropped; reconnecting"; sleep 5; }
+  done
+}
+rm -f "$run.tunnel-stop"
+tunnel & tloop=$!
+stop_tunnel() { touch "$run.tunnel-stop"; kill "$(cat "$run.tunnel-pid" 2>/dev/null)" 2>/dev/null; wait "$tloop" 2>/dev/null; }
+trap stop_tunnel EXIT
+for i in $(seq 1 30); do rsh 'curl -fsS 127.0.0.1:9911/status' >/dev/null 2>&1 && break; sleep 4; done
+rsh 'curl -fsS 127.0.0.1:9911/status' >/dev/null 2>&1 || log "ledger not reachable through the tunnel"
+if [ "$mode" = start ]; then
+  rsh "setsid nohup bash work/detach.sh $prefix $cap < /dev/null > /dev/null 2>&1 & echo detached-started" || { log "detached start failed"; exit 5; }
+fi
+n=0
+while true; do
+  ex=$(rsh 'cat work/vm-run.exit 2>/dev/null' 2>/dev/null)
+  [ -n "$ex" ] && break
+  n=$((n + 1))
+  if [ $((n % 10)) = 1 ]; then log "progress: $(rsh 'ls -d work/run/jobs/*/*/result.json 2>/dev/null | wc -l; tail -c 300 work/vm-run.log 2>/dev/null' 2>/dev/null | tr '\n' ' ' | cut -c1-400)"; fi
+  sleep 60
+done
+log "vm-run exit $ex"
+stop_tunnel; trap - EXIT
+"$S" ssh "$name" 'rm -f ~/.laneb-keys; tail -5 work/vm-run.log' || true
+mkdir -p "$run/pulled"
+pulled=no
+for attempt in 1 2 3; do
+  if "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
+    && [ "$("$S" ssh "$name" 'cd work/run && find out jobs -type f | wc -l')" = "$(cd "$run/pulled" && find out jobs -type f | wc -l)" ]; then
+    pulled=yes; break
+  fi
+  log "pull attempt $attempt failed"; sleep 20
+done
+"$S" pull "$name" work/vm-run.log "$run/pulled" || true
+if [ "$pulled" != yes ]; then log "WARNING: results not fully pulled; VM $name kept"; exit 7; fi
+"$S" down "$name" && log "destroyed $name" && echo "$ex" > "$run.exit"
+exit 0
+
+===== scripts/refusal-stop.sh
+#!/usr/bin/env bash
+# GEVA-128: the Captain's ledger-refusal stop (GSTA-2 ruling on GST-823, 2026-11-01). Polls the batch VM's proxy totals
+# every 60 s. When the proxy has latched a ledger refusal (cap_stop set; the tag's proxy then refuses every new session
+# itself), this waits for the sessions already open to close, then sends SIGINT to Harbor so the batch starts nothing
+# more. batch.sh then pulls and destroys the VM as usual. Usage: refusal-stop.sh <run dir>
+set -uo pipefail
+run=$(cd "$1" && pwd)
+state_root=${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner
+log() { echo "$(date -u +%FT%TZ) $*"; }
+alive() { kill -0 "$(cat $run.ctl.pid 2>/dev/null)" 2>/dev/null; }
+while [ ! -s $run.vm ]; do [ -e $run.exit ] || alive || exit 0; sleep 20; done
+name=$(cat $run.vm)
+while [ ! -f "$state_root/$name/env" ]; do sleep 10; done
+. "$state_root/$name/env"; key="$state_root/$name/key"
+rsh() { timeout 60 ssh -i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=20 "ubi@$IP" "$@"; }
+log "watching $name for a ledger refusal"
+while [ ! -e $run.exit ] && alive; do
+  t=$(rsh 'curl -fsS 127.0.0.1:8788/totals' 2>/dev/null)
+  cs=$(echo "$t" | jq -r '.cap_stop // empty' 2>/dev/null)
+  if [ -n "$cs" ]; then
+    log "ledger refusal latched: $cs; totals $t"
+    echo "$cs" > $run.refusal
+    while t=$(rsh 'curl -fsS 127.0.0.1:8788/totals' 2>/dev/null); do
+      [ "$(echo "$t" | jq -r .open_sessions)" = 0 ] && break
+      sleep 30
+    done
+    log "sessions open before the refusal have closed; totals $t; stopping Harbor"
+    rsh "pkill -INT -f 'bin/[h]arbor run -y -c'"; log "SIGINT sent (pkill exit $?)"
+    sleep 120
+    if rsh "pgrep -f 'bin/[h]arbor run -y -c'" >/dev/null; then rsh "pkill -TERM -f 'bin/[h]arbor run -y -c'"; log "Harbor still up after 2 min; SIGTERM sent"; fi
+    exit 0
+  fi
+  sleep 60
+done
+log "batch ended with no ledger refusal"
+
+===== scripts/launch-ab.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T, phase 2: particle-1 and Haiku at once (prereg section 8 order). Starts the one supervised ledger
+# service, then for each batch runs the tag's start-rule.ts check --note and, only if it passes, batch.sh under setsid,
+# with refusal-stop.sh beside it (the Captain's ledger-refusal ruling).
+set -uo pipefail
+W=$HOME/.capy/work/rt
+L=<captain-drive>/ledger/texttax-r1.jsonl
+log() { echo "$(date -u +%FT%TZ) $*"; }
+if ! pgrep -f 'ledger-sup[.]sh' >/dev/null; then (setsid bash $W/scripts/ledger-sup.sh >> $W/logs/ledger-sup.log 2>&1 < /dev/null &); fi
+for i in $(seq 1 30); do curl -fsS 127.0.0.1:9911/status >/dev/null 2>&1 && break; sleep 1; done
+log "ledger service: $(curl -fsS 127.0.0.1:9911/status)" || { log "ledger service not up"; exit 2; }
+cd /workspace/rt-runner
+bun quick/laneb/runner/start-rule.ts check --run texttax-r1 --ledger $L --batch particle-1 --note || { log "start rule failed for particle-1: not launched, Run T ends incomplete"; exit 1; }
+(setsid bash $W/scripts/batch.sh start $W/runs/t-particle tp- 61.64 >> $W/runs/t-particle.ctl.log 2>&1 < /dev/null & echo $! > $W/runs/t-particle.ctl.pid)
+log "particle-1 controller started, pid $(cat $W/runs/t-particle.ctl.pid)"
+(setsid bash $W/scripts/refusal-stop.sh $W/runs/t-particle >> $W/runs/t-particle.refusal.log 2>&1 < /dev/null &)
+bun quick/laneb/runner/start-rule.ts check --run texttax-r1 --ledger $L --batch claude-haiku-5-5 --batch particle-1 --note || { log "start rule failed for Haiku: not launched, Run T ends incomplete"; exit 1; }
+(setsid bash $W/scripts/batch.sh start $W/runs/t-haiku th- 8.81 >> $W/runs/t-haiku.ctl.log 2>&1 < /dev/null & echo $! > $W/runs/t-haiku.ctl.pid)
+log "Haiku controller started, pid $(cat $W/runs/t-haiku.ctl.pid)"
+(setsid bash $W/scripts/refusal-stop.sh $W/runs/t-haiku >> $W/runs/t-haiku.refusal.log 2>&1 < /dev/null &)
+
+===== scripts/launch-ab2.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T, phase 2 (second try, after launch-ab.sh stopped at its first check): start-rule.ts check --note wrote
+# a passing note row and then crashed on fsync (ENOTSUP on the Capy Drive FUSE mount, start-rule.ts:94), so its exit
+# status is not the verdict. rule() takes the verdict from the note row the check just wrote. particle-1 launches on
+# its passing row of 21:42:04.945Z; Haiku gets a fresh check with particle-1 listed. refusal-stop.sh runs beside each.
+set -uo pipefail
+W=$HOME/.capy/work/rt
+L=<captain-drive>/ledger/texttax-r1.jsonl
+log() { echo "$(date -u +%FT%TZ) $*"; }
+rule() {
+  local before; before=$(wc -l < $L)
+  bun quick/laneb/runner/start-rule.ts check --run texttax-r1 --ledger $L "$@" --note > $W/logs/rule-last.out 2>&1; local rc=$?
+  head -1 $W/logs/rule-last.out
+  local row; row=$(tail -n +$((before + 1)) $L | jq -c 'select(.kind == "note" and (.id | startswith("start-rule-")))' | tail -1)
+  [ -n "$row" ] || { log "start rule wrote no note row (exit $rc)"; return 1; }
+  [ "$(echo "$row" | jq -r .start_rule.pass)" = true ] || { log "start rule failed: $row"; return 1; }
+  [ $rc = 0 ] || log "start-rule.ts exited $rc after writing a passing note row ($(grep -o 'ENOTSUP[^\n]*fsync' $W/logs/rule-last.out | head -1)); the rule passed"
+}
+start_batch() { # run dir name, ledger prefix, batch cap
+  (setsid bash $W/scripts/batch.sh start $W/runs/$1 $2 $3 >> $W/runs/$1.ctl.log 2>&1 < /dev/null & echo $! > $W/runs/$1.ctl.pid)
+  sleep 1
+  (setsid bash $W/scripts/refusal-stop.sh $W/runs/$1 >> $W/runs/$1.refusal.log 2>&1 < /dev/null &)
+  log "$1 controller started, pid $(cat $W/runs/$1.ctl.pid), batch cap \$$3"
+}
+curl -fsS 127.0.0.1:9911/status >/dev/null || { log "ledger service not up"; exit 2; }
+cd /workspace/rt-runner
+p=$(jq -c 'select(.id == "start-rule-2026-11-01T21:42:04.945Z")' $L)
+[ "$(echo "$p" | jq -r '.start_rule.pass')" = true ] && [ "$(echo "$p" | jq -c '[.start_rule.batches[].model]')" = '["particle-1"]' ] || { log "particle-1 note row missing or not passing"; exit 1; }
+log "particle-1 start rule (note row 21:42:04.945Z): bound \$$(echo "$p" | jq -r .start_rule.bound_usd) of \$75, pass"
+start_batch t-particle tp- 61.64
+rule --batch claude-haiku-5-5 --batch particle-1 || { log "Haiku not launched: Run T ends incomplete"; exit 1; }
+start_batch t-haiku th- 8.81
+
+===== scripts/watch.sh
+#!/usr/bin/env bash
+# GEVA-128: waits until one batch's controller has ended (exit file written, or controller gone), at most 5.75 h.
+# Usage: watch.sh <batch>. It keeps this machine awake while it runs as a watched Capy operation.
+W=$HOME/.capy/work/rt; b=$1; end=$((SECONDS + 20700))
+while [ $SECONDS -lt $end ]; do
+  [ -e $W/runs/$b.exit ] && { echo "$b ended: exit $(cat $W/runs/$b.exit)"; break; }
+  kill -0 "$(cat $W/runs/$b.ctl.pid 2>/dev/null)" 2>/dev/null || { echo "$b controller is gone and $b.exit is missing"; break; }
+  sleep 60
+done
+[ $SECONDS -ge $end ] && echo "$b still running at the watch limit"
+grep -v progress: $W/runs/$b.ctl.log | tail -6; grep progress: $W/runs/$b.ctl.log | tail -1 | cut -c1-300
+curl -fsS 127.0.0.1:9911/status; echo
+
+===== scripts/close-out.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T, phase 3: stop the ledger service, keep a local copy of the ledger, VM proof, open-reserve reconciliation.
+set -uo pipefail
+W=$HOME/.capy/work/rt
+L=<captain-drive>/ledger/texttax-r1.jsonl
+S=<ubicloud-skill>/scripts/ubi-runner.sh
+touch $W/ledger.stop; sleep 4; pkill -f 'ledger[.]ts serve --path <captain-drive>/ledger/texttax-r1' ; sleep 2
+ss -ltn | grep -q ':9911 ' && echo "9911 still listening" || echo "ledger service stopped"
+mkdir -p $W/ledger && cp $L $W/ledger/texttax-r1.jsonl && sha256sum $W/ledger/texttax-r1.jsonl
+(cd /workspace/rt-runner && bun quick/laneb/runner/ledger.ts status --path $W/ledger/texttax-r1.jsonl --item texttax-r1)
+echo "== VM proof"; UBI_OWNER=geva128 $S list --mine 2>&1 | tail -5; UBI_OWNER=geva128 $S records 2>&1 | tail -3
+echo "== open reserves"
+for id in $(jq -r 'select(.kind=="reserve") | .id' $L); do jq -e --arg i $id 'select(.kind=="settle" and .id==$i)' $L >/dev/null || echo $id; done > $W/ledger/open-ids.txt
+for id in $(cat $W/ledger/open-ids.txt); do
+  case $id in th-*) b=t-haiku;; tp-*) b=t-particle;; esac; s=${id#t?-}
+  inS=$(jq -c --arg s $s 'select(.id==$s)' $W/runs/$b/pulled/out/proxy-sessions.jsonl | wc -l)
+  rq=$(jq -s -c --arg s $s '[.[] | select(.session==$s and .event=="request")] | {trial: (.[0].trial // null), requests: length, ok: (map(select(.status==200)) | length), cost: ((map(.cost_micros // 0) | add // 0)/1e6)}' $W/runs/$b/pulled/out/proxy-requests.jsonl)
+  echo "$id in_sessions_file=$inS $rq"
+done | tee $W/ledger/open-reserves.txt
+
+===== scripts/analysis.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T, phase 4: the tag's analysis/discovery-tax.ts on the pulled job folders and proxy session files.
+# Primary config: the proxy-sessions.jsonl files as written. Recovered config adds the 8 sessions whose settle failed
+# (ECONNRESET through the tunnel), whose records the proxy never wrote, rebuilt from proxy-requests.jsonl by the jq
+# below, so the retried-after-response sensitivity can see the first attempts (section 7). DeepSeek is not in the
+# models list: dropped under R54 before its batch.
+set -euo pipefail
+W=$HOME/.capy/work/rt; A=$W/analysis; mkdir -p $A
+: > $A/recovered-sessions.jsonl
+for id in $(cat $W/ledger/open-ids.txt); do
+  case $id in th-*) b=t-haiku;; tp-*) b=t-particle;; esac; s=${id#t?-}
+  jq -s -c --arg s $s '[.[] | select(.session == $s and .event == "request")] | {id: $s, trial: .[0].trial, model: .[0].model, requests: length, ok_responses: (map(select(.status == 200)) | length), spent_micros: (map(.cost_micros // 0) | add), opened_at: .[0].ts, recovered_from: "proxy-requests.jsonl"}' $W/runs/$b/pulled/out/proxy-requests.jsonl >> $A/recovered-sessions.jsonl
+done
+J1=$W/runs/t-particle/pulled/jobs/texttax-r1-t-particle; J2=$W/runs/t-haiku/pulled/jobs/texttax-r1-t-haiku
+S1=$W/runs/t-particle/pulled/out/proxy-sessions.jsonl; S2=$W/runs/t-haiku/pulled/out/proxy-sessions.jsonl
+jq -n --arg j1 $J1 --arg j2 $J2 --arg s1 $S1 --arg s2 $S2 '{run: "T", models: ["particle-1", "claude-haiku-5-5"], jobs: [$j1, $j2], sessions: [$s1, $s2]}' > $A/config-primary.json
+jq --arg r $A/recovered-sessions.jsonl '.sessions += [$r]' $A/config-primary.json > $A/config-recovered.json
+cd /workspace/rt-runner/quick/laneb
+bun analysis/discovery-tax.ts $A/config-primary.json > $A/output-primary.txt
+bun analysis/discovery-tax.ts $A/config-recovered.json > $A/output-recovered.txt
+sha256sum $A/*.json $A/*.jsonl $A/*.txt
+
+===== scripts/cost.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T, phase 5: tokens and metered dollars per model and arm from the proxy session files, plus the
+# 8 recovered sessions (settle failed), and the proxy totals per batch.
+set -euo pipefail
+W=$HOME/.capy/work/rt
+for b in t-particle t-haiku; do
+  echo "== $b proxy totals: $(cat $W/runs/$b/pulled/out/proxy-totals.json)"
+  cat $W/runs/$b/pulled/out/proxy-sessions.jsonl | jq -s -r 'group_by(.meta.arm)[] | "\(.[0].model) \(.[0].meta.arm): sessions \(length), input \(map(.usage.input_tokens) | add), output \(map(.usage.output_tokens) | add), cache_write \(map(.usage.cache_creation_input_tokens + .usage.cache_creation_1h_input_tokens) | add), cache_read \(map(.usage.cache_read_input_tokens) | add), metered $\(((map(.spent_micros) | add) / 1e6 * 100 | round) / 100)"'
+done
+echo "== recovered sessions (settle failed): $(jq -s -c 'group_by(.model) | map({model: .[0].model, sessions: length, metered_usd: ((map(.spent_micros) | add) / 1e6)})' $W/analysis/recovered-sessions.jsonl)"
+echo "== route check: $(jq -s -c 'map({model, usd: (.spent_micros / 1e6)})' $W/route-t2/proxy-sessions.jsonl)"
+echo "== ledger (local copy): $(cd /workspace/rt-runner && bun quick/laneb/runner/ledger.ts status --path $W/ledger/texttax-r1.jsonl --item texttax-r1)"
+for b in t-particle t-haiku; do echo "$b VM: $(head -3 $W/runs/$b.ctl.log | grep -o 'creating [^ ]*' ) created $(date -u -d @$(cat $W/runs/$b.vm | cut -d- -f3) +%FT%TZ), $(grep destroyed $W/runs/$b.ctl.log | tail -1)"; done
+
+===== scripts/settle-bundle.sh
+#!/usr/bin/env bash
+# GEVA-128 Run T, phase 6 (Captain's correction, 2026-11-02): settle the 8 reserves the ECONNRESET settles left open,
+# at their request-log costs, through the tag's Ledger.settle (the same class the approval row used), then refresh the
+# local copy. Then the data bundle for the Captain drive, with TB2 fixture secrets redacted as GEVA-93 did.
+set -euo pipefail
+W=$HOME/.capy/work/rt
+L=<captain-drive>/ledger/texttax-r1.jsonl
+cd /workspace/rt-runner
+while read -r line; do
+  sid=$(echo "$line" | jq -r .id); model=$(echo "$line" | jq -r .model); micros=$(echo "$line" | jq -r .spent_micros)
+  case $model in particle-1) id=tp-$sid;; claude-haiku-5-5) id=th-$sid;; esac
+  bun -e 'import { Ledger } from "./quick/laneb/runner/ledger.ts"; const [p, id, m, trial] = process.argv.slice(1); const out = new Ledger(p, "texttax-r1").settle(id, Number(m), { by: "GEVA-128", manual: true, prereg: "0ffe8d0c231e3136d3c8cfade39bd75a30f4eb14", trial, reason: "settle lost to ECONNRESET through the SSH tunnel; amount from proxy-requests.jsonl cost_micros" }); console.log(id, m, JSON.stringify(out))' "$L" "$id" "$micros" "$(echo "$line" | jq -r .trial)"
+done < $W/analysis/recovered-sessions.jsonl
+cp $L $W/ledger/texttax-r1.jsonl && sha256sum $W/ledger/texttax-r1.jsonl
+bun quick/laneb/runner/ledger.ts status --path $W/ledger/texttax-r1.jsonl --item texttax-r1
+# data bundle
+B=$W/bundle/geva128-runt-data; rm -rf $W/bundle; mkdir -p $B/runs
+for b in t-particle t-haiku; do mkdir -p $B/runs/$b; cp -r $W/runs/$b/pulled $W/runs/$b/job.json $W/runs/$b/oracle.json $W/runs/$b/manifest.json $W/runs/$b/proxy.json $B/runs/$b/; cp $W/runs/$b.ctl.log $W/runs/$b.refusal.log $W/runs/$b.vm $W/runs/$b.exit $B/runs/; done
+cp -r $W/route-t2 $B/route-t2; rm -rf $B/route-t2/arms $B/route-t2/task
+cp -r $W/analysis $B/analysis; cp $W/ledger/texttax-r1.jsonl $B/
+n=0
+for f in $(grep -rlE 'sk-ant-[A-Za-z0-9_-]{20,}|sk-or-v1-[a-f0-9]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}' $B); do
+  perl -0pi -e 's/-----BEGIN ([A-Z ]*)PRIVATE KEY-----.*?-----END \1PRIVATE KEY-----/<redacted-fixture-private-key>/gs; s/(sk-ant-[A-Za-z0-9_-]{20,}|sk-or-v1-[a-f0-9]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16})/<redacted-fixture-secret>/g' "$f"; n=$((n+1))
+done
+echo "redacted files: $n; remaining matches: $(grep -rlE 'sk-ant-[A-Za-z0-9_-]{20,}|sk-or-v1-[a-f0-9]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}' $B | wc -l)"
+grep -rl 'jq.*sk-ant' $B >/dev/null 2>&1 || true
+cd $W/bundle && tar czf geva128-runt-data.tar.gz geva128-runt-data && sha256sum geva128-runt-data.tar.gz && ls -la geva128-runt-data.tar.gz
+D=<captain-drive>/handoffs/GEVA-128; mkdir -p $D
+split -b 95m -d geva128-runt-data.tar.gz $D/geva128-runt-data.tar.gz.part-
+(cd $D && sha256sum geva128-runt-data.tar.gz.part-* > SHA256SUMS && echo "$(sha256sum $W/bundle/geva128-runt-data.tar.gz | cut -d' ' -f1)  geva128-runt-data.tar.gz (cat the parts in order)" >> SHA256SUMS && cat SHA256SUMS)
+echo BUNDLE_DONE
+

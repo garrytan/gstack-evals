@@ -1,0 +1,34 @@
+# config-primary.json
+{
+  "run": "T",
+  "models": [
+    "particle-1",
+    "claude-haiku-5-5"
+  ],
+  "jobs": [
+    "<work>/runs/t-particle/pulled/jobs/texttax-r1-t-particle",
+    "<work>/runs/t-haiku/pulled/jobs/texttax-r1-t-haiku"
+  ],
+  "sessions": [
+    "<work>/runs/t-particle/pulled/out/proxy-sessions.jsonl",
+    "<work>/runs/t-haiku/pulled/out/proxy-sessions.jsonl"
+  ]
+}
+
+# config-recovered.json
+{
+  "run": "T",
+  "models": [
+    "particle-1",
+    "claude-haiku-5-5"
+  ],
+  "jobs": [
+    "<work>/runs/t-particle/pulled/jobs/texttax-r1-t-particle",
+    "<work>/runs/t-haiku/pulled/jobs/texttax-r1-t-haiku"
+  ],
+  "sessions": [
+    "<work>/runs/t-particle/pulled/out/proxy-sessions.jsonl",
+    "<work>/runs/t-haiku/pulled/out/proxy-sessions.jsonl",
+    "<work>/analysis/recovered-sessions.jsonl"
+  ]
+}

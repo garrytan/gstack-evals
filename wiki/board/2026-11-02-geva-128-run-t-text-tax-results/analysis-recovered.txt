@@ -1,0 +1,24 @@
+# Run T: told-text tax
+Prior readings, never pooled: #109 particle-1 -10 [-18, -2], Haiku -5 [-13, +3]; quick look 3 particle-1 +6 [-2, +15], Haiku +0 [-7, +8], DeepSeek -2 [-9, +6].
+
+## particle-1
+particle-1 none: graded 185, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 77.8% [67.6%, 87.0%]; session-cap stops 7 (3.8%), agent timeouts 5; median requests 14, median first-request tokens 57905; cost per trial $0.086, per success $0.111
+particle-1 placebo-short: graded 185, missing 0, refused 0, retried after a response 3; body load 100.0%; pass 81.6% [71.4%, 90.3%]; session-cap stops 9 (4.9%), agent timeouts 8; median requests 16, median first-request tokens 69823; cost per trial $0.095, per success $0.116
+particle-1 placebo: graded 185, missing 0, refused 0, retried after a response 1; body load 100.0%; pass 75.7% [65.4%, 84.9%]; session-cap stops 13 (7.0%), agent timeouts 10; median requests 16, median first-request tokens 105464; cost per trial $0.115, per success $0.152
+T1 (placebo minus none): -2.2 [-7.0, +2.7] pp over 37 tasks; verdict not confirmed, smaller than the lead
+T2 (placebo minus placebo-short): -5.9 [-11.9, +0.0] pp, p 0.0908, Holm 0.182; no claim
+placebo minus none: pass -2.2 [-7.0, +2.7] pp; session-cap stop rate +3.2 [+0.5, +6.5] pp; complete case (descriptive) -1.7 [-7.1, +3.9] pp; retried-after-response scored 0 -2.7 [-8.1, +2.7] pp
+placebo-short minus none: pass +3.8 [-2.2, +9.2] pp; session-cap stop rate +1.1 [+0.0, +3.2] pp; complete case (descriptive) +3.9 [-2.1, +9.4] pp; retried-after-response scored 0 +2.7 [-3.2, +8.6] pp
+placebo minus placebo-short: pass -5.9 [-11.9, +0.0] pp; session-cap stop rate +2.2 [-1.6, +5.9] pp; complete case (descriptive) -5.6 [-11.9, +0.7] pp; retried-after-response scored 0 -5.4 [-11.9, +1.1] pp
+
+## claude-haiku-5-5
+claude-haiku-5-5 none: graded 185, missing 0, refused 0, retried after a response 3; eligible 100.0%; pass 76.2% [65.4%, 85.9%]; session-cap stops 0 (0.0%), agent timeouts 6; median requests 6, median first-request tokens 20560; cost per trial $0.009, per success $0.012
+claude-haiku-5-5 placebo-short: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 71.4% [59.5%, 82.2%]; session-cap stops 0 (0.0%), agent timeouts 5; median requests 7, median first-request tokens 24690; cost per trial $0.011, per success $0.015
+claude-haiku-5-5 placebo: graded 185, missing 0, refused 0, retried after a response 1; body load 100.0%; pass 75.1% [63.2%, 85.9%]; session-cap stops 0 (0.0%), agent timeouts 10; median requests 7, median first-request tokens 34504; cost per trial $0.013, per success $0.017
+T2 (placebo minus placebo-short): +3.8 [-2.2, +9.2] pp, p 0.276, Holm 0.276; no claim
+placebo minus none: pass -1.1 [-7.6, +4.9] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) -1.1 [-7.6, +4.9] pp; retried-after-response scored 0 +0.0 [-6.5, +6.5] pp
+placebo-short minus none: pass -4.9 [-11.4, +1.1] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) -4.9 [-11.4, +1.1] pp; retried-after-response scored 0 -3.8 [-10.8, +2.7] pp
+placebo minus placebo-short: pass +3.8 [-2.2, +9.2] pp; session-cap stop rate +0.0 [+0.0, +0.0] pp; complete case (descriptive) +3.8 [-2.2, +9.2] pp; retried-after-response scored 0 +3.8 [-2.2, +9.2] pp
+Pooled across models, equal weight (secondary): placebo minus none -1.6 [-6.2, +3.0] pp
+Pooled across models, equal weight (secondary): placebo-short minus none -0.5 [-4.6, +3.2] pp
+Pooled across models, equal weight (secondary): placebo minus placebo-short -1.1 [-5.1, +2.7] pp

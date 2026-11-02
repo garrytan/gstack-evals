@@ -1,0 +1,8 @@
+{"id":"s-bb5996e16dd8","trial":"configure-git-webserver__VJ29kkT__env","model":"claude-haiku-5-5","requests":7,"ok_responses":7,"spent_micros":7710,"opened_at":"2026-11-01T22:14:16.214Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-965a5228b608","trial":"pypi-server__6VxCc2S__env","model":"claude-haiku-5-5","requests":5,"ok_responses":5,"spent_micros":2654,"opened_at":"2026-11-01T22:21:34.829Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-a3dca2ca8626","trial":"large-scale-text-editing__Whkf9QX__env","model":"particle-1","requests":17,"ok_responses":17,"spent_micros":40981,"opened_at":"2026-11-01T22:36:13.275Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-975c48d36861","trial":"code-from-image__wBJx3ZY__env","model":"particle-1","requests":4,"ok_responses":4,"spent_micros":6329,"opened_at":"2026-11-01T22:37:36.057Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-17a506dc3fa8","trial":"tune-mjcf__LpboVCb__env","model":"claude-haiku-5-5","requests":22,"ok_responses":22,"spent_micros":23795,"opened_at":"2026-11-01T22:47:59.716Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-a39a3e7f71df","trial":"log-summary-date-ranges__f7sHpps__env","model":"particle-1","requests":6,"ok_responses":6,"spent_micros":11595,"opened_at":"2026-11-01T23:32:08.166Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-69e453d64947","trial":"pypi-server__THK4JS2__env","model":"claude-haiku-5-5","requests":6,"ok_responses":6,"spent_micros":2825,"opened_at":"2026-11-02T00:16:22.553Z","recovered_from":"proxy-requests.jsonl"}
+{"id":"s-4ae74ae04611","trial":"tune-mjcf__Vqzryfa__env","model":"particle-1","requests":20,"ok_responses":20,"spent_micros":71611,"opened_at":"2026-11-02T01:30:29.010Z","recovered_from":"proxy-requests.jsonl"}

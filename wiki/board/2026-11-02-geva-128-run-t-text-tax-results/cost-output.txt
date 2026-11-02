@@ -1,0 +1,13 @@
+== t-particle proxy totals: {"global_spent_micros":54954097,"cap_stop":null,"open_sessions":0,"sessions":559}
+particle-1 none: sessions 185, input 40314673, output 3353497, cache_write 0, cache_read 84831488, metered $15.98
+particle-1 placebo: sessions 185, input 57891487, output 3851592, cache_write 0, cache_read 100078848, metered $21.33
+particle-1 placebo-short: sessions 185, input 45772224, output 3546704, cache_write 0, cache_read 84171520, metered $17.52
+== t-haiku proxy totals: {"global_spent_micros":6097332,"cap_stop":null,"open_sessions":0,"sessions":559}
+claude-haiku-5-5 none: sessions 185, input 3166, output 1604361, cache_write 2776337, cache_read 49287374, metered $1.72
+claude-haiku-5-5 placebo: sessions 185, input 3270, output 1804327, cache_write 5685075, cache_read 68125003, metered $2.32
+claude-haiku-5-5 placebo-short: sessions 185, input 3254, output 1846563, cache_write 3860655, cache_read 54572808, metered $2.02
+== recovered sessions (settle failed): [{"model":"claude-haiku-5-5","sessions":4,"metered_usd":0.036984},{"model":"particle-1","sessions":4,"metered_usd":0.130516}]
+== route check: [{"model":"particle-1","usd":0.009226},{"model":"claude-haiku-5-5","usd":0.003557},{"model":"deepseek-v4.1-flash-1017","usd":0}]
+== ledger (local copy): {"cap_usd":75,"settled_usd":60.896712,"open_reserved_usd":6,"open_ids":8}
+t-particle VM: creating eu-central-h1/ubirun-geva128-1793569365-5a014866-t12 created 2026-11-01T21:42:45Z, 2026-11-02T02:12:47Z destroyed ubirun-geva128-1793569365-5a014866-t12
+t-haiku VM: creating eu-central-h1/ubirun-geva128-1793569366-19f39d5e-t12 created 2026-11-01T21:42:46Z, 2026-11-02T01:20:52Z destroyed ubirun-geva128-1793569366-19f39d5e-t12

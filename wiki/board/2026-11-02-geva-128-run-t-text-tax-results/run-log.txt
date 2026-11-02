@@ -1,0 +1,478 @@
+===== RUN-RECORD.md
+# GEVA-128 Run T run record
+
+Operator: GEVA-128 (Opus 5.5). PREREG 0ffe8d0c231e3136d3c8cfade39bd75a30f4eb14 (#118). Runner tag laneb-texttax-2-runner at 6d0e960feeb9e8430dfef9ca1702223e96a86609, worktree /workspace/rt-runner; the VM gets runner-export/ (git archive of the tag's quick/laneb; identical to the worktree apart from an ignored __pycache__).
+Ledger: Captain drive ledger/texttax-r1.jsonl, item texttax-r1, approval row written 2026-11-01T21:26:54Z.
+Captain's word (GEVA-2, 2026-11-01): "Do it: A1 and B1." A1 = GEVA-93's batch.sh as the controller; B1 = route check on a VM if local Harbor hangs before any session.
+
+## Controller diff (A1): GEVA-93's batch.sh -> scripts/batch.sh
+Only owner, runner path and TTL differ, plus the header comment:
+- RUNNER=$HOME/.capy/work/geva93/runner-export/quick/laneb/runner -> $HOME/.capy/work/rt/runner-export/quick/laneb/runner
+- UBI_OWNER=geva93 -> geva128
+- UBI_TTL_HOURS default 10 -> 12
+The VM side (vm-bootstrap.sh, vm-run.sh, proxy, Harbor f3a5a923, agent, claude-agent-sdk 0.2.174) is the tag's, unchanged.
+
+## Phases
+- prep.sh (keyless): bun test quick/laneb 95 tests, 94 pass, 1 skip, 0 fail; typecheck clean; arm tars match; placebo-short bb25d3dc (846 tokens); TB2 69671fba.
+- grid-check.sh + grid-check-2.sh (keyless): GRID_CHECK_PASS, 1,332 trials.
+- route.sh (paid): the tag's route-check.sh on this machine.
+- route try 1 (21:26Z): stalled before any session. ps showed harbor and its 'docker exec -i ... ls /root/.claude/skills' in state T (stopped): the background shell's pty sent SIGTTIN when docker exec -i read the terminal. No proxy session, no reserve, nothing spent; operation cancelled, container removed. This is likely the "local Harbor smoke hung on a Capy machine" trap. Try 2 runs the same route.sh under setsid with stdin from /dev/null (no tag file changed).
+- route try 2 (21:33Z, setsid, stdin /dev/null): particle-1 reward 1 ($0.009226), Haiku reward 1 ($0.003557), DeepSeek failed: 11 requests, all 502 "Insufficient Balance" from OpenRouter provider deepseek (only, no fallbacks), $0, no model response (RuntimeError, infrastructure). DeepSeek failure 1 of 2; second try right before its launch. Ledger after: settled $0.012783, open $0.
+- Captain ruling (GSTA-2, GST-823 comment icm_01M6CGVQR80Z0DSE33A3M0B2SZ): a ledger refusal stops that batch, no retries, no new sessions; refused sessions are not run (no score); counts to the Captain before any relaunch; each refusal is a deviation in the post; DeepSeek cap unchanged, print open reserves beside its start rule. Implemented as scripts/refusal-stop.sh beside each batch (polls VM proxy /totals; on cap_stop waits for sessions open before it to close, then SIGINT Harbor).
+- launch-ab.sh (21:42:04Z): start-rule.ts check --note for particle-1 printed pass (bound $61.654783) and wrote its note row, then crashed: fsync ENOTSUP on the Drive FUSE mount (start-rule.ts:94, no catch). The script read the exit status as a failure and launched nothing.
+- launch-ab2.sh (21:42:45Z): verdict taken from the note rows. particle-1 launched on note 21:42:04.945Z (pass, $61.654783), batch cap $61.64, prefix tp-. Haiku check with particle-1 listed: note 21:42:46.322Z, bound $70.460783, pass (same fsync crash after the row); launched, batch cap $8.81, prefix th-.
+- 22:15Z: oracle passed every task on both VMs (t-particle ubirun-geva128-1793569365-5a014866-t12, t-haiku ubirun-geva128-1793569366-19f39d5e-t12). 22:18Z ledger: settled $5.09, open $13.50 (18 sessions). Settled means so far: particle-1 $0.126 per trial over 37 sessions (projection $0.072 to $0.088), Haiku $0.0113 over 43. Early tasks may run heavy (task-major order); a batch-cap or ledger stop on particle-1 is possible.
+- Captain ruling on DeepSeek (GSTA-2, 2026-11-01): OpenRouter's own account at DeepSeek is out of balance (is_byok false, deepseek endpoint status -5). Second try only when GET /api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints shows the deepseek provider at status 0, polled on a timer of 30 min or more; wait up to 48 h after particle-1 and Haiku settle, then try anyway; route stays deepseek only. Write particle-1 and Haiku up meanwhile. Keep working files and ledger on local disk: the ledger moves to local disk at the quiet point after both batches settle (moving it under a live service risks a settle failure and a retried trial).
+- Captain ruling under org R54 (GSTA-2, 2026-11-01, Garry relayed by FOUN-32): Haiku and Sonnet are no longer models under test; particle-1 is the run's subject. DeepSeek dropped now through section 7's drop path (p = 1 in T2's family), reason R54, recorded as a deviation with the endpoint readings taken before the drop. No new Haiku sessions; the running Haiku batch finishes inside its $8.81 cap and its rows are reported as frozen, with no R48 verdict. No DeepSeek poll or timer had been registered. Endpoint reading at 2026-11-01T23:03:45Z: see logs/ds-endpoints-2026-11-01T23:03:45Z.json.
+- 01:20:52Z Haiku batch ended (exit 0, 559 sessions, $6.097332, no cap stop), VM destroyed. 02:12:47Z particle-1 batch ended (exit 0, 559 sessions, $54.954097, no cap stop), VM destroyed. No ledger refusal on either (refusal-stop.sh logs). Ledger then: settled $60.896712, open $6 (8 reserves whose settles hit ECONNRESET; their session records were never written; Harbor reran those 8 trials).
+- close-out.sh: ledger service stopped, local copy, ubi-runner list --mine empty and records "(no VMs recorded)" for geva128.
+- analysis.sh and cost.sh at the tag; outputs in analysis/. Captain correction (2026-11-02): settle the 8 open reserves at request-log costs; settle-bundle.sh did, ledger now settled $61.064212, open $0.
+- Data bundle: first redaction pass left 7 files with private-key headers whose blocks had no END line (truncated tool output); a second pass (perl, BEGIN header plus base64 run) cleared them: remaining 0. Bundle sha256 83b647fdad8e884c4abcc07d6af314f9bcb61c90bf744c214c13d137c75267c3, Captain drive handoffs/GEVA-128/.
+
+===== logs/prep.log
+prep at 6d0e960feeb9e8430dfef9ca1702223e96a86609, 2026-11-01T21:23:00Z
+bun install ok
+ 1 skip
+ 0 fail
+ 1210 expect() calls
+Ran 95 tests across 15 files. [12.96s]
+quick/laneb typecheck clean
+28bfc18d5e55f7146332eebf8c86b873a8f60043a43027ef18930414e0878419  <work>/arms-src/gstack.tar.gz
+6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5  <captain-drive>/handoffs/GSTA-30/arms/none-8bab483364e4.tar.gz
+c181857c01a7ee8d8c4434845c14b74a879bb7b6e6f4aa5ac328bfe3ccd3025b  <captain-drive>/handoffs/GSTA-30/arms/placebo-ff6b909d89d8.tar.gz
+b93994689107ebc329b83b35c139b6a6e37ce6b4637f5c8a76dce961732c46b1  <work>/arms-src/gstack.tar
+8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e  <work>/arms-src/none.tar
+ff6b909d89d87be16780b817bf799361263e0efcf931a2b1543db2b779c406f7  <work>/arms-src/placebo.tar
+gstack-rewritten tar_sha256=a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d bytes=1353994240 tree_digest=a17c6d414d2f328bd6acd1ecee4ec542c78d36eb544454c252c5e951c0fb4029
+gstack-rewritten manifest matches arms/manifests/gstack-rewritten.json and .files.tsv
+placebo-short tar_sha256=bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c bytes=2396160 tree_digest=0b713c2f71b1167dc4ca39cbdd7adb385d039ce2bcdf145621231b1c30476465
+placebo-short manifest matches arms/manifests/placebo-short.json and .files.tsv
+placebo-short-tokens.tsv matches
+placebo-short investigate body tokens=846 target=847
+a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d  <work>/arms-built/gstack-rewritten.tar
+bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c  <work>/arms-built/placebo-short.tar
+none tar sha256 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e manifest 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e
+placebo-short tar sha256 bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c manifest bb25d3dc8018baeaf0048cf0adbc48630fedd562c9bb64abe4974e2135ee527c
+placebo tar sha256 ff6b909d89d87be16780b817bf799361263e0efcf931a2b1543db2b779c406f7 manifest ff6b909d89d87be16780b817bf799361263e0efcf931a2b1543db2b779c406f7
+TB2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c
+runner-export from tag: 101 files
+
+===== logs/grid-check.log
+tasks: 37
+<work>/runs/t-particle: 37 tasks x 3 (model, arm) cells x 5 attempts, git 6d0e960
+<work>/runs/t-haiku: 37 tasks x 3 (model, arm) cells x 5 attempts, git 6d0e960
+<work>/runs/t-deepseek: 37 tasks x 3 (model, arm) cells x 2 attempts, git 6d0e960
+GRID_PREPARED
+
+===== logs/grid-check-2.log
+t-particle: model particle-1 (anthropic/particle-1), session cap $0.5, 37 tasks x 3 cells x 5 attempts = 555 trials, concurrent 12, git 6d0e960 dirty=false
+  none: tar sha256 8bab483364e4 invoke=false told=
+  placebo-short: tar sha256 bb25d3dc8018 invoke=true told=/investigate x 37
+  placebo: tar sha256 ff6b909d89d8 invoke=true told=/investigate x 37
+  none tar in run dir matches arms/manifests/none.json
+  placebo-short tar in run dir matches arms/manifests/placebo-short.json
+  placebo tar in run dir matches arms/manifests/placebo.json
+  oracle.json: oracle, 37 tasks, 1 attempt
+t-haiku: model claude-haiku-5-5 (anthropic/claude-haiku-5-5), session cap $1, 37 tasks x 3 cells x 5 attempts = 555 trials, concurrent 12, git 6d0e960 dirty=false
+  none: tar sha256 8bab483364e4 invoke=false told=
+  placebo-short: tar sha256 bb25d3dc8018 invoke=true told=/investigate x 37
+  placebo: tar sha256 ff6b909d89d8 invoke=true told=/investigate x 37
+  none tar in run dir matches arms/manifests/none.json
+  placebo-short tar in run dir matches arms/manifests/placebo-short.json
+  placebo tar in run dir matches arms/manifests/placebo.json
+  oracle.json: oracle, 37 tasks, 1 attempt
+t-deepseek: model deepseek-v4.1-flash-1017 (anthropic/deepseek-v4.1-flash-1017), session cap $0.5, 37 tasks x 3 cells x 2 attempts = 222 trials, concurrent 12, git 6d0e960 dirty=false
+  none: tar sha256 8bab483364e4 invoke=false told=
+  placebo-short: tar sha256 bb25d3dc8018 invoke=true told=/investigate x 37
+  placebo: tar sha256 ff6b909d89d8 invoke=true told=/investigate x 37
+  none tar in run dir matches arms/manifests/none.json
+  placebo-short tar in run dir matches arms/manifests/placebo-short.json
+  placebo tar in run dir matches arms/manifests/placebo.json
+  oracle.json: oracle, 37 tasks, 1 attempt
+grid total: 1332 trials (prereg: 1,332)
+GRID_CHECK_PASS
+
+===== logs/route-1.log
+ledger: serving texttax-r1 on 127.0.0.1:9911
+laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
+Tip: There are many benchmarks available in Harbor's registry.
+Run `harbor datasets list` to see all available datasets.
+
+
+===== logs/route-2.log
+ledger: serving texttax-r1 on 127.0.0.1:9911
+laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
+WARNING: Error loading config file: open /root/.docker/config.json: permission denied
+[claude-code:unrecognized_model] {"model":"particle-1","query_source":"sdk"}
+  1/1 Mean: 1.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:38 0:00:00
+adhoc • laneb-claude-code • particle-1
+┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
+┃ Trials ┃ Exceptions ┃  Mean ┃
+┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━┩
+│      1 │          0 │ 1.000 │
+└────────┴────────────┴───────┘
+
+┏━━━━━━━━┳━━━━━━━┓
+┃ Reward ┃ Count ┃
+┡━━━━━━━━╇━━━━━━━┩
+│ 1.0    │     1 │
+└────────┴───────┘
+
+Job Info
+Total runtime: 38s
+Results written to 
+<work>/route-t2/jobs/route-particle-1-1793568921/result.json
+Inspect results by running `harbor view <work>/route-t2/jobs`
+Share results by running `harbor upload 
+<work>/route-t2/jobs/route-particle-1-1793568921`
+
+WARNING: Error loading config file: open /root/.docker/config.json: permission denied
+  1/1 Mean: 1.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:30 0:00:00
+adhoc • laneb-claude-code • claude-haiku-5-5
+┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
+┃ Trials ┃ Exceptions ┃  Mean ┃
+┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━┩
+│      1 │          0 │ 1.000 │
+└────────┴────────────┴───────┘
+
+┏━━━━━━━━┳━━━━━━━┓
+┃ Reward ┃ Count ┃
+┡━━━━━━━━╇━━━━━━━┩
+│ 1.0    │     1 │
+└────────┴───────┘
+
+Job Info
+Total runtime: 30s
+Results written to 
+<work>/route-t2/jobs/route-claude-haiku-5-5-1793568964/result.
+json
+Inspect results by running `harbor view <work>/route-t2/jobs`
+Share results by running `harbor upload 
+<work>/route-t2/jobs/route-claude-haiku-5-5-1793568964`
+
+WARNING: Error loading config file: open /root/.docker/config.json: permission denied
+[claude-code:unrecognized_model] {"model":"deepseek-v4.1-flash-1017","query_source":"sdk"}
+  1/1 Mean: 0.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:03:24 0:00:00
+adhoc • laneb-claude-code • deepseek-v4.1-flash-1017
+┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
+┃ Trials ┃ Exceptions ┃  Mean ┃
+┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━┩
+│      0 │          1 │ 0.000 │
+└────────┴────────────┴───────┘
+
+┏━━━━━━━━━━━━━━┳━━━━━━━┓
+┃ Exception    ┃ Count ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━┩
+│ RuntimeError │     1 │
+└──────────────┴───────┘
+
+Job Info
+Total runtime: 3m 24s
+Results written to 
+<work>/route-t2/jobs/route-deepseek-v4.1-flash-1017-1793568997
+/result.json
+Inspect results by running `harbor view <work>/route-t2/jobs`
+Share results by running `harbor upload 
+<work>/route-t2/jobs/route-deepseek-v4.1-flash-1017-1793568997
+`
+
+{"model":"particle-1","spent_usd":0.009226,"requests":6,"refused":0,"close_reason":"agent_finished","usage":{"input_tokens":28119,"output_tokens":512,"cache_creation_input_tokens":0,"cache_creation_1h_input_tokens":0,"cache_read_input_tokens":56064}}
+{"model":"claude-haiku-5-5","spent_usd":0.003557,"requests":4,"refused":0,"close_reason":"agent_finished","usage":{"input_tokens":8,"output_tokens":620,"cache_creation_input_tokens":21058,"cache_creation_1h_input_tokens":0,"cache_read_input_tokens":61278}}
+{"model":"deepseek-v4.1-flash-1017","spent_usd":0,"requests":11,"refused":0,"close_reason":"agent_finished","usage":{"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_creation_1h_input_tokens":0,"cache_read_input_tokens":0}}
+<work>/route-t2/jobs/route-claude-haiku-5-5-1793568964/task__XaYBLEQ/verifier/reward.txt 1
+<work>/route-t2/jobs/route-particle-1-1793568921/task__WP8hCYt/verifier/reward.txt 1
+{"cap_usd":75,"settled_usd":0.012783,"open_reserved_usd":0,"open_ids":0}
+route-check exit 0
+
+===== logs/launch-ab.log
+2026-11-01T21:42:04Z ledger service: {"capMicros":75000000,"settledMicros":12783,"openReservedMicros":0,"openIds":[]}
+{"run":"texttax-r1","cap_usd":75,"settled_usd":0.012783,"open_reserved_usd":0,"batches":[{"model":"particle-1","remaining":{"none":185,"placebo-short":185,"placebo":185},"projected_usd":44.03}],"projected_usd":44.03,"margin":1.4,"bound_usd":61.654783,"pass":true}
+89 | 
+90 | export function appendNote(path: string, item: string, verdict: ReturnType<typeof startRule>) {
+91 |   const ts = new Date().toISOString();
+92 |   appendFileSync(path, JSON.stringify({ ts, item, kind: "note", id: "start-rule-" + ts, usd_micros: 0, start_rule: verdict }) + "\n");
+93 |   const fd = openSync(path, "r");
+94 |   try { fsyncSync(fd); } finally { closeSync(fd); }
+             ^
+ENOTSUP: operation not supported on socket, fsync
+ syscall: "fsync",
+   errno: -95,
+    code: "ENOTSUP"
+
+      at appendNote (/workspace/rt-runner/quick/laneb/runner/start-rule.ts:94:9)
+      at /workspace/rt-runner/quick/laneb/runner/start-rule.ts:120:32
+
+Bun v1.4.4 (Linux x64)
+2026-11-01T21:42:04Z start rule failed for particle-1: not launched, Run T ends incomplete
+
+===== logs/launch-ab2.log
+2026-11-01T21:42:45Z particle-1 start rule (note row 21:42:04.945Z): bound $61.654783 of $75, pass
+2026-11-01T21:42:46Z t-particle controller started, pid 76013, batch cap $61.64
+{"run":"texttax-r1","cap_usd":75,"settled_usd":0.012783,"open_reserved_usd":0,"batches":[{"model":"claude-haiku-5-5","remaining":{"none":185,"placebo-short":185,"placebo":185},"projected_usd":6.29},{"model":"particle-1","remaining":{"none":185,"placebo-short":185,"placebo":185},"projected_usd":44.03}],"projected_usd":50.32,"margin":1.4,"bound_usd":70.460783,"pass":true}
+2026-11-01T21:42:46Z start-rule.ts exited 1 after writing a passing note row (); the rule passed
+2026-11-01T21:42:47Z t-haiku controller started, pid 76131, batch cap $8.81
+
+===== logs/ledger-sup.log
+2026-11-01T21:42:03Z ledger-sup: starting the ledger service
+ledger: serving texttax-r1 on 127.0.0.1:9911
+2026-11-02T02:13:11Z ledger-sup: service exited 0
+
+===== logs/close-out.log
+ledger service stopped
+7c724038a0761143c4be6fc72fb03e1c7171ae269689ec534aa2e1c168740252  <work>/ledger/texttax-r1.jsonl
+{"cap_usd":75,"settled_usd":60.896712,"open_reserved_usd":6,"open_ids":8}
+== VM proof
+record: <home>/.capy/work/ubi-runner/vms.tsv
+(no VMs recorded)
+== open reserves
+th-s-bb5996e16dd8 in_sessions_file=0 {"trial":"configure-git-webserver__VJ29kkT__env","requests":7,"ok":7,"cost":0.00771}
+th-s-965a5228b608 in_sessions_file=0 {"trial":"pypi-server__6VxCc2S__env","requests":5,"ok":5,"cost":0.002654}
+tp-s-a3dca2ca8626 in_sessions_file=0 {"trial":"large-scale-text-editing__Whkf9QX__env","requests":17,"ok":17,"cost":0.040981}
+tp-s-975c48d36861 in_sessions_file=0 {"trial":"code-from-image__wBJx3ZY__env","requests":4,"ok":4,"cost":0.006329}
+th-s-17a506dc3fa8 in_sessions_file=0 {"trial":"tune-mjcf__LpboVCb__env","requests":22,"ok":22,"cost":0.023795}
+tp-s-a39a3e7f71df in_sessions_file=0 {"trial":"log-summary-date-ranges__f7sHpps__env","requests":6,"ok":6,"cost":0.011595}
+th-s-69e453d64947 in_sessions_file=0 {"trial":"pypi-server__THK4JS2__env","requests":6,"ok":6,"cost":0.002825}
+tp-s-4ae74ae04611 in_sessions_file=0 {"trial":"tune-mjcf__Vqzryfa__env","requests":20,"ok":20,"cost":0.071611}
+
+===== logs/settle-bundle.log
+th-s-bb5996e16dd8 7710 {"ok":true}
+th-s-965a5228b608 2654 {"ok":true}
+tp-s-a3dca2ca8626 40981 {"ok":true}
+tp-s-975c48d36861 6329 {"ok":true}
+th-s-17a506dc3fa8 23795 {"ok":true}
+tp-s-a39a3e7f71df 11595 {"ok":true}
+th-s-69e453d64947 2825 {"ok":true}
+tp-s-4ae74ae04611 71611 {"ok":true}
+b15846f8a1dded1af6f8a90c801a0a8ed343d6b2b0ef41e73825b1f7dda55f47  <work>/ledger/texttax-r1.jsonl
+{"cap_usd":75,"settled_usd":61.064212,"open_reserved_usd":0,"open_ids":0}
+redacted files: 39; remaining matches: 7
+ff7de264c5e70cda9a6bc3ff275785f7ee5cad6da961bbe37f81d09012cb6b03  geva128-runt-data.tar.gz
+-rw-r--r-- 1 user user 56138263 Nov  2 02:17 geva128-runt-data.tar.gz
+ff7de264c5e70cda9a6bc3ff275785f7ee5cad6da961bbe37f81d09012cb6b03  geva128-runt-data.tar.gz.part-00
+ff7de264c5e70cda9a6bc3ff275785f7ee5cad6da961bbe37f81d09012cb6b03  geva128-runt-data.tar.gz (cat the parts in order)
+BUNDLE_DONE
+
+===== logs/analysis.log
+854e1125b3a77f54dde20ec87121d8dc8cd7408bc4a340ab886e69d45ea604dc  <work>/analysis/config-primary.json
+918ac087cc00045a215044ea84ead97212e6b3378ca671e09d16bc542bb34c64  <work>/analysis/config-recovered.json
+5e6f5b42f53ba80c42f4f1c266cec3f4c2554c7aad2aeb8e783a46b06c4c6e7b  <work>/analysis/recovered-sessions.jsonl
+15dec24ebbf35e74c804eda668e738bca5945b798ae214ecf952295b980842a1  <work>/analysis/output-primary.txt
+e14cf20ba5a3b5216aa4119217da5fb758827f476d4c33c3516010cc117e2ad0  <work>/analysis/output-recovered.txt
+
+===== runs/t-particle.ctl.log (progress lines: first, every tenth kept by batch.sh, last)
+ubi-runner: reap: no expired VMs
+ubi-runner: creating eu-central-h1/ubirun-geva128-1793569365-5a014866-t12 (standard-30)
+ubi-runner: ready: ubirun-geva128-1793569365-5a014866-t12 (<ip>)
+2026-11-01T21:43:09Z vm: ubirun-geva128-1793569365-5a014866-t12
+ubi-runner: synced <work>/runner-export/quick/laneb/runner -> ubirun-geva128-1793569365-5a014866-t12:work/runner
+ubi-runner: synced <work>/runs/t-particle -> ubirun-geva128-1793569365-5a014866-t12:work/run
++ sh -c apt-get -qq update >/dev/null
++ sh -c DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ca-certificates curl >/dev/null
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+ systemctl restart packagekit.service
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
++ sh -c install -m 0755 -d /etc/apt/keyrings
++ sh -c curl -fsSL "https://download.docker.com/linux/ubuntu/gpg" -o /etc/apt/keyrings/docker.asc
++ sh -c chmod a+r /etc/apt/keyrings/docker.asc
++ sh -c echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
++ sh -c apt-get -qq update >/dev/null
++ apt_flags=-y -qq
++ [ -n  ]
++ sh -c DEBIAN_FRONTEND=noninteractive apt-get -y -qq install docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras docker-buildx-plugin docker-model-plugin >/dev/null
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Using systemd to manage Docker service
++ sh -c systemctl enable --now docker.service 2>/dev/null
+INFO: Docker daemon enabled and started
+
++ sh -c docker version
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+nftables inet: ok (6.8.0-106-generic)
+downloading uv 0.13.6 x86_64-unknown-linux-gnu
+harbor 0.25.0, bun 1.4.4, docker 29.9.2
+detached-started
+2026-11-01T21:44:12Z progress: 0 
+2026-11-01T21:54:26Z progress: 33 
+2026-11-01T22:04:39Z progress: 52 oracle: every task passed on this host 
+2026-11-01T22:14:52Z progress: 67 oracle: every task passed on this host 
+2026-11-01T22:25:07Z progress: 79 oracle: every task passed on this host 
+2026-11-01T22:35:22Z progress: 105 oracle: every task passed on this host 
+2026-11-01T22:45:38Z progress: 148 oracle: every task passed on this host 
+2026-11-01T22:55:53Z progress: 157 oracle: every task passed on this host 
+2026-11-01T23:06:07Z progress: 177 oracle: every task passed on this host 
+2026-11-01T23:16:23Z progress: 184 oracle: every task passed on this host 
+2026-11-01T23:26:38Z progress: 205 oracle: every task passed on this host 
+2026-11-01T23:36:52Z progress: 248 oracle: every task passed on this host 
+2026-11-01T23:47:07Z progress: 269 oracle: every task passed on this host 
+2026-11-01T23:57:21Z progress: 285 oracle: every task passed on this host 
+2026-11-02T00:07:36Z progress: 295 oracle: every task passed on this host 
+2026-11-02T00:17:51Z progress: 317 oracle: every task passed on this host 
+2026-11-02T00:28:06Z progress: 366 oracle: every task passed on this host 
+2026-11-02T00:38:20Z progress: 390 oracle: every task passed on this host 
+2026-11-02T00:48:34Z progress: 406 oracle: every task passed on this host 
+2026-11-02T00:58:49Z progress: 424 oracle: every task passed on this host 
+2026-11-02T01:09:04Z progress: 466 oracle: every task passed on this host 
+2026-11-02T01:19:18Z progress: 490 oracle: every task passed on this host 
+2026-11-02T01:29:32Z progress: 509 oracle: every task passed on this host 
+2026-11-02T01:39:46Z progress: 519 oracle: every task passed on this host 
+2026-11-02T01:50:00Z progress: 540 oracle: every task passed on this host 
+2026-11-02T02:00:15Z progress: 582 oracle: every task passed on this host 
+2026-11-02T02:10:30Z progress: 590 oracle: every task passed on this host 
+2026-11-02T02:12:32Z vm-run exit 0
+Results written to jobs/texttax-r1-t-particle/result.json
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/texttax-r1-t-particle`
+
+{"global_spent_micros":54954097,"cap_stop":null,"open_sessions":0,"sessions":559}ubi-runner: destroy requested: eu-central-h1/ubirun-geva128-1793569365-5a014866-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva128-1793569365-5a014866-t12
+2026-11-02T02:12:47Z destroyed ubirun-geva128-1793569365-5a014866-t12
+
+===== runs/t-particle.refusal.log
+2026-11-01T21:43:26Z watching ubirun-geva128-1793569365-5a014866-t12 for a ledger refusal
+2026-11-02T02:13:31Z batch ended with no ledger refusal
+
+===== runs/t-haiku.ctl.log (progress lines: first, every tenth kept by batch.sh, last)
+ubi-runner: reap: no expired VMs
+ubi-runner: creating eu-central-h1/ubirun-geva128-1793569366-19f39d5e-t12 (standard-30)
+ubi-runner: ready: ubirun-geva128-1793569366-19f39d5e-t12 (<ip>)
+2026-11-01T21:43:10Z vm: ubirun-geva128-1793569366-19f39d5e-t12
+ubi-runner: synced <work>/runner-export/quick/laneb/runner -> ubirun-geva128-1793569366-19f39d5e-t12:work/runner
+ubi-runner: synced <work>/runs/t-haiku -> ubirun-geva128-1793569366-19f39d5e-t12:work/run
++ sh -c apt-get -qq update >/dev/null
++ sh -c DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ca-certificates curl >/dev/null
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+ systemctl restart packagekit.service
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
++ sh -c install -m 0755 -d /etc/apt/keyrings
++ sh -c curl -fsSL "https://download.docker.com/linux/ubuntu/gpg" -o /etc/apt/keyrings/docker.asc
++ sh -c chmod a+r /etc/apt/keyrings/docker.asc
++ sh -c echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
++ sh -c apt-get -qq update >/dev/null
++ apt_flags=-y -qq
++ [ -n  ]
++ sh -c DEBIAN_FRONTEND=noninteractive apt-get -y -qq install docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras docker-buildx-plugin docker-model-plugin >/dev/null
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Using systemd to manage Docker service
++ sh -c systemctl enable --now docker.service 2>/dev/null
+INFO: Docker daemon enabled and started
+
++ sh -c docker version
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+nftables inet: ok (6.8.0-106-generic)
+downloading uv 0.13.6 x86_64-unknown-linux-gnu
+harbor 0.25.0, bun 1.4.4, docker 29.9.2
+detached-started
+2026-11-01T21:44:18Z progress: 0 
+2026-11-01T21:54:33Z progress: 33 
+2026-11-01T22:04:49Z progress: 55 oracle: every task passed on this host 
+2026-11-01T22:15:03Z progress: 71 oracle: every task passed on this host 
+2026-11-01T22:25:19Z progress: 92 oracle: every task passed on this host 
+2026-11-01T22:35:34Z progress: 147 oracle: every task passed on this host 
+2026-11-01T22:45:47Z progress: 167 oracle: every task passed on this host 
+2026-11-01T22:56:02Z progress: 188 oracle: every task passed on this host 
+2026-11-01T23:06:16Z progress: 219 oracle: every task passed on this host 
+2026-11-01T23:16:31Z progress: 264 oracle: every task passed on this host 
+2026-11-01T23:26:44Z progress: 290 oracle: every task passed on this host 
+2026-11-01T23:36:59Z progress: 312 oracle: every task passed on this host 
+2026-11-01T23:47:14Z progress: 353 oracle: every task passed on this host 
+2026-11-01T23:57:28Z progress: 375 oracle: every task passed on this host 
+2026-11-02T00:07:42Z progress: 402 oracle: every task passed on this host 
+2026-11-02T00:17:57Z progress: 422 oracle: every task passed on this host 
+2026-11-02T00:28:12Z progress: 454 oracle: every task passed on this host 
+2026-11-02T00:38:28Z progress: 488 oracle: every task passed on this host 
+2026-11-02T00:48:41Z progress: 517 oracle: every task passed on this host 
+2026-11-02T00:58:56Z progress: 546 oracle: every task passed on this host 
+2026-11-02T01:09:11Z progress: 589 oracle: every task passed on this host 
+2026-11-02T01:19:26Z progress: 590 oracle: every task passed on this host 
+2026-11-02T01:20:27Z vm-run exit 0
+Results written to jobs/texttax-r1-t-haiku/result.json
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/texttax-r1-t-haiku`
+
+{"global_spent_micros":6097332,"cap_stop":null,"open_sessions":0,"sessions":559}ubi-runner: destroy requested: eu-central-h1/ubirun-geva128-1793569366-19f39d5e-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva128-1793569366-19f39d5e-t12
+2026-11-02T01:20:52Z destroyed ubirun-geva128-1793569366-19f39d5e-t12
+
+===== runs/t-haiku.refusal.log
+2026-11-01T21:43:27Z watching ubirun-geva128-1793569366-19f39d5e-t12 for a ledger refusal
+2026-11-02T01:21:26Z batch ended with no ledger refusal
+
+===== DeepSeek endpoint reading (deepseek provider row of logs/ds-endpoints-2026-11-01T23:03:45Z.json)
+{"provider_name":"DeepSeek","tag":"deepseek","status":0,"uptime_last_30m":100,"uptime_last_5m":100}
