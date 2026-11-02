@@ -1,0 +1,373 @@
+===== scripts/batch.sh
+#!/usr/bin/env bash
+# Run D (GEVA-153) batch controller, from GEVA-93 batch.sh: only owner, runner path, TTL and the pid file differ.
+# Was: operator controller for one TB2 grid batch (GEVA-89). It does what the tag's launch.sh does, with two changes
+# the Captain approved: vm-run.sh runs detached on the VM (so this controller can die and be re-attached), and the
+# ledger service is one shared process started separately on port 9911.
+# Usage: batch.sh start <run dir> <prefix> <batch cap usd>   |   batch.sh attach <run dir>
+set -uo pipefail
+S=<ubicloud-skill>/scripts/ubi-runner.sh
+RUNNER=<work>/runner-export/quick/laneb/runner
+state_root=${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner
+export UBI_OWNER=geva153 UBI_ALLOWED_STORAGE='320 600 640 1200'
+mode=$1
+run=$(cd "$2" && pwd)
+meta=$run.vm
+echo $$ > "$run.ctl.pid"
+log() { echo "$(date -u +%FT%TZ) $*"; }
+if [ "$mode" = start ]; then
+  prefix=$3; cap=$4
+  [ -e "$meta" ] && { log "refusing: $meta exists"; exit 2; }
+  name=$(UBI_TTL_HOURS=${UBI_TTL_HOURS:-12} "$S" up -s standard-30 -S 600) || { log "up failed"; exit 3; }
+  echo "$name" > "$meta"
+  log "vm: $name"
+  if ! { "$S" sync "$name" "$RUNNER" work/runner && "$S" sync "$name" "$run" work/run && "$S" ssh "$name" 'bash work/runner/vm-bootstrap.sh'; }; then
+    log "setup failed before any trial; destroying $name"; "$S" down "$name"; exit 4
+  fi
+  { printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:-}"; printf 'OPENROUTER_API_KEY=%s\n' "${OPENROUTER_API_KEY:-}"; } | "$S" ssh "$name" 'umask 077; cat > ~/.laneb-keys'
+  printf '#!/bin/bash\numask 022\ncd ~\nbash work/runner/vm-run.sh work/run "$1" "$2" > work/vm-run.log 2>&1\necho $? > work/vm-run.exit\n' | "$S" ssh "$name" 'cat > work/detach.sh'
+else
+  name=$(cat "$meta")
+  prefix=""; cap=""
+fi
+. "$state_root/$name/env"
+key="$state_root/$name/key"
+SSHO=(-i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30)
+rsh() { timeout 120 ssh "${SSHO[@]}" "ubi@$IP" "$@"; }
+tunnel() {
+  while [ ! -e "$run.tunnel-stop" ]; do
+    ssh "${SSHO[@]}" -N -o ServerAliveInterval=30 -o ServerAliveCountMax=4 -o ExitOnForwardFailure=yes -R 127.0.0.1:9911:127.0.0.1:9911 "ubi@$IP" &
+    echo $! > "$run.tunnel-pid"; wait $!
+    [ -e "$run.tunnel-stop" ] || { echo "$(date -u +%FT%TZ) tunnel dropped; reconnecting"; sleep 5; }
+  done
+}
+rm -f "$run.tunnel-stop"
+tunnel & tloop=$!
+stop_tunnel() { touch "$run.tunnel-stop"; kill "$(cat "$run.tunnel-pid" 2>/dev/null)" 2>/dev/null; wait "$tloop" 2>/dev/null; }
+trap stop_tunnel EXIT
+for i in $(seq 1 30); do rsh 'curl -fsS 127.0.0.1:9911/status' >/dev/null 2>&1 && break; sleep 4; done
+rsh 'curl -fsS 127.0.0.1:9911/status' >/dev/null 2>&1 || log "ledger not reachable through the tunnel"
+if [ "$mode" = start ]; then
+  rsh "setsid nohup bash work/detach.sh $prefix $cap < /dev/null > /dev/null 2>&1 & echo detached-started" || { log "detached start failed"; exit 5; }
+fi
+n=0
+while true; do
+  ex=$(rsh 'cat work/vm-run.exit 2>/dev/null' 2>/dev/null)
+  [ -n "$ex" ] && break
+  n=$((n + 1))
+  if [ $((n % 10)) = 1 ]; then log "progress: $(rsh 'ls -d work/run/jobs/*/*/result.json 2>/dev/null | wc -l; tail -c 300 work/vm-run.log 2>/dev/null' 2>/dev/null | tr '\n' ' ' | cut -c1-400)"; fi
+  sleep 60
+done
+log "vm-run exit $ex"
+stop_tunnel; trap - EXIT
+"$S" ssh "$name" 'rm -f ~/.laneb-keys; tail -5 work/vm-run.log' || true
+mkdir -p "$run/pulled"
+pulled=no
+for attempt in 1 2 3; do
+  if "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
+    && [ "$("$S" ssh "$name" 'cd work/run && find out jobs -type f | wc -l')" = "$(cd "$run/pulled" && find out jobs -type f | wc -l)" ]; then
+    pulled=yes; break
+  fi
+  log "pull attempt $attempt failed"; sleep 20
+done
+"$S" pull "$name" work/vm-run.log "$run/pulled" || true
+if [ "$pulled" != yes ]; then log "WARNING: results not fully pulled; VM $name kept"; exit 7; fi
+"$S" down "$name" && log "destroyed $name" && echo "$ex" > "$run.exit"
+exit 0
+
+===== scripts/watch.sh
+#!/usr/bin/env bash
+# Exits when every named batch has ended (its .exit file exists) or its controller is gone. Keeps the machine awake while it runs.
+W=<work>
+while true; do
+  pending=0
+  for b in "$@"; do
+    r=$W/runs/$b
+    [ -e $r.exit ] && continue
+    pid=$(cat $r.ctl.pid 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 $pid 2>/dev/null; then pending=1; continue; fi
+    echo "$(date -u +%FT%TZ) controller of $b is gone and $b.exit is missing"; exit 3
+  done
+  [ $pending = 0 ] && { echo "$(date -u +%FT%TZ) every batch ended: $*"; for b in "$@"; do echo "$b exit $(cat $W/runs/$b.exit)"; done; exit 0; }
+  sleep 60
+done
+
+===== scripts/ledger-sup.sh
+#!/usr/bin/env bash
+# The one discovery-r1 ledger service on 127.0.0.1:9911 (GEVA-153, Run D), from GEVA-93's ledger-sup.sh. It starts the
+# service only when nothing listens on 9911, so it never runs a second service on the file, and ends when ledger.stop exists.
+W=<work>
+L=<captain-drive>/ledger/discovery-r1.jsonl
+cd $W/runner-export/quick/laneb/runner || exit 1
+while [ ! -e $W/ledger.stop ]; do
+  if ! ss -ltnH 'sport = :9911' | grep -q '127.0.0.1:9911'; then
+    echo "$(date -u +%FT%TZ) ledger-sup: starting the ledger service"
+    bun ledger.ts serve --path $L --item discovery-r1 --port 9911 --prereg 9820b149c3c5b9f12b82edc796871464b3c157c2 &
+    wait $!
+    echo "$(date -u +%FT%TZ) ledger-sup: service exited $?"
+  fi
+  sleep 3
+done
+
+===== gridcheck.py
+import json, sys, os
+runs, mdir = sys.argv[1], sys.argv[2]
+suf = sys.argv[3] if len(sys.argv) > 3 else ''
+only = sys.argv[4].split(',') if len(sys.argv) > 4 else None
+exp = {
+ 'particle-1': ('particle-1', ['none@claude-code-preset','gstack@claude-code-preset','gstack-rewritten@claude-code-preset','placebo@claude-code-preset']),
+ 'claude-opus-5-5': ('claude-opus-5-5', ['none@claude-code-preset','gstack@claude-code-preset','gstack-rewritten@claude-code-preset','placebo@claude-code-preset','none@sdk-default','gstack@sdk-default','gstack-rewritten@sdk-default']),
+ 'claude-opus-5-5-r2': ('claude-opus-5-5', ['gstack@claude-code-preset','gstack@sdk-default']),
+ 'gpt-6.1-sol': ('gpt-6.1-sol', ['none@claude-code-preset','gstack@claude-code-preset','gstack-rewritten@claude-code-preset','placebo@claude-code-preset']),
+}
+tasks = open(os.path.expanduser('<work>/tasks37.txt')).read().strip().split(',')
+fails = []
+for d0, (model, labels) in exp.items():
+    if only and d0 not in only: continue
+    d = d0 + suf
+    r = os.path.join(runs, d)
+    job = json.load(open(os.path.join(r, 'job.json'))); man = json.load(open(os.path.join(r, 'manifest.json')))
+    ok = lambda c, msg: c or fails.append(f'{d}: {msg}')
+    ok(os.path.exists(os.path.join(r, 'oracle.json')), 'no oracle.json')
+    ok(man['job_name'] == 'discovery-r1-' + d, 'job name ' + man['job_name'])
+    ok(man['git_head'] == '16e075e00398a7d8b9b0236d75f7fe14c98f31a1' and not man['git_dirty'], 'git head/dirty')
+    ok(man['invoke'] is False and man['max_turns'] == 60, 'manifest invoke/max_turns')
+    ok(all(v is False for v in man['invoke_by_arm'].values()), 'invoke_by_arm')
+    ok(sorted(job['tasks'] if isinstance(job.get('tasks'), list) and job['tasks'] and isinstance(job['tasks'][0], str) else [t.get('path','').split('/')[-1] if isinstance(t, dict) else t for t in job.get('tasks', [])]) == sorted(tasks) or len(man['tasks']) == 37, 'tasks')
+    ok(sorted(man['tasks'].keys()) == sorted(tasks), 'manifest tasks != 37 list')
+    mlabels = [a['label'] for a in man['arms']]
+    ok(mlabels == labels, f'labels {mlabels}')
+    for a in man['arms']:
+        want = json.load(open(os.path.join(mdir, a['name'] + '.json')))['tar']['sha256']
+        ok(a['sha256'] == want, f"arm {a['name']} sha {a['sha256'][:12]} != {want[:12]}")
+        ok(a['label'].split('@')[1] == a['system_prompt'], f"label/system_prompt {a['label']} {a['system_prompt']}")
+    ags = job['agents']
+    ok(len(ags) == len(labels), f'agents {len(ags)}')
+    seen = []
+    for g in ags:
+        k = g['kwargs']
+        ok(k['upstream_model'] == model, 'model ' + str(k['upstream_model']))
+        ok(k.get('sdk_max_turns') == 60, f"sdk_max_turns {k.get('sdk_max_turns')}")
+        ok(k.get('invoke') is False, f"invoke {k.get('invoke')}")
+        ok(not k.get('skill_map'), 'skill_map not empty')
+        seen.append(k['arm'] + '@' + k.get('system_prompt', 'sdk-default'))
+        want = json.load(open(os.path.join(mdir, k['arm'] + '.json')))['tar']['sha256']
+        ok(k.get('arm_sha256', want) == want, f"agent arm_sha256 {k.get('arm_sha256')}")
+    ok(seen == labels, f'agent cells {seen}')
+    print(f"grid {d}: {len(man['tasks'])} tasks, {len(ags)} cells {seen}, max_turns {man['max_turns']}, invoke {man['invoke']}, arms " + ', '.join(f"{a['name']}={a['sha256'][:12]}" for a in man['arms']))
+    print('  agent kwargs keys: ' + ','.join(sorted(ags[0]['kwargs'].keys())))
+if fails:
+    print('GRID CHECK FAIL'); [print('  ' + f) for f in fails]; sys.exit(1)
+print(f'GRID CHECK PASS: {len(only) if only else 4} batches, every tar = its committed manifest, every label, sdk_max_turns 60, invoke false')
+
+===== settle_lost.py
+import json, sys, collections, urllib.request
+L='<captain-drive>/ledger/discovery-r1.jsonl'
+dirs={'dp-':'particle-1','dob-':'claude-opus-5-5-b','drb-':'claude-opus-5-5-r2-b','ds-':'gpt-6.1-sol'}
+rows=[json.loads(l) for l in open(L) if l.strip()]
+res={r['id']:r for r in rows if r['kind']=='reserve'}; st={r['id'] for r in rows if r['kind']=='settle'}
+openids=sorted(set(res)-st)
+print('open ids', len(openids), openids)
+do = len(sys.argv) > 1 and sys.argv[1] == 'settle'
+for o in openids:
+    pre, sid = o.split('s-',1)[0], 's-' + o.split('s-',1)[1]
+    d=dirs.get(pre)
+    if not d: print(o, 'unknown prefix'); continue
+    base='<work>/runs/'+d+'/pulled/out/'
+    sess=[json.loads(l) for l in open(base+'proxy-sessions.jsonl') if l.strip()]
+    srow=[s for s in sess if s['id']==sid]
+    cost=0; n=0
+    for l in open(base+'proxy-requests.jsonl'):
+        if not l.strip(): continue
+        q=json.loads(l)
+        if q.get('session')==sid and isinstance(q.get('cost_micros'),(int,float)): cost+=q['cost_micros']; n+=1
+    spent = srow[0]['spent_micros'] if srow else None
+    amt = spent if spent is not None else int(round(cost))
+    print(o, 'reserved', res[o]['usd_micros'], 'sessions-file spent', spent, 'request-log cost', cost, 'requests', n, '->', amt)
+    if do:
+        body=json.dumps({'id':o,'usd_micros':int(amt),'meta':{'by':'GEVA-153','manual':True,'trial':res[o].get('trial'),'reason':'settle never reached the ledger; amount from the batch proxy ' + ('sessions file spent_micros' if spent is not None else 'request log cost_micros')}}).encode()
+        r=urllib.request.Request('http://127.0.0.1:9911/settle', data=body, headers={'content-type':'application/json'}, method='POST')
+        print('  settle ->', urllib.request.urlopen(r).read().decode())
+
+===== analysis/build-config.py
+import json, sys
+P='/workspace/gstack-evals/wiki/plans/2026-11-01-geva-125-untold-discovery-prereg/analysis-config.json'
+c=json.load(open(P))
+R='<work>/runs/'
+A='<work>/analysis/'
+b=[('particle-1','discovery-r1-particle-1'),('claude-opus-5-5-b','discovery-r1-claude-opus-5-5-b'),('claude-opus-5-5-r2-b','discovery-r1-claude-opus-5-5-r2-b')]
+if 'sol' in sys.argv[1:]: b.append(('gpt-6.1-sol','discovery-r1-gpt-6.1-sol'))
+c['jobs']=[R+d+'/pulled/jobs/'+j for d,j in b]
+c['sessions']=[R+d+'/pulled/out/proxy-sessions.jsonl' for d,j in b]
+if 'as-written' not in sys.argv[1:]: c['sessions'].append(A+'lost-session.jsonl')
+c['replicate_2_jobs']=[R+'claude-opus-5-5-r2-b/pulled/jobs/discovery-r1-claude-opus-5-5-r2-b']
+c['dropped_tasks']=sorted({l.strip() for d,j in b for l in open(R+d+'/pulled/out/oracle-fails.txt') if l.strip()})
+c['listing_check']={a:True for a in ['none','gstack','gstack-rewritten','placebo']}
+c['arm_tars']={a:'<work>/arms-tar/'+a+'.tar' for a in ['none','gstack','gstack-rewritten','placebo']}
+json.dump(c,sys.stdout,indent=1)
+
+===== analysis/cost.py
+import json, os, collections, urllib.request
+R='<work>/runs/'
+B=['particle-1','claude-opus-5-5-b','claude-opus-5-5-r2-b','gpt-6.1-sol']
+cells=collections.OrderedDict()
+tot=collections.Counter()
+for b in B:
+    f=R+b+'/pulled/out/proxy-sessions.jsonl'
+    if not os.path.exists(f): print(b, 'no sessions file yet'); continue
+    t=json.load(open(R+b+'/pulled/out/proxy-totals.json'))
+    print(f"{b}: sessions {t['sessions']}, metered ${t['global_spent_micros']/1e6:.6f}, cap_stop {t['cap_stop']}, open_sessions {t['open_sessions']}")
+    tot['metered']+=t['global_spent_micros']
+    for l in open(f):
+        if not l.strip(): continue
+        s=json.loads(l); m=s.get('meta') or {}
+        k=(b, s['model'], m.get('arm','?')+'@'+m.get('system_prompt','?'))
+        c=cells.setdefault(k, collections.Counter())
+        c['sessions']+=1; c['usd']+=s['spent_micros']/1e6; c['refused_budget']+=1 if s.get('refused_budget') else 0
+        u=s.get('usage') or {}
+        c['in']+=u.get('input_tokens',0); c['out']+=u.get('output_tokens',0)
+        c['cw']+=u.get('cache_creation_input_tokens',0); c['cr']+=u.get('cache_read_input_tokens',0)
+print()
+print('| Batch | Model | Cell | Sessions | Metered $ | Sessions at session cap | Input tokens | Output tokens | Cache write | Cache read |')
+print('|---|---|---|---|---|---|---|---|---|---|')
+fmt=lambda n: f'{n/1e6:.2f}M' if n>=1e6 else (f'{n/1e3:.1f}k' if n>=1e3 else str(n))
+for (b,m,lab),c in cells.items():
+    print(f"| {b} | {m} | {lab} | {c['sessions']} | {c['usd']:.3f} | {c['refused_budget']} | {fmt(c['in'])} | {fmt(c['out'])} | {fmt(c['cw'])} | {fmt(c['cr'])} |")
+print()
+print(f"Batches metered in all: ${tot['metered']/1e6:.6f}. Route check (route-d.log): $0.144349.")
+print('Lost first attempt not in any sessions file: s-3ac119dfbd14, $0.145598 by its request log (analysis/lost-session.jsonl); proxy-totals counts it.')
+rows=[json.loads(l) for l in open('<captain-drive>/ledger/discovery-r1.jsonl') if l.strip()]
+res={r['id']:r['usd_micros'] for r in rows if r['kind']=='reserve'}; st={r['id']:r['usd_micros'] for r in rows if r['kind']=='settle'}
+print(f"Ledger discovery-r1 (file): {len(st)} settles, settled ${sum(st.values())/1e6:.6f}, open reserves {len(set(res)-set(st))} (${sum(v for k,v in res.items() if k not in st)/1e6:.6f}), manual settles {sum(1 for r in rows if r['kind']=='settle' and (r.get('manual') or (r.get('meta') or {}).get('manual')))}")
+
+===== analysis/xcheck.py
+import json,glob,os,re,collections,sys
+tools=collections.Counter(); skill=collections.Counter(); skillmd=collections.Counter(); n=collections.Counter()
+pat=re.compile(r'\{"id": "[^"]+", "name": "([A-Za-z_]+)", "input": (\{[^\n]*?\})\}')
+for job in sorted(glob.glob('<work>/runs/*/pulled/jobs/discovery-r1-*')):
+    if job.endswith('-oracle'): continue
+    for c in glob.glob(job+'/*/config.json'):
+        d=os.path.dirname(c); k=json.load(open(c))['agent']['kwargs']; lab=k['upstream_model']+':'+k['arm']+'@'+k.get('system_prompt','?')
+        f=d+'/agent/sdk-messages.jsonl'
+        if not os.path.exists(f): continue
+        n[lab]+=1; seen=set(); s=0; m=0
+        for l in open(f):
+            for name,inp in pat.findall(l):
+                seen.add(name)
+                if name=='Skill': s=1
+                if 'SKILL.md' in inp or '/skills/' in inp: m=1
+        for x in seen: tools[x]+=1
+        skill[lab]+=s; skillmd[lab]+=m
+print('trials', sum(n.values()), 'labels', len(n))
+print('trials using each tool', tools.most_common(15))
+print('Skill tool calls', {k:v for k,v in skill.items() if v})
+print('tool inputs naming SKILL.md or /skills/', {k:v for k,v in skillmd.items() if v})
+
+===== analysis/sol-opens.py
+import json,glob,os,re,collections
+pat=re.compile(r'\{"id": "[^"]+", "name": "Skill", "input": (\{[^\n]*?\})\}')
+FIT={'custom-memory-heap-crash','overfull-hbox','fix-code-vulnerability','fix-git','db-wal-recovery'}
+rows=[]; agg=collections.defaultdict(lambda: [0,0])
+for c in sorted(glob.glob('<work>/runs/gpt-6.1-sol/pulled/jobs/discovery-r1-gpt-6.1-sol/*/config.json')):
+    d=os.path.dirname(c); k=json.load(open(c))['agent']['kwargs']; arm=k['arm']
+    task=os.path.basename(d).split('__')[0]
+    rr=json.load(open(d+'/result.json')); rw=((rr.get('verifier_result') or {}).get('rewards') or {}).get('reward')
+    sk=[]
+    f=d+'/agent/sdk-messages.jsonl'
+    if os.path.exists(f):
+        for l in open(f):
+            for inp in pat.findall(l):
+                try: sk.append(json.loads(inp).get('skill'))
+                except Exception: sk.append(inp[:40])
+    if sk: rows.append((arm, task, 'fit' if task in FIT else '', ','.join(map(str,sk)), rw))
+    if arm!='none': agg[(arm, bool(sk))][0]+=1; agg[(arm, bool(sk))][1]+= 1 if rw==1 else 0
+print('| Arm | Task | Fit | Skills called (in order) | Reward |'); print('|---|---|---|---|---|')
+for r in sorted(rows): print('| ' + ' | '.join(str(x) for x in r) + ' |')
+print(); print('Sol pass by arm and whether the trial called Skill (trials, passes):')
+for k,v in sorted(agg.items()): print(' ', k, v)
+
+===== analysis/chart.py
+# GEVA-153 Run D chart from the analysis output: left, trials that opened a listed skill per preset cell (counts, no
+# interval: the analysis prints per-cell opens without one); right, pass rate per preset cell with its 95% interval and cost per trial.
+import re, sys
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+src, out = sys.argv[1], sys.argv[2]
+rows, opens, model = [], {}, None
+for l in open(src):
+    h = re.match(r'## (\S+)$', l.strip())
+    if h: model = h.group(1)
+    m = re.match(r'(\S+) (none|gstack|gstack-rewritten|placebo)@claude-code-preset: .*?pass ([\d.]+)% \[([\d.]+)%, ([\d.]+)%\].*?cost per trial \$([\d.]+)', l)
+    if m: rows.append((m.group(1), m.group(2), float(m.group(3)), float(m.group(4)), float(m.group(5)), float(m.group(6))))
+    o = re.match(r'(none|gstack|gstack-rewritten|placebo)@claude-code-preset: browse .*?opened any listed skill ([\d.]+)%', l)
+    if o and model and (model, o.group(1)) not in opens: opens[(model, o.group(1))] = float(o.group(2))
+models = list(dict.fromkeys(r[0] for r in rows))
+arms = ['none', 'gstack', 'gstack-rewritten', 'placebo']
+colors = {'none': '#777777', 'gstack': '#1f77b4', 'gstack-rewritten': '#2ca02c', 'placebo': '#ff7f0e'}
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.8))
+w = 0.2
+for i, mdl in enumerate(models):
+    for j, a in enumerate(arms):
+        x = i + (j - 1.5) * w
+        v = opens.get((mdl, a), 0.0)
+        a1.bar(x, v, w, color=colors[a], label=a if i == 0 else None)
+        a1.text(x, v + 0.6, f'{round(v * 37 / 100)}/37', ha='center', va='bottom', fontsize=7)
+        r = [q for q in rows if q[0] == mdl and q[1] == a]
+        if not r: continue
+        _, _, p, lo, hi, c = r[0]
+        a2.bar(x, p, w, color=colors[a])
+        a2.errorbar(x, p, yerr=[[p - lo], [hi - p]], fmt='none', ecolor='black', capsize=3, lw=1)
+        a2.text(x, 3, f'${c:.3f}', rotation=90, ha='center', va='bottom', fontsize=7, color='white')
+for ax in (a1, a2):
+    ax.set_xticks(range(len(models)))
+    ax.set_xticklabels(models)
+a1.set_ylim(0, 35)
+a1.set_ylabel('trials that opened a listed skill, %')
+a1.set_title('Untold skill opens (the outcome under test)', fontsize=9)
+a2.set_ylim(0, 105)
+a2.set_ylabel('TB2 pass rate, % (95% interval)')
+a2.set_title('Pass rate and metered cost per trial (secondary)', fontsize=9)
+fig.legend(*a1.get_legend_handles_labels(), loc='lower center', ncol=4, fontsize=8)
+fig.suptitle('Run D: untold, Claude Code preset, 37 TB2 tasks, one trial per task per cell', fontsize=10)
+fig.tight_layout(rect=(0, 0.07, 1, 0.95))
+fig.savefig(out, dpi=130)
+print('wrote', out, len(rows), 'cells', len(opens), 'open readings')
+
+===== scripts/bundle.sh
+#!/usr/bin/env bash
+# GEVA-153 Run D data bundle for the Captain drive: pulled job folders and proxy files per batch, the route check,
+# the ledger, analysis inputs and the run record, with TB2 fixture secrets redacted as GEVA-93 and GEVA-128 did.
+set -euo pipefail
+W=<work>
+C=<captain-drive>
+B=$W/bundle/geva153-rund-data
+rm -rf $W/bundle && mkdir -p $B/runs $B/analysis
+for b in particle-1 claude-opus-5-5-b claude-opus-5-5-r2-b gpt-6.1-sol; do mkdir -p $B/runs/$b && cp -r $W/runs/$b/pulled $B/runs/$b/ && cp $W/runs/$b.ctl.log $B/runs/; done
+mkdir -p $B/runs/attempt1 && cp $W/runs/attempt1/*.ctl.log $B/runs/attempt1/
+cp -r $W/route-d $B/route-d && cp $W/route-d.log $W/prep.log $W/RECORD.md $W/sr-*-gate.json $B/
+cp $C/ledger/discovery-r1.jsonl $B/ledger-discovery-r1.jsonl
+cp $W/analysis/lost-session.jsonl $W/analysis/config-primary.json $W/analysis/config-recovered.json $W/analysis/output-primary.txt $W/analysis/output-recovered.txt $B/analysis/
+grep -rlZ -e '<home>/' $B | xargs -0 -r sed -i -e "s#<captain-drive>#<captain-drive>#g" -e "s#<work>#<work>#g" -e "s#<ubicloud-skill>#<ubicloud-skill>#g"
+PAT='sk-ant-[A-Za-z0-9_-]{20,}|sk-or-v1-[a-f0-9]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}'
+n=0
+while IFS= read -r -d '' f; do
+  perl -0pi -e 's/-----BEGIN ([A-Z ]*)PRIVATE KEY-----.*?-----END \1PRIVATE KEY-----/<redacted-fixture-private-key>/gs; s/-----BEGIN ([A-Z ]*)PRIVATE KEY-----(?:[A-Za-z0-9+\/=\s]|\\n)*/<redacted-fixture-private-key>/g; s/(sk-ant-[A-Za-z0-9_-]{20,}|sk-or-v1-[a-f0-9]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16})/<redacted-fixture-secret>/g' "$f"; n=$((n+1))
+done < <(grep -rlEZ "$PAT" $B || true)
+echo "redacted files: $n; remaining pattern matches: $(grep -rlE "$PAT" $B | wc -l)"
+python3 - "$B" <<'PYEOF'
+import os, sys
+root = sys.argv[1]
+for k in ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'UBICLOUD_API_KEY']:
+    v = os.environ.get(k, '').strip().encode()
+    if not v: print(k, 'not set, not scanned'); continue
+    n = 0
+    for d, _, fs in os.walk(root):
+        for f in fs:
+            try:
+                if v in open(os.path.join(d, f), 'rb').read(): n += 1
+            except OSError: pass
+    print(k, 'live-value matches:', n)
+PYEOF
+cd $W/bundle && tar -czf geva153-rund-data.tar.gz geva153-rund-data && sha256sum geva153-rund-data.tar.gz && ls -l geva153-rund-data.tar.gz
+
