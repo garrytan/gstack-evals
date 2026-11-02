@@ -38,6 +38,8 @@
           "runs pull_request_target and allow-unsafe-pr-checkout only in sealed.yml",
           "runs no merge train while a dispatch runs the head's workflow (GST-254)",
           "names no secret",
+          "counts github.token as naming a secret",
+          "counts secrets: inherit as naming a secret",
           "installs Bun only by the checksummed download, at one version and digest",
           "fetches gstack at one pinned commit",
           "runs the gate's command cases in ci.yml"

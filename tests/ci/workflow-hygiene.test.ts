@@ -21,6 +21,7 @@ const workflows = Object.fromEntries(files.map((f) => [f, Bun.YAML.parse(text[f]
 const jobs = (f: string) => Object.entries(workflows[f]!.jobs);
 const steps = (f: string) => jobs(f).flatMap(([, j]) => j.steps ?? []);
 const READ = { contents: "read" };
+const namesSecret = (t: string) => /secrets\.|\bsecrets:\s*inherit\b|\bgithub\.token\b/.test(t);
 
 describe("workflow hygiene", () => {
   test("reads the workflows the gate relies on", () => {
@@ -61,7 +62,15 @@ describe("workflow hygiene", () => {
   });
 
   test("names no secret", () => {
-    for (const f of files) expect([f, /secrets\./.test(text[f]!)]).toEqual([f, false]);
+    for (const f of files) expect([f, namesSecret(text[f]!)]).toEqual([f, false]);
+  });
+
+  test("counts github.token as naming a secret", () => {
+    expect(namesSecret("        env:\n          GH_TOKEN: ${{ github.token }}\n")).toBe(true);
+  });
+
+  test("counts secrets: inherit as naming a secret", () => {
+    expect(namesSecret("    uses: ./.github/workflows/reusable.yml\n    secrets: inherit\n")).toBe(true);
   });
 
   test("installs Bun only by the checksummed download, at one version and digest", () => {
