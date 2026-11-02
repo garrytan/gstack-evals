@@ -62,11 +62,14 @@ The rig (B4) reads `repo_dir`, `base_branch`, `base_commit`, `kind`, `start_ref`
 Test ids. pytest: `<file>.py::<name>`, as pytest prints node ids from the repository root. Go:
 `<package dir>::<TopLevelTest>`, with `.` for the root package. `functional` are the change's own tests,
 `escaped_defect` the later fix's tests (K1 and K4 replays), and `regression` the tests that pass at base and in every
-gold run. Leave `regression` empty and name `regression_scope` (test files or package dirs); `check
+gold run. For K4, `check` grades base by applying the reverse of the replay commit to the starting tree, and a test that
+passes at the starting tree and in every gold run counts too, so the change's own passing tests stay required. Leave `regression` empty and name `regression_scope` (test files or package dirs); `check
 --freeze-regression` derives the list, records gold-flaky tests in `quarantine` and writes `regression_frozen`, a
 sha256 over the scope and both lists. Until then, or once any of the three changes, `check` prints `verdict: valid,
 regression not frozen` and exits 1, and `verify` refuses the task with E_REAL_TASK_FORMAT. A grader takes its required
 ids from `requiredTests` in verify.ts, which refuses the same way, so no grade silently drops the regression tests.
+A task must require at least one test: readTask refuses one whose `functional`, `escaped_defect` and frozen
+`regression` lists are all empty.
 
 ## Trees and gold
 
@@ -103,6 +106,9 @@ shell.
    `.real-verifier-config.<ext>`.
 3. Run, in a container from the same image: the volume mounted read-only at `/testbed`, user 10001, `--network
    none`, `--read-only` root, a tmpfs `/tmp`, no capabilities, no-new-privileges, a CPU quota and a memory cap.
+   `/out`, where the run writes its record, is a tmpfs volume of 256 MiB and 1024 inodes. A second container from the
+   same image holds it open, and after the run the host reads the record through that container, regular files only,
+   so nothing a run writes to `/out` reaches the host disk.
    pytest runs through `vrun.py`, which an sh entrypoint execs after it prints the start line (step 5). vrun.py imports
    pytest and the image's pytest11 plugins while only the image's paths are on `sys.path`, then runs with plugin
    autoload off, so no module or dist-info in the tree loads as a plugin. An editable install in the image can still
@@ -114,7 +120,9 @@ shell.
    `GOPROXY=off`; gold's go.mod and go.sum are restored, so a `replace` in the tree can't swap a dependency. Build
    errors are read from stderr (Go 1.23 and older) or from build-output events (Go 1.24 and newer).
 4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
-   only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it.
+   only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it. A
+   run that timed out, or left `/out` full (no free block or inode), passes nothing whatever its record says, and a
+   tree passes nothing when no test is required.
 5. Each run's sh entrypoint prints `real-verifier: started` on stdout before it execs python (vrun.py) or `go test`,
    so the line comes out before any interpreter, start-up hook or code from the tree runs. A run that never printed it
    and did not time out has no verdict, and `verify` and `check` stop with E_REAL_TASK_DOCKER: Docker could not start
@@ -123,6 +131,9 @@ shell.
    after it is the tree's outcome, a runner that fails to start, a swapped runner, a plugin that fails to load or a
    tree `sitecustomize` that exits at interpreter start included. Every timeout is the tree's outcome too, with or
    without the line. Nothing the tree can touch turns a failure into no verdict.
+6. Every container the verifier and checker start is named. When the docker client dies before its container (a
+   timeout, or ENOBUFS once a run's output passes the client's 256 MiB buffer), the container is killed and removed by
+   that name, so it can't outlive the run or hold its volumes.
 
 Failure classes: `assert` (the test body ran and failed), `missing_name` (an attribute, import or symbol that
 doesn't exist) and `load` (collection, import, setup or build failed otherwise).
@@ -151,7 +162,7 @@ from the tree, which would let the tree rewrite reports. A Docker failure after 
 | L5 clean start | `git status` in the image is empty |
 | L6 Claude config | The base tree holds no `.claude/` or `.mcp.json` (the sandbox refuses them) |
 | install policy | The lockfile is in the image and the command holds to it |
-| V1 | Gold passes every required test in each of `--runs` runs (default 10), each in a fresh random order, under the CPU quota |
+| V1 | Gold passes every required test in each of `--runs` runs (default 10), each in a fresh random order, under the CPU quota; it fails when no test is required |
 | V2 | K1 to K3: the starting tree fails a functional test at assertion level, or with a missing name the statement names |
 | V3 | K1: the introducing change fails an escaped-defect test at assertion level |
 | V4 | Every missing name a hidden test hits at base is named in the statement, and the auditor's V4 record passes |
@@ -159,7 +170,7 @@ from the tree, which would let the tree rewrite reports. A Docker failure after 
 | V6 | The starting tree fails a required test (not for decoys); gold with VERSION, CHANGELOG and TODOS edits still passes; no restored file names them |
 | V7 | Every run had no network and finished inside `verifier_sec` |
 | V8 | The licence is permissive, `upstream/LICENSE` reads as it and matches the image's licence file |
-| V9 | K4: the replay branch is base plus exactly the change; a replay fails an escaped-defect test at assertion level, a decoy passes every required test as given |
+| V9 | K4: the replay branch is base plus exactly the change; a replay fails an escaped-defect test at assertion level, a decoy passes every required test as given, and no test that passes at base fails in every decoy run |
 
 `--mechanical` skips the audit records, for a check before the audit. The verdict is `valid` only when every rule
 passes. A task that fails a rule is dropped for every arm, and its reason is counted in the prereg.

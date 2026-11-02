@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { main as real } from "../../lanes/real-outcome/cli.ts";
 import { HELP as TASK_HELP } from "../../lanes/real-outcome/task/cli.ts";
 import { detectLicence, installProblem, keysInEnv, PROTECT_ERE, readTask, regressionDigest, statementLeaks, TaskError, validTestId, VERIFIER_DIR } from "../../lanes/real-outcome/task/format.ts";
-import { PYTEST_ENTRY, requiredTests, RUN_STARTED, runInfra } from "../../lanes/real-outcome/task/verify.ts";
+import { allPass, PYTEST_ENTRY, requiredTests, RUN_STARTED, runInfra, type RunRecord, type TreeResult } from "../../lanes/real-outcome/task/verify.ts";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { isProtectedPath } from "../../lanes/real-outcome/mine/paths.ts";
 import { missingName, parseGoTest, parsePytest, resultFor } from "../../lanes/real-outcome/task/record.ts";
@@ -295,6 +295,30 @@ describe("what a grader grades", () => {
     const entry = spawnSync("sh", ["-c", PYTEST_ENTRY, stub, "/out/record.jsonl", "/testbed/.real-verifier-config.ini"], { encoding: "utf8" });
     expect(entry.stdout).toBe(RUN_STARTED + "\nrunner -s /verifier/vrun.py /out/record.jsonl /testbed/.real-verifier-config.ini\n");
     expect(entry.status).toBe(3);
+  });
+
+  const id = "tests/test_ops.py::test_add";
+  const run = (over: Partial<RunRecord> = {}): RunRecord => ({ seed: 1, wall_ms: 10, timed_out: false, out_full: false, exit: 0, parsed: { results: { [id]: { status: "pass" } }, seen: [id], notes: [] }, ...over });
+  const tree = (runs: RunRecord[]): TreeResult => ({ label: "t", prepare: { patch: "applied", deleted: [], unlinked: [], skipped: [], restored: [] }, runs });
+
+  test("nothing required passes nothing: allPass of an empty list is false, and readTask refuses a frozen task with no required test", () => {
+    expect(allPass(tree([run()]), [id])).toBe(true);
+    expect(allPass(tree([run()]), [])).toBe(false);
+    const dir = buildTask(specs.decoy, repo(), join(tmp.dir, "out/decoy-nothing-required")).dir;
+    const t = readTask(dir);
+    t.tests.functional = [];
+    saveTask(dir, t);
+    expect(readTask(dir).tests.regression_scope).toEqual(["tests/test_ops.py"]);
+    t.tests.regression = [];
+    t.tests.quarantine = [];
+    t.tests.regression_frozen = regressionDigest(t);
+    saveTask(dir, t);
+    expect(() => readTask(dir)).toThrow("no required test");
+  });
+
+  test("a run that timed out, or filled /out, passes nothing, whatever its record says", () => {
+    expect(allPass(tree([run(), run({ timed_out: true })]), [id])).toBe(false);
+    expect(allPass(tree([run({ out_full: true })]), [id])).toBe(false);
   });
 });
 
