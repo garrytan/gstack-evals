@@ -235,8 +235,8 @@ for role, xs in rows.items():
     stub += sum(y for _, y in xs); reqs += k * sends
     total += int(packets) * (a + b * real)
     print("judge cap %s %s: %d packets, $%.4f a packet plus $%.5f a finding (least squares on the stub batch's lines)" % (item, role, k, a, b))
-cap = math.ceil(total)
-print("judge cap %s: the stub-shaped batch holds %d findings in %d packets and counts at most %d requests (packets x 3 judges x %d sends); its worst case $%.2f. Sized at %.0f findings a packet (%s sessions a packet) on %s packets, the worst case is $%.2f: cap $%d" % (item, sum(per.values()), max(len(v) for v in rows.values()), reqs, sends, stub, real, sessions, packets, total, cap))
+cap = math.ceil(2 * total)
+print("judge cap %s: the stub-shaped batch holds %d findings in %d packets and counts at most %d requests (packets x 3 judges x %d sends); its worst case $%.2f. Sized at %.0f findings a packet (%s sessions a packet) on %s packets, the worst case is $%.2f, and $%.2f if every answer is asked again (judge-run asks an answer again once): cap $%d" % (item, sum(per.values()), max(len(v) for v in rows.values()), reqs, sends, stub, real, sessions, packets, total, 2 * total, cap))
 open(out, "a").write("%s\t%d\n" % (item, cap))
 EOF
 }
