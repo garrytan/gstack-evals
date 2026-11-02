@@ -75,17 +75,20 @@
 //   holds a credential and no provider key enters the session. A step that cannot write it leaves a missing cell,
 //   E_CODEX_CONFIG.
 // - Background work (GST-734). Claude Code 2.1.314 runs Agent calls in the background by default, and while its input
-//   stays open it starts a turn of its own when a background task finishes or a ScheduleWakeup fires. So when a turn ends
-//   and the simulator has no reply, the adapter keeps the session open while work it can see still holds it: a
+//   stays open it starts a turn of its own when a background task finishes or a ScheduleWakeup fires. The hold is opt-in
+//   (GSTA-2's C1 ruling on #141): only a run that sets backgroundWaitMs gets it (review-units always does), and any other
+//   session ends at its turn's result as before and records no session_end. With a wait set, when a turn ends and the
+//   simulator has no reply, the adapter keeps the session open while work it can see still holds it: a
 //   background task the main thread launched that has not finished (the CLI's background_tasks_changed level, less tasks
 //   whose task_notification came, ambient tasks and tasks a subagent launched), or a pending ScheduleWakeup the agent set
 //   while no such task ran. A wakeup set while tasks ran is their fallback: it stops holding the session once they
 //   finish, and session_end lists it under released_wakeups with when it was set, its delay and what ran then. R2's three
 //   fallback sessions (GEVA-151) are why: their 1200 s wakeups would fire after the report and leave a later last turn.
-//   The wait is bounded: in all, the session may sit idle at most backgroundWaitMs (BACKGROUND_WAIT_MS unless the run
-//   sets another), counted from each such turn's result to the main agent's next message. At that deadline the session
-//   ends as a missing cell, E_BACKGROUND_DEADLINE, never as the arm finding nothing. Every other stop (a cap stop, the
-//   turn cap or the allowance, the session's timeout, a crash) keeps its own termination. The outcome's session_end
+//   The wait is bounded: in all, the session may sit idle at most backgroundWaitMs, counted from each such turn's result
+//   to the main agent's next message. At that deadline the session ends as a missing cell, E_BACKGROUND_DEADLINE, never as
+//   the arm finding nothing, and so does a session whose timeout comes while it sits idle on held work (GSTA-2's B1
+//   ruling on #141); a timeout during an active turn stays the arm's. Every other stop (a cap stop, the turn cap or the
+//   allowance, a crash) keeps its own termination. The outcome's session_end
 //   records the cause (clean: nothing held the session at its end; deadline; tasks_pending: it ended another way while
 //   work still held it), what was pending and the idle time waited.
 import type { ChildProcess } from "node:child_process";
@@ -112,7 +115,7 @@ export const CLAUDE_BIN = "claude";
 /** The most model turns a session may take. */
 export const MAX_TURNS = 60;
 
-/** The most time, in all, a session may sit idle with its turn over, waiting on background work it started. */
+/** review-units' default background wait: the most time, in all, a session may sit idle with its turn over, waiting on background work it started. */
 export const BACKGROUND_WAIT_MS = 3_600_000;
 
 export const SYSTEM_PROMPTS = ["sdk-default", "claude-code-preset"] as const;
@@ -142,7 +145,7 @@ export interface ClaudeCodeOptions {
   sessionKind?: "unattended";
   /** Record the turn cap and the slot's allowance as their own terminations (turn_cap, allowance_stop); unset, today's. */
   capStops?: boolean;
-  /** The most idle time, in all, the session may wait on its background work; BACKGROUND_WAIT_MS when unset. */
+  /** The most idle time, in all, the session may wait on its background work; unset, it ends at its turn's result as before (no hold, no session_end). */
   backgroundWaitMs?: number;
   /** The persona's free-form answers, evaluator side; absent, an unanswered question gets the simulator's fallback. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
@@ -345,7 +348,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let ended = false;
       let agentTurns = 0;
       let usage: TokenUsage | null = null;
-      const waitMs = o.backgroundWaitMs ?? BACKGROUND_WAIT_MS;
+      const waitMs = o.backgroundWaitMs ?? null;
       const level = new Map<string, { run: string; label: string }>();
       const landed = new Set<string>();
       const wakeupCalls = new Set<string>();
@@ -397,12 +400,16 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         const now = stalled();
         if (now < deadline) timer = setTimeout(expire, deadline - now);
         else if (full) infra(new Error("the evaluator's event loop stalled past the session's stall credit of " + cap + " ms, a tenth of its timeout, so the timeout is not the arm's"));
-        else end({ kind: "timeout" });
+        else if (idleSince !== null) {
+          overdue = true;
+          log("adapter: the session's timeout came while it sat idle waiting on its background work (" + holding().join("; ") + "), so it ends at the background deadline as a missing cell, E_BACKGROUND_DEADLINE, not the arm's\n");
+          end({ kind: "missing", code: "E_BACKGROUND_DEADLINE" });
+        } else end({ kind: "timeout" });
       };
       let timer = setTimeout(expire, timeoutMs);
       const watch = setInterval(() => {
         stalled();
-        if (idleSince === null || stop || waited + performance.now() - idleSince < waitMs) return;
+        if (waitMs === null || idleSince === null || stop || waited + performance.now() - idleSince < waitMs) return;
         overdue = true;
         log("adapter: the session sat idle " + waitMs + " ms in all waiting on its background work (" + holding().join("; ") + "), so it ends at that deadline as a missing cell, E_BACKGROUND_DEADLINE, not the arm's\n");
         end({ kind: "missing", code: "E_BACKGROUND_DEADLINE" });
@@ -542,7 +549,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               if ("reply" in next) {
                 inbox.push(userMessage(next.reply));
                 awaitingResult = true;
-              } else if (m.subtype === "success" && holding().length) {
+              } else if (waitMs !== null && m.subtype === "success" && holding().length) {
                 idleSince = performance.now();
                 awaitingResult = true;
               } else {
@@ -602,7 +609,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         exit_code: exitCode,
         signal: exitSignal,
         credited_stall_ms: Math.round(credited),
-        session_end,
+        ...(waitMs !== null ? { session_end } : {}),
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

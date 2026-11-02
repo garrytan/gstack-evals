@@ -37,7 +37,7 @@ export interface HostDriverOptions {
   sessionKind?: "unattended";
   /** Claude Code only: record the turn cap and the slot's allowance as their own terminations (turn_cap, allowance_stop). */
   capStops?: boolean;
-  /** Claude Code only: the most idle time, in all, a session may wait on its background work (the driver's BACKGROUND_WAIT_MS when unset). */
+  /** Claude Code only: the most idle time, in all, a session may wait on its background work; unset, it ends at its turn's result (no hold). */
   backgroundWaitMs?: number;
 }
 

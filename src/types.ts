@@ -202,7 +202,7 @@ export interface ErrorRecord {
  * overall. A deadline end is a missing cell (E_BACKGROUND_DEADLINE), never the arm finding nothing.
  */
 export interface SessionEnd {
-  /** clean: nothing held the session at its end; deadline: its background wait ran out; tasks_pending: it ended another way while work still held it. */
+  /** clean: nothing held the session at its end; deadline: its background wait ran out, or its timeout came while it sat idle on held work; tasks_pending: it ended another way while work still held it. */
   cause: "clean" | "deadline" | "tasks_pending";
   /** What held the session at its end: each unfinished background task as its type and description, and a pending ScheduleWakeup. */
   pending: string[];
@@ -210,6 +210,8 @@ export interface SessionEnd {
   waited_ms: number;
   /** ScheduleWakeups the adapter did not wait for: set while background tasks ran, and still pending once they finished. */
   released_wakeups: { set_at: string; delay_s: number; fires_at: string; running: string[] }[];
+  /** review-units, on a deadline end only: whether a findings block existed when the deadline hit. Recorded, never scored. */
+  findings_block?: boolean;
 }
 
 // Verdict inputs (interface v0.5): what the trial module (U9) and the host adapters (U10) hand the verdict engine (U6)

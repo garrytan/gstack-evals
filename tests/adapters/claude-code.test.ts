@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { ALLOWANCE_SPENT, claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
+import { ALLOWANCE_SPENT, BACKGROUND_WAIT_MS, claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
+import { hostDriver } from "../../src/adapters/host.ts";
 import { parseFindings } from "../../src/trial/review/findings.ts";
 import { loadReaderMap, readerUsage, readTranscript } from "../../src/trial/review/readers.ts";
 import { priceRequest, usageCost } from "../../src/runner/pricing/prices.ts";
@@ -718,14 +719,16 @@ const REPORT = "Report.\n\n```json\n[{\"file\": \"src/a.ts\", \"line\": 3, \"sev
 
 describe("GST-734: background work on the pinned Agent SDK against a stub CLI (keyless)", () => {
   const STUB = join(import.meta.dir, "fixtures", "stub-cli.cjs");
-  const bg = async (spec: Record<string, unknown>, o: { waitMs?: number; timeoutMs?: number; capStops?: boolean } = {}) => {
+  const bg = async (spec: Record<string, unknown>, o: { waitMs?: number | null; timeoutMs?: number; capStops?: boolean; host?: boolean } = {}) => {
     const out = mkdtempSync(join(tmpdir(), "stub-bg-"));
     const session = {
       exec: () => ({ exitCode: 0, timedOut: false, stdout: "", stderr: "" }),
       spawn: (argv: string[], e: Record<string, string>) => (argv[0] === "true" ? spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [STUB, ...argv.slice(1)], { env: { ...e, PATH: process.env.PATH ?? "", STUB_MODE: "background", STUB_BG: JSON.stringify(spec), STUB_FINAL: REPORT }, stdio: ["pipe", "pipe", "pipe"] })),
       stop: () => {},
     };
-    const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" }, skill: null, out, ...(o.waitMs !== undefined ? { backgroundWaitMs: o.waitMs } : {}), ...(o.capStops ? { capStops: true } : {}) });
+    const wait = o.waitMs === null ? {} : { backgroundWaitMs: o.waitMs ?? BACKGROUND_WAIT_MS };
+    const proxy = { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" };
+    const driver = o.host ? hostDriver({ host: "claude", model: MODEL, provider: "anthropic", proxy, interactive: false, skill: null, out, ...wait, ...(o.capStops ? { capStops: true } : {}) }) : claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy, skill: null, out, ...wait, ...(o.capStops ? { capStops: true } : {}) });
     const t0 = performance.now();
     const outcome = await driver.run(session as never, { id: "t", prompt: "Review the branch." }, o.timeoutMs ?? 20_000);
     const log = existsSync(join(out, "cli-stderr.log")) ? readFileSync(join(out, "cli-stderr.log"), "utf8") : "";
@@ -741,6 +744,15 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     expect(parseFindings(r.outcome)).toMatchObject({ kind: "findings", findings: [{ file: "src/a.ts", claim: "off by one" }] });
     expect(r.outcome.session_end).toMatchObject({ cause: "clean", pending: [], released_wakeups: [] });
     expect(r.outcome.session_end!.waited_ms).toBeGreaterThanOrEqual(700);
+  }, 30_000);
+
+  // Value: protects=GSTA-2's C1 ruling on #141: the hold is opt-in, so a runner that sets no wait (skill-eval's run-host.ts and every runner but review-units, which reach the driver through hostDriver) ends at the turn's result as before and records no session_end; fails_when=a session with no wait set waits on its background work or records session_end; why_new=the red team on #141 (skill-eval sessions held with no setting or record); seam=hostDriver and the driver's backgroundWaitMs; no_claim=a real model
+  test("with no wait set, the session ends at the turn's result as before, through hostDriver too", async () => {
+    for (const host of [false, true]) {
+      const r = await bg({ readers: [agent("tu_a", 300)] }, { waitMs: null, host });
+      expect([r.outcome.termination, r.outcome.turns, "session_end" in r.outcome]).toEqual([{ kind: "completed" }, ["Waiting."], false]);
+      expect(r.ms).toBeLessThan(3_000);
+    }
   }, 30_000);
 
   // Value: protects=a background Bash task holds the session like an Agent task, and a level that arrives after its turn (the SDK leaves its order open) never strands a session that has nothing left to wait for; fails_when=only Agent tasks are waited on, or a stale level holds a finished task until the deadline; why_new=GST-734 (tstack and a local_bash in stacks round 1); seam=the level and task_notification handling; no_claim=a real model
@@ -787,8 +799,8 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     expect(r.ms).toBeLessThan(5_000);
   }, 30_000);
 
-  // Value: protects=spend and cap rules during the wait: a refusal on a turn the CLI takes while readers are out still ends the session as a cap stop, as allowance_stop under capStops, or as a missing E_ALLOWANCE cell without it, and the record says tasks were pending; a session timeout during the wait stays the arm's timeout; fails_when=a longer session escapes its allowance, a cap stop becomes a deadline or a completion, or the timeout is swallowed; why_new=GST-734 brief (spend and cap rules still hold); seam=the refusal and timeout paths with a wait open; no_claim=the proxy, which the real CLI test drives
-  test("a cap stop, an allowance stop and the timeout keep their terminations while readers are out", async () => {
+  // Value: protects=spend and cap rules during the wait: a refusal on a turn the CLI takes while readers are out still ends the session as a cap stop, as allowance_stop under capStops, or as a missing E_ALLOWANCE cell without it, and the record says tasks were pending; a session timeout while the session sits idle on held work ends it at the deadline (E_BACKGROUND_DEADLINE, GSTA-2's B1 ruling on #141), and one during an active turn stays the arm's timeout; fails_when=a longer session escapes its allowance, a cap stop becomes a deadline or a completion, or the timeout is swallowed; why_new=GST-734 brief (spend and cap rules still hold); seam=the refusal and timeout paths with a wait open; no_claim=the proxy, which the real CLI test drives
+  test("a cap stop and an allowance stop keep their terminations while readers are out; a timeout is the arm's mid-turn and the deadline while idle", async () => {
     const out = [agent("tu_a", 300), agent("tu_b", null)];
     const cap = await bg({ readers: out, wake_error: "API Error: 402 {\"code\":\"CAP_STOP\",\"message\":\"the lease is spent\"}" });
     expect([cap.outcome.termination, cap.outcome.session_end?.cause, cap.outcome.session_end?.pending]).toEqual([{ kind: "cap_stop" }, "tasks_pending", ['local_agent "reader tu_b"']]);
@@ -799,7 +811,10 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     const today = await bg({ readers: out, wake_error: spent });
     expect(today.outcome.termination).toEqual({ kind: "missing", code: "E_ALLOWANCE" });
     const late = await bg({ readers: [agent("tu_b", null)] }, { waitMs: 60_000, timeoutMs: 1_500 });
-    expect([late.outcome.termination, late.outcome.session_end?.cause, late.outcome.session_end?.pending]).toEqual([{ kind: "timeout" }, "tasks_pending", ['local_agent "reader tu_b"']]);
+    expect([late.outcome.termination, late.outcome.session_end?.cause, late.outcome.session_end?.pending]).toEqual([{ kind: "missing", code: "E_BACKGROUND_DEADLINE" }, "deadline", ['local_agent "reader tu_b"']]);
+    expect(late.log).toContain("the session's timeout came while it sat idle");
+    const busy = await bg({ readers: [agent("tu_a", 300, { stall: true }), agent("tu_b", null)] }, { waitMs: 60_000, timeoutMs: 1_500 });
+    expect([busy.outcome.termination, busy.outcome.session_end?.cause, busy.outcome.session_end?.pending]).toEqual([{ kind: "timeout" }, "tasks_pending", ['local_agent "reader tu_b"']]);
   }, 60_000);
 });
 
@@ -816,7 +831,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
   };
 
   test("canary: two background readers and an ended turn still produce the report", async () => {
-    const r = await run(readers({ A: () => sleep(1_000), B: () => sleep(2_500) }), { prompt: "Review the branch." });
+    const r = await run(readers({ A: () => sleep(1_000), B: () => sleep(2_500) }), { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS } });
     expect(r.outcome.termination).toEqual({ kind: "completed" });
     expect(r.outcome.turns.at(-1)).toBe(REPORT);
     expect(parseFindings(r.outcome)).toMatchObject({ kind: "findings", findings: [{ claim: "off by one" }] });
@@ -832,7 +847,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
       const all = JSON.stringify(t.body.messages);
       return [{ type: "text", text: all.includes("<task-notification>") && all.includes("toolu_sh</tool-use-id>") && all.includes("<status>completed</status>") ? REPORT : "Waiting on the background command." }];
     };
-    const r = await run(script, { prompt: "Review the branch." });
+    const r = await run(script, { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS } });
     expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, REPORT, "clean"]);
   }, 240_000);
 
@@ -860,7 +875,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
       return [{ type: "text", text: JSON.stringify(t.body.messages).includes("FINDING-A") ? REPORT : "The reader is running in the background." }];
     };
     const t0 = performance.now();
-    const r = await run(script, { prompt: "Review the branch." });
+    const r = await run(script, { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS } });
     expect(performance.now() - t0).toBeLessThan(60_000);
     expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause, r.outcome.session_end?.pending]).toEqual([{ kind: "completed" }, REPORT, "clean", []]);
     expect(r.outcome.session_end!.released_wakeups).toHaveLength(1);
@@ -874,7 +889,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
       if (!t.results.has("toolu_wake")) return [{ type: "tool_use", id: "toolu_wake", name: "ScheduleWakeup", input: { delaySeconds: 60, reason: "check the build again", prompt: "WAKE-PROMPT: check the build", noop: false } }];
       return [{ type: "text", text: "I will check back when the wakeup fires." }];
     };
-    const r = await run(script, { prompt: "Review the branch." });
+    const r = await run(script, { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS } });
     expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause, r.outcome.session_end?.released_wakeups]).toEqual([{ kind: "completed" }, REPORT, "clean", []]);
     expect(r.lines("transcript.ndjson").some((m) => m.type === "command_lifecycle" && m.state === "started" && m.wakeup_source === "loop_wakeup")).toBe(true);
   }, 240_000);
@@ -890,7 +905,7 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
     open.push(h);
     const model = "claude-opus-5-5";
     const b = h.proxy.bind({ cell: { run_id: "run-test", arm: "after", task: "t", model, trial: 0, attempt: 1 }, models: ["anthropic:" + model], allowance_micros: 1_000_000 });
-    const driver = claudeCodeDriver({ model, provider: "anthropic", proxy: { baseUrl: h.baseUrl, slot: b.slot, token: b.token }, skill: null, out: join(h.dir, "host"), query: query as never, capStops: true });
+    const driver = claudeCodeDriver({ model, provider: "anthropic", proxy: { baseUrl: h.baseUrl, slot: b.slot, token: b.token }, skill: null, out: join(h.dir, "host"), query: query as never, capStops: true, backgroundWaitMs: BACKGROUND_WAIT_MS });
     const outcome = await driver.run(h.session(join(h.dir, "work", "t"), join(h.dir, "home"), driver.env!), { id: "t", prompt: "Review the branch." }, 120_000);
     expect(outcome.termination).toEqual({ kind: "allowance_stop" });
     const refusals = readFileSync(join(h.dir, "journal.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.kind === "refusal");

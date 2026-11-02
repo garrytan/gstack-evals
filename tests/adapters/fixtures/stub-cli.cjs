@@ -23,6 +23,8 @@
 // wakeup fires after its delay: a command_lifecycle, then a turn whose text is wakeup.text, or "Still waiting." while a
 // reader is out. STUB_BG.wake_error, an API error's text (status STUB_API_STATUS), answers the first turn after the prompt's.
 // STUB_BG.late_level sends a landing reader's level after its turn, as the SDK allows (the level's order is unspecified).
+// STUB_BG.first replaces the prompt's turn text ("Waiting."). A reader with stall true starts its landing turn (init and
+// its text) and never ends it, so the main agent is mid-turn from then on.
 const rl = require("readline").createInterface({ input: process.stdin });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const env = process.env;
@@ -88,7 +90,7 @@ rl.on("line", (line) => {
     const level = () => out({ type: "system", subtype: "background_tasks_changed", tasks: live.map(task), session_id: "s", uuid: "lv" + live.length });
     const out_ = () => live.some((r) => !r.ambient && !r.nested);
     let woken = 0;
-    const turn = (text, origin) => {
+    const turn = (text, origin, stall) => {
       woken++;
       out({ type: "system", subtype: "init", session_id: "s", model: "stub", tools: [], cwd: "/", permissionMode: "default", apiKeySource: "none", claude_code_version: "0", skills: [], mcp_servers: [], slash_commands: [], output_style: "default", uuid: "i" + woken });
       if (bg.wake_error && woken === 1) {
@@ -97,6 +99,7 @@ rl.on("line", (line) => {
         return;
       }
       out(assistant("k" + woken, [{ type: "text", text }], "end_turn"));
+      if (stall) return;
       out({ ...result("k" + woken, text), ...(origin ? { origin } : {}) });
     };
     for (const r of bg.readers) {
@@ -120,15 +123,15 @@ rl.on("line", (line) => {
         out({ type: "command_lifecycle", command_uuid: "c1", state: "completed", uuid: "cl2", session_id: "s" });
       }, bg.wakeup.delay);
     }
-    out(assistant("wait", [{ type: "text", text: "Waiting." }], "end_turn"));
-    out(result("wait", "Waiting."));
+    out(assistant("wait", [{ type: "text", text: bg.first || "Waiting." }], "end_turn"));
+    out(result("wait", bg.first || "Waiting."));
     for (const r of bg.readers.filter((x) => x.delay !== null)) setTimeout(() => {
       out({ type: "assistant", message: { id: "sub_" + r.id, type: "message", role: "assistant", model: "stub", content: [{ type: "text", text: "FINDING from " + r.id }], stop_reason: null, usage }, parent_tool_use_id: r.id, session_id: "s", uuid: "as_" + r.id });
       out({ type: "system", subtype: "task_updated", task_id: "task_" + r.id, run_id: "run_" + r.id, patch: { status: "completed", end_time: Date.now() }, session_id: "s", uuid: "tu_" + r.id });
       out({ type: "system", subtype: "task_notification", task_id: "task_" + r.id, run_id: "run_" + r.id, tool_use_id: r.id, status: "completed", output_file: "", summary: "done", session_id: "s", uuid: "tn_" + r.id });
       live.splice(live.indexOf(r), 1);
       if (!bg.late_level) level();
-      turn(out_() ? "Still waiting." : env.STUB_FINAL || "done", { kind: "task-notification", producer: "session-task", runId: "run_" + r.id });
+      turn(out_() ? "Still waiting." : env.STUB_FINAL || "done", { kind: "task-notification", producer: "session-task", runId: "run_" + r.id }, r.stall);
       if (bg.late_level) level();
     }, r.delay);
     return;
