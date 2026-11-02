@@ -1,0 +1,983 @@
+{
+  "prompts": {
+    "f5731b91727d7e723b2b0601b68e82df5acbacb4874e095c53b0a74fda0b8d3c": "/review Review the changes on this branch against the base branch main: the commits this branch adds since it left main, as git diff main...HEAD shows them.\n\nYou may write and run throwaway tests, repro scripts and commands, but only under a scratch directory outside this repository (for example one made with mktemp -d). Do not change the code under review, and do not commit or push.\n\nEnd your reply with one fenced json block that lists your findings: a JSON array with one object per finding, or [] when you have none. Each object has these fields:\n- \"file\": the path of the file, relative to the repository root\n- \"line\": the line number on this branch, or null\n- \"severity\": the label your review procedure gives the finding\n- \"claim\": what is wrong, in one or two sentences\n- \"evidence\": what shows it, such as the code involved or a command you ran and what it printed\n- \"confirmed\": true or false when your procedure confirms findings by running something; leave it out otherwise",
+    "d11fe86001b2285c61a85e4cb3a786baabe92ca974a2c3a5b2b55aa94edb8596": "Review the changes on this branch against the base branch main: the commits this branch adds since it left main, as git diff main...HEAD shows them.\n\nYou may write and run throwaway tests, repro scripts and commands, but only under a scratch directory outside this repository (for example one made with mktemp -d). Do not change the code under review, and do not commit or push.\n\nEnd your reply with one fenced json block that lists your findings: a JSON array with one object per finding, or [] when you have none. Each object has these fields:\n- \"file\": the path of the file, relative to the repository root\n- \"line\": the line number on this branch, or null\n- \"severity\": the label your review procedure gives the finding\n- \"claim\": what is wrong, in one or two sentences\n- \"evidence\": what shows it, such as the code involved or a command you ran and what it printed\n- \"confirmed\": true or false when your procedure confirms findings by running something; leave it out otherwise",
+    "fe6cc47428767a9b5cec9c082886fb991ada515e30e7b597596aef16d8cc6790": "/pstack:interrogate Review the changes on this branch against the base branch main: the commits this branch adds since it left main, as git diff main...HEAD shows them.\n\nYou may write and run throwaway tests, repro scripts and commands, but only under a scratch directory outside this repository (for example one made with mktemp -d). Do not change the code under review, and do not commit or push.\n\nEnd your reply with one fenced json block that lists your findings: a JSON array with one object per finding, or [] when you have none. Each object has these fields:\n- \"file\": the path of the file, relative to the repository root\n- \"line\": the line number on this branch, or null\n- \"severity\": the label your review procedure gives the finding\n- \"claim\": what is wrong, in one or two sentences\n- \"evidence\": what shows it, such as the code involved or a command you ran and what it printed\n- \"confirmed\": true or false when your procedure confirms findings by running something; leave it out otherwise",
+    "b6274792fb1c4d49bdc3a7c74e74f076488ad7c3fc9202b847a6d87c1a46a888": "/sol-loop Run one review round and stop before any fix. Review the changes on this branch against the base branch main: the commits this branch adds since it left main, as git diff main...HEAD shows them.\n\nYou may write and run throwaway tests, repro scripts and commands, but only under a scratch directory outside this repository (for example one made with mktemp -d). Do not change the code under review, and do not commit or push.\n\nEnd your reply with one fenced json block that lists your findings: a JSON array with one object per finding, or [] when you have none. Each object has these fields:\n- \"file\": the path of the file, relative to the repository root\n- \"line\": the line number on this branch, or null\n- \"severity\": the label your review procedure gives the finding\n- \"claim\": what is wrong, in one or two sentences\n- \"evidence\": what shows it, such as the code involved or a command you ran and what it printed\n- \"confirmed\": true or false when your procedure confirms findings by running something; leave it out otherwise",
+    "7c8d2a8f4616a8cfa5f721e4305e54e7eb2337260ca6379f01364391a9913786": "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed. Review the changes on this branch against the base branch main: the commits this branch adds since it left main, as git diff main...HEAD shows them.\n\nYou may write and run throwaway tests, repro scripts and commands, but only under a scratch directory outside this repository (for example one made with mktemp -d). Do not change the code under review, and do not commit or push.\n\nEnd your reply with one fenced json block that lists your findings: a JSON array with one object per finding, or [] when you have none. Each object has these fields:\n- \"file\": the path of the file, relative to the repository root\n- \"line\": the line number on this branch, or null\n- \"severity\": the label your review procedure gives the finding\n- \"claim\": what is wrong, in one or two sentences\n- \"evidence\": what shows it, such as the code involved or a command you ran and what it printed\n- \"confirmed\": true or false when your procedure confirms findings by running something; leave it out otherwise"
+  },
+  "configs": {
+    "stacks-r1": {
+      "config": "stacks-r1",
+      "args": [
+        "--arms",
+        "none",
+        "gstack=garrytan/gstack@53522b1bbc60b3dc820842371f80ebc9db7911ec",
+        "pstack=cursor/plugins@c742dd61706fbacc1b95f1a20b7b988cf096ce6c:harness/pstack/claude-code",
+        "tstack=t3dotgg/tstack@1085050f3baed1ac724caa4a8166145fb2ac88af",
+        "--models",
+        "claude-opus-5-5",
+        "particle-ai/particle-1",
+        "--severity-map",
+        "<repo>/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json",
+        "--allowance",
+        "15"
+      ],
+      "exit": 0,
+      "out": [
+        "lease null settled: $0.00 committed, 0 unknown calls",
+        "none-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "none-particle-1: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "gstack-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "gstack-particle-1: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "pstack-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "pstack-particle-1: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "tstack-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "tstack-particle-1: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "spent $0.00; arms under <root>/out/arms"
+      ],
+      "errors": [],
+      "rig": {
+        "host": "claude",
+        "models": [
+          "claude-opus-5-5",
+          "particle-ai/particle-1"
+        ],
+        "item": "capture",
+        "arms": [
+          {
+            "name": "none",
+            "kind": "bare"
+          },
+          {
+            "name": "gstack",
+            "kind": "stack",
+            "stack": {
+              "repo": "garrytan/gstack",
+              "sha": "53522b1bbc60b3dc820842371f80ebc9db7911ec"
+            },
+            "install": {}
+          },
+          {
+            "name": "pstack",
+            "kind": "stack",
+            "stack": {
+              "repo": "cursor/plugins",
+              "sha": "c742dd61706fbacc1b95f1a20b7b988cf096ce6c",
+              "path": "harness/pstack/claude-code"
+            },
+            "install": {
+              "claude": "(cd skills/poteto-mode/scripts && bun -e 'import(\"./bootstrap.ts\").then((m) => m.ensureDependenciesInstalled())')"
+            }
+          },
+          {
+            "name": "tstack",
+            "kind": "stack",
+            "stack": {
+              "repo": "t3dotgg/tstack",
+              "sha": "1085050f3baed1ac724caa4a8166145fb2ac88af"
+            },
+            "install": {
+              "claude": "mkdir -p \"$HOME/.claude/skills\" && cp -R skills/* \"$HOME/.claude/skills/\"",
+              "codex": "mkdir -p \"$HOME/.codex/skills\" && cp -R skills/* \"$HOME/.codex/skills/\""
+            }
+          }
+        ],
+        "skill": null,
+        "skills": {
+          "gstack": "review",
+          "pstack": "interrogate",
+          "tstack": "sol-loop"
+        },
+        "voice": null
+      },
+      "run": {
+        "host": "claude",
+        "arms": [
+          {
+            "name": "none",
+            "told": "none"
+          },
+          {
+            "name": "gstack",
+            "told": "gstack"
+          },
+          {
+            "name": "pstack",
+            "told": "pstack"
+          },
+          {
+            "name": "tstack",
+            "told": "tstack"
+          }
+        ],
+        "models": [
+          "claude-opus-5-5",
+          "particle-ai/particle-1"
+        ],
+        "passes": 1,
+        "parallel": 1,
+        "timeoutS": 3600,
+        "cap": 1000000000,
+        "allowanceMicros": 15000000,
+        "date": "2026-11-02",
+        "repair": false,
+        "maxTurns": 60,
+        "backgroundWaitS": 3600,
+        "readers_sha256": null,
+        "severity_map_sha256": "b737af43cb6d73da8c7059a904fb1c02e1541f7cae248f91ca4d2d1e1ba0e56d"
+      },
+      "sessions": [
+        {
+          "arm": "gstack",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "review",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/gstack/gstack-7-<head8>/p1/home/.claude/skills/review"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/gstack/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "f5731b91727d7e723b2b0601b68e82df5acbacb4874e095c53b0a74fda0b8d3c",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "e26d10d203951b9c092b73a581ebd455ab91d05f20dacd841e9d07d11144a2b4",
+            "task": "1eecc49ca417933e9dbcc68046638af01f7b4183904ec9ee53bbcb4ebe2a40a1",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "gstack",
+          "model": "particle-ai/particle-1",
+          "driver": {
+            "host": "claude",
+            "model": "particle-ai/particle-1",
+            "provider": "openrouter",
+            "interactive": false,
+            "skill": {
+              "name": "review",
+              "roots": [
+                "<root>/out/runs/particle-ai_particle-1/gstack/gstack-7-<head8>/p1/home/.claude/skills/review"
+              ],
+              "home": "<root>/out/runs/particle-ai_particle-1/gstack/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "f5731b91727d7e723b2b0601b68e82df5acbacb4874e095c53b0a74fda0b8d3c",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "e26d10d203951b9c092b73a581ebd455ab91d05f20dacd841e9d07d11144a2b4",
+            "task": "1eecc49ca417933e9dbcc68046638af01f7b4183904ec9ee53bbcb4ebe2a40a1",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "110b6beb2223613c2be06b544c4927844ee7e45e142a6936535e0dffcf2c54f4",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "none",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": null,
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "d11fe86001b2285c61a85e4cb3a786baabe92ca974a2c3a5b2b55aa94edb8596",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "7643aee8100647b87578fe8379274e5e884afb40178a8e0d321c609e857279b4",
+            "task": "0a160afab99a964bf170922df448d098191b472b2090174af34dc667081d82f6",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "none",
+          "model": "particle-ai/particle-1",
+          "driver": {
+            "host": "claude",
+            "model": "particle-ai/particle-1",
+            "provider": "openrouter",
+            "interactive": false,
+            "skill": null,
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "d11fe86001b2285c61a85e4cb3a786baabe92ca974a2c3a5b2b55aa94edb8596",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "7643aee8100647b87578fe8379274e5e884afb40178a8e0d321c609e857279b4",
+            "task": "0a160afab99a964bf170922df448d098191b472b2090174af34dc667081d82f6",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "110b6beb2223613c2be06b544c4927844ee7e45e142a6936535e0dffcf2c54f4",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "pstack",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "interrogate",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/pstack/gstack-7-<head8>/p1/home/.claude/skills/interrogate"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/pstack/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "fe6cc47428767a9b5cec9c082886fb991ada515e30e7b597596aef16d8cc6790",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "8bb4a375256de6ee66c3d29751b09daac945f5801c193a2ac478c2de4bebed63",
+            "task": "d55da838e7a3b00c835235c71dc310f9629fdd555b74bd228265a4c33a90323b",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "pstack",
+          "model": "particle-ai/particle-1",
+          "driver": {
+            "host": "claude",
+            "model": "particle-ai/particle-1",
+            "provider": "openrouter",
+            "interactive": false,
+            "skill": {
+              "name": "interrogate",
+              "roots": [
+                "<root>/out/runs/particle-ai_particle-1/pstack/gstack-7-<head8>/p1/home/.claude/skills/interrogate"
+              ],
+              "home": "<root>/out/runs/particle-ai_particle-1/pstack/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "fe6cc47428767a9b5cec9c082886fb991ada515e30e7b597596aef16d8cc6790",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "8bb4a375256de6ee66c3d29751b09daac945f5801c193a2ac478c2de4bebed63",
+            "task": "d55da838e7a3b00c835235c71dc310f9629fdd555b74bd228265a4c33a90323b",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "110b6beb2223613c2be06b544c4927844ee7e45e142a6936535e0dffcf2c54f4",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "tstack",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "sol-loop",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/tstack/gstack-7-<head8>/p1/home/.claude/skills/sol-loop"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/tstack/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "b6274792fb1c4d49bdc3a7c74e74f076488ad7c3fc9202b847a6d87c1a46a888",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "812a366180abb2384e0ab50f2476a1aca7cf081e7e47eace864b030e5d80b928",
+            "task": "838293c66f8a178136c1d7589f2e253780e3d464005b52f48cbd506628984b2f",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "tstack",
+          "model": "particle-ai/particle-1",
+          "driver": {
+            "host": "claude",
+            "model": "particle-ai/particle-1",
+            "provider": "openrouter",
+            "interactive": false,
+            "skill": {
+              "name": "sol-loop",
+              "roots": [
+                "<root>/out/runs/particle-ai_particle-1/tstack/gstack-7-<head8>/p1/home/.claude/skills/sol-loop"
+              ],
+              "home": "<root>/out/runs/particle-ai_particle-1/tstack/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "b6274792fb1c4d49bdc3a7c74e74f076488ad7c3fc9202b847a6d87c1a46a888",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "812a366180abb2384e0ab50f2476a1aca7cf081e7e47eace864b030e5d80b928",
+            "task": "838293c66f8a178136c1d7589f2e253780e3d464005b52f48cbd506628984b2f",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "110b6beb2223613c2be06b544c4927844ee7e45e142a6936535e0dffcf2c54f4",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        }
+      ],
+      "told": {
+        "gstack-opus": {
+          "arm": "gstack",
+          "prefix": "/review",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "gstack-particle-1": {
+          "arm": "gstack",
+          "prefix": "/review",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "none-opus": {
+          "arm": "none",
+          "prefix": "",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "none-particle-1": {
+          "arm": "none",
+          "prefix": "",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "pstack-opus": {
+          "arm": "pstack",
+          "prefix": "/pstack:interrogate",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "pstack-particle-1": {
+          "arm": "pstack",
+          "prefix": "/pstack:interrogate",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "tstack-opus": {
+          "arm": "tstack",
+          "prefix": "/sol-loop Run one review round and stop before any fix.",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "tstack-particle-1": {
+          "arm": "tstack",
+          "prefix": "/sol-loop Run one review round and stop before any fix.",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        }
+      }
+    },
+    "r2-none": {
+      "config": "r2-none",
+      "args": [
+        "--arms",
+        "none",
+        "--models",
+        "claude-opus-5-5",
+        "--system-prompt",
+        "none=claude-code-preset",
+        "--max-turns",
+        "200",
+        "--allowance",
+        "40",
+        "--cap-stops",
+        "--reader-map",
+        "<repo>/src/trial/review/reader-maps/gstack-77fe28c39796.json"
+      ],
+      "exit": 0,
+      "out": [
+        "lease null settled: $0.00 committed, 0 unknown calls",
+        "none-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "spent $0.00; arms under <root>/out/arms"
+      ],
+      "errors": [],
+      "rig": {
+        "host": "claude",
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "item": "capture",
+        "arms": [
+          {
+            "name": "none",
+            "kind": "bare"
+          }
+        ],
+        "skill": null,
+        "skills": {},
+        "voice": null
+      },
+      "run": {
+        "host": "claude",
+        "arms": [
+          {
+            "name": "none",
+            "told": "none",
+            "systemPrompt": "claude-code-preset"
+          }
+        ],
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "passes": 1,
+        "parallel": 1,
+        "timeoutS": 3600,
+        "cap": 1000000000,
+        "allowanceMicros": 40000000,
+        "date": "2026-11-02",
+        "repair": false,
+        "maxTurns": 200,
+        "backgroundWaitS": 3600,
+        "capStops": true,
+        "readers_sha256": "9cb0e15069aa1b28ae370728cd87ef2d441dcf2cfa3a28ce4c75bbd1fa2292ed",
+        "severity_map_sha256": null
+      },
+      "sessions": [
+        {
+          "arm": "none",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": null,
+            "systemPrompt": "claude-code-preset",
+            "maxTurns": 200,
+            "capStops": true,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "d11fe86001b2285c61a85e4cb3a786baabe92ca974a2c3a5b2b55aa94edb8596",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "7643aee8100647b87578fe8379274e5e884afb40178a8e0d321c609e857279b4",
+            "task": "8598302b02f96af50d8ddf7fbe29c5d62316d3a54bc7ae3f5075757b7c9b2333",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        }
+      ],
+      "told": {
+        "none-opus": {
+          "arm": "none",
+          "prefix": "",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        }
+      }
+    },
+    "r2-full": {
+      "config": "r2-full",
+      "args": [
+        "--arms",
+        "gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12",
+        "--models",
+        "claude-opus-5-5",
+        "--system-prompt",
+        "gstack-full=claude-code-preset",
+        "--told-prefix",
+        "gstack-full=<repo>/wiki/plans/2026-11-02-geva-122-r2-amendment/told-gstack-full.txt",
+        "--max-turns",
+        "200",
+        "--allowance",
+        "40",
+        "--cap-stops",
+        "--reader-map",
+        "<repo>/src/trial/review/reader-maps/gstack-77fe28c39796.json"
+      ],
+      "exit": 0,
+      "out": [
+        "lease null settled: $0.00 committed, 0 unknown calls",
+        "gstack-full-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "spent $0.00; arms under <root>/out/arms"
+      ],
+      "errors": [],
+      "rig": {
+        "host": "claude",
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "item": "capture",
+        "arms": [
+          {
+            "name": "gstack-full",
+            "kind": "stack",
+            "stack": {
+              "repo": "garrytan/gstack",
+              "sha": "77fe28c39796cf5573e3d0836b83b2ee436a8f12"
+            },
+            "install": {}
+          }
+        ],
+        "skill": null,
+        "skills": {
+          "gstack-full": "review"
+        },
+        "voice": null
+      },
+      "run": {
+        "host": "claude",
+        "arms": [
+          {
+            "name": "gstack-full",
+            "told": "gstack",
+            "systemPrompt": "claude-code-preset",
+            "toldPrefix": "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed."
+          }
+        ],
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "passes": 1,
+        "parallel": 1,
+        "timeoutS": 3600,
+        "cap": 1000000000,
+        "allowanceMicros": 40000000,
+        "date": "2026-11-02",
+        "repair": false,
+        "maxTurns": 200,
+        "backgroundWaitS": 3600,
+        "capStops": true,
+        "readers_sha256": "9cb0e15069aa1b28ae370728cd87ef2d441dcf2cfa3a28ce4c75bbd1fa2292ed",
+        "severity_map_sha256": null
+      },
+      "sessions": [
+        {
+          "arm": "gstack-full",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "review",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/gstack-full/gstack-7-<head8>/p1/home/.claude/skills/review"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/gstack-full/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "systemPrompt": "claude-code-preset",
+            "maxTurns": 200,
+            "capStops": true,
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "7c8d2a8f4616a8cfa5f721e4305e54e7eb2337260ca6379f01364391a9913786",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "86bb463b1f4d7c3abd7b4464a2e8346155ecc708f5f6330afb918b902d9dae3c",
+            "task": "60bffcdb7bbeac7dbea2dad66e0e022d5ab2e361e754e77dd0947146cf1822c1",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        }
+      ],
+      "told": {
+        "gstack-full-opus": {
+          "arm": "gstack",
+          "prefix": "/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed.",
+          "prefix_sha256": "db9ec7b42f9b2e86c7f51354d581cb47d775fbbc2ebe4e8a229764a5f92540ad",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        }
+      }
+    },
+    "ceremony-cut": {
+      "config": "ceremony-cut",
+      "args": [
+        "--arms",
+        "none",
+        "control=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7",
+        "variant=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7",
+        "control-sdk=garrytan/gstack@142757b107edeffff7c78453490c4d2786996fa7",
+        "--render",
+        "control=interactive",
+        "variant=unattended",
+        "control-sdk=interactive",
+        "--system-prompt",
+        "none=claude-code-preset",
+        "control=claude-code-preset",
+        "variant=claude-code-preset",
+        "--models",
+        "claude-opus-5-5",
+        "--session-kind",
+        "unattended",
+        "--allowance",
+        "15",
+        "--severity-map",
+        "<repo>/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json"
+      ],
+      "exit": 0,
+      "out": [
+        "lease null settled: $0.00 committed, 0 unknown calls",
+        "none-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "control-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "variant-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "control-sdk-opus: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0",
+        "spent $0.00; arms under <root>/out/arms"
+      ],
+      "errors": [],
+      "rig": {
+        "host": "claude",
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "item": "capture",
+        "arms": [
+          {
+            "name": "none",
+            "kind": "bare"
+          },
+          {
+            "name": "control",
+            "kind": "stack",
+            "stack": {
+              "repo": "garrytan/gstack",
+              "sha": "142757b107edeffff7c78453490c4d2786996fa7"
+            },
+            "install": {},
+            "render": "interactive"
+          },
+          {
+            "name": "variant",
+            "kind": "stack",
+            "stack": {
+              "repo": "garrytan/gstack",
+              "sha": "142757b107edeffff7c78453490c4d2786996fa7"
+            },
+            "install": {},
+            "render": "unattended"
+          },
+          {
+            "name": "control-sdk",
+            "kind": "stack",
+            "stack": {
+              "repo": "garrytan/gstack",
+              "sha": "142757b107edeffff7c78453490c4d2786996fa7"
+            },
+            "install": {},
+            "render": "interactive"
+          }
+        ],
+        "skill": null,
+        "skills": {
+          "control": "review",
+          "variant": "review",
+          "control-sdk": "review"
+        },
+        "voice": null
+      },
+      "run": {
+        "host": "claude",
+        "arms": [
+          {
+            "name": "none",
+            "told": "none",
+            "systemPrompt": "claude-code-preset"
+          },
+          {
+            "name": "control",
+            "told": "gstack",
+            "systemPrompt": "claude-code-preset"
+          },
+          {
+            "name": "variant",
+            "told": "gstack",
+            "systemPrompt": "claude-code-preset"
+          },
+          {
+            "name": "control-sdk",
+            "told": "gstack"
+          }
+        ],
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "passes": 1,
+        "parallel": 1,
+        "timeoutS": 3600,
+        "cap": 1000000000,
+        "allowanceMicros": 15000000,
+        "date": "2026-11-02",
+        "repair": false,
+        "maxTurns": 60,
+        "backgroundWaitS": 3600,
+        "sessionKind": "unattended",
+        "readers_sha256": null,
+        "severity_map_sha256": "b737af43cb6d73da8c7059a904fb1c02e1541f7cae248f91ca4d2d1e1ba0e56d"
+      },
+      "sessions": [
+        {
+          "arm": "control",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "review",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/control/gstack-7-<head8>/p1/home/.claude/skills/review"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/control/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "systemPrompt": "claude-code-preset",
+            "maxTurns": 60,
+            "sessionKind": "unattended",
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "f5731b91727d7e723b2b0601b68e82df5acbacb4874e095c53b0a74fda0b8d3c",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "196e9bacee0b40e28f3ee4892c41185b3b9847ebdad62913aeb12e9821f3bde6",
+            "task": "5a166c7e6151a064fd73c300171a13e7e72adc04adee429d276984303c63655a",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "control-sdk",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "review",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/control-sdk/gstack-7-<head8>/p1/home/.claude/skills/review"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/control-sdk/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "maxTurns": 60,
+            "sessionKind": "unattended",
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "f5731b91727d7e723b2b0601b68e82df5acbacb4874e095c53b0a74fda0b8d3c",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "a8cc9f07f284ee43dc5f13620c7d3ddf75088cbf33947ce22bbabd8b7e7b696b",
+            "task": "10d5fcbc1d1713a79596b7d0a56c06c37f7a97bb0bd1b3bed54b02d453656476",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "none",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": null,
+            "systemPrompt": "claude-code-preset",
+            "maxTurns": 60,
+            "sessionKind": "unattended",
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "d11fe86001b2285c61a85e4cb3a786baabe92ca974a2c3a5b2b55aa94edb8596",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "7643aee8100647b87578fe8379274e5e884afb40178a8e0d321c609e857279b4",
+            "task": "41653ec1974ca6e8160d3123df87ebda7b3af173999570eea3342422fcb7d790",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        },
+        {
+          "arm": "variant",
+          "model": "claude-opus-5-5",
+          "driver": {
+            "host": "claude",
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "interactive": false,
+            "skill": {
+              "name": "review",
+              "roots": [
+                "<root>/out/runs/claude-opus-5-5/variant/gstack-7-<head8>/p1/home/.claude/skills/review"
+              ],
+              "home": "<root>/out/runs/claude-opus-5-5/variant/gstack-7-<head8>/p1/home",
+              "dir": null,
+              "namespaces": []
+            },
+            "systemPrompt": "claude-code-preset",
+            "maxTurns": 60,
+            "sessionKind": "unattended",
+            "backgroundWaitMs": 3600000
+          },
+          "prompt_sha256": "f5731b91727d7e723b2b0601b68e82df5acbacb4874e095c53b0a74fda0b8d3c",
+          "termination": {
+            "kind": "completed"
+          },
+          "turns": 1,
+          "parse": "findings",
+          "key": {
+            "arm_tree": "f99a1aa6e3fa6d1560d993743a3c49db7ae8361dbae5f17f4559af5ac3f30de4",
+            "task": "5a166c7e6151a064fd73c300171a13e7e72adc04adee429d276984303c63655a",
+            "sidecar_entry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "fixture_tree": "a2435613b93f5f53a2700998726fc4aeee4b973ecf69731f31e85e9978083def",
+            "model": "15cd98bbce41024da86ab282e1aaa6bd9a143acf1521702dd57babad7caf732b",
+            "timeout_s": "8b34042b7a96b3ba94b27ad723ca8f57787eefbab2083b3098173c444aefbfdf",
+            "env_values": "ba4b4c01512909e214270a4f23ef856ea7857d763cbab32fe7381b0dc204523d",
+            "judge_model": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+          }
+        }
+      ],
+      "told": {
+        "control-opus": {
+          "arm": "gstack",
+          "prefix": "/review",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "control-sdk-opus": {
+          "arm": "gstack",
+          "prefix": "/review",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "none-opus": {
+          "arm": "none",
+          "prefix": "",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        },
+        "variant-opus": {
+          "arm": "gstack",
+          "prefix": "/review",
+          "template_sha256": "16862a34212cd2eddbcedbc5654b26cb92b0dad50e3d501686770e6bc3d088ad"
+        }
+      }
+    }
+  }
+}

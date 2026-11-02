@@ -1,0 +1,362 @@
+[
+  {
+    "unit": "D01",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "D02",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "D05",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "D06",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "D09",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "D10",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "bait",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "P01",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "P01-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "P01-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "P02",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "P02-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "P02-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S01",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S01-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S01-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S02",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S02-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S02-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S05",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S05-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S05-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S06",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S06-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S06-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S09",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S09-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S09-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S12",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S12-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S12-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S13",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S13-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S13-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S16",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S16-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S16-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S19",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S19-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S19-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S20",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S20-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S20-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S23",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S23-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S23-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  },
+  {
+    "unit": "S24",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "S24-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "S24-F2",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "ok",
+        "instruction": ""
+      }
+    ]
+  }
+]

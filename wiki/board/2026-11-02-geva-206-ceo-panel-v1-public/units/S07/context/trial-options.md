@@ -1,0 +1,5 @@
+# Available test arrangements
+
+The distributors have offered a three-week desk trial before software construction. DockLark can rent a seat in each dispatch office for $400 total, use the current arrival estimates, and have one coordinator send notices manually. The finance directors will review a one-page paid order for this arrangement, provided the request arrives before their next monthly budget meeting. The trial needs no system integration and could test the same $450 monthly depot charge.
+
+The founders' investment note identifies willingness to pay for a separate warning service as the largest commercial uncertainty. A refusal would remove the revenue case even if notices were delivered reliably. Hiring two builders for twelve weeks consumes $58,000 of the approved budget. Staff can be released at the end of that period, but wages already paid cannot be recovered. The operations lead has enough time for either trial format, and no customer requires custom software before considering a paid order.

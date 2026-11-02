@@ -692,7 +692,33 @@ describe("OpenRouter route", () => {
     expect(routable("openrouter", `${PARTICLE}:online`)).toBe(false);
     expect(routable("openrouter", "claude-opus-5-5")).toBe(false);
     expect(routable("gemini", "gemini-4-argon")).toBe(false);
-    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`]);
+    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol"]);
+  });
+
+  // Value: protects=Claude Code's token counts on OpenRouter's Messages route are answered by the proxy, as Lane B's proxy answers them, instead of refused into review-units' degraded share, and still pass the slot's model check; fails_when=a count is refused, sent upstream, reserved or charged, or a model off the slot gets a count; why_new=GST-1019 (GEVA-89: all 106 of particle-1's refusals were token counts); seam=forward's estimate route; no_claim=how Claude Code uses the count
+  test("Claude Code's token counts on the Messages route are answered at a token per four bytes, sent nowhere, after the model check", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind({ models });
+    const body = { model: PARTICLE, messages: [{ role: "user", content: "x".repeat(1001) }], tools: [] };
+    const res = await t.call(a.slot, a.token, "/openrouter/v1/messages/count_tokens", body);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ input_tokens: Math.ceil(Buffer.byteLength(JSON.stringify(body)) / 4) });
+    await expectProblem(await t.call(a.slot, a.token, "/openrouter/v1/messages/count_tokens", { ...body, model: "openai/gpt-6-astra" }), 403, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(0);
+    expect(t.ledger.reservations.size).toBe(0);
+    expect(t.journal().map(l => [l.kind, l.status ?? null, l.estimated ?? null])).toEqual([["free", 200, true], ["refusal", null, null]]);
+    expect((await t.proxy.finalize(a.meter_id))).toMatchObject({ micros: 0, requests: 0, refused: 1 });
+  });
+
+  // Value: protects=a Sol prompt past 272,000 tokens still finds the openai endpoint, which bills it at $4 and $15, because max_price carries the long rates; fails_when=max_price sends the base $2 and $10 and OpenRouter has no endpoint for a long prompt; why_new=GST-1019 Capy review finding (max_price above 272k); seam=openRouterRouting on the Messages route; no_claim=OpenRouter's live filtering
+  test("a Sol call past 272,000 prompt tokens goes out with max_price at the long rates and settles at them", async () => {
+    const SOL = "openai/gpt-6.1-sol";
+    const t = setup(() => ok({ input_tokens: 280_000, output_tokens: 10 }));
+    const a = t.bind({ models: [`openrouter:${SOL}`], allowance_micros: 20_000_000 });
+    const res = await t.call(a.slot, a.token, "/openrouter/v1/messages", { model: SOL, max_tokens: 1000, messages: [{ role: "user", content: "x".repeat(1_120_000) }] });
+    expect(res.status).toBe(200);
+    expect(t.calls[0]!.body.provider).toEqual({ only: ["openai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 4, completion: 15, request: 0, image: 0 } });
+    expect(t.ledger.settles[0]![1]).toMatchObject({ kind: "spent", spent_micros: 280_000 * 4 + 10 * 15 });
   });
 });
 

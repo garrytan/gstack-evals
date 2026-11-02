@@ -65,6 +65,15 @@ describe("preflight on gstack's learn tasks", () => {
     expect(same.err).toContain("judges come from another model family");
   });
 
+  // Value: protects=the judge rule compares families, so Sol on OpenRouter (openai/gpt-6.1-sol) never gets gpt-6.1-sol as its judge, by default beside Opus or when named; fails_when=preflight compares providers and passes openai against openrouter; why_new=GST-1019 /ship red-team finding (Opus and Sol on --host claude took the anthropic default judge gpt-6.1-sol); seam=familyOf in the preflight guard; no_claim=a third-family judge
+  test("Sol on OpenRouter is the openai family: gpt-6.1-sol cannot judge it, by default beside Opus or when named", async () => {
+    const { args } = await lockedLearn();
+    const beside = await run(args("claude", "claude-opus-5-5,openai/gpt-6.1-sol"));
+    expect(beside.err).toContain("E_MODEL_POLICY gpt-6.1-sol as the judge: judges come from another model family than the models under test (openai/gpt-6.1-sol)");
+    const named = await run(args("claude", "openai/gpt-6.1-sol", ["--judge-model", "gpt-6.1-sol"]));
+    expect(named.err).toContain("E_MODEL_POLICY gpt-6.1-sol as the judge: judges come from another model family than the models under test (openai/gpt-6.1-sol)");
+  });
+
   // Value: protects=--policy lets a caller narrow or widen the subject list through the same preflight; fails_when=a narrowing policy still admits Haiku or a widening one cannot admit gpt-5.5; why_new=GST-225's custom-policy test; seam=the lock pins the policy, so each policy locks its own set; no_claim=none beyond protects
   test("a caller's own policy narrows or widens the subject list in preflight", async () => {
     const def = JSON.parse(readFileSync(DEFAULT_POLICY, "utf8"));

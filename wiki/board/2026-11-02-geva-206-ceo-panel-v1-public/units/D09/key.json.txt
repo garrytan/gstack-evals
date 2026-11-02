@@ -1,0 +1,29 @@
+{
+  "unit": "D09",
+  "kind": "decoy",
+  "mode": "added-capability",
+  "product": "StepBirch, employer-funded credits added to an exercise class-booking service",
+  "flaws": [],
+  "bait": {
+    "resembles": "T2-B4",
+    "source": "T2",
+    "plan_section": "Getting employees started",
+    "choice": "Launch through employee activity captains without a new purchasing-team campaign.",
+    "justification": [
+      {
+        "path": "context/employer-agreements.md",
+        "what": "All purchasing approvals, fees, deposits and delegation to captains are signed; purchasing teams requested no second campaign."
+      },
+      {
+        "path": "context/enrollment.md",
+        "what": "The captain channel reaches existing users, has approved materials and worked in an account-linking rehearsal."
+      },
+      {
+        "path": "context/existing.md",
+        "what": "Employees can use existing accounts and providers without a purchasing decision or supplier switch."
+      }
+    ],
+    "why_not_a_flaw": "The apparent gap between employee outreach and employer buying authority has already been closed by the signed agreements. Captains perform authorized enrollment, not sales to an actor unable to buy, and the route fits current user behavior."
+  },
+  "notes": "Only the employee-first launch route is the intended superficial concern; funding and purchasing are already complete."
+}

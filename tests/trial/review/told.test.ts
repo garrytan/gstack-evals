@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { TOLD_PREFIX, TOLD_SHA256, TOLD_TEMPLATE, toldArmOf, toldPrompt, toldSkill } from "../../../src/trial/review/told.ts";
+import { STACKS } from "../../../src/arms/stacks.ts";
+import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, TOLD_TEMPLATE, toldArmOf, toldPrompt, toldSkill } from "../../../src/trial/review/told.ts";
 
 describe("the frozen told prompt", () => {
   // Value: protects=every arm gets the same frozen instruction and only its own command in front; fails_when=the told text changes without this pin moving on purpose, or a prefix drifts from the plan; why_new=GEVA-70 build step 2 (plan section 4, T4); seam=told.ts; no_claim=how an arm reads the text, which the canary covers
@@ -36,5 +37,20 @@ describe("GEVA-109: an arm's told prefix override", () => {
     expect(toldPrompt("gstack", "main", undefined)).toBe("/review " + TOLD_TEMPLATE.replaceAll("{base}", "main"));
     expect(toldPrompt("none", "main")).toBe(TOLD_TEMPLATE.replaceAll("{base}", "main"));
     expect([toldSkill("gstack", R2), toldSkill("gstack"), toldSkill("none")]).toEqual(["review", "review", null]);
+  });
+});
+
+// Value: protects=R56-1: a gstack arm's prefix may open with /ship as well as /review, every other arm keeps only its own command, and the target skill follows the prefix's command; fails_when=TOLD_COMMANDS widens past what an arm declares, drops an arm's own command, or toldSkill ignores the prefix; why_new=GEVA-197 (GST-1021); seam=TOLD_COMMANDS and toldSkill; no_claim=the command's checks, which cli.test.ts covers, and the install target, which told-identity.test.ts covers
+describe("R56-1: the commands an arm declares", () => {
+  test("gstack declares /review and /ship, each other arm its own command, and the skill follows the prefix", () => {
+    expect(TOLD_COMMANDS).toEqual({ none: [], gstack: ["/review", "/ship"], pstack: ["/pstack:interrogate"], tstack: ["/sol-loop"] });
+    for (const arm of ["gstack", "pstack", "tstack"] as const) expect(TOLD_COMMANDS[arm][0]).toBe(TOLD_PREFIX[arm].split(" ")[0]);
+    expect([toldSkill("gstack", "/ship Run only the review panel."), toldSkill("gstack", "/review Look hard."), toldSkill("gstack")]).toEqual(["ship", "review", "review"]);
+  });
+
+  // Value: protects=TOLD_COMMANDS holds one word per command, the first word of a stack's told line, since the CLI compares a prefix's first word against it; fails_when=a stack's told line gains a second word and every prefix for that arm is refused; why_new=GEVA-197 /ship pass 1 (adversarial-native#5); seam=TOLD_COMMANDS; no_claim=none
+  test("every declared command is one word, a stack's the first word of its told line", () => {
+    for (const commands of Object.values(TOLD_COMMANDS)) for (const command of commands) expect(command).toMatch(/^\/\S+$/);
+    for (const arm of ["pstack", "tstack"] as const) expect(TOLD_COMMANDS[arm]).toEqual([STACKS.find((k) => k.name === arm)!.told.review.split(" ")[0]!]);
   });
 });

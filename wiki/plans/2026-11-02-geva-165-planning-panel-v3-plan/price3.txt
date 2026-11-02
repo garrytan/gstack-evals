@@ -1,0 +1,36 @@
+| Stage | Item | Runs | Sessions | Projected | Reserve per run | Cap |
+|---|---|---|---|---|---|---|
+| E0 | e0-opus-none | 1 | 48 | 15.84 | 21.12 | 43.3 |
+| E0 | e0-particle-none | 1 | 48 | 3.96 | 0.58 | 6.12 |
+| E0 | e0-judge | 1 | 96 | 9.6 | - | 13.44 |
+| E1 b1 | e1-opus-none-<stratum> | 4 | 64 | 30.72 | 21.12 | 127.48 |
+| E1 b1 | e1-opus-skill-<stratum> | 4 | 64 | 81.6 | 21.12 | 198.72 |
+| E1 b1 | e1-auto-opus-<stratum> | 4 | 16 | 100.8 | 48.0 | 384.0 |
+| E1 b1 | e1-route-sol | 1 | 4 | 2.0 | 3.84 | 15.36 |
+| E1 b1 | e1-route-particle | 1 | 4 | 0.4 | 0.19 | 0.77 |
+| E1 b1 | e1-judge-b1 | 1 | 144 | 21.6 | - | 30.24 |
+| E1 b2 | e1-sol-none-<stratum> | 4 | 64 | 30.72 | 11.52 | 89.08 |
+| E1 b2 | e1-sol-skill-<stratum> | 4 | 64 | 81.6 | 11.52 | 160.32 |
+| E1 b2 | e1-auto-sol-<stratum> | 4 | 8 | 50.4 | 24.0 | 96.0 |
+| E1 b2 | e1-particle-none-<stratum> | 4 | 64 | 7.68 | 0.58 | 13.04 |
+| E1 b2 | e1-particle-skill-<stratum> | 4 | 64 | 20.4 | 0.58 | 30.88 |
+| E1 b2 | e1-auto-particle-<stratum> | 4 | 8 | 12.6 | 1.4 | 5.6 |
+| E1 b2 | e1-judge-b2 | 1 | 272 | 40.8 | - | 57.12 |
+| C/stratum | c-opus | 1 | 208 | 182.52 | 28.16 | 283.69 |
+| C/stratum | c-sol | 1 | 208 | 182.52 | 15.36 | 270.89 |
+| C/stratum | c-particle | 1 | 208 | 45.63 | 0.77 | 64.65 |
+| C/stratum | c-judge | 1 | 624 | 93.6 | - | 131.04 |
+| C/autoplan | c-auto-opus-<stratum> | 4 | 64 | 403.2 | 48.0 | 756.48 |
+| C/autoplan | c-ladder-opus-<stratum> (placeholder k=6) | 4 | 256 | 122.88 | 21.12 | 256.52 |
+| C/autoplan | c-auto-sol-<stratum> | 4 | 64 | 403.2 | 24.0 | 660.48 |
+| C/autoplan | c-ladder-sol-<stratum> (placeholder k=6) | 4 | 256 | 122.88 | 11.52 | 218.12 |
+| C/autoplan | c-auto-particle-<stratum> | 4 | 64 | 100.8 | 1.4 | 146.72 |
+| C/autoplan | c-ladder-particle-<stratum> (placeholder k=6) | 4 | 256 | 30.72 | 0.58 | 45.32 |
+| C/autoplan | c-auto-judge | 1 | 960 | 96.0 | - | 134.4 |
+TOTAL E0 192 29.4 62.86
+TOTAL E1 b1 296 237.12 756.57
+TOTAL E1 b2 544 244.2 452.04
+TOTAL C/stratum 1248 504.27 750.27
+TOTAL C/autoplan 1920 1279.68 2218.04
+E1 total 481.32 1208.61
+program 3807.48 6490.59

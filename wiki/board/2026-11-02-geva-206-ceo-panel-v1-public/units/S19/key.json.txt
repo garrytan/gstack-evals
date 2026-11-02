@@ -1,0 +1,48 @@
+{
+  "unit": "S19",
+  "kind": "seeded",
+  "mode": "fix",
+  "product": "TempoHearth, a repair to written support for exercise-coaching members",
+  "flaws": [
+    {
+      "id": "S19-F1",
+      "group": "W",
+      "source": "T1",
+      "category": "T1-W3",
+      "plan_section": "How we will score the release",
+      "cause": "The plan judges success by automatic receipts rather than answered questions or renewal. The historical series shows receipts improving while human resolution and renewal fall, and a receipt precedes any coach action. The release can pass its chosen success test without fixing the stated member problem.",
+      "evidence": [
+        {
+          "path": "context/metrics.md",
+          "what": "Receipt delivery rises from 95 to 99 percent while next-business-day resolution and renewal fall; actual outcome reports already exist."
+        },
+        {
+          "path": "context/member-notes.md",
+          "what": "Members need human follow-through, not confirmation that mail arrived."
+        }
+      ],
+      "changes_what_gets_built": "Make resolution and member renewal determine acceptance of the repaired service, rather than optimizing receipt delivery.",
+      "deserved_severity": "Critical",
+      "fix": "Use resolved requests within a defined service window and renewal among question-asking members as the success measures."
+    },
+    {
+      "id": "S19-F2",
+      "group": "B",
+      "source": "T2",
+      "category": "T2-B5",
+      "plan_section": "Service offer",
+      "cause": "The plan publicly promises a human reply within two hours on every day while keeping weekday-only shifts. Thirty percent of requests arrive outside those shifts, and there is no on-call or paid external coverage. The response promise cannot be kept even if measurement is corrected.",
+      "evidence": [
+        {
+          "path": "context/staffing.md",
+          "what": "All paid coverage is weekdays 09:00-17:00, substantial demand arrives outside it, and no additional cover is funded."
+        }
+      ],
+      "changes_what_gets_built": "Offer a service window matched to staffed hours or secure additional coverage before promising round-the-clock replies.",
+      "deserved_severity": "High",
+      "fix": "Adopt the supported next-business-day promise, or fund and schedule the coverage required by a two-hour all-hours offer."
+    }
+  ],
+  "bait": null,
+  "notes": "Weekday workload fits current staffing; the excess commitment is specifically all-hours turnaround."
+}

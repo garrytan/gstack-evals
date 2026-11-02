@@ -1,0 +1,52 @@
+{
+  "unit": "S23",
+  "kind": "seeded",
+  "mode": "fix",
+  "product": "PantryOrbit, a scheduling repair for grant-funded community food collections",
+  "flaws": [
+    {
+      "id": "S23-F1",
+      "group": "W",
+      "source": "T2",
+      "category": "T2-W5",
+      "plan_section": "Appointment allocation",
+      "cause": "The plan converts thirty percent of grant-funded appointments into paid reservations for unregistered customers. The grant explicitly requires all those appointments to remain free and available to registered households, including when fees are labeled as scheduling support. This local revenue choice breaches the protected funding condition and prevents renewal.",
+      "evidence": [
+        {
+          "path": "context/grant.md",
+          "what": "Paid reservation pools within funded hours make sites ineligible for renewal; the grant supplies 81 percent of operating funds."
+        },
+        {
+          "path": "context/service.md",
+          "what": "There is no spare funded morning capacity for an additional customer group."
+        }
+      ],
+      "changes_what_gets_built": "Keep all current appointments free and available to registered households instead of creating the paid pool.",
+      "deserved_severity": "Critical",
+      "fix": "Remove paid fast-access reservations from funded hours. Consider a separately funded service only through a separate business decision."
+    },
+    {
+      "id": "S23-F2",
+      "group": "B",
+      "source": "T1",
+      "category": "T1-B2",
+      "plan_section": "Collection pack",
+      "cause": "The plan allocates four weeks to a new roster builder with exactly the fields, input records and ordering already provided by the current staff download. The existing implementation can be placed beside the new controls. Rebuilding it wastes most of the project schedule regardless of how appointment allocation is corrected.",
+      "evidence": [
+        {
+          "path": "context/current-tools.md",
+          "what": "The current download already meets every listed roster requirement and can be moved without new agreements."
+        },
+        {
+          "path": "src/roster.py",
+          "what": "build_roster emits the specified columns and ordering from existing reservation records."
+        }
+      ],
+      "changes_what_gets_built": "Reuse and surface the existing roster download instead of building another generator.",
+      "deserved_severity": "High",
+      "fix": "Connect the existing roster download to the collection-pack area and keep engineering focused on day changes."
+    }
+  ],
+  "bait": null,
+  "notes": "The proposed paid pool and duplicate roster implementation are separate decisions."
+}

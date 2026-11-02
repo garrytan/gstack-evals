@@ -1,0 +1,52 @@
+{
+  "unit": "S22",
+  "kind": "seeded",
+  "mode": "fix",
+  "product": "Hearthbatch, kitchen purchasing software addressing manual reporting support",
+  "flaws": [
+    {
+      "id": "S22-F1",
+      "group": "W",
+      "source": "T2",
+      "category": "T2-W4",
+      "plan_section": "BudgetRoom",
+      "cause": "The plan creates a separate reporting destination with the same contents, format, entitlement and reach as Monthpack. Every intended team already has access, and observed downloads delivered accepted evidence without support work. The proposed destination offers no supported improvement that warrants a separate product investment.",
+      "evidence": [
+        {
+          "path": "context/service.md",
+          "what": "Monthpack provides every required item for all thirty groups, with accepted samples and downloads under four minutes."
+        },
+        {
+          "path": "context/support.md",
+          "what": "Support has assembled reports instead of showing customers the existing feature; customers request no additional reporting capability."
+        }
+      ],
+      "changes_what_gets_built": "Use and introduce the existing Monthpack flow instead of funding an equivalent reporting product.",
+      "deserved_severity": "High",
+      "fix": "Run the proposed customer walkthroughs on Monthpack and measure support labor saved. Fund new reporting capability only for a demonstrated unmet benefit."
+    },
+    {
+      "id": "S22-F2",
+      "group": "B",
+      "source": "T1",
+      "category": "T1-B3",
+      "plan_section": "Work calendar",
+      "cause": "The plan waits until week eight to test whether Quernpath permits embedded customer downloads, after seven weeks of implementation. The same review covers Monthpack's separately funded signing migration, which remains scheduled even if BudgetRoom is dropped. The entitlement decision may change package access and the implementation, while a free five-day sample review is available now. Dropping the duplicate reporting destination therefore leaves this late test and its exposure in place.",
+      "evidence": [
+        {
+          "path": "context/provider.md",
+          "what": "Embedded use is unapproved for both destinations; Monthpack's independently funded migration runs in weeks one through seven regardless of BudgetRoom, and a five-day review needs no software."
+        },
+        {
+          "path": "context/capacity.md",
+          "what": "Entitlement is the largest remaining uncertainty and no customer deadline requires delaying its review."
+        }
+      ],
+      "changes_what_gets_built": "Settle the provider's permitted customer-access model before implementing the Monthpack signing migration or any new report service around it.",
+      "deserved_severity": "High",
+      "fix": "Run the sample-based entitlement review before the Monthpack migration and any BudgetRoom work. Apply that sequence even if BudgetRoom is cancelled, and retain the later release trial for operational verification."
+    }
+  ],
+  "bait": null,
+  "notes": "Using Monthpack instead of BudgetRoom does not remove its separately funded signing migration or the shared late entitlement review. Moving the review earlier does not give BudgetRoom added customer value."
+}

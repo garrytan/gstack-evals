@@ -37,8 +37,8 @@ export interface ChatPrice extends TokenPrices {
 /**
  * OpenRouter models by OpenRouter id, at list prices in USD per 1M tokens. To add an open-weight ladder slot, add one row
  * with the prices on its OpenRouter model page, and providers to pin the route when one provider sets the row's price.
- * The proxy sends the row's input and output prices as OpenRouter's max_price, so OpenRouter never routes the call to a
- * provider that bills above the row.
+ * The proxy sends the row's input and output prices as OpenRouter's max_price, or its long-prompt prices where those are
+ * higher, so OpenRouter never routes the call to a provider that bills above the row at any prompt length.
  */
 export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // OpenRouter's models API (https://openrouter.ai/api/v1/models), read 2026-10-30: $0.10 input, $1 output, $0.003 cache read.
@@ -47,6 +47,15 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // 2026-10-31: $0.08 input, $0.55 output, $0.008 cache read. DeepSeek's own endpoint may train on prompts, so data_collection deny
   // leaves it no route; the rung runs on a third-party fp8 host instead (GST-575, the Captain's option B).
   "deepseek/deepseek-v4.1-flash-1017": { input: 0.08, output: 0.55, cache_read: 0.008, providers: ["inference-net"], quantizations: ["fp8"] },
+  // GPT-6.1 Sol as a model under test on the Claude Code host (R54, GST-1019). OpenRouter's models API
+  // (https://openrouter.ai/api/v1/models), read 2026-11-02T16:38:39Z: $2 input, $10 output, $0.10 cache read and $2.50 cache
+  // write, and $4, $15, $0.20 and $5 past 272,000 prompt tokens (its min_prompt_tokens override). Its endpoints API, read at the
+  // same time, lists the openai endpoint at those prices, as does OpenRouter's record of 2026-11-02
+  // (wiki/plans/2026-11-02-geva-177-r3-amendment-3/openrouter-gpt-6.1-sol.json); they match the openai:gpt-6.1-sol row.
+  // Pinned to the openai provider, as Lane B's R3 row pins it (quick/laneb/config/proxy.json). The proxy refuses a service_tier
+  // on OpenRouter, so OpenRouter serves the standard tier, and max_price, at the long rates of $4 and $15, still leaves out
+  // openai/fast ($4 and $20) and openai/ultrafast ($12 and $60).
+  "openai/gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 }, providers: ["openai"] },
 };
 
 /** List prices, USD per 1M tokens, as harness-evals checked them on 2026-10-02 to 2026-10-08. */
@@ -62,8 +71,8 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
 };
 
-/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers and quantizations, if any, no provider that may train on or keep the data (data_collection deny), and its prices as the most OpenRouter may route to, with no per-request or per-image charge. */
-export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: price.input, completion: price.output, request: 0, image: 0 } });
+/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers and quantizations, if any, no provider that may train on or keep the data (data_collection deny), and its prices as the most OpenRouter may route to, at the long-prompt rates where those are higher (a prompt past the row's threshold is billed at them), with no per-request or per-image charge. */
+export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: Math.max(price.input, price.long?.input ?? 0), completion: Math.max(price.output, price.long?.output ?? 0), request: 0, image: 0 } });
 
 /** A file part: OpenRouter fetches a URL in it, and parses a PDF it cannot pass to the model with a paid OCR engine. */
 const filePart = (value: unknown): boolean =>
