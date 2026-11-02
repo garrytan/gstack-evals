@@ -155,8 +155,10 @@ export interface SidecarHandle {
 export class Sidecar {
   readonly trials = new Map<string, Trial>();
   readonly byToken = new Map<string, Trial>();
-  constructor(readonly root: string, public agentUrl: string) {
-    mkdirSync(root, { recursive: true });
+  readonly root: string;
+  constructor(root: string, public agentUrl: string) {
+    this.root = resolve(root);
+    mkdirSync(this.root, { recursive: true });
   }
 
   private journal(t: Trial, e: Parameters<GhContext["journal"]>[0]): void {

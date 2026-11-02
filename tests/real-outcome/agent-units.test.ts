@@ -16,7 +16,7 @@ const run = (file: string, env: Record<string, string> = {}, timeout = 120_000) 
 test("ship persona, /ship step log, egress rules and turn texts", () => {
   const r = run("unit_test.py");
   expect(r.out).not.toContain("FAIL");
-  expect(r.out.match(/^PASS /gm)?.length).toBe(15);
+  expect(r.out.match(/^PASS /gm)?.length).toBe(16);
   expect(r.status).toBe(0);
 });
 

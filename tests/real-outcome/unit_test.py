@@ -285,6 +285,34 @@ def test_frozen_env_pattern():
     assert "GSTACK|CONDUCTOR" in ra.FREEZE and "GITHUB_ACTIONS|OPENCLAW_SESSION" in ra.FREEZE and ra.FREEZE.endswith('exec claude "$@"')
 
 
+def test_close_sandbox_places_the_shipment_record_only_after_its_sha256_matches():
+    import hashlib
+    side = Path(tempfile.mkdtemp())
+    files = {"record": side / "shipment.json", "journal": side / "journal.jsonl", "bundle": side / "shipped.bundle"}
+    files["record"].write_text('{"status": "none"}\n')
+    files["journal"].write_text('{"type": "open"}\n')
+    files["bundle"].write_bytes(b"bundle")
+    record = {"status": "none", "shipped_head": None, "rig_errors": []}
+    good = hashlib.sha256(files["record"].read_bytes()).hexdigest()
+    for sha in ("0" * 64, good):
+        evdir = Path(tempfile.mkdtemp())
+        agent = ra.RealAgent.__new__(ra.RealAgent)
+        agent._sidecar = lambda path, body, timeout=120: {"record": record, "record_sha256": sha, "files": {k: str(v) for k, v in files.items()}}
+        agent._evaluator_dir = lambda: evdir
+        if sha != good:
+            try:
+                agent._close_sandbox("t1", "agent_finished", lambda e: None)
+                raise AssertionError("a record that does not match its sha256 was accepted")
+            except RuntimeError as e:
+                assert str(e).startswith("E_REAL_SANDBOX_RECORD"), e
+            assert sorted(p.name for p in evdir.iterdir()) == [], sorted(p.name for p in evdir.iterdir())
+            continue
+        info = agent._close_sandbox("t1", "agent_finished", lambda e: None)
+        assert (evdir / "shipment.json").read_bytes() == files["record"].read_bytes()
+        assert info["record_sha256"] == good and info["files"] == {"record": "shipment.json", "journal": "journal.jsonl", "bundle": "shipped.bundle"}, info
+        assert sorted(p.name for p in evdir.iterdir()) == ["journal.jsonl", "shipment.json", "shipped.bundle"]
+
+
 def main():
     failed = 0
     for name, fn in list(globals().items()):
