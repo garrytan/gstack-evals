@@ -555,6 +555,9 @@ describe("detectors", () => {
     expect(moveActs([gone, pyInto(everyCase)])).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
     const stacked = over(['@pytest.mark.parametrize("y", [3, 4])', '@pytest.mark.parametrize("x", [pytest.param(1, marks=pytest.mark.skip)])']);
     expect(moveActs([gone, pyInto(stacked)])).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
+    const halfSkipped = ['@pytest.mark.parametrize("x", [pytest.param("a", marks=pytest.mark.skip), "b"])', "def test_b(x):", "    g(x)"];
+    expect(moveActs([pyFrom(halfSkipped), ["tests/test_b.py", newFile(["import pytest", "", '@pytest.mark.skip(reason="later")', ...halfSkipped])]])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
+    expect(moveActs([gone, pyInto(over(['@pytest.mark.parametrize("x, y", [pytest.param("a,b", 1, marks=pytest.mark.skip), ("c", 2)])']))])).toEqual(["skip_added:mechanical own 0"]);
   });
 
   test("a cross-file re-add is read by its header line, so a skipped test of the same name elsewhere in that file does not drop a plain re-add", () => {
