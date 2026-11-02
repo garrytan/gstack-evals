@@ -4,7 +4,8 @@
 # CUT (take the ceremony out of unattended renders; no-loss shown), KEEP (keep it; the cut lost quality) or FIX-METHOD
 # (this eval cannot tell). It runs nothing and reads no transcript. G3 is as amended by
 # wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment: a variant session whose start line the session cut with its own pipe or
-# redirect, run with --render unattended and keeping UNATTENDED_SESSION: true, is not observable and leaves the count, and a
+# redirect, run with --render unattended, keeping UNATTENDED_SESSION: true and showing RENDER_KIND: unattended nowhere (exposure.py's
+# start_line_cut_render), is not observable and leaves the count, and a
 # SESSION_KIND mismatch fails G3 like a RENDER_KIND_MISMATCH line.
 # Usage: python3 decide.py --tb2 F --review-score F --review-cost F --exposure-review F --exposure-tb2 F [--arms JSON]
 import json, sys

@@ -1,6 +1,6 @@
 # Keyless test of the G3 amendment (wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment). It writes synthetic review-units
 # transcripts and Harbor trial folders, runs exposure.py on them and decide.py on its counts, with stub inputs that pass every other
-# gate, and checks the G3 gates and the Opus verdict. The synthetic start output follows the marker logic of bin/gstack-skill-start
+# gate, and checks the one G3 gate each case targets, that every other G3 gate passes, and the Opus verdict. The synthetic start output follows the marker logic of bin/gstack-skill-start
 # at gstack 142757b (lines 115-117, 185 and 359). With --evidence it also runs GEVA-131's pilot G3 evidence (Captain drive
 # handoffs/GEVA-131/g3-evidence) through the same two scripts. It calls no model, reads no key and prints no evidence text.
 # With --same-as it also runs another exposure.py (#122's) on every case and checks that each count it prints is unchanged.
@@ -18,12 +18,13 @@ def start_output(render, kind):
     if kind == 'unattended': out += ['UNATTENDED_SESSION: true', 'GSTACK_INSTRUCTION_BEGIN: unattended-session 1', 'You are running unattended.', 'GSTACK_INSTRUCTION_END']
     return out
 
-def run(skill='review', render=True, kind='unattended', pipe=None, served_render=None):
-    cmd = SERVED.format(skill) + (' --render unattended' if (render if served_render is None else served_render) else '')
+def run(skill='review', render=True, kind='unattended', pipe=None):
+    cmd = SERVED.format(skill) + (' --render unattended' if render else '')
     out = start_output(render, kind)
     if pipe:
         cmd += ' 2>&1 | ' + pipe
-        n = int(pipe.split()[-1]); out = out[-n:] if pipe.startswith('tail') else out[:n]
+        n = int(re.findall(r'\d+', pipe)[-1])
+        out = out[-n:] if pipe.startswith('tail') else out[n:] if pipe.startswith('sed') else out[:n]
     return cmd + '; git log --oneline -3', '\n'.join(out + ['abc1234 a commit subject'])
 
 def write_session(path, runs, tb2):
@@ -71,33 +72,37 @@ def tb2_default():
 
 CLEAN, CUT = [run()], [run(pipe='tail -20')]
 CONTROL = [[run(render=False)]] * 2
+SOURCE_HIT = ('grep -rn RENDER_KIND bin', 'bin/gstack-skill-start:116:  echo "RENDER_KIND: unattended"')
+REVIEW, TB2_OPUS = 'G3 render kind, review', 'G3 render kind, TB2 ' + OPUS
 CASES = [
-    ('clean RENDER_KIND: unattended line passes', {'control': CONTROL, 'variant': [CLEAN] * 2}, {}, True, None),
-    ('start line cut by the session, UNATTENDED_SESSION: true kept: not observable, not a fail', {'control': CONTROL, 'variant': [CUT] * 2}, {}, True, {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut': 2, 'start_line_cut_render': 2}),
-    ('RENDER_KIND_MISMATCH line fails', {'control': CONTROL, 'variant': [CLEAN, [run(kind='interactive')]]}, {}, False, None),
-    ('SESSION_KIND mismatch in control fails', {'control': [[run(render=False, kind='interactive')], [run(render=False)]], 'variant': [CLEAN] * 2}, {}, False, None),
-    ('cut line beside a mismatch session fails', {'control': CONTROL, 'variant': [CUT, [run(kind='interactive')]]}, {}, False, None),
-    ('cut line that kept no UNATTENDED_SESSION: true stays observable and fails', {'control': CONTROL, 'variant': [[run(pipe='tail -3')]] * 2}, {}, False, None),
-    ('cut line run without the served --render unattended stays observable and fails', {'control': CONTROL, 'variant': [[run(pipe='tail -20', served_render=False)]] * 2}, {}, False, None),
-    ('no control session ran the start line: control half not observable, not a fail', {'control': [[]] * 2, 'variant': [CLEAN] * 2}, {}, True, None),
-    ('TB2: Opus variant start lines cut by the session pass', {'control': CONTROL, 'variant': [CLEAN] * 2}, {(OPUS, 'variant'): [[run('investigate', pipe='tail -20')]] * 2}, True, None),
+    ('clean RENDER_KIND: unattended line passes', {'control': CONTROL, 'variant': [CLEAN] * 2}, {}, REVIEW, True, None),
+    ('start line cut by the session, UNATTENDED_SESSION: true kept: not observable, not a fail', {'control': CONTROL, 'variant': [CUT] * 2}, {}, REVIEW, True, {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut': 2, 'start_line_cut_render': 2}),
+    ('RENDER_KIND_MISMATCH line fails', {'control': CONTROL, 'variant': [CLEAN, [run(kind='interactive')]]}, {}, REVIEW, False, None),
+    ('SESSION_KIND mismatch in control fails', {'control': [[run(render=False, kind='interactive')], [run(render=False)]], 'variant': [CLEAN] * 2}, {}, REVIEW, False, None),
+    ('cut line beside a mismatch session fails', {'control': CONTROL, 'variant': [CUT, [run(kind='interactive')]]}, {}, REVIEW, False, None),
+    ('cut line that kept no UNATTENDED_SESSION: true stays observable and fails', {'control': CONTROL, 'variant': [[run(pipe='tail -3')]] * 2}, {}, REVIEW, False, None),
+    ('cut line run without the served --render unattended stays observable and fails', {'control': CONTROL, 'variant': [[run(render=False, pipe='tail -20')]] * 2}, {}, REVIEW, False, None),
+    ('no control session ran the start line: control half not observable, not a fail', {'control': [[]] * 2, 'variant': [CLEAN] * 2}, {}, REVIEW, True, None),
+    ('TB2: Opus variant start lines cut by the session pass', {'control': CONTROL, 'variant': [CLEAN] * 2}, {(OPUS, 'variant'): [[run('investigate', pipe='tail -20')]] * 2}, TB2_OPUS, True, None),
+    ('a pipe that drops RENDER_KIND but keeps SESSION_KIND (tail -31, sed 1,2d) is a cut, not a fail', {'control': CONTROL, 'variant': [[run(pipe='tail -31')], [run(pipe='sed 1,2d')]]}, {}, REVIEW, True, {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut_render': 2}),
+    ('a cut session that shows RENDER_KIND: unattended elsewhere stays in the count beside a real miss, and fails', {'control': CONTROL, 'variant': [[run(render=False)], CUT + [SOURCE_HIT]]}, {}, REVIEW, False, {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 0}),
 ]
 
 def main():
     scripts = os.path.abspath(sys.argv[1]); failed = 0
-    for name, review, tb2_over, want, counts in CASES:
+    for name, review, tb2_over, target, want, counts in CASES:
         with tempfile.TemporaryDirectory() as root:
             tb2 = tb2_default(); tb2.update(tb2_over)
             lay_out(root, review, tb2)
             d, ex, g3 = decide(scripts, root)
             gates = {k: v for k, v in d['gates'].items() if k.startswith('G3')}
             row = next(r for r in ex if r['arm'] == 'variant')
-            ok = all(gates.values()) == want and d['verdicts'][OPUS][0] == ('CUT' if want else 'FIX-METHOD') and all(row.get(k) == v for k, v in (counts or {}).items())
+            ok = gates[target] == want and all(v for k, v in gates.items() if k != target) and d['verdicts'][OPUS][0] == ('CUT' if want else 'FIX-METHOD') and all(row.get(k) == v for k, v in (counts or {}).items())
             same = '--same-as' not in sys.argv or unchanged(sys.argv[sys.argv.index('--same-as') + 1], root)
             failed += not (ok and same)
-            print(f"{'ok  ' if ok else 'FAIL'} {name}: G3 {'pass' if all(gates.values()) else 'fail'} (want {'pass' if want else 'fail'}), Opus {d['verdicts'][OPUS][0]}" + (f", variant counts {({k: row.get(k) for k in counts})}" if counts else '') + ('' if '--same-as' not in sys.argv else '; other counts unchanged' if same else '; OTHER COUNTS CHANGED'))
+            print(f"{'ok  ' if ok else 'FAIL'} {name}: {target} {'pass' if gates[target] else 'fail'} (want {'pass' if want else 'fail'}), other G3 gates {'pass' if all(v for k, v in gates.items() if k != target) else 'FAIL'}, Opus {d['verdicts'][OPUS][0]}" + (f", variant counts {({k: row.get(k) for k in counts})}" if counts else '') + ('' if '--same-as' not in sys.argv else '; other counts unchanged' if same else '; OTHER COUNTS CHANGED'))
             for l in g3:
-                if (OPUS + ':' in l) if name.startswith('TB2') else ('review' in l): print('       ' + l)
+                if l.startswith(target + ':'): print('       ' + l)
     if '--evidence' in sys.argv: evidence(scripts, sys.argv[sys.argv.index('--evidence') + 1])
     print(f'{len(CASES) - failed} of {len(CASES)} cases as expected')
     sys.exit(1 if failed else 0)

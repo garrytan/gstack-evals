@@ -7,8 +7,9 @@
 # Harbor trial folders (agent/sdk-messages.jsonl, or evaluator/ when present). No transcript text is printed.
 # G3 as amended by wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment reads three more counts from each start-line Bash call
 # and its own tool result: start_line_cut (every start line in the session ran with the session's own pipe or redirect, and its kept
-# output holds UNATTENDED_SESSION: true and no RENDER_KIND or SESSION_KIND line), start_line_cut_render (those whose every start
-# line also carried --render unattended) and session_kind_mismatch (a start line printed a SESSION_KIND other than unattended).
+# output holds UNATTENDED_SESSION: true and no RENDER_KIND line), start_line_cut_render (those whose every start line also carried
+# --render unattended and whose tool results hold RENDER_KIND: unattended nowhere, so an excused session never adds to
+# render_kind_unattended) and session_kind_mismatch (a start line printed a SESSION_KIND other than unattended).
 # Usage: python3 exposure.py review <review-units out dir>... | tb2 <job dir>...  [--json <file>]
 import glob, json, os, re, sys, collections
 G = r'\.claude/skills/gstack/'
@@ -42,8 +43,8 @@ def flat(x):
     if isinstance(x, list): return '\n'.join(flat(i) for i in x)
     if isinstance(x, dict): return flat(x.get('text') or x.get('content') or '')
     return ''
-def own(cmd): return re.split(r';|&&|\|\||\n', re.split(CALL['start_line'], cmd, 1)[1], 1)[0]
-def cut(cmd, out): return bool(re.search(r'[|>]', own(cmd)) and re.search(r'(?m)^UNATTENDED_SESSION: true\s*$', out)) and not re.search(r'(?m)^(?:RENDER_KIND|SESSION_KIND)', out)
+def own(cmd): return re.split(r';|&&|\|\||\n', re.split(CALL['start_line'], cmd, maxsplit=1)[1], maxsplit=1)[0]
+def cut(cmd, out): return bool(re.search(r'[|>]', own(cmd)) and re.search(r'(?m)^UNATTENDED_SESSION: true\s*$', out)) and not re.search(r'(?m)^RENDER_KIND', out)
 def session(path):
     calls, results, texts, tools, capped, starts, outs = [], [], [], collections.Counter(), False, [], {}
     for line in open(path, errors='replace'):
@@ -68,7 +69,7 @@ def session(path):
     m['any_ceremony'] = any(m[k] for k in CEREMONY)
     m['turn_cap'] = capped
     m['start_line_cut'] = bool(starts) and all(cut(c, outs.get(i, '')) for i, c in starts)
-    m['start_line_cut_render'] = m['start_line_cut'] and all(re.search(r'--render\s+unattended\b', own(c)) for _, c in starts)
+    m['start_line_cut_render'] = m['start_line_cut'] and not m['render_kind_unattended'] and all(re.search(r'--render\s+unattended\b', own(c)) for _, c in starts)
     m['session_kind_mismatch'] = any(re.search(r'(?m)^SESSION_KIND: (?!unattended\s*$)', outs.get(i, '')) for i, _ in starts)
     return m
 def sessions(kind, roots):
