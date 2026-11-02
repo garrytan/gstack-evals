@@ -162,6 +162,25 @@ describe("vm-run.sh during the paid batch", () => {
     expect(await r.exited).toBe(130);
     expect(JSON.parse(r.out("proxy-status-end.json")).cap_stop).toMatch(/^ledger refused a reserve for t2 at /);
   }, 60_000);
+
+  test("with STOP_ON_CAP, a real proxy that stops answering leaves Harbor running, and 3 failed reads in a row put one timestamped line in out/cap-watch.log", async () => {
+    const r = await startRealProxyRun({ batchCapUsd: 50, ledgerCapUsd: 5, stopOnCap: true });
+    expect(r.harborRunning()).toBe(true);
+    await Bun.sleep(1000);
+    expect(r.has("cap-watch.log")).toBe(false);
+    expect(r.killProxy()).toBe(true);
+    for (let i = 0; i < 100 && !r.has("cap-watch.log"); i++) await Bun.sleep(100);
+    await Bun.sleep(1000);
+    const lines = r.out("cap-watch.log").trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ proxy_status failed 3 times in a row: /);
+    expect(r.log()).not.toContain("pkill");
+    expect(r.has("cap-stop.json")).toBe(false);
+    r.finish();
+    expect(await r.exited).toBe(0);
+    expect(r.log()).toContain("harbor finished");
+    expect(r.out("proxy-status-end.json")).toBe("");
+  }, 60_000);
 });
 
 describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3)", () => {

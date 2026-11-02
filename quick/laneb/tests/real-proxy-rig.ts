@@ -4,20 +4,26 @@ import { join } from "node:path";
 import { Ledger } from "../runner/ledger.ts";
 
 // vm-run.sh's paid phase against the real metering proxy and a real ledger service, so every control route vm-run.sh
-// reads is the one runner/proxy.ts serves. vm-run.sh starts proxy.ts itself (data 127.0.0.1:8787, control :8788), and the
-// rig serves runner/ledger.ts on 127.0.0.1:9911, where the SSH tunnel would be. Only sg, harbor, pkill and sleep are fakes:
+// reads is the one runner/proxy.ts serves. vm-run.sh starts proxy.ts itself and the rig serves runner/ledger.ts where the
+// SSH tunnel would be, all on free ports the rig picks and passes in PROXY_DATA_PORT, PROXY_CONTROL_PORT and
+// LEDGER_TUNNEL_PORT, so a live proxy or ledger on 8787, 8788 or 9911 never meets the rig. Only sg, harbor, pkill and sleep are fakes:
 // Harbor runs until the test writes HARBOR_DONE or a SIGINT reaches it, and the test plays the agent by opening and
 // closing sessions on the control port. No provider key reaches the proxy, and no request goes to its data port.
 const laneb = join(import.meta.dir, "..");
-const CONTROL = "http://127.0.0.1:8788";
-const taken = (port: number) => Bun.spawnSync(["bash", "-c", 'exec 3<>"/dev/tcp/127.0.0.1/$1"', "bash", String(port)], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
-const post = async (path: string, body: unknown) => {
-  const res = await fetch(CONTROL + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const freePorts = (n: number) => {
+  const held = Array.from({ length: n }, () => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() }));
+  const ports = held.map((s) => s.port);
+  for (const s of held) s.stop(true);
+  return ports;
+};
+const post = async (control: string, path: string, body: unknown) => {
+  const res = await fetch(control + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   return { status: res.status, body: (await res.json()) as any };
 };
 
 export async function startRealProxyRun(o: { batchCapUsd: number; ledgerCapUsd: number; stopOnCap?: boolean }) {
-  for (const port of [8787, 8788, 9911]) if (taken(port)) throw new Error(`127.0.0.1:${port} already answers; the real-proxy rig needs it free`);
+  const [dataPort, controlPort, ledgerPort] = freePorts(3);
+  const control = `http://127.0.0.1:${controlPort}`;
   const root = mkdtempSync(join(tmpdir(), "laneb-realproxy-"));
   const bin = join(root, "bin"), run = join(root, "run"), home = join(root, "home"), log = join(root, "rig.log");
   for (const d of [bin, run, home]) mkdirSync(d, { recursive: true });
@@ -39,10 +45,14 @@ export async function startRealProxyRun(o: { batchCapUsd: number; ledgerCapUsd: 
   if (o.stopOnCap) writeFileSync(join(run, "STOP_ON_CAP"), "");
   const ledgerPath = join(root, "ledger.jsonl");
   new Ledger(ledgerPath, "rig").approve(o.ledgerCapUsd, { words: "test", by: "test" });
-  const env: Record<string, string | undefined> = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, PROXY_DATA_PORT: String(dataPort), PROXY_CONTROL_PORT: String(controlPort), LEDGER_TUNNEL_PORT: String(ledgerPort) };
   for (const k of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "UBICLOUD_API_KEY"]) delete env[k];
-  const ledger = Bun.spawn([process.execPath, join(laneb, "runner/ledger.ts"), "serve", "--path", ledgerPath, "--item", "rig", "--port", "9911"], { env, stdout: "ignore", stderr: "ignore" });
-  for (let i = 0; i < 100 && !(await fetch("http://127.0.0.1:9911/status").then((r) => r.ok, () => false)); i++) await Bun.sleep(50);
+  const ledger = Bun.spawn([process.execPath, join(laneb, "runner/ledger.ts"), "serve", "--path", ledgerPath, "--item", "rig", "--port", String(ledgerPort)], { env, stdout: "ignore", stderr: "ignore" });
+  const ledgerStatus = () => fetch(`http://127.0.0.1:${ledgerPort}/status`).then((r) => (r.ok ? r.json() : null), () => null);
+  for (let i = 0; i < 100 && !(await ledgerStatus()); i++) await Bun.sleep(50);
+  if (ledger.exitCode !== null) throw new Error(`the rig's ledger exited (${ledger.exitCode}) before vm-run.sh started`);
+  const capMicros = ((await ledgerStatus()) as any)?.capMicros;
+  if (capMicros !== Math.round(o.ledgerCapUsd * 1e6)) throw new Error(`127.0.0.1:${ledgerPort}/status reports capMicros ${capMicros}, not the rig's approved ${o.ledgerCapUsd} USD`);
   const proc = Bun.spawn(["setsid", "bash", join(laneb, "runner/vm-run.sh"), run, "p-", String(o.batchCapUsd)], { env, stdout: "pipe", stderr: "pipe" });
   const rigLog = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
   for (let i = 0; i < 300 && !rigLog().includes("harbor running") && proc.exitCode === null; i++) await Bun.sleep(50);
@@ -58,8 +68,9 @@ export async function startRealProxyRun(o: { batchCapUsd: number; ledgerCapUsd: 
     run,
     log: rigLog,
     harborRunning: () => rigLog().includes("harbor running"),
-    open: (trial: string, capUsd: number) => post("/sessions", { trial, model: "claude-opus-5-5", cap_usd: capUsd }),
-    close: (id: string) => post(`/sessions/${id}/close`, { reason: "agent_finished" }),
+    open: (trial: string, capUsd: number) => post(control, "/sessions", { trial, model: "claude-opus-5-5", cap_usd: capUsd }),
+    close: (id: string) => post(control, `/sessions/${id}/close`, { reason: "agent_finished" }),
+    killProxy: () => Bun.spawnSync(["/usr/bin/pkill", "-f", `control-port ${controlPort}`]).exitCode === 0,
     finish: () => writeFileSync(join(run, "HARBOR_DONE"), ""),
     stop: () => writeFileSync(join(run, "STOP"), ""),
     exited,

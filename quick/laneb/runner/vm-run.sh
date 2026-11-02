@@ -24,6 +24,8 @@ run=$(cd "$1" && pwd)
 prefix=$2
 cap=$3
 runner=$(cd "$(dirname "$0")" && pwd)
+# Only tests set PROXY_DATA_PORT, PROXY_CONTROL_PORT and LEDGER_TUNNEL_PORT; job.json's base_url and the agent's control_url assume the defaults.
+data_port=${PROXY_DATA_PORT:-8787}; control_port=${PROXY_CONTROL_PORT:-8788}; ledger_port=${LEDGER_TUNNEL_PORT:-9911}
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 mkdir -p "$run/out" "$run/jobs"
 rm -f "$run/out/vm-run.exit"
@@ -39,7 +41,7 @@ for gz in "$run"/arms/*.tar.gz; do
   got=$(sha256sum "${gz%.gz}" | cut -d' ' -f1)
   [ "$got" = "$want" ] || { echo "arm $name: tar sha256 $got, manifest says $want" >&2; exit 5; }
 done
-curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-start.json" || { echo "ledger tunnel not reachable" >&2; exit 4; }
+curl -fsS 127.0.0.1:$ledger_port/status > "$run/out/ledger-status-start.json" || { echo "ledger tunnel not reachable" >&2; exit 4; }
 hub_auth=${DOCKER_HUB_AUTH_URL:-https://auth.docker.io}
 hub=${DOCKER_HUB_URL:-https://registry-1.docker.io}
 try_s=${PULL_TRY_SEC:-1800}
@@ -147,32 +149,44 @@ fi
 gw=$(sg docker -c "docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'")
 (
   set -a; . "$HOME/.laneb-keys"; set +a
-  exec bun "$runner/proxy.ts" --config "$run/proxy.json" --data-host "$gw" --data-port 8787 --control-port 8788 \
+  exec bun "$runner/proxy.ts" --config "$run/proxy.json" --data-host "$gw" --data-port "$data_port" --control-port "$control_port" \
     --log "$run/out/proxy-requests.jsonl" --sessions "$run/out/proxy-sessions.jsonl" \
-    --ledger-url http://127.0.0.1:9911 --ledger-prefix "$prefix" --global-cap-usd "$cap"
+    --ledger-url http://127.0.0.1:$ledger_port --ledger-prefix "$prefix" --global-cap-usd "$cap"
 ) > "$run/out/proxy.log" 2>&1 &
 proxy=$!
-trap 'rc=$?; curl -fsS -X POST 127.0.0.1:8788/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; echo $rc > "$run/out/vm-run.exit"' EXIT
-for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && break; sleep 0.5; done
-curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
+trap 'rc=$?; curl -fsS -X POST 127.0.0.1:$control_port/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; echo $rc > "$run/out/vm-run.exit"' EXIT
+for _ in $(seq 1 40); do curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 && break; sleep 0.5; done
+curl -fsS 127.0.0.1:$control_port/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
 # proxy_status: the proxy's state, read from its control route GET /totals (proxy.ts serves no /status), as one JSON line
 # that keeps /totals' fields one to one: sessions (every session opened this run), open_sessions, unsettled_sessions,
 # cap_stop (the latched reason, or null) and global_spent_micros. It prints nothing and fails unless the answer has
 # cap_stop and both session counts as numbers, so a missing field never reads as "no cap stop".
 proxy_status() {
-  curl -fsS --max-time 10 127.0.0.1:8788/totals \
+  curl -fsS --max-time 10 127.0.0.1:$control_port/totals \
     | jq -ce 'select(has("cap_stop") and (.sessions | type) == "number" and (.open_sessions | type) == "number") | {sessions, open_sessions, unsettled_sessions, cap_stop, global_spent_micros}'
 }
 sed "s#__GATEWAY__#$gw#g" "$run/job.json" > "$run/out/job.resolved.json"
 cd "$run"
 # With a STOP_ON_CAP file in the run dir, a latched cap stop (the ledger or the batch cap refused a session) also stops
 # Harbor, so the run ends incomplete instead of starting trials that can't open a session; out/cap-stop.json records the
-# proxy_status line that showed it.
-(while kill -0 $$ 2>/dev/null; do
+# proxy_status line that showed it. After 3 failed reads in a row it appends a timestamped line to out/cap-watch.log, so a
+# watcher that can't see cap_stop leaves a record; a failed read never stops Harbor.
+(fails=0
+while kill -0 $$ 2>/dev/null; do
   [ -e "$run/STOP" ] && pkill -INT -f "/bin/harbor run" && break
-  if [ -e "$run/STOP_ON_CAP" ] && s=$(proxy_status 2>/dev/null) && jq -e '.cap_stop != null' <<< "$s" >/dev/null 2>&1; then
-    printf '%s\n' "$s" > "$run/out/cap-stop.json"
-    pkill -INT -f "/bin/harbor run" && break
+  if [ -e "$run/STOP_ON_CAP" ]; then
+    if s=$(proxy_status 2>/dev/null); then
+      fails=0
+      if jq -e '.cap_stop != null' <<< "$s" >/dev/null 2>&1; then
+        printf '%s\n' "$s" > "$run/out/cap-stop.json"
+        pkill -INT -f "/bin/harbor run" && break
+      fi
+    else
+      fails=$((fails + 1))
+      if [ "$fails" -eq 3 ]; then
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) proxy_status failed 3 times in a row: the cap watcher can't read cap_stop from GET /totals" >> "$run/out/cap-watch.log"
+      fi
+    fi
   fi
   sleep 2
 done) >/dev/null 2>&1 </dev/null &
@@ -180,9 +194,9 @@ set +e
 sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' harbor run -y -c '$run/out/job.resolved.json'" > "$run/out/harbor.log" 2>&1
 rc=$?
 set -e
-curl -fsS -X POST 127.0.0.1:8788/close-all > "$run/out/close-all.json" || true
-curl -fsS 127.0.0.1:8788/totals > "$run/out/proxy-totals.json" || true
+curl -fsS -X POST 127.0.0.1:$control_port/close-all > "$run/out/close-all.json" || true
+curl -fsS 127.0.0.1:$control_port/totals > "$run/out/proxy-totals.json" || true
 proxy_status > "$run/out/proxy-status-end.json" || true
-curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-end.json" || true
+curl -fsS 127.0.0.1:$ledger_port/status > "$run/out/ledger-status-end.json" || true
 echo "harbor exit $rc"; tail -5 "$run/out/harbor.log"; cat "$run/out/proxy-totals.json"
 exit $rc
