@@ -13,10 +13,10 @@ links:
   - 2026-11-01-geva-115-planning-ceo-v2-admission-prereg
 source: "Kit v3 built by GEVA-202 (issue GST-1049) from #127's author-spec.md and echo-terms.txt under the approved panel v3 plan (#156, 0aeb3f1), step 2."
 attachments:
-  - 0c2ccc8d7d87c122d66cdebaa39a1f26070c0d6b655e73e048ae3e7bb46b7557  KIT.sha256
-  - a0534ab74b8b927654fc2ce21559385e42337054e51fe006f0877e22b5366ee5  author-spec.md
-  - 7dcfdaed93ebd620477b98adaaf6a413fa3a44a4fe31ac3498bcec5958827ecc  audit-brief.md
-  - 928cc0f671fd5bc0fd415f6f1b4bbf9aa969f6d079416cde6fe6ceb5a4b18e55  check_units.py
+  - fc09ec2f81794a7445c4ff11e0e803fd2a4236b596d5af6b107b1f86f810eb08  KIT.sha256
+  - ce0576203a3071782d3586221b9fa1e4f2189fcbc7db8eb2c3f18ce45916b5cd  author-spec.md
+  - 4b9f51aac56bcfdfbfa1abdb05ba9d8be000db804affd7219ac48f81adb00400  audit-brief.md
+  - 4a9189d1a76ac9134d8140d9162e2d66b7e10a5c4c504b7383a7b369e5520617  check_units.py
   - a3ac8b97504afc9b2118a1d8a34b6201d9826b57308a303440b142803a19957a  draw.py
   - dcb86b4be31d03722f02dea15cb890c794b3586576474140102341a2f8750c3d  echo-terms.txt
 ---
@@ -32,7 +32,7 @@ The kit is the five files below. KIT.sha256 lists their sha256 in name order, ex
     sha256sum author-spec.md audit-brief.md check_units.py draw.py echo-terms.txt > KIT.sha256
     sha256sum KIT.sha256
 
-Kit digest: **0c2ccc8d7d87c122d66cdebaa39a1f26070c0d6b655e73e048ae3e7bb46b7557**
+Kit digest: **fc09ec2f81794a7445c4ff11e0e803fd2a4236b596d5af6b107b1f86f810eb08**
 
 Every authoring wave copies the five files and KIT.sha256 to each author's and auditor's machine, and each agent runs `sha256sum -c KIT.sha256` before it starts and stops if a line fails. A change to any file is a new kit version in a new post.
 
@@ -40,7 +40,7 @@ Every authoring wave copies the five files and KIT.sha256 to each author's and a
 |---|---|
 | author-spec.md | The authors' brief: unit layout and sizes, strata and scope, modes, the four levers, the twelve kinds, anchors, minors, panel units and decoys for later waves, the key schema and the check. |
 | audit-brief.md | The auditors' brief: per-item and per-unit checks with codes, the bias guard, the findings file and the re-audit rule. |
-| check_units.py | The checker. Layout, sizes, scope, the clean-room path list, the echo terms and the key schema, per wave. Prints no file text. `--self-test` builds synthetic units and checks that a clean unit passes and 14 broken ones fail with the right code, plus four recipe cases. |
+| check_units.py | The checker. Layout, sizes, scope, the clean-room path list, the echo terms and the key schema, per wave. Prints no file text. `--self-test` builds synthetic units and checks that a clean unit passes and 14 broken ones fail with the right code, plus three usage and four recipe cases. |
 | draw.py | The calibration draw. A public seed spreads the strata across the four authors; OS randomness mints unit labels and draws modes, anchor shapes and the auditor split. |
 | echo-terms.txt | Phrases no unit may contain: 154 anywhere and 38 in headings. |
 
@@ -57,7 +57,7 @@ Kit v2 is #127's (wiki/plans/2026-11-01-geva-115-planning-ceo-v2-admission-prere
 - **Scope.** ceo, eng and dx plans name no UI file and hold no UI source; a design plan names the UI files it changes; eng and dx units have src/.
 - **Clean room.** The checker refuses a unit tree that holds a symlink, a hidden path, a folder named .claude, .capy, .gstack or .local, a file named AGENTS.md, CLAUDE.md, GEMINI.md or SKILL.md, or a path that contains gstack, .claude/skills, .capy/drive or .local/share/gstack (plan section 4, I1). The echo list also refuses those strings in file text.
 - **Echo terms.** v2's 54 lines stay. New lines come from the heading words of plan-eng-review, plan-devex-review and plan-design-review (SKILL.md, sections/review-sections.md, sections/checklist.md) and autoplan's phases (SKILL.md and sections/ceo-phase.md, design-phase.md, dx-phase.md, eng-phase.md, phase-close.md, ceo-only.md), with plan-ceo-review re-read, at gstack 1.93.17.0 (68410828fd85611caea2c8429846f683849f425a). Distinctive phrases are flagged anywhere; generic pass names (architecture, performance, test plan, accessibility, migration, getting started and the like) only in headings, so a plan can't mirror a skill's section list. Then the skill names, the clean-room strings and the panel's own words (omission, must-fix, planted and the like).
-- **A new checker.** v2's check_units.py was sealed inside v2's kit, and this thread may not open v2 material, so v3's checker is written fresh from v2's published spec (layout, sizes, echo terms, key schema) and extended for v3. It runs per wave: `--wave calibration` wants four items (one of each of the stratum's kinds and one anchor); `--wave admission` and `--wave confirmatory` want three candidate items and take `--kept` and `--floor` to check the recipe.
+- **A new checker.** v2's check_units.py was sealed inside v2's kit, and this thread may not open v2 material, so v3's checker is written fresh from v2's published spec (layout, sizes, echo terms, key schema) and extended for v3. It runs per wave: `--wave calibration` wants four items (one of each of the stratum's kinds and one anchor); `--wave admission` and `--wave confirmatory` want three candidate items and require `--kept` (E0's kept kinds) and `--floor` (its KEEP-FLOOR kinds, or none), so the recipe can't be skipped by leaving them out.
 - **Audit brief.** v2's audit questions (findable, must-fix, keyed, unsignposted, independent, no unkeyed Critical or High, no echo terms, the bias guard) carry over, with a lever check per lever, a realism and a scope check, and a findings file that moves by file transfer.
 
 ## Rules the kit settles

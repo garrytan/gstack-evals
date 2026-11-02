@@ -12,7 +12,7 @@ The authoring rules are in ~/.capy/work/kit/author-spec.md. Read it first. Apply
 
 ## How to audit a unit
 
-1. Run `python3 ~/.capy/work/kit/check_units.py <panel folder> --wave <wave>` and record its result for the unit.
+1. Run `python3 ~/.capy/work/kit/check_units.py <panel folder> --wave <wave>` and record its result for the unit. For an admission or confirmatory wave, add `--kept` and `--floor` exactly as your brief gives them; the checker refuses those waves without them.
 2. Read plan.md and every file in context/ and src/ as a careful reviewer would, before you look at key.json's causes, and note what you would flag.
 3. Then read key.json and answer every question below.
 

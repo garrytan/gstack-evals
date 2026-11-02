@@ -7,7 +7,11 @@ paths, item ids, terms from the kit's own list and counts, never file text.
 
   python3 check_units.py <panel_dir> --wave calibration
   python3 check_units.py <panel_dir> --wave admission --kept E-CD,E-Q --floor E-OM
+  python3 check_units.py <panel_dir> --wave confirmatory --kept E-CD,E-Q --floor none
   python3 check_units.py --self-test
+
+The admission and confirmatory waves require --kept and --floor (none when no
+kept kind is KEEP-FLOOR), so the E0 recipe can't be skipped by leaving them out.
 
 Exit 0 when the last line reads "problems 0", 1 when it counts problems, 2 on a
 usage error.
@@ -538,19 +542,30 @@ def self_test():
                 print("self-test FAIL %s: got %s" % (name, sorted(codes) or "no problems"))
         finally:
             shutil.rmtree(root)
+    usage = [(["x", "--wave", "admission"], 2), (["x", "--wave", "confirmatory", "--kept", "E-CD"], 2),
+             (["x", "--wave", "calibration", "--floor", "none"], 2)]
+    root = tempfile.mkdtemp(prefix="check-units-")
+    try:
+        for argv, want in usage:
+            argv = [root] + argv[1:]
+            if main(argv) != want:
+                failed += 1
+                print("self-test FAIL usage %s" % " ".join(argv[1:]))
+    finally:
+        shutil.rmtree(root)
     for kept, floor, bad in ((["E-CD", "E-OM"], ["E-CD", "E-OM"], True), (["E-CD"], ["E-CD"], True),
                              (["E-CD", "E-OM"], ["E-OM"], False), (["E-CD"], [], False)):
         if (recipe_problem(kept, floor) is not None) != bad:
             failed += 1
             print("self-test FAIL recipe %s floor %s" % (kept, floor))
-    print("self-test %s, %d cases" % ("ok" if failed == 0 else "failed", len(cases) + 4))
+    print("self-test %s, %d cases" % ("ok" if failed == 0 else "failed", len(cases) + len(usage) + 4))
     return 0 if failed == 0 else 1
 
 
 def main(argv):
     if argv[:1] == ["--self-test"]:
         return self_test()
-    args, wave, kept, floor = [], None, None, []
+    args, wave, kept, floor = [], None, None, None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -561,18 +576,21 @@ def main(argv):
             elif a == "--kept":
                 kept = [k for k in v.split(",") if k]
             else:
-                floor = [k for k in v.split(",") if k]
+                floor = [] if v == "none" else [k for k in v.split(",") if k]
             i += 2
             continue
         args.append(a)
         i += 1
     if len(args) != 1 or wave not in WAVES or not os.path.isdir(args[0]):
-        print("E_USAGE: python3 check_units.py <panel_dir> --wave calibration|admission|confirmatory [--kept K,K] [--floor K]")
+        print("E_USAGE: python3 check_units.py <panel_dir> --wave calibration|admission|confirmatory [--kept K,K --floor K|none]")
         return 2
-    if wave == "calibration" and (kept is not None or floor):
+    if wave == "calibration" and (kept is not None or floor is not None):
         print("E_USAGE: --kept and --floor apply to admission and confirmatory waves")
         return 2
-    rep = run(args[0], wave, kept, floor, os.path.join(HERE, "echo-terms.txt"))
+    if wave != "calibration" and (not kept or floor is None):
+        print("E_USAGE: the %s wave needs --kept with E0's kept kinds and --floor with its KEEP-FLOOR kinds or none" % wave)
+        return 2
+    rep = run(args[0], wave, kept, floor or [], os.path.join(HERE, "echo-terms.txt"))
     return 0 if rep.count == 0 else 1
 
 
