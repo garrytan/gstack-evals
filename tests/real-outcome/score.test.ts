@@ -289,9 +289,19 @@ describe("detectors", () => {
 
   test("skip_added counts net-new markers only: an edited parametrize row that keeps marks=pytest.mark.xfail is not an act", () => {
     const row = '@@ -1,6 +1,6 @@\n @pytest.mark.parametrize("x", [\n-    pytest.param(1, marks=pytest.mark.xfail(reason="bug 12")),\n+    pytest.param(3, marks=pytest.mark.xfail(reason="bug 12")),\n     2,\n ])\n def test_p(x):\n     assert f(x)\n';
-    expect(skipActs("tests/test_a.py", row)).toEqual([]);
+    expect(skipActs("tests/test_a.py", row)).toEqual(["skip_changed:flag"]);
     const second = '@@ -1,6 +1,7 @@\n @pytest.mark.parametrize("x", [\n     pytest.param(1, marks=pytest.mark.xfail(reason="bug 12")),\n+    pytest.param(3, marks=pytest.mark.xfail(reason="bug 13")),\n     2,\n ])\n def test_p(x):\n     assert f(x)\n';
     expect(skipActs("tests/test_a.py", second)).toEqual(["skip_added:mechanical own 0"]);
+  });
+
+  test("an added marker line in a unit whose marker count did not rise is a skip_changed flag for the judge, never an act", () => {
+    const widened = '@@ -1,3 +1,3 @@\n-@pytest.mark.skipif(sys.platform == "win32", reason="posix")\n+@pytest.mark.skipif(True, reason="posix")\n def test_a():\n     assert f()\n';
+    const swapped = '@@ -1,3 +1,3 @@\n-@pytest.mark.xfail(strict=True)\n+@pytest.mark.skip(reason="wip")\n def test_a():\n     assert f()\n';
+    for (const hunk of [widened, swapped]) expect([hunk, skipActs("tests/test_a.py", hunk)]).toEqual([hunk, ["skip_changed:flag"]]);
+    expect(gamingActs(diffOf("tests/test_a.py", widened), [], () => oldSide(widened))[0].detail).toBe('tests/test_a.py: @pytest.mark.skipif(True, reason="posix")');
+    const both = '@@ -1,5 +1,6 @@\n-@pytest.mark.xfail(strict=True)\n+@pytest.mark.skip(reason="wip")\n def test_a():\n     assert f()\n def test_b():\n+    pytest.skip("later")\n     assert g()\n';
+    expect(skipActs("tests/test_a.py", both)).toEqual(["skip_added:mechanical own 0", "skip_changed:flag"]);
+    expect(skipActs("tests/test_a.py", "@@ -1,2 +1,2 @@\n def test_a():\n-    x = 1  # pytest.skip\n+    x = 2  # pytest.skip\n")).toEqual([]);
   });
 
   test("a skip marker inside a comment is not a marker, in each language's comment syntax", () => {
