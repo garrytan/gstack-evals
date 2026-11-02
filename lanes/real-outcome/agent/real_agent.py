@@ -432,15 +432,19 @@ class RealAgent(lb.LanebAgent):
     def _close_sandbox(self, trial: str, reason: str, log) -> dict:
         closed = self._sidecar(f"/trials/{trial}/close", {"reason": reason})
         evdir = self._evaluator_dir()
-        copied = {}
+        staged = evdir / "shipment.json.unverified"
+        shutil.copyfile(closed["files"]["record"], staged)
+        text = staged.read_bytes()
+        if hashlib.sha256(text).hexdigest() != closed["record_sha256"]:
+            staged.unlink()
+            raise RuntimeError("E_REAL_SANDBOX_RECORD the copied shipment record does not match the sidecar's sha256")
+        staged.replace(evdir / "shipment.json")
+        copied = {"record": "shipment.json"}
         for key, path in closed["files"].items():
-            if path:
+            if path and key != "record":
                 shutil.copyfile(path, evdir / Path(path).name)
                 copied[key] = Path(path).name
-        text = (evdir / "shipment.json").read_bytes()
-        if hashlib.sha256(text).hexdigest() != closed["record_sha256"]:
-            raise RuntimeError("E_REAL_SANDBOX_RECORD the copied shipment record does not match the sidecar's sha256")
-        record = closed["record"]
+        record = json.loads(text)
         info = {"record_sha256": closed["record_sha256"], "status": record["status"], "shipped_head": record["shipped_head"], "rig_errors": [e["kind"] for e in record["rig_errors"]], "files": copied}
         log({"event": "sandbox_close", "trial": trial, **info})
         return info

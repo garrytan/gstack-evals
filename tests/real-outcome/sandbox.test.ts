@@ -17,9 +17,9 @@ const SENTINEL = "host-only-" + Math.random().toString(36).slice(2);
 let n = 0;
 
 // The sidecar runs in its own process, as it does beside the proxy: the fake agent's git and gh calls block this one.
-beforeAll(async () => {
-  sc.proc = Bun.spawn([process.execPath, join(import.meta.dir, "../../bin/gstack-evals"), "real", "sandbox", "serve", "--root", join(tmp, "sidecar"), "--agent-host", "127.0.0.1", "--agent-port", "0", "--control-port", "0"], { stdout: "pipe", stderr: "inherit", env: { ...process.env, REAL_HOST_SENTINEL: SENTINEL } });
-  const reader = (sc.proc.stdout as ReadableStream<Uint8Array>).getReader();
+async function serve(root: string, cwd?: string) {
+  const proc = Bun.spawn([process.execPath, join(import.meta.dir, "../../bin/gstack-evals"), "real", "sandbox", "serve", "--root", root, "--agent-host", "127.0.0.1", "--agent-port", "0", "--control-port", "0"], { cwd, stdout: "pipe", stderr: "inherit", env: { ...process.env, REAL_HOST_SENTINEL: SENTINEL } });
+  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
   let text = "";
   while (!text.includes("\n")) {
     const { value, done } = await reader.read();
@@ -27,8 +27,12 @@ beforeAll(async () => {
     text += new TextDecoder().decode(value);
   }
   reader.releaseLock();
-  sc.controlUrl = text.match(/control=(\S+)/)?.[1] ?? "";
-  expect(sc.controlUrl).toStartWith("http://127.0.0.1:");
+  const controlUrl = text.match(/control=(\S+)/)?.[1] ?? "";
+  expect(controlUrl).toStartWith("http://127.0.0.1:");
+  return { proc, controlUrl };
+}
+beforeAll(async () => {
+  Object.assign(sc, await serve(join(tmp, "sidecar")));
 });
 afterAll(() => {
   sc.proc?.kill();
@@ -40,13 +44,13 @@ const sh = (cwd: string, cmd: string, env: Record<string, string>, input?: strin
   return { code: r.status ?? -1, out: r.stdout, err: r.stderr };
 };
 
-async function control(path: string, body: unknown) {
-  const r = await fetch(sc.controlUrl + path, { method: "POST", body: JSON.stringify(body) });
+async function control(path: string, body: unknown, url = sc.controlUrl) {
+  const r = await fetch(url + path, { method: "POST", body: JSON.stringify(body) });
   return { status: r.status, body: (await r.json()) as Record<string, unknown> };
 }
 
 /** A fixture repository and a trial opened on it; the fake agent acts in c/testbed with the stub first on PATH. */
-async function trial(o: { kind?: TrialSpec["kind"]; files?: Record<string, string>; replay?: boolean; agent_ip?: string; skipPrep?: boolean; branch?: string; setup?: string } = {}) {
+async function trial(o: { kind?: TrialSpec["kind"]; files?: Record<string, string>; replay?: boolean; agent_ip?: string; skipPrep?: boolean; branch?: string; setup?: string; control?: string } = {}) {
   const branch = o.branch ?? "main";
   const id = "t" + ++n;
   const c = join(tmp, id);
@@ -65,11 +69,11 @@ async function trial(o: { kind?: TrialSpec["kind"]; files?: Record<string, strin
   const bundle = join(c, "base.bundle");
   expect(run("git bundle create -q " + bundle + " 'refs/heads/" + branch + "'").code).toBe(0);
   const spec: TrialSpec = { trial: id, repo: "sandbox/repo", kind: o.kind ?? (o.replay ? "K4" : "K2"), base_branch: branch, base_commit: base, start_ref: o.replay ? "change" : branch, bundle, repo_dir: repo, config_dir: join(c, "etc"), bin_dir: join(c, "bin"), node: process.execPath, ...(o.agent_ip ? { agent_ip: o.agent_ip } : {}) };
-  const opened = await control("/trials", spec);
+  const opened = await control("/trials", spec, o.control);
   const token = opened.body.token as string;
   const prep = o.skipPrep || opened.status !== 200 ? null : run("sh -s", opened.body.prep as string);
   const gh = (args: string, input?: string) => run("gh " + args, input);
-  const close = async (reason = "agent_finished") => (await control("/trials/" + id + "/close", { reason })).body as { record: ShipmentRecord; record_sha256: string; files: { record: string; journal: string; bundle: string } };
+  const close = async (reason = "agent_finished") => (await control("/trials/" + id + "/close", { reason }, o.control)).body as { record: ShipmentRecord; record_sha256: string; files: { record: string; journal: string; bundle: string } };
   const commit = (msg: string, line = msg) => run("echo '// " + line + "' >> src/app.js && git commit -qam '" + msg + "' && git rev-parse HEAD").out.trim();
   return { id, c, repo, env, run, gh, close, commit, base, opened, token, prep, spec };
 }
@@ -354,6 +358,23 @@ describe("integrity: forging, bypassing and touching another trial (open item 1)
     expect(record).toMatchObject({ status: "none", shipped_head: null, pull_requests: [] });
     expect(record.refused.map((r) => r.kind)).toEqual(["bad_ref", "bad_ref"]);
     expect(Object.keys(record.refs_at_close)).toEqual(["refs/heads/main"]);
+  });
+
+  test("a relative --root is resolved, so the pre-receive guard refuses refs outside branches and tags", async () => {
+    const rel = await serve("relative-root", tmp);
+    try {
+      const t = await trial({ control: rel.controlUrl });
+      expect(t.opened.status).toBe(200);
+      t.commit("feat");
+      expect(t.run("git push -q origin HEAD:refs/notes/commits 2>&1").code).not.toBe(0);
+      expect(t.run("git push -q origin HEAD:refs/real-outcome/shipped 2>&1").code).not.toBe(0);
+      const { record, files } = await t.close();
+      expect(record.refused.map((r) => r.kind)).toEqual(["bad_ref", "bad_ref"]);
+      expect(Object.keys(record.refs_at_close)).toEqual(["refs/heads/main"]);
+      expect(files.record).toBe(join(tmp, "relative-root", t.id, "shipment.json"));
+    } finally {
+      rel.proc.kill();
+    }
   });
 
   test("a journal bypass is caught: an origin ref changed outside the journal makes the record a rig error", async () => {

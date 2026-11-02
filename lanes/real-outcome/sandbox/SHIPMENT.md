@@ -8,7 +8,7 @@ The sidecar closes a trial when the agent's session ends (`POST /trials/<id>/clo
 
 | File | Mode | What it holds |
 |---|---|---|
-| `shipment.json` | 0444, written once | The record below. The close response carries its sha256, and the agent checks the copy against it. |
+| `shipment.json` | 0444, written once | The record below. The close response carries its sha256. The agent checks its copy against it under a temporary name and places `shipment.json` only when it matches; on a mismatch it places nothing. |
 | `journal.jsonl` | 0444 after close | Every event, one JSON object per line, in order (`seq`). Only the sidecar writes it. |
 | `shipped.bundle` | | `git bundle --all` of the origin at close, plus `refs/real-outcome/shipped`, `refs/real-outcome/held` and `refs/real-outcome/pr/<n>` for the heads B6 grades. The record holds its sha256. |
 
