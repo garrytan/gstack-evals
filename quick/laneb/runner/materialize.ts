@@ -184,7 +184,7 @@ export function loadSwebvTasks(listPath: string, digestsPath: string, wantSha256
 // R3_DROP_SHA256, name R3's band, list band tasks that failed both passes, once each, match its own id digests, and drop
 // no task in the pilot draw. The band file, its sha256 and the pilot draw stay.
 export const R3_DROP_FILE = "tasks/swebv-r3-drop.json";
-export const R3_DROP_SHA256 = "e341afbeea0af5b64e7fcda19b76b5c36224eb6946d25b0acd278a32b942dcfc";
+export const R3_DROP_SHA256 = "1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc";
 
 export type R3Drop = { task_id: string; reason: string };
 

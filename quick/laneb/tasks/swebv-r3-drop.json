@@ -1,12 +1,136 @@
 {
   "band_file_sha256": "5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67",
   "band_size": 93,
-  "rule": "fixture until GEVA-177's r3-drop-list.json lands (GST-941): no task dropped",
-  "passes": [],
-  "dropped": [],
-  "dropped_ids_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "kept_size": 93,
-  "kept_ids_sha256": "5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67",
+  "rule": "wiki/plans/2026-11-02-geva-177-r3-amendment-3, section 2",
+  "passes": [
+    {
+      "pass": 1,
+      "harbor_exit": "0",
+      "finished": true,
+      "passed": 91,
+      "failed": 2,
+      "images": 96,
+      "images_pulled": 96,
+      "oracle_fails_sha256": "cdf1d975279ad7705cfebac71de83859705f27575f217e08f96c2fdf431a69c5",
+      "pulls_sha256": "8741a6e028fd67d69845030f1d2737d7c8ece0e6b9e11ce6229cca9edff63eb0"
+    },
+    {
+      "pass": 2,
+      "harbor_exit": "0",
+      "finished": true,
+      "passed": 91,
+      "failed": 2,
+      "images": 96,
+      "images_pulled": 96,
+      "oracle_fails_sha256": "cdf1d975279ad7705cfebac71de83859705f27575f217e08f96c2fdf431a69c5",
+      "pulls_sha256": "5aa5f333947bfe199828bf1df9098ad38cd8a192b51f8fa248729b5cb64f2f36"
+    }
+  ],
+  "dropped": [
+    {
+      "task": "django__django-10097",
+      "reason": "reference fails",
+      "pass1": {
+        "result": "fail",
+        "kind": "reference fails",
+        "image": "swebench/sweb.eval.x86_64.django_1776_django-10097:latest",
+        "pull": {
+          "status": "ok",
+          "tries": 1,
+          "repo_digest": "swebench/sweb.eval.x86_64.django_1776_django-10097@sha256:faf07f1d70370e9a4f76dac2cab0758300018f0eb4346b28aa55ac13630b873a",
+          "last_error": "waited 0s at the rate limit"
+        },
+        "trials": [
+          {
+            "trial": "django__django-10097__yFCWCA2",
+            "reward": "0",
+            "exception": null,
+            "digests": {
+              "result.json": "8556eb4cbfc290c9ad439f016da8157b57389c2784af8d6cb1fd190c57353ff8",
+              "verifier/reward.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+              "verifier/test-stdout.txt": "1e4217be4844791266009a37794953e9aa1dd3934ac8a99c2fab9737c73832af"
+            }
+          }
+        ]
+      },
+      "pass2": {
+        "result": "fail",
+        "kind": "reference fails",
+        "image": "swebench/sweb.eval.x86_64.django_1776_django-10097:latest",
+        "pull": {
+          "status": "ok",
+          "tries": 1,
+          "repo_digest": "swebench/sweb.eval.x86_64.django_1776_django-10097@sha256:faf07f1d70370e9a4f76dac2cab0758300018f0eb4346b28aa55ac13630b873a",
+          "last_error": "waited 0s at the rate limit"
+        },
+        "trials": [
+          {
+            "trial": "django__django-10097__7UDCCat",
+            "reward": "0",
+            "exception": null,
+            "digests": {
+              "result.json": "04d10c43779c34ebe834f947131673d674fe194bb1e6490e45e3770c2972febe",
+              "verifier/reward.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+              "verifier/test-stdout.txt": "e0de5db0142ecf20cd2a1132a514f05ecaa1642ac10ad1eb2073838b98378ed9"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "task": "sphinx-doc__sphinx-9711",
+      "reason": "reference fails",
+      "pass1": {
+        "result": "fail",
+        "kind": "reference fails",
+        "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-9711:latest",
+        "pull": {
+          "status": "ok",
+          "tries": 1,
+          "repo_digest": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-9711@sha256:6cfd4c13fa562c54559d5d7cd9335cba16b21a4291f7f46bbaae997d6153ed35",
+          "last_error": "waited 0s at the rate limit"
+        },
+        "trials": [
+          {
+            "trial": "sphinx-doc__sphinx-9711__PFcu5es",
+            "reward": "0",
+            "exception": null,
+            "digests": {
+              "result.json": "346d1e3eadf8d38f553ddd57235c84595d9db4e391c1fc3258cdef5369e75822",
+              "verifier/reward.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+              "verifier/test-stdout.txt": "0a142433d1f9821f4825285d1095eaba1ceb51b35348a584013b8bd1e8fb5677"
+            }
+          }
+        ]
+      },
+      "pass2": {
+        "result": "fail",
+        "kind": "reference fails",
+        "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-9711:latest",
+        "pull": {
+          "status": "ok",
+          "tries": 1,
+          "repo_digest": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-9711@sha256:6cfd4c13fa562c54559d5d7cd9335cba16b21a4291f7f46bbaae997d6153ed35",
+          "last_error": "waited 0s at the rate limit"
+        },
+        "trials": [
+          {
+            "trial": "sphinx-doc__sphinx-9711__2UDS3Mq",
+            "reward": "0",
+            "exception": null,
+            "digests": {
+              "result.json": "c775e5ca646483e28b196586d50f699ea24438e0a1a8857fd515c3141df9a5a8",
+              "verifier/reward.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+              "verifier/test-stdout.txt": "d84f8e58dc209c39ec03505d96884dc44da9d42efc4180d5d4a0177092ad62d2"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "dropped_ids_sha256": "cdf1d975279ad7705cfebac71de83859705f27575f217e08f96c2fdf431a69c5",
+  "kept_size": 91,
+  "kept_ids_sha256": "2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe",
   "pilot_tasks": [
     "scikit-learn__scikit-learn-14087",
     "sympy__sympy-15599",
