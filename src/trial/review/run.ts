@@ -24,8 +24,8 @@
 //   its background work (backgroundWaitS, BACKGROUND_WAIT_MS unless set), so its Claude Code sessions hold while that work
 //   is out (the driver holds only for a run that sets a wait); a wait off its default joins the key too. A completed code
 //   session that waited is scored by held.ts's rule, every code session records the turn it was scored from
-//   (scored_turn), arm.json counts a code arm's held rescues (held_rescues), and a background deadline records in
-//   session_end whether a findings block existed (findings_block), which is never scored.
+//   (scored_turn), arm.json counts a code arm's held rescues, held reads that parse as findings (held_rescues), and a
+//   background deadline records in session_end whether a findings block existed (findings_block), which is never scored.
 //   arm.json records the system prompt in arm_provenance, and an overridden prefix
 //   with its sha256 in told, on either kind of unit.
 // - A run with capStops (the CLI's --cap-stops, code units only) records its code sessions' cap stops as their own
@@ -461,7 +461,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
-        if (e.scored_turn?.rule === "held") held++;
+        if (e.scored_turn?.rule === "held" && e.parse.kind === "findings") held++;
         if (ended === "turn_cap" || ended === "allowance_stop") {
           capped[ended]++;
           cappedUnits.add(unit.unit.id);

@@ -70,6 +70,7 @@ const cells = {
   turnsReview: { STUB_MODE: "turns", STUB_TURN_TEXTS: JSON.stringify({ 2: findings("The cache key drops the allowance."), 3: "One more check.\n\n```json\n{\"draft\": true}\n```\n" }) },
   spent: { STUB_MODE: "apierror", STUB_API_ERROR: SPENT, STUB_API_STATUS: "402" },
   held: { STUB_MODE: "background", STUB_BG: JSON.stringify({ first: findings("The retry loop never backs off."), readers: [{ id: "tu_bg", delay: 300, kind: "local_bash" }] }), STUB_FINAL: "The background check finished; my findings above stand." },
+  heldBroken: { STUB_MODE: "background", STUB_BG: JSON.stringify({ first: "Revised.\n\n```json\n[{\"file\": \"src/a.ts\", \"line\": 1, \"severity\": \"CRITICAL\", \"claim\": \"x\", \"evidence\": \"y\",}]\n```\n", readers: [{ id: "tu_bg", delay: 300, kind: "local_bash" }] }), STUB_FINAL: "The background check finished; my findings above stand." },
   hung: { STUB_MODE: "background", STUB_BG: JSON.stringify({ first: findings("The lock is never released."), readers: [{ id: "tu_hang", delay: null }] }) },
   hungBare: { STUB_MODE: "background", STUB_BG: JSON.stringify({ readers: [{ id: "tu_hang", delay: null }] }) },
 } as const;
@@ -282,6 +283,21 @@ describe("R2 build: a stub run through the run loop with the real driver and the
         expect([e.record.termination, e.parse.kind, e.record.session_end?.cause, e.record.session_end?.findings_block, e.scored_turn?.index]).toEqual([{ kind: "missing", code: "E_BACKGROUND_DEADLINE" }, "incomplete", "deadline", block, null]);
         expect(JSON.stringify(arm(run.out, name + "-opus").coverage_gaps)).toContain("E_BACKGROUND_DEADLINE");
       }
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
+  // Value: protects=GSTA-2's ruling B on #141 (fix-check 2): arm.json's held_rescues counts only held reads that parse as findings, so a held read whose block is malformed (a gap) is not counted as a rescue; fails_when=a malformed held read raises held_rescues; why_new=the fix-check reader on 8a4c909; seam=runReviewUnits' arm.json; no_claim=held.ts's rule (held.test.ts)
+  test("held_rescues counts a held read that scores findings and not one that scores malformed", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "held", [b]: "heldBroken" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: { backgroundWaitS: 2 } });
+    try {
+      await runReviewUnits(run.input, run.rig);
+      const broken = [...readReviewJournal(run.out).values()].find((e) => e.cell.arm === "gstack-full" && e.cell.unit === b)!;
+      expect([broken.parse.kind, broken.scored_turn]).toEqual(["malformed", { rule: "held", index: 0, of: 2 }]);
+      expect([arm(run.out, "gstack-full-opus").held_rescues, arm(run.out, "none-r2-opus").held_rescues]).toEqual([1, 0]);
     } finally {
       run.h.proxy.stop();
     }

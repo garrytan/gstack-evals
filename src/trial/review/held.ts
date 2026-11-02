@@ -2,20 +2,22 @@
 // background work its main agent started is out, and the CLI takes a turn of its own when that work lands, so a session
 // that waited can end on a turn written after its report ("my findings above stand"), which findings.ts's final-turn
 // parse would score as finding nothing. A completed code session whose session_end shows it waited (waited_ms > 0) and
-// whose final turn has no json block at all is therefore scored from the latest main-agent text that carries a json block
-// (findings.ts's final-turn parser, read from its transcript.ndjson) when that text sits in an earlier CLI turn than the
-// final text, turns split at result events; a malformed block there stays malformed (GSTA-2's Step 11 ruling). A block and
-// a closing line in the same final turn score exactly as on main, waited or not, and so does a session that never waited.
+// whose final turn has no json block at all is therefore scored from the latest main-agent text whose last json block is
+// an array, its body starting with [ after whitespace (findings.ts's final-turn parser, read from its transcript.ndjson),
+// when that text sits in an earlier CLI turn than the final text, turns split at result events; a malformed array there
+// stays malformed (GSTA-2's Step 11 ruling). The held search reads only array blocks, the attempted findings blocks, so a
+// json object an earlier turn wrote, such as a plan, is ignored (GSTA-2's ruling B). A block and a closing line in the
+// same final turn score exactly as on main, waited or not, and so does a session that never waited.
 // A malformed final block stays malformed, waited or not (GSTA-2's round-2 narrowing), and a cap-stopped session is scored
-// by capped.ts. Every code session records the turn it was scored from (scored_turn), arm.json counts held rescues
-// (held_rescues), and review-units adds HELD_PARSER_SHA256 to the session key's verifier, so a change to this rule
-// invalidates cached sessions.
+// by capped.ts. Every code session records the turn it was scored from (scored_turn), arm.json counts held reads that
+// parse as findings (held_rescues), and review-units adds HELD_PARSER_SHA256 to the session key's verifier, so a
+// change to this rule invalidates cached sessions.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { SessionEnd, Termination } from "../../types.ts";
 import { cappedParse, mainAgentTexts } from "./capped.ts";
-import { parseFinalTurn, parseFindings, type ParseOutcome } from "./findings.ts";
+import { fencedBlocks, parseFinalTurn, parseFindings, type ParseOutcome } from "./findings.ts";
 import { readTranscript } from "./readers.ts";
 
 /** sha256 of this file: part of the session key's verifier for code units. */
@@ -52,7 +54,7 @@ export function codeParse(record: { termination: Termination; turns: readonly st
   const latest = parses.findLastIndex((p) => p.kind === "findings");
   if (kind === "turn_cap" || kind === "allowance_stop") return { parse: cappedParse(texts), scored_turn: { rule: "capped", index: latest < 0 ? null : latest, of: texts.length } };
   const final = parseFindings(record);
-  const block = parses.findLastIndex((p) => p.kind !== "missing");
+  const block = texts.findLastIndex((t) => fencedBlocks(t).filter((b) => b.info.toLowerCase() === "json").at(-1)?.body.trimStart().startsWith("[") === true);
   if (kind === "completed" && (record.session_end?.waited_ms ?? 0) > 0 && final.kind === "missing" && block >= 0 && turns[block]! < turns.at(-1)!) return { parse: parses[block]!, scored_turn: { rule: "held", index: block, of: texts.length } };
   return { parse: final, scored_turn: { rule: "final", index: kind === "completed" && record.turns.length ? record.turns.length - 1 : null, of: record.turns.length } };
 }

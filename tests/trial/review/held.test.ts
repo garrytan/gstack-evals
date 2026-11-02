@@ -32,7 +32,7 @@ describe("held.ts: the held-session read rule (GSTA-2's A1 ruling on #141)", () 
     }
   });
 
-  // Value: protects=the rule's edges: a waited session with no findings block anywhere keeps the final-turn parse (so a malformed or missing final turn is labelled as today), a cap stop keeps capped.ts's parse and records its turn, and a session that did not complete scores incomplete from no turn; fails_when=the held rule turns malformed into missing, changes a capped parse, or credits a deadline session; why_new=GSTA-2's A1 conditions on #141 (record the scored turn); seam=codeParse; no_claim=plan units (plan.ts walks back already)
+  // Value: protects=the rule's edges: a waited session whose final turn holds a json block that is not findings (here a draft object, malformed) keeps the final-turn parse, so the held search never replaces a final-turn block, a cap stop keeps capped.ts's parse and records its turn, and a session that did not complete scores incomplete from no turn; fails_when=the held rule turns malformed into missing, changes a capped parse, or credits a deadline session; why_new=GSTA-2's A1 conditions on #141 (record the scored turn); seam=codeParse; no_claim=plan units (plan.ts walks back already)
   test("a waited session with no findings turn keeps the final-turn parse; cap stops keep capped.ts; an ended session scores from no turn", () => {
     const draft = "One more check.\n\n" + FENCE + "json\n{\"draft\": true}\n" + FENCE + "\n";
     const none = ended(["Waiting.", draft], 900);
@@ -60,5 +60,15 @@ describe("held.ts: the held-session read rule (GSTA-2's A1 ruling on #141)", () 
     }
     const gst734 = codeParse(ended([REPORT, ACK], 1_200), [REPORT, ACK], [0, 1]);
     expect([gst734.parse.kind, gst734.scored_turn]).toEqual(["findings", { rule: "held", index: 0, of: 2 }]);
+  });
+
+  // Value: protects=GSTA-2's ruling B on #141 (fix-check 2): the held search reads only json blocks whose body starts with [ (attempted findings blocks), so a json object an earlier turn wrote (a plan) never turns a waited session's plain final text into a malformed gap, and an object between a report and an acknowledgement does not hide the report; fails_when=a non-array block in an earlier turn scores held or malformed, or shadows the report before it; why_new=the fix-check reader on 8a4c909; seam=codeParse; no_claim=the final turn (findings.ts parses it as on main)
+  test("the held search ignores a json object in an earlier turn: a plan object then a plain closer is missing, and an object after a report leaves the report held", () => {
+    const plan = "Plan:\n\n" + FENCE + "json\n{\"readers\": 2}\n" + FENCE + "\n";
+    const closer = "No issues found.";
+    const planned = ended([plan, closer], 1_200);
+    expect(codeParse(planned, [plan, closer], [0, 1])).toEqual({ parse: { kind: "missing" }, scored_turn: { rule: "final", index: 1, of: 2 } });
+    const between = codeParse(ended([REPORT, plan, ACK], 1_200), [REPORT, plan, ACK], [0, 1, 2]);
+    expect([between.scored_turn, between.parse]).toMatchObject([{ rule: "held", index: 0, of: 3 }, { kind: "findings", findings: [{ claim: "The retry loop never backs off." }] }]);
   });
 });
