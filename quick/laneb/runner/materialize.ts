@@ -159,6 +159,42 @@ export function materializeTb2(src: string, dest: string, opts: { runtimeStages:
   return { image, sourceDigest: treeDigest(src), digest: treeDigest(dest) };
 }
 
+// R3's SWE-bench Verified tasks (GEVA-101 prereg, section 4.8): the id list must hash to the prereg's sha256, the digest
+// file must list exactly those ids, and each task directory must match its digest before it is materialized. Agent and
+// verifier timeouts stay the dataset's own (task.toml [agent] and [verifier] timeout_sec).
+export const R3_BAND_SHA256 = "5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67";
+
+export type SwebvTask = { task_id: string; registry: { git_url: string; git_commit_id: string; path: string }; digest: string; digest_files: number };
+
+export function loadSwebvTasks(listPath: string, digestsPath: string, wantSha256: string): SwebvTask[] {
+  const raw = readFileSync(listPath);
+  const got = createHash("sha256").update(raw).digest("hex");
+  if (got !== wantSha256) throw new Error(`${listPath}: sha256 ${got} is not the preregistered ${wantSha256}`);
+  const doc = JSON.parse(readFileSync(digestsPath, "utf8")) as { band_sha256: string; tasks: SwebvTask[] };
+  if (doc.band_sha256 !== wantSha256) throw new Error(`${digestsPath}: band_sha256 ${doc.band_sha256} is not ${wantSha256}`);
+  const ids = raw.toString("utf8").split("\n").filter(Boolean);
+  const listed = doc.tasks.map((t) => t.task_id);
+  if (listed.join("\n") !== ids.join("\n")) throw new Error(`${digestsPath}: its tasks are not the ids in ${listPath}, in order`);
+  return doc.tasks;
+}
+
+function tomlNumber(text: string, section: string, key: string): number | null {
+  const body = new RegExp(`^\\[${section}\\]\\s*$([\\s\\S]*?)(?=^\\[|(?![\\s\\S]))`, "m").exec(text)?.[1] ?? "";
+  const v = new RegExp(`^\\s*${key}\\s*=\\s*([0-9.]+)`, "m").exec(body)?.[1];
+  return v === undefined ? null : Number(v);
+}
+
+export function materializeSwebv(root: string, task: SwebvTask, dest: string, opts: { runtimeStages: string; runtimeCopy: string; network: "allowlist" | "public" }) {
+  const src = join(root, task.registry.path);
+  const sourceDigest = treeDigest(src);
+  if ("sha256:" + sourceDigest !== task.digest) throw new Error(`${task.task_id}: source digest sha256:${sourceDigest} differs from swebv-r3.json ${task.digest}`);
+  const original = readFileSync(join(src, "task.toml"), "utf8");
+  const agentTimeoutSec = tomlNumber(original, "agent", "timeout_sec");
+  const verifierTimeoutSec = tomlNumber(original, "verifier", "timeout_sec");
+  if (!agentTimeoutSec || !verifierTimeoutSec) throw new Error(`${task.task_id}: task.toml has no [agent] or [verifier] timeout_sec`);
+  return materialize(src, dest, { ...opts, agentTimeoutSec, verifierTimeoutSec });
+}
+
 if (import.meta.main) {
   const [kind, srcRoot, destRoot, idsCsv, network = "allowlist"] = Bun.argv.slice(2);
   const here = import.meta.dir;

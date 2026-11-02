@@ -2,13 +2,17 @@
 // tasks/tasks.json), arm tarballs, the proxy config and a Harbor JobConfig whose paths point
 // at the VM layout launch.sh syncs (runner at <vm>/runner, run dir at <vm>/run).
 // Usage: bun prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>
-// An arms entry may set agent options per arm (grid.ts armSpec), e.g. gstack:system_prompt=claude-code-preset; the
-// manifest records every arm's system_prompt and session_kind.
-// Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (default /home/ubi/work), NETWORK (default allowlist).
+// An arms entry may set agent options per arm (grid.ts armSpec), e.g. gstack:told=investigate:system_prompt=claude-code-preset;
+// the manifest records every arm's system_prompt, session_kind and told skill.
+// Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM work dir, default in the code), NETWORK (default allowlist),
+// TASK_SET (tb2, the default, or swebv-r3: R3's SWE-bench Verified list, materialized from SWEBV, a harbor-datasets checkout
+// at the registry pin, with the patch exported from /testbed), TASKS (a comma list from the task set, default all),
+// CELLS (a cells*.json file in config/, default cells.json), ARM_MANIFESTS (the arm manifest directory under quick/laneb,
+// default arms/manifests).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
-import { materializeTb2 } from "./materialize.ts";
+import { loadSwebvTasks, materializeSwebv, materializeTb2, R3_BAND_SHA256 } from "./materialize.ts";
 import { armSpec, jobConfig } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -22,26 +26,41 @@ if (import.meta.main) {
   const tb2 = process.env.TB2 ?? join(process.env.HOME ?? "", ".capy/work/ref/terminal-bench-2");
   const vm = process.env.VM_ROOT ?? "/home/ubi/work";
   const network = (process.env.NETWORK ?? "allowlist") as "allowlist" | "public";
-  const cells = JSON.parse(readFileSync(join(root, "config/cells.json"), "utf8"));
-  const selection = JSON.parse(readFileSync(join(root, "tasks/tasks.json"), "utf8"));
-  const final: string[] = JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
-  const expected = new Map<string, string>([...selection.main, ...selection.reserves].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
+  const taskSet = process.env.TASK_SET ?? "tb2";
+  if (taskSet !== "tb2" && taskSet !== "swebv-r3") throw new Error(`E_USAGE TASK_SET ${taskSet} is not tb2 or swebv-r3`);
+  const cellsFile = process.env.CELLS ?? "cells.json";
+  if (!/^cells[\w.-]*\.json$/.test(cellsFile) || !existsSync(join(root, "config", cellsFile))) throw new Error(`E_USAGE CELLS ${cellsFile} is not a cells*.json file in config/`);
+  const armManifests = process.env.ARM_MANIFESTS ?? "arms/manifests";
+  if (!/^[\w/-]+$/.test(armManifests) || !existsSync(join(root, armManifests))) throw new Error(`E_USAGE ARM_MANIFESTS ${armManifests} is not a directory under ${root}`);
+  const cells = JSON.parse(readFileSync(join(root, "config", cellsFile), "utf8"));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
   const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
+  const swebv = taskSet === "swebv-r3" ? loadSwebvTasks(join(root, "tasks/swebv-r3.txt"), join(root, "tasks/swebv-r3.json"), R3_BAND_SHA256) : [];
+  const all: string[] = taskSet === "swebv-r3" ? swebv.map((t) => t.task_id) : JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
+  const final = process.env.TASKS ? process.env.TASKS.split(",") : all;
+  for (const id of final) if (!all.includes(id)) throw new Error(`E_USAGE task ${id} is not in the ${taskSet} task set`);
+  if (new Set(final).size !== final.length) throw new Error(`E_USAGE TASKS names a task twice`);
   if (existsSync(run)) throw new Error(`${run} exists; use a fresh run directory`);
   mkdirSync(join(run, "arms"), { recursive: true });
 
   const tasks: Record<string, unknown> = {};
-  for (const id of final) {
-    const m = materializeTb2(join(tb2, id), join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
-    if (m.sourceDigest !== expected.get(id)) throw new Error(`${id}: source digest ${m.sourceDigest} differs from tasks.json ${expected.get(id)}`);
-    tasks[id] = m;
+  if (taskSet === "swebv-r3") {
+    const root = process.env.SWEBV ?? join(process.env.HOME ?? "", ".capy/work/ref/harbor-datasets");
+    for (const id of final) tasks[id] = materializeSwebv(root, swebv.find((t) => t.task_id === id)!, join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
+  } else {
+    const selection = JSON.parse(readFileSync(join(root, "tasks/tasks.json"), "utf8"));
+    const expected = new Map<string, string>([...selection.main, ...selection.reserves].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
+    for (const id of final) {
+      const m = materializeTb2(join(tb2, id), join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
+      if (m.sourceDigest !== expected.get(id)) throw new Error(`${id}: source digest ${m.sourceDigest} differs from tasks.json ${expected.get(id)}`);
+      tasks[id] = m;
+    }
   }
   // Every arm must be the preregistered bytes: its tar sha256 must equal the committed manifest's.
   const arms = armsCsv.split(",").map((entry) => {
     const { name, ...options } = armSpec(entry);
     const tar = `${vm}/run/arms/${name}.tar`;
-    const manifestPath = join(here, "../arms/manifests", `${name}.json`);
+    const manifestPath = join(root, armManifests, `${name}.json`);
     const want = process.env.ALLOW_UNREGISTERED_ARMS === "1" && !existsSync(manifestPath) ? null : JSON.parse(readFileSync(manifestPath, "utf8")).tar.sha256;
     const gz = join(armDir, `${name}.tar.gz`);
     let got: string;
@@ -54,7 +73,7 @@ if (import.meta.main) {
       copyFileSync(join(armDir, `${name}.tar`), join(run, "arms", `${name}.tar`));
       got = sha256(join(run, "arms", `${name}.tar`));
     }
-    if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (arms/manifests/${name}.json)`);
+    if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (${armManifests}/${name}.json)`);
     return { name, tar, sha256: got, ...extra, options };
   });
   if (new Set(arms.map((a) => a.name)).size !== arms.length) throw new Error(`E_USAGE arms ${armsCsv}: an arm is named twice`);
@@ -68,6 +87,7 @@ if (import.meta.main) {
     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
+    ...(taskSet === "swebv-r3" ? { repo_dir: "/testbed" } : {}),
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
   if (process.env.ORACLE === "1") {
@@ -76,11 +96,11 @@ if (import.meta.main) {
   }
   const git = (args: string[]) => Bun.spawnSync(["git", "-C", root, ...args]).stdout.toString().trim();
   const manifest = {
-    job_name: jobName, created_at: new Date().toISOString(), network,
+    job_name: jobName, created_at: new Date().toISOString(), network, task_set: taskSet, cells_file: cellsFile, arm_manifests: armManifests,
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
     wrapper_sha256: sha256(join(here, "prompt-wrapper.md")), persona_sha256: sha256(join(here, "agent/persona.json")),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
-    arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "" })), tasks,
+    arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "" })), tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   console.log(`${run}: ${final.length} tasks x ${models.length} models x ${arms.length} arms x ${attempts} attempts, git ${manifest.git_head.slice(0, 7)}${manifest.git_dirty ? " (dirty)" : ""}`);
