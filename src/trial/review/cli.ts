@@ -3,7 +3,7 @@
 // trial network and the metering proxy) and runs runReviewUnits. --dry-run prints the plan and writes nothing. Whatever
 // it cannot do refuses with E_USAGE before anything is built or spent.
 import { randomBytes } from "node:crypto";
-import { MAX_TURNS, SYSTEM_PROMPTS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
+import { BACKGROUND_WAIT_MS, MAX_TURNS, SYSTEM_PROMPTS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { insideRepo, loadSuite, readsSealedRoot, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
@@ -41,7 +41,7 @@ export const REVIEW_UNITS_HELP = [
   "    [--resume] [--repair <note>] [--dry-run]",
   "    [--plan <lens> [--arm-models <arm>=<model>[,<model>]...]] [--sealed-root <dir>]",
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
-  "    [--max-turns <n>] [--session-kind unattended] [--cap-stops] [--reader-map <file>]",
+  "    [--max-turns <n>] [--session-kind unattended] [--cap-stops] [--reader-map <file>] [--background-wait <s>]",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
   "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
@@ -63,9 +63,14 @@ export const REVIEW_UNITS_HELP = [
   "launched, named through a map pinned to one gstack commit, such as src/trial/review/reader-maps/gstack-77fe28c39796.json)",
   "to cost.tsv as reader:<name> rows; every gstack arm must run the map's commit. run.json records the allowance and the map",
   "when they are set.",
+  "",
+  "--background-wait bounds how long, in all, a session may sit idle after a turn ends with background work it started still",
+  "out (a background Agent or Bash task, or a ScheduleWakeup set while nothing ran), default " + BACKGROUND_WAIT_MS / 1000 + " s. The CLI",
+  "takes a turn when that work lands; at the deadline the session ends as a missing cell, E_BACKGROUND_DEADLINE, which is a",
+  "coverage gap, never the arm finding nothing. run.json records it.",
 ].join("\n");
 
-const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map"]);
+const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait"]);
 const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render"]);
 const BOOL = new Set(["--resume", "--dry-run", "--cap-stops"]);
 
@@ -197,6 +202,8 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (!Number.isSafeInteger(maxTurns) || maxTurns < 1) throw new Usage("--max-turns must be a whole number from 1");
   const sessionKind = one("--session-kind");
   if (sessionKind !== null && sessionKind !== "unattended") throw new Usage("--session-kind takes unattended; leave it out for no session kind");
+  const backgroundWaitS = Number(one("--background-wait") ?? BACKGROUND_WAIT_MS / 1000);
+  if (!Number.isSafeInteger(backgroundWaitS) || backgroundWaitS < 1) throw new Usage("--background-wait must be whole seconds, at least 1");
   const arms: ReviewArm[] = specs.map((a) => {
     if (lens) {
       const plan = planArmFor(a);
@@ -295,12 +302,14 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const runFile = join(out, "run.json");
   const allowanceUsd = allowance === null ? null : allowance / 1_000_000;
   const mapPin = readerMap && "map" in readerMap ? { file: mapFile!, sha256: readerMap.sha256, gstack: readerMap.map.gstack } : null;
-  const prior = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; max_turns?: number; session_kind?: string | null; allowance_usd?: number; reader_map?: { sha256: string } }) : null;
-  if (prior && ((prior.max_turns ?? MAX_TURNS) !== maxTurns || (prior.session_kind ?? null) !== sessionKind || (prior.allowance_usd ?? null) !== allowanceUsd || (prior.reader_map?.sha256 ?? null) !== (mapPin?.sha256 ?? null))) {
+  const prior = resume && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; max_turns?: number; session_kind?: string | null; allowance_usd?: number; reader_map?: { sha256: string }; background_wait_s?: number }) : null;
+  const priorWait = prior?.background_wait_s ?? BACKGROUND_WAIT_MS / 1000;
+  if (prior && ((prior.max_turns ?? MAX_TURNS) !== maxTurns || (prior.session_kind ?? null) !== sessionKind || (prior.allowance_usd ?? null) !== allowanceUsd || (prior.reader_map?.sha256 ?? null) !== (mapPin?.sha256 ?? null) || priorWait !== backgroundWaitS)) {
+    const waits = prior.background_wait_s !== undefined || backgroundWaitS !== BACKGROUND_WAIT_MS / 1000;
     const r2 = prior.allowance_usd !== undefined || prior.reader_map !== undefined || allowanceUsd !== null || mapPin !== null;
     const was = r2 ? "max turns " + (prior.max_turns ?? MAX_TURNS) + ", session kind " + (prior.session_kind ?? "not set") + ", allowance " + (prior.allowance_usd === undefined ? "default" : "$" + prior.allowance_usd) + " and reader map " + (prior.reader_map?.sha256 ?? "none") : "max turns " + (prior.max_turns ?? MAX_TURNS) + " and session kind " + (prior.session_kind ?? "not set");
     const now = r2 ? maxTurns + ", " + (sessionKind ?? "not set") + ", " + (allowanceUsd === null ? "default" : "$" + allowanceUsd) + " and " + (mapPin?.sha256 ?? "none") : maxTurns + " and " + (sessionKind ?? "not set");
-    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with " + was + ", and this resume gives " + now + "\n  fix: resume with the run's own --max-turns, --session-kind, --allowance and --reader-map, or start a new run in a new --out");
+    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with " + was + (waits ? "; background wait " + priorWait + " s" : "") + ", and this resume gives " + now + (waits ? "; " + backgroundWaitS + " s" : "") + "\n  fix: resume with the run's own --max-turns, --session-kind, --allowance, --reader-map and --background-wait, or start a new run in a new --out");
     return 2;
   }
   const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
@@ -314,6 +323,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
+    io.out("background wait " + backgroundWaitS + " s: a session idle with background work it started still out ends at that deadline as a missing cell, E_BACKGROUND_DEADLINE");
     if (capStops) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
     if (mapPin) io.out("reader map " + mapPin.file + " (sha256 " + mapPin.sha256 + ", gstack " + mapPin.gstack.repo + "@" + mapPin.gstack.sha + ")");
     io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
@@ -367,14 +377,14 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
   const runId = prior?.run_id ?? newRunId("review-units");
-  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}) }, null, 2) + "\n");
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: maxTurns, session_kind: sessionKind, background_wait_s: backgroundWaitS, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}) }, null, 2) + "\n");
   const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
   const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");
