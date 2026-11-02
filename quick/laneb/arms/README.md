@@ -20,6 +20,7 @@ Each arm ships as a tar whose paths are relative to `/root` (`.claude/...`, and 
 | `placebo/verify-tokens.ts` | Re-counts every body with Anthropic's count_tokens endpoint for claude-opus-5-5. Skips when `ANTHROPIC_API_KEY` is not set. |
 | `tree.ts` | Tree walk, digest and per-arm manifest. |
 | `manifests/<arm>.json` | Tar sha256 and size, file count, total bytes, tree digest, skill count and names. |
+| `manifests/r3/<arm>.json` | R3's none, gstack and placebo tars, in the same shape; prepare-run reads them with `ARM_MANIFESTS=arms/manifests/r3`. |
 | `manifests/<arm>.files.tsv` | Every entry: sha256, bytes, mode, type, path. |
 | `manifests/placebo-tokens.tsv` | Per skill: original and placebo body tokens, ratio, routing bytes kept. |
 | `../tests/placebo.test.ts` | Keyless tests. |
