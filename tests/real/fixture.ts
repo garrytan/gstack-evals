@@ -195,11 +195,11 @@ const HELPERS = 'package clamp\n\nimport "testing"\n\nfunc check(t *testing.T, g
 const CLAMP_TEST_1 = 'package clamp\n\nimport "testing"\n\nfunc TestClampLow(t *testing.T) {\n\tcheck(t, Clamp(-5, 0, 10), 0)\n}\n';
 const CLAMP_TEST_2 = CLAMP_TEST_1 + '\nfunc TestClampHigh(t *testing.T) {\n\tcheck(t, Clamp(15, 0, 10), 10)\n}\n';
 
-/** The clampy fixture: a Go module with one K2 change, and its build spec for a Go image. */
-export function clampyRepo(dir: string, image = GO_IMAGE, name = "clampy"): { repo: string; spec: string } {
+/** The clampy fixture: a Go module with one K2 change, and its build spec for a Go image. extra adds files to the first commit. */
+export function clampyRepo(dir: string, image = GO_IMAGE, name = "clampy", extra: Record<string, string> = {}): { repo: string; spec: string } {
   const repo = join(dir, name);
   const sha = buildRepo(repo, [
-    { name: "g1", message: "Initial clamp package", date: "2026-08-01T10:00:00Z", files: { LICENSE: MIT, "go.mod": "module example.com/clampy\n\ngo 1.23\n", "clamp/clamp.go": CLAMP_1, "clamp/helpers_test.go": HELPERS, "clamp/clamp_test.go": CLAMP_TEST_1 } },
+    { name: "g1", message: "Initial clamp package", date: "2026-08-01T10:00:00Z", files: { LICENSE: MIT, "go.mod": "module example.com/clampy\n\ngo 1.23\n", "clamp/clamp.go": CLAMP_1, "clamp/helpers_test.go": HELPERS, "clamp/clamp_test.go": CLAMP_TEST_1, ...extra } },
     { name: "g2", message: "Clamp values above hi (#3)", date: "2026-09-01T10:00:00Z", files: { "clamp/clamp.go": CLAMP_2, "clamp/clamp_test.go": CLAMP_TEST_2 } },
   ]);
   writeFileSync(join(dir, "clampy.md"), "Clamp should also limit values above hi: Clamp(x, lo, hi) returns hi when x is greater than hi.\n");

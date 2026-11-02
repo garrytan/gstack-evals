@@ -26,7 +26,8 @@ export type R3Trial = {
   body_loaded: boolean; investigate_opened: boolean; gate: { debug_report: boolean; phase: boolean }; procedure_shown: boolean; exposed: boolean;
 };
 
-const readJson = (path: string): any => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; } };
+const parseJson = (text: string | null): any => { try { return text === null ? null : JSON.parse(text); } catch { return null; } };
+const readJson = (path: string): any => { try { return parseJson(readFileSync(path, "utf8")); } catch { return null; } };
 
 export function agentText(lines: string[]): string {
   const texts: string[] = [];
@@ -42,11 +43,12 @@ export function agentText(lines: string[]): string {
 
 // A trial directory whose config.json names the Lane B agent is a trial: with no readable result.json it has no reward,
 // so it is infra. A directory with no readable config.json can't be attributed and gives null; the screen counts its
-// task as missing.
-export function loadR3Trial(dir: string, sessions: Map<string, SessionRow[]>, proxy: ProxyConfig): R3Trial | null {
-  const config = readJson(join(dir, "config.json"));
+// task as missing. The route check passes in the config.json and result.json it read itself (route-check.ts judge), so
+// those files are read once and a read that fails on our machine is never taken here for a missing file.
+export function loadR3Trial(dir: string, sessions: Map<string, SessionRow[]>, proxy: ProxyConfig, files?: { config: string; result: string | null }): R3Trial | null {
+  const config = files ? parseJson(files.config) : readJson(join(dir, "config.json"));
   if (!config || config.agent?.name !== "laneb-claude-code") return null;
-  const resultJson = readJson(join(dir, "result.json"));
+  const resultJson = files ? parseJson(files.result) : readJson(join(dir, "result.json"));
   const result = resultJson ?? {};
   const kwargs = config.agent.kwargs ?? {};
   const task = String(config.task?.path ?? result.task_name ?? "").split("/").filter(Boolean).at(-1) ?? "?";
