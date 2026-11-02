@@ -9,7 +9,8 @@
 // A batch spec is a batch name (a model id, or claude-opus-5-5/r2 for Run D's second Opus replicate of the D3 cells) for a batch with every trial still to run, or model:cell=n+cell=n for the
 // trials it has left; a cell is its label (gstack@claude-code-preset in Run D, a bare arm name in Run T). List the batch about to launch and every batch of the run still running.
 // --note appends the inputs and the verdict to the ledger as a note row. check exits 1 when the rule fails.
-// plan walks the run's planned order from an empty ledger, each earlier group settled at its projection.
+// plan walks the run's planned order from a ledger holding only the route check, settled at its projection (Run D: one
+// smoke session under none and one listing session under gstack per model, both preset), each earlier group settled at its projection.
 import { appendFileSync, closeSync, fsyncSync, openSync } from "node:fs";
 import { fromMicros, readRows, toMicros, totals, type Totals } from "./ledger.ts";
 import { armLabel } from "./grid.ts";
@@ -38,14 +39,15 @@ const D_BOTH = [...D_PRESET, ...cellsOf(["none", "gstack", "gstack-rewritten"], 
 const D3_CELLS = [...cellsOf(["gstack"], PRESET), ...cellsOf(["gstack"], "sdk-default")];
 const RUN_T_PLACEBO: Record<string, number> = { "claude-haiku-5-5": 0.013, "particle-1": 0.088, "deepseek-v4.1-flash-1017": 0.068 };
 
-export type RunSpec = { item: string; cap: number; cells: Record<string, string[]>; replicates: Record<string, number>; order: string[][]; price: (model: string, arm: string) => number };
+export type RunSpec = { item: string; cap: number; cells: Record<string, string[]>; replicates: Record<string, number>; order: string[][]; price: (model: string, arm: string) => number; route?: { models: string[]; cells: string[] } };
 
 export const RUNS: Record<string, RunSpec> = {
   "discovery-r1": {
-    item: "discovery-r1", cap: 125,
+    item: "discovery-r1", cap: 126,
     cells: { "particle-1": D_PRESET, "claude-opus-5-5": D_BOTH, "claude-opus-5-5/r2": D3_CELLS, "gpt-6.1-sol": D_PRESET },
     replicates: { "particle-1": 1, "claude-opus-5-5": 1, "claude-opus-5-5/r2": 1, "gpt-6.1-sol": 1 },
     order: [["particle-1"], ["claude-opus-5-5", "claude-opus-5-5/r2"], ["gpt-6.1-sol"]],
+    route: { models: ["particle-1", "claude-opus-5-5", "gpt-6.1-sol"], cells: cellsOf(["none", "gstack"], PRESET) },
     price: (batch, cell) => {
       const model = batch.split("/")[0]!;
       return PROJECTION[model]![cell.split("@")[0]!]! + (cell.endsWith("@" + PRESET) ? PRESET_SURCHARGE[model]! : 0);
@@ -78,6 +80,8 @@ export function parseBatch(run: RunSpec, spec: string): Batch {
 
 export const batchMicros = (run: RunSpec, b: Batch) => Object.entries(b.remaining).reduce((s, [arm, n]) => s + n * toMicros(run.price(b.model, arm)), 0);
 
+export const routeMicros = (run: RunSpec) => (run.route?.models ?? []).reduce((s, m) => s + run.route!.cells.reduce((t, c) => t + toMicros(run.price(m, c)), 0), 0);
+
 export function startRule(run: RunSpec, status: Totals, batches: Batch[]) {
   const projectedMicros = batches.reduce((s, b) => s + batchMicros(run, b), 0);
   const boundMicros = status.settledMicros + status.openReservedMicros + Math.ceil(projectedMicros * MARGIN);
@@ -89,7 +93,8 @@ export function startRule(run: RunSpec, status: Totals, batches: Batch[]) {
 }
 
 export function plan(run: RunSpec) {
-  let settled = 0;
+  const route = routeMicros(run);
+  let settled = route;
   const steps = [];
   for (const group of run.order) {
     const running: Batch[] = [];
@@ -99,7 +104,7 @@ export function plan(run: RunSpec) {
     }
     settled += running.reduce((s, b) => s + batchMicros(run, b), 0);
   }
-  return { steps, total_projected_usd: fromMicros(settled) };
+  return { steps, route_usd: fromMicros(route), total_projected_usd: fromMicros(settled) };
 }
 
 export function appendNote(path: string, item: string, verdict: ReturnType<typeof startRule>) {
@@ -119,6 +124,7 @@ if (import.meta.main) {
   }
   if (cmd === "plan") {
     const p = plan(run);
+    if (run.route) console.log(`${run.item} route check: ${run.route.cells.join(" and ")} per model on ${run.route.models.join(", ")}, projected $${p.route_usd.toFixed(2)}, settled before the first launch`);
     for (const s of p.steps) console.log(`${s.run} launch ${s.launch}: settled $${s.settled_usd.toFixed(2)} + 1.4 x $${s.projected_usd.toFixed(2)} = $${s.bound_usd.toFixed(2)} vs cap $${s.cap_usd} -> ${s.pass ? "PASS" : "FAIL"}`);
     console.log(`${run.item} projected total $${p.total_projected_usd.toFixed(2)}`);
     process.exit(p.steps.every((s) => s.pass) ? 0 : 1);

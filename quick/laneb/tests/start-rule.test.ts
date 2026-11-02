@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ledger, readRows, totals, toMicros } from "../runner/ledger.ts";
-import { batchMicros, parseBatch, plan, RUNS } from "../runner/start-rule.ts";
+import { batchMicros, parseBatch, plan, routeMicros, RUNS } from "../runner/start-rule.ts";
 
 const here = import.meta.dir;
 const cli = (...args: string[]) => Bun.spawnSync(["bun", join(here, "../runner/start-rule.ts"), ...args]);
@@ -18,10 +18,10 @@ describe("start rule", () => {
     expect(plan(t).total_projected_usd).toBeCloseTo(64.75, 2);
   });
 
-  test("Run D: preset cells on Opus, particle-1 and gpt-6.1-sol, sdk-default cells on Opus, Opus's second D3 replicate, the preset surcharge, $125 and the 1.4 margin", () => {
+  test("Run D: preset cells on Opus, particle-1 and gpt-6.1-sol, sdk-default cells on Opus, Opus's second D3 replicate, the preset surcharge, the route check, $126 and the 1.4 margin", () => {
     const d = RUNS["discovery-r1"]!;
     const usd = (m: string) => batchMicros(d, parseBatch(d, m)) / 1e6;
-    expect(d.cap).toBe(125);
+    expect(d.cap).toBe(126);
     expect(Object.keys(d.cells).sort()).toEqual(["claude-opus-5-5", "claude-opus-5-5/r2", "gpt-6.1-sol", "particle-1"]);
     expect(d.cells["claude-opus-5-5"]).toEqual(["none@claude-code-preset", "gstack@claude-code-preset", "gstack-rewritten@claude-code-preset", "placebo@claude-code-preset", "none@sdk-default", "gstack@sdk-default", "gstack-rewritten@sdk-default"]);
     expect(d.cells["claude-opus-5-5/r2"]).toEqual(["gstack@claude-code-preset", "gstack@sdk-default"]);
@@ -29,9 +29,14 @@ describe("start rule", () => {
     expect(usd("claude-opus-5-5")).toBeCloseTo(37 * (0.145 + 3 * 0.16 + 4 * 0.0117 + 0.145 + 2 * 0.16), 2);
     expect(usd("claude-opus-5-5/r2")).toBeCloseTo(37 * (0.16 + 0.0117 + 0.16), 2);
     expect(usd("claude-opus-5-5/r2:gstack@sdk-default=37")).toBeCloseTo(5.92, 2);
-    const total = plan(d).total_projected_usd;
-    expect(total).toBeCloseTo(88.88, 2);
-    expect(1.4 * total).toBeLessThanOrEqual(125);
+    expect(routeMicros(d) / 1e6).toBeCloseTo(0.145 + 0.0117 + 0.16 + 0.0117 + 0.072 + 0.0016 + 0.078 + 0.0016 + 2 * (0.15 + 0.0053), 4);
+    const p = plan(d);
+    expect(p.route_usd).toBeCloseTo(0.79, 2);
+    expect(p.total_projected_usd - p.route_usd).toBeCloseTo(88.88, 2);
+    expect(p.total_projected_usd).toBeCloseTo(89.67, 2);
+    expect(1.4 * p.total_projected_usd).toBeGreaterThan(125);
+    expect(1.4 * p.total_projected_usd).toBeLessThanOrEqual(126);
+    [16.97, 71.24, 88.42, 98.86].forEach((v, i) => expect(p.steps[i]!.bound_usd).toBeCloseTo(v, 2));
     expect(() => parseBatch(d, "claude-haiku-5-5")).toThrow("E_USAGE");
     expect(() => parseBatch(d, "claude-sonnet-5-5")).toThrow("E_USAGE");
     expect(() => parseBatch(d, "particle-1:gstack@sdk-default=1")).toThrow("E_USAGE");
