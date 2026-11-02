@@ -1,13 +1,15 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The validity checker: V1 to V9 (plan section 3, with open items 2 and 9 and the Medium notes) and the leak checks,
 // keyless, in Docker. It builds the agent image, reads the image's repository and filesystem for leaks, then grades
-// the starting tree, gold, the introducing change (K1) and gold with release-file edits through verify.ts.
+// the starting tree, gold, the introducing change (K1), base (K4: the reverse of the replay commit) and gold with
+// release-file edits through verify.ts.
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { docker } from "./docker.ts";
+import { docker, dockerRun } from "./docker.ts";
 import { detectLicence, installProblem, keysInEnv, readTask, regressionFrozen, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
 import { resultFor, type TestResult } from "./record.ts";
-import { allPass, idResults, verifyTree, type TreeResult } from "./verify.ts";
+import { allPass, idResults, stopped, verifyTree, type TreeResult } from "./verify.ts";
 
 export interface Rule {
   rule: string;
@@ -25,7 +27,7 @@ export interface CheckResult {
   derived: { regression: string[]; quarantine: string[] };
   /** Whether task.json already holds the frozen regression list; verify refuses the task until it does. */
   regression_frozen: boolean;
-  trees: { label: string; prepare: TreeResult["prepare"]; runs: { seed: number; wall_ms: number; timed_out: boolean; exit: number; results: Record<string, TestResult> }[] }[];
+  trees: { label: string; prepare: TreeResult["prepare"]; runs: { seed: number; wall_ms: number; timed_out: boolean; out_full: boolean; killed: boolean; exit: number; results: Record<string, TestResult> }[] }[];
 }
 
 export interface CheckOptions {
@@ -41,7 +43,7 @@ export interface CheckOptions {
 const RELEASE = /\b(VERSION|CHANGELOG|TODOS)\b/;
 
 function inImage(image: string, script: string): string {
-  const r = docker(["run", "--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", image, "-c", script], { timeoutMs: 600000 });
+  const r = dockerRun("real-check-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", image, "-c", script], { timeoutMs: 600000 });
   if (r.status !== 0) throw new TaskError("E_REAL_TASK_DOCKER", "a read of the image failed: " + r.stderr.trim().slice(0, 300));
   return r.stdout;
 }
@@ -103,7 +105,7 @@ export function checkTask(o: CheckOptions): CheckResult {
 
   const needles = readFileSync(join(o.taskDir, "tests/leak-needles.txt"), "utf8").split("\n").filter(Boolean);
   if (needles.length > 0) {
-    const r = docker(["run", "--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-v", join(o.taskDir, "tests/leak-needles.txt") + ":/needles.txt:ro", tag, "-c", "grep -rIlF -f /needles.txt / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude=needles.txt 2>/dev/null; true"], { timeoutMs: 1800000 });
+    const r = dockerRun("real-check-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-v", join(o.taskDir, "tests/leak-needles.txt") + ":/needles.txt:ro", tag, "-c", "grep -rIlF -f /needles.txt / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude=needles.txt 2>/dev/null; true"], { timeoutMs: 1800000 });
     const hits = r.stdout.split("\n").filter(Boolean);
     add("L2 gold lines absent", r.status === 0 && hits.length === 0, hits.length === 0 ? needles.length + " gold-only lines found nowhere in the image" : "gold lines in " + hits.slice(0, 5).join(", "));
   } else add("L2 gold lines absent", t.replay?.role === "decoy", "no gold-only lines to scan for");
@@ -123,28 +125,31 @@ export function checkTask(o: CheckOptions): CheckResult {
 
   const runs = o.runs ?? 10;
   const seed = o.seed ?? 1;
-  const tree = (label: string, patchFile: string | null, n: number, releaseEdits = false) => {
-    const r = verifyTree({ taskDir: o.taskDir, task: t, image: tag, label, patch: patchFile ? readFileSync(join(o.taskDir, patchFile), "utf8") : "", runs: n, seed, work: o.work, releaseEdits, cpus: o.cpus });
-    if (r.prepare.patch === "failed") throw new TaskError("E_REAL_TASK_FORMAT", label + ": " + patchFile + " does not apply to the starting tree: " + r.prepare.error);
+  const tree = (label: string, what: string, patch: string, n: number, releaseEdits = false) => {
+    const r = verifyTree({ taskDir: o.taskDir, task: t, image: tag, label, patch, runs: n, seed, work: o.work, releaseEdits, cpus: o.cpus });
+    if (r.prepare.patch === "failed") throw new TaskError("E_REAL_TASK_FORMAT", label + ": " + what + " does not apply to the starting tree: " + r.prepare.error);
     return r;
   };
+  const file = (p: string) => readFileSync(join(o.taskDir, p), "utf8");
   const decoy = t.replay?.role === "decoy";
-  const start = tree("start", null, decoy ? runs : 1);
-  const gold = decoy ? start : tree("gold", "solution/gold.patch", runs);
-  const edited = tree("gold-release-edits", decoy ? null : "solution/gold.patch", 1, true);
-  const intro = t.kind === "K1" ? tree("introducing", "solution/introducing.patch", 1) : null;
-  const trees = [start, ...(decoy ? [] : [gold]), edited, ...(intro ? [intro] : [])];
+  const start = tree("start", "the empty patch", "", decoy ? runs : 1);
+  const gold = decoy ? start : tree("gold", "solution/gold.patch", file("solution/gold.patch"), runs);
+  const edited = tree("gold-release-edits", decoy ? "the empty patch" : "solution/gold.patch", decoy ? "" : file("solution/gold.patch"), 1, true);
+  const intro = t.kind === "K1" ? tree("introducing", "solution/introducing.patch", file("solution/introducing.patch"), 1) : null;
+  const base = t.replay ? tree("base", "the reverse of the replay commit", inImage(tag, "cd " + t.repo_dir + " && git diff --no-ext-diff --no-textconv --binary --full-index --no-renames " + t.replay.commit + " " + t.base_commit), 1) : start;
+  const trees = [start, ...(decoy ? [] : [gold]), edited, ...(intro ? [intro] : []), ...(t.replay ? [base] : [])];
 
   const { functional, escaped_defect: escaped } = t.tests;
   const core = [...functional, ...escaped];
+  const seen = new Set([...base.runs, ...start.runs, ...gold.runs].flatMap((r) => Object.keys(r.parsed.results)).filter((id) => !id.startsWith("collect:") && !core.includes(id) && validTestId(t.runner.kind, id)));
+  const passesIn = (tr: TreeResult, id: string) => idResults(tr, id).every((r) => r.status === "pass");
   let regression = t.tests.regression;
   let quarantine = t.tests.quarantine;
   if (!regressionFrozen(t)) {
-    const ids = new Set([...start.runs, ...gold.runs].flatMap((r) => Object.keys(r.parsed.results)).filter((id) => !id.startsWith("collect:") && !core.includes(id) && validTestId(t.runner.kind, id)));
-    const passStart = (id: string) => idResults(start, id).every((r) => r.status === "pass");
+    const kept = (id: string) => passesIn(base, id) || passesIn(start, id);
     const goldPasses = (id: string) => idResults(gold, id).filter((r) => r.status === "pass").length;
-    regression = [...ids].filter((id) => passStart(id) && goldPasses(id) === gold.runs.length).sort();
-    quarantine = [...ids].filter((id) => passStart(id) && goldPasses(id) > 0 && goldPasses(id) < gold.runs.length).sort();
+    regression = [...seen].filter((id) => kept(id) && goldPasses(id) === gold.runs.length).sort();
+    quarantine = [...seen].filter((id) => kept(id) && goldPasses(id) > 0 && goldPasses(id) < gold.runs.length).sort();
   }
   const required = [...core, ...regression];
   const statement = readFileSync(join(o.taskDir, "instruction.md"), "utf8");
@@ -155,7 +160,9 @@ export function checkTask(o: CheckOptions): CheckResult {
     const n = idResults(gold, id).filter((r) => r.status === "pass").length;
     return n > 0 && n < gold.runs.length;
   });
-  add("V1 gold passes every hidden test", allPass(gold, required), (allPass(gold, required) ? required.length + " tests passed in " + gold.runs.length + " of " + gold.runs.length + " runs in random order" : "failing or flaky: " + describe(gold, required.filter((id) => !idResults(gold, id).every((r) => r.status === "pass")))) + (flaky.length ? "; flaky: " + flaky.join(", ") : "") + (quarantine.length ? "; quarantined regression tests: " + quarantine.length : ""));
+  const v1 = allPass(gold, required);
+  const goldStopped = gold.runs.filter(stopped).length;
+  add("V1 gold passes every hidden test", v1, (v1 ? required.length + " tests passed in " + gold.runs.length + " of " + gold.runs.length + " runs in random order" : required.length === 0 ? "no required tests" : "failing or flaky: " + describe(gold, required.filter((id) => !passesIn(gold, id))) + (goldStopped ? "; runs that timed out, filled /out or were killed: " + goldStopped : "")) + (flaky.length ? "; flaky: " + flaky.join(", ") : "") + (quarantine.length ? "; quarantined regression tests: " + quarantine.length : ""));
 
   const firstStart = (id: string) => resultFor(start.runs[0].parsed, id);
   if (t.kind !== "K4") {
@@ -187,7 +194,8 @@ export function checkTask(o: CheckOptions): CheckResult {
 
   const all = trees.flatMap((tr) => tr.runs);
   const slowest = Math.max(...all.map((r) => r.wall_ms));
-  add("V7 offline and inside the time limit", all.every((r) => !r.timed_out) && slowest <= t.limits.verifier_sec * 1000, "every run had --network none; slowest " + (slowest / 1000).toFixed(1) + "s of " + t.limits.verifier_sec + "s");
+  const halted = trees.flatMap((tr) => tr.runs.filter(stopped).map((r) => tr.label + " " + (r.timed_out ? "timed out" : r.killed ? "killed" : "filled /out")));
+  add("V7 offline and inside the time and output limits", halted.length === 0 && slowest <= t.limits.verifier_sec * 1000, "every run had --network none; slowest " + (slowest / 1000).toFixed(1) + "s of " + t.limits.verifier_sec + "s" + (halted.length ? "; stopped runs: " + halted.join(", ") : ""));
 
   if (t.replay) {
     const replayLines = section(repo, "replay");
@@ -198,7 +206,11 @@ export function checkTask(o: CheckOptions): CheckResult {
         return r.status === "fail" && r.cls === "assert";
       });
       add("V9 the replay branch holds the change and fails an escaped-defect test", exact && hit.length > 0, (exact ? "the branch is base plus exactly the change" : "the branch is not base plus exactly the change") + "; " + (hit.length > 0 ? "fails " + hit.join(", ") : "as given: " + describe(start, escaped)));
-    } else add("V9 the decoy holds the change and passes as given", exact && allPass(start, required), (exact ? "the branch is base plus exactly the change" : "the branch is not base plus exactly the change") + "; " + (allPass(start, required) ? "passes every hidden test as given" : "fails as given"));
+    } else {
+      const asGiven = allPass(start, required);
+      const broken = [...seen].filter((id) => passesIn(base, id) && idResults(start, id).every((r) => r.status !== "pass")).sort();
+      add("V9 the decoy holds the change, passes as given and keeps every test that passes at base", exact && asGiven && broken.length === 0, (exact ? "the branch is base plus exactly the change" : "the branch is not base plus exactly the change") + "; " + (asGiven ? "passes every hidden test as given" : "fails as given") + (broken.length ? "; breaks tests that pass at base: " + broken.join(", ") : ""));
+    }
   }
 
   return {
@@ -210,6 +222,6 @@ export function checkTask(o: CheckOptions): CheckResult {
     rules,
     derived: { regression, quarantine },
     regression_frozen: regressionFrozen(t),
-    trees: trees.map((tr) => ({ label: tr.label, prepare: tr.prepare, runs: tr.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, exit: r.exit, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) })),
+    trees: trees.map((tr) => ({ label: tr.label, prepare: tr.prepare, runs: tr.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, out_full: r.out_full, killed: r.killed, exit: r.exit, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) })),
   };
 }

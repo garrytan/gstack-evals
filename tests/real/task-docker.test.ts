@@ -7,7 +7,7 @@
 // frozen, only a run Docker never started has no verdict, and a tree an image plugin imports through an editable
 // install, or one site.py imports through a .pth, still fails when it exits or breaks at that import. Keyless: no model call; the images install pinned, hashed packages at build time.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { appendFileSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildTask, saveTask } from "../../lanes/real-outcome/task/build.ts";
 import { buildImage, checkTask, type CheckResult } from "../../lanes/real-outcome/task/check.ts";
@@ -201,6 +201,101 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     const decoy = checkTask({ taskDir: decoyDir, work: join(tmp.dir, "work-decoy"), runs: 3, mechanical: true });
     expect(decoy.rules.filter((x) => !x.pass)).toEqual([]);
     expect(rule(decoy, "V9").detail).toContain("passes every hidden test as given");
+  }, LONG);
+
+  test("K4 checks grade base: a decoy that breaks a base-passing test fails V9, a replay keeps the base-passing test its change broke, and nothing required fails V1", () => {
+    const addBroken = OPS_4.replace("    return a + b\n", "    return a - b\n");
+    const negZero = { "calc/fmt.py": FMT_4.replace("    return str(int(x))\n", "    return str(int(x) or 0)\n"), "tests/test_fmt.py": 'from calc import fmt\n\n\ndef test_fmt_int_neg_zero():\n    assert fmt.fmt_int(-0.0) == "0"\n' };
+    const percentTests = 'from calc import fmt\n\n\ndef test_percent_half():\n    assert fmt.percent(0.5) == "50.0%"\n\n\ndef test_percent_small():\n    assert fmt.percent(0.123) == "12.3%"\n';
+    const fmtFixed = FMT_4.replace("x * 10:", "x * 100:");
+    const repoDir = join(tmp.dir, "calc-k4-base");
+    const s = buildRepo(repoDir, [
+      ...calcCommits(),
+      { name: "d1", branch: "decoy-breaks-add", from: "c4", message: "Print 0 for negative zero in fmt_int (#30)", date: "2026-10-10T10:00:00Z", files: { "calc/ops.py": addBroken, ...negZero } },
+      { name: "d2", branch: "decoy-breaks-ops", from: "c4", message: "Print 0 for negative zero in fmt_int (#31)", date: "2026-10-10T11:00:00Z", files: { "calc/ops.py": "", ...negZero } },
+      { name: "r1", branch: "replay-breaks-add", from: "c3", message: "Add ratio and percent helpers (#32)", date: "2026-10-11T10:00:00Z", files: { "calc/ops.py": addBroken, "calc/fmt.py": FMT_4, "tests/test_ops.py": TEST_OPS_4 } },
+      { name: "r2", branch: "replay-breaks-add", message: "Fix percent scaling and add (#33)", date: "2026-10-12T10:00:00Z", files: { "calc/ops.py": OPS_4.replace("    return a + b\n", "    return sum((a, b), 0)\n"), "calc/fmt.py": fmtFixed, "tests/test_percent.py": percentTests } },
+    ]);
+    const build = (name: string, from: string, over: Record<string, unknown>) => {
+      const spec = join(tmp.dir, name + ".json");
+      writeFileSync(spec, JSON.stringify({ ...JSON.parse(readFileSync(from, "utf8")), id: "fx-" + name, ...over }));
+      return buildTask(spec, repoDir, join(tmp.dir, "out/" + name)).dir;
+    };
+    const check = (dir: string) => checkTask({ taskDir: dir, work: join(tmp.dir, "work-k4-base"), runs: 2, mechanical: true });
+    const failing = (r: CheckResult) => r.rules.filter((x) => !x.pass).map((x) => x.rule.split(" ")[0]);
+
+    const decoy = check(build("decoy-breaks-add", specs.decoy, { change: s.d1 }));
+    expect(failing(decoy)).toEqual(["V9"]);
+    expect(rule(decoy, "V9").detail).toContain("tests/test_ops.py::test_add");
+
+    const nothing = check(build("decoy-breaks-ops", specs.decoy, { change: s.d2, tests: { functional: [], regression_scope: ["tests/test_ops.py"] } }));
+    expect(nothing.derived.regression).toEqual([]);
+    expect(rule(nothing, "V1").pass).toBe(false);
+    expect(rule(nothing, "V1").detail).toContain("no required tests");
+
+    const replayDir = build("replay-breaks-add", specs.k4, { change: s.r1, fix: s.r2 });
+    const replay = check(replayDir);
+    expect(failing(replay)).toEqual([]);
+    expect(replay.derived.regression).toEqual(["tests/test_ops.py::test_add", "tests/test_ops.py::test_div", "tests/test_ops.py::test_mul", "tests/test_ops.py::test_ratio", "tests/test_ops.py::test_sub"]);
+    const t = readTask(replayDir);
+    const keepsBreak = verifyTree({ taskDir: replayDir, task: t, image: replay.image.tag, label: "keeps-break", patch: patchFrom(repoDir, s.r1, { "calc/fmt.py": fmtFixed }), runs: 1, seed: 7, work: join(tmp.dir, "work-k4-base") });
+    expect(allPass(keepsBreak, t.tests.escaped_defect)).toBe(true);
+    expect(resultFor(keepsBreak.runs[0].parsed, "tests/test_ops.py::test_add")).toMatchObject({ status: "fail", cls: "assert" });
+    expect(allPass(keepsBreak, [...t.tests.escaped_defect, ...replay.derived.regression])).toBe(false);
+  }, LONG);
+
+  test("a tree that fills /out fails its own run; /out is a capped tmpfs, so the host disk never fills", () => {
+    const fill = "import atexit\n\n\ndef _fill():\n    try:\n        with open('/out/junk', 'wb') as f:\n            for _ in range(300):\n                f.write(b'x' * (1 << 20))\n    except OSError:\n        pass\n\n\natexit.register(_fill)\n";
+    const g = grade("fills-out", { ...intro, "calc/fmt.py": fill + fixed });
+    expect(g.half.status).toBe("pass");
+    expect(g.tree.runs[0].out_full).toBe(true);
+    expect(g.pass).toBe(false);
+    expect(grade("after-fill", { ...intro, "calc/fmt.py": fixed }).pass).toBe(true);
+  }, LONG);
+
+  test("a tree that leaves a sparse /out record past the read cap fails its own run; a sparse record under the cap still grades", () => {
+    const sparse = (size: string) => "import atexit\nimport os\n\n\ndef _sparse():\n    os.truncate('/out/record.jsonl', " + size + ")\n\n\natexit.register(_sparse)\n";
+    for (const size of ["100 << 30", "100 << 20"]) {
+      const g = grade("sparse-record-" + size.replace(" << ", "-"), { ...intro, "calc/fmt.py": sparse(size) + fixed });
+      expect(g.tree.runs[0]).toMatchObject({ timed_out: false, out_full: false, killed: false });
+      expect(g.half.status).toBe("missing");
+      expect(g.pass).toBe(false);
+    }
+    expect(grade("sparse-record-small", { ...intro, "calc/fmt.py": sparse("1 << 20") + fixed }).pass).toBe(true);
+  }, LONG);
+
+  test("a run whose output passes the docker client's buffer fails whatever its record says, and leaves no container or volume behind", () => {
+    const list = (what: string[]) => docker([...what, "-q", "--filter", "name=real-"]).stdout.split("\n").filter(Boolean);
+    const before = [...list(["ps", "-a"]), ...list(["volume", "ls"])];
+    const left = () => ({ containers: list(["ps", "-a"]).filter((x) => !before.includes(x)), volumes: list(["volume", "ls"]).filter((x) => !before.includes(x)) });
+    const flood = "import atexit\nimport os\n\n\ndef _flood():\n    while True:\n        os.write(1, b'x' * (1 << 20))\n\n\natexit.register(_flood)\n";
+    try {
+      const g = grade("floods-stdout", { ...intro, "calc/fmt.py": flood + fixed });
+      expect(g.tree.runs).toHaveLength(1);
+      expect(g.half.status).toBe("pass");
+      expect(g.tree.runs[0]).toMatchObject({ killed: true, timed_out: false, out_full: false });
+      expect(g.pass).toBe(false);
+      expect(left()).toEqual({ containers: [], volumes: [] });
+    } finally {
+      const { containers, volumes } = left();
+      for (const c of containers) docker(["rm", "-f", c]);
+      for (const v of volumes) docker(["volume", "rm", "-f", v]);
+    }
+  }, LONG);
+
+  test("a starting tree whose run the verifier killed fails V7, so its record derives nothing", () => {
+    const dir = join(tmp.dir, "out/start-floods");
+    cpSync(k1Dir, dir, { recursive: true });
+    const t = readTask(dir);
+    appendFileSync(join(dir, "tests/restore/tests/test_percent.py"), "\n\nimport atexit\nimport os\n\n\ndef _flood():\n    while True:\n        os.write(1, b'x' * (1 << 20))\n\n\nif not hasattr(fmt, \"percent\") or fmt.percent(0.5) != \"50.0%\":\n    atexit.register(_flood)\n");
+    saveTask(dir, t);
+    const r = checkTask({ taskDir: dir, work: join(tmp.dir, "work-start-floods"), runs: 1, mechanical: true });
+    const start = r.trees.find((t) => t.label === "start")!;
+    expect(start.runs[0]).toMatchObject({ killed: true, timed_out: false, out_full: false });
+    expect(rule(r, "V1").pass).toBe(true);
+    expect(rule(r, "V7").pass).toBe(false);
+    expect(rule(r, "V7").detail).toContain("start killed");
+    expect(r.verdict).toBe("invalid");
   }, LONG);
 
   test("a functional test that passes at base breaks V2, and a planted gold line breaks L2", () => {
