@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""R3 band rule (GEVA-177, this post's section 2): two finished oracle passes in, the drop list out.
+
+A task passes a pass when one of its oracle trials has verifier/reward.txt equal to 1, as vm-run.sh's gate scores it.
+A task leaves the band only when it failed in both finished passes. Each pass's failure kind is "reference fails" (the
+verifier ran and the reward was not 1), "image unpullable" (its base image failed every pull try and the trial has no
+reward) or "other: <exception>" (no reward for another reason, or no trial). The reason names both passes' kinds.
+
+Usage: drop-list.py.txt <band file> <plan.json> <run dir tasks/> <pass dir 1> <pass dir 2> <out json> <out tsv>
+A pass dir is the pulled work/pass<N>; it must hold "finished". Prints the summary; exit 3 if a dropped task is in
+the pilot draw, 2 if a pass is not finished.
+"""
+import hashlib, json, os, sys
+
+band_file, plan_file, tasks_dir, p1, p2, out_json, out_tsv = sys.argv[1:8]
+sha = lambda b: hashlib.sha256(b).hexdigest()
+fsha = lambda p: sha(open(p, "rb").read())
+band = open(band_file).read().split()
+pilot = json.load(open(plan_file))["pilot_tasks"]
+
+def base_image(task):
+    froms = [l.split()[1] for l in open(os.path.join(tasks_dir, task, "environment/Dockerfile")) if l.split()[:1] and l.split()[0].upper() == "FROM"]
+    return froms[-1]
+
+def read_pass(d, n):
+    if not os.path.exists(os.path.join(d, "finished")):
+        sys.exit(f"pass {n} ({d}) is not finished; it is void under the band rule")
+    pulls = {}
+    for line in open(os.path.join(d, "pulls.tsv")):
+        status, tries, image, digest, err = line.rstrip("\n").split("\t")
+        pulls[image] = {"status": status, "tries": int(tries), "repo_digest": digest, "last_error": err}
+    trials = {}
+    jobs = os.path.join(d, "jobs")
+    for job in sorted(os.listdir(jobs)):
+        if not job.endswith("-oracle") or not os.path.isdir(os.path.join(jobs, job)):
+            continue
+        for t in sorted(os.listdir(os.path.join(jobs, job))):
+            td = os.path.join(jobs, job, t)
+            if not os.path.isfile(os.path.join(td, "config.json")):
+                continue
+            task = json.load(open(os.path.join(td, "config.json")))["task"]["path"].rstrip("/").split("/")[-1]
+            rp = os.path.join(td, "verifier/reward.txt")
+            reward = open(rp).read().strip() if os.path.exists(rp) else None
+            res = json.load(open(os.path.join(td, "result.json"))) if os.path.exists(os.path.join(td, "result.json")) else {}
+            exc = (res.get("exception_info") or {}).get("exception_type")
+            digests = {f: fsha(os.path.join(td, f)) for f in ("result.json", "verifier/reward.txt", "verifier/test-stdout.txt", "exception.txt") if os.path.exists(os.path.join(td, f))}
+            trials.setdefault(task, []).append({"trial": t, "reward": reward, "exception": exc, "digests": digests})
+    fails_file = open(os.path.join(d, "oracle-fails.txt")).read().split()
+    return {"pulls": pulls, "trials": trials, "fails_file": fails_file, "harbor_exit": open(os.path.join(d, "harbor.exit")).read().strip(),
+            "oracle_fails_sha256": fsha(os.path.join(d, "oracle-fails.txt")), "pulls_sha256": fsha(os.path.join(d, "pulls.tsv"))}
+
+def passed(r):
+    try:
+        return float(r) == 1
+    except (TypeError, ValueError):
+        return False
+
+def verdict(task, pa):
+    img = base_image(task)
+    pull = pa["pulls"].get(img, {"status": "missing", "tries": 0, "repo_digest": "-", "last_error": "not in pulls.tsv"})
+    ts = pa["trials"].get(task, [])
+    ok = any(passed(t["reward"]) for t in ts)
+    if ok:
+        kind = "pass"
+    elif any(t["reward"] is not None for t in ts):
+        kind = "reference fails"
+    elif pull["status"] != "ok":
+        kind = "image unpullable"
+    else:
+        kind = "other: " + (",".join(sorted({t["exception"] or "no reward" for t in ts})) if ts else "no trial")
+    return {"result": "pass" if ok else "fail", "kind": kind, "image": img, "pull": pull, "trials": ts}
+
+passes = [read_pass(p1, 1), read_pass(p2, 2)]
+rows, dropped = [], []
+for task in band:
+    v = [verdict(task, pa) for pa in passes]
+    rows.append((task, v))
+    if all(x["result"] == "fail" for x in v):
+        kinds = [x["kind"] for x in v]
+        reason = kinds[0] if kinds[0] == kinds[1] else f"pass 1: {kinds[0]}; pass 2: {kinds[1]}"
+        dropped.append({"task": task, "reason": reason, "pass1": v[0], "pass2": v[1]})
+for n, pa in enumerate(passes, 1):
+    mine = sorted(t for t, v in rows if v[n - 1]["result"] == "fail")
+    if mine != sorted(pa["fails_file"]):
+        sys.exit(f"pass {n}: this scorer's fails {mine} differ from the VM's oracle-fails.txt {sorted(pa['fails_file'])}")
+kept = [t for t in band if t not in {d["task"] for d in dropped}]
+listing = lambda ids: "".join(i + "\n" for i in sorted(ids)).encode()
+doc = {
+    "band_file_sha256": fsha(band_file), "band_size": len(band),
+    "rule": "wiki/plans/2026-11-02-geva-177-r3-amendment-3, section 2",
+    "passes": [{"pass": n, "harbor_exit": pa["harbor_exit"], "finished": True,
+                "passed": sum(v[n - 1]["result"] == "pass" for _, v in rows), "failed": sum(v[n - 1]["result"] == "fail" for _, v in rows),
+                "images": len(pa["pulls"]), "images_pulled": sum(p["status"] == "ok" for p in pa["pulls"].values()),
+                "oracle_fails_sha256": pa["oracle_fails_sha256"], "pulls_sha256": pa["pulls_sha256"]} for n, pa in enumerate(passes, 1)],
+    "dropped": dropped, "dropped_ids_sha256": sha(listing([d["task"] for d in dropped])),
+    "kept_size": len(kept), "kept_ids_sha256": sha(listing(kept)),
+    "pilot_tasks": pilot, "pilot_dropped": sorted(set(pilot) & {d["task"] for d in dropped}),
+}
+open(out_json, "w").write(json.dumps(doc, indent=2) + "\n")
+with open(out_tsv, "w") as f:
+    f.write("task\tpass1\tpass1_kind\tpass1_reward\tpass2\tpass2_kind\tpass2_reward\tdropped\n")
+    for task, v in rows:
+        rw = lambda x: ",".join(str(t["reward"]) for t in x["trials"]) or "-"
+        f.write(f"{task}\t{v[0]['result']}\t{v[0]['kind']}\t{rw(v[0])}\t{v[1]['result']}\t{v[1]['kind']}\t{rw(v[1])}\t{'yes' if all(x['result'] == 'fail' for x in v) else 'no'}\n")
+for p in doc["passes"]:
+    print(f"pass {p['pass']}: {p['passed']} passed, {p['failed']} failed of {len(band)}; images pulled {p['images_pulled']} of {p['images']}; harbor exit {p['harbor_exit']}")
+for d in dropped:
+    print(f"dropped {d['task']}: {d['reason']}")
+print(f"band: {len(band)} -> {len(kept)} tasks; kept ids sha256 {doc['kept_ids_sha256']}; dropped ids sha256 {doc['dropped_ids_sha256']}")
+print(f"{os.path.basename(out_json)} sha256 {fsha(out_json)}")
+if doc["pilot_dropped"]:
+    print(f"STOP: dropped tasks in the seed-20261101 pilot draw: {doc['pilot_dropped']}")
+    sys.exit(3)
+print("pilot draw: no dropped task")
