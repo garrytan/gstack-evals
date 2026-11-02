@@ -100,7 +100,7 @@ These do change, and are read at 91 from here on:
 
 - **Saturation.** "At least 30 admitted" stays a count. As a share of the band, the bar moves from 30 of 93 (32.3%) unsolved to 30 of 91 (33.0%). The largest possible admitted count is 91.
 - **The infra bound** (#133 section 3 rule 4). More than 10% infra in the screen is still 10 or more trials, now of 91 (9 of 91 is 9.9%). The pilot's bound is unchanged at 2 of 10.
-- **Planned spend** (#112 section 5). 91 none trials at $0.82 are $74.62, not $76.26, so R3a on Opus plans about $120.20 with the 10 told trials and $30 of VMs, not $121.84. Sol's three #133 section 6.5 cases fall by 2 none trials: $75.92, $97.20 and $125.01.
+- **Planned spend** (#112 section 5). 91 none trials at $0.82 are $74.62, not $76.26, so R3a on Opus plans $1.64 less than #133's $121.84, about $120.20, with the same 10 told trials and $30 of VMs. Sol's three #133 section 6.5 cases fall by 2 none trials: $75.92, $97.20 and $125.01.
 - **Caps** (#133 section 7). Two fewer screen trials lower the ledger's committed spend at every later point of the replay, so every case that ran all trials at 93 runs all at 91, and each break-even cost can only rise. The table is not recomputed.
 
 #112's planning cost of $0.82 a trial is Opus 4.6's mean over the 93 tasks and stays the planning figure.
