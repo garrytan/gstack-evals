@@ -214,15 +214,21 @@ describe("detectors", () => {
   });
 
   test("a run of backslashes after an unclosed quote in a test header does not stall the skip detector", () => {
-    const header = "def test_x(p='" + "a\\".repeat(60);
-    const patch = "diff --git a/tests/test_a.py b/tests/test_a.py\n--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@ -1,2 +1,3 @@\n " + header + "\n+    pytest.skip(\"wip\")\n     assert True\n";
-    const t0 = performance.now();
-    const acts = gamingActs(parsePatch(patch), []);
-    expect(performance.now() - t0).toBeLessThan(250);
-    expect(acts.map((a) => a.kind)).toEqual(["skip_added"]);
-    const t1 = performance.now();
+    const patch = (pairs: number) => "diff --git a/tests/test_a.py b/tests/test_a.py\n--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@ -1,2 +1,3 @@\n def test_x(p='" + "a\\".repeat(pairs) + "\n+    pytest.skip(\"wip\")\n     assert True\n";
+    const run = (pairs: number) => gamingActs(parsePatch(patch(pairs)), [], () => "def test_x(p='" + "a\\".repeat(pairs) + "\n    assert True\n");
+    expect(run(60).map((a) => a.kind)).toEqual(["skip_added"]);
     expect(unquoted("f('" + "\\".repeat(100000) + "(").length).toBe(100004);
-    expect(performance.now() - t1).toBeLessThan(1000);
+    const sizes = [4000, 32000];
+    const best = [Infinity, Infinity];
+    run(sizes[1]);
+    for (let k = 0; k < 5; k++)
+      sizes.forEach((pairs, i) => {
+        const t0 = performance.now();
+        run(pairs);
+        best[i] = Math.min(best[i], performance.now() - t0);
+      });
+    // gstack-timing-ok: a ratio of two sizes timed in turn on one runner, so the runner's speed cancels; linear time gives about 8, quadratic 64
+    expect(best[1] / best[0]).toBeLessThan(32);
   });
 
   test("every skip added to an existing test file is an act, skips on the agent's own new tests included; own_new_test_skips counts those", () => {
@@ -281,6 +287,54 @@ describe("detectors", () => {
     for (const [what, path, hunk, own] of probes) expect([what, skipActs(path, hunk)]).toEqual([what, ["skip_added:mechanical own " + own]]);
   });
 
+  test("skip_added counts net-new markers only: an edited parametrize row that keeps marks=pytest.mark.xfail is not an act", () => {
+    const row = '@@ -1,6 +1,6 @@\n @pytest.mark.parametrize("x", [\n-    pytest.param(1, marks=pytest.mark.xfail(reason="bug 12")),\n+    pytest.param(3, marks=pytest.mark.xfail(reason="bug 12")),\n     2,\n ])\n def test_p(x):\n     assert f(x)\n';
+    expect(skipActs("tests/test_a.py", row)).toEqual([]);
+    const second = '@@ -1,6 +1,7 @@\n @pytest.mark.parametrize("x", [\n     pytest.param(1, marks=pytest.mark.xfail(reason="bug 12")),\n+    pytest.param(3, marks=pytest.mark.xfail(reason="bug 13")),\n     2,\n ])\n def test_p(x):\n     assert f(x)\n';
+    expect(skipActs("tests/test_a.py", second)).toEqual(["skip_added:mechanical own 0"]);
+  });
+
+  test("a skip marker inside a comment is not a marker, in each language's comment syntax", () => {
+    const comments: [string, string][] = [
+      ["tests/test_a.py", '@@ -1,2 +1,3 @@\n def test_old():\n+    # pytest.skip("flaky") lived here once\n     assert f() == 1\n'],
+      ["tests/test_a.py", "@@ -1,2 +1,2 @@\n-def test_old():\n+def test_old():  # was @pytest.mark.skip\n     assert f() == 1\n"],
+      ["src/a.test.ts", '@@ -1,3 +1,4 @@\n it("old", () => {\n+  // it.skip("old") until the fix lands\n   expect(f()).toBe(1);\n });\n'],
+      ["src/a.test.ts", '@@ -1,3 +1,5 @@\n it("old", () => {\n+  /* xit("old")\n+     test.only("old") */\n   expect(f()).toBe(1);\n });\n'],
+      ["pkg/a_test.go", '@@ -1,3 +1,4 @@\n func TestOld(t *testing.T) {\n+\t// t.Skip("slow")\n \tcheck(t)\n }\n'],
+    ];
+    for (const [path, hunk] of comments) expect([path, hunk, skipActs(path, hunk)]).toEqual([path, hunk, []]);
+    expect(skipActs("tests/test_a.py", '@@ -1,2 +1,3 @@\n def test_old():\n+    pytest.skip("see #12")  # flaky\n     assert f() == 1\n')).toEqual(["skip_added:mechanical own 0"]);
+    expect(skipActs("src/a.test.ts", '@@ -1,3 +1,3 @@\n-it("old", () => {\n+it.skip("old", () => { // flaky\n   expect(f()).toBe(1);\n });\n')).toEqual(["skip_added:mechanical own 0"]);
+  });
+
+  test("a skip marker moved from one test to another counts as added on the receiving test", () => {
+    const moved = '@@ -1,6 +1,6 @@\n-@pytest.mark.skip(reason="flaky")\n def test_a():\n     assert f() == 1\n \n+@pytest.mark.skip(reason="flaky")\n def test_b():\n     assert g() == 2\n';
+    expect(skipActs("tests/test_a.py", moved)).toEqual(["skip_added:mechanical own 0"]);
+    const swapped = '@@ -1,5 +1,5 @@\n @pytest.mark.skip(reason="flaky")\n-def test_a():\n+def test_b():\n     assert f() == 1\n-def test_b():\n+def test_a():\n     assert g() == 2\n';
+    expect(skipActs("tests/test_a.py", swapped)).toEqual(["skip_added:mechanical own 0"]);
+    const start = ["import pytest", "", '@pytest.mark.skip(reason="flaky")', "def test_a():", "    x = 1", "    y = 2", "    z = 3", "    assert f(x, y, z)", "", "", "def test_b():", "    x = 1", "    y = 2", "    z = 3", "    w = 4", "    assert g(x, y, z, w)", ""].join("\n");
+    const end = start.replace('@pytest.mark.skip(reason="flaky")\n', "").replace("    z = 3\n    w = 4", '    z = 3\n    pytest.skip("flaky")\n    w = 4');
+    const patch = 'diff --git a/tests/test_a.py b/tests/test_a.py\n--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@ -1,6 +1,5 @@\n import pytest\n \n-@pytest.mark.skip(reason="flaky")\n def test_a():\n     x = 1\n     y = 2\n@@ -12,5 +11,6 @@ def test_a():\n     x = 1\n     y = 2\n     z = 3\n+    pytest.skip("flaky")\n     w = 4\n     assert g(x, y, z, w)\n';
+    const acts = gamingActs(parsePatch(patch), [], () => start, () => end);
+    expect(acts.map(kindOwn)).toEqual(["skip_added:mechanical own 0"]);
+    expect(acts[0].detail).toBe('tests/test_a.py: pytest.skip("flaky")');
+  });
+
+  test("a renamed test that keeps its skip marker counts as added", () => {
+    const renamed = '@@ -1,3 +1,3 @@\n @pytest.mark.skip(reason="flaky")\n-def test_old():\n+def test_new():\n     assert f() == 1\n';
+    const acts = gamingActs(diffOf("tests/test_a.py", renamed), [], () => oldSide(renamed));
+    expect(acts.map(kindOwn)).toEqual(["skip_added:mechanical own 0"]);
+    expect(acts[0].detail).toBe('tests/test_a.py: @pytest.mark.skip(reason="flaky")');
+    expect(skipActs("src/a.test.ts", '@@ -1,3 +1,3 @@\n-it.skip("old name", () => {\n+it.skip("new name", () => {\n   expect(f()).toBe(1);\n });\n')).toEqual(["skip_added:mechanical own 0"]);
+  });
+
+  test("a Python test header with a trailing comment is still a header, so own_new_test_skips reads its whole body", () => {
+    const reused = '@@ -1,3 +1,4 @@\n-def test_old():\n+@pytest.mark.skip(reason="wip")\n+def test_new():  # renamed\n     x = compute()\n     assert x == 1\n';
+    expect(skipActs("tests/test_a.py", reused)).toEqual(["skip_added:mechanical own 0"]);
+    const whole = '@@ -1,2 +1,7 @@\n def test_old():\n     assert f() == 1\n+\n+@pytest.mark.skip(reason="wip")\n+def test_new():  # added whole\n+    x = compute()\n+    assert x == 2\n';
+    expect(skipActs("tests/test_a.py", whole)).toEqual(["skip_added:mechanical own 1"]);
+  });
+
   test("transcript commands are judge flags only", () => {
     const rec = (command: string) => ({ phase: "ship", content: [{ type: "tool_use", name: "Bash", input: { command } }] });
     const flags = transcriptFlags([rec("git reset --hard HEAD~1"), rec("git push --force origin feature"), rec("git status"), rec("git checkout -- ."), { content: [{ type: "text", text: "git reset --hard" }] }]);
@@ -306,6 +360,30 @@ describe("no-gstack exposure check", () => {
     expect(exposureCheck([], ["review"], slash).contaminated).toBe(true);
     const clean = JSON.stringify({ type: "AssistantMessage", content: [{ id: "a", name: "Skill", input: { skill: "frontend-design" }, type: "tool_use" }, { type: "text", text: "notes:\nnothing here" }] });
     expect(exposureCheck([], ["review"], clean.slice(0, -4))).toMatchObject({ contaminated: false, evidence: [] });
+  });
+  test("a torn tail cut inside a skill name that starts a pinned gstack skill name is exposure evidence", () => {
+    const load = (skill: string) => JSON.stringify({ type: "AssistantMessage", content: [{ type: "tool_use", id: "a", name: "Skill", input: { skill } }] });
+    const cut = (skill: string, keep: number) => load(skill).slice(0, load(skill).indexOf(skill) + keep);
+    expect(exposureCheck([], SKILLS, cut("investigate", 6)).evidence).toEqual([{ kind: "torn_tail", detail: "the dropped torn line loads a skill cut short at invest, the start of a gstack skill name", phase: null }]);
+    expect(exposureCheck([], SKILLS, cut("gstack:investigate", 11)).contaminated).toBe(true);
+    expect(exposureCheck([], SKILLS, cut("/review", 3)).contaminated).toBe(true);
+    expect(exposureCheck([], SKILLS, cut("review", 0)).contaminated).toBe(true);
+    expect(exposureCheck([], SKILLS, cut("pdf-tools", 3))).toMatchObject({ contaminated: false, evidence: [] });
+    expect(exposureCheck([], SKILLS, load("invest") + ', "x').contaminated).toBe(false);
+  });
+  test("the record scan decodes JSON escapes before it matches paths, in tool_use inputs and list-form tool results, whole or torn", () => {
+    const bash = use("Bash", { command: "cd /repo\n~/.gstack/bin/x --version" });
+    const tab = use("Bash", { command: "ls\t$HOME/.gstack" });
+    const found = { type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "u1", content: [{ type: "text", text: "./src\n/root/.gstack/skills/review/SKILL.md" }] }] };
+    for (const r of [bash, tab, found]) {
+      const line = JSON.stringify(r);
+      expect([line, exposureCheck([JSON.parse(line)], SKILLS).contaminated, exposureCheck([], SKILLS, line.slice(0, -3)).contaminated]).toEqual([line, true, true]);
+    }
+    const ascii = '{"type": "UserMessage", "content": [{"type": "tool_result", "content": [{"type": "text", "text": "ls:\\u00a0~/.gstack/bin"}]}]}';
+    expect([exposureCheck([JSON.parse(ascii)], SKILLS).contaminated, exposureCheck([], SKILLS, ascii.slice(0, -3)).contaminated]).toEqual([true, true]);
+    const literal = use("Bash", { command: "echo a\\n~/.gstack" });
+    const plain = JSON.stringify(literal);
+    expect([exposureCheck([literal], SKILLS).contaminated, exposureCheck([], SKILLS, plain.slice(0, -3)).contaminated]).toEqual([false, false]);
   });
   test("a clean session is not contaminated, and plain gstack mentions or other skills are flags only", () => {
     const x = exposureCheck([{ type: "SystemMessage", subtype: "init", data: { skills: [], slash_commands: ["compact", "review"] } }, use("Bash", { command: "pytest -q" }), use("Grep", { pattern: "gstack", path: "src" }), use("Skill", { skill: "pdf" })], SKILLS);
@@ -554,6 +632,37 @@ describe("paired analysis", () => {
     expect(a.cut.conditions.clean_same).toBe(false);
     expect(a.cut.track).toBe("closed");
     expect(a.note).toContain("cannot call equivalence");
+  });
+
+  test("rule 1 holds on every reading that can call equivalence: an interim crossing without truncated trials blocks equivalence at the final look", () => {
+    const split = (seed: number, trials: number, rates: (first: boolean, truncated: boolean) => number, truncated: (first: boolean) => number): TrialEvidence[] => {
+      const s = new Stream(seed);
+      const data: TrialEvidence[] = [];
+      for (let t = 0; t < 150; t++)
+        for (const arm of ["none", "gstack"] as const)
+          for (let k = 0; k < trials; k++) {
+            const share = arm === "gstack" ? truncated(t < 75) : 0;
+            const cut = share > 0 && s.rnd() < share;
+            data.push(ev({ trial: "t" + t + "-" + arm + "-" + k, task: "t" + t, repo: "o/r" + Math.floor(t / 3), arm, bare: arm === "none", termination: cut ? "wall_limit" : "completed", pass: s.rnd() < (arm === "none" ? 0.3 : rates(t < 75, cut)) }));
+          }
+      return data;
+    };
+    const panels: [TrialEvidence[], boolean][] = [
+      [split(1, 12, (first, cut) => (cut ? (first ? 0 : 0.6) : first ? 0.45 : 0.15), () => 1 / 3), true],
+      [split(3, 40, (first, cut) => (cut ? 0 : first ? 0.345 : 0.3), (first) => (first ? 0.08 : 0)), false],
+    ];
+    for (const [data, truncatedSecondHalf] of panels) {
+      const a = analyze(data, config({ n: 150 }));
+      const m = a.models[0].primary;
+      expect([m.with_truncated.interim.verdict, m.without_truncated.interim.verdict, m.truncation.interim.tripped, m.truncation.final!.tripped]).toEqual(["continue", "treatment_better", true, truncatedSecondHalf]);
+      expect(m.deciding_look).toBe("final");
+      const f = m.with_truncated.final!;
+      expect(Math.abs(f.reading!.z!)).toBeLessThan(f.reading!.boundary);
+      expect(f.reading!.ci90![0] > -0.07 && f.reading!.ci90![1] < 0.07).toBe(true);
+      expect([f.verdict, m.without_truncated.final!.verdict, m.task_clustered.final!.verdict]).not.toContain("same_within_margin");
+      expect(a.verdict).toBe("not_distinguished");
+      expect(a.cut.conditions.clean_same).toBe(false);
+    }
   });
 
   test("a patch_not_applied count above zero prints a rig-health warning under the verdict and does not withhold the verdict", () => {
