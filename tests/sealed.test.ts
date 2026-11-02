@@ -59,10 +59,34 @@ describe("sealed publication rules", () => {
     const markers = sealed.answer_markers.map((m) => new RegExp(m));
     const trips = (line: string) => markers.some((re) => re.test(line));
     const bare = "SEALED" + ": ";
-    for (const verdict of ["clear findings=0 commits=1", "refused findings=1 commits=1", "warned findings=1 commits=1", "error", "no-policy findings=0 commits=1", "not checked (exit 3)"]) {
+    const tail = " skipped=0 visibility=public waived=0 exempt=0 policy=origin/main";
+    for (const verdict of [
+      "clear findings=0 commits=1" + tail,
+      "refused findings=7 commits=11" + tail + " + commit 578129a3039f",
+      "warned findings=1 commits=1" + tail,
+      "error findings=0 commits=0 visibility=public waived=0 policy=origin/main",
+      "no-policy findings=0 commits=1" + tail,
+      "clear findings=0 commits=1",
+      "clear",
+      "refused",
+      "error",
+      "not checked (exit 3)",
+    ]) {
       expect(trips(bare + verdict)).toBe(false);
     }
-    for (const line of [bare + "42", bare + "fixture-only-answer=42", bare + "clearly 42", "SEALED" + " ANSWER: 42", "SEALED" + " HIDDEN TEST: t1"]) {
+    const label = (words: string, rest: string) => "SEALED " + words + ": " + rest;
+    for (const line of [
+      bare + "42",
+      bare + "fixture-only-answer=42",
+      bare + "clearly 42",
+      bare + "clear 42",
+      bare + "error 42",
+      label("ANSWER", "42"),
+      label("ANSWER", "error"),
+      label("ANSWER", "clear findings=0 commits=1"),
+      label("HIDDEN TEST", "t1"),
+      label("HIDDEN TEST", "not checked yet"),
+    ]) {
       expect(trips(line)).toBe(true);
     }
   });
