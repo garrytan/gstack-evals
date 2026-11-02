@@ -184,6 +184,12 @@ Every item serves one run: its first lease binds it, and a second run on it is r
 
 **The pause rule (GSTA-2, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. With the caps above, the worst case of every item together ($8,235) passes $4,500, so the rule binds only if sessions cost far more than R2's.
 
+**Launches run one at a time.** A launch is one review-units command or one judge batch. review-units opens its lease only after the arm's image builds (src/runner/run-host.ts at 715f837), so the guard can't see a launch that has started but not yet leased. The operator runs rr-pause.py for the next launch only after the previous launch's lease shows in the ledger record, and two launches never run at once. This closes the overlap the /ship red-team found: two grid arms launched together each saw the full $4,500 of headroom, and their leases reserved $5,280.
+
+**One ledger.** Every review-units, judge-run, ledger and rr-pause.py command in this rerun uses the same two paths, named in section 10: the ledger <dir>/ledger.sqlite and the ledger record <dir>/ledger-record. The guard and the one-run-per-item rule (E_ITEM_BOUND) read only that record.
+
+**An overspent close stops the run.** The ledger warns LEASE_OVERSPENT when a lease closes above what it reserved (src/runner/ledger/ledger.ts). On that warning the run thread launches nothing more and reports to the Captain, whatever headroom rr-pause.py prints.
+
 ## 9. What follows in separate amendments
 
 **GPT-6.1 Sol.** R54 puts Sol under test beside Opus 5.5. At 176fdc7 review-units can't drive it: it takes only a model with an anthropic or openrouter route for Claude Code (src/trial/review/cli.ts), policy/models.json routes gpt-6.1-sol to openai, and src/runner/pricing/prices.ts has no openrouter row for it, so the metering proxy can't price it, and a `--policy` file can't add a price. GSTA-2 started a build (GEVA-196) for the price row and the route. It had not merged when this post froze, so this post freezes Opus only. A short amendment on the same set adds Sol's none and gstack-full arms at that build's merge commit, reusing this post's rules, as its own Holm family. One fact that amendment must face: src/arms/cells.ts keeps no cross-family voice in a Sol cell, so gstack's outside voice is off there.
@@ -192,12 +198,14 @@ Every item serves one run: its first lease binds it, and a second run on it is r
 
 ## 10. Commands
 
-Each arm runs alone, in its own out dir, on its own item, from a checkout at 176fdc7. The flags not named are stacks round 1's step 5 flags (`--severity-map` from its post, `--test garrytan/gstack=true --test garrytan/gbrain=true`, and `--source` clones holding each unit head), as #129. API keys come from the ledger's run environment, never the command line. P is rr-pause.py's printed spend cap for the launch.
+Each arm runs alone, one launch at a time (section 8), in its own out dir, on its own item, from a checkout at 176fdc7. The flags not named are stacks round 1's step 5 flags (`--severity-map` from its post, `--test garrytan/gstack=true --test garrytan/gbrain=true`, and `--source` clones holding each unit head), as #129. API keys come from the ledger's run environment, never the command line. P is rr-pause.py's printed spend cap for the launch. The ledger paths are the same everywhere: judge-run takes `--ledger $L --record $R`, the ledger CLI takes `--ledger $L --ledger-record $R`, and rr-pause.py takes `$R`.
 
     S=wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
     A=wiki/plans/2026-11-02-geva-195-r2-rerun-amendment
     G=garrytan/gstack@5209e9262d8068a75b29be562fbc1de82ba8b487
-    COMMON="--models claude-opus-5-5 --max-turns 200 --allowance 40 --cap-stops --timeout 10800 --reader-map $A/reader-map-gstack-5209e9262d80.json"
+    L=<dir>/ledger.sqlite
+    R=<dir>/ledger-record
+    COMMON="--models claude-opus-5-5 --max-turns 200 --allowance 40 --cap-stops --timeout 10800 --reader-map $A/reader-map-gstack-5209e9262d80.json --ledger $L --record $R"
 
     # pilot and smoke
     gstack-evals review-units --suite $S --units all --arms none --passes 1 --system-prompt none=claude-code-preset \
