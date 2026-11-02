@@ -379,23 +379,30 @@ function markerUnits(text: string, path: string, drop: (line: number, code: stri
 const PARAMETRIZE = /^\s*@[\w.]*\bparametrize\s*\(/;
 const WRAPPING = /^\s*pytestmark\b|\bpytest\.(?:skip|xfail|importorskip)\s*\(|\braise\s+unittest\.SkipTest\b/;
 
-/** The parts of text between its commas outside brackets, trimmed, without the empty part a trailing comma leaves. */
+/** The parts of text between its commas outside brackets and strings, trimmed, without the empty part a trailing comma
+ * leaves. */
 const commaParts = (text: string): string[] => {
   const parts = [""];
   let depth = 0;
-  for (const c of text) {
-    if (c === "," && depth === 0) parts.push("");
-    else {
-      depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
-      parts[parts.length - 1] += c;
-    }
+  let quote = "";
+  for (let i = 0; i < text.length; i++) {
+    let c = text[i];
+    if (quote) {
+      if (c === "\\") c += text[++i] ?? "";
+      else if (c === quote) quote = "";
+    } else if (c === "," && depth === 0) {
+      parts.push("");
+      continue;
+    } else if (QUOTES.includes(c)) quote = c;
+    else depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
+    parts[parts.length - 1] += c;
   }
   if (!parts[parts.length - 1].trim()) parts.pop();
   return parts.map((p) => p.trim());
 };
 
-/** Whether a parametrize decorator (its code with strings removed) skips every case: its values are a list or tuple
- * written out, and each one is a param(...) holding a skip marker. */
+/** Whether a parametrize decorator (its code) skips every case: its values are a list or tuple written out, and each
+ * one is a param(...) holding a skip marker. */
 function everyCaseSkipped(code: string): boolean {
   const args = commaParts(code.slice(code.indexOf("(") + 1, code.lastIndexOf(")")));
   const values = args.find((a) => /^argvalues\s*=/.test(a))?.replace(/^argvalues\s*=\s*/, "") ?? args.filter((a) => !/^\w+\s*=/.test(a))[1];
@@ -429,7 +436,7 @@ function testStates(text: string, path: string): Map<number, TestState> {
   };
   const covers = (i: number, u: number, own: boolean): boolean => {
     const s = statement(i);
-    if (py && PARAMETRIZE.test(s)) return everyCaseSkipped(unquoted(s));
+    if (py && PARAMETRIZE.test(s)) return everyCaseSkipped(s);
     return own || (u >= 0 && i <= u) || (py && WRAPPING.test(s));
   };
   const states = new Map<number, TestState>();
