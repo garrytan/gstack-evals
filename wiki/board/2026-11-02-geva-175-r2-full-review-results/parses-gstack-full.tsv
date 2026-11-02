@@ -1,0 +1,20 @@
+arm_id	arm	model	unit	pass	outcome	findings	reason
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7511@6b01f793f2bc	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7674@af88cba164b0	1	empty	0	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7684@ac3c2af65960	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7789@49eb4da5f7c8	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7794@2d801d54cee4	1	findings	4	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7872@f61d1a5fd5fa	1	findings	7	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7878@d43d2497a65c	1	findings	9	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7884@d3b843389bd6	1	findings	1	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gbrain#7901@40461c875975	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#1808@b17f340a457a	1	findings	7	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3381@8a52c271ad81	1	findings	6	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3431@8f4cbb8db01c	1	findings	2	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3448@b476ae9e4b66	1	findings	3	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3475@fc69d3ff0bfe	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3494@c555ce3a8324	1	findings	8	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3507@8c021d124220	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3516@3712b7971126	1	missing		
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3556@95d9c6d06ef1	1	findings	1	
+gstack-full-opus	gstack-full	claude-opus-5-5	garrytan/gstack#3557@7459bb48317d	1	findings	3	
