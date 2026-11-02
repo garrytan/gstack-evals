@@ -147,6 +147,17 @@ describe("scoring one trial", () => {
     expect(() => run(trial({ task: "k1", edit: null, arm: "nope" }), "k1")).toThrow(/not in arms.json/);
   });
 
+  test("a shipment record and summary that name different trials make the trial infra, with nothing graded", () => {
+    const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+    const summary = JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8"));
+    writeFileSync(join(ev, "real-summary.json"), JSON.stringify({ ...summary, trial: "another-trial" }));
+    const e = run(ev, "k1");
+    expect(e.infra_reason).toMatch(/different trials/);
+    expect(e.trees.shipped).toBeNull();
+    expect(calls.map((c) => c.label)).not.toContain("shipped");
+    expect(classifyTrial(e).status).toBe("infra");
+  });
+
   test("a none-arm trial that read a gstack skill is contaminated", () => {
     const e = run(trial({ task: "k1", edit: "git apply ../gold.patch", messages: [{ type: "AssistantMessage", phase: "build", content: [{ type: "tool_use", id: "1", name: "Read", input: { file_path: "/root/.claude/skills/ship/SKILL.md" } }] }] }), "k1");
     expect(classifyTrial(e).status).toBe("contaminated");

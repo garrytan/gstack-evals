@@ -18,6 +18,14 @@ const PARTICLE = "particle/particle-1";
 const MODELS = [OPUS, SOL, PARTICLE];
 const SHA = (c: string) => c.repeat(40);
 const CLEAN: Exposure = { contaminated: false, evidence: [], flags: [], messages: 0 };
+const codeOf = (f: () => unknown): string | null => {
+  try {
+    f();
+    return null;
+  } catch (e) {
+    return e instanceof ScoreError ? e.code : String(e);
+  }
+};
 
 const graded = (pass: boolean, failed: Partial<{ functional: string[]; escaped_defect: string[]; regression: string[] }> = {}): TreeGrade => ({ status: "graded", pass, applied: true, runs: 1, failed: { functional: [], escaped_defect: [], regression: [], ...failed } });
 
@@ -70,7 +78,7 @@ describe("outcome categories", () => {
     expect([r("pr", true).caught, r("pr", true).shipped_clean, r("none", true).held]).toEqual([1, null, 1]);
     const d = (status: ShipmentStatus, pass: boolean) => classifyTrial(ev({ kind: "K4", role: "decoy", status, pass }));
     expect([d("pr", true).category, d("pr", false).category, d("none", false).category]).toEqual(["shipped_clean", "broke_it", "held"]);
-    expect(() => classifyTrial(ev({ kind: "K4", role: null }))).toThrow(ScoreError);
+    expect(codeOf(() => classifyTrial(ev({ kind: "K4", role: null })))).toBe("E_REAL_SCORE_INPUT");
   });
 
   test("infra is a rig reason, never the arm's failure: crashes, rig errors, missing records and no verdict", () => {
@@ -94,7 +102,7 @@ describe("outcome categories", () => {
     const b7 = readTaxonomy({ version: "b7-1", classes: { ...DEFAULT_TAXONOMY.classes, cancelled: "truncated", mystery: "infra" } });
     expect(classifyTrial(ev({ termination: "cancelled" }), b7).truncated).toBe(true);
     expect(classifyTrial(ev({ termination: "mystery" }), b7).status).toBe("infra");
-    expect(() => readTaxonomy({ version: "x", classes: { completed: "completed", wall_limit: "fail" } })).toThrow(ScoreError);
+    expect(codeOf(() => readTaxonomy({ version: "x", classes: { completed: "completed", wall_limit: "fail" } }))).toBe("E_REAL_SCORE_CONFIG");
   });
 
   test("a bare arm with exposure is contaminated and excluded; the gstack arm is not checked; flags count only when a judge confirms", () => {
@@ -366,12 +374,19 @@ describe("paired analysis", () => {
   });
 
   test("configs are validated, and the primary model's build tasks must all be in the frozen order", () => {
-    expect(() => config({ n: 4, primary_model: SOL })).toThrow(ScoreError);
+    expect(codeOf(() => config({ n: 4, primary_model: SOL }))).toBe("E_REAL_SCORE_CONFIG");
     expect(() => config({ n: 4, treatment: "none" })).toThrow(/two different arms/);
     expect(() => config({ n: 4, margin: 7 })).toThrow(/margin/);
     expect(() => readConfig({ schema: "nope" })).toThrow(ScoreError);
     const data = panel({ tasks: 4, trials: 1, control: () => ({ clean: 0.5, defective: 0.5 }), treatment: () => ({ clean: 0.5, defective: 0.5 }) });
     expect(() => analyze(data, config({ n: 3 }))).toThrow(/not in task_order/);
+  });
+
+  test("a trial that appears twice in the evidence is refused, never counted twice", () => {
+    const data = panel({ tasks: 4, trials: 1, control: () => ({ clean: 0.5, defective: 0.5 }), treatment: () => ({ clean: 0.5, defective: 0.5 }) });
+    expect(analyze(data, config({ n: 4 })).models.length).toBe(1);
+    expect(codeOf(() => analyze([...data, data[0]], config({ n: 4 })))).toBe("E_REAL_SCORE_INPUT");
+    expect(() => analyze([...data, data[0]], config({ n: 4 }))).toThrow(/appears twice/);
   });
 
   test("models are input (R54): the scorer names no model", () => {

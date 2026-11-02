@@ -413,7 +413,11 @@ export interface Analysis {
 export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig, taxonomy: Taxonomy = DEFAULT_TAXONOMY): Analysis {
   const ignored: Record<string, number> = {};
   const outcomes: TrialOutcome[] = [];
+  const seen = new Set<string>();
   for (const e of evidence) {
+    const key = [e.task, e.model, e.arm, e.trial].join(" / ");
+    if (seen.has(key)) throw new ScoreError("E_REAL_SCORE_INPUT", "trial " + key + " appears twice in the evidence; pass each trial-score.json once");
+    seen.add(key);
     if (!cfg.models.includes(e.model) || (e.arm !== cfg.control && e.arm !== cfg.treatment)) {
       const k = e.model + " / " + e.arm;
       ignored[k] = (ignored[k] ?? 0) + 1;
