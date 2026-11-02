@@ -86,8 +86,10 @@ const OUR_READ_ERRORS = new Set(["EACCES", "EIO", "EMFILE", "ENFILE", "ENOMEM", 
 // One session's route-side verdict from its Harbor exit, its job directory and the proxy's session rows. A trial whose
 // files can't be read fails with the read error as its reason; a read that fails on our machine (OUR_READ_ERRORS) throws
 // instead, so the check ends incomplete and counts no try (A1). loadR3Trial reads a JSON file it can't read as missing,
-// so judge reads each trial file once itself first and the error surfaces here. Only ENOENT and ENOTDIR mean absent: a
-// stat that fails for another reason is an error, not a missing file.
+// so judge reads config.json and result.json once itself, the error surfacing here, and hands loadR3Trial their bytes.
+// laneb-summary.json gives only wall_s, which no verdict reads, so judge doesn't read it. Only ENOENT and ENOTDIR mean
+// absent: a stat that fails for another reason is an error, not a missing file. main reads the proxy's sessions file the
+// same way, so an error there ends the check incomplete instead of judging a told part with no rows.
 const ifThere = <T>(read: () => T): T | null => {
   try {
     return read();
@@ -101,12 +103,15 @@ export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: st
   const bySession = sessionsByTrial(sessionRows);
   let trial: ReturnType<typeof loadR3Trial> = null, toolCount = 0, unreadable: string | null = null;
   try {
-    const dir = (ifThere(() => readdirSync(jobDir)) ?? []).map((t) => join(jobDir, t)).find((d) => ifThere(() => readFileSync(join(d, "config.json"))) !== null);
-    if (dir) for (const f of ["result.json", "evaluator/laneb-summary.json"]) ifThere(() => readFileSync(join(dir, f)));
-    trial = dir ? loadR3Trial(dir, bySession, proxyConfig) : null;
-    const text = dir ? ifThere(() => readFileSync(join(dir, "evaluator", "sdk-messages.jsonl"), "utf8")) : null;
-    const msgs = text !== null ? text.split("\n").flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : [];
-    toolCount = toolResults(msgs);
+    for (const t of ifThere(() => readdirSync(jobDir)) ?? []) {
+      const dir = join(jobDir, t);
+      const config = ifThere(() => readFileSync(join(dir, "config.json"), "utf8"));
+      if (config === null) continue;
+      trial = loadR3Trial(dir, bySession, proxyConfig, { config, result: ifThere(() => readFileSync(join(dir, "result.json"), "utf8")) });
+      const text = ifThere(() => readFileSync(join(dir, "evaluator", "sdk-messages.jsonl"), "utf8"));
+      toolCount = toolResults(text !== null ? text.split("\n").flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : []);
+      break;
+    }
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (code && OUR_READ_ERRORS.has(code)) throw new Error(`${code} reading the trial: ${(e as Error).message}`);
@@ -319,7 +324,7 @@ async function main(argv: string[]): Promise<number> {
         capStop = t?.cap_stop ?? null;
         infra = !t ? "the proxy is down (its /totals did not answer)" : capStop ? `the proxy latched a cap stop: ${capStop}` : null;
       }
-      const rows = existsSync(sessionsFile) ? readSessionRows([sessionsFile]) : [];
+      const rows = ifThere(() => readSessionRows([sessionsFile])) ?? [];
       Object.assign(s, judge(kind, exit, join(out, "jobs", job), rows, proxyConfig), { harbor_exit: exit, finished_at: new Date().toISOString(), proxy_cap_stop: capStop, infra });
       if (infra) rec.incomplete = `${kind} try ${n}: ${infra}`;
       save();

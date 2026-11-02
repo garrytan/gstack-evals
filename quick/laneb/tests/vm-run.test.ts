@@ -326,6 +326,37 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     expect(r.code).toBe(130);
   }, 60_000);
 
+  test("a SIGHUP, SIGINT or SIGTERM during a pull kills the pull and its watcher, then exits 129, 130 or 143 before the oracle gate", async () => {
+    const ps = (pid: number) => Bun.spawnSync(["ps", "-o", "ppid=,stat=", "-p", String(pid)]).stdout.toString().trim().split(/\s+/);
+    const alive = (pid: number) => { const [, stat] = ps(pid); return stat !== undefined && !stat.startsWith("Z"); };
+    for (const [sig, code] of [["SIGHUP", 129], ["SIGINT", 130], ["SIGTERM", 143]] as const) {
+      const s = setup({ a: "1" });
+      const root = join(s.run, "..");
+      mkdirSync(join(s.run, "tasks", "a", "environment"), { recursive: true });
+      writeFileSync(join(s.run, "tasks", "a", "environment", "Dockerfile"), "FROM img-a\n");
+      const pidFile = join(root, "pull.pid");
+      writeFileSync(join(root, "bin", "sg"), `#!/usr/bin/env bash\necho "$3" >> "${join(root, "sg.log")}"\ncase "$3" in "docker pull"*) echo $$ > "${pidFile}.tmp"; mv "${pidFile}.tmp" "${pidFile}"; exec /usr/bin/sleep 600 ;; esac\n`);
+      const p = Bun.spawn(s.cmd, { env: s.env, stdout: "ignore", stderr: "ignore" });
+      for (let i = 0; i < 400 && !existsSync(pidFile); i++) await Bun.sleep(25);
+      await Bun.sleep(300);
+      const pull = Number(readFileSync(pidFile, "utf8"));
+      const timeout = Number(ps(pull)[0]);
+      const watchers = () => Bun.spawnSync(["pgrep", "-f", s.run]).stdout.toString().split("\n").filter(Boolean).map(Number).filter((pid) => pid !== p.pid);
+      expect(alive(pull) && alive(timeout) && watchers().length > 0).toBe(true);
+      const left = () => [pull, timeout, ...watchers()].filter(alive);
+      try {
+        p.kill(sig);
+        expect(await p.exited).toBe(code);
+        expect(s.exitFile()).toBe(String(code));
+        for (let i = 0; i < 40 && left().length; i++) await Bun.sleep(50);
+        expect(left()).toEqual([]);
+        expect(s.sg()).not.toContain("oracle.json");
+      } finally {
+        for (const pid of left()) process.kill(pid, "SIGKILL");
+      }
+    }
+  }, 60_000);
+
   test("a rate-limit read that hangs gives up after 30 s, so the failed pull counts as a try and the next pull goes ahead", async () => {
     const r = await pulls(hub({ fails: { "img-a": 1 }, hangHead: true }), { a: "FROM img-a\n" }, { killAfterMs: 80_000 });
     expect(r.out("pulls.tsv")).toBe(HEAD + "ok\t2\t0\timg-a\n");
