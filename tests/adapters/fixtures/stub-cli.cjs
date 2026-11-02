@@ -24,7 +24,8 @@
 // reader is out. STUB_BG.wake_error, an API error's text (status STUB_API_STATUS), answers the first turn after the prompt's.
 // STUB_BG.late_level sends a landing reader's level after its turn, as the SDK allows (the level's order is unspecified).
 // STUB_BG.first replaces the prompt's turn text ("Waiting."). A reader with stall true starts its landing turn (init and
-// its text) and never ends it, so the main agent is mid-turn from then on.
+// its text) and never ends it, so the main agent is mid-turn from then on; stall "init" stops right after the turn's init,
+// before any text. A reader's think delays its landing turn's text and result that many ms after the turn's init.
 const rl = require("readline").createInterface({ input: process.stdin });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const env = process.env;
@@ -90,7 +91,7 @@ rl.on("line", (line) => {
     const level = () => out({ type: "system", subtype: "background_tasks_changed", tasks: live.map(task), session_id: "s", uuid: "lv" + live.length });
     const out_ = () => live.some((r) => !r.ambient && !r.nested);
     let woken = 0;
-    const turn = (text, origin, stall) => {
+    const turn = (text, origin, r = {}) => {
       woken++;
       out({ type: "system", subtype: "init", session_id: "s", model: "stub", tools: [], cwd: "/", permissionMode: "default", apiKeySource: "none", claude_code_version: "0", skills: [], mcp_servers: [], slash_commands: [], output_style: "default", uuid: "i" + woken });
       if (bg.wake_error && woken === 1) {
@@ -98,9 +99,15 @@ rl.on("line", (line) => {
         out({ type: "result", subtype: "success", is_error: true, num_turns: 1, result: bg.wake_error, terminal_reason: "api_error", session_id: "s", duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage, uuid: "rw" });
         return;
       }
-      out(assistant("k" + woken, [{ type: "text", text }], "end_turn"));
-      if (stall) return;
-      out({ ...result("k" + woken, text), ...(origin ? { origin } : {}) });
+      if (r.stall === "init") return;
+      const k = "k" + woken;
+      const say = () => {
+        out(assistant(k, [{ type: "text", text }], "end_turn"));
+        if (r.stall) return;
+        out({ ...result(k, text), ...(origin ? { origin } : {}) });
+      };
+      if (r.think) setTimeout(say, r.think);
+      else say();
     };
     for (const r of bg.readers) {
       const bash = r.kind === "local_bash";
@@ -131,7 +138,7 @@ rl.on("line", (line) => {
       out({ type: "system", subtype: "task_notification", task_id: "task_" + r.id, run_id: "run_" + r.id, tool_use_id: r.id, status: "completed", output_file: "", summary: "done", session_id: "s", uuid: "tn_" + r.id });
       live.splice(live.indexOf(r), 1);
       if (!bg.late_level) level();
-      turn(out_() ? "Still waiting." : env.STUB_FINAL || "done", { kind: "task-notification", producer: "session-task", runId: "run_" + r.id }, r.stall);
+      turn(out_() ? "Still waiting." : env.STUB_FINAL || "done", { kind: "task-notification", producer: "session-task", runId: "run_" + r.id }, r);
       if (bg.late_level) level();
     }, r.delay);
     return;

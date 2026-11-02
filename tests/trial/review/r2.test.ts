@@ -312,6 +312,36 @@ describe("R2 build: a stub run through the run loop with the real driver and the
     expect(sixty.parts.map(({ task: _, ...rest }) => rest)).toEqual(today.parts.map(({ task: _, ...rest }) => rest));
   }, 240_000);
 
+  // Value: protects=C1 on #141 round 2: when a waited code session's transcript cannot be read, the run says so in its log and the session keeps the final-turn parse; fails_when=the fallback is silent; why_new=the round-2 specialist on #141; seam=runReviewUnits' transcript read; no_claim=why a transcript goes missing
+  test("an unreadable transcript on a held session is logged, and the session keeps its final-turn parse", async () => {
+    const { prepared } = twoUnits();
+    const [a, b] = prepared.map((p) => p.unit.id) as [string, string];
+    const run = stubRun({ prepared, plan: { "gstack-full": { [a]: "held", [b]: "plain" }, "none-r2": { [a]: "plain", [b]: "plain" } }, settings: {} });
+    const rig: HostRig = {
+      ...run.rig,
+      driver: (o) => {
+        const d = hostDriver(o);
+        return {
+          ...d,
+          async run(...args: Parameters<typeof d.run>) {
+            const r = await d.run(...args);
+            if ((r.session_end?.waited_ms ?? 0) > 0) rmSync(join(o.out, "transcript.ndjson"));
+            return r;
+          },
+        };
+      },
+    };
+    const lines: string[] = [];
+    try {
+      await runReviewUnits(run.input, rig, (l) => lines.push(l));
+      const held = [...readReviewJournal(run.out).values()].find((e) => e.cell.arm === "gstack-full" && e.cell.unit === a)!;
+      expect([held.parse.kind, held.scored_turn?.rule]).toEqual(["missing", "final"]);
+      expect(lines.filter((l) => l.includes("transcript.ndjson is unreadable"))).toEqual([expect.stringContaining(a)]);
+    } finally {
+      run.h.proxy.stop();
+    }
+  }, 120_000);
+
   // Value: protects=GEVA-116's byte-for-byte line: a run at today's defaults (60 turns, the policy allowance, no reader map) records the same stub sessions as before the build: the turn cap as completed, the allowance as a missing E_ALLOWANCE cell, no cap_stops or reader_map_sha256 in arm.json and no reader rows; fails_when=a default run gains a cap kind, an arm.json field or a cost row; why_new=GEVA-116's note on #119; seam=runReviewUnits' capStops and readers gates
   test("a default run keeps today's records", async () => {
     const { prepared } = twoUnits();
@@ -321,7 +351,7 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       await runReviewUnits(run.input, run.rig);
       const journal = [...readReviewJournal(run.out).values()];
       expect(journal.map((e) => [e.cell.arm, e.cell.unit, e.record.termination]).sort()).toEqual([["gstack-full", a, { kind: "completed" }], ["gstack-full", b, { kind: "completed" }], ["none-r2", a, { kind: "completed" }], ["none-r2", b, { kind: "missing", code: "E_ALLOWANCE" }]].sort() as never);
-      expect(journal.every((e) => !("readers" in e) && e.key.parts.verifier === keyPart(PARSER_SHA256 + "+" + HELD_PARSER_SHA256))).toBe(true);
+      expect(journal.every((e) => !("readers" in e) && e.key.parts.verifier === keyPart(PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256))).toBe(true);
       for (const id of ["gstack-full-opus", "none-r2-opus"]) {
         expect(Object.keys(arm(run.out, id)).filter((k) => k === "cap_stops" || k === "reader_map_sha256")).toEqual([]);
         expect(costRows(run.out, id).map((r) => r[1])).toEqual(["all", "all"]);

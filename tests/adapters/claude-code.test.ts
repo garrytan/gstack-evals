@@ -751,6 +751,7 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     for (const host of [false, true]) {
       const r = await bg({ readers: [agent("tu_a", 300)] }, { waitMs: null, host });
       expect([r.outcome.termination, r.outcome.turns, "session_end" in r.outcome]).toEqual([{ kind: "completed" }, ["Waiting."], false]);
+      expect(r.log).toContain('background work still out (local_agent "reader tu_a"); this run sets no background wait, so nothing held it');
       expect(r.ms).toBeLessThan(3_000);
     }
   }, 30_000);
@@ -773,6 +774,13 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     expect(r.ms).toBeLessThan(5_000);
     expect(r.log).toContain("E_BACKGROUND_DEADLINE, not the arm's");
     expect(parseFindings(r.outcome)).toEqual({ kind: "incomplete", reason: "the session ended missing (E_BACKGROUND_DEADLINE)" });
+  }, 30_000);
+
+  // Value: protects=GSTA-2's B1 condition on #141 round 2: the idle clock stops at the system init the CLI sends when it starts a turn of its own (2.1.314 sends one on every task-notification turn, checked on the real CLI), so the model's time before its first message never counts toward the background deadline; fails_when=the clock runs on to the first assistant message, so a slow first message pushes a session past the deadline; why_new=the round-2 specialist on #141; seam=the driver's init handling; no_claim=a real model
+  test("the idle clock stops at the CLI's turn init, not at the first assistant message", async () => {
+    const r = await bg({ readers: [agent("tu_a", 300, { think: 1_500 })] }, { waitMs: 1_000 });
+    expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, REPORT, "clean"]);
+    expect(r.outcome.session_end!.waited_ms).toBeLessThan(1_000);
   }, 30_000);
 
   // Value: protects=ruling B (GEVA-2, 2026-11-02): a ScheduleWakeup set while nothing ran holds the session until it fires, one set while readers ran is their fallback and is released once they finish, with when it was set, its delay and what ran recorded, and a stopped wakeup holds nothing; fails_when=a fallback wakeup keeps the session open past the report (R2's 3 fallback sessions would end on a later turn), a lone wakeup is not waited for, or a released one goes unrecorded; why_new=GST-734 ruling B; seam=the driver's wakeup tracking; no_claim=a real model
@@ -815,6 +823,8 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     expect(late.log).toContain("the session's timeout came while it sat idle");
     const busy = await bg({ readers: [agent("tu_a", 300, { stall: true }), agent("tu_b", null)] }, { waitMs: 60_000, timeoutMs: 1_500 });
     expect([busy.outcome.termination, busy.outcome.session_end?.cause, busy.outcome.session_end?.pending]).toEqual([{ kind: "timeout" }, "tasks_pending", ['local_agent "reader tu_b"']]);
+    const opening = await bg({ readers: [agent("tu_a", 300, { stall: "init" }), agent("tu_b", null)] }, { waitMs: 60_000, timeoutMs: 1_500 });
+    expect([opening.outcome.termination, opening.outcome.session_end?.cause]).toEqual([{ kind: "timeout" }, "tasks_pending"]);
   }, 60_000);
 });
 

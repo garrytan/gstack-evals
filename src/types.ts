@@ -210,7 +210,7 @@ export interface SessionEnd {
   waited_ms: number;
   /** ScheduleWakeups the adapter did not wait for: set while background tasks ran, and still pending once they finished. */
   released_wakeups: { set_at: string; delay_s: number; fires_at: string; running: string[] }[];
-  /** review-units, on a deadline end only: whether a findings block existed when the deadline hit. Recorded, never scored. */
+  /** review-units, on a deadline end only, in the cells.ndjson record (trial.json is written before it): whether a findings block existed when the deadline hit. Recorded, never scored. */
   findings_block?: boolean;
 }
 

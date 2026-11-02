@@ -85,7 +85,8 @@
 //   finish, and session_end lists it under released_wakeups with when it was set, its delay and what ran then. R2's three
 //   fallback sessions (GEVA-151) are why: their 1200 s wakeups would fire after the report and leave a later last turn.
 //   The wait is bounded: in all, the session may sit idle at most backgroundWaitMs, counted from each such turn's result
-//   to the main agent's next message. At that deadline the session ends as a missing cell, E_BACKGROUND_DEADLINE, never as
+//   to the start of the main agent's next turn: the system init the CLI sends when it starts a turn of its own (2.1.314
+//   sends one on every task-notification turn) or the main agent's next message, whichever comes first. At that deadline the session ends as a missing cell, E_BACKGROUND_DEADLINE, never as
 //   the arm finding nothing, and so does a session whose timeout comes while it sits idle on held work (GSTA-2's B1
 //   ruling on #141); a timeout during an active turn stays the arm's. Every other stop (a cap stop, the turn cap or the
 //   allowance, a crash) keeps its own termination. The outcome's session_end
@@ -502,6 +503,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             messages.push(m);
             appendFileSync(transcript, JSON.stringify(m) + "\n");
             if (m.type === "system" && m.subtype === "init") {
+              if (!m.parent_tool_use_id && idleSince !== null) {
+                waited += performance.now() - idleSince;
+                idleSince = null;
+              }
               writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: m.model, claude_code_version: m.claude_code_version, permissionMode: m.permissionMode, apiKeySource: m.apiKeySource, tools: m.tools, skills: m.skills, cwd: m.cwd, system_prompt: o.systemPrompt ?? "sdk-default" }, null, 2) + "\n");
             } else if (m.type === "system" && m.subtype === "background_tasks_changed") {
               level.clear();
@@ -585,6 +590,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         if (!abort.signal.aborted) abort.abort();
       }
       const held = holding();
+      if (waitMs === null && held.length) log("adapter: the session ended at its turn's result with background work still out (" + held.join("; ") + "); this run sets no background wait, so nothing held it\n");
       const session_end: SessionEnd = { cause: overdue ? "deadline" : held.length ? "tasks_pending" : "clean", pending: held, waited_ms: Math.round(waited), released_wakeups: wakeup && wakeup.running.length && !running().length ? [wakeup] : [] };
       if (unapprovedAsks(messages, approved, hooked).length && (stop as Termination | null)?.kind !== "cap_stop") stop = { kind: "missing", code: "E_APPROVAL_BYPASS" };
       const { turns, calls, outputs } = parseClaudeCode(messages);

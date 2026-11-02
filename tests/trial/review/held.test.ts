@@ -23,6 +23,15 @@ describe("held.ts: the held-session read rule (GSTA-2's A1 ruling on #141)", () 
     expect([later.scored_turn, later.parse]).toMatchObject([{ rule: "held", index: 1, of: 3 }, { kind: "findings", findings: [{ claim: "The lock is never released." }] }]);
   });
 
+  // Value: protects=GSTA-2's round-2 A1 narrowing on #141: the held rule applies only when the final turn has no json block at all, so a waited session whose last turn holds a revised block with a trailing comma stays malformed, exactly as a session that never waited; fails_when=an earlier draft rescues a malformed final block; why_new=the round-2 red team on #141; seam=codeParse; no_claim=the driver
+  test("a malformed final block stays malformed whether or not the session waited", () => {
+    const broken = "Revised.\n\n" + FENCE + "json\n[{\"file\": \"src/a.ts\", \"line\": 1, \"severity\": \"CRITICAL\", \"claim\": \"x\", \"evidence\": \"y\",}]\n" + FENCE + "\n";
+    for (const waited of [undefined, 0, 1_200]) {
+      const scored = codeParse(ended([REPORT, broken], waited), [REPORT, broken]);
+      expect([scored.parse.kind, scored.scored_turn]).toEqual(["malformed", { rule: "final", index: 1, of: 2 }]);
+    }
+  });
+
   // Value: protects=the rule's edges: a waited session with no findings block anywhere keeps the final-turn parse (so a malformed or missing final turn is labelled as today), a cap stop keeps capped.ts's parse and records its turn, and a session that did not complete scores incomplete from no turn; fails_when=the held rule turns malformed into missing, changes a capped parse, or credits a deadline session; why_new=GSTA-2's A1 conditions on #141 (record the scored turn); seam=codeParse; no_claim=plan units (plan.ts walks back already)
   test("a waited session with no findings turn keeps the final-turn parse; cap stops keep capped.ts; an ended session scores from no turn", () => {
     const draft = "One more check.\n\n" + FENCE + "json\n{\"draft\": true}\n" + FENCE + "\n";

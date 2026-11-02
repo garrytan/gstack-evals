@@ -1,10 +1,11 @@
 // The held-session read rule (GSTA-2's A1 ruling on #141, GST-734). review-units holds a Claude Code session open while
 // background work its main agent started is out, and the CLI takes a turn of its own when that work lands, so a session
 // that waited can end on a turn written after its report ("my findings above stand"), which findings.ts's final-turn
-// parse would score as finding nothing. A completed code session whose session_end shows it waited (waited_ms > 0) is
-// therefore scored from the latest main-agent text whose last json block parses as findings (findings.ts's final-turn
-// parser, the rule capped.ts applies to cap stops), read from its transcript.ndjson; with no such text it keeps the
-// final-turn parse. A session that never waited is scored on its final turn exactly as before, and a cap-stopped one by
+// parse would score as finding nothing. A completed code session whose session_end shows it waited (waited_ms > 0) and
+// whose final turn has no json block at all is therefore scored from the latest main-agent text whose last json block
+// parses as findings (findings.ts's final-turn parser, the rule capped.ts applies to cap stops), read from its
+// transcript.ndjson; with no such text it keeps the final-turn parse. A malformed final block stays malformed, waited or
+// not (GSTA-2's round-2 narrowing). A session that never waited is scored on its final turn exactly as before, and a cap-stopped one by
 // capped.ts. Every code session records the turn it was scored from (scored_turn), and review-units adds
 // HELD_PARSER_SHA256 to the session key's verifier, so a change to this rule invalidates cached sessions.
 import { createHash } from "node:crypto";
@@ -35,6 +36,7 @@ export function codeParse(record: { termination: Termination; turns: readonly st
   const kind = record.termination.kind;
   const latest = texts.map(parseFinalTurn).findLastIndex((p) => p.kind === "findings");
   if (kind === "turn_cap" || kind === "allowance_stop") return { parse: cappedParse(texts), scored_turn: { rule: "capped", index: latest < 0 ? null : latest, of: texts.length } };
-  if (kind === "completed" && (record.session_end?.waited_ms ?? 0) > 0 && latest >= 0) return { parse: parseFinalTurn(texts[latest]!), scored_turn: { rule: "held", index: latest, of: texts.length } };
-  return { parse: parseFindings(record), scored_turn: { rule: "final", index: kind === "completed" && record.turns.length ? record.turns.length - 1 : null, of: record.turns.length } };
+  const final = parseFindings(record);
+  if (kind === "completed" && (record.session_end?.waited_ms ?? 0) > 0 && final.kind === "missing" && latest >= 0) return { parse: parseFinalTurn(texts[latest]!), scored_turn: { rule: "held", index: latest, of: texts.length } };
+  return { parse: final, scored_turn: { rule: "final", index: kind === "completed" && record.turns.length ? record.turns.length - 1 : null, of: record.turns.length } };
 }

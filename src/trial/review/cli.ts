@@ -68,7 +68,8 @@ export const REVIEW_UNITS_HELP = [
   "out (a background Agent or Bash task, or a ScheduleWakeup set while nothing ran), default " + BACKGROUND_WAIT_MS / 1000 + " s. The CLI",
   "takes a turn when that work lands; at the deadline, or at the session timeout while the session sits idle on that work,",
   "the session ends as a missing cell, E_BACKGROUND_DEADLINE, which is a coverage gap, never the arm finding nothing. A",
-  "completed session that waited is scored from its latest turn with a findings block. run.json records the wait.",
+  "completed session that waited and whose last turn has no json block is scored from its latest turn with a findings",
+  "block. run.json records the wait.",
 ].join("\n");
 
 const VALUE = new Set(["--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait"]);
