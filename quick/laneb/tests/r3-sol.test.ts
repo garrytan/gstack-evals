@@ -344,7 +344,7 @@ const kind = job.job_name.includes("-told-") ? "told" : "smoke";
 const log = process.env.STUB_LOG;
 const n = (existsSync(log) ? readFileSync(log, "utf8").trim().split("\\n").filter(Boolean).map((l) => JSON.parse(l)).filter((e) => e.kind === kind).length : 0) + 1;
 const task = job.tasks[0].path;
-appendFileSync(log, JSON.stringify({ kind, n, job: job.job_name, model_name: a.model_name, base_url: a.base_url, kwargs: k, overlay: job.environment.extra_docker_compose, toml: readFileSync(join(task, "task.toml"), "utf8"), keys: ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY"].map((x) => process.env[x] ?? null) }) + "\\n");
+appendFileSync(log, JSON.stringify({ kind, n, job: job.job_name, model_name: a.model_name, base_url: a.base_url, kwargs: k, overlay: job.environment.extra_docker_compose, toml: readFileSync(join(task, "task.toml"), "utf8"), keys: ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "UBICLOUD_API_KEY", "GH_TOKEN"].map((x) => process.env[x] ?? null) }) + "\\n");
 const mode = (process.env.STUB_PLAN ?? "").split(",").find((p) => p.startsWith(kind + n + "="))?.split("=")[1] ?? "ok";
 if (mode === "harbor") process.exit(1);
 const trial = "smoke-task__" + kind + n;
@@ -387,7 +387,7 @@ async function routeCheck(r: ReturnType<typeof rig>, env: Record<string, string>
   nextUsd = 0.05;
   const p = Bun.spawn([process.execPath, join(laneb, "r3/route-check.ts"), ...args], {
     env: { PATH: join(r.dir, "bin") + ":" + process.env.PATH, HOME: r.dir, LEDGER: r.ledger, ARMS: join(r.dir, "arms"), ARM_MANIFESTS: join(r.dir, "manifests"), PROXY_CONFIG: join(r.dir, "proxy.json"),
-      OPENROUTER_API_KEY: "fake-openrouter", ANTHROPIC_API_KEY: "fake-anthropic", OUT: join(r.dir, "out"), LEDGER_PORT: String(freePort()), PROXY_DATA_PORT: String(freePort()), PROXY_CONTROL_PORT: String(freePort()),
+      OPENROUTER_API_KEY: "fake-openrouter", ANTHROPIC_API_KEY: "fake-anthropic", UBICLOUD_API_KEY: "fake-ubicloud", GH_TOKEN: "fake-gh", OUT: join(r.dir, "out"), LEDGER_PORT: String(freePort()), PROXY_DATA_PORT: String(freePort()), PROXY_CONTROL_PORT: String(freePort()),
       STUB_LOG: join(r.dir, "calls.jsonl"), STUB_BUN: process.execPath, STUB_JS: join(r.dir, "stub-harbor.ts"), ...env },
     stdout: "pipe", stderr: "pipe",
   });
@@ -445,7 +445,7 @@ describe("route-check.ts", () => {
       ["told", "anthropic/gpt-6.1-sol", SOL, "gstack", "investigate", "claude-code-preset", 4, sha("gstack arm")],
     ]);
     for (const c of calls) {
-      expect(c.keys).toEqual(["placeholder-not-a-key", null, null]);
+      expect(c.keys).toEqual(["placeholder-not-a-key", null, null, null, null]);
       expect(c.overlay).toEqual([join(laneb, "runner/agent-caps.compose.yaml")]);
       expect(c.toml).not.toContain("allowlist");
       expect(c.toml).not.toContain("no-network");

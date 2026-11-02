@@ -38,7 +38,8 @@ export const PARTS = [
   { kind: "told", arm: R3_ARMS.gstack },
 ] as const;
 export const TRIES = 2;
-const KEYS = ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY"];
+// Harbor gets no credential: every variable named like a key, token, secret or password stays with the proxy.
+const SECRET = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i;
 
 export type RouteSession = {
   kind: "smoke" | "told"; try: number; job: string; started_at: string; finished_at: string | null; harbor_exit: number | null;
@@ -161,7 +162,7 @@ async function main(argv: string[]): Promise<number> {
   const proxy = Bun.spawn([process.execPath, join(RUNNER, "proxy.ts"), "--config", proxyPath, "--data-host", gw, "--data-port", dport, "--control-port", cport,
     "--log", join(out, "proxy-requests.jsonl"), "--sessions", sessionsFile, "--ledger-url", `http://127.0.0.1:${lport}`, "--ledger-prefix", prefix], { stdout: "pipe", stderr: "pipe" });
   for (const [p, name] of [[ledgerSvc, "ledger-service.log"], [proxy, "proxy.log"]] as const) { const w = log(name); new Response(p.stdout).text().then((t) => w.write(t)); new Response(p.stderr).text().then((t) => w.end(t)); }
-  const harborEnv: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => v !== undefined && !KEYS.includes(k)) as [string, string][]);
+  const harborEnv: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => v !== undefined && !SECRET.test(k)) as [string, string][]);
   Object.assign(harborEnv, { ANTHROPIC_API_KEY: "placeholder-not-a-key", PYTHONPATH: join(RUNNER, "agent") });
   let verdict: ReturnType<typeof next>;
   try {
