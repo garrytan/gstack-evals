@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# Keyless dry run for Run D's preregistration (GEVA-125, section 10). No provider key, no Ubicloud call, no spend.
+# Keyless dry run for Run D's preregistration (GEVA-125 and GEVA-139, section 10). No provider key, no Ubicloud call, no spend.
 #   a  builds the variant tars twice and compares digests; prepare-run for each Run D batch (invoke off, MAX_TURNS=60,
 #      preset cells on every model, sdk-default cells on Opus, and the batch of Opus's second D3 replicate)
 #   b  listing check through the real proxy and ledger service, with the fake upstream behind a pass-through shim that
 #      records each request body; one cell at a time, both system prompts
 #   c  one lease for the run on a temp ledger (b's sessions reserve and settle through the proxy)
 #   d  start rule: the planned order, and an over-cap case that writes its note row
-#   e  analysis on synthetic job folders     f  MDD simulation     g  the route-check command (not run)
+#   e  analysis on synthetic job folders, then the preregistration's frozen analysis config on them
+#   f  MDD simulation     g  the route-check command (not run)
 # Usage: ARMS_DIR=<dir with none.tar gstack.tar placebo.tar> OUT=<empty work dir> TB2=<terminal-bench-2 checkout>
-#        CLAUDE_BIN=<Claude Code 2.1.312 binary> SDK_PYTHON=<python with claude-agent-sdk 0.2.174> runner/dryrun-discovery.sh [steps]
+#        CLAUDE_BIN=<Claude Code 2.1.312 binary> SDK_PYTHON=<python with claude-agent-sdk 0.2.174> (steps b and c)
+#        ANALYSIS_CONFIG=<the preregistration's analysis-config.json> (step e) runner/dryrun-discovery.sh [steps]
 set -euo pipefail
+steps=" ${*:-a b c d e f g} "
+has() { [[ "$steps" == *" $1 "* ]]; }
 for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY; do
   if [ -n "${!k:-}" ]; then echo "E_USAGE unset $k: the dry run is keyless" >&2; exit 2; fi
 done
-for k in ARMS_DIR OUT TB2 CLAUDE_BIN SDK_PYTHON; do
+need=(ARMS_DIR OUT TB2)
+if has b || has c; then need+=(CLAUDE_BIN SDK_PYTHON); fi
+if has e; then need+=(ANALYSIS_CONFIG); fi
+for k in "${need[@]}"; do
   if [ -z "${!k:-}" ]; then echo "E_USAGE set $k (see the usage line)" >&2; exit 2; fi
 done
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,9 +28,8 @@ root=$(cd "$here/.." && pwd)
 armsrc=$ARMS_DIR
 out=$OUT
 export TB2
-steps=" ${*:-a b c d e f g} "
-sdk_python=$SDK_PYTHON
-claude_bin=$CLAUDE_BIN
+sdk_python=${SDK_PYTHON:-}
+claude_bin=${CLAUDE_BIN:-}
 direct_root=${DIRECT_ROOT:-/tmp/rund-direct}
 PRESET=claude-code-preset
 SDK=sdk-default
@@ -48,7 +54,6 @@ free_ports() {
     done
   done
 }
-has() { [[ "$steps" == *" $1 "* ]]; }
 mkdir -p "$out"
 armdir=$out/arms
 SHIPPED='Systematic debugging with root cause investigation.'
@@ -145,7 +150,7 @@ EOF
 if has b || has c; then
   echo "== b, c. listing check under both system prompts, one lease for the run"
   echo "driver: direct. runner/dryrun-direct.py drives claude-agent-sdk $("$sdk_python" -c 'import claude_agent_sdk as s; print(s.__version__)') and Claude Code $("$claude_bin" --version | cut -d' ' -f1) on the host with laneb_agent.py's options (its SYSTEM_PROMPTS, max_turns 60), env and build_prompt, HOME and CLAUDE_CONFIG_DIR at the arm's extracted .claude/, through the metering proxy."
-  harness_run discovery-r1 125 none@$PRESET gstack@$PRESET gstack-rewritten@$PRESET placebo@$PRESET none@$SDK gstack@$SDK gstack-rewritten@$SDK
+  harness_run discovery-r1 126 none@$PRESET gstack@$PRESET gstack-rewritten@$PRESET placebo@$PRESET none@$SDK gstack@$SDK gstack-rewritten@$SDK
 fi
 
 if has d; then
@@ -153,7 +158,7 @@ if has d; then
   bun "$here/start-rule.ts" plan --run discovery-r1
   led=$out/start-rule-discovery-r1.jsonl
   rm -f "$led"
-  bun -e "import {Ledger, toMicros} from '$here/ledger.ts'; const l = new Ledger('$led','discovery-r1'); l.approve(125, {note: 'dry run'}); l.reserve('a', toMicros(95)); l.settle('a', toMicros(95));"
+  bun -e "import {Ledger, toMicros} from '$here/ledger.ts'; const l = new Ledger('$led','discovery-r1'); l.approve(126, {note: 'dry run'}); l.reserve('a', toMicros(95)); l.settle('a', toMicros(95));"
   if bun "$here/start-rule.ts" check --run discovery-r1 --ledger "$led" --batch gpt-6.1-sol --note >/dev/null; then echo "over-cap case passed (bad)"; exit 1; fi
   echo "over-cap case (95 settled, then gpt-6.1-sol) refused; note row: $(jq -c 'select(.kind == "note") | {kind, item, pass: .start_rule.pass, bound_usd: .start_rule.bound_usd, cap_usd: .start_rule.cap_usd}' "$led")"
 fi
@@ -163,6 +168,14 @@ if has e; then
   rm -rf "$out/synthetic"
   bun "$root/tests/discovery-tax.fixtures.ts" "$out/synthetic"
   for cfg in "$out"/synthetic/run-d*.json; do echo "--- $(basename "$cfg")"; bun "$root/analysis/discovery-tax.ts" "$cfg"; done
+  echo "--- the frozen analysis config: $(basename "$ANALYSIS_CONFIG") sha256 $(sha256sum < "$ANALYSIS_CONFIG" | cut -d' ' -f1)"
+  jq -c . "$ANALYSIS_CONFIG"
+  echo "Its setting, contrast setting, d2, d3 and mdd, over run-d-gates.json's synthetic jobs, contrast model m-claim. task_count stays the synthetic run's 38 (37 tasks and dropped-task, which the oracle rule takes out)."
+  for models in '["m-claim","m-zero","m-partial"]' '["m-claim","m-zero","m-sparse"]'; do
+    jq -s --argjson models "$models" '.[1] as $f | .[0] + ($f | {setting, d2, d3, mdd}) | .models = $models | .contrast.setting = $f.contrast.setting' "$out/synthetic/run-d-gates.json" "$ANALYSIS_CONFIG" > "$out/synthetic/frozen.json"
+    echo "--- frozen config on models $models"
+    bun "$root/analysis/discovery-tax.ts" "$out/synthetic/frozen.json"
+  done
 fi
 
 if has f; then
@@ -172,5 +185,5 @@ fi
 
 if has g; then
   echo "== g. route-check command (not run)"
-  echo "PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain drive>/ledger/discovery-r1.jsonl MODELS='$MODELS' SYSTEM_PROMPT=$PRESET MAX_TURNS=60 OUT=<work>/route-d quick/laneb/runner/route-check.sh"
+  echo "PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain drive>/ledger/discovery-r1.jsonl MODELS='$MODELS' SYSTEM_PROMPT=$PRESET MAX_TURNS=60 GSTACK_TAR=<arms dir>/gstack.tar OUT=<work>/route-d quick/laneb/runner/route-check.sh"
 fi
