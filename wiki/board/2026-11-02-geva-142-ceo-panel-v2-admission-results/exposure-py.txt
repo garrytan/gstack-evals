@@ -1,0 +1,4 @@
+none: transcripts 16/16, read 0, mode 0, exposed 0, ran 0, preset 16, first-request tokens median 22437.5 min 22435 (>= 21300: 16), helpers 0, agent calls 0, turn-cap endings 0
+gstack: transcripts 16/16, read 0, mode 1, exposed 0, ran 0, preset 16, first-request tokens median 48295.5 min 48293 (>= 21300: 16), helpers 29, agent calls 0, turn-cap endings 0
+gstack-forced: transcripts 16/16, read 16, mode 16, exposed 16, ran 16, preset 16, first-request tokens median 48495.5 min 48493 (>= 21300: 16), helpers 51, agent calls 0, turn-cap endings 0
+system prompt check: PASS; procedure: READY

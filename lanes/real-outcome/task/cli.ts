@@ -106,7 +106,7 @@ export async function main(argv: string[]): Promise<number> {
       const required = requiredTests(t);
       const image = buildImage(dir, t);
       const tree = verifyTree({ taskDir: dir, task: t, image: image.tag, label: "verify", patch: readFileSync(resolve(s("patch")!), "utf8"), runs: num("runs", 1), seed: num("seed", 1), work });
-      const out = { task: t.id, image: image.tag, prepare: tree.prepare, all_pass: allPass(tree, required), runs: tree.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) };
+      const out = { task: t.id, image: image.tag, prepare: tree.prepare, all_pass: allPass(tree, required), runs: tree.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, out_full: r.out_full, killed: r.killed, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) };
       if (s("out")) writeFileSync(resolve(s("out")!), JSON.stringify(out, null, 2) + "\n");
       for (const id of required) console.log(id + " " + tree.runs.map((r) => resultFor(r.parsed, id).status).join(","));
       console.log("all_pass: " + out.all_pass);

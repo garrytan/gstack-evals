@@ -1,0 +1,5 @@
+sessions per arm, from the run's cells.ndjson (cost, termination, exit) and exposure.py's per-session rows (turns):
+none: sessions 16; termination {'completed': 16}; timeouts 0; gaps 0; exit-137 0; median turns 3.0 (min 3, max 3); cost $2.13 in all, median $0.126, max $0.216; parse {'findings': 16}
+gstack: sessions 16; termination {'completed': 16}; timeouts 0; gaps 0; exit-137 0; median turns 4.0 (min 3, max 4); cost $5.25 in all, median $0.321, max $0.388; parse {'findings': 16}
+gstack-forced: sessions 16; termination {'completed': 16}; timeouts 0; gaps 0; exit-137 0; median turns 6.0 (min 5, max 9); cost $9.17 in all, median $0.569, max $0.723; parse {'findings': 16}
+all arms: $16.55 metered over 48 sessions

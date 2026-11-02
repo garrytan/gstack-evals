@@ -1,0 +1,4 @@
+Panel: NOT ADMITTED, ceiling (none R = 1, any severity 1, Power n/a; flags F1 severity-limited (none any-severity recall 1); F3 stratum hard at 1; F3 stratum premise at 1; F3 stratum ambition at 1). Procedure: READY (gstack-forced ran it 16/16, exposed 16/16; gstack exposed 0/16, ran 0). System prompt: PASS (claude-code-preset 48/48, none first-request floor 16/16). Turn-cap stops: none 0, gstack 0, gstack-forced 0.
+recall per arm (must-fix / any severity): none 1 / 1, gstack 1 / 1, gstack-forced 1 / 1
+recall per stratum, descriptive (hard, premise, ambition): none 1, 1, 1; gstack 1, 1, 1; gstack-forced 1, 1, 1
+headline gain power at dependence 0 / 0.3 / 0.6: n/a / n/a / n/a; a gain inside H only: null, inside P and U only: null

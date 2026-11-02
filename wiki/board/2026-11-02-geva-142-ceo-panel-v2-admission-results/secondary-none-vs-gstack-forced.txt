@@ -1,0 +1,5 @@
+noloss secondary: none-opus vs gstack-forced-opus on planrev-ceo-v2-admission (sha256 8fa4529de7a838b5b78b224ce76732e78264f7641e9655d72482b10fbc98308a), seed 20261102
+recall, none-opus: blocking 12/12 = 1 [1, 1]; at any severity 12/12 = 1 [1, 1]; 0 judgments with coverage incomplete
+recall, gstack-forced-opus: blocking 12/12 = 1 [1, 1]; at any severity 12/12 = 1 [1, 1]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.4375, reference 1.625 (7 and 26 in all, 8 PRs); difference -1.1875 [-1.6875, -0.75], exact two-sided sign-flip p 0.007813 (min p 0.0078125)
+idea-card wins: 0 of 12 blocking blockers (found by none-opus in every pass and by gstack-forced-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 0, 95th percentile 0; above the null: no

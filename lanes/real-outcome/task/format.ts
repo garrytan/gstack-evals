@@ -263,6 +263,7 @@ export function readTask(dir: string): TaskJson {
   if (t.kind !== "K4" && functional.length === 0) fail(t.kind + " needs functional tests");
   if (t.kind === "K4" && t.replay?.role === "decoy" && functional.length + t.tests.regression.length + t.tests.regression_scope.length === 0) fail("a decoy needs tests to pass");
   const ids = [...functional, ...escaped, ...t.tests.regression];
+  if (ids.length === 0 && regressionFrozen(t)) fail("no required test: functional, escaped_defect and the frozen regression list are all empty");
   if (new Set(ids).size !== ids.length) fail("a test id is listed twice across functional, escaped_defect and regression");
   if (ids.some((id) => !validTestId(t.runner.kind, id))) fail(t.runner.kind === "go" ? "go ids are <package dir>::<TopLevelTest>" : "pytest ids are <file>.py::<name>");
   const { files, links } = walk(dir);

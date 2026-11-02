@@ -1,0 +1,45 @@
+## headline clusters, recall 1.2, dependence 0
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## headline clusters, recall 1.2, dependence 0.3
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## headline clusters, recall 1.2, dependence 0.6
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## H-only clusters, recall 1.2, dependence 0
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## H-only clusters, recall 1.2, dependence 0.3
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## H-only clusters, recall 1.2, dependence 0.6
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## P-and-U-only clusters, recall 1.2, dependence 0
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## P-and-U-only clusters, recall 1.2, dependence 0.3
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage
+## P-and-U-only clusters, recall 1.2, dependence 0.6
+E_USAGE --recall is the reference's blocking recall, a share strictly between 0 and 1, not "1.2"
+E_USAGE context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_USAGE fix: Read the message and gstack-evals <command> --help. gstack-evals --help lists every command and which ones run today. Without --spend-cap the CLI prints the dry-run matrix, never a cap to copy.
+E_USAGE docs: docs/errors.md#e_usage

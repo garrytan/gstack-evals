@@ -1,0 +1,18 @@
+items 12; unmatched keys 0
+outcome codes seen: ['F']
+passes per item per arm: [2]
+none, found share by item kind (must-fix F; any severity F or D), descriptive:
+  H-F: 3 item(s), must-fix 1.000, any severity 1.000
+  H-T: 1 item(s), must-fix 1.000, any severity 1.000
+  H-X: 4 item(s), must-fix 1.000, any severity 1.000
+  P-alt: 2 item(s), must-fix 1.000, any severity 1.000
+  U: 2 item(s), must-fix 1.000, any severity 1.000
+dead items (matched at no severity in any of the 48 sessions): 0 of 12
+none-opus per-stratum must-fix recall: ambition 1.000 (2 items), hard 1.000 (8 items), premise 1.000 (2 items)
+gstack-opus per-stratum must-fix recall: ambition 1.000 (2 items), hard 1.000 (8 items), premise 1.000 (2 items)
+gstack-forced-opus per-stratum must-fix recall: ambition 1.000 (2 items), hard 1.000 (8 items), premise 1.000 (2 items)
+adjudication of unmatched must-fix findings (8 plans x 2 passes = 16 plan-passes per arm):
+  none-opus: 7 findings; not-defect 0 (0.000 per plan per pass), defect 7, known-informational 0
+  gstack-opus: 24 findings; not-defect 1 (0.062 per plan per pass), defect 23, known-informational 0
+  gstack-forced-opus: 33 findings; not-defect 7 (0.438 per plan per pass), defect 26, known-informational 0
+  P-premise: 0 item(s); P-size: 0 item(s) (not in the admission draw)

@@ -1,0 +1,25 @@
+CEO panel v2 admission pilot (GST-848): metered tokens per arm and per judge model.
+Arms: sums of each session record's metered usage (cells.ndjson cost.all, from the run's metering proxy), 16 sessions per arm, claude-opus-5-5. Total = input + cache read + cache write + output. Reasoning prints apart and is not in the total. The Opus and Sonnet rows report 0 because Anthropic counts thinking inside output; for gpt-6.1-sol the scorer metered reasoning apart from output and priced it at the output rate, so that model's billed tokens are its total plus its reasoning.
+none: input 96; cache read 1031632; cache write 153774; output 57850; total 1243352; reasoning 0; requests 48; metered $2.13; sessions 16
+gstack: input 122; cache read 2538328; cache write 597589; output 87872; total 3223911; reasoning 0; requests 61; metered $5.25; sessions 16
+gstack-forced: input 200; cache read 5239095; cache write 951551; output 168014; total 6358860; reasoning 0; requests 100; metered $9.17; sessions 16
+all arms: input 418; cache read 8809055; cache write 1702914; output 313736; total 10826123; reasoning 0; requests 209; metered $16.55
+cross-check: the session records' own usage fields equal the metered sums.
+Judges: sums of the local ledger's settled reservations for each judge-run call (one reservation per metered request), grouped by model. Same columns.
+adjudication (planning-v2-judge-adjudicate), claude-opus-5-5: input 184532; cache read 0; cache write 0; output 13718; total 198250; reasoning 0; requests 7; metered $1.01
+adjudication (planning-v2-judge-adjudicate), claude-sonnet-5-5: input 153230; cache read 0; cache write 0; output 10390; total 163620; reasoning 0; requests 6; metered $0.41
+adjudication (planning-v2-judge-adjudicate), gpt-6.1-sol: input 24; cache read 0; cache write 127134; output 2796; total 129954; reasoning 1723; requests 8; metered $0.36
+matching (planning-v2-judge-match), claude-opus-5-5: input 62388; cache read 0; cache write 0; output 4463; total 66851; reasoning 0; requests 3; metered $0.34
+matching (planning-v2-judge-match), claude-sonnet-5-5: input 19753; cache read 0; cache write 0; output 1423; total 21176; reasoning 0; requests 1; metered $0.05
+matching (planning-v2-judge-match), gpt-6.1-sol: input 24; cache read 0; cache write 111478; output 1819; total 113321; reasoning 3323; requests 8; metered $0.33
+cross-check: the ledger's reservations for the run match the session records' sums per arm.
+Prices the scorer applied: src/runner/pricing/prices.ts at the pin a5633c6205b735989c9fbe082092947dec9c2f19 (file last changed in a50deb50199867d7fad649632b0d9986fc8d2b4b 2026-11-01). Its rows for the four models, and its lines on cache pricing, as written:
+  prices.ts:15: //   one-hour cache writes are priced at twice input, in the reservation and the settlement.
+  prices.ts:44: // OpenRouter's models API (https://openrouter.ai/api/v1/models), read 2026-10-30: $0.10 input, $1 output, $0.003 cache read.
+  prices.ts:47: // 2026-10-31: $0.08 input, $0.55 output, $0.008 cache read. DeepSeek's own endpoint may train on prompts, so data_collection deny
+  prices.ts:55: "anthropic:claude-sonnet-5-5": { input: 2, output: 10, cache_read: 0.2, cache_write: 2.5 },
+  prices.ts:56: "anthropic:claude-opus-5-5": { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
+  prices.ts:59: "openai:gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
+  prices.ts:158: // OpenAI caches automatically; Anthropic writes its cache only where a request sets cache_control.
+  prices.ts:186: // Anthropic reports cache reads and writes beside input_tokens; OpenAI counts them inside input_tokens or prompt_tokens.
+Cache pricing as metered, per million tokens: claude-opus-5-5 cache read $0.20 and cache write $5 (1.25x its $4 input); claude-sonnet-5-5 $0.20 and $2.50; gpt-6.1-sol $0.10 and $2.50 (its long-context row, above 272,000 input tokens, did not apply). The judge requests to Opus and Sonnet wrote no cache. These rates reproduce the metered dollars above, per arm and per judge model.
