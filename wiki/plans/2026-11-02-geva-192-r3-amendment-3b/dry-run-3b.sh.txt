@@ -3,8 +3,8 @@
 # amendment 3's dry-run-a3.sh.txt with the pin's export, both models on temporary ledgers, and prints its whole output.
 # Then it drives each rule 3b adds. It shows the diff from 73042c5 to the pin and which pinned files changed, and that
 # UBI_LOCATION reaches the runner with no code change. It drives capacity-probe.sh.txt against a stub runner (no VM, no
-# network, no key) through a failing window, a pass after failures, a VM it can't confirm gone and a probe ledger that
-# refuses, and the run step's 30-minute and location guard. It drives a no-start through the export's own screen.ts run and
+# network, no key) through a failing window, a full 3-hour window of fast refusals on a fake clock, a pass after failures, a VM
+# it can't confirm gone (its reserve stays open) and a probe ledger that refuses, and the run step's 30-minute and location guard. It drives a no-start through the export's own screen.ts run and
 # launch.sh with the stub runner standing in for a VM that never reaches running: Opus on a temporary a4 ledger, then a5
 # on a fresh one; Sol on a temporary ledger, then its second attempt on a fresh ledger with the route record carried
 # forward. no-start.sh.txt classifies each and four records that are not no-starts. It drives section 10 step 5's
@@ -62,6 +62,14 @@ case $cmd in
 esac
 EOF
 chmod +x "$W/bin/stub-runner.sh"
+mkdir -p "$W/bin/clock"
+printf '#!/usr/bin/env bash\n# Fake date for the window fixture: the time is the epoch in $FAKE_CLOCK unless -d names one.\ncase " $* " in *" -d "*) exec %s "$@" ;; esac\nexec %s -d "@$(cat "$FAKE_CLOCK")" "$@"\n' "$(command -v date)" "$(command -v date)" > "$W/bin/clock/date"
+cat > "$W/bin/clock/sleep" <<'EOF'
+#!/usr/bin/env bash
+# Fake sleep for the window fixture: moves the clock in $FAKE_CLOCK forward by $1 seconds and returns at once.
+echo $(( $(cat "$FAKE_CLOCK") + $1 )) > "$FAKE_CLOCK"
+EOF
+chmod +x "$W/bin/clock/date" "$W/bin/clock/sleep"
 cat > "$W/bin/approve.ts" <<'EOF'
 const { Ledger } = await import(process.argv[2] + "/quick/laneb/runner/ledger.ts");
 new Ledger(process.env.LEDGER!, process.argv[3]).approve(Number(process.argv[4]), { words: process.argv[5], by: process.argv[6], source: "dry run" });
@@ -90,8 +98,9 @@ step . sh -c "sha256sum $R; grep -n 'DEFAULT_LOCATION=' $R; grep -n '\"\$S\" up'
 echo; echo "## Probe fixtures (stub runner, no VM)"
 F=$W/probe-fixtures; mkdir -p "$F"
 step . sh -c "LEDGER=$F/fail.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/fail.jsonl eu-central-h1 $F/fail; echo probe exit \$?; test ! -e $F/fail/probe-pass && echo 'no probe-pass'; bun $L/runner/ledger.ts status --path $F/fail.jsonl --item r3-capacity-probe"
+SHOW=40 step . sh -c "LEDGER=$F/window.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && echo 1800000000 > $F/clock && PATH=$W/bin/clock:\$PATH FAKE_CLOCK=$F/clock STUB_STATE=$F/s-window UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/window.jsonl eu-central-h1 $F/window; echo probe exit \$?; echo fake clock at the end: first probe start + \$(( \$(cat $F/clock) - 1800000000 )) s; echo up calls: \$(grep -c '^up ' $F/s-window/calls); bun $L/runner/ledger.ts status --path $F/window.jsonl --item r3-capacity-probe"
 step . sh -c "LEDGER=$F/late.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/late.jsonl eu-north-h1 $F/late; echo probe exit \$?; cat $F/late/probe-pass; cat $F/s-late/calls"
-step . sh -c "LEDGER=$F/left.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/left.jsonl eu-central-h1 $F/left; echo probe exit \$?; test ! -e $F/left/probe-pass && echo 'no probe-pass'"
+step . sh -c "LEDGER=$F/left.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-192 && STUB_STATE=$F/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/left.jsonl eu-central-h1 $F/left; echo probe exit \$?; test ! -e $F/left/probe-pass && echo 'no probe-pass'; bun $L/runner/ledger.ts status --path $F/left.jsonl --item r3-capacity-probe"
 step . sh -c "LEDGER=$F/cap.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 0.2 '$DRY' GEVA-192 && STUB_STATE=$F/s-cap UBI_OWNER=$UBI_OWNER bash $B/capacity-probe.sh.txt $S $L $F/cap.jsonl eu-central-h1 $F/cap; echo probe exit \$?; test ! -e $F/s-cap/calls && echo 'the runner was never called'"
 step . bash -c "$(declare -f guard); guard $F/late eu-north-h1 && echo 'fresh pass in eu-north-h1: the run step may start'; guard $F/late eu-central-h1 || echo 'pass in another location: the run step refuses'; touch -d '31 minutes ago' $F/late/probe-pass; guard $F/late eu-north-h1 || echo 'pass 31 minutes old: the run step refuses'; guard $F/fail eu-central-h1 || echo 'no pass: the run step refuses'"
 

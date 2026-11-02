@@ -2,7 +2,7 @@
 
 $ sh -c sha256sum $A3/dry-run-a3.sh.txt $B/capacity-probe.sh.txt $B/no-start.sh.txt
 f4f96462e696cf430daf9420eb73668171856f7a8f5d28142ef08e7802618f8c  $A3/dry-run-a3.sh.txt
-7b6cda45cac7d51cb0fbb3d5b430db26e7870a2488179c13e62619c206cdd844  $B/capacity-probe.sh.txt
+7740ca150290c91161b3d27d62b1d3b893e99c1d861d875e6e0e89fd87febedb  $B/capacity-probe.sh.txt
 964ef25ccb04eb40f3942b6bdb9a4bb594e8da5bf9966624e483de1d5b17d38e  $B/no-start.sh.txt
 exit 0 (log/1.txt)
 
@@ -107,7 +107,7 @@ exit 0 (log/7.txt)
 ## Dependencies, task set, arm tars and the drop list
 $ sh -c cd $W/export && bun install --frozen-lockfile
 bun install v1.4.4 (38afee6c8)
-112 packages installed [201.00ms]
+112 packages installed [107.00ms]
 exit 0 (log/8.txt)
 $ git -C $HARBOR_DIR rev-parse HEAD
 f3a5a923f6d722472c9e797af836ae4425fb215f
@@ -372,7 +372,7 @@ exit 0 (log/37.txt)
 $ sh -c cd $W/export && bun test quick/laneb/tests/r3.test.ts quick/laneb/tests/r3-sol.test.ts quick/laneb/tests/launch.test.ts quick/laneb/tests/vm-run.test.ts
  160 pass
  0 fail
-Ran 160 tests across 4 files. [148.98s]
+Ran 160 tests across 4 files. [214.31s]
 exit 0 (log/38.txt)
 ## Done
 exit 0 (log/2.txt)
@@ -448,48 +448,78 @@ exit 0 (log/6.txt)
 
 $ sh -c LEDGER=$W/probe-fixtures/fail.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-192 && STUB_STATE=$W/probe-fixtures/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/fail.jsonl eu-central-h1 $W/probe-fixtures/fail; echo probe exit $?; test ! -e $W/probe-fixtures/fail/probe-pass && echo 'no probe-pass'; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/fail.jsonl --item r3-capacity-probe
 probe: eu-central-h1 standard-16 640 GB, window 5s, at least 2s between probe starts, owner GEVA-192, ledger item r3-capacity-probe
-probe 1 at 2026-11-02T16:02:39Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793635359-1-t1 confirmed gone, 0 s, settled $0.000000
-probe 2 at 2026-11-02T16:02:41Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793635361-2-t1 confirmed gone, 0 s, settled $0.000000
-probe 3 at 2026-11-02T16:02:43Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793635364-3-t1 confirmed gone, 1 s, settled $0.000167
-probe: every probe in eu-central-h1 failed in the 5s window (3 probes); nothing binds
+probe 1 at 2026-11-02T16:42:01Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793637721-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2026-11-02T16:42:03Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793637724-2-t1 confirmed gone, 1 s, settled $0.000167
+probe 3 at 2026-11-02T16:42:05Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793637725-3-t1 confirmed gone, 0 s, settled $0.000000
+probe 4 at 2026-11-02T16:42:06Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793637726-4-t1 confirmed gone, 0 s, settled $0.000000
+probe: every probe in eu-central-h1 failed in the 5s window (4 probes); nothing binds
 probe exit 1
 no probe-pass
 {"cap_usd":5,"settled_usd":0.000167,"open_reserved_usd":0,"open_ids":0}
 exit 0 (log/7.txt)
 
-$ sh -c LEDGER=$W/probe-fixtures/late.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-192 && STUB_STATE=$W/probe-fixtures/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/late.jsonl eu-north-h1 $W/probe-fixtures/late; echo probe exit $?; cat $W/probe-fixtures/late/probe-pass; cat $W/probe-fixtures/s-late/calls
-probe: eu-north-h1 standard-16 640 GB, window 60s, at least 2s between probe starts, owner GEVA-192, ledger item r3-capacity-probe
-probe 1 at 2026-11-02T16:02:44Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793635364-1-t1 confirmed gone, 0 s, settled $0.000000
-probe 2 at 2026-11-02T16:02:46Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793635366-2-t1 confirmed gone, 0 s, settled $0.000000
-probe 3 at 2026-11-02T16:02:48Z: pass, ubirun-fixture-1793635368-3-t1 reached running and is destroyed, 0 s, settled $0.000000; list --mine empty
-probe exit 0
-location=eu-north-h1
-vm=ubirun-fixture-1793635368-3-t1
-passed=2026-11-02T16:02:48Z
-up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
-down ubirun-fixture-1793635364-1-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
-list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
-up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
-down ubirun-fixture-1793635366-2-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
-list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
-up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
-down ubirun-fixture-1793635368-3-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
-list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+$ sh -c LEDGER=$W/probe-fixtures/window.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-192 && echo 1800000000 > $W/probe-fixtures/clock && PATH=$W/bin/clock:$PATH FAKE_CLOCK=$W/probe-fixtures/clock STUB_STATE=$W/probe-fixtures/s-window UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/window.jsonl eu-central-h1 $W/probe-fixtures/window; echo probe exit $?; echo fake clock at the end: first probe start + $(( $(cat $W/probe-fixtures/clock) - 1800000000 )) s; echo up calls: $(grep -c '^up ' $W/probe-fixtures/s-window/calls); bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/window.jsonl --item r3-capacity-probe
+probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-192, ledger item r3-capacity-probe
+probe 1 at 2027-01-15T08:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800000000-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2027-01-15T08:10:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800000600-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2027-01-15T08:20:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800001200-3-t1 confirmed gone, 0 s, settled $0.000000
+probe 4 at 2027-01-15T08:30:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800001800-4-t1 confirmed gone, 0 s, settled $0.000000
+probe 5 at 2027-01-15T08:40:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800002400-5-t1 confirmed gone, 0 s, settled $0.000000
+probe 6 at 2027-01-15T08:50:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800003000-6-t1 confirmed gone, 0 s, settled $0.000000
+probe 7 at 2027-01-15T09:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800003600-7-t1 confirmed gone, 0 s, settled $0.000000
+probe 8 at 2027-01-15T09:10:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800004200-8-t1 confirmed gone, 0 s, settled $0.000000
+probe 9 at 2027-01-15T09:20:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800004800-9-t1 confirmed gone, 0 s, settled $0.000000
+probe 10 at 2027-01-15T09:30:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800005400-10-t1 confirmed gone, 0 s, settled $0.000000
+probe 11 at 2027-01-15T09:40:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800006000-11-t1 confirmed gone, 0 s, settled $0.000000
+probe 12 at 2027-01-15T09:50:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800006600-12-t1 confirmed gone, 0 s, settled $0.000000
+probe 13 at 2027-01-15T10:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800007200-13-t1 confirmed gone, 0 s, settled $0.000000
+probe 14 at 2027-01-15T10:10:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800007800-14-t1 confirmed gone, 0 s, settled $0.000000
+probe 15 at 2027-01-15T10:20:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800008400-15-t1 confirmed gone, 0 s, settled $0.000000
+probe 16 at 2027-01-15T10:30:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800009000-16-t1 confirmed gone, 0 s, settled $0.000000
+probe 17 at 2027-01-15T10:40:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800009600-17-t1 confirmed gone, 0 s, settled $0.000000
+probe 18 at 2027-01-15T10:50:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800010200-18-t1 confirmed gone, 0 s, settled $0.000000
+probe 19 at 2027-01-15T11:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800010800-19-t1 confirmed gone, 0 s, settled $0.000000
+probe: every probe in eu-central-h1 failed in the 10800s window (19 probes); nothing binds
+probe exit 1
+fake clock at the end: first probe start + 10800 s
+up calls: 19
+{"cap_usd":5,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
 exit 0 (log/8.txt)
 
-$ sh -c LEDGER=$W/probe-fixtures/left.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-192 && STUB_STATE=$W/probe-fixtures/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/left.jsonl eu-central-h1 $W/probe-fixtures/left; echo probe exit $?; test ! -e $W/probe-fixtures/left/probe-pass && echo 'no probe-pass'
+$ sh -c LEDGER=$W/probe-fixtures/late.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-192 && STUB_STATE=$W/probe-fixtures/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/late.jsonl eu-north-h1 $W/probe-fixtures/late; echo probe exit $?; cat $W/probe-fixtures/late/probe-pass; cat $W/probe-fixtures/s-late/calls
+probe: eu-north-h1 standard-16 640 GB, window 60s, at least 2s between probe starts, owner GEVA-192, ledger item r3-capacity-probe
+probe 1 at 2026-11-02T16:42:11Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793637731-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2026-11-02T16:42:13Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793637733-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2026-11-02T16:42:15Z: pass, ubirun-fixture-1793637735-3-t1 reached running and is destroyed, 0 s, settled $0.000000; list --mine empty
+probe exit 0
+location=eu-north-h1
+vm=ubirun-fixture-1793637735-3-t1
+passed=2026-11-02T16:42:15Z
+up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793637731-1-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793637733-2-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793637735-3-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+exit 0 (log/9.txt)
+
+$ sh -c LEDGER=$W/probe-fixtures/left.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-192 && STUB_STATE=$W/probe-fixtures/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/left.jsonl eu-central-h1 $W/probe-fixtures/left; echo probe exit $?; test ! -e $W/probe-fixtures/left/probe-pass && echo 'no probe-pass'; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/left.jsonl --item r3-capacity-probe
 probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-192, ledger item r3-capacity-probe
-probe 1 at 2026-11-02T16:02:48Z: VM ubirun-fixture-1793635368-1-t1 may still exist (down exit 1, list --mine exit 0, listed: eu-central-h1  ubirun-fixture-1793635368-1-t1); destroy it before anything else
+probe 1 at 2026-11-02T16:42:15Z: VM ubirun-fixture-1793637735-1-t1 may still exist (down exit 1, list --mine exit 0, listed: eu-central-h1  ubirun-fixture-1793637735-1-t1); reserve probe-1-1793637735 stays open and must be settled for the VM's full life after cleanup; destroy the VM before anything else
 probe exit 3
 no probe-pass
-exit 0 (log/9.txt)
+{"cap_usd":5,"settled_usd":0,"open_reserved_usd":0.3,"open_ids":1}
+exit 0 (log/10.txt)
 
 $ sh -c LEDGER=$W/probe-fixtures/cap.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 0.2 'Dry run: a temporary ledger, no spend' GEVA-192 && STUB_STATE=$W/probe-fixtures/s-cap UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/cap.jsonl eu-central-h1 $W/probe-fixtures/cap; echo probe exit $?; test ! -e $W/probe-fixtures/s-cap/calls && echo 'the runner was never called'
 probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-192, ledger item r3-capacity-probe
 probe 1: the probe ledger refused the $0.30 reserve ({"ok":false,"reason":"cap","totals":{"capMicros":200000,"settledMicros":0,"openReservedMicros":0,"openIds":[]}}); no VM was asked for
 probe exit 9
 the runner was never called
-exit 0 (log/10.txt)
+exit 0 (log/11.txt)
 
 $ bash -c guard () 
 { 
@@ -499,7 +529,7 @@ fresh pass in eu-north-h1: the run step may start
 pass in another location: the run step refuses
 pass 31 minutes old: the run step refuses
 no pass: the run step refuses
-exit 0 (log/11.txt)
+exit 0 (log/12.txt)
 
 ## No-start fixtures: the export's screen.ts run with the stub runner
 
@@ -516,23 +546,23 @@ run exit 0
 {"cap_usd":150,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
 {"ok":true,"existing":false}
 ubi-runner: reap: no expired VMs
-ubi-runner: creating eu-central-h1/ubirun-fixture-1793635368-1-t1 (standard-16)
+ubi-runner: creating eu-central-h1/ubirun-fixture-1793637736-1-t1 (standard-16)
 ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)
-ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793635368-1-t1
+ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793637736-1-t1
 {"ok":true}
 screen: launch exited 1; the run stops here
 up -s standard-16 -S 640 UBI_LOCATION=eu-central-h1 UBI_SIZE=standard-16 UBI_STORAGE=640
-exit 0 (log/12.txt)
+exit 0 (log/13.txt)
 
 $ bash $B/no-start.sh.txt $W/a3/work-r3a-screen $W/no-start/run-a4.log $W/a3/r3a-screen.jsonl claude-opus-5-5
 no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
-exit 0 (log/13.txt)
+exit 0 (log/14.txt)
 
 $ sh -c cd $W/a3/export && LEDGER=$W/a3/r3a-screen.jsonl bun quick/laneb/r3/screen.ts analyze $W/a3/work-r3a-screen --model claude-opus-5-5; echo analyze exit $?
 r3a-screen: 0 screen trials, 0 pilot trials, settled $0.00 of $150, open reserves 0
 R3 outcome: none (incomplete: screen's launch exited 1). R3a stopped, so R3b does not start; the Captain gets the record.
 analyze exit 4
-exit 0 (log/14.txt)
+exit 0 (log/15.txt)
 
 $ sh -c LEDGER=$W/no-start/r3a-screen-a5.jsonl bun $W/bin/approve.ts $W/a3/export r3a-screen 150 'Dry run: a temporary ledger, no spend' GEVA-192 && cd $W/a3/export && LEDGER=$W/no-start/r3a-screen-a5.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/no-start/work-a5 --model claude-opus-5-5 && python3 $W/a3/bin/jobtasks.py $DROPS $W/no-start/work-a5
 $W/no-start/work-a5/screen: 91 tasks x 1 models x 1 arms x 1 attempts, git 
@@ -542,7 +572,7 @@ screen/job.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d6068
 screen/oracle.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
 pilot/job.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
 pilot/oracle.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
-exit 0 (log/15.txt)
+exit 0 (log/16.txt)
 
 $ bash -c cd $W/a3/export && runenv () 
 { 
@@ -555,7 +585,7 @@ $ bash -c cd $W/a3/export && runenv ()
 run exit 0
 up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=standard-16 UBI_STORAGE=640
 no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
-exit 0 (log/16.txt)
+exit 0 (log/17.txt)
 
 $ bash -c cd $W/a3/export && runenv () 
 { 
@@ -569,18 +599,18 @@ run exit 0
 {"cap_usd":140,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
 {"ok":true,"existing":false}
 ubi-runner: reap: no expired VMs
-ubi-runner: creating eu-central-h1/ubirun-fixture-1793635378-1-t1 (standard-16)
+ubi-runner: creating eu-central-h1/ubirun-fixture-1793637768-1-t1 (standard-16)
 ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)
-ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793635378-1-t1
+ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793637768-1-t1
 {"ok":true}
 screen: launch exited 1; the run stops here
 no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
-exit 0 (log/17.txt)
+exit 0 (log/18.txt)
 
 $ sh -c LEDGER=$W/no-start/r3a-sol-a2.jsonl bun $W/bin/approve.ts $W/a3/export r3a-sol 140 'Dry run: a temporary ledger, no spend' GEVA-192 && cd $W/a3/export && (LEDGER=$W/no-start/r3a-sol-a2.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/no-start/work-sol-a2 --model gpt-6.1-sol; echo 'prepare without the route record: exit' $?) 2>&1 | tail -2
 E_INTERNAL GPT-6.1 Sol has not passed its route check on r3a-sol ($W/no-start/r3a-sol-a2.jsonl.route.json); run r3/route-check.ts first
 prepare without the route record: exit 1
-exit 0 (log/18.txt)
+exit 0 (log/19.txt)
 
 $ sh -c cp $W/a3/r3a-sol.jsonl.route.json $W/no-start/r3a-sol-a2.jsonl.route.json && sha256sum $W/a3/r3a-sol.jsonl.route.json $W/no-start/r3a-sol-a2.jsonl.route.json && cd $W/a3/export && LEDGER=$W/no-start/r3a-sol-a2.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/no-start/work-sol-a2b --model gpt-6.1-sol && python3 $W/a3/bin/jobtasks.py $DROPS $W/no-start/work-sol-a2b
 d678993a08a0a9c1a39201572befb904c5497588e07778c52d42848d96395fea  $W/a3/r3a-sol.jsonl.route.json
@@ -592,7 +622,7 @@ screen/job.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d6068
 screen/oracle.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
 pilot/job.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
 pilot/oracle.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
-exit 0 (log/19.txt)
+exit 0 (log/20.txt)
 
 $ bash -c cd $W/a3/export && runenv () 
 { 
@@ -604,25 +634,25 @@ $ bash -c cd $W/a3/export && runenv ()
 }; runenv $W/no-start/r3a-sol-a2.jsonl $W/no-start/s-sol-a2 9912 eu-central-h1 bun quick/laneb/r3/screen.ts run $W/no-start/work-sol-a2b --model gpt-6.1-sol > $W/no-start/run-sol-a2.log 2>&1; echo run exit $?; bash $B/no-start.sh.txt $W/no-start/work-sol-a2b $W/no-start/run-sol-a2.log $W/no-start/r3a-sol-a2.jsonl gpt-6.1-sol
 run exit 0
 no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
-exit 0 (log/20.txt)
+exit 0 (log/21.txt)
 
 ## Records that are not no-starts
 
 $ bash -c cp -r $W/a3/work-r3a-screen $W/no-start/x1 && echo 6 > $W/no-start/x1/screen.launch-exit && { cat $W/no-start/run-a4.log; echo 'vm: ubirun-fixture-x1-t24'; } > $W/no-start/x1.log && bash $B/no-start.sh.txt $W/no-start/x1 $W/no-start/x1.log $W/a3/r3a-screen.jsonl claude-opus-5-5
 not a no-start: the screen's launch exited 6, not 1
-exit 1 (log/21.txt)
+exit 1 (log/22.txt)
 
 $ bash -c cp -r $W/a3/work-r3a-screen $W/no-start/x2 && echo 9 > $W/no-start/x2/screen.launch-exit && bash $B/no-start.sh.txt $W/no-start/x2 $W/no-start/run-a4.log $W/a3/r3a-screen.jsonl claude-opus-5-5
 not a no-start: the screen's launch exited 9, not 1
-exit 1 (log/22.txt)
+exit 1 (log/23.txt)
 
 $ bash -c cp -r $W/a3/work-r3a-screen $W/no-start/x3 && echo 0 > $W/no-start/x3/pilot.launch-exit && bash $B/no-start.sh.txt $W/no-start/x3 $W/no-start/run-a4.log $W/a3/r3a-screen.jsonl claude-opus-5-5
 not a no-start: the pilot launched
-exit 1 (log/23.txt)
+exit 1 (log/24.txt)
 
 $ bash -c cp $W/a3/r3a-screen.jsonl $W/no-start/x4.jsonl && echo '{"ts":"1970-01-01T00:00:00.000Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/django__django-10973__a1","usd_micros":4000000}' >> $W/no-start/x4.jsonl && bash $B/no-start.sh.txt $W/a3/work-r3a-screen $W/no-start/run-a4.log $W/no-start/x4.jsonl claude-opus-5-5
 not a no-start: the ledger holds spend rows that are not VM blocks: r3a-screen/django__django-10973__a1
-exit 1 (log/24.txt)
+exit 1 (log/25.txt)
 
 ## Route check exit 1 (GST-1005): a drop only when the record says drop
 
@@ -630,16 +660,16 @@ $ bash -c cp -a $W/a3/export $W/rc-fixture/export && python3 $W/bin/rc-fixture.p
 same file list as the export
 r3/ and runner/ unchanged in the copy
 15
-exit 0 (log/25.txt)
+exit 0 (log/26.txt)
 
 $ sh -c cd $W/rc-fixture/export && FIX_OUT=$W/rc-fixture/out bun test quick/laneb/tests/r3-sol.test.ts -t '3b fixture'
-(pass) R3 amendment 3b fixture > 3b fixture drop [357.15ms]
-(pass) R3 amendment 3b fixture > 3b fixture dirsessions [375.99ms]
-(pass) R3 amendment 3b fixture > 3b fixture badsessions [373.06ms]
+(pass) R3 amendment 3b fixture > 3b fixture drop [438.21ms]
+(pass) R3 amendment 3b fixture > 3b fixture dirsessions [438.64ms]
+(pass) R3 amendment 3b fixture > 3b fixture badsessions [449.94ms]
  3 pass
  0 fail
-Ran 3 tests across 1 file. [1131.00ms]
-exit 0 (log/26.txt)
+Ran 3 tests across 1 file. [1368.00ms]
+exit 0 (log/27.txt)
 
 $ bash $W/bin/rc-rule.sh $W/rc-fixture/out drop dirsessions badsessions
 drop: exit 1, record {"verdict":"drop","reason":"the smoke part failed twice: try 1: Harbor exited 1; no trial directory with a readable config.json | try 2: Harbor exited 1; no tri
@@ -650,32 +680,32 @@ dirsessions: exit 1, record {"verdict":null,"reason":null,"incomplete":null}
 badsessions: exit 1, record {"verdict":null,"reason":null,"incomplete":null}
   E_INTERNAL JSON Parse error: Unexpected identifier "not"
   rule: exit 1 with no drop recorded, so it is not a drop; it goes to the Captain (GST-1005)
-exit 0 (log/27.txt)
+exit 0 (log/28.txt)
 
 ## One real probe: eu-central-h1, standard-16, 640 GB, temporary item r3-capacity-probe-dry
 
 $ sh -c test -s $PROBE_LEDGER || LEDGER=$PROBE_LEDGER bun $W/bin/approve.ts $W/a3/export r3-capacity-probe-dry 5 'GSTA-2, approvals/2026-11-02-r3-amendment-3b-caps.md: $5 of VM time in all for the author probes, no model calls' GSTA-2; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $PROBE_LEDGER --item r3-capacity-probe-dry
-{"cap_usd":5,"settled_usd":0.096834,"open_reserved_usd":0,"open_ids":0}
-exit 0 (log/28.txt)
+{"cap_usd":5,"settled_usd":0.102834,"open_reserved_usd":0,"open_ids":0}
+exit 0 (log/29.txt)
 
 $ sh -c echo 'e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8' | grep -qx e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8 && echo 'runner copy OK' && PROBE_ITEM=r3-capacity-probe-dry UBI_OWNER=GEVA-192 bash $B/capacity-probe.sh.txt $R $W/a3/export/quick/laneb $PROBE_LEDGER eu-central-h1 $W/probe-real; echo probe exit $?; cat $W/probe-real/probe-pass; grep -h '^ubi-runner: \(creating\|ready\|destroy\|destroyed\|gone\|VM did\)' $W/probe-real/probe-*.log | sed 's/ready: \([a-z0-9-]*\) (.*)/ready: \1/'
 runner copy OK
 probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-192, ledger item r3-capacity-probe-dry
-probe 1 at 2026-11-02T16:03:16Z: pass, ubirun-geva192-1793635396-49d74466-t1 reached running and is destroyed, 36 s, settled $0.006000; list --mine empty
+probe 1 at 2026-11-02T16:43:31Z: pass, ubirun-geva192-1793637812-6da4d45f-t1 reached running and is destroyed, 32 s, settled $0.005333; list --mine empty
 probe exit 0
 location=eu-central-h1
-vm=ubirun-geva192-1793635396-49d74466-t1
-passed=2026-11-02T16:03:52Z
-ubi-runner: creating eu-central-h1/ubirun-geva192-1793635396-49d74466-t1 (standard-16)
-ubi-runner: ready: ubirun-geva192-1793635396-49d74466-t1
-ubi-runner: destroy requested: eu-central-h1/ubirun-geva192-1793635396-49d74466-t1
-ubi-runner: destroyed eu-central-h1/ubirun-geva192-1793635396-49d74466-t1
-exit 0 (log/29.txt)
+vm=ubirun-geva192-1793637812-6da4d45f-t1
+passed=2026-11-02T16:44:04Z
+ubi-runner: creating eu-central-h1/ubirun-geva192-1793637812-6da4d45f-t1 (standard-16)
+ubi-runner: ready: ubirun-geva192-1793637812-6da4d45f-t1
+ubi-runner: destroy requested: eu-central-h1/ubirun-geva192-1793637812-6da4d45f-t1
+ubi-runner: destroyed eu-central-h1/ubirun-geva192-1793637812-6da4d45f-t1
+exit 0 (log/30.txt)
 
 $ sh -c UBI_OWNER=GEVA-192 $R list --mine; echo list --mine exit $?; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $PROBE_LEDGER --item r3-capacity-probe-dry; grep -c '"kind":"settle"' $PROBE_LEDGER
 list --mine exit 0
-{"cap_usd":5,"settled_usd":0.102834,"open_reserved_usd":0,"open_ids":0}
-5
-exit 0 (log/30.txt)
+{"cap_usd":5,"settled_usd":0.108167,"open_reserved_usd":0,"open_ids":0}
+6
+exit 0 (log/31.txt)
 
 ## Done
