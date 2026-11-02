@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# R3 amendment 3b capacity probe (GEVA-192). Probes one Ubicloud location for a standard-16 VM with 640 GB until a
+# probe passes or the window ends. Each probe asks the pinned runner for a VM the way launch.sh asks for a part's VM
+# (UBI_LOCATION from the environment and "up -s standard-16 -S 640", launch.sh:145), then destroys it at once. A probe
+# passes when up printed the VM's name (the VM reached running and answered on SSH), down confirmed it gone, and
+# "list --mine" exited 0 listing no VM. Before up, each probe reserves $0.30 (30 minutes at $0.60 an hour) on the probe
+# ledger under the id probe-<n>-<epoch of its start>. After down it settles the time from just before up to just after
+# down at $0.60 an hour. Probes start at least PROBE_GAP_SEC apart (600) and only inside PROBE_WINDOW_SEC (10800) from
+# the first probe's start; the dry run alone sets these two lower. The ledger item is r3-capacity-probe; only the dry
+# run sets PROBE_ITEM (r3-capacity-probe-dry). A pass writes <record dir>/probe-pass ("location=<location>",
+# "vm=<name>", "passed=<iso>"), whose mtime the run step checks (3b section 10 step 9). Each probe's runner and ledger
+# output goes to <record dir>/probe-<n>.log.
+# Usage: UBI_OWNER=<thread code> bash probe.sh.txt <runner copy> <laneb dir> <probe ledger> <location> <record dir>
+# Exit 0: a probe passed. 1: every probe in the window failed and each probe's VM is confirmed gone. 3: a probe's VM may
+# still exist (down or list --mine failed, or list --mine lists a VM): destroy it and empty list --mine before anything
+# else. 9: the probe ledger refused a reserve (cap stop). 2: usage. No exit path binds or touches an R3a ledger.
+set -uo pipefail
+[ $# -eq 5 ] || { echo "usage: UBI_OWNER=<code> bash probe.sh.txt <runner copy> <laneb dir> <probe ledger> <location> <record dir>" >&2; exit 2; }
+R=$1 LANEB=$2 L=$3 LOC=$4 OUT=$5
+[ -n "${UBI_OWNER:-}" ] || { echo "probe: set UBI_OWNER to the thread code" >&2; exit 2; }
+WINDOW=${PROBE_WINDOW_SEC:-10800} GAP=${PROBE_GAP_SEC:-600} ITEM=${PROBE_ITEM:-r3-capacity-probe}
+mkdir -p "$OUT" && rm -f "$OUT/probe-pass"
+echo "probe: $LOC standard-16 640 GB, window ${WINDOW}s, at least ${GAP}s between probe starts, owner $UBI_OWNER, ledger item $ITEM"
+first=$(date +%s)
+while :; do
+  n=1; while [ -e "$OUT/probe-$n.log" ]; do n=$((n + 1)); done
+  log=$OUT/probe-$n.log; t0=$(date +%s); id=probe-$n-$t0
+  if ! bun "$LANEB/runner/ledger.ts" reserve --path "$L" --item "$ITEM" --id "$id" --usd 0.30 --detail "capacity probe $n, $LOC" >> "$log" 2>&1; then
+    echo "probe $n: the probe ledger refused the \$0.30 reserve ($(tail -1 "$log")); no VM was asked for"; exit 9
+  fi
+  name=$(UBI_LOCATION=$LOC UBI_TTL_HOURS=1 "$R" up -s standard-16 -S 640 2>> "$log" < /dev/null); up=$?
+  vm=$(sed -n "s#^ubi-runner: creating $LOC/\([a-z0-9-]*\) .*#\1#p" "$log" | tail -1)
+  down=0; [ -z "$vm" ] || "$R" down "$vm" >> "$log" 2>&1 < /dev/null || down=$?
+  t1=$(date +%s)
+  mine=$("$R" list --mine 2>> "$log" < /dev/null); lrc=$?
+  usd=$(awk -v s="$t0" -v e="$t1" 'BEGIN { printf "%.6f", (e - s) / 3600 * 0.60 }')
+  settled=yes
+  bun "$LANEB/runner/ledger.ts" settle --path "$L" --item "$ITEM" --id "$id" --usd "$usd" --detail "capacity probe $n, $LOC: $((t1 - t0)) s at \$0.60/h" >> "$log" 2>&1 || settled=no
+  why=$(grep '^ubi-runner: ' "$log" | grep -v -e '^ubi-runner: reap' -e '^ubi-runner: creating' -e '^ubi-runner: destroy' -e '^ubi-runner: gone' -e '^ubi-runner: ready' | head -1)
+  at=$(date -u -d "@$t0" +%Y-%m-%dT%H:%M:%SZ)
+  if [ "$down" -ne 0 ] || [ "$lrc" -ne 0 ] || [ -n "$mine" ]; then
+    echo "probe $n at $at: VM ${vm:-none} may still exist (down exit $down, list --mine exit $lrc, listed: ${mine:-nothing}); destroy it before anything else"; exit 3
+  fi
+  [ "$settled" = yes ] || echo "probe $n: WARNING: the settle of \$$usd failed; settle $id with ledger.ts settle"
+  if [ "$up" -eq 0 ] && [ -n "$name" ] && [ "$name" = "$vm" ]; then
+    printf 'location=%s\nvm=%s\npassed=%s\n' "$LOC" "$vm" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT/probe-pass"
+    echo "probe $n at $at: pass, $vm reached running and is destroyed, $((t1 - t0)) s, settled \$$usd; list --mine empty"
+    exit 0
+  fi
+  echo "probe $n at $at: fail (up exit $up: ${why:-no runner line}), VM ${vm:-none} confirmed gone, $((t1 - t0)) s, settled \$$usd"
+  next=$(( t0 + GAP )); now=$(date +%s); [ "$next" -ge "$now" ] || next=$now
+  if [ "$next" -ge $(( first + WINDOW )) ]; then
+    echo "probe: every probe in $LOC failed in the ${WINDOW}s window ($n probes); nothing binds"; exit 1
+  fi
+  sleep $(( next - now ))
+done
