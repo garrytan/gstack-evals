@@ -168,7 +168,7 @@ async function main(argv: string[]): Promise<number> {
   const ledgerSvc = Bun.spawn([process.execPath, join(RUNNER, "ledger.ts"), "serve", "--path", ledger, "--item", m.item, "--port", lport], { stdout: "pipe", stderr: "pipe" });
   const proxy = Bun.spawn([process.execPath, join(RUNNER, "proxy.ts"), "--config", proxyPath, "--data-host", gw, "--data-port", dport, "--control-port", cport,
     "--log", join(out, "proxy-requests.jsonl"), "--sessions", sessionsFile, "--ledger-url", `http://127.0.0.1:${lport}`, "--ledger-prefix", prefix], { stdout: "pipe", stderr: "pipe" });
-  for (const [p, name] of [[ledgerSvc, "ledger-service.log"], [proxy, "proxy.log"]] as const) { const w = log(name); new Response(p.stdout).text().then((t) => w.write(t)); new Response(p.stderr).text().then((t) => w.end(t)); }
+  for (const [p, name] of [[ledgerSvc, "ledger-service.log"], [proxy, "proxy.log"]] as const) { const w = log(name); Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]).then(([o, e]) => { w.write(o); w.end(e); }); }
   const harborEnv: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => v !== undefined && !SECRET.test(k)) as [string, string][]);
   Object.assign(harborEnv, { ANTHROPIC_API_KEY: "placeholder-not-a-key", PYTHONPATH: join(RUNNER, "agent") });
   let verdict: ReturnType<typeof next>;
