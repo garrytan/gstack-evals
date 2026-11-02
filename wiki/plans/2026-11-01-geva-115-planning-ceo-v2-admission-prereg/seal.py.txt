@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+# seal.py <staging> <out>: builds CEO panel v2's sealed bundle from the authored unit dirs (<staging>/units/<ID>/) and
+# the audit verdicts (<staging>/audit/*.json). Each unit becomes a two-commit git repo built with git fast-import (base
+# commit: context/ and any src/; head commit: adds plan.md only), committer "Team <team@example.com>" at a fixed time,
+# bundled as repo.bundle beside its key.json. manifest.json holds every per-unit digest, and stays inside the bundle.
+# Writes <out>/ceo-panel-v2.tar (deterministic) and prints counts and digests only, never file text. GEVA-115.
+import hashlib, io, json, os, subprocess, sys, tarfile
+staging, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
+NAME = "ceo-panel-v2"
+WHEN = "1793491200 +0000"
+sha = lambda b: hashlib.sha256(b).hexdigest()
+def run(args, cwd=None, inp=None):
+    r = subprocess.run(args, cwd=cwd, input=inp, capture_output=True)
+    if r.returncode: raise SystemExit("command failed: " + args[0] + " " + (args[1] if len(args) > 1 else ""))
+    return r.stdout
+units_dir = os.path.join(staging, "units")
+ids = sorted(os.listdir(units_dir))
+root = os.path.join(out, NAME); os.makedirs(os.path.join(root, "units")); os.makedirs(os.path.join(root, "audit"))
+rows = []
+for uid in ids:
+    d = os.path.join(units_dir, uid)
+    files = []
+    for dp, dn, fn in os.walk(d):
+        for f in fn: files.append(os.path.relpath(os.path.join(dp, f), d))
+    files.sort()
+    key_raw = open(os.path.join(d, "key.json"), "rb").read()
+    k = json.loads(key_raw)
+    assert k["unit"] == uid
+    tree = [f for f in files if f != "key.json"]
+    base_files = [f for f in tree if f != "plan.md"]
+    assert "plan.md" in tree and all(f.startswith("context/") or f.startswith("src/") for f in base_files)
+    data = {f: open(os.path.join(d, f), "rb").read() for f in tree}
+    stream = io.BytesIO()
+    w = stream.write
+    marks = {}
+    for i, f in enumerate(tree, 1):
+        marks[f] = i
+        w(b"blob\nmark :%d\ndata %d\n" % (i, len(data[f]))); w(data[f]); w(b"\n")
+    def commit(mark, msg, fs, parent):
+        w(b"commit refs/heads/main\nmark :%d\n" % mark)
+        w(("committer Team <team@example.com> " + WHEN + "\n").encode())
+        m = msg.encode(); w(b"data %d\n" % len(m)); w(m); w(b"\n")
+        if parent: w(b"from :%d\n" % parent)
+        for f in fs: w(("M 100644 :%d %s\n" % (marks[f], f)).encode())
+        w(b"\n")
+    n = len(tree)
+    commit(n + 1, "Context", base_files, None)
+    commit(n + 2, "Plan", ["plan.md"], n + 1)
+    g = os.path.join(out, "work", uid)
+    run(["git", "init", "-q", "--bare", "--initial-branch=main", g])
+    run(["git", "fast-import", "--quiet"], cwd=g, inp=stream.getvalue())
+    head = run(["git", "rev-parse", "main"], cwd=g).decode().strip()
+    base = run(["git", "rev-parse", "main~1"], cwd=g).decode().strip()
+    assert run(["git", "rev-list", "--count", "main"], cwd=g).decode().strip() == "2"
+    assert run(["git", "diff", "--name-only", base, head], cwd=g).decode().split() == ["plan.md"]
+    ud = os.path.join(root, "units", uid); os.makedirs(ud)
+    bundle = os.path.join(ud, "repo.bundle")
+    run(["git", "bundle", "create", "-q", bundle, "HEAD", "main"], cwd=g)
+    open(os.path.join(ud, "key.json"), "wb").write(key_raw)
+    tree_sha = sha("".join(f + "\0" + sha(data[f]) + "\n" for f in tree).encode())
+    item_kinds = [i["item_kind"] for i in k.get("items", [])] or [k["bait"]["resembles"]]
+    rows.append(dict(unit=uid, author=uid[0], kind=k["kind"], mode=k["mode"], item_kinds=item_kinds, head=head, base=base,
+                     plan_sha256=sha(data["plan.md"]), key_sha256=sha(key_raw), bundle_sha256=sha(open(bundle, "rb").read()),
+                     tree_sha256=tree_sha, files=len(tree), plan_bytes=len(data["plan.md"])))
+audits = []
+for f in sorted(os.listdir(os.path.join(staging, "audit"))):
+    b = open(os.path.join(staging, "audit", f), "rb").read()
+    open(os.path.join(root, "audit", f), "wb").write(b); audits.append({"file": f, "sha256": sha(b)})
+kit = []
+kd = os.path.join(staging, "kit")
+if os.path.isdir(kd):
+    os.makedirs(os.path.join(root, "kit"))
+    for f in sorted(os.listdir(kd)):
+        b = open(os.path.join(kd, f), "rb").read()
+        open(os.path.join(root, "kit", f), "wb").write(b); kit.append({"file": f, "sha256": sha(b)})
+man = {"name": NAME, "recipient": "age1qru8aggfw8sgaxrx7whjfjksptqr4rnqaaxns4xq9auxxepe9susevg7vr", "units": rows, "audit": audits, "kit": kit}
+open(os.path.join(root, "manifest.json"), "w").write(json.dumps(man, indent=2) + "\n")
+tpath = os.path.join(out, NAME + ".tar")
+with tarfile.open(tpath, "w", format=tarfile.PAX_FORMAT) as t:
+    entries = []
+    for dp, dn, fn in os.walk(root):
+        dn.sort()
+        rel = os.path.relpath(dp, out)
+        entries.append(rel)
+        for f in sorted(fn): entries.append(os.path.join(rel, f))
+    for e in sorted(entries):
+        p = os.path.join(out, e)
+        ti = t.gettarinfo(p, arcname=e)
+        ti.mtime = 0; ti.uid = ti.gid = 0; ti.uname = ti.gname = ""; ti.mode = 0o755 if ti.isdir() else 0o644
+        ti.pax_headers = {}
+        if ti.isdir(): t.addfile(ti)
+        else:
+            with open(p, "rb") as fh: t.addfile(ti, fh)
+from collections import Counter
+print("units", len(rows), "by kind", dict(Counter(r["kind"] for r in rows)), "by mode", dict(Counter(r["mode"] for r in rows)))
+print("item kinds", dict(Counter(x for r in rows for x in r["item_kinds"])))
+print("plan bytes range", min(r["plan_bytes"] for r in rows), max(r["plan_bytes"] for r in rows))
+print("audit files", len(audits), "kit files", len(kit))
+print("tar sha256", sha(open(tpath, "rb").read()))

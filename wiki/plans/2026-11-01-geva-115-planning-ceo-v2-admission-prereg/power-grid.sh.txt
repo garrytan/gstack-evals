@@ -1,0 +1,5 @@
+cd /workspace/gstack-evals
+pw() { bin/gstack-evals noloss power --clusters "$1" --passes 3 --margin 10 --loss 20 --recall "$2" --alpha 0.025 --dependence "$3" --sims 2000 --seed 1 --json 2>&1 | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d["rows"][0] if "rows" in d else d["row"]; print(r.get("loss"))'; }
+echo "# gain power: none at R, gstack at R+0.20 (--recall R+0.20 --loss 20), alpha 0.025, 3 passes, 2000 sims, seed 1"
+echo "# design R dependence power"
+for R in 0.2 0.3 0.4 0.5 0.6; do G=$(python3 -c "print(round($R+0.2,2))"); for d in 0 0.3 0.6; do echo "headline $R $d $(pw 2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1 $G $d)"; done; echo "H-only $R 0.3 $(pw 2,2,2,2,2,2,2,2,2,2,2,2 $G 0.3)"; echo "PU-only $R 0.3 $(pw 1,1,1,1,1,1,1,1,1,1,1,1 $G 0.3)"; done

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# build-v2.sh <panel dir> <run dir> <scorer>: builds the admission pilot's run material from the extracted panel with the
+# pinned scorer: plan cases and the source clone (convert-v2.py), the admission suite (the 8 drawn units, stratum pilot)
+# and the later headline's suite (the other 36). Keyless. Prints counts and digests only. GEVA-115.
+set -euo pipefail
+PANEL=$1; RUN=$2; SCORER=$3
+G="env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY $SCORER/bin/gstack-evals"
+HERE=$(cd "$(dirname "$0")" && pwd)
+python3 "$HERE/convert-v2.py" "$PANEL" "$RUN"
+SR=$RUN/sealed-root; mkdir -p "$SR/suites"
+(cd "$SCORER" && $G noloss suite --from-catalog catalog/admission --stratum pilot --id planrev-ceo-v2-admission --sealed-root "$SR" --out "$SR/suites/planrev-ceo-v2-admission.json")
+(cd "$SCORER" && $G noloss suite --from-catalog catalog/headline --id planrev-ceo-v2 --sealed-root "$SR" --out "$SR/suites/planrev-ceo-v2.json")
+git clone -q --mirror "$RUN/source/plans.bundle" "$RUN/source/plans.git"
+for s in planrev-ceo-v2-admission planrev-ceo-v2; do echo "suite $s sha256 $(sha256sum "$SR/suites/$s.json" | cut -c1-64)"; done
