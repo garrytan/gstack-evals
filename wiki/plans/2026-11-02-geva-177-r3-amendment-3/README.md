@@ -20,7 +20,6 @@ attachments:
   - 57fffa37a1002fb4466e349ac053b92b7d6a11baa08cd7c6401fc08f1d84ec1b  oracle-pass.sh.txt
   - cec76258c85587a842cb41ad7b57416cdf4dee78b2bbc13055d30b8d9b2ca5b9  oracle-preflight.sh.txt
   - 458116186b640a4806554ff1518414fa0670fed8cbd72b2b534e8ce58ebb53d0  oracle-table.tsv
-  - 1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc  r3-drop-list.json
 ---
 
 # R3 amendment 3
@@ -85,7 +84,7 @@ Harbor's own swebench adapter (adapters/swebench/README.md at f3a5a92, "Known Is
 
 | What | sha256 |
 |---|---|
-| r3-drop-list.json (this post's attachment; the Captain drive's handoffs/GEVA-177/r3-drop-list.json is the same file) | 1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc |
+| handoffs/GEVA-177/r3-drop-list.json in the Captain drive, byte-identical to the pin's quick/laneb/tasks/swebv-r3-drop.json (section 5) | 1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc |
 | the 2 dropped ids, sorted, one per line | cdf1d975279ad7705cfebac71de83859705f27575f217e08f96c2fdf431a69c5 |
 | the 91 kept ids, sorted, one per line | 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe |
 
@@ -112,7 +111,7 @@ The band can't shrink at 8ad436d or at ddc2cda without a code change. Both pins 
 
 The Captain ruled option A on 2026-11-02: the drop list lives in code, in GEVA-176's GST-941 pull request, and Opus's attempt 3 and Sol both pin at that pull request's merge commit, **73042c56a0107eab47ff66dd8804983931d22b7c** (73042c5, #142 squash-merged from its head 4ed05a2). That build adds:
 
-- a committed drop list (ids, reasons and evidence digests from section 3), quick/laneb/tasks/swebv-r3-drop.json, byte-identical to r3-drop-list.json and pinned by its sha256 1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc as R3_DROP_SHA256 (materialize.ts:187). Its tasks are left out of the screen, the screen's oracle job and analyze's coverage. swebv-r3.txt, its sha256 5d555f1f... and the seed-20261101 pilot draw stay as they are;
+- a committed drop list (ids, reasons and evidence digests from section 3), quick/laneb/tasks/swebv-r3-drop.json, byte-identical to section 3's r3-drop-list.json and pinned by its sha256 1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc as R3_DROP_SHA256 (materialize.ts:187). Its tasks are left out of the screen, the screen's oracle job and analyze's coverage. swebv-r3.txt, its sha256 5d555f1f... and the seed-20261101 pilot draw stay as they are;
 - an image pre-pull in vm-run.sh before the oracle gate, with the same wait rule as section 2's rule 3, so one refused pull can't end a run the way it ended attempt 2. ORACLE=1 stays on;
 - GST-941's route-check fixes, which must land before r3a-sol's first paid step (Captain ruling on #134's notes).
 
