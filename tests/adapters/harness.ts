@@ -51,7 +51,7 @@ export interface Turn {
 }
 
 /** A scripted model: the blocks of the next answer, given what the conversation holds. */
-export type Script = (turn: Turn) => Block[];
+export type Script = (turn: Turn) => Block[] | Promise<Block[]>;
 
 export interface Upstream {
   url: string;
@@ -202,7 +202,7 @@ export function harness(script: Script, opts: { capMicros?: number; env?: Record
       if (!new URL(url).pathname.endsWith("/v1/messages")) return Response.json({ data: [] });
       const tools = new Set((body.tools ?? []).map((t: { name: string }) => t.name));
       const turn = { ...parse(body.messages ?? []), body };
-      return tools.has("Bash") ? messagesResponse(body, script(turn), opts.stop?.(turn)) : messagesResponse(body, [{ type: "text", text: "ok" }]);
+      return tools.has("Bash") ? messagesResponse(body, await script(turn), opts.stop?.(turn)) : messagesResponse(body, [{ type: "text", text: "ok" }]);
     },
   });
   proxy.start();

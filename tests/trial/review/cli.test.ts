@@ -68,6 +68,14 @@ describe("review-units arguments (keyless)", () => {
       writeFileSync(join(out, "run.json"), JSON.stringify({ run_id: "review-units-old" }) + "\n");
       expect((await run([])).code).toBe(0);
       expect((await run(["--max-turns", "80"])).err).toMatch(/^E_CACHE_STALE review-units: run review-units-old ran with max turns 60 and session kind not set/);
+      const waited = JSON.stringify({ run_id: "review-units-waited", max_turns: 60, session_kind: null, background_wait_s: 600 }) + "\n";
+      writeFileSync(join(out, "run.json"), waited);
+      const other = await run([]);
+      expect([other.code, other.err]).toEqual([2, expect.stringMatching(/^E_CACHE_STALE review-units: run review-units-waited ran with max turns 60 and session kind not set; background wait 600 s, and this resume gives 60 and not set; 3600 s/)]);
+      expect(readFileSync(join(out, "run.json"), "utf8")).toBe(waited);
+      const same = await run(["--background-wait", "600"]);
+      expect([same.code, same.out.includes("background wait 600 s: ")]).toEqual([0, true]);
+      for (const bad of ["0", "1.5", "soon"]) expect((await run(["--background-wait", bad])).err).toContain("--background-wait must be whole seconds, at least 1");
     } finally {
       removeTree(join(out, ".."));
     }
@@ -98,6 +106,7 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("review-units startup (
       expect(code).toBe(2);
       expect(err).toMatch(/^E_LEDGER_MISSING review-units: no approved cap is on record for line item review-units-start/);
       const runId = (JSON.parse(readFileSync(join(out, "run.json"), "utf8")) as { run_id: string }).run_id;
+      expect((JSON.parse(readFileSync(join(out, "run.json"), "utf8")) as { background_wait_s: number }).background_wait_s).toBe(3600);
       const again = collect();
       expect(await main([...argv, "--resume"], again, env)).toBe(2);
       expect(again.text().err).toMatch(/^E_LEDGER_MISSING review-units: /);
