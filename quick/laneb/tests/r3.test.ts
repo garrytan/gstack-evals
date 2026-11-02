@@ -9,7 +9,7 @@ import { Ledger, readRows, toMicros, totals } from "../runner/ledger.ts";
 import { APPLY_BLOCK, loadSwebvTasks, materializeSwebv, R3_BAND_SHA256 } from "../runner/materialize.ts";
 import { startProxy, type ProxyConfig } from "../runner/proxy.ts";
 import { loadR3Jobs, toTrial, type R3Trial } from "../r3/exposure.ts";
-import { admission, bandIds, bindCheck, pilotTasks, R3_ARMS, R3_CELLS } from "../r3/screen.ts";
+import { admission, bandIds, bindCheck, pilotTasks, R3_ARMS, R3_CELLS, screenIds } from "../r3/screen.ts";
 
 // R3's build (GEVA-101 prereg, section 4.8), keyless.
 const here = import.meta.dir;
@@ -281,7 +281,9 @@ describe("R3 screen and admission", () => {
     expect(fix.lines[1]).toContain("STOP (FIX-METHOD)");
   });
 
-  // A prepared and pulled R3a work dir: one none trial per band task (the first 35 fail) and one told trial per pilot task.
+  // A prepared and pulled R3a work dir: one none trial per screened task (the band less the drop list; the first 35 fail)
+  // and one told trial per pilot task.
+  const N = screenIds().length;
   function work(opts: { capStop?: "status" | "trial" | "vm" | "vm-block"; edit?: (parts: Record<string, T[]>) => void; after?: (w: string) => void } = {}) {
     const w = tmp("r3-work-");
     const ledger = join(w, "r3a-screen.jsonl");
@@ -290,10 +292,10 @@ describe("R3 screen and admission", () => {
     const pilotIds = pilotTasks(band);
     writeFileSync(join(w, "plan.json"), JSON.stringify({ item: "r3a-screen", pilot_tasks: pilotIds }));
     const parts: Record<string, T[]> = {
-      screen: band.map((task, i) => ({ task, reward: i < 35 ? 0 : 1 })),
+      screen: screenIds().map((task, i) => ({ task, reward: i < 35 ? 0 : 1 })),
       pilot: pilotIds.map((task) => ({ task, arm: "gstack", told: "investigate", cmdNames: ["investigate"], lines: [text("Phase 1")] })),
     };
-    if (opts.capStop === "trial") parts.screen![92] = { task: band[92]!, reward: 0, ok: null, lines: [], exc: "LedgerCapStop" };
+    if (opts.capStop === "trial") parts.screen![N - 1] = { task: parts.screen![N - 1]!.task, reward: 0, ok: null, lines: [], exc: "LedgerCapStop" };
     opts.edit?.(parts);
     for (const [name, trials] of Object.entries(parts)) {
       const dir = join(w, name);
@@ -314,26 +316,26 @@ describe("R3 screen and admission", () => {
     const r = work();
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("r3a-screen: 93 screen trials, 10 pilot trials, settled $0.00 of $150, open reserves 0");
-    expect(r.out).toContain("admission: 35 of 93 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials");
+    expect(r.out).toContain(`r3a-screen: ${N} screen trials, 10 pilot trials, settled $0.00 of $150, open reserves 0`);
+    expect(r.out).toContain(`admission: 35 of ${N} graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials`);
     expect(r.out).toContain("R3b start: 35 tasks; measured cost per trial none $0.50, told $0.50; projection r3b-opus $105, r3b-particle $47");
     expect(readFileSync(join(r.w, "admitted.txt"), "utf8").trim().split("\n")).toHaveLength(35);
     const rec = JSON.parse(readFileSync(join(r.w, "record.json"), "utf8"));
     expect(rec.pilot).toMatchObject({ graded: 10, exposed: 10, body_loaded: 10, investigate_opened: 10, procedure_shown: 10 });
     expect(rec.measured_cost_per_trial_usd).toMatchObject({ none: 0.5, told: 0.5 });
     const exported = readFileSync(join(r.w, "trials.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-    expect(exported).toHaveLength(103);
+    expect(exported).toHaveLength(N + 10);
     expect(exported.filter((t) => t.part === "pilot").every((t) => t.exposed && t.route === "anthropic")).toBe(true);
   });
 
   test("a trial with no result.json is infra, and admission counts it as one", () => {
-    const r = work({ edit: (p) => { p.screen![92]!.noResult = true; } });
+    const r = work({ edit: (p) => { p.screen![N - 1]!.noResult = true; } });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("admission: 35 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra)");
+    expect(r.out).toContain(`admission: 35 of ${N - 1} graded in-band tasks unsolved by Opus 5.5 none (1 infra)`);
   });
 
   const gaps: [string, (p: Record<string, T[]>) => void, string][] = [
-    ["a planned task with no trial", (p) => { p.screen!.pop(); }, "screen: 1 of 93 planned tasks have no trial"],
+    ["a planned task with no trial", (p) => { p.screen!.pop(); }, `screen: 1 of ${N} planned tasks have no trial`],
     ["a trial directory that can't be attributed", (p) => { p.pilot![3]!.noConfig = true; }, "pilot: 1 of 10 planned tasks have no trial"],
     ["a second trial for a task", (p) => { p.screen!.push({ ...p.screen![0]! }); }, "screen: 1 tasks with more than one trial"],
     ["a trial outside the band", (p) => { p.screen!.push({ task: "astropy__astropy-00000", reward: 0 }); }, "screen: 1 trials outside the plan"],
@@ -348,13 +350,13 @@ describe("R3 screen and admission", () => {
     });
   }
 
-  // GSTA-2 ruling A1: more than 10% infra trials in a part (10 or more of 93 screen trials, 2 or more of 10 pilot trials)
+  // GSTA-2 ruling A1: more than 10% infra trials in a part (10 or more of 91 or 93 screen trials, 2 or more of 10 pilot trials)
   // makes R3a incomplete before admission, so broken infrastructure can't end R3 as saturation or FIX-METHOD.
   const infra = (t: T): T => ({ ...t, reward: null, ok: 0 });
-  const lastScreen = (n: number) => (p: Record<string, T[]>) => { for (let i = 93 - n; i < 93; i++) p.screen![i] = infra(p.screen![i]!); };
+  const lastScreen = (n: number) => (p: Record<string, T[]>) => { for (let i = N - n; i < N; i++) p.screen![i] = infra(p.screen![i]!); };
   const overInfra: [string, (p: Record<string, T[]>) => void, string][] = [
-    ["an all-infra screen", lastScreen(93), "screen: 93 of 93 trials are infra, over 10%"],
-    ["10 infra screen trials of 93", lastScreen(10), "screen: 10 of 93 trials are infra, over 10%"],
+    ["an all-infra screen", lastScreen(N), `screen: ${N} of ${N} trials are infra, over 10%`],
+    [`10 infra screen trials of ${N}`, lastScreen(10), `screen: 10 of ${N} trials are infra, over 10%`],
     ["2 infra pilot trials of 10", (p) => { p.pilot![0] = infra(p.pilot![0]!); p.pilot![1] = infra(p.pilot![1]!); }, "pilot: 2 of 10 trials are infra, over 10%"],
   ];
   for (const [what, edit, reason] of overInfra) {
@@ -367,10 +369,10 @@ describe("R3 screen and admission", () => {
     });
   }
 
-  test("9 infra screen trials of 93 and 1 infra pilot trial of 10 go on to admission", () => {
+  test(`9 infra screen trials of ${N} and 1 infra pilot trial of 10 go on to admission`, () => {
     const r = work({ edit: (p) => { lastScreen(9)(p); p.pilot![0] = infra(p.pilot![0]!); } });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("admission: 35 of 84 graded in-band tasks unsolved by Opus 5.5 none (9 infra); pilot exposure 9 of 9 graded told trials");
+    expect(r.out).toContain(`admission: 35 of ${N - 9} graded in-band tasks unsolved by Opus 5.5 none (9 infra); pilot exposure 9 of 9 graded told trials`);
   });
 
   // GSTA-2 ruling B1: a pulled proxy file that is empty or can't be parsed means the proxy failed at the end, so a cap stop

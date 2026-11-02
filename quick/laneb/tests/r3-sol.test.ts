@@ -10,7 +10,7 @@ import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, toMicros, totals } from "../runner/ledger.ts";
 import { priceFor, costMicros, startProxy, type ProxyConfig } from "../runner/proxy.ts";
 import { loadR3Jobs, type R3Trial } from "../r3/exposure.ts";
-import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, SOL, vmBlock } from "../r3/screen.ts";
+import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, screenIds, SOL, vmBlock } from "../r3/screen.ts";
 import { judge, next, toolResults, type RouteRecord } from "../r3/route-check.ts";
 
 const here = import.meta.dir;
@@ -157,7 +157,9 @@ function load(trials: T[]): R3Trial[] {
 const say = (s: string) => ({ type: "AssistantMessage", content: [{ text: s }] });
 const toldTrial = (task: string, model = SOL, shown = true): T => ({ task, model, arm: "gstack", told: "investigate", spent: 1.1, cmdNames: ["investigate"], lines: [say(shown ? "Phase 1" : "done")] });
 
-// A prepared and pulled R3a work dir for one model: one none trial per band task (the first fails are failed) and one
+// The screened tasks: the band less the drop list.
+const N = screenIds().length;
+// A prepared and pulled R3a work dir for one model: one none trial per screened task (the first fails are failed) and one
 // told trial per pilot task, on that model's item.
 function work(m = sol, opts: { fails?: number; edit?: (parts: Record<string, T[]>) => void; after?: (w: string) => void; ledger?: string } = {}) {
   const w = tmp("sol-work-");
@@ -167,7 +169,7 @@ function work(m = sol, opts: { fails?: number; edit?: (parts: Record<string, T[]
   const pilotIds = pilotTasks(band);
   writeFileSync(join(w, "plan.json"), JSON.stringify({ item: m.item, pilot_tasks: pilotIds }));
   const parts: Record<string, T[]> = {
-    screen: band.map((task, i) => ({ task, model: m.id, reward: i < (opts.fails ?? 35) ? 0 : 1, spent: 0.6 })),
+    screen: screenIds().map((task, i) => ({ task, model: m.id, reward: i < (opts.fails ?? 35) ? 0 : 1, spent: 0.6 })),
     pilot: pilotIds.map((task) => toldTrial(task, m.id)),
   };
   opts.edit?.(parts);
@@ -223,8 +225,8 @@ describe("the screen per model", () => {
     const r = analyzeCli(w, ledger, SOL);
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("r3a-sol: 93 screen trials, 10 pilot trials, settled $0.00 of $140, open reserves 0");
-    expect(r.out).toContain("admission: 35 of 93 graded in-band tasks unsolved by GPT-6.1 Sol none (0 infra); pilot exposure 10 of 10 graded told trials");
+    expect(r.out).toContain(`r3a-sol: ${N} screen trials, 10 pilot trials, settled $0.00 of $140, open reserves 0`);
+    expect(r.out).toContain(`admission: 35 of ${N} graded in-band tasks unsolved by GPT-6.1 Sol none (0 infra); pilot exposure 10 of 10 graded told trials`);
     expect(r.out).toContain("R3b start for GPT-6.1 Sol: 35 tasks; measured cost per trial none $0.60, told $1.10; projection r3b-sol $179; Garry records r3b-sol's cap before Sol's R3b starts");
     const rec = JSON.parse(readFileSync(join(w, "record.json"), "utf8"));
     expect(rec).toMatchObject({ item: "r3a-sol", model: SOL, route_check: { verdict: "pass" }, outcome: "admitted", n: 35 });
@@ -388,7 +390,7 @@ describe("#121's notes", () => {
       const out = r.stdout.toString();
       expect(r.exitCode).toBe(0);
       expect(readFileSync(join(w!, "screen.launch-exit"), "utf8")).toBe("0\n");
-      expect(out).toContain("screen is incomplete (screen: 93 of 93 planned tasks have no trial");
+      expect(out).toContain(`screen is incomplete (screen: ${N} of ${N} planned tasks have no trial`);
       expect(existsSync(join(w!, "pilot.launch-exit"))).toBe(false);
       expect(readFileSync(events, "utf8").split("\n").filter((e) => e.startsWith("up "))).toHaveLength(1);
       expect(readRows(ledger).filter((x) => x.kind === "reserve").map((x) => x.id)).toEqual([m.parts[0]!.prefix + "vm"]);
