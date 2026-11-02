@@ -33,7 +33,7 @@
         "run": "bun test tests/ci/workflow-hygiene.test.ts --reporter=junit --reporter-outfile=\"$GATE_JUNIT\"",
         "tests": [
           "pins every action to a full commit sha",
-          "keeps every token read-only except the train gate's publish job",
+          "keeps every token read-only",
           "names no secret",
           "installs Bun only by the checksummed download, at one version and digest",
           "fetches gstack at one pinned commit",

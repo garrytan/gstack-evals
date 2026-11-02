@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 // The keyless full gate (U19). It runs gate/manifest.json's cases, writes the train record gstack's merge train reads, and
-// routes and publishes train-gate.yml's runs. It imports only Node built-ins, so train-gate.yml can run the train base's copy
-// from a bare worktree while the cases run in the train head.
+// routes and publishes a train-gate workflow's runs. It imports only Node built-ins, so that workflow can run the train base's
+// copy from a bare worktree while the cases run in the train head. train-gate.yml is removed until a train dispatches the
+// base's workflow instead of the head's (GST-254); `bun run gate` runs the gate locally.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
