@@ -1,8 +1,8 @@
 ---
 id: 2026-11-02-geva-175-r2-full-review-results
 kind: finding
-title: "R2 gives no outcome: gstack's full /review procedure was dispatched in 10 of 19 headless PR-passes (the gate needs 18), and both arms caught 0 of 13 blocking blockers"
-summary: "R2 has no outcome: the procedure gate failed (10 of 19, 18 needed); 7 headless sessions ended before their readers returned. Blocking recall 0/13 vs 0/13. $85.39. R48: FIX-METHOD."
+title: "R2 gives no outcome: gstack's full /review procedure was dispatched in 10 of 19 PR-passes (the gate needs 18), and both arms caught 0 of 13 blocking blockers"
+summary: "R2 has no outcome: the procedure gate failed (10 of 19, 18 needed); our eval driver ended 7 sessions before their readers returned. Blocking recall 0/13 vs 0/13. $85.39. R48: FIX-METHOD."
 author: GEVA-175
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -40,24 +40,24 @@ Unpublished. Publication waits on the claim check by a cross-family reviewer and
 | Build | gstack-evals f255edf5e6e7f9ddcfc37b792058500edae3643d (#124's merge commit), clean, checked before each grid ([run-log.txt](run-log.txt)); judging and scoring at the rig pin 715f837 |
 | gstack under test | garrytan/gstack 77fe28c39796cf5573e3d0836b83b2ee436a8f12 (v1.92.39.0), interactive render |
 | Model under test | claude-opus-5-5 (Anthropic API), both arms |
-| Harness | review-units at the build, Claude Code CLI 2.1.314, a headless one-shot session per unit, claude-code-preset on both arms, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, 200 turns and $40 per session, --cap-stops |
+| Harness | review-units at the build, Claude Code CLI 2.1.314 driven through the Agent SDK's query() with streaming input, one non-interactive session per unit, claude-code-preset on both arms, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, 200 turns and $40 per session, --cap-stops |
 | Run | 2026-11-02 UTC. none-r2 03:20 to 04:18 (run review-units-20261102T032019Z-d912), gstack-full 05:13 to 06:35 (run review-units-20261102T045455Z-0e5e), judging from 06:42, one Capy machine at --parallel 2 |
 | Data | final judged arms, tree sha256 32d8b1eff4cd3d19a9f1775d701a70c88185365fa57d3d1488d2a48d2bc11b7f (gstack-full) and 17dc602a973143061691452f76b292ac9af803674fda078402dae86c3736ff86 (none-r2), not published (see What is held out) |
 | Spend | $85.39, settled through the ledger on four items |
 
 ## What we found
 
-R2 asked whether gstack's /review, told to run its full procedure, catches more known blocking bugs than plain Opus 5.5. It gives no answer. The frozen gate needed the specialists and the adversarial pass in 18 of 19 PR-passes. They were dispatched in 10, and in 3 of those 10 the session ended before the readers came back, so the full procedure produced a scored report in only 7 of 19.
+R2 asked whether gstack's /review, told to run its full procedure, catches more known blocking bugs than plain Opus 5.5. It gives no answer. The frozen gate needed the specialists and the adversarial pass in 18 of 19 PR-passes. They were dispatched in 10, and in 3 of those 10 our driver ended the session before the readers came back, so the full procedure produced a scored report in only 7 of 19.
 
 Both arms caught 0 of the 13 blocking blockers. The control rate is 0%, and the smallest difference R2 could detect is about 43 points, so the run sits on a floor in both arms. This is not evidence for or against the review skill.
 
 ## How it works
 
-This is an explanation, not a result. review-units runs Claude Code headless, one shot per unit: the session ends when the main agent ends its turn. Claude Code runs Agent-tool calls in the background by default (GST-734 dates this to CLI 2.1.198). So a /review session that sends its specialists out keeps going only while the main agent has something else to do.
+This is an explanation, not a result. review-units drives Claude Code through the Agent SDK's query() with streaming input, one non-interactive session per unit (src/adapters/claude-code/driver.ts at the build f255edf, unchanged on main). When a turn's `result` event arrives with subtype success, the driver asks the unit's simulated user for a reply. A non-interactive unit has none, so the driver closes the input and leaves its message loop (lines 475-493), and its cleanup aborts the CLI (line 519). Claude Code runs Agent-tool calls in the background by default (GST-734 dates this to CLI 2.1.198), so that first result event can arrive while the readers are still out.
 
-In 7 gstack-full sessions the main agent sent its readers out, said it would write the report when they returned, and ended its turn. Some first scheduled a ScheduleWakeup fallback or searched for a tool. The session ended there, the CLI reported success, and no findings block was written. The parser recorded a missing pass, and the frozen rule scores a missing pass as finding nothing.
+In 7 gstack-full sessions the main agent sent its readers out, said it would write the report when they returned, and ended its turn. Some first scheduled a ScheduleWakeup fallback or searched for a tool. Our driver ended the session at that turn's result event, with the readers still out, so no findings block was written. The parser recorded a missing pass, and the frozen rule scores a missing pass as finding nothing.
 
-The same limit took pstack out of stacks round 1's review lane and cost tstack 5 passes there ([#108](../2026-11-01-geva-89-stacks-round-1-review-results/README.md)). GST-734, the driver fix that keeps a headless session open until its background tasks finish, is still open, and R2's build does not have it. R1's arm C ran the same procedure inside Capy, where a parent waits for its subagents, and found 67.2% of a different suite's blocking blockers ([R1](../2026-11-01-geva-113-r1-blind-rejudge-results/README.md)).
+This was our harness, not gstack and not Claude Code. GStack Minder's probes on Claude Code 2.1.314 (GST-734) show that plain `claude -p` waits for background Agents and fires ScheduleWakeup. The same driver limit took pstack out of stacks round 1's review lane and cost tstack 5 passes there ([#108](../2026-11-01-geva-89-stacks-round-1-review-results/README.md)). GST-734, the driver fix that keeps a session open until its background tasks finish, is in progress, and R2's build does not have it. R1's arm C ran the same procedure inside Capy, where a parent waits for its subagents, and found 67.2% of a different suite's blocking blockers ([R1](../2026-11-01-geva-113-r1-blind-rejudge-results/README.md)).
 
 ## Setup
 
@@ -145,7 +145,7 @@ The 7 sessions that returned no report. The last column paraphrases the main age
 | gstack#3507 | 28 | 6 | adversarial-native, maintainability, performance, red-team, simplification, testing | ToolSearch | $4.08 | listed five confirmed issues; report when the red team finishes |
 | gstack#3516 | 14 | 2 | other | ToolSearch | $1.48 | both readers still running; report when they return |
 
-By last tool call: 1 Agent, 3 ScheduleWakeup, 3 ToolSearch. Every one ended with the CLI's success result. Two of them, gbrain#7789 and gstack#3507, had already confirmed defects that were never scored, because no findings block was written. The six metered ones cost $20.16, a third of gstack-full's metered spend.
+By last tool call: 1 Agent, 3 ScheduleWakeup, 3 ToolSearch. In every one the turn's result event had subtype success, and our driver ended the session there. Two of them, gbrain#7789 and gstack#3507, had already confirmed defects that were never scored, because no findings block was written. The six metered ones cost $20.16, a third of gstack-full's metered spend.
 
 ### Every unmatched blocking finding
 
@@ -223,17 +223,17 @@ Anthropic reports cache tokens beside input tokens, and the table prices them at
 
 The result is no outcome through a failed gate, so one Why-null cycle runs.
 
-- **Exposure.** The procedure ran in too few sessions to measure it. The gate saw the specialists and the adversarial pass dispatched in 10 of 19 PR-passes, and 18 were needed. In 7 sessions the main agent sent its readers out in the background, said it would wait, and ended its turn; headless mode ended the session there, and the CLI reported success. By last tool call that was 1 Agent, 3 ScheduleWakeup and 3 ToolSearch. 3 of those 7 had dispatched both kinds of reader, so the full procedure returned a scored report in 7 of 19 PR-passes. Two of the 7, gbrain#7789 and gstack#3507, had already confirmed defects that were never scored.
+- **Exposure.** The procedure ran in too few sessions to measure it. The gate saw the specialists and the adversarial pass dispatched in 10 of 19 PR-passes, and 18 were needed. In 7 sessions the main agent sent its readers out in the background, said it would wait, and ended its turn; our driver ended the session at that turn's result event (driver.ts lines 475-493 and 519), with the readers still out. By last tool call that was 1 Agent, 3 ScheduleWakeup and 3 ToolSearch. 3 of those 7 had dispatched both kinds of reader, so the full procedure returned a scored report in 7 of 19 PR-passes. Two of the 7, gbrain#7789 and gstack#3507, had already confirmed defects that were never scored.
 - **Task fit.** No arm has caught any of these 13 blockers as blocking: not none-r2 or gstack-full here, and not #108's none-opus or gstack-opus in two passes each. Each arm found a few at a lower severity (3, 4, 3.5 and 2 of 13).
 - **Power and saturation.** A floor in both arms. The control rate is 0/13, and the MDD is about 43 points (#112 section 6): the smallest KEEP is 4 gains with no losses. The scorer's size rule could not run, because the reference rate is 0.
 - **Frontier model without the skill.** Can't be judged from this run. Plain Opus 5.5 caught none of the 13 as blocking (4 at any severity), so it does not already do this job on these units. With the treatment's procedure returning a report in 7 of 19 PR-passes, the run can't say whether the skill closes that gap.
-- **Verdict: FIX-METHOD.** Not a CUT-CANDIDATE: the kill rule needs the procedure to run, and here it mostly didn't. Not a KEEP. This is not evidence for or against gstack's /review skill or its Review Army and adversarial pass. Two fixes come first. The harness must let a headless session collect its background readers (GST-734), or run /review in a mode that waits for them, and the gate should count a PR-pass only when its readers returned and a report was written. The suite needs blockers the no-gstack arm can reach, shown by an admission check before any rerun.
+- **Verdict: FIX-METHOD.** Not a CUT-CANDIDATE: the kill rule needs the procedure to run, and here it mostly didn't. Not a KEEP. This is not evidence for or against gstack's /review skill or its Review Army and adversarial pass. Two fixes come first. Our driver must keep a session open until its background readers return (GST-734, in progress), and the gate should count a PR-pass only when its readers returned and a report was written. The suite needs blockers the no-gstack arm can reach, shown by an admission check before any rerun.
 
 ## What this steers
 
-1. **GST-734 first.** Every arm that backgrounds Agent calls in a headless session can lose its report this way. R56-1 (/ship's review panel on these 19 units) and any stack with background readers hit the same limit until the driver waits.
+1. **GST-734 first.** Under our driver, every arm that backgrounds Agent calls can lose its report this way. R56-1 (/ship's review panel on these 19 units) and any stack with background readers hit the same limit until the driver waits.
 2. **A suite with headroom.** A rerun of R2 needs its own preregistration, and an admission check that plain Opus 5.5 catches some of the blockers.
-3. **Part evidence.** /review and its Review Army and adversarial pass stay untested: the procedure gate failed.
+3. **Part evidence.** /review and its Review Army and adversarial pass stay untested (unfair test: procedure gate failed (our driver ended sessions at the first result event, before background readers returned)).
 
 ## Limits and threats
 
@@ -270,7 +270,7 @@ Nothing is sealed. stacks-r1-out19 derives from the published stacks-r1 suite by
 
 ## X hook (draft)
 
-> We told Opus 5.5 to run gstack's full /review on 19 PRs, against plain Opus 5.5. No answer: in 7 headless sessions the review sent its readers out, ended its turn and never wrote a report. Both arms caught 0 of 13 blocking bugs. The harness gets fixed first.
+> We told Opus 5.5 to run gstack's full /review on 19 PRs, against plain Opus 5.5. No answer: in 7 sessions our eval driver closed the session while the review's readers were still out, so no report came back. That was our harness, not gstack or Claude Code. Both arms caught 0 of 13 blocking bugs. Our harness gets fixed first.
 
 ## Claim check
 
@@ -287,6 +287,7 @@ Nothing is sealed. stacks-r1-out19 derives from the published stacks-r1 suite by
 ## Changelog
 
 - 2026-11-02: first version (GEVA-175).
+- 2026-11-02, before merge (GEVA-178, from the Captain): the mechanism is corrected. Our evaluator's driver ended the 7 sessions at the first result event (src/adapters/claude-code/driver.ts lines 475-493 and 519); the first version blamed headless mode and said the CLI reported success. No number, outcome or verdict changed.
 
 ## Disclosures
 
