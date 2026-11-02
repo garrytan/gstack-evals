@@ -93,6 +93,7 @@ export async function main(argv: string[]): Promise<number> {
     return fail("E_USAGE", "unknown real score command " + JSON.stringify(cmd) + "; gstack-evals real score --help lists them");
   } catch (e) {
     if (e instanceof ScoreError || e instanceof TaskError) return fail(e.code, e.message);
+    if (String((e as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS")) return fail("E_USAGE", (e as Error).message);
     throw e;
   }
 }

@@ -240,7 +240,10 @@ describe("paired analysis", () => {
     expect(analyze([...build, ...replay], config({ n: 150, cost_accepted: true })).cut.track).toBe("open");
     const noReplay = analyze(build, config({ n: 150 }));
     expect([noReplay.cut.track, noReplay.cut.conditions.safety_usable, noReplay.cut.safety]).toEqual(["closed", false, expect.stringContaining("cannot decide")]);
-    expect(analyze(build, config({ n: 150, k1_secondary_kept: true })).cut.conditions.safety_usable).toBe(true);
+    const noK1 = analyze(build, config({ n: 150, k1_secondary_kept: true }));
+    expect([noK1.cut.track, noK1.cut.conditions.safety_usable, noK1.cut.conditions.safety_no_benefit, noK1.cut.safety]).toEqual(["closed", false, null, expect.stringContaining("cannot decide")]);
+    const k1 = panel({ tasks: 150, trials: 8, kind: "K1", control: (t) => ({ clean: p(t), defective: 1 - p(t) }), treatment: (t) => ({ clean: p(t), defective: 1 - p(t) }) });
+    expect(analyze(k1, config({ n: 150, k1_secondary_kept: true })).cut.conditions).toMatchObject({ safety_usable: true, safety_no_benefit: true });
     expect(analyze(build, config({ n: 150, look: "interim" })).verdict).toBe("continue");
   });
 
@@ -278,16 +281,32 @@ describe("paired analysis", () => {
     const data = panel({ tasks: 150, trials: 8, control: () => ({ clean: 0.4, defective: 0.6 }), treatment: () => ({ clean: 0.4, defective: 0.6, truncated: 0.4, truncatedClean: true }) });
     const a = analyze(data, config({ n: 150 }));
     const m = a.models[0].primary;
-    expect(m.truncation.tripped).toBe(true);
-    expect(m.truncation.treatment).toBeGreaterThan(0.3);
+    expect([m.truncation.interim.tripped, m.truncation.final!.tripped]).toEqual([true, true]);
+    expect(m.truncation.final!.treatment).toBeGreaterThan(0.3);
     expect((m.with_truncated.final ?? m.with_truncated.interim).verdict).toBe("treatment_better");
     expect((m.without_truncated.final ?? m.without_truncated.interim).verdict).not.toBe("treatment_better");
     expect(a.verdict).toBe("not_distinguished");
     expect(a.note).toContain("truncation guard");
     const light = panel({ tasks: 150, trials: 8, control: (t) => ({ clean: p(t), defective: 1 - p(t), truncated: 0.02 }), treatment: (t) => ({ clean: p(t), defective: 1 - p(t), truncated: 0.02 }) });
     const b = analyze(light, config({ n: 150 }));
-    expect(b.models[0].primary.truncation.tripped).toBe(false);
+    expect([b.models[0].primary.truncation.interim.tripped, b.models[0].primary.truncation.final?.tripped ?? false]).toEqual([false, false]);
     expect(b.verdict).toBe((b.models[0].primary.with_truncated.final ?? b.models[0].primary.with_truncated.interim).verdict);
+  });
+
+  test("the truncation guard is read at each look: an interim crossing it refuses does not stop the trial", () => {
+    const data = panel({ tasks: 150, trials: 8, control: () => ({ clean: 0.05, defective: 0.95 }), treatment: (t) => ({ clean: 0.05, defective: 0.95, truncated: t < 75 ? 0.08 : 0, truncatedClean: true }) });
+    const a = analyze(data, config({ n: 150 }));
+    const m = a.models[0].primary;
+    expect([m.truncation.interim.tripped, m.truncation.final!.tripped]).toEqual([true, false]);
+    expect([m.with_truncated.interim.verdict, m.without_truncated.interim.verdict]).toEqual(["treatment_better", "continue"]);
+    expect(m.deciding_look).toBe("final");
+    expect(m.with_truncated.final).not.toBeNull();
+    expect(m.without_truncated.final).not.toBeNull();
+    expect(m.task_clustered.final).not.toBeNull();
+    expect(a.verdict).toBe(m.with_truncated.final!.verdict);
+    expect(a.note).toContain("truncation guard at the interim look");
+    const early = analyze(data, config({ n: 150, look: "interim" }));
+    expect([early.verdict, early.models[0].primary.deciding_look, early.models[0].primary.truncation.final]).toEqual(["continue", "interim", null]);
   });
 
   test("a boundary crossing the sign-flip test cannot back is not a claim", () => {

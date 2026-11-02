@@ -6,8 +6,8 @@
 // verifier grades a K1 ship end to end.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { main as score } from "../../lanes/real-outcome/score/cli.ts";
 import { scoreTrial, treeGrade, type Grader } from "../../lanes/real-outcome/score/grade.ts";
 import { classifyTrial, ScoreError, type TrialEvidence } from "../../lanes/real-outcome/score/outcome.ts";
@@ -188,6 +188,26 @@ describe("gstack-evals real score", () => {
     }
     expect(await score(["nope"])).toBe(2);
     expect(await score(["analyze", "--config", join(tmp.dir, "missing.json")])).toBe(2);
+  });
+
+  test("trial resolves relative paths and refuses a run count or seed that is not a whole number", async () => {
+    const ev = trial({ task: "k1", edit: null });
+    const cwd = process.cwd();
+    const log = console.log;
+    console.log = () => {};
+    try {
+      process.chdir(tmp.dir);
+      expect(await score(["trial", relative(tmp.dir, ev), "--task", relative(tmp.dir, tasks.k1.dir), "--model", OPUS, "--work", relative(tmp.dir, join(ev, "..", "rel-w"))])).toBe(0);
+      expect(existsSync(join(ev, "trial-score.json"))).toBe(true);
+      rmSync(join(ev, "trial-score.json"));
+      for (const bad of [["--runs", "0"], ["--runs", "-2"], ["--runs", "x"], ["--runs", "1.5"], ["--seed", "x"], ["--seed", "-1"]]) {
+        expect(await score(["trial", ev, "--task", tasks.k1.dir, "--model", OPUS, "--work", join(ev, "..", "bad-w"), ...bad])).toBe(2);
+        expect(existsSync(join(ev, "trial-score.json"))).toBe(false);
+      }
+    } finally {
+      process.chdir(cwd);
+      console.log = log;
+    }
   });
 
   test.skipIf(!DOCKER)("the real verifier grades a shipped K1 head end to end (GSTACK_EVALS_DOCKER=1)", () => {

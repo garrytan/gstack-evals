@@ -157,7 +157,7 @@ function controlShare(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, mo
 }
 
 /** One look at the primary (shipped clean), for one reading (with or without truncated trials). */
-function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string, which: "interim" | "final", tasks: ReadonlySet<string>, truncated: boolean, cluster: Cluster, interimStopped: boolean): LookResult {
+function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string, which: "interim" | "final", tasks: ReadonlySet<string>, truncated: boolean, cluster: Cluster): LookResult {
   const boundary = which === "interim" ? cfg.boundaries.interim : cfg.boundaries.final;
   const reading = compare(outcomes, { metric: "shipped_clean", value: metricOf("shipped_clean"), model, tasks, cluster, truncated, boundary }, cfg);
   const share = controlShare(outcomes, cfg, model, tasks, truncated);
@@ -167,7 +167,7 @@ function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: str
   if (x.crossed && x.agrees) return { ...base, verdict: x.direction > 0 ? "treatment_better" : "treatment_worse", note: null };
   const disagree = x.crossed ? "z crossed the boundary but the sign-flip test does not agree" : null;
   if (which === "interim") return { ...base, verdict: "continue", note: disagree };
-  if (!x.crossed && !interimStopped && within(reading?.ci90 ?? null, cfg.margin)) return { ...base, verdict: "same_within_margin", note: null };
+  if (!x.crossed && within(reading?.ci90 ?? null, cfg.margin)) return { ...base, verdict: "same_within_margin", note: null };
   return { ...base, verdict: "not_distinguished", note: disagree };
 }
 
@@ -178,11 +178,19 @@ export interface Primary {
   without_truncated: { interim: LookResult; final: LookResult | null };
   /** Task-clustered sensitivity (plan open item 13: repository clustering decides). */
   task_clustered: { interim: LookResult; final: LookResult | null };
-  truncation: { control: number; treatment: number; guard: number; tripped: boolean };
+  /** Truncated shares at each look that ran; the guard is read at each look on that look's tasks. */
+  truncation: { guard: number; interim: TruncationShare; final: TruncationShare | null };
   /** The look that decided and its verdict, after the truncation guard. */
   deciding_look: "interim" | "final";
   verdict: Verdict;
   note: string | null;
+}
+
+export interface TruncationShare {
+  control: number;
+  treatment: number;
+  /** Either arm's share passed the guard. */
+  tripped: boolean;
 }
 
 function truncShare(outcomes: readonly TrialOutcome[], model: string, arm: string, tasks: ReadonlySet<string>): number {
@@ -193,25 +201,39 @@ function truncShare(outcomes: readonly TrialOutcome[], model: string, arm: strin
 function primary(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string): Primary {
   const half = new Set(cfg.task_order.slice(0, Math.floor(cfg.task_order.length / 2)));
   const all = new Set(cfg.task_order);
-  const run = (truncated: boolean, cluster: Cluster) => {
-    const interim = look(outcomes, cfg, model, "interim", half, truncated, cluster, false);
-    const stopped = interim.verdict !== "continue";
-    const final = cfg.look === "final" && !stopped ? look(outcomes, cfg, model, "final", all, truncated, cluster, false) : null;
-    return { interim, final };
+  const at = (which: "interim" | "final", tasks: ReadonlySet<string>) => {
+    const control = truncShare(outcomes, model, cfg.control, tasks), treatment = truncShare(outcomes, model, cfg.treatment, tasks);
+    return {
+      withT: look(outcomes, cfg, model, which, tasks, true, "repo"),
+      withoutT: look(outcomes, cfg, model, which, tasks, false, "repo"),
+      task: look(outcomes, cfg, model, which, tasks, true, "task"),
+      share: { control, treatment, tripped: control > cfg.truncation_guard || treatment > cfg.truncation_guard },
+    };
   };
-  const withT = run(true, "repo");
-  const withoutT = run(false, "repo");
-  const scope = cfg.look === "interim" ? half : all;
-  const truncation = { control: truncShare(outcomes, model, cfg.control, scope), treatment: truncShare(outcomes, model, cfg.treatment, scope), guard: cfg.truncation_guard, tripped: false };
-  truncation.tripped = truncation.control > cfg.truncation_guard || truncation.treatment > cfg.truncation_guard;
-  const decide = (r: { interim: LookResult; final: LookResult | null }) => r.final ?? r.interim;
-  const a = decide(withT), b = decide(withoutT);
-  let verdict = a.verdict, note = a.note;
-  if (truncation.tripped && (a.verdict !== b.verdict || a.look !== b.look)) {
-    verdict = a.look === "interim" && b.look === "interim" ? "continue" : "not_distinguished";
-    note = "truncation guard: more than " + 100 * cfg.truncation_guard + "% of an arm's trials were truncated and the readings with and without them disagree (" + a.look + " " + a.verdict + " against " + b.look + " " + b.verdict + ")";
+  const guardNote = (which: string, a: LookResult, b: LookResult) => "truncation guard at the " + which + " look: more than " + 100 * cfg.truncation_guard + "% of an arm's trials were truncated and the readings with and without them disagree (" + a.verdict + " against " + b.verdict + ")";
+  const interim = at("interim", half);
+  const blocked = interim.share.tripped && interim.withT.verdict !== interim.withoutT.verdict;
+  const stopped = interim.withT.verdict !== "continue" && !blocked;
+  const final = cfg.look === "final" && !stopped ? at("final", all) : null;
+  const notes = blocked ? [guardNote("interim", interim.withT, interim.withoutT)] : [];
+  let verdict: Verdict = stopped ? interim.withT.verdict : "continue";
+  if (!final && !blocked && interim.withT.note) notes.push(interim.withT.note);
+  if (final) {
+    const refused = final.share.tripped && final.withT.verdict !== final.withoutT.verdict;
+    verdict = refused ? "not_distinguished" : final.withT.verdict;
+    const note = refused ? guardNote("final", final.withT, final.withoutT) : final.withT.note;
+    if (note) notes.push(note);
   }
-  return { model, with_truncated: withT, without_truncated: withoutT, task_clustered: run(true, "task"), truncation, deciding_look: a.look, verdict, note };
+  return {
+    model,
+    with_truncated: { interim: interim.withT, final: final?.withT ?? null },
+    without_truncated: { interim: interim.withoutT, final: final?.withoutT ?? null },
+    task_clustered: { interim: interim.task, final: final?.task ?? null },
+    truncation: { guard: cfg.truncation_guard, interim: interim.share, final: final?.share ?? null },
+    deciding_look: final ? "final" : "interim",
+    verdict,
+    note: notes.length ? notes.join("; ") : null,
+  };
 }
 
 export interface FamilyRow {
@@ -353,11 +375,12 @@ function cutRule(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, p: Prim
   const caught = replay.find((r) => r.metric === "replay_caught")!;
   const escaped = secondaries.find((r) => r.metric === "escaped_defect")!;
   const replayUsable = (caught.reading?.tasks ?? 0) >= cfg.replay_min_tasks;
-  conditions.safety_usable = replayUsable || cfg.k1_secondary_kept;
+  const k1 = cfg.k1_secondary_kept ? escaped.reading : null;
+  conditions.safety_usable = replayUsable || k1 !== null;
   const replayBenefit = replayUsable && caught.reading !== null && ((caught.reading.delta > 0 && caught.p_holm < 0.05) || caught.reading.delta >= cfg.margin);
-  const k1Benefit = cfg.k1_secondary_kept && escaped.reading !== null && ((escaped.reading.delta < 0 && escaped.p_holm < 0.05) || -escaped.reading.delta >= cfg.margin);
+  const k1Benefit = k1 !== null && ((k1.delta < 0 && escaped.p_holm < 0.05) || -k1.delta >= cfg.margin);
   conditions.safety_no_benefit = conditions.safety_usable ? !replayBenefit && !k1Benefit : null;
-  const safety = !conditions.safety_usable ? "cannot decide: fewer than " + cfg.replay_min_tasks + " scored replay tasks and the K1 build-flow secondary was not kept" : replayBenefit || k1Benefit ? cfg.treatment + " shows an escaped-defect benefit" : "no escaped-defect benefit for " + cfg.treatment;
+  const safety = !conditions.safety_usable ? "cannot decide: fewer than " + cfg.replay_min_tasks + " scored replay tasks, and no K1 build-flow reading (the secondary was not kept, or no K1 trials paired)" : replayBenefit || k1Benefit ? cfg.treatment + " shows an escaped-defect benefit" : "no escaped-defect benefit for " + cfg.treatment;
   const readings: string[] = [];
   if (conditions.clean_same && defective.verdict === "treatment_lower") readings.push(cfg.treatment + " stops bad merges at the same clean-ship rate");
   if (conditions.clean_same && replayBenefit) readings.push(cfg.treatment + " stops escaped bugs the build flow did not surface");
@@ -430,6 +453,7 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
 }
 
 const pct = (x: number | null | undefined): string => (x === null || x === undefined ? "-" : (100 * x).toFixed(1));
+const share = (look: string, s: TruncationShare | null): string | null => (s ? look + " control " + pct(s.control) + "%, treatment " + pct(s.treatment) + "%" + (s.tripped ? ", tripped" : "") : null);
 const ivl = (c: [number, number] | null): string => (c ? "[" + pct(c[0]) + ", " + pct(c[1]) + "]" : "-");
 const row = (r: Reading | null, extra = ""): string =>
   r === null ? "| no pairs | | | | | |" : "| " + r.metric + " | " + r.tasks + " (" + r.clusters + " " + r.cluster + "s) | " + pct(r.control_mean) + " | " + pct(r.treatment_mean) + " | " + pct(r.delta) + " " + ivl(r.ci95) + " | " + (r.z === null ? "-" : r.z.toFixed(2)) + " | " + r.p_two_sided.toFixed(4) + extra + " |";
@@ -441,7 +465,7 @@ export function renderMarkdown(a: Analysis): string {
   const head = "| metric | tasks | control % | treatment % | difference, 95% interval | z | p |";
   for (const m of a.models) {
     const p = m.primary;
-    out.push("", "## " + m.model + (m.model === c.primary_model ? " (primary)" : " (descriptive)"), "", "Verdict " + p.verdict + " at the " + p.deciding_look + " look" + (p.note ? " (" + p.note + ")" : "") + ". Truncated: control " + pct(p.truncation.control) + "%, treatment " + pct(p.truncation.treatment) + "% (guard " + pct(p.truncation.guard) + "%" + (p.truncation.tripped ? ", tripped" : "") + ").", "", head, "|---|---|---|---|---|---|---|");
+    out.push("", "## " + m.model + (m.model === c.primary_model ? " (primary)" : " (descriptive)"), "", "Verdict " + p.verdict + " at the " + p.deciding_look + " look" + (p.note ? " (" + p.note + ")" : "") + ". Truncated (guard " + pct(p.truncation.guard) + "%): " + [share("interim", p.truncation.interim), share("final", p.truncation.final)].filter((x) => x !== null).join("; ") + ".", "", head, "|---|---|---|---|---|---|---|");
     for (const [label, r] of [["with truncated", p.with_truncated], ["without truncated", p.without_truncated], ["task-clustered", p.task_clustered]] as const) {
       const l = r.final ?? r.interim;
       out.push(row(l.reading, ", " + label + ", " + l.look + " " + l.verdict));

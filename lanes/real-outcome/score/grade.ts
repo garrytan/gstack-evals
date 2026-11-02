@@ -6,7 +6,7 @@
 // starting tree: the shipped head, a held draft, the turn-1 tree and the final tree. Keyless: git and Docker only.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ShipmentRecord } from "../sandbox/shipment.ts";
 import { buildImage } from "../task/check.ts";
 import { readTask, sha256, TaskError, type TaskJson } from "../task/format.ts";
@@ -103,7 +103,10 @@ function dockerGrader(o: GradeOptions, task: TaskJson): Grader {
   };
 }
 
-export function scoreTrial(o: GradeOptions): TrialEvidence {
+export function scoreTrial(opts: GradeOptions): TrialEvidence {
+  if (!Number.isSafeInteger(opts.runs) || opts.runs < 1) throw new ScoreError("E_REAL_SCORE_INPUT", "runs must be a positive whole number, not " + opts.runs);
+  if (!Number.isSafeInteger(opts.seed) || opts.seed < 0) throw new ScoreError("E_REAL_SCORE_INPUT", "seed must be a whole number of 0 or more, not " + opts.seed);
+  const o = { ...opts, evaluatorDir: resolve(opts.evaluatorDir), taskDir: resolve(opts.taskDir), work: resolve(opts.work) };
   const task = readTask(o.taskDir);
   const ev = (f: string) => join(o.evaluatorDir, f);
   const summary = readJson(ev("real-summary.json")) as { arm?: string; termination?: string | null; skill_calls?: { build?: string[] }; proxy?: { spent_micros?: number | null; refused?: number | null } } | null;
