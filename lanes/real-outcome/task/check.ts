@@ -27,7 +27,7 @@ export interface CheckResult {
   derived: { regression: string[]; quarantine: string[] };
   /** Whether task.json already holds the frozen regression list; verify refuses the task until it does. */
   regression_frozen: boolean;
-  trees: { label: string; prepare: TreeResult["prepare"]; runs: { seed: number; wall_ms: number; timed_out: boolean; out_full: boolean; exit: number; results: Record<string, TestResult> }[] }[];
+  trees: { label: string; prepare: TreeResult["prepare"]; runs: { seed: number; wall_ms: number; timed_out: boolean; out_full: boolean; killed: boolean; exit: number; results: Record<string, TestResult> }[] }[];
 }
 
 export interface CheckOptions {
@@ -161,8 +161,8 @@ export function checkTask(o: CheckOptions): CheckResult {
     return n > 0 && n < gold.runs.length;
   });
   const v1 = allPass(gold, required);
-  const stopped = gold.runs.filter((r) => r.timed_out || r.out_full).length;
-  add("V1 gold passes every hidden test", v1, (v1 ? required.length + " tests passed in " + gold.runs.length + " of " + gold.runs.length + " runs in random order" : required.length === 0 ? "no required tests" : "failing or flaky: " + describe(gold, required.filter((id) => !passesIn(gold, id))) + (stopped ? "; runs that timed out or filled /out: " + stopped : "")) + (flaky.length ? "; flaky: " + flaky.join(", ") : "") + (quarantine.length ? "; quarantined regression tests: " + quarantine.length : ""));
+  const stopped = gold.runs.filter((r) => r.timed_out || r.out_full || r.killed).length;
+  add("V1 gold passes every hidden test", v1, (v1 ? required.length + " tests passed in " + gold.runs.length + " of " + gold.runs.length + " runs in random order" : required.length === 0 ? "no required tests" : "failing or flaky: " + describe(gold, required.filter((id) => !passesIn(gold, id))) + (stopped ? "; runs that timed out, filled /out or were killed: " + stopped : "")) + (flaky.length ? "; flaky: " + flaky.join(", ") : "") + (quarantine.length ? "; quarantined regression tests: " + quarantine.length : ""));
 
   const firstStart = (id: string) => resultFor(start.runs[0].parsed, id);
   if (t.kind !== "K4") {
@@ -221,6 +221,6 @@ export function checkTask(o: CheckOptions): CheckResult {
     rules,
     derived: { regression, quarantine },
     regression_frozen: regressionFrozen(t),
-    trees: trees.map((tr) => ({ label: tr.label, prepare: tr.prepare, runs: tr.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, out_full: r.out_full, exit: r.exit, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) })),
+    trees: trees.map((tr) => ({ label: tr.label, prepare: tr.prepare, runs: tr.runs.map((r) => ({ seed: r.seed, wall_ms: r.wall_ms, timed_out: r.timed_out, out_full: r.out_full, killed: r.killed, exit: r.exit, results: Object.fromEntries(required.map((id) => [id, resultFor(r.parsed, id)])) })) })),
   };
 }

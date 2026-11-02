@@ -253,7 +253,7 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     expect(grade("after-fill", { ...intro, "calc/fmt.py": fixed }).pass).toBe(true);
   }, LONG);
 
-  test("a run whose output passes the docker client's buffer leaves no container or volume behind", () => {
+  test("a run whose output passes the docker client's buffer fails whatever its record says, and leaves no container or volume behind", () => {
     const list = (what: string[]) => docker([...what, "-q", "--filter", "name=real-"]).stdout.split("\n").filter(Boolean);
     const before = [...list(["ps", "-a"]), ...list(["volume", "ls"])];
     const left = () => ({ containers: list(["ps", "-a"]).filter((x) => !before.includes(x)), volumes: list(["volume", "ls"]).filter((x) => !before.includes(x)) });
@@ -261,6 +261,9 @@ describe.skipIf(!DOCKER)("real-outcome tasks in Docker (GSTACK_EVALS_DOCKER=1)",
     try {
       const g = grade("floods-stdout", { ...intro, "calc/fmt.py": flood + fixed });
       expect(g.tree.runs).toHaveLength(1);
+      expect(g.half.status).toBe("pass");
+      expect(g.tree.runs[0]).toMatchObject({ killed: true, timed_out: false, out_full: false });
+      expect(g.pass).toBe(false);
       expect(left()).toEqual({ containers: [], volumes: [] });
     } finally {
       const { containers, volumes } = left();

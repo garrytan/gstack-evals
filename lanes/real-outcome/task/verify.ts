@@ -33,6 +33,9 @@ export interface RunRecord {
   timed_out: boolean;
   /** /out had no free block or inode after the run: the tree overran the verifier's output space, so the run fails. */
   out_full: boolean;
+  /** The docker client died before the container (ENOBUFS once the run's output passed its buffer), so the verifier
+   * killed and removed the run before it ended: the run fails. */
+  killed: boolean;
   exit: number;
   parsed: Parsed;
 }
@@ -156,7 +159,7 @@ export function verifyTree(o: VerifyOptions): TreeResult {
         const record = read("record.jsonl") ?? "";
         const parsed = r.kind === "pytest" ? parsePytest(record) : parseGoTest(record, read("stderr.txt") ?? "", r.module);
         const exitLine = (read("exit") ?? "").split("\n").filter(Boolean)[0];
-        runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, out_full: blocks === 0 || inodes === 0, exit: r.kind === "pytest" ? res.status : Number(exitLine ?? res.status), parsed });
+        runs.push({ seed, wall_ms: res.wall_ms, timed_out: res.timed_out, out_full: blocks === 0 || inodes === 0, killed: res.error !== undefined && !res.timed_out, exit: r.kind === "pytest" ? res.status : Number(exitLine ?? res.status), parsed });
       } finally {
         docker(["rm", "-f", out]);
         docker(["volume", "rm", "-f", out]);
@@ -171,8 +174,8 @@ export function verifyTree(o: VerifyOptions): TreeResult {
 /** One id's result in each run. */
 export const idResults = (tree: TreeResult, id: string): TestResult[] => tree.runs.map((r) => resultFor(r.parsed, id));
 
-/** Whether every required id passed in every run. Nothing required passes nothing, and a run that timed out or left /out
- * full fails whatever its record says. */
+/** Whether every required id passed in every run. Nothing required passes nothing, and a run that timed out, left /out
+ * full or was killed past the output buffer fails whatever its record says. */
 export function allPass(tree: TreeResult, ids: string[]): boolean {
-  return tree.runs.length > 0 && ids.length > 0 && tree.runs.every((r) => !r.timed_out && !r.out_full) && ids.every((id) => idResults(tree, id).every((r) => r.status === "pass"));
+  return tree.runs.length > 0 && ids.length > 0 && tree.runs.every((r) => !r.timed_out && !r.out_full && !r.killed) && ids.every((id) => idResults(tree, id).every((r) => r.status === "pass"));
 }

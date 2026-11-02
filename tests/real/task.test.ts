@@ -298,7 +298,7 @@ describe("what a grader grades", () => {
   });
 
   const id = "tests/test_ops.py::test_add";
-  const run = (over: Partial<RunRecord> = {}): RunRecord => ({ seed: 1, wall_ms: 10, timed_out: false, out_full: false, exit: 0, parsed: { results: { [id]: { status: "pass" } }, seen: [id], notes: [] }, ...over });
+  const run = (over: Partial<RunRecord> = {}): RunRecord => ({ seed: 1, wall_ms: 10, timed_out: false, out_full: false, killed: false, exit: 0, parsed: { results: { [id]: { status: "pass" } }, seen: [id], notes: [] }, ...over });
   const tree = (runs: RunRecord[]): TreeResult => ({ label: "t", prepare: { patch: "applied", deleted: [], unlinked: [], skipped: [], restored: [] }, runs });
 
   test("nothing required passes nothing: allPass of an empty list is false, and readTask refuses a frozen task with no required test", () => {
@@ -316,9 +316,10 @@ describe("what a grader grades", () => {
     expect(() => readTask(dir)).toThrow("no required test");
   });
 
-  test("a run that timed out, or filled /out, passes nothing, whatever its record says", () => {
+  test("a run that timed out, filled /out, or was killed past the output buffer, passes nothing, whatever its record says", () => {
     expect(allPass(tree([run(), run({ timed_out: true })]), [id])).toBe(false);
     expect(allPass(tree([run({ out_full: true })]), [id])).toBe(false);
+    expect(allPass(tree([run(), run({ killed: true })]), [id])).toBe(false);
   });
 });
 

@@ -121,8 +121,8 @@ shell.
    errors are read from stderr (Go 1.23 and older) or from build-output events (Go 1.24 and newer).
 4. The host parses the record. Every required id must be present and passed; a missing id fails. A pytest id passes
    only when its setup, call and teardown phases all reported passed, so a run that stops inside a test fails it. A
-   run that timed out, or left `/out` full (no free block or inode), passes nothing whatever its record says, and a
-   tree passes nothing when no test is required.
+   run that timed out, was killed by the verifier after its output passed the buffer, or left `/out` full (no free
+   block or inode), passes nothing whatever its record says, and a tree passes nothing when no test is required.
 5. Each run's sh entrypoint prints `real-verifier: started` on stdout before it execs python (vrun.py) or `go test`,
    so the line comes out before any interpreter, start-up hook or code from the tree runs. A run that never printed it
    and did not time out has no verdict, and `verify` and `check` stop with E_REAL_TASK_DOCKER: Docker could not start
@@ -133,7 +133,8 @@ shell.
    without the line. Nothing the tree can touch turns a failure into no verdict.
 6. Every container the verifier and checker start is named. When the docker client dies before its container (a
    timeout, or ENOBUFS once a run's output passes the client's 256 MiB buffer), the container is killed and removed by
-   that name, so it can't outlive the run or hold its volumes.
+   that name, so it can't outlive the run or hold its volumes. A run killed this way after it printed the start line
+   fails (rule 4).
 
 Failure classes: `assert` (the test body ran and failed), `missing_name` (an attribute, import or symbol that
 doesn't exist) and `load` (collection, import, setup or build failed otherwise).
