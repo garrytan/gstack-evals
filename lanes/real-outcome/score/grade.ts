@@ -123,20 +123,24 @@ export function scoreTrial(opts: GradeOptions): TrialEvidence {
   const last = lines.findLastIndex((l) => l.trim() !== "");
   const messages: unknown[] = [];
   let torn_tail = false;
-  let tornAt: number | null = null;
+  let badLine: string | null = null;
   lines.forEach((l, i) => {
     if (!l.trim()) return;
+    let m: unknown;
     try {
-      messages.push(JSON.parse(l));
+      m = JSON.parse(l);
     } catch {
       if (i === last) torn_tail = true;
-      else tornAt ??= i + 1;
+      else badLine ??= "sdk-messages.jsonl line " + (i + 1) + " is not JSON";
+      return;
     }
+    if (m !== null && typeof m === "object" && !Array.isArray(m)) messages.push(m);
+    else badLine ??= "sdk-messages.jsonl line " + (i + 1) + " is not a JSON object";
   });
   const lanebSummary = readJson(ev("laneb-summary.json")) as { wall_s?: number; session?: { refused_budget?: number | null } | null } | null;
   let infra_reason: string | null = null;
   if (shipment && shipment.trial !== (summary as { trial?: string } | null)?.trial && summary && (summary as { trial?: string }).trial) infra_reason = "shipment.json and real-summary.json name different trials";
-  if (tornAt !== null) infra_reason ??= "sdk-messages.jsonl line " + tornAt + " is not JSON";
+  if (badLine !== null) infra_reason ??= badLine;
   const isInit = (m: unknown) => (m as { type?: string; subtype?: string }).type === "SystemMessage" && (m as { subtype?: string }).subtype === "init";
   if (armInfo.install === "none" && !messages.some(isInit)) infra_reason ??= "no session record to check exposure";
 

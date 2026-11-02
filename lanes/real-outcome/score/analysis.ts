@@ -404,7 +404,8 @@ export interface Analysis {
   trials: { total: number; analysed: number; ignored: Record<string, number> };
   /** Build trials whose task is not in task_order, left out of every build reading (a config error for the primary model). */
   outside_order: Record<string, number>;
-  /** Trials made infra because the verifier could not apply the shipped patch: a rig bug for B7 to chase, never a result. */
+  /** Patches the verifier could not apply: shipped heads (the trial is infra) plus turn-1 and final trees (scored null).
+   * A rig bug for B7 to chase, never a result. */
   patch_not_applied: number;
   verdict: Verdict;
   note: string | null;
@@ -416,6 +417,7 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
   const ignored: Record<string, number> = {};
   const outcomes: TrialOutcome[] = [];
   const seen = new Set<string>();
+  let unapplied = 0;
   for (const e of evidence) {
     const key = [e.task, e.model, e.arm, e.trial].join(" / ");
     if (seen.has(key)) throw new ScoreError("E_REAL_SCORE_INPUT", "trial " + key + " appears twice in the evidence; pass each trial-score.json once");
@@ -426,6 +428,7 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
       continue;
     }
     outcomes.push(classifyTrial(e, taxonomy));
+    unapplied += [e.trees.turn1, e.trees.final].filter((g) => g?.status === "graded" && !g.applied).length;
   }
   const order = new Set(cfg.task_order);
   const outside_order: Record<string, number> = {};
@@ -452,7 +455,7 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
   return {
     schema: ANALYSIS_SCHEMA, config: cfg, taxonomy: taxonomy.version,
     trials: { total: evidence.length, analysed: outcomes.length, ignored }, outside_order,
-    patch_not_applied: outcomes.filter((o) => o.status === "infra" && o.reason === NOT_APPLIED).length,
+    patch_not_applied: outcomes.filter((o) => o.status === "infra" && o.reason === NOT_APPLIED).length + unapplied,
     verdict: main.primary.verdict, note: main.primary.note,
     cut: cutRule(outcomes, cfg, main.primary, main.secondaries, main.replay),
     models,
@@ -468,7 +471,7 @@ const row = (r: Reading | null, extra = ""): string =>
 /** A plain report of the analysis, in percentage points. */
 export function renderMarkdown(a: Analysis): string {
   const c = a.config;
-  const out: string[] = ["# Real-outcome analysis (" + c.look + " look)", "", "Treatment " + c.treatment + " against control " + c.control + ". Primary model " + c.primary_model + "; models " + c.models.join(", ") + ". Taxonomy " + a.taxonomy + ".", "", "Verdict: **" + a.verdict + "**" + (a.note ? " (" + a.note + ")" : "") + ". Cut track: " + a.cut.track + ". Safety: " + a.cut.safety + "." + (a.cut.readings.length ? " " + a.cut.readings.join("; ") + "." : ""), "", "Shipped patches the verifier could not apply: " + a.patch_not_applied + (a.patch_not_applied ? " (a rig bug for B7, not a result)." : ".")];
+  const out: string[] = ["# Real-outcome analysis (" + c.look + " look)", "", "Treatment " + c.treatment + " against control " + c.control + ". Primary model " + c.primary_model + "; models " + c.models.join(", ") + ". Taxonomy " + a.taxonomy + ".", "", "Verdict: **" + a.verdict + "**" + (a.note ? " (" + a.note + ")" : "") + ". Cut track: " + a.cut.track + ". Safety: " + a.cut.safety + "." + (a.cut.readings.length ? " " + a.cut.readings.join("; ") + "." : ""), "", "Patches the verifier could not apply: " + a.patch_not_applied + (a.patch_not_applied ? " (a rig bug for B7, not a result)." : ".")];
   const head = "| metric | tasks | control % | treatment % | difference, 95% interval | z | p |";
   for (const m of a.models) {
     const p = m.primary;

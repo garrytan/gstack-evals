@@ -155,7 +155,7 @@ export function familyOf(kind: Kind, role: TrialEvidence["role"]): Family {
 }
 
 const bit = (b: boolean): Bit => (b ? 1 : 0);
-const clean = (g: TreeGrade | null): Bit | null => (g && g.status === "graded" ? bit(g.pass) : null);
+const clean = (g: TreeGrade | null): Bit | null => (g && g.status === "graded" && g.applied ? bit(g.pass) : null);
 
 /** The trial's termination reason as the taxonomy reads it: an error result after the proxy refused requests for the
  * session's cap is the cap (a limit), not a crash. */

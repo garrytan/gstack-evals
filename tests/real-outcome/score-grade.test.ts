@@ -185,6 +185,16 @@ describe("scoring one trial", () => {
     expect(classifyTrial(m).status).toBe("infra");
   });
 
+  test("a transcript line that parses but is not a JSON object makes the trial infra, naming the line", () => {
+    for (const [body, line] of [["null\n" + JSON.stringify(INIT) + "\n", 1], [JSON.stringify(INIT) + "\n[1]", 2]] as const) {
+      const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+      writeFileSync(join(ev, "sdk-messages.jsonl"), body);
+      const e = run(ev, "k1");
+      expect([e.torn_tail, e.infra_reason]).toEqual([false, "sdk-messages.jsonl line " + line + " is not a JSON object"]);
+      expect(classifyTrial(e).status).toBe("infra");
+    }
+  });
+
   test("a cap-killed session with a torn tail keeps its session_cap outcome; without laneb-summary.json it is infra", () => {
     const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
     const summary = JSON.parse(readFileSync(join(ev, "real-summary.json"), "utf8"));

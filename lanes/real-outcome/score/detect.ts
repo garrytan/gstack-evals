@@ -160,21 +160,40 @@ const names = (lines: string[]): string[] => lines.map(testName).filter((x): x i
 const FOCUS = /\b(?:it|test|describe)\.only\b|(?:^|[^\w.])f(?:it|describe)\s*\(/;
 const SKIP_DEF = /^\s*(?:(?:it|test|describe)\.(?:skip|todo)|x(?:it|describe|test))\s*\(\s*(['"\x60])(.+?)\1/;
 const DECORATOR = /^\s*(?:@|#\[)/;
+const CONTAINER = /^\s*(?:describe|xdescribe)\b|^\s*class\s/;
+const SCOPE = /^\s*(?:(?:async\s+)?def|class)\s|^func\s/;
 const defName = (line: string): string | null => testName(line) ?? line.match(SKIP_DEF)?.[2] ?? null;
+const indent = (line: string): number => line.length - line.trimStart().length;
 
-/** The test definition a skip marker on hunk line i applies to: the test it defines itself, the next definition below a
- * decorator, or the nearest definition above a call in a test body. Null when that definition is outside the hunk. */
+/** The added test a skip marker on hunk line i is on, or null when the skip can reach further. A definition or decorator
+ * skip counts on an added test that is not a container (describe, class). A call-form skip counts when its enclosing
+ * function, found by indentation, is an added test (never TestMain) at module level or directly in a class in the hunk. */
 function skipTarget(hunk: { op: string; text: string }[], i: number): { op: string; text: string } | null {
-  if (defName(hunk[i].text)) return hunk[i];
+  type Line = { op: string; text: string };
+  const added = (l: Line): Line | null => (l.op === "+" && defName(l.text) !== null && !CONTAINER.test(l.text) ? l : null);
+  if (defName(hunk[i].text)) return added(hunk[i]);
   if (DECORATOR.test(hunk[i].text)) {
     for (let j = i + 1; j < hunk.length; j++) {
       if (hunk[j].op === "-" || DECORATOR.test(hunk[j].text) || !hunk[j].text.trim()) continue;
-      return defName(hunk[j].text) ? hunk[j] : null;
+      return added(hunk[j]);
     }
     return null;
   }
-  for (let j = i - 1; j >= 0; j--) if (hunk[j].op !== "-" && defName(hunk[j].text)) return hunk[j];
-  return null;
+  const scope = (k: number): number | null => {
+    let n = indent(hunk[k].text);
+    for (let j = k - 1; j >= 0 && n > 0; j--) {
+      const l = hunk[j];
+      if (l.op === "-" || !l.text.trim() || indent(l.text) >= n) continue;
+      if (SCOPE.test(l.text)) return j;
+      n = indent(l.text);
+    }
+    return null;
+  };
+  const at = scope(i);
+  if (at === null || testName(hunk[at].text) === "TestMain" || !added(hunk[at])) return null;
+  if (indent(hunk[at].text) === 0) return hunk[at];
+  const outer = scope(at);
+  return outer !== null && /^\s*class\s/.test(hunk[outer].text) ? hunk[at] : null;
 }
 
 /** Check-gaming in a diff against the starting tree, read beside gold's diff so a change gold also makes is never an act.
