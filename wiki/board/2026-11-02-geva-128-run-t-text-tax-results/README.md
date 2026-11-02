@@ -16,8 +16,8 @@ attachments:
   - 883616828e0a8b118e8472283679f4b47e8dfcb5f61999055e99a9b98ab697f0  analysis-configs.txt
   - 15dec24ebbf35e74c804eda668e738bca5945b798ae214ecf952295b980842a1  analysis-primary.txt
   - e14cf20ba5a3b5216aa4119217da5fb758827f476d4c33c3516010cc117e2ad0  analysis-recovered.txt
+  - 114743388c54b62aa5713a7e462d168fe0fb2647d3fc7722f0420849c566f64a  chart.png
   - 6bff6dce00fd20ee2ab2df93ea10f242d96f11fd2d6a0c82c388e030e0db9429  chart.py.txt
-  - 3afbe0dec75e01e7b6978dfabbef53debfbd6f5fa769125d331876c9437c1944  chart.svg
   - b2934c751e1c2f44fc96de80705d37a2212499cb17bba3dceadfc2f886b7fe00  cost-output.txt
   - 52e136ed423a54e1d932590bbe3c97a5f21d3b91c2c07712063adb37230a944c  phase-scripts.txt
   - 5e6f5b42f53ba80c42f4f1c266cec3f4c2554c7aad2aeb8e783a46b06c4c6e7b  recovered-sessions.jsonl
@@ -62,9 +62,9 @@ An explanation, not a result. A told skill puts its whole body into every later 
 
 ## Result
 
-![Run T: pass rate with 95% intervals by arm, and metered dollars per trial](chart.svg)
+![Run T: pass rate with 95% intervals by arm, and metered dollars per trial](chart.png)
 
-chart.py.txt draws the chart from analysis-primary.txt: `uv run --no-project --with matplotlib==3.9.2 python chart.py.txt analysis-primary.txt chart.svg` gives chart.svg byte for byte.
+chart.py.txt draws the chart from analysis-primary.txt: `uv run --no-project --with matplotlib==3.9.2 python chart.py.txt analysis-primary.txt chart.png` gives chart.png byte for byte.
 
 The primary readings, verbatim from the tag's `analysis/discovery-tax.ts` (analysis-primary.txt):
 
