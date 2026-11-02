@@ -1,0 +1,561 @@
+# R2 phase scripts: every script GEVA-151 ran, in run order
+# Copied from the Captain drive handoffs/GEVA-151/run/scripts. Each header gives the original file's sha256. Machine paths are replaced as in run-log.txt; nothing else changed.
+
+### scripts/setup.sh (sha256 a48c0741571f4c66eccc99cbd140eed2e728ea0660916db33a9e7b0e1be2c31c)
+#!/usr/bin/env bash
+set -u
+B=$HOME/.capy/work/r2
+. ~/.gstack/install-verdicts/16f8dc7e92d740c441fcb4b01e7873edf56dbb026b34ad45b69f9f269205ba42/addc956f19ee349a149767767cc0497a17d7a7483ce799b4dfb32c244647df08.env
+cd /workspace/gstack-evals
+git fetch --quiet origin || true
+git cat-file -e f255edf5e6e7f9ddcfc37b792058500edae3643d^{commit} && echo "have build commit"
+git cat-file -e 715f837c353700344785e2ae2c721e8195d616cd^{commit} && echo "have rig commit"
+[ -d $B/build ] || git worktree add --detach $B/build f255edf5e6e7f9ddcfc37b792058500edae3643d
+[ -d $B/rig ] || git worktree add --detach $B/rig 715f837c353700344785e2ae2c721e8195d616cd
+(cd $B/build && bun install --frozen-lockfile) > $B/build-install.log 2>&1; echo "build install exit $?"
+(cd $B/rig && bun install --frozen-lockfile) > $B/rig-install.log 2>&1; echo "rig install exit $?"
+if [ ! -d $B/rev ]; then mkdir -p $B/rev && (cd ~/.capy/drive/captain-gstack-evals/handoffs/GEVA-89/review-data && sha256sum -c SHA256SUMS) && tar xzf ~/.capy/drive/captain-gstack-evals/handoffs/GEVA-89/review-data/review-data.tar.gz -C $B/rev; echo "unpack exit $?"; fi
+[ -e $HOME/.capy/work/geva89 ] || ln -s $B/rev $HOME/.capy/work/geva89
+[ -d $B/gstack ] || git clone --quiet --filter=blob:none https://git.capy.ai/garrytan/gstack.git $B/gstack; echo "gstack clone exit $?"
+[ -d $B/gbrain ] || git clone --quiet --filter=blob:none https://git.capy.ai/garrytan/gbrain.git $B/gbrain; echo "gbrain clone exit $?"
+echo SETUP_DONE
+
+### scripts/phase-a.sh (sha256 f0a24ff03412d18e3ead5ca0906b85f5e54eb7d4500ca2da4aa57be8377c74a1)
+#!/usr/bin/env bash
+# R2 real run, phase A (keyless): pins, script digests, the 19-unit suite, and both review-units dry runs.
+set -u
+B=$HOME/.capy/work/r2
+. ~/.gstack/install-verdicts/16f8dc7e92d740c441fcb4b01e7873edf56dbb026b34ad45b69f9f269205ba42/addc956f19ee349a149767767cc0497a17d7a7483ce799b4dfb32c244647df08.env
+export R=$B/rig
+BLD=$B/build
+W=$B/run
+M=/workspace/gstack-evals
+P=$M/wiki/plans/2026-11-02-geva-122-r2-amendment
+PD=$M/wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg
+P76=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+REV=$B/rev/judge
+G="$R/bin/gstack-evals noloss"
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+[ -e "$W" ] && { echo "E_RUN $W exists"; exit 1; }
+mkdir -p "$W/log" "$W/bin" "$W/r2"
+for f in r2-source.py r2-caps.py blind.py r1-exposure.py; do cp "$P/$f.txt" "$W/bin/$f"; done
+cp "$P/told-gstack-full.txt" "$W/bin/"
+cp "$PD/r2-decide.py.txt" "$W/bin/r2-decide.py"; cp "$PD/comparisons.r2.json" "$W/bin/"
+HIDE="s#$W#\$W#g; s#$BLD#\$BLD#g; s#$R#\$R#g; s#$B/gstack#\$GSRC#g; s#$B/gbrain#\$GBSRC#g; s#$B#\$B#g; s#$M#\$M#g"
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/a$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/a$n.txt" | head -${SHOW:-30} | sed "$HIDE"; echo "exit $c (log/a$n.txt)"; }
+echo "## Pins"
+step . git -C "$M" log -1 --format='main %H %s'
+step . git -C "$R" log -1 --format='rig %H %s'
+step . sh -c "git -C $R status --porcelain | wc -l"
+step . git -C "$BLD" rev-parse HEAD
+step . sh -c "git -C $BLD status --porcelain | wc -l"
+step . sh -c "cd $P && sha256sum blind.py.txt r1-exposure.py.txt r2-caps.py.txt r2-source.py.txt told-gstack-full.txt"
+step . sh -c "cd $PD && sha256sum r2-decide.py.txt comparisons.r2.json"
+step . sh -c "printf %s \"\$(cat $P/told-gstack-full.txt)\" | sha256sum"
+step . sh -c "cd $BLD && sha256sum src/trial/review/reader-maps/gstack-77fe28c39796.json src/trial/review/capped.ts src/trial/review/readers.ts src/trial/review/findings.ts"
+step . sh -c "cd $P76 && sha256sum severity-map.json stacks-r1.json judge-brief.md"
+step . git -C $B/gstack cat-file -t 77fe28c39796cf5573e3d0836b83b2ee436a8f12
+echo; echo "## The 19-unit suite (prereg section 3.1)"
+(echo unit; jq -r '.units[].id' "$R/lanes/review-noloss/suites/gsta167-14pr.json") > "$W/r2/cohort14.tsv"
+step . sha256sum "$W/r2/cohort14.tsv"
+step '^(derive|suite|E_)|units|blocking' $G derive --suite "$P76/stacks-r1.json" --comparisons "$REV/comparisons.stacks-r1.nopstack.json" --id stacks-r1-out19 --out "$W/r2/suite" --root "$REV/final/arms" --drop-file "$W/r2/cohort14.tsv"
+S2=$W/r2/suite/stacks-r1-out19.json
+step . sha256sum "$S2"
+step . sh -c "jq -r '.id + \": \" + (.units | length | tostring) + \" units, \" + ([.units[].blockers[] | select(.counts == \"blocking\")] | length | tostring) + \" blocking blockers\"' $S2"
+step . sh -c "cd $B/gstack && for u in \$(jq -r '.units[] | select(.repo == \"garrytan/gstack\") | .head' $S2); do git cat-file -t \$u; done | sort | uniq -c"
+step . sh -c "cd $B/gbrain && for u in \$(jq -r '.units[] | select(.repo == \"garrytan/gbrain\") | .head' $S2); do git cat-file -t \$u; done | sort | uniq -c"
+echo "$S2" > "$W/s2-path.txt"
+
+### scripts/phase-b-dry.sh (sha256 d67e83579ebe61c5ea2ca4c5a785f7309471622b1452b00ebdd9bfba30999758)
+#!/usr/bin/env bash
+# R2 real run, phase B (keyless): both review-units commands with --dry-run, from the build pin.
+set -u
+B=$HOME/.capy/work/r2
+. ~/.gstack/install-verdicts/16f8dc7e92d740c441fcb4b01e7873edf56dbb026b34ad45b69f9f269205ba42/addc956f19ee349a149767767cc0497a17d7a7483ce799b4dfb32c244647df08.env
+export R=$B/rig
+BLD=$B/build
+W=$B/run
+M=/workspace/gstack-evals
+P76=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+REC=~/.capy/drive/captain-gstack-evals/ledger/r48-follow-ups
+LED=$W/ledger.sqlite
+S2=$(cat $W/s2-path.txt)
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+HIDE="s#$W#\$W#g; s#$BLD#\$BLD#g; s#$R#\$R#g; s#$B/gstack#\$GSRC#g; s#$B/gbrain#\$GBSRC#g; s#$B#\$B#g; s#$M#\$M#g"
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/b$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/b$n.txt" | head -${SHOW:-40} | sed "$HIDE"; echo "exit $c (log/b$n.txt)"; }
+FLAGS="--severity-map $P76/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$B/gstack --source garrytan/gbrain=$B/gbrain --ledger $LED --record $REC"
+cd $BLD
+step . git -C "$BLD" rev-parse HEAD
+step . sh -c "git -C $BLD status --porcelain | wc -l"
+step . bin/gstack-evals review-units --suite $S2 --units all --arms none --models claude-opus-5-5 --passes 1 --system-prompt none=claude-code-preset --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2a-grid --spend-cap 25 --out $W/r2-none $FLAGS --dry-run
+step . git -C "$BLD" rev-parse HEAD
+step . sh -c "git -C $BLD status --porcelain | wc -l"
+step . bin/gstack-evals review-units --suite $S2 --units all --arms gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 --models claude-opus-5-5 --passes 1 --system-prompt gstack-full=claude-code-preset --told-prefix gstack-full=$W/bin/told-gstack-full.txt --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2b-grid --spend-cap 325 --out $W/r2-full $FLAGS --dry-run
+
+### scripts/phase-c.sh (sha256 3738543adb1d83c43066a32a40ff4d315e05303e1fafe99332d1a34b6598f721)
+#!/usr/bin/env bash
+# R2 real run, phase C (keyless): the four ledger items at their caps (A1 for the grids), then both dry runs with the real caps and --timeout 10800 (B1).
+. $HOME/.capy/work/r2/common.sh
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/c$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/c$n.txt" | head -${SHOW:-12} | sed "$HIDE"; echo "exit $c (log/c$n.txt)"; }
+WG="R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01, r2a-grid and r2b-grid raised to \$760 each on 2026-11-02 (approvals/2026-11-01-r48-follow-ups-caps.md, section 'R2 grid caps raised'); this item as section 5 of the merged prereg (#112, main f0b81c0), with the cap deviation listed in the results post."
+SG="Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42), section 'R2 grid caps raised' (GSTA-2, 2026-11-02); item per #112 section 5; init by GEVA-151 (GST-909)"
+WJ="R48 follow-ups caps approved by GSTA-2 under R42, 2026-11-01 (approvals/2026-11-01-r48-follow-ups-caps.md); this item as section 5 of the merged prereg (#112, main f0b81c0)."
+SJ="Captain drive approvals/2026-11-01-r48-follow-ups-caps.md (org rule R42); item and cap per #112 section 5; init by GEVA-151 (GST-909)"
+BR=geva-151-r2-results
+step . $L init --item r2a-grid --cap 760 --admission warn --words "$WG" --by GSTA-2 --source "$SG" --branch $BR --ledger "$LED" --ledger-record "$REC"
+step . $L init --item r2b-grid --cap 760 --admission warn --words "$WG" --by GSTA-2 --source "$SG" --branch $BR --ledger "$LED" --ledger-record "$REC"
+step . $L init --item r2-judge-match --cap 25 --admission warn --words "$WJ" --by GSTA-2 --source "$SJ" --branch $BR --ledger "$LED" --ledger-record "$REC"
+step . $L init --item r2-judge-adjudicate --cap 25 --admission warn --words "$WJ" --by GSTA-2 --source "$SJ" --branch $BR --ledger "$LED" --ledger-record "$REC"
+SHOW=30 step . $L status --ledger "$LED" --ledger-record "$REC"
+cd $BLD
+step . git -C "$BLD" rev-parse HEAD
+step . sh -c "git -C $BLD status --porcelain | wc -l"
+SHOW=8 step '^(review-units|arms|models|max turns|cap stops|reader map|worst case|out|E_)' bin/gstack-evals review-units $NONE --dry-run
+step . git -C "$BLD" rev-parse HEAD
+step . sh -c "git -C $BLD status --porcelain | wc -l"
+SHOW=8 step '^(review-units|arms|models|max turns|cap stops|reader map|worst case|out|E_)' bin/gstack-evals review-units $FULL --dry-run
+grep -c timeout $W/log/c8.txt $W/log/c11.txt
+
+### scripts/phase-chain.sh (sha256 65688973122b28328e9171971f679fca15e8bfb7bfd4ef25c2ae4048ab828b1b)
+#!/usr/bin/env bash
+# R2 chain: after none-r2's resume ends with its arm complete, free none-r2's unit trees (resume-only data, 20G) and
+# start gstack-full (phase-e-full.sh). Anything else stops here for a look.
+W=$HOME/.capy/work/r2/run
+while [ ! -f $W/d2-none.exit ]; do sleep 60; done
+c=$(cat $W/d2-none.exit); st=$(jq -r .status $W/r2-none/arms/none-opus/arm.json 2>/dev/null)
+echo "none-r2 resume exit $c, arm status $st" > $W/log/chain.txt
+if [ "$st" = complete ]; then du -sh $W/r2-none/units >> $W/log/chain.txt; rm -rf $W/r2-none/units; df -h / | tail -1 >> $W/log/chain.txt; bash $HOME/.capy/work/r2/phase-e-full.sh; else echo "E_CHAIN none-r2 arm not complete" >> $W/log/chain.txt; echo chain > $W/e-full.exit; fi
+
+### scripts/phase-d-none.sh (sha256 e23564c1a27064e266d76b86142879442559f9820ac88581f08fae98284ee609)
+#!/usr/bin/env bash
+# R2 real run, d-none: the none-r2 session grid on its own item, from the build pin, detached. Keys come from this machine's run environment.
+. $HOME/.capy/work/r2/common.sh
+cd $BLD
+{
+echo "\$ git -C \$BLD rev-parse HEAD"; git -C "$BLD" rev-parse HEAD
+echo "\$ git -C \$BLD status --porcelain | wc -l"; git -C "$BLD" status --porcelain | wc -l
+date -u +"start %FT%TZ"
+echo "\$ bin/gstack-evals review-units $NONE" | sed "$HIDE"
+} > $W/log/d-none-head.txt 2>&1
+[ "$(git -C "$BLD" rev-parse HEAD)" = f255edf5e6e7f9ddcfc37b792058500edae3643d ] && [ -z "$(git -C "$BLD" status --porcelain)" ] || { echo "E_PIN build checkout is not clean f255edf" >> $W/log/d-none-head.txt; exit 1; }
+bin/gstack-evals review-units $NONE > $W/log/d-none-run.txt 2>&1
+c=$?
+{ date -u +"end %FT%TZ"; echo "exit $c"; } >> $W/log/d-none-head.txt
+echo $c > $W/d-none.exit
+
+### scripts/phase-d2-none-resume.sh (sha256 3c08c25f1c9dbe2db7ebb5d17f1566c79aa73f4493ab6d5a8d69e978064f9189)
+#!/usr/bin/env bash
+# R2 real run, d-none resume: the none-r2 run review-units-20261102T032019Z-d912 stopped when the disk filled (ENOSPC in
+# the grade copy of its 9th session; its lease settled at $14.40). Resume the same run on the same item: same flags,
+# plus --resume, --parallel 2 (disk), and --spend-cap at what the item has left, since a lease can't ask for more.
+. $HOME/.capy/work/r2/common.sh
+cd $BLD
+NONE_R="${NONE/--spend-cap 760/--spend-cap 745.60} --resume --parallel 2"
+{
+echo "\$ git -C \$BLD rev-parse HEAD"; git -C "$BLD" rev-parse HEAD
+echo "\$ git -C \$BLD status --porcelain | wc -l"; git -C "$BLD" status --porcelain | wc -l
+df -h / | tail -1
+date -u +"start %FT%TZ"
+echo "\$ bin/gstack-evals review-units $NONE_R" | sed "$HIDE"
+} > $W/log/d2-none-head.txt 2>&1
+[ "$(git -C "$BLD" rev-parse HEAD)" = f255edf5e6e7f9ddcfc37b792058500edae3643d ] && [ -z "$(git -C "$BLD" status --porcelain)" ] || { echo "E_PIN build checkout is not clean f255edf" >> $W/log/d2-none-head.txt; exit 1; }
+bin/gstack-evals review-units $NONE_R > $W/log/d2-none-run.txt 2>&1
+c=$?
+{ date -u +"end %FT%TZ"; echo "exit $c"; df -h / | tail -1; } >> $W/log/d2-none-head.txt
+echo $c > $W/d2-none.exit
+
+### scripts/phase-e-full.sh (sha256 bc97516199e64aafd6c59fef6fbdc0f62796925f74e7fc41727fc5ac6c391b02)
+#!/usr/bin/env bash
+# R2 real run, e-full: the gstack-full session grid on its own item, from the build pin, detached, at --parallel 2 (disk: 65G holds about 2 gstack sessions in flight beside the units). Keys come from this machine's run environment.
+. $HOME/.capy/work/r2/common.sh
+cd $BLD
+{
+echo "\$ git -C \$BLD rev-parse HEAD"; git -C "$BLD" rev-parse HEAD
+echo "\$ git -C \$BLD status --porcelain | wc -l"; git -C "$BLD" status --porcelain | wc -l
+date -u +"start %FT%TZ"
+echo "\$ bin/gstack-evals review-units $FULL --parallel 2" | sed "$HIDE"
+} > $W/log/e-full-head.txt 2>&1
+[ "$(git -C "$BLD" rev-parse HEAD)" = f255edf5e6e7f9ddcfc37b792058500edae3643d ] && [ -z "$(git -C "$BLD" status --porcelain)" ] || { echo "E_PIN build checkout is not clean f255edf" >> $W/log/e-full-head.txt; exit 1; }
+bin/gstack-evals review-units $FULL --parallel 2 > $W/log/e-full-run.txt 2>&1
+c=$?
+{ date -u +"end %FT%TZ"; echo "exit $c"; } >> $W/log/e-full-head.txt
+echo $c > $W/e-full.exit
+
+### scripts/phase-chain2.sh (sha256 6aa06ca569aa396a162d20c59a22f456e1dbccad0377b148fd6957b23ef9dacf)
+#!/usr/bin/env bash
+# R2 chain 2: after gstack-full ends with both arms complete, run phase F1 (keyless). The paid phase F2 starts by hand.
+W=$HOME/.capy/work/r2/run
+while [ ! -f $W/e2-full.exit ]; do sleep 60; done
+a=$(jq -r .status $W/r2-full/arms/gstack-full-opus/arm.json 2>/dev/null); b=$(jq -r .status $W/r2-none/arms/none-opus/arm.json 2>/dev/null)
+echo "gstack-full exit $(cat $W/e2-full.exit), arm status $a; none-r2 arm status $b" > $W/log/chain2.txt
+if [ "$a" = complete ] && [ "$b" = complete ]; then bash $HOME/.capy/work/r2/phase-f1.sh > $W/log/f1-out.txt 2>&1; else echo "E_CHAIN an arm is not complete" >> $W/log/chain2.txt; fi
+echo done > $W/chain2.done
+
+### scripts/phase-e2-full.sh (sha256 aeb9f14af163552948f37719f747a73f44ef23350e9035b83ceef63de2f91e61)
+#!/usr/bin/env bash
+# R2 real run, e2-full: gstack-full, relaunched with --resume after attempt 1 filled the disk in unit preparation before any lease; --resume reuses its 14 prepared units. --parallel 2 for disk.
+. $HOME/.capy/work/r2/common.sh
+cd $BLD
+{
+echo "\$ git -C \$BLD rev-parse HEAD"; git -C "$BLD" rev-parse HEAD
+echo "\$ git -C \$BLD status --porcelain | wc -l"; git -C "$BLD" status --porcelain | wc -l
+date -u +"start %FT%TZ"
+echo "\$ bin/gstack-evals review-units $FULL --parallel 2 --resume" | sed "$HIDE"
+} > $W/log/e2-full-head.txt 2>&1
+[ "$(git -C "$BLD" rev-parse HEAD)" = f255edf5e6e7f9ddcfc37b792058500edae3643d ] && [ -z "$(git -C "$BLD" status --porcelain)" ] || { echo "E_PIN build checkout is not clean f255edf" >> $W/log/e2-full-head.txt; exit 1; }
+bin/gstack-evals review-units $FULL --parallel 2 --resume > $W/log/e2-full-run.txt 2>&1
+c=$?
+{ date -u +"end %FT%TZ"; echo "exit $c"; } >> $W/log/e2-full-head.txt
+echo $c > $W/e2-full.exit
+
+### scripts/fix-stack-source.sh (sha256 6bce540c936ef0c564ff4c02628d4caf5429158c073e7cb9571f7af3aae98410)
+set -e
+B=$HOME/.capy/work/r2; W=$B/run; S=$HOME/.capy/work/gstack-evals/sources
+{
+date -u +"%FT%TZ"
+echo "gstack-full attempt 2 (phase-e2-full.sh) exited 2 at 04:54:56Z with E_STACK_SOURCE: garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 is in no local repository (searched: ~/.claude/skills/gstack). No lease opened (r2b-grid leases=0, \$0)."
+echo "Cause: the rig takes a stack tree only from a local repository (src/arms/install.ts:125 stackSources: inferred checkout, gstack checkouts, <state>/sources/*) and never fetches. The machine's gstack checkout is a fresh clone at a563f47 without 77fe28c."
+echo "Fix: local clone of the run's full gstack clone into <state>/sources/gstack, as the E_STACK_SOURCE hint says. No rig code changed."
+echo "\$ git clone --no-checkout --local \$B/gstack \$S/gstack"
+mkdir -p $S; git clone -q --no-checkout --local $B/gstack $S/gstack
+echo "\$ git -C \$S/gstack cat-file -t 77fe28c39796cf5573e3d0836b83b2ee436a8f12"
+git -C $S/gstack cat-file -t 77fe28c39796cf5573e3d0836b83b2ee436a8f12
+echo "\$ git -C \$S/gstack rev-parse 77fe28c39796cf5573e3d0836b83b2ee436a8f12^{tree}"
+git -C $S/gstack rev-parse '77fe28c39796cf5573e3d0836b83b2ee436a8f12^{tree}'
+} > $W/log/stack-source-fix.txt 2>&1
+mkdir -p $W/log/attempt4-full-stack-source
+mv $W/log/e2-full-head.txt $W/log/e2-full-run.txt $W/log/chain2.txt $W/log/attempt4-full-stack-source/
+mv $W/e2-full.exit $W/log/attempt4-full-stack-source/
+rm -f $W/chain2.done
+sed -e 's/e2-full/e3-full/g' -e 's/^# R2 real run, e2-full.*/# R2 real run, e3-full: gstack-full, relaunched with --resume after attempt 2 stopped with E_STACK_SOURCE before any lease (fix in log\/stack-source-fix.txt). --parallel 2 for disk./' $B/phase-e2-full.sh > $B/phase-e3-full.sh
+sed -e 's/e2-full/e3-full/g' -e 's/chain2/chain3/g' -e 's/R2 chain 2/R2 chain 3/' $B/phase-chain2.sh > $B/phase-chain3.sh
+bash -n $B/phase-e3-full.sh && bash -n $B/phase-chain3.sh && echo SYNTAX_OK
+cat $W/log/stack-source-fix.txt | tail -4
+grep -c e3-full $B/phase-e3-full.sh $B/phase-chain3.sh
+docker system df 2>/dev/null | head -5; df -h / | tail -1; du -sh $W/r2-full/units 2>/dev/null; ls $W/r2-full/units | wc -l
+### scripts/phase-chain3.sh (sha256 30d6e9a4339a6e476a64117d4ed799f7293bfc3c044541935c813e7df0bee940)
+#!/usr/bin/env bash
+# R2 chain 3: after gstack-full ends with both arms complete, run phase F1 (keyless). The paid phase F2 starts by hand.
+W=$HOME/.capy/work/r2/run
+while [ ! -f $W/e3-full.exit ]; do sleep 60; done
+a=$(jq -r .status $W/r2-full/arms/gstack-full-opus/arm.json 2>/dev/null); b=$(jq -r .status $W/r2-none/arms/none-opus/arm.json 2>/dev/null)
+echo "gstack-full exit $(cat $W/e3-full.exit), arm status $a; none-r2 arm status $b" > $W/log/chain3.txt
+if [ "$a" = complete ] && [ "$b" = complete ]; then bash $HOME/.capy/work/r2/phase-f1.sh > $W/log/f1-out.txt 2>&1; else echo "E_CHAIN an arm is not complete" >> $W/log/chain3.txt; fi
+echo done > $W/chain3.done
+
+### scripts/phase-e3-full.sh (sha256 cf8347860d16294f3318a4612e89976f2db76fa78003b2c8587f019d52ccc0c0)
+#!/usr/bin/env bash
+# R2 real run, e3-full: gstack-full, relaunched with --resume after attempt 1 filled the disk in unit preparation before any lease; --resume reuses its 14 prepared units. --parallel 2 for disk.
+. $HOME/.capy/work/r2/common.sh
+cd $BLD
+{
+echo "\$ git -C \$BLD rev-parse HEAD"; git -C "$BLD" rev-parse HEAD
+echo "\$ git -C \$BLD status --porcelain | wc -l"; git -C "$BLD" status --porcelain | wc -l
+date -u +"start %FT%TZ"
+echo "\$ bin/gstack-evals review-units $FULL --parallel 2 --resume" | sed "$HIDE"
+} > $W/log/e3-full-head.txt 2>&1
+[ "$(git -C "$BLD" rev-parse HEAD)" = f255edf5e6e7f9ddcfc37b792058500edae3643d ] && [ -z "$(git -C "$BLD" status --porcelain)" ] || { echo "E_PIN build checkout is not clean f255edf" >> $W/log/e3-full-head.txt; exit 1; }
+bin/gstack-evals review-units $FULL --parallel 2 --resume > $W/log/e3-full-run.txt 2>&1
+c=$?
+{ date -u +"end %FT%TZ"; echo "exit $c"; } >> $W/log/e3-full-head.txt
+echo $c > $W/e3-full.exit
+
+### scripts/prep-e4.sh (sha256 7e795d871c15b321053cd3aee60ff1115ec80d4fbef12fdbb37398a39f2c8781)
+set -e
+B=$HOME/.capy/work/r2; W=$B/run
+{ date -u +"%FT%TZ"; echo "gstack-full attempt 3 (phase-e3-full.sh, start 04:58:25Z) was killed when the Capy machine slept and restarted (about 05:12Z): this thread waited on a timer alone, which keeps no machine awake. It had verified the 19 prepared units and built the gstack@77fe28c install and arm image; no lease opened (r2b-grid leases=0, \$0). Relaunched as phase-e4-full.sh with --resume, with phase-chain4.sh run as a watched background operation so the machine stays awake."; } > $W/log/machine-sleep.txt
+mkdir -p $W/log/attempt5-full-machine-sleep
+mv $W/log/e3-full-head.txt $W/log/e3-full-run.txt $W/log/attempt5-full-machine-sleep/ 2>/dev/null || true
+rm -f $W/e3-full.exit $W/chain3.done
+sed -e 's/e3-full/e4-full/g' -e 's/^# R2 real run, e4-full.*/# R2 real run, e4-full: gstack-full, relaunched with --resume after attempt 3 was killed by a machine restart before any lease (log\/machine-sleep.txt). --parallel 2 for disk./' $B/phase-e3-full.sh > $B/phase-e4-full.sh
+sed -e 's/e3-full/e4-full/g' -e 's/chain3/chain4/g' -e 's/R2 chain 3/R2 chain 4/' $B/phase-chain3.sh > $B/phase-chain4.sh
+bash -n $B/phase-e4-full.sh && bash -n $B/phase-chain4.sh && echo SYNTAX_OK; head -3 $B/phase-e4-full.sh | tail -2 | cut -c1-120; grep -c e4-full $B/phase-chain4.sh
+### scripts/disk-guard-e4.sh (sha256 997d8a043adce3dc7e6990b83f673879a285f0aeb3f7d6cd4d94ce50674a8978)
+#!/usr/bin/env bash
+# R2 disk guard during gstack-full (e4): the rig writes a 1.2-1.3 GB tar of each unit tree and arm layer to <state>/retained/trees for replicators only (src/trial/image.ts:264 retainTree; the run reads back only the record in unit.json). Delete each finished tar (not .tmp) two minutes after it lands, and log it.
+W=$HOME/.capy/work/r2/run; T=$HOME/.capy/work/gstack-evals/retained/trees
+echo "$(date -u +%FT%TZ) cleaner start; $(df -h / | tail -1)" >> $W/log/disk-cleanup.txt
+while [ ! -f $W/e4-full.exit ]; do
+  find $T -maxdepth 1 -name '*.tar' -mmin +2 -printf '%f %s\n' 2>/dev/null | while read f s; do rm -f "$T/$f" && echo "$(date -u +%FT%TZ) deleted retained/trees/$f ($s bytes)" >> $W/log/disk-cleanup.txt; done
+  sleep 60
+done
+echo "$(date -u +%FT%TZ) cleaner end; $(df -h / | tail -1)" >> $W/log/disk-cleanup.txt
+
+### scripts/phase-e4-full.sh (sha256 7943b2170969f4c3eba4c400b670748296cb0843e7449365fcfc847a19c90a57)
+#!/usr/bin/env bash
+# R2 real run, e4-full: gstack-full, relaunched with --resume after attempt 3 was killed by a machine restart before any lease (log/machine-sleep.txt). --parallel 2 for disk.
+. $HOME/.capy/work/r2/common.sh
+cd $BLD
+{
+echo "\$ git -C \$BLD rev-parse HEAD"; git -C "$BLD" rev-parse HEAD
+echo "\$ git -C \$BLD status --porcelain | wc -l"; git -C "$BLD" status --porcelain | wc -l
+date -u +"start %FT%TZ"
+echo "\$ bin/gstack-evals review-units $FULL --parallel 2 --resume" | sed "$HIDE"
+} > $W/log/e4-full-head.txt 2>&1
+[ "$(git -C "$BLD" rev-parse HEAD)" = f255edf5e6e7f9ddcfc37b792058500edae3643d ] && [ -z "$(git -C "$BLD" status --porcelain)" ] || { echo "E_PIN build checkout is not clean f255edf" >> $W/log/e4-full-head.txt; exit 1; }
+bin/gstack-evals review-units $FULL --parallel 2 --resume > $W/log/e4-full-run.txt 2>&1
+c=$?
+{ date -u +"end %FT%TZ"; echo "exit $c"; } >> $W/log/e4-full-head.txt
+echo $c > $W/e4-full.exit
+
+### scripts/phase-chain4.sh (sha256 0dea794c1c7ec0c4dad16ba8a9e52d07a9abd9f0b4debcae68b6849e7b3d3889)
+#!/usr/bin/env bash
+# R2 chain 4: after gstack-full ends with both arms complete, run phase F1 (keyless). The paid phase F2 starts by hand.
+W=$HOME/.capy/work/r2/run
+while [ ! -f $W/e4-full.exit ]; do sleep 60; done
+a=$(jq -r .status $W/r2-full/arms/gstack-full-opus/arm.json 2>/dev/null); b=$(jq -r .status $W/r2-none/arms/none-opus/arm.json 2>/dev/null)
+echo "gstack-full exit $(cat $W/e4-full.exit), arm status $a; none-r2 arm status $b" > $W/log/chain4.txt
+if [ "$a" = complete ] && [ "$b" = complete ]; then bash $HOME/.capy/work/r2/phase-f1.sh > $W/log/f1-out.txt 2>&1; else echo "E_CHAIN an arm is not complete" >> $W/log/chain4.txt; fi
+echo done > $W/chain4.done
+
+### scripts/phase-f1.sh (sha256 cfbf8ccec6713c15b4b2a6f3930cf879781c27123e009bbc28abab7661949d7b)
+#!/usr/bin/env bash
+# R2 real run, phase F1 (keyless): source arms, the cap rule (r2-caps.py first), blinding, ingest, the procedure gate,
+# the matching packets and judge-run's worst case on r2-judge-match. In the handoff's and dry-run-r2.sh's order.
+set -u
+PH=f1
+. $HOME/.capy/work/r2/common.sh
+G="$R/bin/gstack-evals noloss"
+P76=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+SID=stacks-r1-out19
+SRC=$W/r2src
+X=$W/r2/real
+RAWR=$W/r2/raw/$SID
+ARMS="gstack-full none-r2"
+COMP=$W/bin/comparisons.r2.json
+GSRC=$B/gstack; GBSRC=$B/gbrain
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/$PH$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/$PH$n.txt" | head -${SHOW:-30} | sed "$HIDE"; echo "exit $c (log/$PH$n.txt)"; LAST=$c; }
+need() { [ "$LAST" = 0 ] || { echo "E_PHASE step $n exited $LAST; stopping before any later step"; echo stop > $W/$PH.exit; exit 1; }; }
+
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+echo "## Both arms"
+step . sh -c "jq -c '{id, status, system_prompt: .arm_provenance.system_prompt, told_prefix_sha256: .told.prefix_sha256, cap_stops, reader_map_sha256, coverage_gaps, diagnostics}' $W/r2-none/arms/none-opus/arm.json $W/r2-full/arms/gstack-full-opus/arm.json"
+step '^(source|E_)' python3 $W/bin/r2-source.py $W/r2-full/arms/gstack-full-opus gstack-full-opus gstack-full $SRC/gstack-full; need
+step '^(source|E_)' python3 $W/bin/r2-source.py $W/r2-none/arms/none-opus none-opus none-r2 $SRC/none-r2; need
+echo; echo "## The cap rule first (amendment section 3)"
+step '^(cap|complete|R2|E_)' python3 $W/bin/r2-caps.py $S2 $SRC/gstack-full $SRC/none-r2 $W/caps-drop.tsv
+echo $LAST > $W/caps.exit
+step . cat $W/caps-drop.tsv
+echo; echo "## Blinding (A1), ingest, the procedure gate (B1)"
+step '^(reader|gstack|none|E_)' python3 $W/bin/blind.py $S2 $SRC/gstack-full $SRC/none-r2; need
+for a in $ARMS; do step 'ingested|published|E_' $G ingest $SRC/$a --suite $S2 --root $W/r2/raw; need; done
+step '^(exposure|gate|E_)' python3 $W/bin/r1-exposure.py $S2 $SRC/gstack-full
+echo $LAST > $W/gate.exit
+echo; echo "## Matching packets and judge-run's worst case"
+mkdir -p $X
+step 'packet|E_' $G judge-packet --suite $S2 $(arms $RAWR $ARMS) --seed 20261031 --out $X/match --key $X/match-key.json; need
+J="--suite $S2 --packets $X/match --key $X/match-key.json $(arms $RAWR $ARMS) --brief $P76/judge-brief.md $JUDGES --ledger $LED --record $REC"
+echo "$J" > $W/match-args.txt
+step '^(worst case|item )|E_' $G judge-run $J --item r2-judge-match --out $X/judge-match --dry-run; need
+echo 0 > $W/f1.exit
+
+### scripts/phase-f1b.sh (sha256 cd5fbcb7368bfeb5ca382971f4118a7e31c3e86a798dc8f0274db44fbd114826)
+#!/usr/bin/env bash
+# R2 real run, phase F1b (keyless): Captain decision A (GST-909, after F1 stopped at ingest). On both source arms, before
+# blinding: GEVA-89's sevmap.ts unchanged (item 10), then R1's pinned scrub chain (item 11 precedent; r1-scrub.sh's logic
+# with the suite set to S2), the same steps in the same order on both arms. Records each file's sha256 before and after
+# and the changed lines (file:line only). Then F1's remaining steps unchanged: blinding, ingest, the procedure gate, the
+# matching packets and judge-run's worst case on r2-judge-match.
+set -u
+PH=f1b
+. $HOME/.capy/work/r2/common.sh
+G="$R/bin/gstack-evals noloss"
+P76=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+SID=stacks-r1-out19
+SRC=$W/r2src
+X=$W/r2/real
+RAWR=$W/r2/raw/$SID
+ARMS="gstack-full none-r2"
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+SV=$B/rev/judge/scripts/sevmap.ts
+SC=~/.capy/drive/captain-gstack-evals/handoffs/GEVA-101/scrub
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/$PH$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/$PH$n.txt" | head -${SHOW:-30} | sed "$HIDE"; echo "exit $c (log/$PH$n.txt)"; LAST=$c; }
+need() { [ "$LAST" = 0 ] || { echo "E_PHASE step $n exited $LAST; stopping before any later step"; echo stop > $W/$PH.exit; exit 1; }; }
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+echo "## Pins"
+step 'b3724a71|OK|FAIL' sh -c "sha256sum $SV; cd $SC && sha256sum -c SHA256SUMS"
+[ "$(sha256sum $SV | cut -c1-64)" = b3724a71fe4ee0a8a70eb454115d8e815679ab62066771541f975f9e197a66ea ] || LAST=9; need
+grep -q FAIL $W/log/$PH$n.txt && LAST=9; need
+echo; echo "## Before"
+rm -rf $W/r2src-pre; mkdir -p $W/r2src-pre
+for a in $ARMS; do cp -r $SRC/$a $W/r2src-pre/$a; done
+step . sh -c "cd $SRC && find gstack-full none-r2 -type f | sort | xargs sha256sum"
+cp $W/log/$PH$n.txt $W/log/f1b-sha-in.txt
+echo; echo "## sevmap.ts, then the scrub chain, per arm"
+for a in $ARMS; do
+  A=$SRC/$a
+  step 'labels|unmapped' bun $SV $A; need
+  hits() { $G ingest "$A" --suite "$S2" --check 2>&1 | sed -n 's/^E_NOLOSS_ARM \(findings\/[^ ]*\.jsonl\) line \([0-9]*\) (finding .*breaks the publication scan.*/\1:\2/p' | sort -t: -k1,1 -k2,2n -u; }
+  hits > "$A.hits0"; echo "$a scan hits before the scrub: $(wc -l < "$A.hits0")"
+  k=0
+  for s in $SC/scrub.ts $SC/scrub2.ts $SC/r1-scrub3.ts; do
+    k=$((k + 1)); [ -s "$A.hits$((k - 1))" ] && bun "$s" "$A" "$A.hits$((k - 1))"
+    hits > "$A.hits$k"; echo "$a scan hits after step $k: $(wc -l < "$A.hits$k")"
+  done
+  echo "$a left for --digest-only: $(tr '\n' ',' < "$A.hits3")"
+  mkdir -p $W/log/f1b-hits; mv $A.hits0 $A.hits1 $A.hits2 $A.hits3 $W/log/f1b-hits/ 2>/dev/null; for h in 0 1 2 3; do [ -f $W/log/f1b-hits/$a.hits$h ] || mv $W/log/f1b-hits/hits$h $W/log/f1b-hits/$a.hits$h 2>/dev/null; done
+done
+for f in $W/log/f1b-hits/*.hits*; do :; done
+echo; echo "## After"
+step . sh -c "cd $SRC && find gstack-full none-r2 -type f | sort | xargs sha256sum"
+cp $W/log/$PH$n.txt $W/log/f1b-sha-out.txt
+step 'changed|arm.json' python3 -c '
+import os, sys
+pre, post = sys.argv[1], sys.argv[2]
+for a in ("gstack-full", "none-r2"):
+    for root, _, files in os.walk(os.path.join(post, a)):
+        for f in sorted(files):
+            q = os.path.join(root, f); p = q.replace(post, pre, 1)
+            x = open(p).read().split("\n") if os.path.exists(p) else []
+            y = open(q).read().split("\n")
+            rel = os.path.relpath(q, post)
+            if rel.endswith("arm.json"):
+                if x != y: print("arm.json changed:", rel)
+                continue
+            for i in range(max(len(x), len(y))):
+                if (x[i] if i < len(x) else None) != (y[i] if i < len(y) else None): print("changed line:", rel + ":" + str(i + 1))
+' $W/r2src-pre $SRC
+cp $W/log/$PH$n.txt $W/log/f1b-changed.txt
+echo; echo "## Blinding (A1), ingest, the procedure gate (B1)"
+step '^(reader|gstack|none|E_)' python3 $W/bin/blind.py $S2 $SRC/gstack-full $SRC/none-r2; need
+for a in $ARMS; do step 'ingested|published|E_' $G ingest $SRC/$a --suite $S2 --root $W/r2/raw; need; done
+step '^(exposure|gate|E_)' python3 $W/bin/r1-exposure.py $S2 $SRC/gstack-full
+echo $LAST > $W/gate.exit
+echo; echo "## Matching packets and judge-run's worst case"
+mkdir -p $X
+step 'packet|E_' $G judge-packet --suite $S2 $(arms $RAWR $ARMS) --seed 20261031 --out $X/match --key $X/match-key.json; need
+J="--suite $S2 --packets $X/match --key $X/match-key.json $(arms $RAWR $ARMS) --brief $P76/judge-brief.md $JUDGES --ledger $LED --record $REC"
+echo "$J" > $W/match-args.txt
+step '^(worst case|item )|E_' $G judge-run $J --item r2-judge-match --out $X/judge-match --dry-run; need
+echo 0 > $W/f1b.exit
+
+### scripts/phase-f2.sh (sha256 91c51793942c759a80af72852c8706d8e003f14436e2abc8bf35ffe1d4a88c6f)
+#!/usr/bin/env bash
+# R2 real run, phase F2: the paid matching batch on r2-judge-match, join and ingest, the adjudication packets, the paid
+# adjudication batch on r2-judge-adjudicate; then keyless: join and ingest, the ledger, scoring with comparisons.r2.json,
+# the secondaries, r2-decide.py (second, and only when r2-caps.py did not exit 4), the complete-case sensitivity, and
+# #108's none-opus and gstack-opus on the same 19 units (context only, other settings).
+set -u
+PH=f2
+. $HOME/.capy/work/r2/common.sh
+G="$R/bin/gstack-evals noloss"
+P76=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+SID=stacks-r1-out19
+SRC=$W/r2src
+X=$W/r2/real
+RAWR=$W/r2/raw/$SID
+ARMS="gstack-full none-r2"
+COMP=$W/bin/comparisons.r2.json
+GSRC=$B/gstack; GBSRC=$B/gbrain
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/$PH$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/$PH$n.txt" | head -${SHOW:-30} | sed "$HIDE"; echo "exit $c (log/$PH$n.txt)"; LAST=$c; }
+need() { [ "$LAST" = 0 ] || { echo "E_PHASE step $n exited $LAST; stopping before any later step"; echo stop > $W/$PH.exit; exit 1; }; }
+
+J=$(cat $W/match-args.txt)
+date -u +"match start %FT%TZ"
+step '^(judge-run|RIG_|E_)|unjudged' $G judge-run $J --item r2-judge-match --out $X/judge-match --concurrency 4
+step . sh -c "jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $X/judge-match/run.json"
+[ "$(jq -r '.state + " " + (.unjudged|tostring)' $X/judge-match/run.json)" = "finished 0" ] || { echo "E_PHASE the matching batch did not finish with 0 unjudged; stopping before adjudication"; echo stop > $W/f2.exit; exit 1; }
+step 'judge-join|E_' $G judge-join --suite $S2 --key $X/match-key.json --reply $X/judge-match/primary.json --second $X/judge-match/second.json --third $X/judge-match/third.json $(arms $RAWR $ARMS) --out $X/judge-match/joined; need
+for a in $ARMS; do step 'published|E_' $G ingest $X/judge-match/joined/$a --suite $S2 --root $X/judged; need; done
+step 'packet|E_' $G judge-packet --suite $S2 $(arms $X/judged/$SID $ARMS) --seed 20261031 --out $X/adj --key $X/adj-key.json --adjudicate; need
+A="--suite $S2 --packets $X/adj --key $X/adj-key.json $(arms $X/judged/$SID $ARMS) --brief $P76/judge-brief.md $JUDGES --ledger $LED --record $REC --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC"
+echo "$A" > $W/adj-args.txt
+step '^(worst case|item )|E_' $G judge-run $A --item r2-judge-adjudicate --out $X/judge-adj --dry-run; need
+date -u +"adjudicate start %FT%TZ"
+step '^(judge-run|RIG_|E_)|unjudged|unverifiable' $G judge-run $A --item r2-judge-adjudicate --out $X/judge-adj --concurrency 4
+step . sh -c "jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $X/judge-adj/run.json"
+[ "$(jq -r '.state + " " + (.unjudged|tostring)' $X/judge-adj/run.json)" = "finished 0" ] || { echo "E_PHASE the adjudication batch did not finish with 0 unjudged; stopping before scoring"; echo stop > $W/f2.exit; exit 1; }
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+step 'judge-join|E_' $G judge-join --suite $S2 --key $X/adj-key.json --reply $X/judge-adj/primary.json --second $X/judge-adj/second.json --third $X/judge-adj/third.json $(arms $X/judged/$SID $ARMS) --out $X/judge-adj/joined; need
+for a in $ARMS; do step 'published|E_' $G ingest $X/judge-adj/joined/$a --suite $S2 --root $X/final; need; done
+SHOW=40 step 'ITEM: r2|committed|E_' $L status --ledger $LED --ledger-record $REC
+echo; echo "## Score, secondaries, the cap rule's exit, r2-decide.py"
+SHOW=60 step . $G score --suite $S2 --root $X/final --prereg $COMP --variant gstack-full --reference none-r2 --out $X/score-gstack-full-vs-none.json
+SHOW=60 step . $G secondary --suite $S2 --root $X/final --variant gstack-full --reference none-r2 --seed 20261031
+echo "r2-caps.py exit $(cat $W/caps.exit)"
+if [ "$(cat $W/caps.exit)" = 4 ]; then echo "r2-caps.py exited 4: R2 gives no outcome (FIX-METHOD to the Captain); r2-decide.py is not consulted"; else SHOW=20 step . python3 $W/bin/r2-decide.py $X/score-gstack-full-vs-none.json $SRC/gstack-full $S2; echo $LAST > $W/decide.exit; fi
+echo; echo "## Complete-case sensitivity (reported, never deciding)"
+step '^(derive|suite|E_)|units|blocking|dropped' $G derive --suite $S2 --comparisons $COMP --id stacks-r1-out19-cc --out $W/cc --root $X/final --drop-file $W/caps-drop.tsv
+SHOW=60 step . $G score --suite $W/cc/stacks-r1-out19-cc.json --root $W/cc/arms --prereg $W/cc/comparisons.stacks-r1-out19-cc.json --variant gstack-full --reference none-r2 --out $W/score-cc.json
+echo; echo "## #108's none-opus and gstack-opus on the same 19 units (SDK default prompt, 60 turns; context only)"
+SHOW=40 step . $G secondary --suite $S2 --root $W/r2/suite/arms --variant gstack-opus --reference none-opus --seed 20261031
+echo 0 > $W/f2.exit
+
+### scripts/phase-f2b.sh (sha256 a8f4e3e22243a7314118356d1ebeb6532fdf3459035dcb889761d5c3bba950bb)
+#!/usr/bin/env bash
+# R2 real run, phase F2b: F2 resumed after its matching batch finished (finished, 0 unjudged, third judge 0 packets) and
+# judge-join refused --third with no third reads. Same steps from the join on; --third goes in only when the batch
+# log shows the third judge answered. The paid matching batch is not rerun.
+# Then the adjudication batch, joins, ledger, score, secondaries, r2-decide.py, complete-case sensitivity, #108 context.
+set -u
+PH=f2b
+. $HOME/.capy/work/r2/common.sh
+G="$R/bin/gstack-evals noloss"
+P76=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+SID=stacks-r1-out19
+SRC=$W/r2src
+X=$W/r2/real
+RAWR=$W/r2/raw/$SID
+ARMS="gstack-full none-r2"
+COMP=$W/bin/comparisons.r2.json
+GSRC=$B/gstack; GBSRC=$B/gbrain
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+n=0
+step() { local pat=$1; shift; n=$((n + 1)); echo; echo "\$ $*" | sed "$HIDE"; "$@" > "$W/log/$PH$n.txt" 2>&1; local c=$?; grep -E -- "$pat" "$W/log/$PH$n.txt" | head -${SHOW:-30} | sed "$HIDE"; echo "exit $c (log/$PH$n.txt)"; LAST=$c; }
+need() { [ "$LAST" = 0 ] || { echo "E_PHASE step $n exited $LAST; stopping before any later step"; echo stop > $W/$PH.exit; exit 1; }; }
+
+J=$(cat $W/match-args.txt)
+third() { grep -q "third 0;" "$1" && return 0; printf -- " --third %s/third.json" "$2"; }
+[ "$(jq -r '.state + " " + (.unjudged|tostring)' $X/judge-match/run.json)" = "finished 0" ] || { echo "E_PHASE the matching batch did not finish with 0 unjudged; stopping before adjudication"; echo stop > $W/f2b.exit; exit 1; }
+step 'judge-join|E_' $G judge-join --suite $S2 --key $X/match-key.json --reply $X/judge-match/primary.json --second $X/judge-match/second.json $(third $W/log/f21.txt $X/judge-match) $(arms $RAWR $ARMS) --out $X/judge-match/joined; need
+for a in $ARMS; do step 'published|E_' $G ingest $X/judge-match/joined/$a --suite $S2 --root $X/judged; need; done
+step 'packet|E_' $G judge-packet --suite $S2 $(arms $X/judged/$SID $ARMS) --seed 20261031 --out $X/adj --key $X/adj-key.json --adjudicate; need
+A="--suite $S2 --packets $X/adj --key $X/adj-key.json $(arms $X/judged/$SID $ARMS) --brief $P76/judge-brief.md $JUDGES --ledger $LED --record $REC --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC"
+echo "$A" > $W/adj-args.txt
+step '^(worst case|item )|E_' $G judge-run $A --item r2-judge-adjudicate --out $X/judge-adj --dry-run; need
+date -u +"adjudicate start %FT%TZ"
+step '^(judge-run|RIG_|E_)|unjudged|unverifiable' $G judge-run $A --item r2-judge-adjudicate --out $X/judge-adj --concurrency 4
+ADJ=$n
+step . sh -c "jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $X/judge-adj/run.json"
+[ "$(jq -r '.state + " " + (.unjudged|tostring)' $X/judge-adj/run.json)" = "finished 0" ] || { echo "E_PHASE the adjudication batch did not finish with 0 unjudged; stopping before scoring"; echo stop > $W/f2b.exit; exit 1; }
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+step 'judge-join|E_' $G judge-join --suite $S2 --key $X/adj-key.json --reply $X/judge-adj/primary.json --second $X/judge-adj/second.json $(third $W/log/$PH$ADJ.txt $X/judge-adj) $(arms $X/judged/$SID $ARMS) --out $X/judge-adj/joined; need
+for a in $ARMS; do step 'published|E_' $G ingest $X/judge-adj/joined/$a --suite $S2 --root $X/final; need; done
+SHOW=40 step 'ITEM: r2|committed|E_' $L status --ledger $LED --ledger-record $REC
+echo; echo "## Score, secondaries, the cap rule's exit, r2-decide.py"
+SHOW=60 step . $G score --suite $S2 --root $X/final --prereg $COMP --variant gstack-full --reference none-r2 --out $X/score-gstack-full-vs-none.json
+SHOW=60 step . $G secondary --suite $S2 --root $X/final --variant gstack-full --reference none-r2 --seed 20261031
+echo "r2-caps.py exit $(cat $W/caps.exit)"
+if [ "$(cat $W/caps.exit)" = 4 ]; then echo "r2-caps.py exited 4: R2 gives no outcome (FIX-METHOD to the Captain); r2-decide.py is not consulted"; else SHOW=20 step . python3 $W/bin/r2-decide.py $X/score-gstack-full-vs-none.json $SRC/gstack-full $S2; echo $LAST > $W/decide.exit; fi
+echo; echo "## Complete-case sensitivity (reported, never deciding)"
+step '^(derive|suite|E_)|units|blocking|dropped' $G derive --suite $S2 --comparisons $COMP --id stacks-r1-out19-cc --out $W/cc --root $X/final --drop-file $W/caps-drop.tsv
+SHOW=60 step . $G score --suite $W/cc/stacks-r1-out19-cc.json --root $W/cc/arms --prereg $W/cc/comparisons.stacks-r1-out19-cc.json --variant gstack-full --reference none-r2 --out $W/score-cc.json
+echo; echo "## #108's none-opus and gstack-opus on the same 19 units (SDK default prompt, 60 turns; context only)"
+SHOW=40 step . $G secondary --suite $S2 --root $W/r2/suite/arms --variant gstack-opus --reference none-opus --seed 20261031
+echo 0 > $W/f2b.exit
+
+### scripts/phase-x-ret12.sh (sha256 908d908a0dda93aae40333110b944e0b73d83c3e5678958c0fa6176787fdd737)
+#!/usr/bin/env bash
+# R2 exploratory (Captain, GST-909): the paired comparison on the 12 units where gstack-full returned a report. Labelled exploratory, never a verdict. Keyless; uses derive --drop-file as the complete-case step does.
+. $HOME/.capy/work/r2/common.sh
+G="$R/bin/gstack-evals noloss"; X=$W/r2/real; COMP=$W/bin/comparisons.r2.json
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+{ echo unit; awk -F'\t' '$1=="gstack-full-opus" && $6=="missing" {print $4}' $W/r2-full/parses.tsv; } > $W/ret12-drop.tsv
+cat $W/ret12-drop.tsv
+rm -rf $W/ret12
+$G derive --suite $S2 --comparisons $COMP --id stacks-r1-out19-ret12 --out $W/ret12 --root $X/final --drop-file $W/ret12-drop.tsv 2>&1 | grep -E 'suite|dropped|E_' | sed "$HIDE"
+$G score --suite $W/ret12/stacks-r1-out19-ret12.json --root $W/ret12/arms --prereg $W/ret12/comparisons.stacks-r1-out19-ret12.json --variant gstack-full --reference none-r2 --out $W/score-ret12.json 2>&1 | grep -E 'NOT_DIST|verdict|false blockers|cost on' | cut -c1-400 | sed "$HIDE"
+$G secondary --suite $W/ret12/stacks-r1-out19-ret12.json --root $W/ret12/arms --variant gstack-full --reference none-r2 --seed 20261031 2>&1 | grep -E 'recall|new blockers' | sed "$HIDE"

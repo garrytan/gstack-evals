@@ -1,0 +1,342 @@
+{
+  "record": "noloss-score",
+  "version": 1,
+  "id": "gstack-full-vs-none",
+  "suite": {
+    "id": "stacks-r1-out19-cc",
+    "sha256": "ad6980c1fed4be56725815b0c808cdeaffc79ba82071124faa3a562fb091bf63",
+    "development_only": true,
+    "sealed": false
+  },
+  "variant": {
+    "id": "gstack-full",
+    "label": "gstack-full on claude-opus-5-5",
+    "provenance": "live",
+    "passes": 1,
+    "status": "complete",
+    "tree_sha256": "b142f879e8c78664b761cf21394586732250df73c361fab6dabd1501f03b1592"
+  },
+  "reference": {
+    "id": "none-r2",
+    "label": "none on claude-opus-5-5",
+    "provenance": "live",
+    "passes": 1,
+    "status": "complete",
+    "tree_sha256": "629d64cc4c1645b67af2a5e10c96aff6f5ad37f54a9fd7d86d886fe932e5852b"
+  },
+  "margin": {
+    "points": 10,
+    "reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R2's kill rule is a count rule, so the margin decides nothing"
+  },
+  "post_hoc": false,
+  "frozen_bar": null,
+  "judging": {
+    "labelled": false,
+    "blind_share": {
+      "variant": 1,
+      "reference": 1
+    },
+    "severity_maps": {
+      "variant": {
+        "default": {
+          "MAJOR": "CRITICAL",
+          "major": "CRITICAL",
+          "MINOR": "INFORMATIONAL",
+          "minor": "INFORMATIONAL"
+        }
+      },
+      "reference": {
+        "default": {
+          "BLOCKER": "CRITICAL",
+          "BLOCKING": "CRITICAL",
+          "HIGH": "CRITICAL",
+          "P0": "CRITICAL",
+          "MEDIUM": "INFORMATIONAL",
+          "LOW": "INFORMATIONAL",
+          "NIT": "INFORMATIONAL",
+          "INFO": "INFORMATIONAL",
+          "blocker": "CRITICAL",
+          "blocking": "CRITICAL",
+          "high": "CRITICAL",
+          "p0": "CRITICAL",
+          "medium": "INFORMATIONAL",
+          "low": "INFORMATIONAL",
+          "nit": "INFORMATIONAL",
+          "info": "INFORMATIONAL",
+          "MAJOR": "CRITICAL",
+          "major": "CRITICAL",
+          "MINOR": "INFORMATIONAL",
+          "minor": "INFORMATIONAL"
+        }
+      },
+      "differ": true
+    }
+  },
+  "result": {
+    "verdict": "NOT_DISTINGUISHED",
+    "no_verdict_reason": null,
+    "blockers": 13,
+    "clusters": 13,
+    "discordant_clusters": 0,
+    "recall": {
+      "variant": 0,
+      "reference": 0
+    },
+    "delta": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "losses": 0,
+    "gains": 0,
+    "p_no_loss": null,
+    "p_no_loss_holm": null,
+    "p_loss": null,
+    "p_loss_holm": null,
+    "min_p_loss": null,
+    "note": "floor: neither arm found any blocker",
+    "holm_family": 1,
+    "loss_family": null
+  },
+  "false_blockers": {
+    "complete": true,
+    "reasons": [],
+    "labelled": false,
+    "prs": 19,
+    "per_pr": {
+      "variant": 0.0526,
+      "reference": 0.0526
+    },
+    "drop": 0.5,
+    "table": [
+      {
+        "pr": "garrytan/gbrain#7511",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7674",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7684",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7789",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7794",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7872",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7878",
+        "variant": 1,
+        "reference": 0,
+        "difference": 1,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7884",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gbrain#7901",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#1808",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3381",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3431",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3448",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3475",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3494",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3507",
+        "variant": 0,
+        "reference": 1,
+        "difference": -1,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3516",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3556",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      },
+      {
+        "pr": "garrytan/gstack#3557",
+        "variant": 0,
+        "reference": 0,
+        "difference": 0,
+        "variant_unadjudicated": 0,
+        "reference_unadjudicated": 0
+      }
+    ],
+    "difference": 0,
+    "ci95": [
+      -0.1579,
+      0.1579
+    ],
+    "p_two_sided": 1,
+    "min_p": 0.5,
+    "clears_drop": false,
+    "interval_below_zero": false
+  },
+  "size_rule": {
+    "source": "unchecked",
+    "power": null,
+    "goal": 0.8,
+    "met": null,
+    "detail": "the reference's blocking recall is 0, so the simulation has no rate to draw around"
+  },
+  "agreement": {
+    "shared": 2,
+    "table": {
+      "FF": 0,
+      "FD": 0,
+      "DF": 0,
+      "DD": 2
+    },
+    "agreement": 1,
+    "kappa": null,
+    "reason": "2 blockers matched by both arms; kappa needs 10"
+  },
+  "noise_floor": {
+    "repeat": null,
+    "reason": "no same-window repeat of reference none-r2 is named"
+  },
+  "cost": {
+    "variant": {
+      "units": 18,
+      "tokens_per_pass": 87983025,
+      "per_unit_mean": 4887946,
+      "per_unit_median": 3418158,
+      "found": 0,
+      "per_blocker_found": null,
+      "wall_seconds_per_pass": 6382.499999999999,
+      "usd_per_pass": 60.409238999999985,
+      "grade": "exact",
+      "notes": [
+        "1 units whose total_tokens is unknown, so not metered",
+        "no blocker was found on these units, so there is no cost per blocker found"
+      ]
+    },
+    "reference": {
+      "units": 18,
+      "tokens_per_pass": 25263513,
+      "per_unit_mean": 1403529,
+      "per_unit_median": 1008050,
+      "found": 0,
+      "per_blocker_found": null,
+      "wall_seconds_per_pass": 3952.4,
+      "usd_per_pass": 14.563254,
+      "grade": "exact",
+      "notes": [
+        "no blocker was found on these units, so there is no cost per blocker found"
+      ]
+    },
+    "grade": "exact"
+  },
+  "warnings": [],
+  "eligibility": {
+    "claim": "non-inferior within 10 points of blocking recall",
+    "eligible": false,
+    "reasons": [
+      "the verdict is NOT_DISTINGUISHED",
+      "suite stacks-r1-out19-cc is development-only: it ranks variants but cannot confirm a release on its own"
+    ]
+  },
+  "seed": 20261031,
+  "draws": 10000,
+  "exit": 2
+}

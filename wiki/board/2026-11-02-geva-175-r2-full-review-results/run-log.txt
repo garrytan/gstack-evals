@@ -1,0 +1,552 @@
+# R2 run log: the lines GEVA-151's phase scripts printed, in run order
+# Copied from the Captain drive handoffs/GEVA-151/run/log. Each header gives the original file's sha256. Machine paths are replaced by <ledger record>, <scrub dir>, <work>, <machine gstack checkout> and <captain drive>, the scrub chain's path-prefix labels by <agent home>, <ubi home>, <mac home> and <temp dir>, and terminal color codes are removed; nothing else changed.
+
+### log/attempt1/d-none-head.txt (sha256 8b3a6862240388cf8d99b9c728688ee09913295c95079ba4746425b6b6810409)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+start 2026-11-02T02:49:14Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms none --models claude-opus-5-5 --passes 1 --system-prompt none=claude-code-preset --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2a-grid --spend-cap 760 --out $W/r2-none --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800
+end 2026-11-02T02:49:45Z
+exit 2
+
+### log/attempt1/d-none-run.txt (sha256 9b2215355490501940116460b51bc6a545d3e83018b588dac67182a2e9fb4189)
+E_UNIT_REPO garrytan/gbrain#7511@6b01f793f2bc: git diff in the source: fatal: could not fetch 005a4918bc42e23b45d8db8565edd5e4f7c8f3b8 from promisor remote
+E_UNIT_REPO garrytan/gbrain#7674@af88cba164b0: git diff in the source: fatal: could not fetch 3cc4c961e338e0474e989646b2e469e75dd6529c from promisor remote
+E_UNIT_REPO garrytan/gbrain#7684@ac3c2af65960: git diff in the source: fatal: could not fetch eef5f90237e736055af320a7f20f9092034aab17 from promisor remote
+E_UNIT_REPO garrytan/gbrain#7789@49eb4da5f7c8: git diff in the source: fatal: could not fetch d2db19e2cf2b3b920068ebc1364c20685e6d7ac1 from promisor remote
+E_UNIT_REPO garrytan/gbrain#7794@2d801d54cee4: git diff in the source: fatal: could not fetch 9bdfa4a6c86757a3ac200a0057e233237d10e72d from promisor remote
+E_UNIT_REPO garrytan/gbrain#7872@f61d1a5fd5fa: git diff in the source: fatal: could not fetch 457d9a3a7512bec5d4c7224852d9a0100d43761a from promisor remote
+E_UNIT_REPO garrytan/gbrain#7878@d43d2497a65c: git diff in the source: fatal: could not fetch 182feb8ac8f946a9e70996a21704644f941abc99 from promisor remote
+E_UNIT_REPO garrytan/gbrain#7884@d3b843389bd6: git diff in the source: fatal: could not fetch a72b56d2729b289a67ee8829bc9b1ee5de28d9b0 from promisor remote
+E_UNIT_REPO garrytan/gbrain#7901@40461c875975: git diff in the source: fatal: could not fetch 27a66f4e9286861a1255fc94c45df8e765618cb4 from promisor remote
+E_UNIT_REPO garrytan/gstack#1808@b17f340a457a: git diff in the source: fatal: could not fetch b07bc2142c58d80326067d82977c7b14700859eb from promisor remote
+E_UNIT_REPO garrytan/gstack#3381@8a52c271ad81: git diff in the source: fatal: could not fetch 9652e71fdecd8d1fa0ab3a7509e06ee819bb8ad7 from promisor remote
+E_UNIT_REPO garrytan/gstack#3431@8f4cbb8db01c: git diff in the source: fatal: could not fetch 4299662d09731d48bcb3b570a017a6fa8599bcdf from promisor remote
+E_UNIT_REPO garrytan/gstack#3448@b476ae9e4b66: git diff in the source: fatal: could not fetch 65d14b08f1d15925b1c9755857aa406ac0ca09fa from promisor remote
+E_UNIT_REPO garrytan/gstack#3475@fc69d3ff0bfe: git diff in the source: fatal: could not fetch bcc901d8750f80c0e58db58677fd3cc43b376c9a from promisor remote
+E_UNIT_REPO garrytan/gstack#3494@c555ce3a8324: git diff in the source: fatal: could not fetch 0c0916118ad516e6eb71099e5ad06f81db9655be from promisor remote
+E_UNIT_REPO garrytan/gstack#3507@8c021d124220: git diff in the source: fatal: could not fetch 6d5bb3af69b2d3ced6e955ff09430ae9893d224a from promisor remote
+E_UNIT_REPO garrytan/gstack#3516@3712b7971126: git diff in the source: fatal: could not fetch b6f5fc4f9d680b39251c7d97aee20368ca343c5d from promisor remote
+E_UNIT_REPO garrytan/gstack#3556@95d9c6d06ef1: git diff in the source: fatal: could not fetch 3d8357e7f26058b1ca2294d17520b61e30e6c1b5 from promisor remote
+E_UNIT_REPO garrytan/gstack#3557@7459bb48317d: git diff in the source: fatal: could not fetch 49d9de8fe28d9c35695b9007c6087ce38666c324 from promisor remote
+
+### log/attempt2-none-enospc/d-none-head.txt (sha256 fdf439bdf3e75b898ddb37cd497beb7b8e11b9858c289f7260baac1b315a37f0)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+start 2026-11-02T02:54:58Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms none --models claude-opus-5-5 --passes 1 --system-prompt none=claude-code-preset --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2a-grid --spend-cap 760 --out $W/r2-none --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800
+end 2026-11-02T03:44:29Z
+exit 2
+
+### log/d-none-settle1.txt (sha256 241761342e3254ede41f8f513345d009fa3357dff0f66164e3e7ae40b8fac5f0)
+$ bin/gstack-evals ledger settle --lease r2a-grid.0001.98bec3
+SETTLED: r2a-grid.0001.98bec3 spent=$10.895941 unknown=$3.49995 (2 calls) record=<ledger record>
+exit 0
+
+### log/d2-none-head.txt (sha256 0337e9c4932a3f5420466ba2bda27f5414281a7891a27a8b85b821c2b8fe8a8e)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+/dev/root        65G   55G  9.8G  85% /
+start 2026-11-02T03:50:32Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms none --models claude-opus-5-5 --passes 1 --system-prompt none=claude-code-preset --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2a-grid --spend-cap 745.60 --out $W/r2-none --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800 --resume --parallel 2
+end 2026-11-02T04:18:10Z
+exit 0
+/dev/root        65G   55G  9.7G  85% /
+
+### log/d2-none-run.txt (sha256 648de50a4030552b5326611e443081e1cb0001b882df708626b733b757f10b7e)
+lease r2a-grid.0002.e1167e settled: $7.08 committed, 0 unknown calls
+none-opus: findings 16, empty 3, missing 0, malformed 0, incomplete 0, not_run 0
+spent $7.08; arms under <work>/r2/run/r2-none/arms
+
+### log/attempt3-full-enospc/e-full-head.txt (sha256 0c31a8493e6fc240eb706222ae73bb26f5694d05788eba72a691775fd2312d68)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+start 2026-11-02T04:18:48Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 --models claude-opus-5-5 --passes 1 --system-prompt gstack-full=claude-code-preset --told-prefix gstack-full=$W/bin/told-gstack-full.txt --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2b-grid --spend-cap 760 --out $W/r2-full --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800 --parallel 2
+end 2026-11-02T04:41:50Z
+exit 2
+
+### log/disk-cleanup.txt (sha256 93f61039803208a99c0fb187d3c742a54359deea354fc74733c78d642070fee1)
+2026-11-02T04:43Z cleanup before the gstack-full relaunch
+gstack-full attempt 1 stopped in unit preparation at 04:41:50Z (ENOSPC, exit 2, no lease opened: r2b-grid leases=0, $0).
+deleted: ~/.capy/work/gstack-evals/retained/trees/*.tar (34 unit-tree tarballs for replicators, 34G: 19 from none-r2, 15 from gstack-full attempt 1); their sha256 stay in each run units.json
+deleted: r2-full/units/gstack-3494-c555ce3a (partial, no unit.json); kept 14 prepared units for --resume
+df after: /dev/root 65G 30G 35G 46%
+earlier: none-r2 attempt 2 (run review-units-20261102T032019Z-d912) stopped at 03:44:29Z on ENOSPC in session 9 grade copy; lease r2a-grid.0001.98bec3 settled $10.895941 spent + $3.49995 unknown (2 calls); deleted the 4 in-flight session dirs (9.4G); resumed as lease r2a-grid.0002 ($7.08).
+2026-11-02T05:24:51Z cleaner start; /dev/root        65G   55G  8.9G  87% /
+2026-11-02T05:24:51Z deleted retained/trees/6814f98be1b1fcfd8dbc6859d094d0b01fdae486f23594d40e469757657c454a.tar (1333022720 bytes)
+2026-11-02T05:24:51Z deleted retained/trees/8b4b5a67c960e666ce47d4a56cfec38610da703efc2d48d9b03295bacf81fe77.tar (1333596160 bytes)
+2026-11-02T05:24:51Z deleted retained/trees/4112c40c4087ac17bbef5e3bd300b55f79f912ebcd49400f465a460a691d5ced.tar (1336514560 bytes)
+2026-11-02T05:24:51Z deleted retained/trees/3290d0929341e9a84a5d0ab776ffa28e8f3900c72d3069208e18014defcb4b53.tar (1338552320 bytes)
+2026-11-02T05:24:51Z deleted retained/trees/a0a0b25fffa4f54e0d9c8d4c65b29ae67a7e837ec8c9332560f00bd2584f1cb5.tar (1338286080 bytes)
+2026-11-02T05:25:51Z deleted retained/trees/e94d9c74e29579ce4caad0d055be62dd17dbcf88d6a4647177fa7478f54eac0c.tar (1216020480 bytes)
+2026-11-02T06:35:51Z cleaner end; /dev/root        65G   44G   21G  68% /
+
+### log/attempt4-full-stack-source/e2-full-head.txt (sha256 529d0afbdcc386dd8f8512f21f269186bb9f57200df1a2db4b30b5c6d0f156f7)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+start 2026-11-02T04:43:53Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 --models claude-opus-5-5 --passes 1 --system-prompt gstack-full=claude-code-preset --told-prefix gstack-full=$W/bin/told-gstack-full.txt --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2b-grid --spend-cap 760 --out $W/r2-full --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800 --parallel 2 --resume
+end 2026-11-02T04:54:56Z
+exit 2
+
+### log/attempt4-full-stack-source/e2-full-run.txt (sha256 64f1b8f34838fe519ce64f79c2b36353003a3c47fe9376cfe0d461249a43a2f1)
+E_STACK_SOURCE: garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 is in no local repository (searched: <machine gstack checkout>)
+
+### log/stack-source-fix.txt (sha256 9f631a04c8b7764750cff66a2e343532289300b1bbe679e309d75b530162f9d4)
+2026-11-02T04:58:09Z
+gstack-full attempt 2 (phase-e2-full.sh) exited 2 at 04:54:56Z with E_STACK_SOURCE: garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 is in no local repository (searched: <machine gstack checkout>). No lease opened (r2b-grid leases=0, $0).
+Cause: the rig takes a stack tree only from a local repository (src/arms/install.ts:125 stackSources: inferred checkout, gstack checkouts, <state>/sources/*) and never fetches. The machine's gstack checkout is a fresh clone at a563f47 without 77fe28c.
+Fix: local clone of the run's full gstack clone into <state>/sources/gstack, as the E_STACK_SOURCE hint says. No rig code changed.
+$ git clone --no-checkout --local $B/gstack $S/gstack
+$ git -C $S/gstack cat-file -t 77fe28c39796cf5573e3d0836b83b2ee436a8f12
+commit
+$ git -C $S/gstack rev-parse 77fe28c39796cf5573e3d0836b83b2ee436a8f12^{tree}
+1d881253694c660a25646c2007fe92a3aee7fad2
+
+### log/attempt5-full-machine-sleep/e3-full-head.txt (sha256 f5204d0216c5b44866fb68d4bf93ca249cb33f0847c64cb5e66aa2fc19f6693d)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+start 2026-11-02T04:58:25Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 --models claude-opus-5-5 --passes 1 --system-prompt gstack-full=claude-code-preset --told-prefix gstack-full=$W/bin/told-gstack-full.txt --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2b-grid --spend-cap 760 --out $W/r2-full --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800 --parallel 2 --resume
+
+### log/machine-sleep.txt (sha256 cf3a80a5ff4b37a0e2a84f604f3cce92d0e56c86199f3e1382d38b0d555ae5da)
+2026-11-02T05:13:34Z
+gstack-full attempt 3 (phase-e3-full.sh, start 04:58:25Z) was killed when the Capy machine slept and restarted (about 05:12Z): this thread waited on a timer alone, which keeps no machine awake. It had verified the 19 prepared units and built the gstack@77fe28c install and arm image; no lease opened (r2b-grid leases=0, $0). Relaunched as phase-e4-full.sh with --resume, with phase-chain4.sh run as a watched background operation so the machine stays awake.
+
+### log/e4-full-head.txt (sha256 77d7e8b163a76010849b6b7042b3a7a48faa9e74fe466865130501a5f6c3c5f8)
+$ git -C $BLD rev-parse HEAD
+f255edf5e6e7f9ddcfc37b792058500edae3643d
+$ git -C $BLD status --porcelain | wc -l
+0
+start 2026-11-02T05:13:34Z
+$ bin/gstack-evals review-units --suite $W/r2/suite/stacks-r1-out19.json --units all --arms gstack-full=garrytan/gstack@77fe28c39796cf5573e3d0836b83b2ee436a8f12 --models claude-opus-5-5 --passes 1 --system-prompt gstack-full=claude-code-preset --told-prefix gstack-full=$W/bin/told-gstack-full.txt --max-turns 200 --allowance 40 --cap-stops --reader-map src/trial/review/reader-maps/gstack-77fe28c39796.json --item r2b-grid --spend-cap 760 --out $W/r2-full --severity-map $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json --test garrytan/gstack=true --test garrytan/gbrain=true --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --ledger $W/ledger.sqlite --record <ledger record> --timeout 10800 --parallel 2 --resume
+end 2026-11-02T06:34:59Z
+exit 0
+
+### log/e4-full-run.txt (sha256 e05e3881ff8af405c8697b54a2b7ca86a4dc47ffa23fa8af5faed34578a341bc)
+lease r2b-grid.0001.a144c1 settled: $62.59 committed, 0 unknown calls
+gstack-full-opus: findings 11, empty 1, missing 7, malformed 0, incomplete 0, not_run 0
+spent $62.42; arms under <work>/r2/run/r2-full/arms
+
+### log/f1-out.txt (sha256 87618783345c258efa843d3f795fadae8821c3842742a5d47198be9e76e12982)
+## Both arms
+
+$ sh -c jq -c '{id, status, system_prompt: .arm_provenance.system_prompt, told_prefix_sha256: .told.prefix_sha256, cap_stops, reader_map_sha256, coverage_gaps, diagnostics}' $W/r2-none/arms/none-opus/arm.json $W/r2-full/arms/gstack-full-opus/arm.json
+{"id":"none-opus","status":"complete","system_prompt":"claude-code-preset","told_prefix_sha256":null,"cap_stops":{"turn_cap":0,"allowance_stop":0,"units":[],"parser_sha256":"717e33723cd1a4d2acc8d7d11d8e7dd3f966b609855c2c28df98b6a45fc38fa9"},"reader_map_sha256":"9cb0e15069aa1b28ae370728cd87ef2d441dcf2cfa3a28ce4c75bbd1fa2292ed","coverage_gaps":null,"diagnostics":null}
+{"id":"gstack-full-opus","status":"complete","system_prompt":"claude-code-preset","told_prefix_sha256":"db9ec7b42f9b2e86c7f51354d581cb47d775fbbc2ebe4e8a229764a5f92540ad","cap_stops":{"turn_cap":0,"allowance_stop":0,"units":[],"parser_sha256":"717e33723cd1a4d2acc8d7d11d8e7dd3f966b609855c2c28df98b6a45fc38fa9"},"reader_map_sha256":"9cb0e15069aa1b28ae370728cd87ef2d441dcf2cfa3a28ce4c75bbd1fa2292ed","coverage_gaps":null,"diagnostics":null}
+exit 0 (log/f11.txt)
+
+$ python3 $W/bin/r2-source.py $W/r2-full/arms/gstack-full-opus gstack-full-opus gstack-full $W/r2src/gstack-full
+source arm gstack-full from gstack-full-opus: 19 findings files, 106 cost rows, status complete
+exit 0 (log/f12.txt)
+
+$ python3 $W/bin/r2-source.py $W/r2-none/arms/none-opus none-opus none-r2 $W/r2src/none-r2
+source arm none-r2 from none-opus: 19 findings files, 19 cost rows, status complete
+exit 0 (log/f13.txt)
+
+## The cap rule first (amendment section 3)
+
+$ python3 $W/bin/r2-caps.py $W/r2/suite/stacks-r1-out19.json $W/r2src/gstack-full $W/r2src/none-r2 $W/caps-drop.tsv
+cap stops gstack-full: 0 of 19 sessions (turn_cap 0, allowance_stop 0)
+cap stops none-r2: 0 of 19 sessions (turn_cap 0, allowance_stop 0)
+complete case: 19 of 19 units, 0 dropped ($W/caps-drop.tsv)
+cap rule passes: the verdict stands, printed with these counts and the complete-case sensitivity.
+exit 0 (log/f14.txt)
+
+$ cat $W/caps-drop.tsv
+unit
+exit 0 (log/f15.txt)
+
+## Blinding (A1), ingest, the procedure gate (B1)
+
+$ python3 $W/bin/blind.py $W/r2/suite/stacks-r1-out19.json $W/r2src/gstack-full $W/r2src/none-r2
+reader names rewritten to <reader>: adversarial-native, Review Army; left as ordinary words: batched, confirmed, data-migration, maintainability, other, performance, red-team, security, simplification, state-machines, testing, unconfirmed; model ids: claude-opus-5-5, gpt-6.1-sol
+gstack-full: 0 findings rewritten {}; left out (path names a reader or model id): none
+none-r2: 0 findings rewritten {}; left out (path names a reader or model id): none
+exit 0 (log/f16.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2src/gstack-full --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/raw
+E_NOLOSS_ARM findings/garrytan__gstack#1808@b17f340a457a.jsonl line 1 (finding "p1-1"): breaks the publication scan (machine-path)
+E_NOLOSS_ARM row fix: remove it in the source arm, or pass --digest-only p1-1 to publish only that finding's digest
+E_NOLOSS_ARM findings/garrytan__gstack#3381@8a52c271ad81.jsonl line 4 (finding "p1-4"): breaks the publication scan (machine-path)
+E_NOLOSS_ARM row fix: remove it in the source arm, or pass --digest-only p1-4 to publish only that finding's digest
+E_NOLOSS_ARM findings/garrytan__gstack#3494@c555ce3a8324.jsonl line 6 (finding "p1-6"): breaks the publication scan (machine-path)
+E_NOLOSS_ARM row fix: remove it in the source arm, or pass --digest-only p1-6 to publish only that finding's digest
+E_NOLOSS_ARM context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_NOLOSS_ARM fix: Each line names the file, row and field and how to fix that row. Fix the source arm (ingest never edits it) and run ingest --check again. For a scan hit in a finding, --digest-only <id> publishes only its digest; to replace a published arm, pass --replace with the reason.
+E_NOLOSS_ARM docs: docs/errors.md#e_noloss_arm
+exit 2 (log/f17.txt)
+E_PHASE step 7 exited 2; stopping before any later step
+
+### log/f1b-out.txt (sha256 be3191aed43009dc08a760dffd1ef92646a8c8ad51fe3c273716ff31ccd78ca7)
+## Pins
+
+$ sh -c sha256sum $B/rev/judge/scripts/sevmap.ts; cd <scrub dir> && sha256sum -c SHA256SUMS
+b3724a71fe4ee0a8a70eb454115d8e815679ab62066771541f975f9e197a66ea  $B/rev/judge/scripts/sevmap.ts
+r1-scrub3.ts: OK
+scrub.ts: OK
+scrub2.ts: OK
+exit 0 (log/f1b1.txt)
+
+## Before
+
+$ sh -c cd $W/r2src && find gstack-full none-r2 -type f | sort | xargs sha256sum
+98a893988b6670b95c6e4139ce961bd8208d0f8b4e9806baa12ade2d7efebddf  gstack-full/arm.json
+72172419fe5fe7c0921e3790355a64ec25712ab3c3535c01a0bd8cf700819b89  gstack-full/cost.tsv
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7511@6b01f793f2bc.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7674@af88cba164b0.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7684@ac3c2af65960.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7789@49eb4da5f7c8.jsonl
+4940b80729a638fd67d4bd9b10b85776c3439181f538cdb8527500b6041ab5a9  gstack-full/findings/garrytan__gbrain#7794@2d801d54cee4.jsonl
+85f4c853a23095c9b8806389038306410b0ca8b51d074c99d4950675b5f4e4ac  gstack-full/findings/garrytan__gbrain#7872@f61d1a5fd5fa.jsonl
+5066ff966e696d7d477783c293e6af7142d2d1ac9488ef8ed5e0cf60e6c1fef0  gstack-full/findings/garrytan__gbrain#7878@d43d2497a65c.jsonl
+3b148bd72fe9a9f2a47bfc6db045b3aa06567adb44d95f4b6dfaff6cbbe3918d  gstack-full/findings/garrytan__gbrain#7884@d3b843389bd6.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7901@40461c875975.jsonl
+b874ff39f8bf9c11283317614c598497ddf5638412bbeb040ef9edc55ec438df  gstack-full/findings/garrytan__gstack#1808@b17f340a457a.jsonl
+453bc50ac04d42966b96e0df3075ae3d01a76b63f64bdac2bad934b8c183dfbc  gstack-full/findings/garrytan__gstack#3381@8a52c271ad81.jsonl
+51e90fc92bd09ddef14df167233d2750b45807824c03b6cc7a4846ead7320243  gstack-full/findings/garrytan__gstack#3431@8f4cbb8db01c.jsonl
+cf162b9f1eb6679becf9d58140267a5f2c97d0a7d0fcdfeb9273679169e0692e  gstack-full/findings/garrytan__gstack#3448@b476ae9e4b66.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gstack#3475@fc69d3ff0bfe.jsonl
+01924727ca6216904697844001a1399bed903231d62b15420e8e5799d05ee180  gstack-full/findings/garrytan__gstack#3494@c555ce3a8324.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gstack#3507@8c021d124220.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gstack#3516@3712b7971126.jsonl
+be399214299c3a36bcebb281653365e9d4807401224e5d72f08eee945cda74b2  gstack-full/findings/garrytan__gstack#3556@95d9c6d06ef1.jsonl
+4d2ad6d3de2cc6d62fd3476ef99c405de6a31f4f91c52a0542182caacdabac64  gstack-full/findings/garrytan__gstack#3557@7459bb48317d.jsonl
+2cd36db07a067decdc8eece1f2b862603d1cd7901d4b177d683a5d4fe6e60ee1  none-r2/arm.json
+4aedf45dda730e8c5bef8fc88f7fead9f3af58a130a5d167864b648d1d7188d2  none-r2/cost.tsv
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  none-r2/findings/garrytan__gbrain#7511@6b01f793f2bc.jsonl
+ae251a0815be1d75741da0fd17de5554cee3568ad51854835f519db72338d0f7  none-r2/findings/garrytan__gbrain#7674@af88cba164b0.jsonl
+8ba55a54b44d70dc6989080bf3b705fd98c9251de52638f55552a453081a584b  none-r2/findings/garrytan__gbrain#7684@ac3c2af65960.jsonl
+64b5e30a5bdc9190597181f706a4dedee408afb69752be0f4ccc73a389c5c07f  none-r2/findings/garrytan__gbrain#7789@49eb4da5f7c8.jsonl
+ae21de46c6c83caa579feb86318fb06992dfc6fba9dafb92161baedf112d89b5  none-r2/findings/garrytan__gbrain#7794@2d801d54cee4.jsonl
+277578c8ec8fa5382caa7e7727c82bae84c7b031fa908ed73363b4f3750d9625  none-r2/findings/garrytan__gbrain#7872@f61d1a5fd5fa.jsonl
+da41f3e394800a210bdc85e4d15d08da9d452cb636bf9468afd71a191ae7bc82  none-r2/findings/garrytan__gbrain#7878@d43d2497a65c.jsonl
+exit 0 (log/f1b2.txt)
+
+## sevmap.ts, then the scrub chain, per arm
+
+$ bun $B/rev/judge/scripts/sevmap.ts $W/r2src/gstack-full
+gstack-full labels 2 map keys 4 compound entries 0 unmapped 0 
+exit 0 (log/f1b3.txt)
+gstack-full scan hits before the scrub: 3
+gstack-full lines 3 by prefix {"<temp dir>/":0,"<agent home>/":0,"<ubi home>/":0,"~/":4,"<mac home>/":0}
+gstack-full scan hits after step 1: 0
+gstack-full scan hits after step 2: 0
+gstack-full scan hits after step 3: 0
+gstack-full left for --digest-only: 
+
+$ bun $B/rev/judge/scripts/sevmap.ts $W/r2src/none-r2
+none-r2 labels 3 map keys 20 compound entries 0 unmapped 0 
+exit 0 (log/f1b4.txt)
+none-r2 scan hits before the scrub: 2
+none-r2 lines 2 by prefix {"<temp dir>/":1,"<agent home>/":0,"<ubi home>/":0,"~/":1,"<mac home>/":0}
+none-r2 scan hits after step 1: 0
+none-r2 scan hits after step 2: 0
+none-r2 scan hits after step 3: 0
+none-r2 left for --digest-only: 
+
+## After
+
+$ sh -c cd $W/r2src && find gstack-full none-r2 -type f | sort | xargs sha256sum
+5ce50a18a3231359c09df028caf5cfff44c547d4e632d965bbfa229619920abe  gstack-full/arm.json
+72172419fe5fe7c0921e3790355a64ec25712ab3c3535c01a0bd8cf700819b89  gstack-full/cost.tsv
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7511@6b01f793f2bc.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7674@af88cba164b0.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7684@ac3c2af65960.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7789@49eb4da5f7c8.jsonl
+4940b80729a638fd67d4bd9b10b85776c3439181f538cdb8527500b6041ab5a9  gstack-full/findings/garrytan__gbrain#7794@2d801d54cee4.jsonl
+85f4c853a23095c9b8806389038306410b0ca8b51d074c99d4950675b5f4e4ac  gstack-full/findings/garrytan__gbrain#7872@f61d1a5fd5fa.jsonl
+5066ff966e696d7d477783c293e6af7142d2d1ac9488ef8ed5e0cf60e6c1fef0  gstack-full/findings/garrytan__gbrain#7878@d43d2497a65c.jsonl
+3b148bd72fe9a9f2a47bfc6db045b3aa06567adb44d95f4b6dfaff6cbbe3918d  gstack-full/findings/garrytan__gbrain#7884@d3b843389bd6.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gbrain#7901@40461c875975.jsonl
+c4b7fe3f75b16d0f03134370724dee39b96e96cd5fa1436d9fb2573fe8977f4d  gstack-full/findings/garrytan__gstack#1808@b17f340a457a.jsonl
+eba5b170092bdee9a0ddcb3f2c27fe41d0e1542ecc8abd07c3adb9d83d870df1  gstack-full/findings/garrytan__gstack#3381@8a52c271ad81.jsonl
+51e90fc92bd09ddef14df167233d2750b45807824c03b6cc7a4846ead7320243  gstack-full/findings/garrytan__gstack#3431@8f4cbb8db01c.jsonl
+cf162b9f1eb6679becf9d58140267a5f2c97d0a7d0fcdfeb9273679169e0692e  gstack-full/findings/garrytan__gstack#3448@b476ae9e4b66.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gstack#3475@fc69d3ff0bfe.jsonl
+9d8e5302420883a5628fa2d6f8c8a778b34cdfb1488fd2ce5f965652cb30463e  gstack-full/findings/garrytan__gstack#3494@c555ce3a8324.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gstack#3507@8c021d124220.jsonl
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gstack-full/findings/garrytan__gstack#3516@3712b7971126.jsonl
+be399214299c3a36bcebb281653365e9d4807401224e5d72f08eee945cda74b2  gstack-full/findings/garrytan__gstack#3556@95d9c6d06ef1.jsonl
+4d2ad6d3de2cc6d62fd3476ef99c405de6a31f4f91c52a0542182caacdabac64  gstack-full/findings/garrytan__gstack#3557@7459bb48317d.jsonl
+1ca85521226203f20a1799049cdf8f83be0b0f2ca00169318ac117b569ae4797  none-r2/arm.json
+4aedf45dda730e8c5bef8fc88f7fead9f3af58a130a5d167864b648d1d7188d2  none-r2/cost.tsv
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  none-r2/findings/garrytan__gbrain#7511@6b01f793f2bc.jsonl
+ae251a0815be1d75741da0fd17de5554cee3568ad51854835f519db72338d0f7  none-r2/findings/garrytan__gbrain#7674@af88cba164b0.jsonl
+8ba55a54b44d70dc6989080bf3b705fd98c9251de52638f55552a453081a584b  none-r2/findings/garrytan__gbrain#7684@ac3c2af65960.jsonl
+ebf883f4401566343a7cabe2df8c7cf3a4d8608890aaded5a83172ed88bae7bd  none-r2/findings/garrytan__gbrain#7789@49eb4da5f7c8.jsonl
+ae21de46c6c83caa579feb86318fb06992dfc6fba9dafb92161baedf112d89b5  none-r2/findings/garrytan__gbrain#7794@2d801d54cee4.jsonl
+277578c8ec8fa5382caa7e7727c82bae84c7b031fa908ed73363b4f3750d9625  none-r2/findings/garrytan__gbrain#7872@f61d1a5fd5fa.jsonl
+da41f3e394800a210bdc85e4d15d08da9d452cb636bf9468afd71a191ae7bc82  none-r2/findings/garrytan__gbrain#7878@d43d2497a65c.jsonl
+exit 0 (log/f1b5.txt)
+
+$ python3 -c 
+import os, sys
+pre, post = sys.argv[1], sys.argv[2]
+for a in ("gstack-full", "none-r2"):
+    for root, _, files in os.walk(os.path.join(post, a)):
+        for f in sorted(files):
+            q = os.path.join(root, f); p = q.replace(post, pre, 1)
+            x = open(p).read().split("\n") if os.path.exists(p) else []
+            y = open(q).read().split("\n")
+            rel = os.path.relpath(q, post)
+            if rel.endswith("arm.json"):
+                if x != y: print("arm.json changed:", rel)
+                continue
+            for i in range(max(len(x), len(y))):
+                if (x[i] if i < len(x) else None) != (y[i] if i < len(y) else None): print("changed line:", rel + ":" + str(i + 1))
+ $W/r2src-pre $W/r2src
+arm.json changed: gstack-full/arm.json
+changed line: gstack-full/findings/garrytan__gstack#1808@b17f340a457a.jsonl:1
+changed line: gstack-full/findings/garrytan__gstack#3381@8a52c271ad81.jsonl:4
+changed line: gstack-full/findings/garrytan__gstack#3494@c555ce3a8324.jsonl:6
+arm.json changed: none-r2/arm.json
+changed line: none-r2/findings/garrytan__gbrain#7789@49eb4da5f7c8.jsonl:1
+changed line: none-r2/findings/garrytan__gstack#1808@b17f340a457a.jsonl:1
+exit 0 (log/f1b6.txt)
+
+## Blinding (A1), ingest, the procedure gate (B1)
+
+$ python3 $W/bin/blind.py $W/r2/suite/stacks-r1-out19.json $W/r2src/gstack-full $W/r2src/none-r2
+reader names rewritten to <reader>: adversarial-native, Review Army; left as ordinary words: batched, confirmed, data-migration, maintainability, other, performance, red-team, security, simplification, state-machines, testing, unconfirmed; model ids: claude-opus-5-5, gpt-6.1-sol
+gstack-full: 0 findings rewritten {}; left out (path names a reader or model id): none
+none-r2: 0 findings rewritten {}; left out (path names a reader or model id): none
+exit 0 (log/f1b7.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2src/gstack-full --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/raw
+ingest published: arm gstack-full (live, raw, 1 pass) at $W/r2/raw/stacks-r1-out19/gstack-full
+exit 0 (log/f1b8.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2src/none-r2 --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/raw
+ingest published: arm none-r2 (live, raw, 1 pass) at $W/r2/raw/stacks-r1-out19/none-r2
+exit 0 (log/f1b9.txt)
+
+$ python3 $W/bin/r1-exposure.py $W/r2/suite/stacks-r1-out19.json $W/r2src/gstack-full
+exposure: Review Army specialists ran in 11 of 19 PR-passes, the adversarial pass in 10, both in 10 (0 rows or findings name no PR-pass of the suite)
+gate: FAIL (both in at least 18 of 19 PR-passes)
+exit 3 (log/f1b10.txt)
+
+## Matching packets and judge-run's worst case
+
+$ $R/bin/gstack-evals noloss judge-packet --suite $W/r2/suite/stacks-r1-out19.json --arm $W/r2/raw/stacks-r1-out19/gstack-full --arm $W/r2/raw/stacks-r1-out19/none-r2 --seed 20261031 --out $W/r2/real/match --key $W/r2/real/match-key.json
+judge-packet: batch 303f5e37507cd3cc1097caa4c58676471a9300e3fd91c8b0085fc2f76d43e663, 19 packets, 88 findings from 2 arms; the key is outside the packets
+exit 0 (log/f1b11.txt)
+
+$ $R/bin/gstack-evals noloss judge-run --suite $W/r2/suite/stacks-r1-out19.json --packets $W/r2/real/match --key $W/r2/real/match-key.json --arm $W/r2/raw/stacks-r1-out19/gstack-full --arm $W/r2/raw/stacks-r1-out19/none-r2 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record <ledger record> --item r2-judge-match --out $W/r2/real/judge-match --dry-run
+worst case: primary $21.081108 on 19 packets; second up to $10.902267 and third up to $10.540782 if they read every packet; $42.524157 in all, $85.048314 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+item r2-judge-match: cap $25.00, $0.00 committed, $25.00 left; the worst case $42.524157 does not fit, and asked again $85.048314 does not fit. The cap stops the run wherever it falls.
+exit 0 (log/f1b12.txt)
+
+### log/f1b-changed.txt (sha256 289a108d85320c20d3902390ec6516236a590515abbe78a6376bd2d0b3e2f3f0)
+arm.json changed: gstack-full/arm.json
+changed line: gstack-full/findings/garrytan__gstack#1808@b17f340a457a.jsonl:1
+changed line: gstack-full/findings/garrytan__gstack#3381@8a52c271ad81.jsonl:4
+changed line: gstack-full/findings/garrytan__gstack#3494@c555ce3a8324.jsonl:6
+arm.json changed: none-r2/arm.json
+changed line: none-r2/findings/garrytan__gbrain#7789@49eb4da5f7c8.jsonl:1
+changed line: none-r2/findings/garrytan__gstack#1808@b17f340a457a.jsonl:1
+
+### log/f2-out.txt (sha256 fb4e8e29d40870e72b0440d6e539c655ebd8ce11955eec6903346963286d50fa)
+match start 2026-11-02T06:42:34Z
+
+$ $R/bin/gstack-evals noloss judge-run --suite $W/r2/suite/stacks-r1-out19.json --packets $W/r2/real/match --key $W/r2/real/match-key.json --arm $W/r2/raw/stacks-r1-out19/gstack-full --arm $W/r2/raw/stacks-r1-out19/none-r2 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record <ledger record> --item r2-judge-match --out $W/r2/real/judge-match --concurrency 4
+RIG_UNPROVEN: noloss judge-run: line item r2-judge-match leased without admission: no admission record at <ledger record>/items/r2-judge-match/admission-0001.json for slot 1; run gstack-evals rig admit --item r2-judge-match on the machine that will spend (docs/rig.md)
+judge-run: batch 303f5e37507cd3cc1097caa4c58676471a9300e3fd91c8b0085fc2f76d43e663, 26 requests; primary answered 19 packets, second 7, third 0; 0 unjudged; files in $W/r2/real/judge-match
+exit 0 (log/f21.txt)
+
+$ sh -c jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $W/r2/real/judge-match/run.json
+{"state":"finished","unjudged":0,"lease":null}
+exit 0 (log/f22.txt)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $W/r2/suite/stacks-r1-out19.json --key $W/r2/real/match-key.json --reply $W/r2/real/judge-match/primary.json --second $W/r2/real/judge-match/second.json --third $W/r2/real/judge-match/third.json --arm $W/r2/raw/stacks-r1-out19/gstack-full --arm $W/r2/raw/stacks-r1-out19/none-r2 --out $W/r2/real/judge-match/joined
+E_NOLOSS_BLIND the two judges agree on every blocker, so there is no third read to join; drop --third
+E_NOLOSS_BLIND context: {"resource_ids":{},"gstack_evals_version":"0.0.1","host":null,"host_version":null,"image_digest":null,"policy_sha256":null,"ledger":null,"ledger_record":null,"env_names":[]}
+E_NOLOSS_BLIND fix: Read the named arm, packet or reply. Judge an arm one way only, remove the leaking text from the source arm and ingest it again, keep --key outside --out, and send each judge the packets of the batch its reply names.
+E_NOLOSS_BLIND docs: docs/errors.md#e_noloss_blind
+exit 2 (log/f23.txt)
+E_PHASE step 3 exited 2; stopping before any later step
+
+### log/f2b-out.txt (sha256 d90aa0073bc56d9a1a45810727236596a8975e92c5ab12799e49e53f7b2c6551)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $W/r2/suite/stacks-r1-out19.json --key $W/r2/real/match-key.json --reply $W/r2/real/judge-match/primary.json --second $W/r2/real/judge-match/second.json --arm $W/r2/raw/stacks-r1-out19/gstack-full --arm $W/r2/raw/stacks-r1-out19/none-r2 --out $W/r2/real/judge-match/joined
+judge-join: batch 303f5e37507cd3cc1097caa4c58676471a9300e3fd91c8b0085fc2f76d43e663, wrote judgments for gstack-full, none-r2 under $W/r2/real/judge-match/joined; second judge on 7 blockers (kappa 1), third read on 0. Ingest each arm with noloss ingest.
+exit 0 (log/f2b1.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2/real/judge-match/joined/gstack-full --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/real/judged
+ingest published: arm gstack-full (live, judged, 1 pass) at $W/r2/real/judged/stacks-r1-out19/gstack-full
+exit 0 (log/f2b2.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2/real/judge-match/joined/none-r2 --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/real/judged
+ingest published: arm none-r2 (live, judged, 1 pass) at $W/r2/real/judged/stacks-r1-out19/none-r2
+exit 0 (log/f2b3.txt)
+
+$ $R/bin/gstack-evals noloss judge-packet --suite $W/r2/suite/stacks-r1-out19.json --arm $W/r2/real/judged/stacks-r1-out19/gstack-full --arm $W/r2/real/judged/stacks-r1-out19/none-r2 --seed 20261031 --out $W/r2/real/adj --key $W/r2/real/adj-key.json --adjudicate
+judge-packet: batch 53b2d033f14c53322baa988a74d0036ab91579658a6f4730c99d30ba1af2e2e3, 9 packets, 15 findings from 2 arms; the key is outside the packets
+exit 0 (log/f2b4.txt)
+
+$ $R/bin/gstack-evals noloss judge-run --suite $W/r2/suite/stacks-r1-out19.json --packets $W/r2/real/adj --key $W/r2/real/adj-key.json --arm $W/r2/real/judged/stacks-r1-out19/gstack-full --arm $W/r2/real/judged/stacks-r1-out19/none-r2 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record <ledger record> --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --item r2-judge-adjudicate --out $W/r2/real/judge-adj --dry-run
+worst case: primary $10.59396 on 9 packets; second up to $5.544339 and third up to $5.297088 if they read every packet; $21.435387 in all, $42.870774 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+item r2-judge-adjudicate: cap $25.00, $0.00 committed, $25.00 left; the worst case $21.435387 fits, and asked again $42.870774 does not fit. The cap stops the run wherever it falls.
+exit 0 (log/f2b5.txt)
+adjudicate start 2026-11-02T06:44:16Z
+
+$ $R/bin/gstack-evals noloss judge-run --suite $W/r2/suite/stacks-r1-out19.json --packets $W/r2/real/adj --key $W/r2/real/adj-key.json --arm $W/r2/real/judged/stacks-r1-out19/gstack-full --arm $W/r2/real/judged/stacks-r1-out19/none-r2 --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/ledger.sqlite --record <ledger record> --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC --item r2-judge-adjudicate --out $W/r2/real/judge-adj --concurrency 4
+RIG_UNPROVEN: noloss judge-run: line item r2-judge-adjudicate leased without admission: no admission record at <ledger record>/items/r2-judge-adjudicate/admission-0001.json for slot 1; run gstack-evals rig admit --item r2-judge-adjudicate on the machine that will spend (docs/rig.md)
+unverifiable not-defect rulings, arm gstack-full: 1, 0.0526 per PR cluster per pass (1 passes, 19 PR clusters)
+unverifiable not-defect rulings, arm none-r2: 0, 0.0000 per PR cluster per pass (1 passes, 19 PR clusters)
+judge-run: batch 53b2d033f14c53322baa988a74d0036ab91579658a6f4730c99d30ba1af2e2e3, 19 requests; primary answered 9 packets, second 6, third 4; 0 unjudged; files in $W/r2/real/judge-adj
+exit 0 (log/f2b6.txt)
+
+$ sh -c jq -c '{state, unjudged, lease: (.lease // .ledger // null)}' $W/r2/real/judge-adj/run.json
+{"state":"finished","unjudged":0,"lease":null}
+exit 0 (log/f2b7.txt)
+
+$ $R/bin/gstack-evals noloss judge-join --suite $W/r2/suite/stacks-r1-out19.json --key $W/r2/real/adj-key.json --reply $W/r2/real/judge-adj/primary.json --second $W/r2/real/judge-adj/second.json --third $W/r2/real/judge-adj/third.json --arm $W/r2/real/judged/stacks-r1-out19/gstack-full --arm $W/r2/real/judged/stacks-r1-out19/none-r2 --out $W/r2/real/judge-adj/joined
+judge-join: batch 53b2d033f14c53322baa988a74d0036ab91579658a6f4730c99d30ba1af2e2e3, wrote adjudication.tsv for gstack-full, none-r2 under $W/r2/real/judge-adj/joined; second judge on 6 blockers (kappa -0.3333), third read on 4. Ingest each arm with noloss ingest.
+exit 0 (log/f2b8.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2/real/judge-adj/joined/gstack-full --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/real/final
+ingest published: arm gstack-full (live, judged, 1 pass) at $W/r2/real/final/stacks-r1-out19/gstack-full
+exit 0 (log/f2b9.txt)
+
+$ $R/bin/gstack-evals noloss ingest $W/r2/real/judge-adj/joined/none-r2 --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/real/final
+ingest published: arm none-r2 (live, judged, 1 pass) at $W/r2/real/final/stacks-r1-out19/none-r2
+exit 0 (log/f2b10.txt)
+
+$ $R/bin/gstack-evals ledger status --ledger $W/ledger.sqlite --ledger-record <ledger record>
+ITEM: r1-judge-adjudicate cap=$15.00 admission=warn committed=$5.761417 left=$9.238583 run=judge-fed8817be92a leases=1 open=-
+ITEM: r1-judge-match cap=$25.00 admission=warn committed=$2.42631 left=$22.57369 run=judge-48f64a649449 leases=1 open=-
+ITEM: r2-judge-adjudicate cap=$25.00 admission=warn committed=$0.616651 left=$24.383349 run=judge-39e2d536d36a leases=1 open=-
+ITEM: r2-judge-match cap=$25.00 admission=warn committed=$0.716205 left=$24.283795 run=judge-ef3b4fa98219 leases=1 open=-
+ITEM: r2a-grid cap=$760.00 admission=warn committed=$21.473431 left=$738.526569 run=review-units-20261102T032019Z-d912 leases=2 open=-
+ITEM: r2b-grid cap=$760.00 admission=warn committed=$62.585436 left=$697.414564 run=review-units-20261102T045455Z-0e5e leases=1 open=-
+exit 0 (log/f2b11.txt)
+
+## Score, secondaries, the cap rule's exit, r2-decide.py
+
+$ $R/bin/gstack-evals noloss score --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/real/final --prereg $W/bin/comparisons.r2.json --variant gstack-full --reference none-r2 --out $W/r2/real/score-gstack-full-vs-none.json
+gstack-full vs none-r2 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R2's kill rule is a count rule, so the margin decides nothing): NOT_DISTINGUISHED. Blocking recall 0.0% vs 0.0%, delta 0.0 points [95% CI 0.0, 0.0]; 0 losses, 0 gains on 13 blockers in 13 PRs (0 discordant). p non-inferior n/a, p loss n/a (minimum reachable n/a); floor: neither arm found any blocker.
+size rule: unchecked, the reference's blocking recall is 0, so the simulation has no rate to draw around.
+false blockers per PR: gstack-full 0.05, none-r2 0.05, difference 0.00 [95% CI -0.16, +0.16] on 19 PRs; two-sided p 1.000 (minimum reachable 0.500); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 18 units metered in both (exact): gstack-full 4.9M tokens per unit, n/a per blocker found; none-r2 1.4M tokens per unit, n/a per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED; suite stacks-r1-out19 is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | gstack-full | none-r2 | difference | unadjudicated (gstack-full / none-r2) |
+|---|---|---|---|---|
+| garrytan/gbrain#7511 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7674 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7684 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7789 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7794 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7872 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7878 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gbrain#7884 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7901 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#1808 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3381 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3431 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3448 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3475 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3494 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3507 | 0 | 1 | -1 | 0 / 0 |
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3556 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3557 | 0 | 0 | 0 | 0 / 0 |
+verdict: NOT_DISTINGUISHED
+exit 2 (log/f2b12.txt)
+
+$ $R/bin/gstack-evals noloss secondary --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/real/final --variant gstack-full --reference none-r2 --seed 20261031
+noloss secondary: gstack-full vs none-r2 on stacks-r1-out19 (sha256 0719dbbd24303e65b44e879091cfacd4669500a9d55114fb07de16ad86021d40), seed 20261031
+recall, gstack-full: blocking 0/13 = 0 [0, 0]; at any severity 3/13 = 0.2308 [0, 0.4615]; 0 judgments with coverage incomplete
+recall, none-r2: blocking 0/13 = 0 [0, 0]; at any severity 4/13 = 0.3077 [0.0769, 0.5385]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.4737, reference 0.2105 (9 and 4 in all, 19 PRs); difference 0.2632 [-0.1053, 0.7368], exact two-sided sign-flip p 0.375 (min p 0.03125)
+idea-card wins: 0 of 13 blocking blockers (found by gstack-full in every pass and by none-r2 in none; 0 left out); null from 10000 within-unit label swaps: mean 0, 95th percentile 0; above the null: no
+exit 0 (log/f2b13.txt)
+r2-caps.py exit 0
+
+$ python3 $W/bin/r2-decide.py $W/r2/real/score-gstack-full-vs-none.json $W/r2src/gstack-full $W/r2/suite/stacks-r1-out19.json
+exposure: Review Army specialists ran in 11 of 19 PR-passes, the adversarial pass in 10, both in 10 (0 rows or findings name no PR-pass of the suite)
+gate: FAIL (both in at least 18 of 19 PR-passes)
+R2 outcome: none (procedure gate failed). FIX-METHOD to the Captain; no CUT-CANDIDATE and no KEEP.
+exit 4 (log/f2b14.txt)
+
+## Complete-case sensitivity (reported, never deciding)
+
+$ $R/bin/gstack-evals noloss derive --suite $W/r2/suite/stacks-r1-out19.json --comparisons $W/bin/comparisons.r2.json --id stacks-r1-out19-cc --out $W/cc --root $W/r2/real/final --drop-file $W/caps-drop.tsv
+derive stacks-r1-out19-cc: drop every unit listed in caps-drop.tsv (sha256 8864b17444ee3d899a854dc9b28317e33e241780fcc642313ab21e4d1882ddfe)
+suite $W/cc/stacks-r1-out19-cc.json sha256 ad6980c1fed4be56725815b0c808cdeaffc79ba82071124faa3a562fb091bf63: 19 units, 13 blocking blockers on 13 PRs; 0 units dropped
+exit 0 (log/f2b15.txt)
+
+$ $R/bin/gstack-evals noloss score --suite $W/cc/stacks-r1-out19-cc.json --root $W/cc/arms --prereg $W/cc/comparisons.stacks-r1-out19-cc.json --variant gstack-full --reference none-r2 --out $W/score-cc.json
+gstack-full vs none-r2 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R2's kill rule is a count rule, so the margin decides nothing): NOT_DISTINGUISHED. Blocking recall 0.0% vs 0.0%, delta 0.0 points [95% CI 0.0, 0.0]; 0 losses, 0 gains on 13 blockers in 13 PRs (0 discordant). p non-inferior n/a, p loss n/a (minimum reachable n/a); floor: neither arm found any blocker.
+size rule: unchecked, the reference's blocking recall is 0, so the simulation has no rate to draw around.
+false blockers per PR: gstack-full 0.05, none-r2 0.05, difference 0.00 [95% CI -0.16, +0.16] on 19 PRs; two-sided p 1.000 (minimum reachable 0.500); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 18 units metered in both (exact): gstack-full 4.9M tokens per unit, n/a per blocker found; none-r2 1.4M tokens per unit, n/a per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED; suite stacks-r1-out19-cc is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | gstack-full | none-r2 | difference | unadjudicated (gstack-full / none-r2) |
+|---|---|---|---|---|
+| garrytan/gbrain#7511 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7674 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7684 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7789 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7794 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7872 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7878 | 1 | 0 | 1 | 0 / 0 |
+| garrytan/gbrain#7884 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7901 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#1808 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3381 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3431 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3448 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3475 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3494 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3507 | 0 | 1 | -1 | 0 / 0 |
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3556 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3557 | 0 | 0 | 0 | 0 / 0 |
+verdict: NOT_DISTINGUISHED
+exit 2 (log/f2b16.txt)
+
+## #108's none-opus and gstack-opus on the same 19 units (SDK default prompt, 60 turns; context only)
+
+$ $R/bin/gstack-evals noloss secondary --suite $W/r2/suite/stacks-r1-out19.json --root $W/r2/suite/arms --variant gstack-opus --reference none-opus --seed 20261031
+noloss secondary: gstack-opus vs none-opus on stacks-r1-out19 (sha256 0719dbbd24303e65b44e879091cfacd4669500a9d55114fb07de16ad86021d40), seed 20261031
+recall, gstack-opus: blocking 0/13 = 0 [0, 0]; at any severity 3.5/13 = 0.2692 [0.0769, 0.5]; 0 judgments with coverage incomplete
+recall, none-opus: blocking 0/13 = 0 [0, 0]; at any severity 2/13 = 0.1538 [0, 0.3462]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.2105, reference 0.1579 (8 and 6 in all, 19 PRs); difference 0.0526 [-0.0526, 0.1579], exact two-sided sign-flip p 0.625 (min p 0.125)
+idea-card wins: 0 of 13 blocking blockers (found by gstack-opus in every pass and by none-opus in none; 0 left out); null from 10000 within-unit label swaps: mean 0, 95th percentile 0; above the null: no
+exit 0 (log/f2b17.txt)
+
+### log/x-ret12.txt (sha256 dba12cc236b23a1f48bd78ecf6e6005a26e5c1c3df7ec61d6fb2dd7a33a694ff)
+unit
+garrytan/gbrain#7511@6b01f793f2bc
+garrytan/gbrain#7684@ac3c2af65960
+garrytan/gbrain#7789@49eb4da5f7c8
+garrytan/gbrain#7901@40461c875975
+garrytan/gstack#3475@fc69d3ff0bfe
+garrytan/gstack#3507@8c021d124220
+garrytan/gstack#3516@3712b7971126
+suite $W/ret12/stacks-r1-out19-ret12.json sha256 cd8f490a7a2bed1738cc24b4400b8a1b6624d87364db0467f96db1bd44c3e5b4: 12 units, 8 blocking blockers on 8 PRs; 7 units dropped (garrytan/gbrain#7511@6b01f793f2bc, garrytan/gbrain#7684@ac3c2af65960, garrytan/gbrain#7789@49eb4da5f7c8, garrytan/gbrain#7901@40461c875975, garrytan/gstack#3475@fc69d3ff0bfe, garrytan/gstack#3507@8c021d124220, garrytan/gstack#3516@3712b7971126)
+arm gstack-full: complete, 38 cost rows dropped, tree 3abe57c48578af8adfefdd0d8e9c9fe6e33d0da45496fb88b74789ebcba4d38e
+arm none-r2: complete, 7 cost rows dropped, tree e50b95d8a24970fa1a9410471b968ee13d3c3555d838fbfca6ac9ba6751a2d68
+score with: gstack-evals noloss score --suite $W/ret12/stacks-r1-out19-ret12.json --root $W/ret12/arms --prereg $W/ret12/comparisons.stacks-r1-out19-ret12.json --variant <id> --reference <id>
+gstack-full vs none-r2 at a 10-point margin (Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; R2's kill rule is a count rule, so the margin decides nothing): NOT_DISTINGUISHED. Blocking recall 0.0% vs 0.0%, delta 0.0 points [95% CI 0.0, 0.0]; 0 losses, 0 gains on 8 blockers in 8 PRs (0 discordant). p
+false blockers per PR: gstack-full 0.08, none-r2 0.00, difference +0.08 [95% CI 0.00, +0.25] on 12 PRs; two-sided p 1.000 (minimum reachable 1.000); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 12 units metered in both (exact): gstack-full 4.7M tokens per unit, n/a per blocker found; none-r2 1.1M tokens per unit, n/a per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: the verdict is NOT_DISTINGUISHED; suite stacks-r1-out19-ret12 is development-only: it ranks variants but cannot confirm a release on its own.
+verdict: NOT_DISTINGUISHED
+recall, gstack-full: blocking 0/8 = 0 [0, 0]; at any severity 3/8 = 0.375 [0.125, 0.75]; 0 judgments with coverage incomplete
+recall, none-r2: blocking 0/8 = 0 [0, 0]; at any severity 2/8 = 0.25 [0, 0.5]; 0 judgments with coverage incomplete
+new blockers per pass per PR: variant 0.75, reference 0.25 (9 and 3 in all, 12 PRs); difference 0.5 [0, 1.1667], exact two-sided sign-flip p 0.25 (min p 0.0625)
