@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "gstack": {
+    "repo": "garrytan/gstack",
+    "sha": "77fe28c39796cf5573e3d0836b83b2ee436a8f12"
+  },
+  "note": "gstack /review at v1.92.39.0: Step 4.5's Review Army checklists (review/sections/review-army.md) and Step 4.8's Claude adversarial subagent prompt (review/sections/adversarial.md).",
+  "checklists": {
+    "review/specialists/testing.md": "testing",
+    "review/specialists/maintainability.md": "maintainability",
+    "review/specialists/security.md": "security",
+    "review/specialists/performance.md": "performance",
+    "review/specialists/data-migration.md": "data-migration",
+    "review/specialists/api-contract.md": "api-contract",
+    "review/design-checklist.md": "design",
+    "review/specialists/simplification.md": "simplification",
+    "review/specialists/state-machines.md": "state-machines",
+    "review/specialists/red-team.md": "red-team"
+  },
+  "adversarial": [
+    "Think like an attacker and a chaos engineer"
+  ]
+}

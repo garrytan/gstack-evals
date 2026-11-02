@@ -8,7 +8,11 @@
 // - total_tokens is input + output + cache_read + cache_write; reasoning_tokens is shown as the proxy recorded it.
 // - requests, refused and unknown_calls are extra columns, which the arm contract keeps and ignores. refusals.tsv sums
 //   them per arm and cell: an arm with more than 2% of its requests refused in a cell is reported as degraded there.
+// - A unit-pass with readers (readers.ts) gets a reader:<name> row per reader after its all and voice rows, sorted by
+//   name: the same pr and pass, total_tokens from the CLI's per-subagent counter (unavailable when a subagent never
+//   reported it), meter_source reader-counter, and every other column unavailable or blank.
 import { existsSync, readFileSync } from "node:fs";
+import type { ReaderUsage } from "./readers.ts";
 
 export interface Usage {
   input: number;
@@ -91,6 +95,8 @@ export interface CostSession {
   pass: number;
   wall_ms: number | null;
   cost: MeterCost | null;
+  /** The unit-pass's readers, when the run records them. */
+  readers?: readonly ReaderUsage[];
 }
 
 const usd = (micros: number) => (micros / 1_000_000).toFixed(6);
@@ -108,6 +114,9 @@ export function costTsv(sessions: readonly CostSession[]): string {
     const wall = s.wall_ms === null ? "" : String(Math.round(s.wall_ms / 100) / 10);
     rows.push(row(s.pr, "all", s.pass, s.cost?.all ?? null, wall, s.cost?.refused ?? null).join("\t"));
     if (s.cost?.voice) rows.push(row(s.pr, "voice", s.pass, s.cost.voice, "", null).join("\t"));
+    for (const r of [...(s.readers ?? [])].sort((a, b) => (a.reader < b.reader ? -1 : a.reader > b.reader ? 1 : 0))) {
+      rows.push([s.pr, "reader:" + r.reader, String(s.pass), r.total_tokens === null ? "unavailable" : String(r.total_tokens), "unavailable", "unavailable", "unavailable", "unavailable", "unavailable", "unavailable", "", "reader-counter", "", "", ""].join("\t"));
+    }
   }
   return rows.join("\n") + "\n";
 }

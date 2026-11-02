@@ -35,13 +35,15 @@ export interface HostDriverOptions {
   systemPrompt?: SystemPrompt;
   maxTurns?: number;
   sessionKind?: "unattended";
+  /** Claude Code only: record the turn cap and the slot's allowance as their own terminations (turn_cap, allowance_stop). */
+  capStops?: boolean;
 }
 
 /** The adapter for one session. Claude Code takes Anthropic and OpenRouter models; Codex takes OpenAI and OpenRouter ones. */
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.capStops ? { capStops: o.capStops } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
   return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
