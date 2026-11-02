@@ -1,0 +1,56 @@
+{
+  "unit": "S11",
+  "kind": "seeded",
+  "mode": "added-capability",
+  "product": "Cinderbook, an invoice platform adding a collections desk",
+  "flaws": [
+    {
+      "id": "S11-F1",
+      "group": "W",
+      "source": "T1",
+      "category": "T1-W3",
+      "plan_section": "The operating scorecard",
+      "cause": "The plan declares success and expansion on reminders per open invoice and paid renewals, not the intended collection outcome. The prior exercise increased that reminder measure while overdue balances worsened. The finance team can measure aged balances and collector hours, but neither is a release decision measure.",
+      "evidence": [
+        {
+          "path": "context/results.md",
+          "what": "Reminders rose from 1.8 to 3.7 while overdue balances increased; the approved goal is a 20% reduction in aged balances at unchanged hours."
+        },
+        {
+          "path": "context/customer-notes.md",
+          "what": "Customers value recovered balances and saved collector time, not message volume."
+        }
+      ],
+      "changes_what_gets_built": "Change the release and expansion decision to require collection improvement at unchanged labor rather than maximizing reminder activity.",
+      "deserved_severity": "High",
+      "fix": "Use aged balances and collector hours as the success and expansion gates. Keep reminder counts only as an explanatory operational measure."
+    },
+    {
+      "id": "S11-F2",
+      "group": "B",
+      "source": "T2",
+      "category": "T2-B1",
+      "plan_section": "Partner reservation",
+      "cause": "The plan commits $210,000 for eighteen months and 150 accounts before testing whether customers will pay $240 for the add-on. Research explicitly leaves that purchase question unresolved, and five suppliers are ready for a $4,000 assisted paid trial on available infrastructure. The full reservation cannot be reduced or cancelled after the pilot.",
+      "evidence": [
+        {
+          "path": "context/customer-notes.md",
+          "what": "Interest was collected without a price; five suppliers will join an assisted paid trial."
+        },
+        {
+          "path": "context/product.md",
+          "what": "The existing service can run the trial for $4,000 and has spare capacity."
+        },
+        {
+          "path": "context/commercial.md",
+          "what": "The large reservation is non-cancellable and the same quote can start later."
+        }
+      ],
+      "changes_what_gets_built": "Run the smaller paid test before reserving broad partner capacity and choose the commitment from observed uptake.",
+      "deserved_severity": "High",
+      "fix": "Use existing matching capacity for the assisted paid trial. Sign a scaled reservation only after the price test supports its size."
+    }
+  ],
+  "bait": null,
+  "notes": "The useful desk mechanism is supported; the distinct problems are the goal measure and the size of the pre-test commercial commitment."
+}

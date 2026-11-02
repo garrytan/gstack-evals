@@ -1,0 +1,48 @@
+{
+  "unit": "P01",
+  "kind": "pilot",
+  "mode": "greenfield",
+  "product": "ReedCove, a referral-booking service for community hearing assessments",
+  "flaws": [
+    {
+      "id": "P01-F1",
+      "group": "W",
+      "source": "T1",
+      "category": "T1-W2",
+      "plan_section": "First customers",
+      "cause": "The plan sells patient-owned accounts and lets patients allocate and transfer appointments. The district's booking rules give those powers only to referring-office coordinators, and centers will not connect personally purchased accounts. The selected user and payer cannot perform the work needed to deliver paying center subscriptions or faster allocation.",
+      "evidence": [
+        {
+          "path": "context/booking-rules.md",
+          "what": "Only office coordinators control blocks and transfers; personal accounts are not permitted; patients will not pay but coordinators have budgets."
+        },
+        {
+          "path": "context/opportunity.md",
+          "what": "The approved business target is paying centers and an office-managed referral service."
+        }
+      ],
+      "changes_what_gets_built": "Build shared office-controlled referral accounts rather than patient-owned paid booking accounts.",
+      "deserved_severity": "Critical",
+      "fix": "Sell to centers or referring offices and put allocation authority with their coordinators; keep patient preferences as an input."
+    },
+    {
+      "id": "P01-F2",
+      "group": "B",
+      "source": "T2",
+      "category": "T2-B5",
+      "plan_section": "Human help",
+      "cause": "The plan promises fifteen-minute human responses at every hour using staff who work weekday business hours only. A quarter of demand arrives outside those shifts, with no funded on-call, overtime or external service. Correcting account ownership would not provide the missing coverage.",
+      "evidence": [
+        {
+          "path": "context/service-team.md",
+          "what": "Both specialists work weekdays 09:00-17:00 only, off-hours demand exists, and no additional cover is funded."
+        }
+      ],
+      "changes_what_gets_built": "Match the response offer to weekday capacity or fund the additional shifts before offering all-hours help.",
+      "deserved_severity": "High",
+      "fix": "Use the supported next-business-day service standard unless a separately funded coverage plan is secured."
+    }
+  ],
+  "bait": null,
+  "notes": "Total weekly work fits; the staffing issue is coverage of the promised hours, independent of account ownership."
+}

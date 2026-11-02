@@ -1,0 +1,29 @@
+{
+  "unit": "D01",
+  "kind": "decoy",
+  "mode": "greenfield",
+  "product": "CrumbQuay, a first distribution test for bakery surplus-sales software",
+  "flaws": [],
+  "bait": {
+    "resembles": "T1-W3",
+    "source": "T1",
+    "plan_section": "Success for this release",
+    "choice": "Judge this release on completed qualified manager meetings and acquisition cost rather than food waste or transaction volume.",
+    "justification": [
+      {
+        "path": "context/remit.md",
+        "what": "The approved stage tests access to buying managers only, and meeting counts cannot authorize a marketplace build."
+      },
+      {
+        "path": "context/fieldwork.md",
+        "what": "A prior manual service established the batch process's usefulness, but its personal-contact recruitment cannot supply the next group."
+      },
+      {
+        "path": "context/capacity.md",
+        "what": "The meeting measure requires attendance and actual buying authority, not a booking or click."
+      }
+    ],
+    "why_not_a_flaw": "The immediate decision is whether an introduction channel can reach authorized buyers at the required cost. Completed qualified meetings directly answer that question, and the context requires separate transaction outcomes before any broader product commitment."
+  },
+  "notes": "The long-term food outcome is deliberately outside this small approved channel-access project, not omitted from an authorized marketplace launch."
+}

@@ -1,0 +1,44 @@
+{
+  "unit": "S01",
+  "kind": "seeded",
+  "mode": "greenfield",
+  "product": "LadlePath, a meal-coordination subscription for families caring for an older relative",
+  "flaws": [
+    {
+      "id": "S01-F1",
+      "group": "W",
+      "source": "T1",
+      "category": "T1-W1",
+      "plan_section": "The service",
+      "cause": "The plan builds recipe selection and shopping lists while excluding assigning cooks and confirming delivery. The interviews show that meal selection is already quick and settled, while unconfirmed responsibility causes most of the administrative work. Better recipes do not remove the work the service is funded to reduce.",
+      "evidence": [
+        {
+          "path": "context/research.md",
+          "what": "All households already have accepted meals; all rank assigning responsibility and confirming delivery above meal selection."
+        }
+      ],
+      "changes_what_gets_built": "Build shared meal assignments and delivery confirmations rather than making recipe selection the core service.",
+      "deserved_severity": "Critical",
+      "fix": "Center the first release on assigning and confirming meal responsibility. Keep recipes optional only if they support that job."
+    },
+    {
+      "id": "S01-F2",
+      "group": "B",
+      "source": "T2",
+      "category": "T2-B1",
+      "plan_section": "Finding the first customers",
+      "cause": "The plan commits $60,000 for a noncancelable year of placements before learning whether readers buy subscriptions. The agency offers a $900 test before the annual deadline, and the association can supply the first cohort independently. Correcting the meal feature would not answer the channel's paid-conversion question or undo the annual commitment.",
+      "evidence": [
+        {
+          "path": "context/channels.md",
+          "what": "Paid conversion is unresolved, an equivalent three-week test is available, and the annual price is held until test results."
+        }
+      ],
+      "changes_what_gets_built": "Run a small paid acquisition test before reserving a year of distribution.",
+      "deserved_severity": "High",
+      "fix": "Buy the short test and make the annual reservation conditional on paid conversion and cancellation results."
+    }
+  ],
+  "bait": null,
+  "notes": "The channel commitment is independent of the selected meal-management functionality."
+}

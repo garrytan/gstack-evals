@@ -1,0 +1,44 @@
+{
+  "unit": "S05",
+  "kind": "seeded",
+  "mode": "greenfield",
+  "product": "SessionWillow, a session-exchange service for outpatient dietitian practices",
+  "flaws": [
+    {
+      "id": "S05-F1",
+      "group": "W",
+      "source": "T2",
+      "category": "T2-W1",
+      "plan_section": "Purpose and customer",
+      "cause": "The plan makes individual dietitians the purchasers and the people who confirm allocations. The practices reserve both purchasing and session-allocation authority for administrators and prohibit the proposed personal tools. Serving practitioners through personal accounts cannot deliver ten paying practice customers or effective schedule exchanges.",
+      "evidence": [
+        {
+          "path": "context/research.md",
+          "what": "Administrators alone allocate sessions; personal tools are prohibited and practitioners will not pay; administrators have a budget for group accounts."
+        }
+      ],
+      "changes_what_gets_built": "Build an administrator-purchased practice account with practitioners contributing availability.",
+      "deserved_severity": "Critical",
+      "fix": "Sell to practice administrators and give them allocation approval, with practitioners participating inside the practice account."
+    },
+    {
+      "id": "S05-F2",
+      "group": "B",
+      "source": "T1",
+      "category": "T1-B1",
+      "plan_section": "What ships together",
+      "cause": "The plan requires four product areas before any paid use. The practices can buy and benefit from a four-week exchange-only service, while the unrelated invoice, education and directory work adds sixteen weeks. Changing the purchaser does not remove those unnecessary release requirements.",
+      "evidence": [
+        {
+          "path": "context/scope.md",
+          "what": "All administrators can purchase exchange-only; the other capabilities are not adoption conditions and the core is estimated at four weeks."
+        }
+      ],
+      "changes_what_gets_built": "Release the session-exchange service without the other three product areas.",
+      "deserved_severity": "High",
+      "fix": "Ship exchanges first and evaluate the other offers as separate investments after the coverage results."
+    }
+  ],
+  "bait": null,
+  "notes": "The team and budget can deliver the broad plan; the issue is unnecessary investment, not unavailable capacity."
+}
