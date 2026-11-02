@@ -39,11 +39,12 @@ R3a on Opus 5.5 starts when this post merges, on item r3a-screen at $150 includi
 | Cells and prices | config/cells.r3.json 7fe70d5ee4f55cd1efab783f08543192873ec1bd0ff071706df0d5d444ac5dbf (allowances: Opus 5.5 $4, particle-1 $1); config/proxy.json ba3927b68624958714c2fee7ac19836181c76a8bbabe148fbfdddce3d169c474 |
 | Screen and its rules | r3/screen.ts c7a11aff14d42735066b00749cf43b905d2df1a9f95ccdbb48b7c078cf568eb0, r3/exposure.ts 98db9f1310ae3f0e7631ce8666368d2bcc579412636a417b2c4a3e090eae2f4f, runner/launch.sh ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38, runner/vm-run.sh 7c149a38a54f4f52aa3b1e3f660b14bdb2b705c0262c968bea520e236667088a, runner/ledger.ts 9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33, analysis/analyze.ts 6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d |
 | System prompt | claude-code-preset on every arm and model (section 2) |
-| Run settings | 8 trials at a time (screen.ts's CONCURRENT default), a standard-16 VM with 600 GB per part (launch.sh's UBI_SIZE and UBI_STORAGE defaults), VM hours settled at VM_USD_PER_HOUR=0.60 in blocks of VM_RESERVE_HOURS=4 ($2.40 a block), the ledger service on LEDGER_PORT=9911 and each next block reserved VM_EXTEND_LEAD_SEC=1800 ahead (launch.sh's defaults). Section 10's commands set each value explicitly. ORACLE=1, so each part's oracle gate runs before its paid batch, and an oracle failure makes R3a incomplete (sections 3 and 10) |
+| Ubicloud runner | ubi-runner.sh e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8, the user drive's ubicloud skill copy of 2026-11-02, saved in the Captain drive as handoffs/GEVA-161/pins/ubi-runner.sh. launch.sh calls the runner UBI_RUNNER names (launch.sh:25), and section 10 sets UBI_RUNNER to this copy and checks its sha256 before run binds the item. It accepts 320 or 640 GB disks (ubi-runner.sh:117 and :930) and names each VM ubirun-<owner>-<epoch>-<suffix>-t<UBI_TTL_HOURS> (:874) |
+| Run settings | 8 trials at a time (screen.ts's CONCURRENT default), a standard-16 VM with 640 GB per part (UBI_SIZE is launch.sh's default; UBI_STORAGE=640 replaces launch.sh's default of 600, which the pinned runner refuses), each VM named with a 24-hour TTL (UBI_TTL_HOURS=24 in place of the runner's 3), VM hours settled at VM_USD_PER_HOUR=0.60 in blocks of VM_RESERVE_HOURS=4 ($2.40 a block), the ledger service on LEDGER_PORT=9911 and each next block reserved VM_EXTEND_LEAD_SEC=1800 ahead (launch.sh's defaults). Section 10's commands set each value explicitly. ORACLE=1, so each part's oracle gate runs before its paid batch, and an oracle failure makes R3a incomplete (sections 3 and 10) |
 
 ledger.ts and analyze.ts differ in bytes from tag laneb-stacks-1-runner's, which #112's dry run used: main's lineage changed analyze.ts, and #121 added ledger.ts's reserve, settle and open commands. #112's frozen r3-dry.ts still prints its 135 R3 lines byte for byte at the pin (section 11).
 
-The VM rate: Ubicloud lists standard-16 at $0.00831 a minute (about $0.50 an hour) with 320 GB of disk. launch.sh asks for 600 GB, and the price page lists no rate for the extra disk, so the ledger settles VM hours at $0.60 an hour, about 20% above the list price. The results post reports VM hours and this rate.
+The VM rate: Ubicloud lists standard-16 at $0.00831 a minute (about $0.50 an hour) with 320 GB of disk. Section 10 asks for 640 GB, and the price page lists no rate for the extra disk, so the ledger settles VM hours at $0.60 an hour, about 20% above the list price. The results post reports VM hours and this rate.
 
 ## 2. GSTA-2's three rulings
 
@@ -53,7 +54,7 @@ The Captain (GSTA-2) made three rulings on #121 that read the intent of #112's s
 2. **Opened.** A told trial opened /investigate when the proxy saw the slash command expand in the first request (the body-load probe), or when the agent read the skill file itself. A slash command delivers the body without a file open, so either signal counts. The export keeps the two signals apart (cmd_names from the proxy, skill_opens from the agent), and its investigate_opened is true on either. The procedure gate of #112's section 4.5 counts a trial as exposed when it opened /investigate and its output shows the procedure (DEBUG REPORT or a Phase 1 to Phase 5 heading).
 3. **claude-code-preset.** Every R3 arm on every model runs on Claude Code's own system prompt. It is part of R3's arm config (`none:system_prompt=claude-code-preset`, `gstack:told=investigate:system_prompt=claude-code-preset`, `placebo:told=investigate:system_prompt=claude-code-preset`).
 
-Each cell's allowance-stop count, its trials with budget_stop true in trials.jsonl, prints beside every verdict in the run record and the results post: R3a's screen and pilot, and each of R3b's cells. It is report-only and changes no outcome rule.
+Each cell's allowance-stop count, its trials with budget_stop true, goes beside every verdict in the run record and the results post: R3a's screen and pilot, and each of R3b's cells. analyze() at the pin prints no such count and record.json carries none (screen.ts:217-234), so the run thread counts it, one count per part, from the trials.jsonl that analyze writes (screen.ts:216). Nothing at the pin writes a trials.jsonl for R3b's cells, so the commands that freeze R3b's run name the file its counts come from. The count is report-only and changes no outcome rule.
 
 ## 3. When R3a is incomplete
 
@@ -64,7 +65,7 @@ Each cell's allowance-stop count, its trials with budget_stop true in trials.jso
 3. **An unreachable ledger.** launch.sh reserves each next VM block through the ledger service before the current block runs out. Only the service's HTTP 409 is a refusal, a cap stop. Any other failure, such as the service being unreachable, is retried until the current block runs out, and then stops the batch the same way. Either way the part's run dir holds vm-cap-stop.
 4. **The infra bound (Captain ruling A1 on #121).** More than 10% infra trials in a part (10 or more of the screen's 93, or 2 or more of the pilot's 10) makes R3a incomplete. It is checked before admission. #112's 10% infra rule in section 4.6 covers R3b's Opus cells and is unchanged.
 5. **Unreadable proxy files (Captain ruling B1 on #121).** An empty or unparseable pulled cap-stop.json, proxy-status-end.json or proxy-sessions.jsonl makes R3a incomplete, and the reason names the file, because a cap stop can't be ruled out. An empty or non-integer `<part>.launch-exit` does the same ("launch exit unreadable").
-6. **An oracle failure (GSTA-2's ruling on this post's review).** Section 10 sets ORACLE=1. A part whose oracle gate fails stops before any paid trial, launch.sh exits non-zero, and R3a is incomplete, having spent only VM hours (section 10).
+6. **An oracle failure (GSTA-2's ruling on this post's review).** Section 10 sets ORACLE=1. A part whose oracle gate fails stops before any of its paid trials, launch.sh exits non-zero, and R3a is incomplete. On the screen's VM that spends only VM hours. The pilot's oracle runs on its own VM after the screen's paid trials, so a pilot oracle failure, even on a task that passed on the screen's VM, ends R3a incomplete after the screen's model spend, which stays spent (section 10).
 
 The build also refuses, from 301d8d3 and f8a279b:
 
@@ -82,7 +83,7 @@ So R3a is incomplete when: a cap refusal (a session reserve, the proxy's batch c
 | The pilot runs after an incomplete screen (screen.ts:154). run() checks only the launch exit, cap-stop.json and vm-cap-stop between parts, so a screen that analyze() will call incomplete (over 10% infra, an unreadable proxy file) still launches the pilot. GSTA-2 kept it an open note for this amendment | Opus's R3a runs the pinned build as is: the pilot runs whatever the screen shows, its spend settles to r3a-screen inside the $150 cap, and analyze()'s verdict decides. The run thread does not stop the run by hand between parts, and the results post reports the pilot's spend on an incomplete run as spent. Sol's build checks the screen's stop reason before the pilot (section 6.6), since that code is being written anyway |
 | The incomplete rules weren't in the public record (screen.ts:13), and the labels A1 and B1 collide with #112's | Sections 2 and 3 state every rule, and the dry run drives each through the build at the pin (section 11). This post calls them the Captain's rulings A1 and B1 on #121; section 9 says what #112's A1 and B1 were |
 | A positive VM rate small enough rounds the block to $0 (launch.sh:45) | Fixed in 301d8d3 before the merge: launch.sh refuses a block that rounds to $0, and run() refuses it before it binds. The dry run shows both refusals |
-| The VM cap stop rests on one unretried `ssh touch STOP` (launch.sh:76), and the extend call has no timeout | A vm-cap-stop file makes R3a incomplete whatever happens next (section 3), so no outcome moves; the risk is VM hours past a reserve. The run thread watches each part's run dir: when vm-cap-stop appears, it confirms on the VM that work/run/STOP exists or that Harbor has exited, writes STOP itself through ubi-runner's ssh when neither holds, and records that in the run record. The ledger service runs on the run thread's own machine, which waits on it. The results post reports any VM hours settled past the cap |
+| The VM cap stop rests on one unretried `ssh touch STOP` (launch.sh:76), and the extend call has no timeout | A vm-cap-stop file makes R3a incomplete whatever happens next (section 3), so once it exists no outcome moves, and the risk is VM hours past a reserve. A hung extend call is the exception: it writes no vm-cap-stop, and section 10 says how the run record shows it. The run thread watches each part's run dir: when vm-cap-stop appears, it confirms on the VM that work/run/STOP exists or that Harbor has exited, writes STOP itself through ubi-runner's ssh when neither holds, and records that in the run record. The ledger service runs on the run thread's own machine, which waits on it. The results post reports any VM hours settled past the cap |
 | particle-1's price row ($0.25 in, $1 out, $0.03 cache read) is not OpenRouter's, and the row sends no max_price (proxy.json:71) | Ruling C1 keeps the row. Section 5 pins the price with its as_of date and says which cost the results report |
 | Fix-check 1: run()'s $0 guard and launch.sh round the block differently at the half-micro boundary (screen.ts:143) | Reachable only at absurd rates. R3a's run settings fix the block at $2.40 ($0.60 an hour for 4 hours), far from the boundary. If launch.sh ever exits 2 after run() bound the item, that is a launch that exited non-zero: R3a is incomplete |
 | Fix-check 2: analyze() exiting 1 on a mismatched plan.json, or a failed band read, leaves an earlier admitted.txt and r3b-tasks.txt in place (screen.ts:208) | An exit 1 is an error, never an outcome. R3b reads admitted.txt and r3b-tasks.txt only from an analyze() that exited 0, and the run record keeps that exit code beside the files. After any exit 1 the run thread deletes both files before anything else, and nobody edits plan.json. Sol's build moves the removal ahead of the plan.json read (section 6.6) |
@@ -196,6 +197,8 @@ The replay assumes every settle lands. proxy.ts tries each settle 3 times (proxy
 
 Every model in R3 has a no-gstack arm (Garry, 2026-10-31): Opus 5.5 none in R3a's screen and in R3b, Sol none in its screen and its R3b, and particle-1 none in R3b. R3a has no particle-1 cells: #112 first runs particle-1 in R3b, and the Captain confirmed that reading.
 
+The none arm's agent is Claude Code inside the trial's own task container on the part's Ubicloud VM, never on a Capy machine, so it sees no Capy drive and no gstack install: launch.sh copies only runner/ and the run dir to the VM (launch.sh:152-153), laneb_agent.py starts the CLI by `docker exec` into the container with HOME=/root and CLAUDE_CONFIG_DIR=/root/.claude and reads user and project settings there (laneb_agent.py:322-323, :346 and :370), the none tar adds only an empty /root/.claude/skills (arms/manifests/r3/none.json, 0 files), and none of the 93 task repos holds a .claude, .gstack, AGENTS.md or CLAUDE.md path at its SWE-bench base commit (GEVA-161 read each tree, 2026-11-02).
+
 ## 9. Attribution
 
 #112 says "Garry's rulings for this post (A1 and B1, through GEVA-2)". That is wrong. A1 (one prereg freezes all three experiments; R1 runs at merge; R2 and R3 each start only after their build PR merges and an amendment pins it) and B1 (the caps) were rulings by GSTA-2, the gstack-evals Captain, under R42 on 2026-11-01. Garry did not rule on them. The record is approvals/2026-11-01-r48-follow-ups-caps.md in the Captain drive, which says so.
@@ -210,24 +213,39 @@ Opus's R3a, from a checkout of 8ad436d in the run thread's own machine (section 
 
     LEDGER=<r3a-screen.jsonl> SWEBV=<harbor-datasets> ARMS=<arm tars> ORACLE=1 CONCURRENT=8 \
       bun quick/laneb/r3/screen.ts prepare <work>
-    LEDGER=<r3a-screen.jsonl> UBI_OWNER=<thread code> VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 \
-      UBI_SIZE=standard-16 UBI_STORAGE=600 LEDGER_PORT=9911 VM_EXTEND_LEAD_SEC=1800 \
-      bun quick/laneb/r3/screen.ts run <work>
+    R=<pinned runner>
+    echo "e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8  $R" | sha256sum -c - && test -x "$R" && \
+      LEDGER=<r3a-screen.jsonl> UBI_OWNER=<thread code> UBI_RUNNER="$R" UBI_TTL_HOURS=24 \
+      VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 UBI_SIZE=standard-16 UBI_STORAGE=640 LEDGER_PORT=9911 \
+      VM_EXTEND_LEAD_SEC=1800 bash -c 'echo $$ > <pid file>; exec bun quick/laneb/r3/screen.ts run <work> > <run log> 2>&1'
     LEDGER=<r3a-screen.jsonl> bun quick/laneb/r3/screen.ts analyze <work>
 
-CONCURRENT, UBI_SIZE, UBI_STORAGE, LEDGER_PORT and VM_EXTEND_LEAD_SEC equal the pin's defaults (screen.ts:129, launch.sh:145, :33 and :62), and the commands set them anyway, so the run rests on no default. analyze exits 0, 4, 5 or 6 (section 3). Sol's commands come with its pin-only amendment.
+<pinned runner> is the Captain drive's handoffs/GEVA-161/pins/ubi-runner.sh, as a path on the run thread's machine. The run command's first step checks it: if its sha256 differs or it is not executable, the command stops before `screen.ts run` starts, so nothing binds r3a-screen. The run record repeats the check after run exits. <pid file> and <run log> sit beside <work>, outside it, under ~/.capy/work.
 
-**The oracle gate.** With ORACLE=1, prepare-run.ts writes oracle.json beside each part's job (prepare-run.ts:93). vm-run.sh then runs the reference solution on every task of the part, calling no model, before the paid batch, and needs reward 1 on every task; a task with no trial fails too (vm-run.sh:29 to :38). An oracle failure stops the part before any paid trial: vm-run.sh exits 6, launch.sh exits with that code, and R3a is incomplete under section 3, having spent only VM hours. The run record names the failing tasks from the pulled out/oracle-fails.txt, with Harbor's out/oracle.log beside it. The oracle job's trial directories are pulled into pulled/jobs beside the part's job, but exposure.ts reads only trials whose agent is laneb-claude-code (exposure.ts:48), so they never count as trials, stray trials or infra.
+CONCURRENT, UBI_SIZE, LEDGER_PORT and VM_EXTEND_LEAD_SEC equal the pin's defaults (screen.ts:129, launch.sh:145, :33 and :62), and the commands set them anyway. Three settings replace a default on purpose:
+
+- UBI_STORAGE=640: launch.sh's default of 600 is not a size the runner accepts (it allows 320 or 640, ubi-runner.sh:117 and :930), so launch would exit 1 after run bound the item.
+- UBI_TTL_HOURS=24: with the runner's default of 3 hours (:118), any later `up` in the Ubicloud project could reap the VM mid-batch (:955 runs cmd_reap, :762), and that VM holds the only copy of the part's artifacts.
+- UBI_RUNNER: launch.sh's default (launch.sh:25) is the user drive's live copy, which can change after this post merges.
+
+So the run rests on no default. analyze exits 0, 4, 5 or 6 (section 3). Sol's commands come with its pin-only amendment.
+
+**The VMs' lifetime.** Each part's VM is named ubirun-<owner>-<epoch>-<suffix>-t24 (ubi-runner.sh:874), so no `up` reaps it until 24 hours and 10 minutes after it was created. The VM plan is 12 VM hours for both parts together (section 7). A part still running past that can be reaped by any `up` in the project, which leaves it with no pulled results, so R3a is incomplete. launch.sh still destroys each VM itself after a confirmed pull (launch.sh:122-123). The run record checks two things (R16):
+
+- each `vm: <name>` line launch.sh prints to the run log ends in -t24;
+- after run exits, `UBI_OWNER=<thread code> "$R" list --mine` lists no VM. A VM that a launch exiting 7 kept is pulled, reconciled, settled and destroyed with the commands launch.sh printed, and the list is read again.
+
+**The oracle gate.** With ORACLE=1, prepare-run.ts writes oracle.json beside each part's job (prepare-run.ts:93). vm-run.sh then runs the reference solution on every task of the part, calling no model, before the paid batch, and needs reward 1 on every task; a task with no trial fails too (vm-run.sh:29 to :38). An oracle failure stops the part before any of its paid trials: vm-run.sh exits 6, launch.sh exits with that code, and R3a is incomplete under section 3. On the screen that spends only VM hours; the pilot's oracle runs after the screen's paid trials (rule 6). The run record names the failing tasks from the pulled out/oracle-fails.txt, with Harbor's out/oracle.log beside it. The oracle job's trial directories are pulled into pulled/jobs beside the part's job, but exposure.ts reads only trials whose agent is laneb-claude-code (exposure.ts:48), so they never count as trials, stray trials or infra.
 
 **Keeping the machine awake.** run launches the screen and then the pilot, each on its own VM, and can pass 6 hours. It holds the ledger service, the VM extender and the tunnel, so its machine must stay awake until it exits:
 
-- `screen.ts run` runs detached on the run thread's own machine and writes its pid to a pid file.
-- The thread keeps that machine awake with a chain of background watcher operations, each under 6 hours, which it waits on. At each wake it starts a new one while the pid lives.
+- `screen.ts run` runs detached on the run thread's own machine, through the `bash -c` wrapper in the run command: the wrapper writes its own pid to <pid file> and then execs bun, so the file holds the controller's pid. screen.ts writes no pid file itself.
+- The thread keeps that machine awake with a chain of background watcher operations, each under 6 hours, which it waits on. At each wake it starts a new one while the pid in <pid file> lives (`kill -0`).
 - It reads the pid from the pid file, never with pgrep.
 - The ledger service runs on that same machine.
 - One launch runs per machine at a time, because launches share LEDGER_PORT 9911.
 
-One limit stands: the extender's curl has no --max-time, but it calls the local ledger service, so the risk is VM hours, not an outcome.
+One limit stands. The extender's curl (launch.sh:69) has no --max-time. It calls the local ledger service, so a hang is unlikely, but a hung curl fails open: vm_extend then writes neither vm-cap-stop nor STOP, the batch runs on VM hours no block reserves, and analyze sees no stop, so a run that rule 3 would end incomplete can score as complete. So the risk is VM hours, and in that one case an outcome too. The ledger shows it: after teardown, launch.sh settles the VM's hours across its open blocks, and only the last block can settle above its $2.40 (launch.sh:111). With the extender working, only the teardown after the extender stops (launch.sh:191) runs past the last reserve. The run record lists each part's VM settles from record.json and names any last block above $2.40, and a named block goes to the Captain with the record before R3b starts.
 
 ## 11. Dry run
 
@@ -254,6 +272,7 @@ dry-run-r3.sh reruns the R3 section of #112's dry-run.sh, keyless, at the build 
 - The dry run reruns at the build pin; it uses the build's tests rather than a stub Harbor run (section 11).
 - After review, GSTA-2's rulings: section 10 sets ORACLE=1 and every run setting explicitly, keeps the controller's machine awake and runs one launch per machine, and an oracle failure makes R3a incomplete (sections 1, 3 and 10).
 - Sol's route check records cache reads and takes LEDGER_PORT, allowance stops print beside every verdict, the verifier limit reads 6000 s, and section 7 notes lost settles (sections 1, 2, 6 and 7).
+- Round 3, on GSTA-2's rulings: UBI_STORAGE=640, a pinned ubi-runner.sh checked before run binds the item, and UBI_TTL_HOURS=24 with a name and deletion check in the run record; the pid file comes from a wrapper shown in the run command; a hung extender curl can fail open; rule 6's VM-hours-only holds for the screen, not the pilot; allowance stops are counted from trials.jsonl; and the none arm's agent sees no Capy drive and no gstack install (sections 1, 2, 3, 4, 8 and 10).
 
 ## Attachments
 
