@@ -1,0 +1,5 @@
+{
+ "note": "Band tasks left out of R3's screen, its oracle job and its coverage (Captain ruling on GEVA-177's finding, GST-941): each with the reason and a digest of its evidence. The band file and its sha256 are unchanged, and the pilot still draws from the whole band. materialize.ts pins this file's sha256.",
+ "band_sha256": "5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67",
+ "tasks": []
+}

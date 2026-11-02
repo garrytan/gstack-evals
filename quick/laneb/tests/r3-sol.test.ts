@@ -353,6 +353,21 @@ describe("the screen per model", () => {
 
 // #121's notes (R3 amendment 6.6 item 5), for both models: launch.sh against the fake ubi-runner and ssh of
 // launch.test.ts, whose batch leaves a trial directory no config.json attributes, so the screen comes back incomplete.
+describe("base image pulls", () => {
+  for (const m of [opus, sol]) {
+    test(`a base image that didn't pull makes ${m.label}'s screen incomplete as infra before any model call`, () => {
+      const { w, ledger } = work(m, { edit: (p) => { p.screen = []; }, after: (w) => {
+        rmSync(join(w, "screen", "pulled/out/proxy-sessions.jsonl"));
+        writeFileSync(join(w, "screen", "pulled/out/pull-fails.txt"), "django__django-10097 img-x\n");
+        writeFileSync(join(w, "screen.launch-exit"), "10\n");
+      } });
+      const r = analyzeCli(w, ledger, m.id);
+      expect(r.code).toBe(4);
+      expect(r.out).toContain(`R3 outcome${m.tag}: none (incomplete: screen: infra before any model call: a base image did not pull after 3 tries (django__django-10097 img-x)). ${m.incomplete}`);
+    });
+  }
+});
+
 describe("#121's notes", () => {
   for (const m of [opus, sol]) {
     test(`run doesn't launch ${m.label}'s pilot after its screen came back incomplete`, () => {

@@ -178,6 +178,31 @@ export function loadSwebvTasks(listPath: string, digestsPath: string, wantSha256
   return doc.tasks;
 }
 
+// R3's drop list (Captain ruling on GEVA-177's finding, GST-941): band tasks left out of the screen's run, its oracle job
+// and its coverage, each with the reason and a digest of its evidence (sha256:<hex>). The file must hash to
+// R3_DROP_SHA256, name R3's band, and list band tasks only, once each. The band file, its sha256 and the pilot draw stay.
+export const R3_DROP_FILE = "tasks/swebv-r3-drop.json";
+export const R3_DROP_SHA256 = "088f627bdbdfb484b64827c95ad83b0fe5ec80ef64a57f2f26fe0ff9bff2d6de";
+
+export type R3Drop = { task_id: string; reason: string; evidence_digest: string };
+
+export function loadR3Drops(path: string, wantSha256: string, band: string[]): R3Drop[] {
+  const raw = readFileSync(path);
+  const got = createHash("sha256").update(raw).digest("hex");
+  if (got !== wantSha256) throw new Error(`${path}: sha256 ${got} is not the pinned ${wantSha256}`);
+  const doc = JSON.parse(raw.toString("utf8")) as { band_sha256: string; tasks: R3Drop[] };
+  if (doc.band_sha256 !== R3_BAND_SHA256) throw new Error(`${path}: band_sha256 ${doc.band_sha256} is not ${R3_BAND_SHA256}`);
+  const seen = new Set<string>();
+  for (const d of doc.tasks) {
+    if (!band.includes(d.task_id)) throw new Error(`${path}: ${d.task_id} is not a band task`);
+    if (seen.has(d.task_id)) throw new Error(`${path}: ${d.task_id} is listed twice`);
+    if (typeof d.reason !== "string" || !d.reason.trim()) throw new Error(`${path}: ${d.task_id} has no reason`);
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(d.evidence_digest))) throw new Error(`${path}: ${d.task_id}'s evidence_digest is not sha256:<64 hex>`);
+    seen.add(d.task_id);
+  }
+  return doc.tasks;
+}
+
 function tomlNumber(text: string, section: string, key: string): number | null {
   const body = new RegExp(`^\\[${section}\\]\\s*$([\\s\\S]*?)(?=^\\[|(?![\\s\\S]))`, "m").exec(text)?.[1] ?? "";
   const v = new RegExp(`^\\s*${key}\\s*=\\s*([0-9.]+)`, "m").exec(body)?.[1];

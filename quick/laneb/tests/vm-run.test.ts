@@ -162,3 +162,37 @@ describe("vm-run.sh during the paid batch", () => {
     clearTimeout(timer);
   }, 60_000);
 });
+
+describe("vm-run.sh's base image pulls", () => {
+  // A run whose manifest gives each task its base image, with a fake sg that fails `docker pull` as the test says.
+  function pulls(images: Record<string, string>, pullCase: string) {
+    const s = setup(Object.fromEntries(Object.keys(images).map((t) => [t, "1"])));
+    const log = join(s.run, "..", "sg.log");
+    writeFileSync(join(s.run, "manifest.json"), JSON.stringify({ arms: [], tasks: Object.fromEntries(Object.entries(images).map(([t, image]) => [t, { image }])) }));
+    writeFileSync(join(s.run, "..", "bin", "sg"), `#!/usr/bin/env bash\necho "$3" >> "${log}"\ncase "$3" in *"docker pull"*) ${pullCase} ;; *"network inspect"*) echo 172.17.0.1 ;; esac\n`);
+    const r = Bun.spawnSync(s.cmd, { env: s.env });
+    return { ...s, code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString(), log: s.sg() };
+  }
+
+  test("each image is pulled once before the oracle gate, and one that fails 3 tries is infra: the run exits 10 before the oracle job or the proxy", () => {
+    const r = pulls({ a: "img-a", b: "img-b", c: "img-a" }, `case "$3" in *"'img-b'"*) exit 1 ;; esac`);
+    expect(r.code).toBe(10);
+    expect(r.exitFile()).toBe("10");
+    expect(readFileSync(join(r.run, "out", "pull-fails.txt"), "utf8")).toBe("b img-b\n");
+    expect(r.stderr).toContain("base image pull failed after 3 tries (infra), no paid trial started:\nb img-b");
+    expect(r.log.match(/docker pull 'img-a'/g)).toHaveLength(1);
+    expect(r.log.match(/docker pull 'img-b'/g)).toHaveLength(3);
+    expect(r.log).not.toContain("harbor run");
+    expect(r.log).not.toContain("network inspect");
+  });
+
+  test("an image that pulls on its third try lets the oracle gate run", () => {
+    const count = join(tmpdir(), `laneb-pull-count-${process.pid}-${Date.now()}`);
+    const r = pulls({ a: "img-a" }, `n=$(( $(cat "${count}" 2>/dev/null || echo 0) + 1 )); echo $n > "${count}"; [ $n -ge 3 ]`);
+    expect(r.log.match(/docker pull 'img-a'/g)).toHaveLength(3);
+    expect(existsSync(join(r.run, "out", "pull-fails.txt"))).toBe(false);
+    expect(r.log.lastIndexOf("docker pull")).toBeLessThan(r.log.indexOf("oracle.json"));
+    expect(r.stdout).toContain("oracle: every task passed on this host");
+    expect(r.code).toBe(8);
+  });
+});

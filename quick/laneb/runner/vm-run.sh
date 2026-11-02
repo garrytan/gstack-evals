@@ -5,7 +5,9 @@
 # Every exit writes out/vm-run.exit with the exit code, after the sessions are closed; launch.sh
 # pulls only once it exists. out/ and jobs/ exist from the start, so an early exit leaves both to
 # pull. A STOP file in the run dir (launch.sh writes it on an interrupt) keeps the paid run from
-# starting, or stops a running one with one SIGINT to Harbor.
+# starting, or stops a running one with one SIGINT to Harbor. Before the oracle gate it pulls each task's base image
+# (manifest.json), up to 3 tries 30 s apart; a task whose image still doesn't pull is infra: out/pull-fails.txt lists it
+# with its image, and the run exits 10 before any model call.
 # Usage: vm-run.sh <run dir> <ledger prefix> <batch cap usd>
 set -euo pipefail
 run=$(cd "$1" && pwd)
@@ -26,6 +28,18 @@ for gz in "$run"/arms/*.tar.gz; do
   [ "$got" = "$want" ] || { echo "arm $name: tar sha256 $got, manifest says $want" >&2; exit 5; }
 done
 curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-start.json" || { echo "ledger tunnel not reachable" >&2; exit 4; }
+declare -A pull=()
+while read -r task image; do
+  if [ -z "${pull[$image]:-}" ]; then
+    pull[$image]=failed
+    for try in 1 2 3; do
+      if sg docker -c "docker pull '$image'" < /dev/null >> "$run/out/pull.log" 2>&1; then pull[$image]=ok; break; fi
+      [ "$try" = 3 ] || sleep 30
+    done
+  fi
+  [ "${pull[$image]}" = ok ] || echo "$task $image" >> "$run/out/pull-fails.txt"
+done < <(jq -r '(.tasks // {}) | to_entries[] | "\(.key) \(.value.image)"' "$run/manifest.json")
+if [ -s "$run/out/pull-fails.txt" ]; then echo "base image pull failed after 3 tries (infra), no paid trial started:" >&2; cat "$run/out/pull-fails.txt" >&2; exit 10; fi
 if [ -f "$run/oracle.json" ]; then
   (cd "$run" && sg docker -c "harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
   # Every task in the oracle job needs a trial with reward 1; a task with no trial directory fails too.
