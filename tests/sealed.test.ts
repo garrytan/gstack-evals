@@ -55,10 +55,16 @@ describe("sealed publication rules", () => {
     expect(seeds.some((re) => re.test("const seed = 7"))).toBe(false);
   });
 
-  test("an answer marker needs one or more words before the colon, so a bare verdict line passes", () => {
+  test("the guard's own verdict lines pass, and every other bare or labelled marker still trips", () => {
     const markers = sealed.answer_markers.map((m) => new RegExp(m));
-    for (const line of ["SEALED" + ": error", "SEALED" + ": clear findings=0 commits=1"]) expect(markers.some((re) => re.test(line))).toBe(false);
-    for (const line of ["SEALED" + " ANSWER: 42", "SEALED" + " HIDDEN TEST: t1"]) expect(markers.some((re) => re.test(line))).toBe(true);
+    const trips = (line: string) => markers.some((re) => re.test(line));
+    const bare = "SEALED" + ": ";
+    for (const verdict of ["clear findings=0 commits=1", "refused findings=1 commits=1", "warned findings=1 commits=1", "error", "no-policy findings=0 commits=1", "not checked (exit 3)"]) {
+      expect(trips(bare + verdict)).toBe(false);
+    }
+    for (const line of [bare + "42", bare + "fixture-only-answer=42", bare + "clearly 42", "SEALED" + " ANSWER: 42", "SEALED" + " HIDDEN TEST: t1"]) {
+      expect(trips(line)).toBe(true);
+    }
   });
 
   test("no text rule matches a line of the config itself, so the config never refuses its own commit", () => {
