@@ -10,10 +10,11 @@
 // its first spend by creating <LEDGER>.bound, so any later run is refused. A cap refusal (a VM block, a session reserve
 // or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing. So does a part whose
 // trials are not one per planned task: a planned task with no trial, a second trial for a task, or a stray trial. So does
-// a part with more than 10% infra trials, or a pulled proxy file that is empty or unparseable (GSTA-2 rulings).
+// a part with more than 10% infra trials, a pulled proxy file that is empty or unparseable, or a launch exit that can't
+// be read (GSTA-2 rulings). analyze removes an earlier analysis's admitted.txt and r3b-tasks.txt before it writes.
 // Exit codes, as r3-dry.ts: 0 admission passed (R3b waits for Garry's caps), 4 incomplete, 5 saturation, 6 pilot
 // FIX-METHOD; 2 usage, 1 any other error.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readSessionRows, rng } from "../analysis/analyze.ts";
 import { fromMicros, readRows, totals } from "../runner/ledger.ts";
@@ -138,6 +139,8 @@ function run(work: string) {
   const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
   if (!rate) throw new Error("E_USAGE set VM_USD_PER_HOUR so the VM hours settle to r3a-screen");
   if (![rate, hours].every((v) => /^\d+(\.\d+)?$/.test(v) && Number(v) > 0)) throw new Error(`E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers (got ${rate} and ${hours})`);
+  const block = Number(rate) * Number(hours);
+  if (Math.round(block * 1e6) <= 0 || block > CAP_USD || Math.trunc(Number(hours) * 3600) < 2) throw new Error(`E_USAGE the VM block (${rate} $/h for ${hours} h) must come to more than $0, at most the $${CAP_USD} cap, and at least 2 seconds`);
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   const bound = ledger + ".bound";
   try {
@@ -175,7 +178,9 @@ function unreadable(path: string): boolean {
 function stopReason(work: string, part: (typeof PARTS)[number], trials: R3Trial[], tasks: string[]): string | null {
   const dir = join(work, part.name);
   const exitFile = join(work, `${part.name}.launch-exit`);
-  const rc = existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null;
+  const exitText = existsSync(exitFile) ? readFileSync(exitFile, "utf8").trim() : null;
+  if (exitText !== null && !/^\d+$/.test(exitText)) return `${part.name}: launch exit unreadable`;
+  const rc = exitText === null ? null : Number(exitText);
   if (rc === 9) return `${ITEM} refused ${part.name}'s VM reserve`;
   if (existsSync(join(dir, "vm-cap-stop"))) return `${part.name}: ${readFileSync(join(dir, "vm-cap-stop"), "utf8").trim()}`;
   const bad = PROXY_FILES.find((f) => existsSync(join(dir, "pulled/out", f)) && unreadable(join(dir, "pulled/out", f)));
@@ -200,6 +205,7 @@ function analyze(work: string): number {
   const band = bandIds();
   if (JSON.stringify(plan.pilot_tasks) !== JSON.stringify(pilotTasks(band))) throw new Error(`${work}/plan.json's pilot tasks are not the seed ${PILOT.seed} draw`);
   const planned: Record<string, string[]> = { screen: band, pilot: plan.pilot_tasks };
+  for (const stale of ["admitted.txt", "r3b-tasks.txt"]) rmSync(join(work, stale), { force: true });
   const parts = PARTS.map((part) => {
     const dir = join(work, part.name);
     const sessions = join(dir, "pulled/out/proxy-sessions.jsonl");

@@ -397,6 +397,26 @@ describe("R3 screen and admission", () => {
     });
   }
 
+  for (const [part, content] of [["screen", ""], ["pilot", "x\n"]] as const) {
+    test(`${content ? "a non-integer" : "an empty"} ${part}.launch-exit makes R3a incomplete and admits nothing`, () => {
+      const r = work({ after: (w) => writeFileSync(join(w, part + ".launch-exit"), content) });
+      expect(r.code).toBe(4);
+      expect(r.out).toContain(`R3 outcome: none (incomplete: ${part}: launch exit unreadable`);
+      expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+    });
+  }
+
+  test("a reanalysis that ends incomplete leaves no admitted.txt or r3b-tasks.txt from an earlier analysis", () => {
+    const r = work();
+    expect(r.code).toBe(0);
+    expect(existsSync(join(r.w, "r3b-tasks.txt"))).toBe(true);
+    writeFileSync(join(r.w, "screen/pulled/out/cap-stop.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for t__1 at x" }));
+    const again = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "analyze", r.w], { env: { ...process.env, LEDGER: join(r.w, "r3a-screen.jsonl") } });
+    expect(again.exitCode).toBe(4);
+    expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+    expect(existsSync(join(r.w, "r3b-tasks.txt"))).toBe(false);
+  });
+
   test("run binds the item before its first spend: a second run, from this work dir or another, is refused", () => {
     const w = tmp("r3-bindrun-");
     const ledger = join(w, "r3a-screen.jsonl");
@@ -420,15 +440,24 @@ describe("R3 screen and admission", () => {
     expect(readRows(ledger).filter((x) => x.kind === "reserve")).toHaveLength(1);
   });
 
-  for (const [rate, hours] of [["0,6", undefined], ["$0.60", undefined], ["0", undefined], ["2", "4h"]] as const) {
-    test(`run refuses a VM rate or block that isn't a positive number (${rate} $/h, ${hours ?? "default"} h) before it binds the item`, () => {
+  const badVm: [string, string | undefined, string][] = [
+    ["0,6", undefined, "E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers"],
+    ["$0.60", undefined, "E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers"],
+    ["0", undefined, "E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers"],
+    ["2", "4h", "E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers"],
+    ["0.0000001", "4", "E_USAGE the VM block (0.0000001 $/h for 4 h) must come to more than $0, at most the $150 cap, and at least 2 seconds"],
+    ["2", "0.0005", "E_USAGE the VM block (2 $/h for 0.0005 h) must come to more than $0, at most the $150 cap, and at least 2 seconds"],
+    ["2", "100", "E_USAGE the VM block (2 $/h for 100 h) must come to more than $0, at most the $150 cap, and at least 2 seconds"],
+  ];
+  for (const [rate, hours, message] of badVm) {
+    test(`run refuses a VM rate or block it can't reserve (${rate} $/h, ${hours ?? "default"} h) before it binds the item`, () => {
       const w = tmp("r3-vmrate-");
       const ledger = join(w, "r3a-screen.jsonl");
       approve(ledger);
       writeFileSync(join(w, "plan.json"), "{}");
       const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: rate, VM_RESERVE_HOURS: hours, UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
       const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w], { env: env as Record<string, string> });
-      expect(r.stderr.toString()).toContain("E_USAGE VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers");
+      expect(r.stderr.toString()).toContain(message);
       expect(r.exitCode).toBe(2);
       expect(existsSync(ledger + ".bound")).toBe(false);
       expect(existsSync(join(w, "screen.launch-exit"))).toBe(false);

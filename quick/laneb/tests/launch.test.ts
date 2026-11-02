@@ -193,12 +193,13 @@ describe("launch.sh with VM hours on the item (VM_USD_PER_HOUR, VM_RESERVE_HOURS
     expect(code).toBe(9);
   }, 60_000);
 
-  for (const [rate, hours] of [["0,6", "4"], ["$0.60", "4"], ["0", "4"], ["2", "4h"]] as const) {
-    test(`a VM rate or block that isn't a positive number (${rate} $/h, ${hours} h) is refused before any reserve or VM`, async () => {
+  const notNumbers = "launch.sh: VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers";
+  for (const [rate, hours, message] of [["0,6", "4", notNumbers], ["$0.60", "4", notNumbers], ["0", "4", notNumbers], ["2", "4h", notNumbers], ["0.0000001", "4", "launch.sh: the VM block (0.0000001 $/h for 4 h) rounds to $0"]] as const) {
+    test(`a VM rate or block that isn't a positive number or rounds to $0 (${rate} $/h, ${hours} h) is refused before any reserve or VM`, async () => {
       const r = rig({ finish: 0 });
       Object.assign(r.env, { VM_USD_PER_HOUR: rate, VM_RESERVE_HOURS: hours });
       const { code, stderr, events } = await runToEnd(r);
-      expect(stderr).toContain("launch.sh: VM_USD_PER_HOUR and VM_RESERVE_HOURS must be positive numbers");
+      expect(stderr).toContain(message);
       expect(events.some((e) => e.startsWith("up"))).toBe(false);
       expect(vmRows(r)).toEqual([]);
       expect(code).toBe(2);

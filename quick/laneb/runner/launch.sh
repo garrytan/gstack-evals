@@ -46,6 +46,7 @@ if [ -n "$vm_rate" ]; then
   vm_block_micros=$(awk -v b="$vm_block" 'BEGIN { printf "%d", b * 1000000 + 0.5 }')
   vm_block_sec=$(awk -v h="$vm_hours" 'BEGIN { printf "%d", h * 3600 }')
   [ "$vm_block_sec" -ge 2 ] || { echo "launch.sh: VM_RESERVE_HOURS $vm_hours is under 2 seconds" >&2; exit 2; }
+  [ "$vm_block_micros" -gt 0 ] || { echo "launch.sh: the VM block ($vm_rate \$/h for $vm_hours h) rounds to \$0" >&2; exit 2; }
   bun "$here/ledger.ts" reserve --path "$LEDGER" --item "$ITEM" --id "$vm_id" --usd "$vm_block" --detail "VM hours, block 1 of $vm_hours h" \
     || { echo "launch.sh: the ledger refused the VM reserve of \$$vm_block for $ITEM; no VM started (cap stop)" >&2; exit 9; }
 fi
