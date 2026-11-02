@@ -17,6 +17,7 @@
 # out/pulls.tsv has each image's status, tries and seconds waited at the rate limit. An image that still failed is infra:
 # out/pull-fails.txt lists it with the tasks that build from it, and the run exits 10 before any model call. A STOP file
 # ends the pulls too (exit 130), and kills a pull in flight. The VM's time spent waiting is billed in launch.sh's VM blocks like the rest of the run.
+# A HUP, INT or TERM exits 129, 130 or 143, and first kills a pull in flight and its watcher.
 # Usage: vm-run.sh <run dir> <ledger prefix> <batch cap usd>
 set -euo pipefail
 run=$(cd "$1" && pwd)
@@ -27,7 +28,9 @@ export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
 mkdir -p "$run/out" "$run/jobs"
 rm -f "$run/out/vm-run.exit"
 trap 'echo $? > "$run/out/vm-run.exit"' EXIT
-trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
+pulling=""
+stop_pull() { if [ -n "$pulling" ]; then kill $pulling 2>/dev/null || true; wait $pulling 2>/dev/null || true; fi; }
+trap 'stop_pull; exit 129' HUP; trap 'stop_pull; exit 130' INT; trap 'stop_pull; exit 143' TERM
 for gz in "$run"/arms/*.tar.gz; do
   [ -e "$gz" ] || continue
   gzip -dkf "$gz"
@@ -69,13 +72,16 @@ pull() {
     if [ -e "$run/STOP" ]; then printf 'STOP\t%s\t%s\t%s\n' "$((n + 1))" "$waited" "$img"; return 0; fi
     timeout --kill-after=30 "$try_s" sg docker -c "docker pull -q '$img'" < /dev/null >> "$log" 2>&1 &
     p=$!
+    pulling=$p
     (while kill -0 "$p" 2>/dev/null; do
       read -rt 2 <> <(:) || true
       if [ -e "$run/STOP" ]; then kill "$p" 2>/dev/null; break; fi
     done) &
     watch=$!
+    pulling="$p $watch"
     rc=0
     wait "$p" || rc=$?
+    pulling=""
     kill "$watch" 2>/dev/null || true
     wait "$watch" 2>/dev/null || true
     if [ "$rc" -eq 0 ]; then
