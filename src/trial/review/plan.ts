@@ -21,7 +21,6 @@
 // - parsePlanSession reads the last plan-findings block in any assistant turn of a completed session. A plan run scores
 //   a malformed, missing or incomplete pass as finding nothing, with a diagnostic note (open item 2).
 // - ceoMode reads the review mode gstack's mode handoff line names, so each session's mode is recorded (open item 6).
-// - ceoMode reads the review mode gstack's mode handoff line names, so each session's mode is recorded (open item 6).
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
