@@ -353,17 +353,19 @@ describe("the screen per model", () => {
 
 // #121's notes (R3 amendment 6.6 item 5), for both models: launch.sh against the fake ubi-runner and ssh of
 // launch.test.ts, whose batch leaves a trial directory no config.json attributes, so the screen comes back incomplete.
-describe("base image pulls", () => {
+describe("image pulls", () => {
   for (const m of [opus, sol]) {
-    test(`a base image that didn't pull makes ${m.label}'s screen incomplete as infra before any model call`, () => {
+    test(`an image that didn't pull makes ${m.label}'s screen incomplete as infra before any model call, and the record keeps the pulls`, () => {
       const { w, ledger } = work(m, { edit: (p) => { p.screen = []; }, after: (w) => {
         rmSync(join(w, "screen", "pulled/out/proxy-sessions.jsonl"));
-        writeFileSync(join(w, "screen", "pulled/out/pull-fails.txt"), "django__django-10097 img-x\n");
+        writeFileSync(join(w, "screen", "pulled/out/pull-fails.txt"), "img-x (django__django-10097)\n");
+        writeFileSync(join(w, "screen", "pulled/out/pulls.tsv"), "status\ttries\trate_limit_wait_s\timage\nFAIL\t6\t10800\timg-x\nok\t1\t300\timg-y\n");
         writeFileSync(join(w, "screen.launch-exit"), "10\n");
       } });
       const r = analyzeCli(w, ledger, m.id);
       expect(r.code).toBe(4);
-      expect(r.out).toContain(`R3 outcome${m.tag}: none (incomplete: screen: infra before any model call: a base image did not pull after 3 tries (django__django-10097 img-x)). ${m.incomplete}`);
+      expect(r.out).toContain(`R3 outcome${m.tag}: none (incomplete: screen: infra before any model call: an image did not pull (6 tries and up to 3 hours at the rate limit): img-x (django__django-10097)). ${m.incomplete}`);
+      expect(JSON.parse(readFileSync(join(w, "record.json"), "utf8")).pulls).toEqual({ screen: { images: 2, failed: ["img-x"], rate_limit_wait_s: 11100 }, pilot: null });
     });
   }
 });

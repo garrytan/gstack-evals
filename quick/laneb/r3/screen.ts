@@ -300,7 +300,7 @@ function unreadable(path: string): boolean {
 }
 
 // Why a part is incomplete, or null. A cap refusal anywhere, a pulled proxy file that is empty or unparseable (a cap stop
-// can't be ruled out), a base image that didn't pull (vm-run.sh's out/pull-fails.txt), a launch that didn't exit 0, a part with no pulled results, trials that are not one per planned
+// can't be ruled out), an image that didn't pull (vm-run.sh's out/pull-fails.txt), a launch that didn't exit 0, a part with no pulled results, trials that are not one per planned
 // task on the model, or more than 10% of the part's trials infra (GSTA-2 rulings).
 function stopReason(work: string, part: Part, trials: R3Trial[], tasks: string[], m: R3aModel): string | null {
   const dir = join(work, part.name);
@@ -317,7 +317,7 @@ function stopReason(work: string, part: Part, trials: R3Trial[], tasks: string[]
   const capped = trials.find((t) => t.cap_stop);
   if (capped) return `${part.name}: ${capped.trial} stopped at the cap (LedgerCapStop)`;
   const pullFails = join(dir, "pulled/out/pull-fails.txt");
-  if (existsSync(pullFails)) return `${part.name}: infra before any model call: a base image did not pull after 3 tries (${readFileSync(pullFails, "utf8").trim().split("\n").join(", ")})`;
+  if (existsSync(pullFails)) return `${part.name}: infra before any model call: an image did not pull (6 tries and up to 3 hours at the rate limit): ${readFileSync(pullFails, "utf8").trim().split("\n").join("; ")}`;
   if (rc === null) return `${part.name} was never launched`;
   if (rc !== 0) return `${part.name}'s launch exited ${rc}`;
   if (!existsSync(join(dir, "pulled/jobs"))) return `${part.name} has no pulled results`;
@@ -353,7 +353,13 @@ function analyze(work: string, m: R3aModel): number {
   const vm = rows.filter((r) => r.kind === "settle" && String(r.kind_detail ?? "").startsWith("VM hours")).map((r) => ({ id: r.id, usd: fromMicros(r.usd_micros), detail: r.kind_detail }));
   const ledgerLine = `${m.item}: ${screen.length} screen trials, ${pilot.length} pilot trials, settled $${fromMicros(t.settledMicros).toFixed(2)} of $${fromMicros(t.capMicros)}, open reserves ${t.openIds.length}`;
   const route = m.routePrefix === null ? {} : { model: m.id, route_check: readRoute(ledger) };
-  const base = { item: m.item, ...route, ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
+  // Each part's image pulls as vm-run.sh logged them (out/pulls.tsv): images, failures and seconds waited at the rate limit.
+  const pulls = Object.fromEntries(m.parts.map((part) => {
+    const f = join(work, part.name, "pulled/out/pulls.tsv");
+    const rows = existsSync(f) ? readFileSync(f, "utf8").split("\n").slice(1).filter(Boolean).map((l) => l.split("\t")) : null;
+    return [part.name, rows && { images: rows.length, failed: rows.filter((r) => r[0] !== "ok").map((r) => r[3]), rate_limit_wait_s: rows.reduce((s, r) => s + Number(r[2]), 0) }];
+  }));
+  const base = { item: m.item, ...route, pulls, ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
   console.log(ledgerLine);
   const stop = parts.map((p) => p.stop).find(Boolean);
   if (stop) {
