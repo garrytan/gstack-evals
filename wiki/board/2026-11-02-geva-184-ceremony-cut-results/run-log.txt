@@ -1,0 +1,681 @@
+GEVA-184 run log: the lines each phase printed, in run order. Machine paths: <home> stands for /home and <Users> for /Users in the chain scan names, <work> is GEVA-184's work dir, <rig> the rig worktree at b792646.
+
+===== RUNLOG.md (GEVA-184's run notes)
+- 2026-11-02T10:07:35Z TB2 controllers launched (opus, particle), batch cap 168.58 each, ledger ceremony-r1-tb2 cap 168.58, UBI_OWNER=geva184, TTL 14h, runner sha a16fca41
+- 2026-11-02T13:04:10Z TB2 both batches exit 0, 333+333 trials, oracle 37/37 x2, VMs destroyed 12:11:50Z and 12:58:04Z, list shows no geva184 VM. Ledger settled 91.346257, 4 reserves (6.60) never settled, proxy global +0.247043. Ledger service stopped 13:00:12Z.
+judge-match start rule: pilots 14.902839 + review-grid 181.04 + review-sdk 35.046846 + tb2 settled 91.346257 + tb2 open reserves 6.6 + judge-match cap 20 + judge-adj cap 20 = 368.935942 <= 496.12: True
+- 2026-11-02T13:08:10Z judge-match launched (item ceremony-r1-judge-match, cap 20, admitted green, seed 20261101, 33 packets, 452 findings)
+- judge-adj start rule: pilots 14.902839 + review-grid 181.04 + review-sdk 35.046846 + tb2 settled 91.346257 + tb2 open reserves 6.6 + judge-match settled 2.29528 + judge-adj cap 20 = 351.231222 <= 496.12: True
+- judge-match settled 2.29528 (60 requests, 0 unjudged, kappa 0.9454 on 28 blockers, third read 3)
+- 2026-11-02T13:11:37Z judge-adj launched (item ceremony-r1-judge-adj, cap 20, admitted green, 11 packets, 50 findings)
+- 2026-11-02T13:13:25Z judge-adj done, 22 requests, 0 unjudged; joined and ingested to final/arms
+
+===== setup-tb2.sh output: tag export, TB2 checkout, tar rebuild and digest check
+Preparing worktree (detached HEAD 8cd4973)
+HEAD is now at 8cd4973 laneb: rendered arm manifests from two matching clean builds at 5a1b774 (gstack 142757b); gstack-render eeab89bf, gstack-render-unattended 406d4a86 (GEVA-108)
+8cd497367e3d7e609103540c22e01542b705604d
+2026-11-02T10:01:53Z export done
+69671fbaac6d67a7ef0dfec016cc38a64ef7a77c
+2026-11-02T10:01:57Z tb2 done
+== gstack checkout at 142757b107edeffff7c78453490c4d2786996fa7
+== gstack-render: ./setup, then render --session-kind interactive, in docker
+Unable to find image 'ubuntu:24.04@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c' locally
+docker.io/library/ubuntu@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c: Pulling from library/ubuntu
+Digest: sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
+Status: Downloaded newer image for ubuntu@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
+gstack-render files=14123 bytes=1349516237 skills=65 tree_digest=98ad57d30dc3d1014a9d84215149ff973283a0d0e023dcf522c1c847d55a7140 tar_sha256=eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e
+== gstack-render-unattended: ./setup, then render --session-kind unattended, in docker
+gstack-render-unattended files=14123 bytes=1348967350 skills=65 tree_digest=937a8678708af46cf2cac0c36d0e330cd52480fa00df05fc36d5c83e1a1e2196 tar_sha256=406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1
+-rw-r--r-- 1 user user 1362626560 Nov  2 10:04 <work>/arms/gstack-render-unattended.tar
+-rw-r--r-- 1 user user  547229444 Nov  2 10:05 <work>/arms/gstack-render-unattended.tar.gz
+-rw-r--r-- 1 user user 1363179520 Nov  2 10:02 <work>/arms/gstack-render.tar
+-rw-r--r-- 1 user user  547528636 Nov  2 10:03 <work>/arms/gstack-render.tar.gz
+2026-11-02T10:05:11Z render build done
+2026-11-02T10:05:11Z none done
+eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e  gstack-render.tar
+406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1  gstack-render-unattended.tar
+c7ef36e8d7013fa49e86b7403a20a667adb78065dd837e3e5898d0ae8a7526c5  gstack-render.tar.gz
+22545ba5b3a9d5b981952faf773ec19dcce897fc2f1e06852309d200273b4ce2  gstack-render-unattended.tar.gz
+8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e  none.tar
+none manifest(tag) tar.sha256=8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e tar_gz=6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5
+gstack-render manifest(tag) tar.sha256=eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e tar_gz=c7ef36e8d7013fa49e86b7403a20a667adb78065dd837e3e5898d0ae8a7526c5
+gstack-render-unattended manifest(tag) tar.sha256=406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1 tar_gz=22545ba5b3a9d5b981952faf773ec19dcce897fc2f1e06852309d200273b4ce2
+gstack-render manifest identical to tag
+gstack-render-unattended manifest identical to tag
+2026-11-02T10:05:14Z ALL DONE
+exit=0
+
+===== TB2 ledger note rows (ledger/ceremony-r1-tb2.jsonl)
+{"ts":"2026-11-02T10:03:26.272Z","item":"ceremony-r1-tb2","kind":"note","id":"start-rule-tb2-launch","usd_micros":0,"prereg":"64e4d626f89aeaace0eeabdca00892c5749ee41a","by":"GEVA-184","start_rule":{"label":"tb2-launch","pilots_settled":14.902839,"review_grid_settled_log_line":181.04,"review_sdk_settled":35.046846,"tb2_open_reserved":0,"tb2_settled":0,"launching_item_cap_tb2":168.58,"judges_projection":6,"total_usd":405.569685,"ceiling_usd":496.12,"fits":true},"rule":"prereg section 9: settled spend, plus open reservations, plus the launching item's cap, plus the projection of every item not yet launched (judges, about $6), must be at most the ceiling. review-grid counts at its log line's $181.04 (the lease settled $176.218648 with 2 unknown calls), as GSTA-2 directed."}
+{"ts":"2026-11-02T13:04:10.130Z","item":"ceremony-r1-tb2","kind":"note","id":"tb2-close","usd_micros":0,"prereg":"64e4d626f89aeaace0eeabdca00892c5749ee41a","by":"GEVA-184","event":"item closed","closed_at":"2026-11-02T12:58:04Z","batches":{"opus":{"exit":0,"trials":333,"sessions_in_session_file":333,"proxy_global_spent_usd":69.532834,"session_file_spent_usd":69.386883,"vm":"ubirun-geva184-1793614055-9542bf15-t14","destroyed_at":"2026-11-02T12:11:50Z"},"particle":{"exit":0,"trials":333,"sessions_in_session_file":333,"proxy_global_spent_usd":22.060466,"session_file_spent_usd":21.959374,"vm":"ubirun-geva184-1793614055-9b5d2db0-t14","destroyed_at":"2026-11-02T12:58:04Z"}},"settled_usd":91.346257,"open_reserves_never_settled":["ceremony-r1-tb2-opuss-481faf899546","ceremony-r1-tb2-opuss-14191d25e7fa","ceremony-r1-tb2-particles-6b01381eca64","ceremony-r1-tb2-particles-3d2f76ef55e5"],"open_reserved_usd":6.6,"proxy_spend_outside_settles_usd":0.247043,"oracle":"37 of 37 passed on both VMs","note":"The 4 reserves were opened by sessions that never closed into proxy-sessions.jsonl or a settle. The global proxy counter holds their 0.247043 USD. No row is edited."}
+
+===== tb2/watch.sh, last lines
+2026-11-02T12:11:50Z destroyed ubirun-geva184-1793614055-9542bf15-t14
+{"global_spent_micros":22060466,"cap_stop":null,"open_sessions":0,"sessions":335}ubi-runner: destroy requested: eu-central-h1/ubirun-geva184-1793614055-9b5d2db0-t14
+2026-11-02T12:59:59Z done=2 ledger={"capMicros":168580000,"settledMicros":91346257,"openReservedMicros":6600000,"openIds":["ceremony-r1-tb2-opuss-481faf899546","ceremony-r1-tb2-opuss-14191d25e7fa","ceremony-r1-tb2-particles-6b01381eca6
+2026-11-02T12:11:50Z destroyed ubirun-geva184-1793614055-9542bf15-t14
+2026-11-02T12:58:04Z destroyed ubirun-geva184-1793614055-9b5d2db0-t14
+ALL_EXITED
+
+===== ceremony-tb2.ts (frozen), both readings
+## No-reward trials scored 0 (primary)
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $28.3189 | $0.2551 | $0.2890 | 6.71 | 36361, 36033, 39042 |
+| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $25.7744 | $0.2322 | $0.2802 | 6.68 | 31751, 31423, 34432 |
+| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $15.2936 | $0.1378 | $0.1662 | 5.89 | 22619, 22450, 65081 |
+| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $8.8439 | $0.0797 | $0.1053 | 19.44 | 99853, 98989, 107174 |
+| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $6.2154 | $0.0560 | $0.0714 | 17.59 | 89150, 88286, 96471 |
+| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | $6.9000 | $0.0622 | $0.0775 | 18.42 | 64264, 63757, 68270 |
+
+| Model | Contrast | Tasks | Difference, pp | 90% CI | 95% CI | LOSS p (one-sided) | Margin | Size | No-loss |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | variant - control | 37 | -5.4 | [-9.9, -1.8] | [-10.8, -0.9] | 0.0140 | 7.5 | 0.939 | NOT_SHOWN |
+| claude-opus-5-5 | control - none | 37 | +5.4 | [+0.0, +11.7] | [-0.9, +12.6] | - | - | - | - |
+| claude-opus-5-5 | variant - none | 37 | +0.0 | [-5.4, +5.4] | [-6.3, +6.3] | - | - | - | - |
+| particle-1 | variant - control | 37 | +2.7 | [-3.6, +9.0] | [-5.4, +10.8] | 0.7624 | 10 | 0.838 | NO_LOSS |
+| particle-1 | control - none | 37 | -4.5 | [-13.5, +3.6] | [-15.3, +5.4] | - | - | - | - |
+| particle-1 | variant - none | 37 | -1.8 | [-9.0, +4.5] | [-10.8, +6.3] | - | - | - | - |
+
+| Model | Ratio | Tasks | Per trial [95% CI] | Per success [95% CI] |
+|---|---|---|---|---|
+| claude-opus-5-5 | variant / control | 37 | 0.910 [0.842, 1.012] | 0.970 [0.884, 1.090] |
+| claude-opus-5-5 | control / none | 37 | 1.852 [1.673, 2.107] | 1.738 [1.517, 2.020] |
+| claude-opus-5-5 | variant / none | 37 | 1.685 [1.502, 1.914] | 1.685 [1.465, 1.954] |
+| particle-1 | variant / control | 37 | 0.703 [0.569, 0.874] | 0.679 [0.536, 0.866] |
+| particle-1 | control / none | 37 | 1.282 [1.099, 1.522] | 1.358 [1.091, 1.715] |
+| particle-1 | variant / none | 37 | 0.901 [0.725, 1.136] | 0.921 [0.713, 1.214] |
+
+## No-reward trials dropped (sensitivity)
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $28.3189 | $0.2551 | $0.2890 | 6.71 | 36361, 36033, 39042 |
+| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $25.7744 | $0.2322 | $0.2802 | 6.68 | 31751, 31423, 34432 |
+| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $15.2936 | $0.1378 | $0.1662 | 5.89 | 22619, 22450, 65081 |
+| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $8.8439 | $0.0797 | $0.1053 | 19.44 | 99853, 98989, 107174 |
+| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $6.2154 | $0.0560 | $0.0714 | 17.59 | 89150, 88286, 96471 |
+| particle-1 | none | 110 | 110 | 80.9% (89) | 0 | 0 | 4 | 0 | $6.7048 | $0.0610 | $0.0753 | 18.27 | 64264, 63757, 68270 |
+
+| Model | Contrast | Tasks | Difference, pp | 90% CI | 95% CI | LOSS p (one-sided) | Margin | Size | No-loss |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | variant - control | 37 | -5.4 | [-9.9, -1.8] | [-10.8, -0.9] | 0.0140 | 7.5 | 0.939 | NOT_SHOWN |
+| claude-opus-5-5 | control - none | 37 | +5.4 | [+0.0, +11.7] | [-0.9, +12.6] | - | - | - | - |
+| claude-opus-5-5 | variant - none | 37 | +0.0 | [-5.4, +5.4] | [-6.3, +6.3] | - | - | - | - |
+| particle-1 | variant - control | 37 | +2.7 | [-3.6, +9.0] | [-5.4, +10.8] | 0.7624 | 10 | 0.838 | NO_LOSS |
+| particle-1 | control - none | 37 | -4.5 | [-13.5, +3.6] | [-15.3, +5.4] | - | - | - | - |
+| particle-1 | variant - none | 37 | -1.8 | [-9.0, +4.5] | [-10.8, +6.3] | - | - | - | - |
+
+| Model | Ratio | Tasks | Per trial [95% CI] | Per success [95% CI] |
+|---|---|---|---|---|
+| claude-opus-5-5 | variant / control | 37 | 0.910 [0.842, 1.012] | 0.970 [0.884, 1.090] |
+| claude-opus-5-5 | control / none | 37 | 1.852 [1.673, 2.107] | 1.738 [1.517, 2.020] |
+| claude-opus-5-5 | variant / none | 37 | 1.685 [1.502, 1.914] | 1.685 [1.465, 1.954] |
+| particle-1 | variant / control | 37 | 0.703 [0.569, 0.874] | 0.679 [0.536, 0.866] |
+| particle-1 | control / none | 37 | 1.298 [1.105, 1.549] | 1.398 [1.108, 1.798] |
+| particle-1 | variant / none | 37 | 0.912 [0.731, 1.157] | 0.948 [0.728, 1.259] |
+
+## Mechanical saving (derived)
+| Model | First-request tokens, variant minus control (medians) | Dollars per trial |
+|---|---|---|
+| claude-opus-5-5 | -4610 | $-0.0283 |
+| particle-1 | -10703 | $-0.0017 |
+
+===== exposure.py (frozen, amended by #128) on TB2
+| Marker | claude-opus-5-5 gstack-render (n=111) | claude-opus-5-5 gstack-render-unattended (n=111) | claude-opus-5-5 none (n=111) | particle-1 gstack-render (n=111) | particle-1 gstack-render-unattended (n=111) | particle-1 none (n=111) |
+|---|---|---|---|---|---|---|
+| start_line | 14 | 103 | 0 | 39 | 97 | 0 |
+| any_gstack_helper | 14 | 103 | 0 | 39 | 97 | 0 |
+| preamble_read | 0 | 0 | 0 | 0 | 0 | 0 |
+| question_tuning | 0 | 0 | 0 | 0 | 0 | 0 |
+| telemetry | 9 | 0 | 0 | 2 | 0 | 0 |
+| learnings | 0 | 0 | 0 | 2 | 0 | 0 |
+| aside | 0 | 0 | 0 | 0 | 0 | 0 |
+| queue_status | 0 | 0 | 0 | 0 | 0 | 0 |
+| brain_sync | 0 | 0 | 0 | 0 | 0 | 0 |
+| review_log | 0 | 0 | 0 | 0 | 0 | 0 |
+| scope_lock | 0 | 0 | 0 | 0 | 23 | 0 |
+| checklist_read | 0 | 0 | 0 | 0 | 0 | 0 |
+| review_army_read | 0 | 0 | 0 | 0 | 0 | 0 |
+| adversarial_read | 0 | 0 | 0 | 0 | 0 | 0 |
+| render_kind_unattended | 0 | 67 | 0 | 0 | 96 | 0 |
+| render_kind_mismatch | 0 | 0 | 0 | 0 | 0 | 0 |
+| session_kind_unattended | 14 | 67 | 0 | 37 | 96 | 0 |
+| debug_report | 0 | 0 | 0 | 18 | 57 | 0 |
+| status_line | 0 | 70 | 0 | 21 | 80 | 0 |
+| root_cause_hypothesis | 0 | 1 | 0 | 0 | 1 | 0 |
+| pre_landing_review | 0 | 0 | 0 | 0 | 0 | 0 |
+| agent_dispatch | 0 | 0 | 0 | 0 | 0 | 0 |
+| ask_user | 0 | 0 | 0 | 0 | 0 | 0 |
+| skill_tool | 0 | 0 | 0 | 0 | 0 | 0 |
+| any_ceremony | 9 | 0 | 0 | 4 | 0 | 0 |
+| turn_cap | 0 | 0 | 0 | 0 | 0 | 0 |
+| start_line_cut | 1 | 36 | 0 | 32 | 0 | 0 |
+| start_line_cut_render | 0 | 36 | 0 | 0 | 0 | 0 |
+| session_kind_mismatch | 0 | 0 | 0 | 0 | 0 | 0 |
+| start_line_render_kind | 0 | 67 | 0 | 0 | 96 | 0 |
+
+===== tb2-metered.py: per-arm proxy spend, peak session, sessions at cap
+{
+  "opus": {
+    "sessions": 333,
+    "trials": 333,
+    "metered_usd": 69.386883,
+    "per_arm": {
+      "gstack-render": {
+        "sessions": 111,
+        "metered_usd": 28.318909,
+        "max_session_usd": 1.188913,
+        "max_trial": "cobol-modernization__KvVhAb7__env",
+        "sessions_at_cap": 0,
+        "sessions_refused_budget": 0
+      },
+      "gstack-render-unattended": {
+        "sessions": 111,
+        "metered_usd": 25.774379,
+        "max_session_usd": 1.142838,
+        "max_trial": "cobol-modernization__KfutSAz__env",
+        "sessions_at_cap": 0,
+        "sessions_refused_budget": 0
+      },
+      "none": {
+        "sessions": 111,
+        "metered_usd": 15.293595,
+        "max_session_usd": 0.923518,
+        "max_trial": "cobol-modernization__aXqGqE7__env",
+        "sessions_at_cap": 0,
+        "sessions_refused_budget": 0
+      }
+    },
+    "sessions_without_final_trial": [],
+    "sessions_not_settled_in_ledger": [],
+    "close_reasons": {
+      "agent_finished": 333
+    }
+  },
+  "particle": {
+    "sessions": 333,
+    "trials": 333,
+    "metered_usd": 21.959374,
+    "per_arm": {
+      "gstack-render": {
+        "sessions": 111,
+        "metered_usd": 8.843942,
+        "max_session_usd": 0.533031,
+        "max_trial": "feal-differential-cryptanalysis__pTJKw36__env",
+        "sessions_at_cap": 0,
+        "sessions_refused_budget": 0
+      },
+      "gstack-render-unattended": {
+        "sessions": 111,
+        "metered_usd": 6.215416,
+        "max_session_usd": 0.239486,
+        "max_trial": "filter-js-from-html__ZzreG8s__env",
+        "sessions_at_cap": 0,
+        "sessions_refused_budget": 0
+      },
+      "none": {
+        "sessions": 111,
+        "metered_usd": 6.900016,
+        "max_session_usd": 0.466966,
+        "max_trial": "filter-js-from-html__NMYfHPc__env",
+        "sessions_at_cap": 0,
+        "sessions_refused_budget": 0
+      }
+    },
+    "sessions_without_final_trial": [],
+    "sessions_not_settled_in_ledger": [],
+    "close_reasons": {
+      "agent_finished": 333
+    }
+  },
+  "ledger": {
+    "settle_rows": 666,
+    "reserve_rows": 670,
+    "settled_usd": 91.346257
+  }
+}
+
+===== tb2-pertask.py: tasks where control and variant differ
+opus tasks 37 tasks where control != variant (control, variant, none passes of 3):
+   ('feal-differential-cryptanalysis', 3, 1, 3)
+   ('model-extraction-relu-logits', 3, 1, 1)
+   ('polyglot-rust-c', 3, 2, 0)
+   ('query-optimize', 3, 2, 3)
+particle tasks 37 tasks where control != variant (control, variant, none passes of 3):
+   ('model-extraction-relu-logits', 3, 1, 2)
+   ('extract-elf', 3, 2, 1)
+   ('sparql-university', 3, 2, 3)
+   ('overfull-hbox', 3, 2, 2)
+   ('chess-best-move', 3, 2, 3)
+   ('torch-pipeline-parallelism', 0, 1, 0)
+   ('large-scale-text-editing', 0, 1, 0)
+   ('query-optimize', 1, 2, 1)
+   ('headless-terminal', 2, 3, 3)
+   ('pytorch-model-cli', 0, 1, 2)
+   ('db-wal-recovery', 1, 3, 3)
+   ('tune-mjcf', 1, 3, 3)
+
+===== tb2-tokens.py: tokens per arm from the proxy session file
+opus none 111 usd 15.293595 tok/trial 168315 in 1308 out 353098 cw 950088 cr 17378417 {'claude-opus-5-5': 648, 'claude-opus-5': 3, 'claude-opus-4-8': 3}
+opus gstack-render-unattended 111 usd 25.774379 tok/trial 257533 in 1484 out 469278 cw 2241554 cr 25873883 {'claude-opus-5-5': 735, 'claude-opus-5': 3, 'claude-opus-4-8': 3}
+opus gstack-render 111 usd 28.318909 tok/trial 289504 in 1490 out 451385 cw 2697604 cr 28984442 {'claude-opus-5-5': 739, 'claude-opus-5': 3, 'claude-opus-4-8': 3}
+particle none 111 usd 6.900016 tok/trial 653277 in 13631659 out 1777984 cw 0 cr 57104128 {'particle-1': 2046}
+particle gstack-render-unattended 111 usd 6.215416 tok/trial 646907 in 11249262 out 1634445 cw 0 cr 58923008 {'particle-1': 1953}
+particle gstack-render 111 usd 8.843942 tok/trial 897114 in 17586526 out 2047865 cw 0 cr 79945216 {'particle-1': 2158}
+
+===== judge/chain.sh: derived-arm chain (GSTA-2 decision A)
+b3724a71fe4ee0a8a70eb454115d8e815679ab62066771541f975f9e197a66ea  <work>/judge/scripts/judge/scripts/sevmap.ts
+218350de091f1951a425da200c16fdb2791adcb0fc6f5a3de6ee52c54359c518  <work>/judge/scripts/casetwin.ts
+c3829af672462a22e22991cb7d80bedffdad3fb9c181c5ce549f8d881a2c4f8e  <work>/judge/scripts/scrub.ts
+cad13e6af4444df657d3b48c1978b08184e2c4c056f8b8d0f73e9629cdd1b237  <work>/judge/scripts/scrub2.ts
+3a462a557026665d6a367b40dde48f2f9c863f567915c9bff3c4cb4461ae9886  <work>/judge/scripts/r1-scrub3.ts
+17c926af9762c098627451855eb8f60125f3dde3e352abf0202ae1554ad88566  <work>/judge/scripts/ceremony-scrub.sh
+b320d3c2cf28c71cd07401a7ef359887b3c8d67002ca0c82651451e72d7f6905  <work>/judge/scripts/judge/scripts/majorinfo.ts
+== none-opus
+none-opus labels 10 map keys 20 compound entries 0 unmapped 3 ["High","Medium","Low"]
+none-opus labels 10 twins added 3
+scan hits before the scrub: 8
+none-opus lines 8 by prefix {"/tmp/<dir>/":4,"<home>/agent/":0,"<home>/ubi/":0,"~/":8,"<Users>/<name>/":0}
+scan hits after step 1: 1
+none-opus lines 1 by rule {"<Users>/<name with spaces>/":1,"/tmp/<dir with spaces>/":0,"/tmp/<name> unclosed":0,"C:\\Users\\<name>":1}
+scan hits after step 2: 0
+scan hits after step 3: 0
+left for --digest-only: 
+step1-sevmap files changed: 1
+step2-casetwin files changed: 1
+step3-scrub files changed: 7
+ingest --check ok: arm none-opus (live, raw, 2 passes) fits contract v1 and suite stacks-r1; nothing written
+== control-opus
+control-opus labels 2 map keys 4 compound entries 0 unmapped 0 
+control-opus labels 2 twins added 0
+scan hits before the scrub: 13
+control-opus lines 13 by prefix {"/tmp/<dir>/":5,"<home>/agent/":2,"<home>/ubi/":0,"~/":10,"<Users>/<name>/":0}
+scan hits after step 1: 0
+scan hits after step 2: 0
+scan hits after step 3: 0
+left for --digest-only: 
+step1-sevmap files changed: 1
+step2-casetwin files changed: 0
+step3-scrub files changed: 8
+ingest --check ok: arm control-opus (live, raw, 2 passes) fits contract v1 and suite stacks-r1; nothing written
+== variant-opus
+variant-opus labels 2 map keys 4 compound entries 0 unmapped 0 
+variant-opus labels 2 twins added 0
+scan hits before the scrub: 10
+variant-opus lines 10 by prefix {"/tmp/<dir>/":1,"<home>/agent/":1,"<home>/ubi/":0,"~/":7,"<Users>/<name>/":0}
+scan hits after step 1: 3
+variant-opus lines 3 by rule {"<Users>/<name with spaces>/":1,"/tmp/<dir with spaces>/":2,"/tmp/<name> unclosed":0,"C:\\Users\\<name>":2}
+scan hits after step 2: 1
+variant-opus lines 1 by rule {"<home>/<name>/":0,"<home>/<name> unclosed":0,"/root/":0,"/workspace/":0,"/var/folders/":0,"<Users>/<name> unclosed":1}
+scan hits after step 3: 0
+left for --digest-only: 
+step1-sevmap files changed: 1
+step2-casetwin files changed: 0
+step3-scrub files changed: 5
+ingest --check ok: arm variant-opus (live, raw, 2 passes) fits contract v1 and suite stacks-r1; nothing written
+== control-sdk-opus
+control-sdk-opus labels 2 map keys 4 compound entries 0 unmapped 0 
+control-sdk-opus labels 2 twins added 0
+scan hits before the scrub: 5
+control-sdk-opus lines 5 by prefix {"/tmp/<dir>/":1,"<home>/agent/":1,"<home>/ubi/":0,"~/":4,"<Users>/<name>/":0}
+scan hits after step 1: 0
+scan hits after step 2: 0
+scan hits after step 3: 0
+left for --digest-only: 
+step1-sevmap files changed: 1
+step2-casetwin files changed: 0
+step3-scrub files changed: 4
+ingest --check ok: arm control-sdk-opus (live, raw, 1 pass) fits contract v1 and suite stacks-r1; nothing written
+
+===== judge-match (judge-run, then judge-join)
+judge-run: batch b0a0f8160534a1d9c3f787367b0f9154324eb2e30e2ac15dd824a8f18e27d96b, 60 requests; primary answered 33 packets, second 24, third 3; 0 unjudged; files in <work>/judge/judge-match
+next: gstack-evals noloss judge-join --suite <rig>/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key <work>/judge/match-key.json --reply <work>/judge/judge-match/primary.json --second <work>/judge/judge-match/second.json --third <work>/judge/judge-match/third.json --arm <work>/judge/raw/stacks-r1/none-opus --arm <work>/judge/raw/stacks-r1/control-opus --arm <work>/judge/raw/stacks-r1/variant-opus --arm <work>/judge/raw/stacks-r1/control-sdk-opus --out <work>/judge/judge-match/joined
+exit=0
+{"version":1,"batch":"b0a0f8160534a1d9c3f787367b0f9154324eb2e30e2ac15dd824a8f18e27d96b","second_required":28,"arms_differed":23,"third_required":3,"kappa_primary_second":0.9454,"replaced":null,"unjudged":null}
+
+===== judge-adj (judge-run, then judge-join)
+unverifiable not-defect rulings, arm none-opus: 0, 0.0000 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm control-opus: 0, 0.0000 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm variant-opus: 1, 0.0156 per PR cluster per pass (2 passes, 32 PR clusters)
+unverifiable not-defect rulings, arm control-sdk-opus: 0, 0.0000 per PR cluster per pass (1 passes, 32 PR clusters)
+judge-run: batch f35e73275ff4540d8c2f6bc243dc1d9b7820f58209aeb7dcc07d4debdcc8b361, 22 requests; primary answered 11 packets, second 7, third 4; 0 unjudged; files in <work>/judge/judge-adj
+next: gstack-evals noloss judge-join --suite <rig>/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key <work>/judge/adj-key.json --reply <work>/judge/judge-adj/primary.json --second <work>/judge/judge-adj/second.json --third <work>/judge/judge-adj/third.json --arm <work>/judge/judged/stacks-r1/none-opus --arm <work>/judge/judged/stacks-r1/control-opus --arm <work>/judge/judged/stacks-r1/variant-opus --arm <work>/judge/judged/stacks-r1/control-sdk-opus --out <work>/judge/judge-adj/joined
+exit=0
+{"version":1,"kind":"adjudicate","batch":"f35e73275ff4540d8c2f6bc243dc1d9b7820f58209aeb7dcc07d4debdcc8b361","second_required":14,"third_required":4,"kappa_primary_second":0,"replaced":null,"unjudged":null}
+
+===== score-review.sh: noloss score (primary and secondary), review-cost.py, exposure.py, peak.py
+## comparisons.ceremony-r1.json variant-vs-control (variant-opus vs control-opus)
+exit 2
+variant-opus vs control-opus at a 10-point margin (The review no-loss lane's margin (stacks round 1 plan, section 7), kept so the scorer and size rule run unchanged. Control sits near 10% blocking recall, so this margin can only bound a loss; section 5 says so.): no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 9.5% vs 8.3%, delta 1.2 points [95% CI -3.7, 6.8]; 4 losses, 4 gains on 42 blockers in 26 PRs (5 discordant). p non-inferior 0.000016, p loss 0.813 (Holm n/a, step 1 of 1 in the declared LOSS family) (minimum reachable 0.031).
+size rule: met, an arm as good as the reference gets NO_LOSS in 84.5% of 2000 simulations (spread wide, recall 0.083, seed 20261101).
+false blockers per PR: incomplete, so not tested (arm control-opus stopped, so there is no verdict).
+cost on the 32 units metered in both (exact): variant-opus 1.5M tokens per unit, 12.0M tokens per blocker found; control-opus 1.6M tokens per unit, 15.0M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: arm control-opus stopped, so there is no verdict; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | variant-opus | control-opus | difference | unadjudicated (variant-opus / control-opus) |
+|---|---|---|---|---|
+| garrytan/gbrain#7511 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7674 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7684 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7789 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7794 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7872 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7878 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7884 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7901 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#1808 | 0.5 | 0 | 0.5 | 0 / 0 |
+| garrytan/gstack#3381 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3431 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3448 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3475 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3494 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3507 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3524 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3526 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3527 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3534 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3540 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3545 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3556 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3557 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3564 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3567 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3573 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3593 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3596 | 0 | 0 | 0 | 0 / 0 |
+verdict: none
+## comparisons.ceremony-r1-secondary.json control-vs-none (control-opus vs none-opus)
+exit 2
+control-opus vs none-opus at a 10-point margin (Secondary, the lane's margin.): no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 8.3% vs 7.1%, delta 1.2 points [95% CI -4.2, 6.4]; 3 losses, 4 gains on 42 blockers in 26 PRs (5 discordant). p non-inferior 0.00062 (Holm n/a over 3), p loss 0.813 (Holm n/a, step 1 of 1 in the declared LOSS family) (minimum reachable 0.031).
+size rule: below, an arm as good as the reference gets NO_LOSS in 75.3% of 2000 simulations (spread wide, recall 0.071, seed 20261101, no-loss alpha 0.05/3, Holm's strictest step).
+false blockers per PR: incomplete, so not tested (arm control-opus stopped, so there is no verdict).
+cost on the 32 units metered in both (exact): control-opus 1.6M tokens per unit, 15.0M tokens per blocker found; none-opus 1.2M tokens per unit, 15.1M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: arm control-opus stopped, so there is no verdict; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | control-opus | none-opus | difference | unadjudicated (control-opus / none-opus) |
+|---|---|---|---|---|
+| garrytan/gbrain#7511 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7674 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7684 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7789 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7794 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7872 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7878 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7884 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7901 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#1808 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3381 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3431 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3448 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3475 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3494 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3507 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3524 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3526 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3527 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3534 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3540 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3545 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3556 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3557 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3564 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3567 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3573 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3593 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3596 | 0 | 0 | 0 | 0 / 0 |
+verdict: none
+## comparisons.ceremony-r1-secondary.json variant-vs-none (variant-opus vs none-opus)
+exit 2
+variant-opus vs none-opus at a 10-point margin (Secondary, the lane's margin.): non-inferior within 10 points (NO_LOSS). Blocking recall 9.5% vs 7.1%, delta 2.4 points [95% CI -4.5, 10.5]; 5 losses, 6 gains on 42 blockers in 26 PRs (7 discordant). p non-inferior 0.0012 (Holm 0.0035 over 3), p loss 0.820 (minimum reachable 0.0078).
+size rule: below, an arm as good as the reference gets NO_LOSS in 75.3% of 2000 simulations (spread wide, recall 0.071, seed 20261101, no-loss alpha 0.05/3, Holm's strictest step).
+false blockers per PR: variant-opus 0.02, none-opus 0.00, difference +0.02 [95% CI 0.00, +0.05] on 32 PRs; two-sided p 1.000 (minimum reachable 1.000); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+cost on the 33 units metered in both (exact): variant-opus 1.5M tokens per unit, 12.4M tokens per blocker found; none-opus 1.2M tokens per unit, 13.1M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: below the size rule: power 0.753 is under 0.8; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | variant-opus | none-opus | difference | unadjudicated (variant-opus / none-opus) |
+|---|---|---|---|---|
+| garrytan/gbrain#7511 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7674 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7684 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7789 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7794 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7872 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7878 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7884 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7901 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#1808 | 0.5 | 0 | 0.5 | 0 / 0 |
+| garrytan/gstack#3381 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3431 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3448 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3475 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3494 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3507 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3524 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3526 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3527 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3534 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3540 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3545 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3556 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3557 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3564 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3567 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3573 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3593 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3596 | 0 | 0 | 0 | 0 / 0 |
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+## comparisons.ceremony-r1-secondary.json control-vs-control-sdk (control-opus vs control-sdk-opus)
+exit 2
+control-opus vs control-sdk-opus at a 10-point margin (Secondary, the lane's margin.): no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 8.3% vs 14.3%, delta -5.9 points [95% CI -15.6, 2.8]; 5 losses, 3 gains on 42 blockers in 26 PRs (8 discordant). p non-inferior 0.227 (Holm n/a over 3), p loss 0.172 (minimum reachable 0.0039).
+size rule: below, an arm as good as the reference gets NO_LOSS in 35.9% of 2000 simulations (spread wide, recall 0.143, seed 20261101, no-loss alpha 0.05/3, Holm's strictest step).
+false blockers per PR: incomplete, so not tested (arm control-opus stopped, so there is no verdict).
+cost on the 32 units metered in both (exact): control-opus 1.6M tokens per unit, 15.0M tokens per blocker found; control-sdk-opus 1.8M tokens per unit, 11.7M tokens per blocker found.
+claim "non-inferior within 10 points of blocking recall": may not be made: arm control-opus stopped, so there is no verdict; suite stacks-r1 is development-only: it ranks variants but cannot confirm a release on its own.
+| PR | control-opus | control-sdk-opus | difference | unadjudicated (control-opus / control-sdk-opus) |
+|---|---|---|---|---|
+| garrytan/gbrain#7511 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7674 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7684 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7789 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7794 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7872 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7878 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7884 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gbrain#7901 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#1808 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3381 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3431 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3448 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3475 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3494 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3507 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3516 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3524 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3526 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3527 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3534 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3540 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3545 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3556 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3557 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3564 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3567 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3573 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3578 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3583 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3593 | 0 | 0 | 0 | 0 / 0 |
+| garrytan/gstack#3596 | 0 | 0 | 0 | 0 / 0 |
+verdict: none
+## review-cost
+exit 1
+Traceback (most recent call last):
+  File "<work>/score/s/review-cost.py", line 53, in <module>
+    arms = {r: load(r) for r in names}
+               ^^^^^^^
+  File "<work>/score/s/review-cost.py", line 36, in load
+    n = len(rows); usd = sum(float(r['usd']) for r in rows)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<work>/score/s/review-cost.py", line 36, in <genexpr>
+    n = len(rows); usd = sum(float(r['usd']) for r in rows)
+                             ^^^^^^^^^^^^^^^
+ValueError: could not convert string to float: 'unavailable'
+## exposure review
+exit 0
+| Marker | claude-opus-5-5 control (n=66) | claude-opus-5-5 control-sdk (n=33) | claude-opus-5-5 none (n=66) | claude-opus-5-5 variant (n=66) |
+|---|---|---|---|---|
+| start_line | 1 | 0 | 0 | 49 |
+| any_gstack_helper | 3 | 1 | 0 | 50 |
+| preamble_read | 0 | 0 | 0 | 0 |
+| question_tuning | 0 | 0 | 0 | 0 |
+| telemetry | 0 | 0 | 0 | 0 |
+| learnings | 0 | 0 | 0 | 0 |
+| aside | 0 | 0 | 0 | 0 |
+| queue_status | 0 | 0 | 0 | 0 |
+| brain_sync | 0 | 0 | 0 | 0 |
+| review_log | 0 | 0 | 0 | 23 |
+| scope_lock | 0 | 0 | 0 | 0 |
+| checklist_read | 0 | 0 | 0 | 0 |
+| review_army_read | 0 | 0 | 0 | 0 |
+| adversarial_read | 0 | 0 | 0 | 0 |
+| render_kind_unattended | 0 | 0 | 0 | 20 |
+| render_kind_mismatch | 0 | 0 | 0 | 0 |
+| session_kind_unattended | 1 | 0 | 0 | 20 |
+| debug_report | 0 | 0 | 0 | 0 |
+| status_line | 0 | 0 | 0 | 15 |
+| root_cause_hypothesis | 0 | 0 | 0 | 0 |
+| pre_landing_review | 54 | 23 | 0 | 60 |
+| agent_dispatch | 0 | 0 | 0 | 0 |
+| ask_user | 0 | 0 | 0 | 0 |
+| skill_tool | 0 | 0 | 0 | 0 |
+| any_ceremony | 0 | 0 | 0 | 0 |
+| turn_cap | 0 | 0 | 0 | 0 |
+| start_line_cut | 1 | 0 | 0 | 29 |
+| start_line_cut_render | 0 | 0 | 0 | 29 |
+| session_kind_mismatch | 0 | 0 | 0 | 0 |
+| start_line_render_kind | 0 | 0 | 0 | 20 |
+## peak exposure
+exit 0
+<work>/review/review-grid/out/proxy/journal.ndjson control 66 peak max 4.95 p95 4.19 settled max 2.18
+<work>/review/review-grid/out/proxy/journal.ndjson none 66 peak max 3.95 p95 3.44 settled max 1.6
+<work>/review/review-grid/out/proxy/journal.ndjson variant 66 peak max 4.42 p95 4.18 settled max 1.68
+exit 0
+review-sdk control-sdk 33 peak max 5.01 p95 4.37 settled max 2.07
+
+===== score-part2.sh: review-cost.py on the copy without the gap row, decide.py, first sensitivity try (none arm only) and a complete-case look
+## review-cost on a symlink copy of the grid out dir whose control-opus cost.tsv drops the one unavailable row (gstack#3564 pass 2, the UPSTREAM gap)
+rows before 133 after 132
+exit 0
+| Role | Arm | Unit-passes | Dollars | Per unit-pass | Tokens per unit-pass | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|
+| control | control-opus | 65 | $64.72 | $0.996 | 1,648,618 | 16.68 | 62424.0, 62225, 69850 |
+| variant | variant-opus | 66 | $60.61 | $0.918 | 1,499,415 | 16.05 | 57109.0, 56910, 64535 |
+| none | none-opus | 66 | $49.18 | $0.745 | 1,186,892 | 16.64 | 36736.0, 36537, 44162 |
+| control-sdk | control-sdk-opus | 33 | $35.05 | $1.062 | 1,862,771 | 18.67 | 60103, 59978, 67593 |
+
+| Ratio of mean dollars per unit-pass | Units | PRs | Ratio [95% CI] |
+|---|---|---|---|
+| variant / control | 33 | 32 | 0.920 [0.871, 0.972] |
+| control / none | 33 | 32 | 1.340 [1.254, 1.427] |
+| variant / none | 33 | 32 | 1.232 [1.166, 1.310] |
+| control / control-sdk | 33 | 32 | 0.940 [0.879, 1.009] |
+## decide.py
+exit 0
+claude-opus-5-5: FIX-METHOD, no-loss no. a gate failed: G4 coverage, review: noloss gave no verdict: arm control-opus stopped, so there is no verdict
+particle-1: CUT, no-loss yes. TB2 variant minus control +2.7 pp, 90% CI lower end -3.6 above -10, size 0.838
+LOSS test TB2 claude-opus-5-5: Holm-adjusted p 0.0420 (LOSS)
+LOSS test TB2 particle-1: Holm-adjusted p 1.0000
+LOSS test review: Holm-adjusted p 1.0000
+gate failed: G4 coverage, review: noloss gave no verdict: arm control-opus stopped, so there is no verdict
+G3 render kind, TB2 claude-opus-5-5: variant 67 of 67 counted start-line sessions printed RENDER_KIND: unattended, 36 more cut by the session; control 0 printed it, 13 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+G3 render kind, TB2 particle-1: variant 96 of 97 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 7 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+G3 render kind, review: variant 20 of 20 counted start-line sessions printed RENDER_KIND: unattended, 29 more cut by the session; control 0 printed it, 0 uncut start-line sessions (control half not observable); mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+TB2 claude-opus-5-5 cost per trial, variant/control: 0.910 [0.842, 1.012]
+TB2 particle-1 cost per trial, variant/control: 0.703 [0.569, 0.874]
+review cost per unit-pass, variant/control: 0.920 [0.871, 0.972]
+## MAJOR-as-INFORMATIONAL sensitivity (majorinfo.ts unchanged; derived root of links under the names it reads; none entry kept)
+stacks none,gstack,tstack
+exit 0
+2eb7cd698c4b944ebe587c26f55e5c4254f78b0caed4c1645d3ce05c8af4e70f  <work>/score/mi/severity-map.major-info.json
+{"HIGH":"CRITICAL","high":"CRITICAL","MAJOR":"INFORMATIONAL","major":"INFORMATIONAL","minor":"INFORMATIONAL","High":"CRITICAL"}
+comparisons <work>/score/mi/stacks-r1-major-info/comparisons.stacks-r1-major-info.json sha256 002f8efe0902d01873fe75f51b9acc28c718fccd5a687f6040bae52f8ee405e0
+arm control-opus: stopped, 1 coverage gaps left, tree 9e5773d1a4fabea61992ed5380c36a7afb72f604074f7f3eb633a3a8c8b2c3d0
+arm control-sdk-opus: complete, tree fb861f211813ab84de1444175072a393010358e61755a0dff84d6adac4d91beb
+arm none-opus: complete, tree 4febab985ffc95ecae59389d3b9772cfdc93eb13a35d1be5814d88a3e8572560
+arm variant-opus: complete, tree 25e58873e237b6db928d6f7f0f5d5b5bf10a5111835f1b7971f90afe408a907a
+score with: gstack-evals noloss score --suite <work>/score/mi/stacks-r1-major-info/stacks-r1-major-info.json --root <work>/score/mi/stacks-r1-major-info/arms --prereg <work>/score/mi/stacks-r1-major-info/comparisons.stacks-r1-major-info.json --variant <id> --reference <id>
+control-opus vs none-opus at a 10-point margin (Secondary, the lane's margin.): no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 8.3% vs 7.1%, delta 1.2 points [95% CI -4.2, 6.4]; 3 losses, 4 gains on 42 blockers in 26 PRs (5 discordant). p non-inferior 0.00062 (Holm n/a over 3), p loss 0.813 (Holm n/a, step 1 of 1 in the declared LOSS family) (minimum reachable 0.031).
+verdict: none
+variant-opus vs none-opus at a 10-point margin (Secondary, the lane's margin.): non-inferior within 10 points (NO_LOSS). Blocking recall 9.5% vs 7.1%, delta 2.4 points [95% CI -4.5, 10.5]; 5 losses, 6 gains on 42 blockers in 26 PRs (7 discordant). p non-inferior 0.0012 (Holm 0.0035 over 3), p loss 0.820 (minimum reachable 0.0078).
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+## complete case (descriptive): every gap unit dropped, primary comparisons file
+comparisons <work>/score/cc/comparisons.stacks-r1-complete.json sha256 4b9f2e70681613ab56a0ab4e72a51ae35a6d8ec1045b27289744289b98ab629a
+arm control-opus: stopped -> complete, 4 cost rows dropped, tree 65402b2738e287f623fa66c87b42b3266c2d96d8ad75726fd3efda970daff007
+arm control-sdk-opus: complete, 2 cost rows dropped, tree 4f6750a5a1e4942f1d4c6ff13d62975770bdc50b30e624d4315500ec0bc241d7
+arm none-opus: complete, 2 cost rows dropped, tree 5dca7f7243bee8a267b0be881c825f7b1fba4f1e1ecae2b8630671493f236f8d
+arm variant-opus: complete, 4 cost rows dropped, tree 7fa30f3e2064572393f6b6e0032fc39349796b6d03274058d5c1ae1f878cdd26
+score with: gstack-evals noloss score --suite <work>/score/cc/stacks-r1-complete.json --root <work>/score/cc/arms --prereg <work>/score/cc/comparisons.stacks-r1-complete.json --variant <id> --reference <id>
+variant-opus vs control-opus at a 10-point margin (The review no-loss lane's margin (stacks round 1 plan, section 7), kept so the scorer and size rule run unchanged. Control sits near 10% blocking recall, so this margin can only bound a loss; section 5 says so.): non-inferior within 10 points (NO_LOSS). Blocking recall 9.8% vs 8.5%, delta 1.2 points [95% CI -3.9, 6.9]; 4 losses, 4 gains on 41 blockers in 25 PRs (5 discordant). p non-inferior 0.000026, p loss 0.813 (Holm 0.813, step 1 of 1 in the declared LOSS family) (minimum reachable 0.031).
+size rule: met, an arm as good as the reference gets NO_LOSS in 82.2% of 2000 simulations (spread wide, recall 0.085, seed 20261101).
+false blockers per PR: variant-opus 0.02, control-opus 0.00, difference +0.02 [95% CI 0.00, +0.05] on 31 PRs; two-sided p 1.000 (minimum reachable 1.000); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+claim "non-inferior within 10 points of blocking recall": may not be made: suite stacks-r1-complete is development-only: it ranks variants but cannot confirm a release on its own.
+verdict: NO_LOSS
+
+===== score-mi.sh: MAJOR-as-INFORMATIONAL sensitivity on every arm
+## labels in final arms (findings files), MAJOR or major
+none-opus       1 "severity":"High"       1 "severity":"Low"       1 "severity":"MEDIUM"       1 "severity":"Medium"      16 "severity":"high"      58 "severity":"low"       1 "severity":"major"      52 "severity":"medium"       3 "severity":"minor"       2 "severity":"nit" 
+control-opus      23 "severity":"CRITICAL"     111 "severity":"INFORMATIONAL" 
+variant-opus      21 "severity":"CRITICAL"      95 "severity":"INFORMATIONAL" 
+control-sdk-opus      15 "severity":"CRITICAL"      51 "severity":"INFORMATIONAL" 
+stacks none,gstack,tstack
+stacks none,gstack,tstack
+exit 0
+4d2d1a7031621a7b73c0cdafffd6adc6715869f2a00248201b68c794476348da  <work>/score/mi2/severity-map.major-info.json
+f9e55b1bfe4d0fc64cd73b3a5177c478c8c27698f95a8d51e64c64e01a7f0228  <work>/score/mi2/mi-run1.json
+f9e55b1bfe4d0fc64cd73b3a5177c478c8c27698f95a8d51e64c64e01a7f0228  <work>/score/mi2/mi-run2.json
+[{"k":"none-opus","MAJOR":"INFORMATIONAL","major":"INFORMATIONAL","n":23},{"k":"control-opus","MAJOR":"INFORMATIONAL","major":"INFORMATIONAL","n":4},{"k":"variant-opus","MAJOR":"INFORMATIONAL","major":"INFORMATIONAL","n":4},{"k":"control-sdk-opus","MAJOR":"INFORMATIONAL","major":"INFORMATIONAL","n":4}]
+derive stacks-r1-mi-ceremony-r1: re-map severity with severity-map.major-info.json (sha256 4d2d1a7031621a7b73c0cdafffd6adc6715869f2a00248201b68c794476348da)
+suite <work>/score/mi2/mi-ceremony-r1/stacks-r1-mi-ceremony-r1.json sha256 d75ee380d68ab51a27a5298d038e869e38b12f8188ddab5891847cdcdcfab4e7: 33 units, 42 blocking blockers on 26
+comparisons <work>/score/mi2/mi-ceremony-r1/comparisons.stacks-r1-mi-ceremony-r1.json sha256 ba5dd2f0598592d474b02097d5cb0c67ac73d340a6383c000b3fb1ec7678608a
+arm control-opus: stopped, 1 coverage gaps left, tree cc45e11b3ff74e8ae0148f884a4e81450f2f82f7e8c0e01b25b112d4b8683e4b
+arm control-sdk-opus: complete, tree 98896bca0581b26572de560a87be36a0d399680cd149aa08986cbf7c4011f90c
+arm none-opus: complete, tree a8e85bfcd1edd0ddb91ef1bbb072ed73988104641d9fb128fa4c278393a9c3c6
+arm variant-opus: complete, tree 8913f636997d2464fb224c227d85ccd9d235ad86030c746d80a00e8aaa096005
+### variant-vs-control
+variant-opus vs control-opus, kept so the scorer and size rule run unchanged. Control sits near 10% blocking recall, so this margin can only bound a loss; section 5 says so.): no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 9.5% vs 8.3%, delta 1.2 points [95% CI -3.7, 6.8]; 4 losses, 4 gains on 42 blockers in 26 PRs (5 discordant). p non-inferior 0.000016, p loss 0.813 (Holm n/a, step 1
+false blockers per PR: incomplete, so not tested (arm control-opus stopped, so there is no verdict).
+verdict: none
+derive stacks-r1-mi-ceremony-r1-secondary: re-map severity with severity-map.major-info.json (sha256 4d2d1a7031621a7b73c0cdafffd6adc6715869f2a00248201b68c794476348da)
+suite <work>/score/mi2/mi-ceremony-r1-secondary/stacks-r1-mi-ceremony-r1-secondary.json sha256 5c5e8569306f930f793aa8dc6522a6df71e1614a2e04d23bb1685dbf1a586fff: 33 units, 42 blo
+comparisons <work>/score/mi2/mi-ceremony-r1-secondary/comparisons.stacks-r1-mi-ceremony-r1-secondary.json sha256 705d0107e13bdce58832ad6904cf979d03f16ba46917a3bacca7cab1a4834bac
+arm control-opus: stopped, 1 coverage gaps left, tree 6679f95b2f5c9e618c51daaad28510e8980afa7b6b50b0007f373421c0a8596d
+arm control-sdk-opus: complete, tree 961359f78af4e850752b28655ab706aef7dfe976b8984dd0e37d47cd465d0d96
+arm none-opus: complete, tree e204f908b668297e52285323da5b62e1cda3d5095a92ab0513168871e2351ba3
+arm variant-opus: complete, tree afd310ded0b69f9c9c9fd7c064e5d29139f7fc5186d82df439f1165edb1c2153
+### control-vs-none
+control-opus vs none-opus: no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 8.3% vs 7.1%, delta 1.2 points [95% CI -4.2, 6.4]; 3 losses, 4 gains on 42 blockers in 26 PRs (5 discordant). p non-inferior 0.00062 (Holm n/a over 3), p loss 0.813 (Holm n/a, step 1 of 1 in the declared LOSS family) (minimum reachable 0.031).
+false blockers per PR: incomplete, so not tested (arm control-opus stopped, so there is no verdict).
+verdict: none
+### variant-vs-none
+variant-opus vs none-opus: non-inferior within 10 points (NO_LOSS). Blocking recall 9.5% vs 7.1%, delta 2.4 points [95% CI -4.5, 10.5]; 5 losses, 6 gains on 42 blockers in 26 PRs (7 discordant). p non-inferior 0.0012 (Holm 0.0035 over 3), p loss 0.820 (minimum reachable 0.0078).
+false blockers per PR: variant-opus 0.02, none-opus 0.00, difference +0.02 [95% CI 0.00, +0.05] on 32 PRs; two-sided p 1.000 (minimum reachable 1.000); smallest drop that counts 0.5 per PR: the estimate does not clear it; the interval does not exclude zero or lies above it.
+verdict: NO_LOSS NOLOSS_UNDERPOWERED
+### control-vs-control-sdk
+control-opus vs control-sdk-opus: no verdict (arm control-opus stopped, so there is no verdict). Blocking recall 8.3% vs 14.3%, delta -5.9 points [95% CI -15.6, 2.8]; 5 losses, 3 gains on 42 blockers in 26 PRs (8 discordant). p non-inferior 0.227 (Holm n/a over 3), p loss 0.172 (minimum reachable 0.0039).
+false blockers per PR: incomplete, so not tested (arm control-opus stopped, so there is no verdict).
+verdict: none
+## mapped severities in sensitivity arms vs primary (none-opus)
+{"MAJOR":"INFORMATIONAL","major":"INFORMATIONAL"}
+{"MAJOR":"INFORMATIONAL","major":"INFORMATIONAL"}
+
+===== GST-734 check: GEVA-131's scan of review-grid and the pilot (its gst734-scan.txt, sha256 of gst734-scan.py 25f0598f), then the same script on review-sdk with only its paths changed
+sessions with a background_tasks_changed event before result: 2 ; last state non-empty: 0
+sdk {"control-sdk": {"sessions": 33, "bg_started": 4, "sessions_bg_running_at_result": 1, "sessions_any_task_open_at_result": 1}}
+   ('control-sdk', 'gstack-3540-115355a3', 'p1', 1, 1, 0, ['local_bash'])
+exit 0
+(SAMPLE lines, which quote session events, are left out.)
