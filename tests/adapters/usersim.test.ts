@@ -155,3 +155,13 @@ describe("the user simulator: approvals bound to category and effect", () => {
     expect(isOrdinal("Go with approach A.")).toBe(false);
   });
 });
+
+describe("a free-form answer marked choice (GST-925)", () => {
+  // Value: protects=a choice answer only picks among the question's options, so a gated question does not swap it for the non-approving answer, while a choice that names a gated effect itself is still held; fails_when=choice approves an effect, or a gated question swaps a plain choice; seam=UserSim.reply
+  test("a choice passes a gated question unchanged, and one that names a gated effect is still held", async () => {
+    const choose = (text: string) => new UserSim({ task: "t", script: { persona: "p" }, log: join(TMP, "log-" + n++ + ".ndjson"), freeform: async () => ({ text, choice: true as const }) });
+    const ask = async (u: UserSim, question: string) => ((await u.answerAsk([{ question, options: [{ label: "A" }, { label: "B" }] }])) as { answers: Record<string, string> }).answers[question];
+    expect(await ask(choose("Go with your recommendation."), "Mode A or mode B? Both end with /ship and a commit.")).toBe("Go with your recommendation.");
+    expect(await ask(choose("Yes, commit and push it."), "Mode A or mode B?")).toBe(NON_APPROVING);
+  });
+});

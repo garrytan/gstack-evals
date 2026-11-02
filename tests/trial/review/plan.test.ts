@@ -10,7 +10,7 @@ import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
 import { main } from "../../../src/trial/review/cli.ts";
-import { ceoMode, compareVersions, GLOBAL_PREFERENCES, GSTACK_AUTO, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_SEVERITY_MAP, planArmLine, planArmOf, parsePlanSession, planSkill, REC_DECLINE, REC_REPLY, REC_USER, REC_USER_SHA256, recAnswer, recFreeformFor, renderPlanFindings, PLAN_TURN2, PLAN_TURN2_SHA256, PLAN_TURN2_TEXT } from "../../../src/trial/review/plan.ts";
+import { ceoMode, compareVersions, GLOBAL_PREFERENCES, GSTACK_AUTO, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_SEVERITY_MAP, planArmLine, planArmOf, parsePlanSession, planSkill, REC_DECLINE, REC_REPLY, REC_USER, REC_USER_SHA256, recAnswer, recFreeformFor, renderPlanFindings, PLAN_TURN2, PLAN_TURN2_SHA256, PLAN_TURN2_TEXT, type PlanLens } from "../../../src/trial/review/plan.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
 import { NON_APPROVING, UserSim } from "../../../src/usersim/sim.ts";
@@ -96,6 +96,32 @@ describe("the rec user (B4, open item 3)", () => {
     expect(await ask("Run /plan-eng-review next?")).toBe(REC_DECLINE);
     expect(await ask("Write the revised plan to plan.md?")).toBe(NON_APPROVING);
     expect(await ask("Promote the plan to docs/designs?")).toBe(REC_DECLINE);
+  });
+
+  // Value: protects=GST-925: a mode, scope-gate or Step 0 question that names /ship or a commit gets the recommendation through the simulator, because the rec user marks that answer a choice; without the mode words it gets the decline (it names /ship) or the non-approving answer; fails_when=the binding rules swap a choice for "Not yet", or a gated question with no mode words is approved; seam=recFreeformFor through UserSim, as the driver adapts it
+  test("a mode, scope-gate or Step 0 question passes the simulator as a choice; without the mode words it does not", async () => {
+    const through = (lens: PlanLens) => {
+      const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-choice-"), "usersim.ndjson"), freeform: async (p, q) => {
+        const a = await recFreeformFor(lens)(p, q);
+        return "text" in a && a.text !== null ? (a.choice ? { text: a.text, choice: true as const } : a.text) : null;
+      } });
+      return async (question: string, options: string[]) => ((await sim.answerAsk([{ question, options: options.map((label) => ({ label })) }])) as { answers: Record<string, string> }).answers[question];
+    };
+    const gated = " Each option ends with /ship and a commit.";
+    // The devex mode question and the eng and design scope gates quote gstack v1.93.17.0 (plan-devex-review, plan-eng-review and plan-design-review SKILL.md).
+    const cases: [PlanLens, string, string[]][] = [
+      ["ceo", "Step 0E, mode selection. A) SCOPE EXPANSION B) SELECTIVE EXPANSION C) HOLD SCOPE (recommended) D) SCOPE REDUCTION.", ["SCOPE EXPANSION", "SELECTIVE EXPANSION", "HOLD SCOPE", "SCOPE REDUCTION"]],
+      ["devex", "How deep should this DX review go? A) DX EXPANSION B) DX POLISH C) DX TRIAGE: Focus only on the critical DX gaps that would block adoption. Fast, surgical, for plans that need to ship soon.", ["DX EXPANSION", "DX POLISH", "DX TRIAGE"]],
+      ["eng", "What should I review? A) The current branch diff B) A plan or design doc I'll paste or point you to. C) A specific file, directory, or path.", ["A", "B", "C"]],
+      ["design", "What should I review? A) The current branch diff B) A plan or design doc I'll paste or point you to. C) A specific page, file, or path.", ["A", "B", "C"]],
+    ];
+    for (const [lens, q, options] of cases) {
+      const ask = through(lens);
+      expect([lens, await ask(q, options), await ask(q + gated, options)]).toEqual([lens, REC_REPLY, REC_REPLY]);
+    }
+    expect(await through("ceo")("Pick one: A) keep the plan B) cut the plan." + gated, ["A", "B"])).toBe(REC_DECLINE);
+    expect(await through("ceo")("Pick one: A) keep the plan B) cut the plan. Each option ends with a deploy.", ["A", "B"])).toBe(NON_APPROVING);
+    expect(await through("devex")("Which should we do? A) tighten the error messages B) skip ahead for plans that need to ship soon", ["A", "B"])).toBe(NON_APPROVING);
   });
 
   test("an arm's installed gstack registry becomes never-ask preferences, and its VERSION is read", () => {

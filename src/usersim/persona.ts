@@ -20,7 +20,8 @@ export const PERSONA_REASONING_EFFORT = "low";
 export const PERSONA_TIMEOUT_S = 120;
 
 /** What a free-form source gives the adapter: the answer's text (null when the model gave none), or the termination that ends the cell. */
-export type PersonaAnswer = { text: string | null } | { stop: Termination };
+/** choice: the answer only picks among the question's own options and approves no effect (UserSim passes it through). */
+export type PersonaAnswer = { text: string | null; choice?: true } | { stop: Termination };
 
 export function personaPrompt(persona: string, question: string): string {
   return [

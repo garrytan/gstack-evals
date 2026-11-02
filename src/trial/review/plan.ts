@@ -152,7 +152,7 @@ const MODE = /\b(SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION|
 /** The rec user's answer to one question under one lens, as the user simulator's free-form source. */
 export const recAnswer = (question: string, lens: PlanLens): string => (MODE.test(question) ? REC_REPLY : OTHER_SKILL[lens].test(question) || DOCS.test(question) ? REC_DECLINE : REC_REPLY);
 /** The driver's free-form source for one lens. */
-export const recFreeformFor = (lens: PlanLens) => async (_persona: string, question: string): Promise<PersonaAnswer> => ({ text: recAnswer(question, lens) });
+export const recFreeformFor = (lens: PlanLens) => async (_persona: string, question: string): Promise<PersonaAnswer> => ({ text: recAnswer(question, lens), ...(MODE.test(question) ? { choice: true as const } : {}) });
 /** The sidecar entry every plan arm runs with: a persona and no scripted replies, so every question reaches recAnswer. */
 export const REC_USER: UserScript = { persona: REC_PERSONA };
 export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: Object.fromEntries(Object.entries(OTHER_SKILL).map(([lens, r]) => [lens, r.source])), docs: DOCS.source, mode: MODE.source }));

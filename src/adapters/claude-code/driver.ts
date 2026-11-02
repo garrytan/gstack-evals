@@ -465,7 +465,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             timer = setTimeout(expire, Math.max(0, deadline - performance.now()));
           }
         }
-        if ("text" in a) return a.text;
+        if ("text" in a) return a.choice && a.text !== null ? { text: a.text, choice: true as const } : a.text;
         end(a.stop);
         return null;
       });

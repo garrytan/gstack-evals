@@ -13,7 +13,9 @@
 //
 // A question with no scripted reply gets the persona's free-form answer when the run has a free-form source, else a
 // fixed non-approving fallback. A free-form answer to a gated question, or one that names a gated effect itself, is sent only when it refuses; otherwise the
-// non-approving answer goes instead, so a free-form answer never approves a gated effect. An AskUserQuestion in a task that
+// non-approving answer goes instead, so a free-form answer never approves a gated effect. A free-form answer marked
+// choice only picks among the question's own options, so a gated question does not hold it back; one that names a gated
+// effect itself still goes through the rule above. An AskUserQuestion in a task that
 // declared no user replies is not answered at all: the trial ends as a missing cell (E_USER_TURNS_MISSING) naming the
 // task and the question.
 //
@@ -108,7 +110,7 @@ export interface Reply {
 }
 
 /** A free-form answer source: the persona and the question in, one answer or null out. */
-export type FreeForm = (persona: string, question: string) => Promise<string | null>;
+export type FreeForm = (persona: string, question: string) => Promise<string | { text: string; choice: true } | null>;
 
 export interface UserSimOptions {
   task: string;
@@ -168,9 +170,11 @@ export class UserSim {
     }
     const persona = this.o.script?.persona;
     if (persona !== undefined && this.o.freeform) {
-      const text = await this.o.freeform(persona, question);
+      const answer = await this.o.freeform(persona, question);
+      const choice = typeof answer === "object" && answer !== null;
+      const text = choice ? answer.text : answer;
       if (text !== null && text.trim()) {
-        if ((effects.length || effectsOf(text).length) && !isRefusal(text, effects)) return { text: NON_APPROVING, source: "non_approving", approves: false, misaligned: null };
+        if (((!choice && effects.length) || effectsOf(text).length) && !isRefusal(text, effects)) return { text: NON_APPROVING, source: "non_approving", approves: false, misaligned: null };
         return { text: text.trim(), source: "freeform", approves: false, misaligned: null };
       }
     }
