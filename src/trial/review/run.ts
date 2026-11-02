@@ -24,8 +24,8 @@
 //   its background work (backgroundWaitS, BACKGROUND_WAIT_MS unless set), so its Claude Code sessions hold while that work
 //   is out (the driver holds only for a run that sets a wait); a wait off its default joins the key too. A completed code
 //   session that waited is scored by held.ts's rule, every code session records the turn it was scored from
-//   (scored_turn), and a background deadline records in session_end whether a findings block existed (findings_block),
-//   which is never scored.
+//   (scored_turn), arm.json counts a code arm's held rescues (held_rescues), and a background deadline records in
+//   session_end whether a findings block existed (findings_block), which is never scored.
 //   arm.json records the system prompt in arm_provenance, and an overridden prefix
 //   with its sha256 in told, on either kind of unit.
 // - A run with capStops (the CLI's --cap-stops, code units only) records its code sessions' cap stops as their own
@@ -75,7 +75,7 @@ import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
 import { CAPPED_PARSER_SHA256, mainAgentTexts } from "./capped.ts";
 import { PARSER_SHA256, renderFindings, type ParseOutcome } from "./findings.ts";
-import { codeParse, hasFindingsBlock, HELD_PARSER_SHA256, type ScoredTurn } from "./held.ts";
+import { codeParse, hasFindingsBlock, HELD_PARSER_SHA256, mainAgentTurns, type ScoredTurn } from "./held.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
 import { planNoPrefixProblem, planPrefixProblem, planToldLine, planToldPrompt } from "./plan-told.ts";
 import { READERS_SHA256, readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
@@ -398,7 +398,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     }
     const texts = plan ? [] : mainAgentTexts(transcript);
     if (deadline && trial.record.session_end) trial.record.session_end = { ...trial.record.session_end, findings_block: plan ? parsePlanSession({ termination: { kind: "completed" }, turns: trial.record.turns }).kind === "findings" : hasFindingsBlock(texts) };
-    const code = plan ? null : codeParse(trial.record, texts);
+    const code = plan ? null : codeParse(trial.record, texts, mainAgentTurns(transcript));
     const parse = code ? code.parse : parsePlanSession(trial.record);
     const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
@@ -443,6 +443,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const diagnostics: string[] = [];
     const modes: Record<string, number> = {};
     let withoutText = 0;
+    let held = 0;
     const capped = { turn_cap: 0, allowance_stop: 0 };
     const cappedUnits = new Set<string>();
     const sessions: CostSession[] = [];
@@ -460,6 +461,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
         const score = plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
+        if (e.scored_turn?.rule === "held") held++;
         if (ended === "turn_cap" || ended === "allowance_stop") {
           capped[ended]++;
           cappedUnits.add(unit.unit.id);
@@ -495,7 +497,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { completed_without_text: withoutText, ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts,
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
       ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");

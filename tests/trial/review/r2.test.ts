@@ -276,6 +276,7 @@ describe("R2 build: a stub run through the run loop with the real driver and the
       expect([held.record.termination, held.record.turns.at(-1), held.parse.kind, held.scored_turn]).toEqual([{ kind: "completed" }, "The background check finished; my findings above stand.", "findings", { rule: "held", index: 0, of: 2 }]);
       expect(held.record.session_end!.waited_ms).toBeGreaterThan(0);
       expect([at("none-r2", a).parse.kind, at("none-r2", a).scored_turn?.rule]).toEqual(["findings", "final"]);
+      expect([arm(run.out, "gstack-full-opus").held_rescues, arm(run.out, "none-r2-opus").held_rescues]).toEqual([1, 0]);
       for (const [name, block] of [["gstack-full", true], ["none-r2", false]] as const) {
         const e = at(name, b);
         expect([e.record.termination, e.parse.kind, e.record.session_end?.cause, e.record.session_end?.findings_block, e.scored_turn?.index]).toEqual([{ kind: "missing", code: "E_BACKGROUND_DEADLINE" }, "incomplete", "deadline", block, null]);

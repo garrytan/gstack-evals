@@ -8,7 +8,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ALLOWANCE_SPENT, BACKGROUND_WAIT_MS, claudeCodeDriver, claudeCodeEnv, refusalIn, type ClaudeCodeOptions } from "../../src/adapters/claude-code/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
 import { parseFindings } from "../../src/trial/review/findings.ts";
-import { codeParse } from "../../src/trial/review/held.ts";
+import { mainAgentTexts } from "../../src/trial/review/capped.ts";
+import { codeParse, mainAgentTurns } from "../../src/trial/review/held.ts";
 import { loadReaderMap, readerUsage, readTranscript } from "../../src/trial/review/readers.ts";
 import { priceRequest, usageCost } from "../../src/runner/pricing/prices.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "../../src/runner/proxy/metering-proxy.ts";
@@ -733,7 +734,7 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     const t0 = performance.now();
     const outcome = await driver.run(session as never, { id: "t", prompt: "Review the branch." }, o.timeoutMs ?? 20_000);
     const log = existsSync(join(out, "cli-stderr.log")) ? readFileSync(join(out, "cli-stderr.log"), "utf8") : "";
-    return { outcome, ms: performance.now() - t0, log };
+    return { outcome, ms: performance.now() - t0, log, out };
   };
   const agent = (id: string, delay: number | null, extra: Record<string, unknown> = {}) => ({ id, delay, ...extra });
 
@@ -790,7 +791,9 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     const r = await bg({ readers: [agent("tu_a", 0, { at_result: true })], first: REPORT, final: ack });
     expect([r.outcome.termination, r.outcome.turns, r.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, [REPORT, ack], "clean"]);
     expect(r.outcome.session_end!.waited_ms).toBeGreaterThan(0);
-    expect(codeParse(r.outcome, r.outcome.turns)).toMatchObject({ parse: { kind: "findings" }, scored_turn: { rule: "held", index: 0, of: 2 } });
+    const transcript = readFileSync(join(r.out, "transcript.ndjson"), "utf8");
+    expect(mainAgentTurns(transcript)).toEqual([0, 1]);
+    expect(codeParse(r.outcome, mainAgentTexts(transcript), mainAgentTurns(transcript))).toMatchObject({ parse: { kind: "findings" }, scored_turn: { rule: "held", index: 0, of: 2 } });
   }, 30_000);
 
   // Value: protects=ruling A's one risk: rounding the wait up never turns a session that never sat idle on held work into a waited one; fails_when=such a session records waited_ms above 0
