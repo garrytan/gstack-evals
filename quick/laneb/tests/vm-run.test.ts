@@ -168,7 +168,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
   // endpoint the fake docker asks. The fake sleep logs its seconds instead of waiting, and the clock is their sum. While the clock is before
   // limitedUntil every pull gets 429 and the HEAD says ratelimit-remaining 0 (with ratelimit-reset when reset is set); an
   // image in fails fails that many more pulls before one succeeds.
-  function hub(o: { limitedUntil?: number; reset?: boolean; fails?: Record<string, number> } = {}) {
+  function hub(o: { limitedUntil?: number; reset?: boolean; fails?: Record<string, number>; hangHead?: boolean } = {}) {
     const h = { sleepLog: "", pulls: {} as Record<string, number>, url: "" };
     const left = { ...(o.fails ?? {}) };
     const sleeps = () => (h.sleepLog && existsSync(h.sleepLog) ? readFileSync(h.sleepLog, "utf8").split("\n").filter(Boolean).map(Number) : []);
@@ -177,10 +177,12 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
+      idleTimeout: o.hangHead ? 0 : undefined,
       fetch(req) {
         const u = new URL(req.url);
         if (u.pathname === "/token") return Response.json({ token: "t" });
         if (u.pathname === "/v2/ratelimitpreview/test/manifests/latest") {
+          if (o.hangHead) return new Promise<Response>(() => {});
           const headers: Record<string, string> = { "ratelimit-limit": "100;w=3600", "ratelimit-remaining": (limited() ? "0" : "42") + ";w=3600" };
           if (limited() && o.reset) headers["ratelimit-reset"] = String(o.limitedUntil! - clock());
           return new Response(null, { headers });
@@ -200,7 +202,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
   }
   // A run whose tasks' environment Dockerfiles are the test's, against the fake hub, with fake curl, sleep and sg (whose
   // docker pull asks the hub). The oracle trials pass and the proxy never turns healthy, so a run past the gate exits 8.
-  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; stopOnSleep?: boolean; stopOnPull?: boolean } = {}) {
+  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; stopOnSleep?: boolean; stopOnPull?: boolean; hangPull?: boolean; env?: Record<string, string>; killAfterMs?: number } = {}) {
     const s = setup(Object.fromEntries(Object.keys(tasks).map((t) => [t, "1"])));
     const root = join(s.run, "..");
     const url = fake.h.url;
@@ -217,10 +219,12 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     const bin = (name: string, body: string) => { writeFileSync(join(root, "bin", name), "#!/usr/bin/env bash\n" + body); chmodSync(join(root, "bin", name), 0o755); };
     bin("curl", `case "$*" in *${url}*) exec /usr/bin/curl "$@" ;; *9911/status*) echo '{}' ;; *) exit 7 ;; esac\n`);
     bin("sleep", `echo "$1" >> "${fake.h.sleepLog}"\n` + (opts.stopOnSleep ? `touch "${join(s.run, "STOP")}"\n` : ""));
-    bin("sg", `echo "$3" >> "${join(root, "sg.log")}"\ncase "$3" in "docker pull -q '"*) ${opts.stopOnPull ? `touch "${join(s.run, "STOP")}"; ` : ""}img=\${3#"docker pull -q '"}; img=\${img%"'"}; [ "$(/usr/bin/curl -s -o /dev/null -w '%{http_code}' -X POST "${url}/pull?image=$img")" = 200 ] ;; *"network inspect"*) echo 172.17.0.1 ;; esac\n`);
-    const p = Bun.spawn(s.cmd, { env: { ...s.env, DOCKER_HUB_AUTH_URL: url, DOCKER_HUB_URL: url }, stdout: "pipe", stderr: "pipe" });
+    bin("sg", `echo "$3" >> "${join(root, "sg.log")}"\ncase "$3" in "docker pull -q '"*) ${opts.stopOnPull ? `touch "${join(s.run, "STOP")}"; ` : ""}${opts.hangPull ? "exec /usr/bin/sleep 600; " : ""}img=\${3#"docker pull -q '"}; img=\${img%"'"}; [ "$(/usr/bin/curl -s -o /dev/null -w '%{http_code}' -X POST "${url}/pull?image=$img")" = 200 ] ;; *"network inspect"*) echo 172.17.0.1 ;; esac\n`);
+    const p = Bun.spawn(s.cmd, { env: { ...s.env, DOCKER_HUB_AUTH_URL: url, DOCKER_HUB_URL: url, ...opts.env }, stdout: "pipe", stderr: "pipe" });
+    const timer = opts.killAfterMs ? setTimeout(() => p.kill("SIGKILL"), opts.killAfterMs) : undefined;
     const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
     const code = await p.exited;
+    clearTimeout(timer);
     fake.stop();
     const out = (f: string) => (existsSync(join(s.run, "out", f)) ? readFileSync(join(s.run, "out", f), "utf8") : null);
     return { ...s, code, stdout, stderr, log: s.sg(), out, waited: fake.sleeps().filter((x) => x >= 1).reduce((a, x) => a + x, 0), pulls: fake.h.pulls };
@@ -302,4 +306,29 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     expect(r.code).toBe(130);
     expect(r.exitFile()).toBe("130");
   }, 60_000);
+
+  test("a pull that hangs is stopped at its try limit and counts as a failed try; an image that never pulls is infra: exit 10 before the oracle job", async () => {
+    const r = await pulls(hub(), { a: "FROM img-a\n" }, { hangPull: true, env: { PULL_TRY_SEC: "1" }, killAfterMs: 45_000 });
+    expect(r.out("pulls.tsv")).toBe(HEAD + "FAIL\t6\t0\timg-a\n");
+    expect(r.out("pull.d/img-a.log")).toContain("try 1 of 6 timed out after 1 s");
+    expect(r.out("pull-fails.txt")).toBe("img-a (a)\n");
+    expect(r.log).not.toContain("oracle.json");
+    expect(r.code).toBe(10);
+  }, 60_000);
+
+  test("a STOP file during a pull kills the pull in flight and ends the run before the oracle gate (exit 130)", async () => {
+    const t0 = Date.now();
+    const r = await pulls(hub(), { a: "FROM img-a\n", b: "FROM img-b\n" }, { hangPull: true, stopOnPull: true, killAfterMs: 45_000 });
+    expect(Date.now() - t0).toBeLessThan(20_000);
+    expect(r.out("pulls.tsv")).toBe(HEAD + "STOP\t1\t0\timg-a\n");
+    expect(r.stderr).toContain("stop requested during the image pulls: no paid trial started");
+    expect(r.log).not.toContain("oracle.json");
+    expect(r.code).toBe(130);
+  }, 60_000);
+
+  test("a rate-limit read that hangs gives up after 30 s, so the failed pull counts as a try and the next pull goes ahead", async () => {
+    const r = await pulls(hub({ fails: { "img-a": 1 }, hangHead: true }), { a: "FROM img-a\n" }, { killAfterMs: 80_000 });
+    expect(r.out("pulls.tsv")).toBe(HEAD + "ok\t2\t0\timg-a\n");
+    expect(r.code).toBe(8);
+  }, 90_000);
 });
