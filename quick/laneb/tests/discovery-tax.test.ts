@@ -91,6 +91,51 @@ describe("Run D, frozen layout (preset primary, sdk-default contrast, pooled D2 
   });
 });
 
+describe("Run D gates and replicates (GEVA-139: replicate 1 for D1 and D2, completeness, MDD by pooled model count)", () => {
+  const g = cfgs["run-d-gates"];
+  const gr = loadRun(g);
+  const s = runD(gr.recs, g).join("\n");
+  const fs = runD(loadRun(cfgs["run-d-factor"]).recs, cfgs["run-d-factor"]).join("\n");
+  const block = (out: string, m: string) => out.split(`## ${m}\n`)[1]!.split("\n## ")[0]!;
+  const line = (out: string, m: string, re: RegExp) => block(out, m).match(re)?.[0];
+  test("the second replicate's job is tagged replicate 2; every other trial is replicate 1", () => {
+    expect(gr.recs.filter((r) => r.replicate === 2).length).toBe(74);
+    expect(gr.recs.filter((r) => r.replicate === 2).every((r) => r.model === "m-claim" && r.label.startsWith("gstack@"))).toBe(true);
+    expect(d.recs.every((r) => r.replicate === 1)).toBe(true);
+  });
+  test("D1 and D2 read replicate 1 only: m-claim's D1 and per-model D2 match the run without the second replicate", () => {
+    const d1 = /^D1 \(gstack and placebo pooled, eligible\): .*$/m;
+    expect(line(s, "m-claim", d1)).toBe(line(fs, "m-claim", d1)!);
+    expect(line(s, "m-claim", d1)).toMatch(/opened of 73 trials/);
+    const d2 = /^D2 \(rewritten minus pooled\), exploratory: .* unadjusted/m;
+    expect(line(s, "m-claim", d2)).toBe(line(fs, "m-claim", d2)!);
+    expect(s).toMatch(/^m-claim gstack@claude-code-preset: graded 36, missing 1,/m);
+  });
+  test("D3 reads both replicates of its two cells, with its completeness beside it", () => {
+    expect(s).toMatch(/^D3 m-claim: \+81\.1 \[[^\]]+\] pp over 37 tasks, .*; MDD 10\.9 to 15\.4 points \(section 11\); claim: claude-code-preset raised opens by \+81\.1 points$/m);
+    expect(s).toContain("Completeness beside D3 (tasks graded of 37, both replicates): m-claim gstack@claude-code-preset 37 (73 trials), gstack@sdk-default 37 (74 trials)");
+  });
+  test("a model whose preset cells a ledger stop left partial is flagged and leaves pooled D2, though every graded trial is eligible", () => {
+    expect(block(s, "m-partial")).toContain("Completeness (tasks graded of 37): none@claude-code-preset 37, gstack@claude-code-preset 25, gstack-rewritten@claude-code-preset 25, placebo@claude-code-preset 25");
+    expect(block(s, "m-partial")).toMatch(/Gate: a cell is graded on fewer than 90% of the run's 37 tasks; flagged, no D1 or D2 claim for this model\.[\s\S]*D1 no claim \(gate\)/);
+    expect(block(s, "m-partial")).not.toContain("under 90% eligible");
+    expect(block(s, "m-claim")).toContain("Completeness (tasks graded of 37): none@claude-code-preset 37, gstack@claude-code-preset 36, gstack-rewritten@claude-code-preset 37, placebo@claude-code-preset 37");
+    expect(s).toMatch(/^D2 pooled over 2 models \(m-claim, m-zero\); left out by the gate or missing: m-partial: .*; MDD 10\.8 to 13\.0 points \(section 11\)$/m);
+    expect(s).toContain("Gates beside pooled D2 (every preset cell at least 90% eligible and graded on at least 90% of the run's 37 tasks): m-claim in; m-zero in; m-partial out (graded on fewer than 90% of tasks: gstack@claude-code-preset 25, gstack-rewritten@claude-code-preset 25, placebo@claude-code-preset 25)");
+    expect(fs).toContain("m-gate out (under 90% eligible: none@claude-code-preset)");
+  });
+  test("the pooled D2 MDD is keyed by the number of models pooled", () => {
+    const keyed = { ...cfgs["run-d-factor"], mdd: { ...g.mdd } };
+    expect(runD(loadRun(keyed).recs, keyed).join("\n")).toMatch(/^D2 pooled over 3 models \(m-claim, m-zero, m-sparse\);.*; MDD 7\.5 to 10\.3 points \(section 11\)$/m);
+    expect(s).not.toMatch(/MDD 7\.5 to 10\.3/);
+  });
+  test("a forgotten replicate_2_jobs key is refused, and so is one naming a job the run does not list", () => {
+    const forgot = { ...g, replicate_2_jobs: [] };
+    expect(() => runD(loadRun(forgot).recs, forgot)).toThrow(/^E_USAGE two replicate-1 trials of m-claim gstack@claude-code-preset on /);
+    expect(() => loadRun({ ...g, replicate_2_jobs: [join(root, "jobs-elsewhere")] })).toThrow(/^E_USAGE replicate_2_jobs names /);
+  });
+});
+
 describe("Run T claims", () => {
   test("T1 confirmed (not smaller than the lead), T2 cost and raised claims", () => {
     const s = t("run-t-confirmed");

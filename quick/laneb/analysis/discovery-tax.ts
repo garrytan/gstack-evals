@@ -5,7 +5,10 @@
 // config: { run: "D" | "T", models: [...], jobs: [Harbor job dirs], sessions?: [proxy-sessions.jsonl],
 //   cells?: { role: label }, dropped_tasks?: [...], fit?: [...], listing_check?: { arm: true|false },
 //   bodies?: { arm: { folder: SKILL.md body } }, arm_tars?: { arm: tar path },
-//   Run D only: setting?, contrast?: { setting, models }, d2?, d3?: "pooled" | "per-model", mdd?: { reading: points } }
+//   Run D only: setting?, contrast?: { setting, models }, d2?, d3?: "pooled" | "per-model",
+//   mdd?: { reading: points, or { "<models pooled>": points } for d2_pooled }, task_count?, replicate_2_jobs?: [Harbor job dirs] }
+// Run D's replicate_2_jobs hold Opus's second replicate of the two D3 cells: those trials feed D3 alone, and every other
+// reading uses replicate 1. task_count is the run's task count before the oracle rule (the completeness gate's base).
 // Cells are keyed by a label: grid.ts armLabel rebuilt from each trial's kwargs (gstack@claude-code-preset); armOf strips it.
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -30,7 +33,7 @@ export type Rec = {
   trial: string; task: string; label: string; model: string; status: "graded" | "missing"; pass: number;
   responded: boolean; refused: boolean; eligible: boolean; opens: string[]; builtinOpens: Record<string, number>; browses: number;
   loaded: string[]; markers: Record<string, boolean>; bodyLoad: boolean; firstTokens: number | null; requests: number;
-  costUsd: number; budgetStop: boolean; agentTimeout: boolean; turnCap: boolean; retried: boolean;
+  costUsd: number; budgetStop: boolean; agentTimeout: boolean; turnCap: boolean; retried: boolean; replicate: number;
 };
 export type Ctx = { installed: (arm: string) => string[]; bodies: Record<string, Record<string, string>>; sessions: Map<string, any[]> };
 
@@ -89,6 +92,7 @@ export function loadRec(dir: string, ctx: Ctx): Rec | null {
     markers: Object.fromEntries(Object.entries(MARKERS).map(([k, re]) => [k, texts.some((x) => re.test(x))])),
     bodyLoad: session.cmd_expanded === true, firstTokens: session.first_req_prompt_tokens ?? null, requests: t.requests, costUsd: t.costUsd,
     budgetStop: t.budgetStop, agentTimeout: t.agentTimeout, turnCap: msgs.some((m) => m.type === "ResultMessage" && m.subtype === "error_max_turns"), retried: attempts.slice(0, -1).some((s) => (s.ok_responses ?? 0) > 0),
+    replicate: 1,
   };
 }
 
@@ -114,12 +118,14 @@ export function loadRun(cfg: any): { recs: Rec[]; dropped: { task: string; trial
   for (const [arm, tar] of Object.entries(cfg.arm_tars ?? {})) bodies[arm] = tarBodies(tar as string);
   const manifests = join(import.meta.dir, "../arms/manifests");
   const installed = (arm: string) => (bodies[arm] ? Object.keys(bodies[arm]!) : readJson(join(manifests, arm + ".json"))?.skills?.names ?? []);
+  const r2 = new Set<string>(cfg.replicate_2_jobs ?? []);
+  for (const job of r2) if (!cfg.jobs.includes(job)) throw new Error(`E_USAGE replicate_2_jobs names ${job}, which jobs does not list`);
   const all: Rec[] = [];
   for (const job of cfg.jobs) for (const name of readdirSync(job)) {
     const d = join(job, name);
     if (!statSync(d).isDirectory()) continue;
     const r = loadRec(d, { installed, bodies, sessions });
-    if (r) all.push(r);
+    if (r) all.push(r2.has(job) ? { ...r, replicate: 2 } : r);
   }
   const drop = new Set<string>(cfg.dropped_tasks ?? []);
   const dropped = [...drop].map((task) => { const xs = all.filter((r) => r.task === task); return { task, trials: xs.length, usd: xs.reduce((s, r) => s + r.costUsd, 0) }; });
@@ -184,7 +190,7 @@ function cellLine(recs: Rec[], model: string, label: string, told: boolean) {
   const cost = g.reduce((s, r) => s + r.costUsd, 0);
   const share = (n: number) => (g.length ? n / g.length : NaN);
   return {
-    graded: g, eligibleShare: share(g.filter((r) => r.eligible).length), bodyLoadShare: share(g.filter((r) => r.bodyLoad).length),
+    label, graded: g, tasks: new Set(g.map((r) => r.task)).size, eligibleShare: share(g.filter((r) => r.eligible).length), bodyLoadShare: share(g.filter((r) => r.bodyLoad).length),
     text: `${model} ${label}: graded ${g.length}, missing ${all.length - g.length}, refused ${g.filter((r) => r.refused).length}, retried after a response ${g.filter((r) => r.retried).length}; ` +
       (told ? `body load ${pct(share(g.filter((r) => r.bodyLoad).length))}; ` : `eligible ${pct(share(g.filter((r) => r.eligible).length))}; `) +
       `pass ${ci(rate(perTask(g, (r) => r.pass)))}; session-cap stops ${g.filter((r) => r.budgetStop).length} (${pct(share(g.filter((r) => r.budgetStop).length))}), agent timeouts ${g.filter((r) => r.agentTimeout).length}, turn-cap stops (error_max_turns) ${g.filter((r) => r.turnCap).length}; ` +
@@ -208,15 +214,30 @@ const MIN_POOLED_D2 = 2;
 
 // Run D. cfg.setting is the primary cells' system prompt (labels arm@setting; absent, bare arm names), cfg.contrast
 // { setting, models } the second setting's cells, cfg.d2 and cfg.d3 "pooled" or "per-model" (section 11's power
-// choice), cfg.mdd the frozen MDDs in points that exploratory rows print beside them.
-export function runD(recs: Rec[], cfg: any): string[] {
+// choice), cfg.mdd the frozen MDDs in points that exploratory rows print beside them, the pooled D2's keyed by the
+// number of models pooled. D3 reads both replicates; every other reading reads replicate 1. A cell is gated when under
+// 90% of its graded trials are eligible or it is graded on under 90% of the run's tasks (a ledger stop leaves cells partial).
+export function runD(all: Rec[], cfg: any): string[] {
+  const recs = all.filter((r) => r.replicate === 1);
+  const seen = new Set<string>();
+  for (const r of recs) {
+    const k = `${r.model} ${r.label} on ${r.task}`;
+    if (seen.has(k)) throw new Error(`E_USAGE two replicate-1 trials of ${k}: list the second replicate's job under replicate_2_jobs`);
+    seen.add(k);
+  }
+  const T = cfg.task_count !== undefined ? cfg.task_count - (cfg.dropped_tasks ?? []).length : new Set(all.map((r) => r.task)).size;
+  const short = (cls: { label: string; tasks: number }[]) => cls.filter((x) => x.tasks < 0.9 * T);
+  const unelig = (cls: { label: string; eligibleShare: number }[]) => cls.filter((x) => !(x.eligibleShare >= 0.9));
   const c = { ...D_CELLS, ...(cfg.cells ?? {}) };
   const P: string | undefined = cfg.setting;
   const S: string | undefined = cfg.contrast?.setting;
   const sModels: string[] = cfg.contrast?.models ?? [];
   const d2Pooled = cfg.d2 === "pooled";
   const d3Pooled = cfg.d3 === "pooled";
-  const mdd = (k: string) => (cfg.mdd?.[k] !== undefined ? `; MDD ${cfg.mdd[k]} points (section 11)` : "");
+  const mdd = (k: string, models?: number) => {
+    const v = cfg.mdd?.[k] !== null && typeof cfg.mdd?.[k] === "object" ? cfg.mdd[k][String(models)] : cfg.mdd?.[k];
+    return v !== undefined ? `; MDD ${v} points (section 11)` : "";
+  };
   const out: string[] = ["# Run D: untold discovery"];
   const failed = Object.entries(cfg.listing_check ?? {}).filter(([, ok]) => ok !== true).map(([a]) => a);
   out.push(failed.length ? `Listing check FAILED for ${failed.join(", ")}: the run stops before any batch.` : `Listing check: ${Object.keys(cfg.listing_check ?? {}).length ? "passed for every arm" : "not supplied"}.`);
@@ -247,14 +268,17 @@ export function runD(recs: Rec[], cfg: any): string[] {
     const pool = [...elig(m, L(c.gstack)), ...elig(m, L(c.placebo))];
     const d1Map = perTask(pool, opened);
     const rwMap = perTask(elig(m, L(c.rewritten)), opened);
+    const [inelig, partial] = [unelig(cells), short(cells)];
     return { m, cells, pool, d1: rate(d1Map), d1Count: pool.filter((r) => r.opens.length).length, d1Map, rwMap, d2: contrast(rwMap, d1Map),
-      flagged: cells.some((x) => !(x.eligibleShare >= 0.9)),
+      inelig, partial, flagged: inelig.length > 0 || partial.length > 0,
       fit: { d1: rate(perTask(fitOnly(pool), opened)), d2: contrast(perTask(fitOnly(elig(m, L(c.rewritten))), opened), perTask(fitOnly(pool), opened), false) } };
   });
   const adj = holm(per.map((x: any) => x.d2.p));
   per.forEach((x: any, i: number) => {
     out.push("", `## ${x.m}`, ...x.cells.map((cl: any) => cl.text));
-    if (x.flagged) out.push("Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.");
+    out.push(`Completeness (tasks graded of ${T}): ${x.cells.map((cl: any) => `${cl.label} ${cl.tasks}`).join(", ")}`);
+    if (x.inelig.length) out.push("Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.");
+    if (x.partial.length) out.push(`Gate: a cell is graded on fewer than 90% of the run's ${T} tasks; flagged, no D1 or D2 claim for this model.`);
     const bound = zeroBound(x.d1.tasks);
     out.push(`D1 (gstack and placebo pooled, eligible): ${x.d1Count} opened of ${x.pool.length} trials, rate ${ci(x.d1)} over ${x.d1.tasks} tasks` + (x.d1Count === 0 ? `, exact one-sided 95% upper bound ${pct(bound)}` : ""));
     out.push(`D1 ${x.flagged ? "no claim (gate)" : x.d1.lo > 0 ? `claim: opened an untold gstack skill in ${pct(x.d1.point)} of eligible trials` : `claim: fewer than ${pct(x.d1Count === 0 ? bound : x.d1.hi)} (95% upper bound)`}`);
@@ -271,7 +295,8 @@ export function runD(recs: Rec[], cfg: any): string[] {
     const cellsS = [c.none, c.gstack, c.rewritten].map((a) => cellLine(recs, x.m, lab(a, S), false));
     const gS = elig(x.m, lab(c.gstack, S));
     out.push(`### ${x.m} under ${S} (secondary)`, ...cellsS.map((cl) => cl.text));
-    if (cellsS.some((cl) => !(cl.eligibleShare >= 0.9))) out.push(`Gate: a ${S} cell is under 90% eligible; flagged.`);
+    if (unelig(cellsS).length) out.push(`Gate: a ${S} cell is under 90% eligible; flagged.`);
+    if (short(cellsS).length) out.push(`Gate: a ${S} cell is graded on fewer than 90% of the run's ${T} tasks; flagged.`);
     out.push(`D1 under ${S} (gstack alone, eligible): ${gS.filter((r) => r.opens.length).length} opened of ${gS.length} trials, rate ${ci(rate(perTask(gS, opened)))}`);
     out.push(`D2 under ${S} (rewritten minus gstack): ${ci(contrast(perTask(elig(x.m, lab(c.rewritten, S)), opened), perTask(gS, opened), false), pp)} pp`);
     for (const a of [c.none, c.gstack, c.rewritten]) out.push(detail(x.m, lab(a, S)));
@@ -282,7 +307,9 @@ export function runD(recs: Rec[], cfg: any): string[] {
   const left = per.filter((x: any) => x.flagged).map((x: any) => x.m);
   const d2p = pooledContrast(inD2.map((x: any) => [x.rwMap, x.d1Map]));
   out.push("", `## D2 pooled across models (${d2Pooled ? "primary, one test" : "secondary"})`);
-  out.push(`D2 pooled over ${inD2.length} models (${inD2.map((x: any) => x.m).join(", ")})${left.length ? `; left out by the gate or missing: ${left.join(", ")}` : ""}: ${ci(d2p, pp)} pp over ${d2p.tasks} tasks, p ${pv(d2p.p)}${d2Pooled ? mdd("d2_pooled") : ""}`);
+  out.push(`D2 pooled over ${inD2.length} models (${inD2.map((x: any) => x.m).join(", ")})${left.length ? `; left out by the gate or missing: ${left.join(", ")}` : ""}: ${ci(d2p, pp)} pp over ${d2p.tasks} tasks, p ${pv(d2p.p)}${d2Pooled ? mdd("d2_pooled", inD2.length) : ""}`);
+  const why = (x: any) => [x.inelig.length ? `under 90% eligible: ${x.inelig.map((cl: any) => cl.label).join(", ")}` : "", x.partial.length ? `graded on fewer than 90% of tasks: ${x.partial.map((cl: any) => `${cl.label} ${cl.tasks}`).join(", ")}` : ""].filter(Boolean).join("; ");
+  out.push(`Gates beside pooled D2 (every preset cell at least 90% eligible and graded on at least 90% of the run's ${T} tasks): ` + per.map((x: any) => (x.flagged ? `${x.m} out (${why(x)})` : `${x.m} in`)).join("; "));
   if (d2Pooled) {
     const sig = inD2.length >= MIN_POOLED_D2 && d2p.p < 0.05 && (d2p.lo > 0 || d2p.hi < 0);
     out.push(`D2 pooled ${inD2.length < MIN_POOLED_D2 ? `no claim (fewer than ${MIN_POOLED_D2} models)` : sig ? `claim: the rewritten description ${d2p.lo > 0 ? "raised" : "lowered"} opens by ${pp(d2p.point)} points, pooled across models` : "no claim"}`);
@@ -293,12 +320,14 @@ export function runD(recs: Rec[], cfg: any): string[] {
 
   if (S && sModels.length) {
     const d3 = sModels.map((m) => {
-      const g = [lab(c.gstack, P), lab(c.gstack, S)].map((l) => cellLine(recs, m, l, false));
-      const [a, b] = [perTask(elig(m, lab(c.gstack, P)), opened), perTask(elig(m, lab(c.gstack, S)), opened)];
-      return { m, a, b, flagged: g.some((x) => !(x.eligibleShare >= 0.9)), r: contrast(a, b) };
+      const g = [lab(c.gstack, P), lab(c.gstack, S)].map((l) => cellLine(all, m, l, false));
+      const both = (l: string) => all.filter((r) => r.model === m && r.label === l && r.eligible);
+      const [a, b] = [perTask(both(lab(c.gstack, P)), opened), perTask(both(lab(c.gstack, S)), opened)];
+      return { m, g, a, b, flagged: unelig(g).length > 0 || short(g).length > 0, r: contrast(a, b) };
     });
     const adj3 = holm(d3.map((x) => x.r.p));
     out.push("", `## D3, ${lab(c.gstack, P)} minus ${lab(c.gstack, S)} open rate (${d3Pooled ? "pooled primary, one test" : "per model, Holm"})`);
+    out.push(`Completeness beside D3 (tasks graded of ${T}, both replicates): ` + d3.map((x) => `${x.m} ${x.g.map((cl) => `${cl.label} ${cl.tasks} (${cl.graded.length} trials)`).join(", ")}`).join("; "));
     d3.forEach((x, i) => {
       if (d3Pooled) out.push(`D3 ${x.m}, exploratory: ${ci(x.r, pp)} pp over ${x.r.tasks} tasks, p ${pv(x.r.p)} unadjusted${mdd("d3_per_model")}${x.flagged ? "; gate flagged" : ""}; no claim`);
       else {

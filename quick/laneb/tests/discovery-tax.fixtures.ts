@@ -74,6 +74,26 @@ function runD(root: string, factor = false) {
     ...(factor ? { setting: "claude-code-preset", contrast: { setting: "sdk-default", models: ["m-claim", "m-zero"] }, d2: "pooled", d3: "pooled", mdd: { d2_per_model: 25.0, d2_pooled: 9.0, d3_per_model: 27.0, d3_pooled: 15.0 } } : {}) };
 }
 
+// gates: the factor run's job, plus m-claim's second replicate of its two D3 cells as its own job (every preset trial opens,
+// so it would move D1 and D2 if they read it), plus m-partial, whose preset cells a ledger stop cut short: gstack graded on
+// 25 of 37 tasks (its last 12 never launched), gstack-rewritten and placebo missing on those 12 (no model response). Every
+// graded m-partial trial is eligible, so only the completeness gate catches it. task_count is 38: the 37 tasks and
+// dropped-task, which the oracle rule takes out.
+function runDGates(root: string, factor: any) {
+  const r2 = join(root, "jobs-d-r2");
+  TASKS.forEach((task, i) => {
+    for (const sp of ["claude-code-preset", "sdk-default"]) trial(r2, { task, arm: "gstack", model: "m-claim", system_prompt: sp, reward: 1, msgs: sp === "sdk-default" ? M.respond : M.readOpen("investigate", `q${i}`) });
+  });
+  const partial = join(root, "jobs-d-partial");
+  for (const arm of ["none", "gstack", "gstack-rewritten", "placebo"]) TASKS.forEach((task, i) => {
+    if (arm === "gstack" && i >= 25) return;
+    const stopped = arm !== "none" && i >= 25;
+    trial(partial, { task, arm, model: "m-partial", system_prompt: "claude-code-preset", ...(stopped ? { msgs: [], reward: null, exc: "RuntimeError" } : { reward: i % 2, msgs: arm === "gstack-rewritten" && i % 2 ? M.readOpen("investigate", `p${i}`) : M.respond }) });
+  });
+  return { ...factor, models: ["m-claim", "m-zero", "m-partial"], jobs: [...factor.jobs, r2, partial], replicate_2_jobs: [r2], task_count: 38,
+    contrast: { setting: "sdk-default", models: ["m-claim"] }, d3: "per-model", mdd: { d2_per_model: "22.3 to 25.8", d2_pooled: { "3": "7.5 to 10.3", "2": "10.8 to 13.0" }, d3_per_model: "10.9 to 15.4" } };
+}
+
 // pass(model, arm, i) per scenario; told cells load their body unless bodyLoad says otherwise.
 function runT(root: string, scenario: string, pass: (model: string, arm: string, i: number) => number, bodyLoad: (model: string, arm: string, i: number) => boolean = () => true) {
   const job = join(root, "jobs-t-" + scenario);
@@ -85,9 +105,12 @@ function runT(root: string, scenario: string, pass: (model: string, arm: string,
 }
 
 export function scenarios(root: string): Record<string, object> {
+  const plain = runD(root);
+  const factor = runD(root, true);
   return {
-    "run-d": runD(root),
-    "run-d-factor": runD(root, true),
+    "run-d": plain,
+    "run-d-factor": factor,
+    "run-d-gates": runDGates(root, factor),
     "run-t-confirmed": runT(root, "confirmed", (m, a, i) => {
       if (m === "particle-1") return a === "placebo" ? (i % 5 === 0 ? 1 : 0) : 1;
       if (m === "claude-haiku-5-5") return a === "placebo" ? (i % 4 === 0 ? 1 : 0) : 1;
