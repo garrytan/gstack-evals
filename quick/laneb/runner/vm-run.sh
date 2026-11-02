@@ -155,14 +155,23 @@ proxy=$!
 trap 'rc=$?; curl -fsS -X POST 127.0.0.1:8788/close-all >/dev/null 2>&1 || true; kill $proxy 2>/dev/null || true; echo $rc > "$run/out/vm-run.exit"' EXIT
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && break; sleep 0.5; done
 curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 || { echo "metering proxy not healthy; see out/proxy.log" >&2; exit 8; }
+# proxy_status: the proxy's state, read from its control route GET /totals (proxy.ts serves no /status), as one JSON line
+# that keeps /totals' fields one to one: sessions (every session opened this run), open_sessions, unsettled_sessions,
+# cap_stop (the latched reason, or null) and global_spent_micros. It prints nothing and fails unless the answer has
+# cap_stop and both session counts as numbers, so a missing field never reads as "no cap stop".
+proxy_status() {
+  curl -fsS --max-time 10 127.0.0.1:8788/totals \
+    | jq -ce 'select(has("cap_stop") and (.sessions | type) == "number" and (.open_sessions | type) == "number") | {sessions, open_sessions, unsettled_sessions, cap_stop, global_spent_micros}'
+}
 sed "s#__GATEWAY__#$gw#g" "$run/job.json" > "$run/out/job.resolved.json"
 cd "$run"
 # With a STOP_ON_CAP file in the run dir, a latched cap stop (the ledger or the batch cap refused a session) also stops
-# Harbor, so the run ends incomplete instead of starting trials that can't open a session; out/cap-stop.json records it.
+# Harbor, so the run ends incomplete instead of starting trials that can't open a session; out/cap-stop.json records the
+# proxy_status line that showed it.
 (while kill -0 $$ 2>/dev/null; do
   [ -e "$run/STOP" ] && pkill -INT -f "/bin/harbor run" && break
-  if [ -e "$run/STOP_ON_CAP" ] && curl -fsS 127.0.0.1:8788/status 2>/dev/null | jq -e '.cap_stop != null' >/dev/null 2>&1; then
-    curl -fsS 127.0.0.1:8788/status > "$run/out/cap-stop.json" 2>/dev/null
+  if [ -e "$run/STOP_ON_CAP" ] && s=$(proxy_status 2>/dev/null) && jq -e '.cap_stop != null' <<< "$s" >/dev/null 2>&1; then
+    printf '%s\n' "$s" > "$run/out/cap-stop.json"
     pkill -INT -f "/bin/harbor run" && break
   fi
   sleep 2
@@ -173,7 +182,7 @@ rc=$?
 set -e
 curl -fsS -X POST 127.0.0.1:8788/close-all > "$run/out/close-all.json" || true
 curl -fsS 127.0.0.1:8788/totals > "$run/out/proxy-totals.json" || true
-curl -fsS 127.0.0.1:8788/status > "$run/out/proxy-status-end.json" || true
+proxy_status > "$run/out/proxy-status-end.json" || true
 curl -fsS 127.0.0.1:9911/status > "$run/out/ledger-status-end.json" || true
 echo "harbor exit $rc"; tail -5 "$run/out/harbor.log"; cat "$run/out/proxy-totals.json"
 exit $rc
