@@ -10,7 +10,9 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 - told.ts: the frozen told prompt and its sha256.
 - plan.ts: plan units: the plan arms, prompt, rec user, parser and CEO mode (see Plan units).
 - findings.ts: the fixed findings parser and the render to arm contract v1. A finding that says whether it was confirmed gets reader `confirmed` or `unconfirmed`, so an arm's `severity_map.by_reader.unconfirmed` can map unconfirmed findings as informational, as the plan's primary map does for pstack.
-- cost.ts: cost.tsv and refusals.tsv from the metering proxy's journal.
+- cost.ts: cost.tsv and refusals.tsv from the metering proxy's journal, plus reader rows.
+- readers.ts: reader rows: each subagent a session launched, named through a reader map pinned to one gstack commit
+  (reader-maps/).
 - run.ts: runReviewUnits, the run loop on a HostRig.
 - cli.ts: the command.
 
@@ -76,9 +78,15 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   passes no system prompt option, so the Agent SDK sends its empty one. claude-code-preset passes the SDK's claude_code
   preset, which brings Claude Code's own system guidance. arm_provenance.system_prompt in arm.json and system_prompt in
   each session's init.json record it.
-- `--told-prefix <arm>=<file>`, repeatable, code units only. The file's one line replaces the arm's told command (for
+- `--told-prefix <arm>=<file>`, repeatable. On code units the file's one line replaces the arm's told command (for
   example R2's full-procedure /review line); it must open with the arm's own command. The template and TOLD_SHA256 stay
-  the same. arm.json's told block records the prefix and prefix_sha256; an arm without one keeps today's block.
+  the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
+  command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
+  for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
+  BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
+  one). none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo
+  runs, since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
+  and an arm without one keeps today's prompt and block.
 - `--render <arm>=interactive|unattended`, repeatable, on a gstack stack arm. The install runs gstack's setup, renders
   the full loadout into ~/.claude/gstack-render, serves each rendered skill's SKILL.md and sections from it, and checks
   the lock's session_kind and the served review and investigate start lines (src/arms/install.ts). arm_provenance.render
@@ -87,9 +95,50 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
 - `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
 
-run.json records max_turns and session_kind. --resume with other values than run.json records is refused before
-anything runs, and run.json stays as it was (E_CACHE_STALE). A setting off its default also joins the session key, so a
-cell run under another value is never reused.
+- `--allowance <usd>`: each session's spend cap on its proxy slot. Left out, a session gets SESSION_ALLOWANCE (1.6M input
+  and 32k output tokens) at its model's price, $7.04 on Opus 5.5. The proxy refuses a call whose worst case the slot's
+  allowance cannot hold (E_ALLOWANCE).
+- `--cap-stops`, code units only: cap stops (below). Off by default.
+- `--reader-map <file>`, code units only: reader rows (below). Every gstack stack arm must run the map's gstack commit.
+
+run.json records max_turns and session_kind, and allowance_usd and reader_map (its sha256 and gstack commit) when they
+are set. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
+(E_CACHE_STALE). A setting off its default also joins the session key, so a cell run under another value is never
+reused. The allowance is the exception: it joins the key only in a --cap-stops run (below), and otherwise only the
+run.json check refuses a resume under another allowance.
+
+## Cap stops and reader rows (R2 build)
+
+R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
+
+- **Cap stops.** A run with `--cap-stops` records a code session that either cap ends as its own termination:
+  turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
+  names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
+  against its own arm, the same in every arm: its findings are those of the latest main-agent text block in the session's
+  transcript.ndjson whose last json block parses as findings (an AskUserQuestion's question never counts), and with no
+  such block, or no readable transcript, it is a missing pass, scored as finding nothing. arm.json counts them
+  in `cap_stops: {turn_cap, allowance_stop, units, parser_sha256}`, where units names each unit a cap stop hit and
+  parser_sha256 is capped.ts's (the read rule), and diagnostics names each session with its settled metered spend. In
+  such a run the session key's verifier is the findings parser's sha256, capped.ts's and readers.ts's (whose
+  readTranscript feeds the read rule), so a change to any of them refuses its cached cells, and the allowance joins the
+  key. A run without `--cap-stops`, whatever its `--max-turns` and `--allowance`, and every plan unit, keeps today's
+  records and keys: the turn cap ends a session as completed, and the allowance as a missing cell (E_ALLOWANCE).
+- The allowance binds worst-case committed spend, including the reservations of calls still in flight, so a session that
+  runs calls in parallel can stop below its allowance.
+- **Reader rows.** With `--reader-map`, each code session's readers go to the journal and to cost.tsv as
+  `reader:<name>` rows after the unit-pass's all and voice rows, sorted by name. A reader is a subagent the main agent
+  launched through the Agent tool (Task in older CLIs) and the CLI started (task_started, or a message from the
+  subagent). Its name comes from the launch prompt: the one map checklist the prompt names (a path ending in, say,
+  review/specialists/testing.md), batched when it names two or more, adversarial-native when it names none but carries
+  the map's adversarial marker, and other otherwise. A row's pr and pass are the unit-pass's (the unit id, as the all row
+  writes it, and the pass number), its total_tokens is the sum of its subagents' task_notification usage (unavailable
+  when one never reported), its meter_source is reader-counter, and every other column is unavailable or blank
+  (READER_ROW in readers.ts). arm.json names the map in reader_map_sha256. A run without a map writes no reader rows.
+- reader-maps/gstack-77fe28c39796.json is the map for garrytan/gstack at 77fe28c39796cf5573e3d0836b83b2ee436a8f12
+  (v1.92.39.0): Step 4.5's ten Review Army checklists and Step 4.8's Claude adversarial subagent.
+- **R2's two runs** (section 5): none-r2 runs alone on its own out dir with `--item r2a-grid --spend-cap 25`, and
+  gstack-full alone with `--item r2b-grid --spend-cap 325`. The first lease binds each item to its run, so a second run
+  on either is refused (E_ITEM_BOUND). The R2 amendment pins the exact commands.
 
 ## Plan units
 
@@ -99,7 +148,9 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
 - Arms: `none` ("Review this plan for problems."), `gstack=<gstack repo>@<sha>` (`/plan-ceo-review` and that line),
   `lens` (the lens line from the skill's description, then that line), `placebo` (Lane B's placebo tree generated
   from the gstack arm, with the gstack line) and `gstack-auto=<gstack repo>@<sha>`, a frozen placeholder for
-  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. `--arm-models
+  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
+  `gstack-<suffix>` (not gstack-auto) is a second gstack arm, such as a forced-procedure arm, and needs its
+  own `--told-prefix`. `--arm-models
   <arm>=<model>[,<model>]` limits an arm to some of `--models`, so lens runs only on Opus and placebo only on particle-1.
 - TOLD_PLAN_TEMPLATE, pinned by TOLD_PLAN_SHA256, asks for a `plan-findings` fence with severity (Critical, High,
   Medium, Low), section, line, claim, evidence and fix. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.

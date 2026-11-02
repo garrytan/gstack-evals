@@ -146,6 +146,10 @@ export type Termination =
   | { kind: "credentials_rejected" }
   /** The cap ran out before this item ran (CAP_STOP). */
   | { kind: "cap_stop" }
+  /** The session's own turn cap ended it (the Claude Code adapter's capStops; without it a turn cap is completed). */
+  | { kind: "turn_cap" }
+  /** The session's slot allowance could not hold its next call (capStops; without it a missing cell, E_ALLOWANCE). */
+  | { kind: "allowance_stop" }
   /** A paid send with no recorded outcome: it keeps its charge and is never resent. */
   | { kind: "unknown"; reservation_id: string };
 

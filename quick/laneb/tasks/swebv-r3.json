@@ -1,0 +1,942 @@
+{
+ "note": "R3's in-band SWE-bench Verified tasks (GEVA-101 prereg, section 4.1): swebv-r3.txt with its sha256, and a digest per task at the Harbor Hub pin. Built by swebv_r3.py.",
+ "dataset": {
+  "name": "swebench-verified",
+  "version": "1.0"
+ },
+ "band_file": "swebv-r3.txt",
+ "band_sha256": "5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67",
+ "digest_algorithm": "sha256 over sorted lines '<relpath>\\0<sha256(file)>\\n' for every git-tracked file under the task path at registry.git_commit_id (digest_tasks.py)",
+ "tasks": [
+  {
+   "task_id": "astropy__astropy-13033",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/astropy__astropy-13033"
+   },
+   "digest": "sha256:42702a0899752aa7bd1762a6fda2f95b87ce007c393ffaf0442573e528da6781",
+   "digest_files": 6
+  },
+  {
+   "task_id": "astropy__astropy-13977",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/astropy__astropy-13977"
+   },
+   "digest": "sha256:df029c5e963c2c29865db62a62a9c4fbf706c1979f94642f5b628a9cbd004c38",
+   "digest_files": 6
+  },
+  {
+   "task_id": "astropy__astropy-14182",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/astropy__astropy-14182"
+   },
+   "digest": "sha256:2770f01f9f024d3da5e908bdc064189f11f2ea521fb59920875f0eda6bb002b8",
+   "digest_files": 6
+  },
+  {
+   "task_id": "astropy__astropy-14365",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/astropy__astropy-14365"
+   },
+   "digest": "sha256:5f8f4cb9a4621efaed39e85b98de63d1b275bd944b41acf70cdb653847a6c91d",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-10097",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-10097"
+   },
+   "digest": "sha256:9e3cd52702cae19ad8f34bd762e4dd5223c2354ea0ccd67086a0a376dd11c954",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-10973",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-10973"
+   },
+   "digest": "sha256:d76bb8bd824694e0e2bffde0870de347e32f6a6410a9869c730dd8dcfc1b6dd1",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-11149",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-11149"
+   },
+   "digest": "sha256:c486842f9e3a54fe9288f24b2348ad3e6fb6a7586cdd6c88bc464111d8b22e8d",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-11265",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-11265"
+   },
+   "digest": "sha256:bdf7d4cf6a9be4731e61ef4f08d8125442fdee7e185ecc51c62c45d9b04a23ea",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-11790",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-11790"
+   },
+   "digest": "sha256:89814397de6fff36469b984d1daf4c2c18f28390e7910bffda84bb7e9770b695",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-11815",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-11815"
+   },
+   "digest": "sha256:180bc324224a65bc5975f8be9d026210239e4680ef2e5bce3135f1f016da218d",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-11885",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-11885"
+   },
+   "digest": "sha256:40c0aba0d07caf06736108c3b90c58bff5ee890b4f973da122563d9ae5a1c759",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-11964",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-11964"
+   },
+   "digest": "sha256:c587136b6a4a1d6f44dc212c69f8ac43d962e459e30847040a8584c9d667e674",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-12209",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-12209"
+   },
+   "digest": "sha256:465583a39868363d04e9f2f4412b2b3cd0fd088f26255e8e2fe086a2c0d86b5c",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-12273",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-12273"
+   },
+   "digest": "sha256:be3390e88ba705482ec60f8dfcd69010a25d70bdce9410b0d7dce09fc2eeec72",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-12406",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-12406"
+   },
+   "digest": "sha256:2c48e0a44e1069b88c98b4a292ab2cb29ca72c0e5e27164ef9380e4b0d3ceed3",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-12663",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-12663"
+   },
+   "digest": "sha256:bf9c867921c070d3a41ef65432d9a0e5d3932898262cce58f6e05436ac156aa0",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13023",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13023"
+   },
+   "digest": "sha256:bbd61216fbf3f995d1d43d8179bcd837e3e1955660a2922aa639f110d9616b2d",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13315",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13315"
+   },
+   "digest": "sha256:96d05b36e88b84d66ba65a27df36f002755cc120edb2788ba5f13f5c3649bf26",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13401",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13401"
+   },
+   "digest": "sha256:df1cb4153a9590443d258023048079a733907b548759267512a5860f5cd6a074",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13406",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13406"
+   },
+   "digest": "sha256:b77e535511e4e31db81a946a0beaa0c50af3d6134fed08cc049abf41db223c2c",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13590",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13590"
+   },
+   "digest": "sha256:9349dd415b2bd53da19d5017d0d28763fb6cea206e212a7fa8ce650be9f45215",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13807",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13807"
+   },
+   "digest": "sha256:1538bc4f41cff130d3bfa65dbf5fd02fa9d70948174701872276d713ae68a128",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-13925",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-13925"
+   },
+   "digest": "sha256:66c52e988252e07be32d22284e4ab885fed4db344f1ee668ba31e173d090a28b",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-14053",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-14053"
+   },
+   "digest": "sha256:4af3e795447dbeb56446890c73452f9584876e6488193aca2a5abc83f9a93ae8",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-14376",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-14376"
+   },
+   "digest": "sha256:3c8f968dbf5d65b46686b17809d2ae8bfa49aa57d9aba669f2721b7a62719cc5",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-14404",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-14404"
+   },
+   "digest": "sha256:f77913f690501cd24cbf3f3156e1e5fa338b5b7b82495fa990c8bff8f1db4c41",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-14534",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-14534"
+   },
+   "digest": "sha256:4f045da3c3b301ceeb60518023f69b830f1d7ecb60e9e0617c72c762314dc44f",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-14725",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-14725"
+   },
+   "digest": "sha256:eb95455f3d9ad83f2ea9e442046c228f5ed0f31fe5f18329d20c7cb12a3f035d",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-14771",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-14771"
+   },
+   "digest": "sha256:0fefdd8488cd07808e52b012c7a28508bee68dceb70a2a5eb1ef73962479fd81",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15503",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15503"
+   },
+   "digest": "sha256:b0c53f78fd492d310cefa34d4dd57a1d54e45a531f86a6dda0f41e94076110ba",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15554",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15554"
+   },
+   "digest": "sha256:cd6329bf2719b6c06e9de08cdeb5ae7b7a6d09c26b084bf0d1037f94089692c7",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15563",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15563"
+   },
+   "digest": "sha256:d41a7a8a2d7724c11781ef0ec586f0d8e6d35d0e62d92c61579b22d932c044e3",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15572",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15572"
+   },
+   "digest": "sha256:7a80df9ae9e4a2169ca6c9a689027279a430fedcb4331a4e2093418523da54f1",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15695",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15695"
+   },
+   "digest": "sha256:651405c0e786dc55fefe46f1a18eaec8b345ecd574a6b6c816f2362f5f50a34c",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15732",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15732"
+   },
+   "digest": "sha256:970c06cf77cda28978716d05e6f13d136ee2b437f82a107423ee9dcc17635c5b",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15916",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15916"
+   },
+   "digest": "sha256:310faf734c17795ac43b6537cb7500046b7269a68695f26899d2cf55961a077a",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15957",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15957"
+   },
+   "digest": "sha256:b2620c4faf6fd17d48c105a8edb357ec7e845478099aa7c575604f3496e89071",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-15973",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-15973"
+   },
+   "digest": "sha256:330e645e1fd10b68539bc3cf7e06f75209373b0d5fbe2ca3ffc971515391943b",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-16454",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-16454"
+   },
+   "digest": "sha256:84a15ed1e1cd33652627ccbaa2eb90b1b3bf47c0ce22f990596ff9c73219b3b0",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-16560",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-16560"
+   },
+   "digest": "sha256:9dafa22aa81118d4b147002b104fe591dd031194a2d4f32daf25cc784e510479",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-16938",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-16938"
+   },
+   "digest": "sha256:013bf21ad3dd45b5cbdc7549af860d78835620994e82d79a98a0ed0e0f4d1502",
+   "digest_files": 6
+  },
+  {
+   "task_id": "django__django-16950",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/django__django-16950"
+   },
+   "digest": "sha256:3fb424964c347d1db5cf94676133de1817dcc304c232318cbd66ae42f12542fb",
+   "digest_files": 6
+  },
+  {
+   "task_id": "matplotlib__matplotlib-20826",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/matplotlib__matplotlib-20826"
+   },
+   "digest": "sha256:ed5972d29e86d32752bfba241645aa3ab478158b1e7717ee68eb52117a8a4b3f",
+   "digest_files": 6
+  },
+  {
+   "task_id": "matplotlib__matplotlib-25311",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/matplotlib__matplotlib-25311"
+   },
+   "digest": "sha256:1d34b6b683a0cd8b1c85f9cc9cf7798a5beb7d058dfc348c7d9c71cc6b610882",
+   "digest_files": 6
+  },
+  {
+   "task_id": "matplotlib__matplotlib-25960",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/matplotlib__matplotlib-25960"
+   },
+   "digest": "sha256:67e21c07f5d0b6d42241ab5ba9048da6800d8433fce3b19bd7de724cc854af8a",
+   "digest_files": 6
+  },
+  {
+   "task_id": "mwaskom__seaborn-3069",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/mwaskom__seaborn-3069"
+   },
+   "digest": "sha256:9f4f000e662f78a618d328ec28b8346c9f1d9bc634f981e2c2c37ddcc1e416f8",
+   "digest_files": 6
+  },
+  {
+   "task_id": "psf__requests-2931",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/psf__requests-2931"
+   },
+   "digest": "sha256:d4b507f329d2ba7258dffdfe18b3f5c88e30f7b29236d7761f22ca63b7024dcc",
+   "digest_files": 6
+  },
+  {
+   "task_id": "psf__requests-5414",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/psf__requests-5414"
+   },
+   "digest": "sha256:fb618ccaff4f6a74d59f59023be07879c278fad4c662c331be29fc1dda91285e",
+   "digest_files": 6
+  },
+  {
+   "task_id": "psf__requests-6028",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/psf__requests-6028"
+   },
+   "digest": "sha256:7db9418fc257f37d6f3a269188b13b49492696f8b02cded86e605263cb449b34",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pydata__xarray-4687",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pydata__xarray-4687"
+   },
+   "digest": "sha256:7c2845615e7d988a19adb1366a099e2b6851b970b9369f0bb39153df79cbd205",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pydata__xarray-6461",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pydata__xarray-6461"
+   },
+   "digest": "sha256:e5f707587a69c6da8223967716ca95bdc741861cceecb1f98e28bc4d171de090",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pydata__xarray-6938",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pydata__xarray-6938"
+   },
+   "digest": "sha256:5008856484d02e6e30a75592767c7e1040107b92df51da4d2dc654359fc6e58c",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pylint-dev__pylint-4970",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pylint-dev__pylint-4970"
+   },
+   "digest": "sha256:144fa16a4889ca720f4643d5dc4b0d774ea3ad003d2c60152a5c88efc2495c43",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pylint-dev__pylint-6386",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pylint-dev__pylint-6386"
+   },
+   "digest": "sha256:a3300ca24fb9cfd2c955e76ce99de2b53788a5a9a07804afec73d791181db838",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pylint-dev__pylint-6528",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pylint-dev__pylint-6528"
+   },
+   "digest": "sha256:6e37e15a62956c0db82bf9fbdcc428da69c8ad0aba349b6b20439bd39629e8ed",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pylint-dev__pylint-7277",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pylint-dev__pylint-7277"
+   },
+   "digest": "sha256:35301022c7dc1c09ab40489af6a181a8225dce96518fecec983b7cfb6d0cf0dc",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pylint-dev__pylint-8898",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pylint-dev__pylint-8898"
+   },
+   "digest": "sha256:76776fc4cd046f7e4bf4a8b8e0d310389d1daeefd70b06727a1d3f31fdd93682",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pytest-dev__pytest-5787",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pytest-dev__pytest-5787"
+   },
+   "digest": "sha256:6a6cf11bcef6c5c8f459690c0f69ae557cf63f9f6369f440b6fa4e1f53314f5b",
+   "digest_files": 6
+  },
+  {
+   "task_id": "pytest-dev__pytest-7490",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/pytest-dev__pytest-7490"
+   },
+   "digest": "sha256:b15518431542706bfe0bee9973c5f60c069b5523226bc343ec2e39aac91a5305",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-10908",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-10908"
+   },
+   "digest": "sha256:cdbcc469b8f285449046bba427dd3b9f4a8b72a44290d24527cf0490d43a08f4",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-12973",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-12973"
+   },
+   "digest": "sha256:5de4abac612a95b6120c41f3ccfd640a202d9bcdd78be6f2b62d2ec5cc87bc48",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-13142",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-13142"
+   },
+   "digest": "sha256:af912138a910dc8de8c23f561739774478a64281808ac07818f502ac41391172",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-14087",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-14087"
+   },
+   "digest": "sha256:211d9662e59caf7353d78e94806cf1f6cea16e4c9c2da643007f36a07b1ad08e",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-25102",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-25102"
+   },
+   "digest": "sha256:0853b4c667c106459f010b468e1f365fde63c8b8e7d78f8eadedbfde3de3a057",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-25747",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-25747"
+   },
+   "digest": "sha256:85e4372c8eceec299c95f21f1178585c7a710410069506071923d765e269b2e6",
+   "digest_files": 6
+  },
+  {
+   "task_id": "scikit-learn__scikit-learn-26194",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/scikit-learn__scikit-learn-26194"
+   },
+   "digest": "sha256:b650227457b5144ad173fffec4c2b72c9d7996e6658db6ce5d72d24c37adfcd6",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-10323",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-10323"
+   },
+   "digest": "sha256:d3479ab18a84275700aac0da100dd19864bb87689cb1a167d197db3ea6b48b58",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-10435",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-10435"
+   },
+   "digest": "sha256:3e760425a0ead45f390c9fb39ede7fd94daf4f1565899a32fc5d3c5eb22f64e6",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-10673",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-10673"
+   },
+   "digest": "sha256:7aa27945ed77ba5e82b4252935026f87387a35e6d2a285c1c2a1b5aa8460272a",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-8056",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-8056"
+   },
+   "digest": "sha256:c53516a7aafee5bb01d7063781989eae912d78ae4f3daf6d2125b4a84eddf046",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-8548",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-8548"
+   },
+   "digest": "sha256:40382da589fe12e5fb6293dfbb3be4a2d01fe559344feca4e71d4a7541b971be",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-8595",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-8595"
+   },
+   "digest": "sha256:a8344129884548caa5aa3abacdacc01ac846887d3da92ecf5b8fc24da1d8caa5",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sphinx-doc__sphinx-9711",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sphinx-doc__sphinx-9711"
+   },
+   "digest": "sha256:eeb356d02314ac3e9158cfad2c3897e020fbf05a99811d41e6e8527447832717",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-11618",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-11618"
+   },
+   "digest": "sha256:e870b24e297166f23f228e8a745e471b6c3d74a33aac16e6ad96d2241f363195",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-12096",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-12096"
+   },
+   "digest": "sha256:1ea51c21e4fb21c9163a80178184ca3c94c2ef8aee5ecda5a7b2e69c2b428003",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-12419",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-12419"
+   },
+   "digest": "sha256:68fe1c22196d966cff9eb46572929ae2c16ad907f2f75a83840fc90d4bead222",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-12481",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-12481"
+   },
+   "digest": "sha256:e222e4206037bd9ca77b8f77e1c0c9c31f4487b8976fca37566a903081e234af",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-13031",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-13031"
+   },
+   "digest": "sha256:7949ff5b514c28eedc9c797ed40625c60cfed317b1430582d3a5820da2804f47",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-13372",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-13372"
+   },
+   "digest": "sha256:ed40036d87fcfdcf879ec65a9746359d27297febfe1760a2ebd1d8cc760d4924",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-13877",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-13877"
+   },
+   "digest": "sha256:e8333d7f32d5de3c82da28af10e271e8c878040c4319fb9d6f54c6bf7bf887e4",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-13878",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-13878"
+   },
+   "digest": "sha256:4409aad41085bb93659e370371ce7b4b4e697d29636683bb0b997ff1e862082b",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-14248",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-14248"
+   },
+   "digest": "sha256:ddb71259ff26f70eda74509233770224885f37db31c9ae4d8d51810ccf41fced",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-14976",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-14976"
+   },
+   "digest": "sha256:96a73b9e03fd630d3ca6285b970262bcf49288ea6fc40494f18aa918ea1fa97c",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-15599",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-15599"
+   },
+   "digest": "sha256:0da89484b94c7f662b06023f1c9f8181d2c7a1297aff3b8299cb6bf67d3355cf",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-15976",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-15976"
+   },
+   "digest": "sha256:9f23ba9c92de1340215aac5f56dbfaeeba7f8c5b85655c458dba91f540fd9590",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-17318",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-17318"
+   },
+   "digest": "sha256:3794ca52cfdbbe9c5d3edde9dc1046ff0923891ef9e15c91771df333718a5d29",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-18211",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-18211"
+   },
+   "digest": "sha256:1de1621dd0ceae6e3c265f8e924298ba306c8e9f8e82e551decff5f62be45210",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-19040",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-19040"
+   },
+   "digest": "sha256:10fea5be63ae2ff38a69736706df2a826abbfb0ea89b4db851321c6ba1b6eb6e",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-19495",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-19495"
+   },
+   "digest": "sha256:1323d6eb79325c0b614da2ad00020a18de0a5c42309935021c17f641bfdbc125",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-20916",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-20916"
+   },
+   "digest": "sha256:8da7ced0fd95abdad085716e1d9bbe9a10f1e5b8c2f6e05ed4fb736a264945e0",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-22456",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-22456"
+   },
+   "digest": "sha256:b7ba81af2753a54c0ca0234cadbdb66459c31a3d89da4eb5a9f4e1285fa88d70",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-23950",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-23950"
+   },
+   "digest": "sha256:4670a35364a4499ae2be3533f83561bfb45133036b05596d7d1ab8f67ce4f6b5",
+   "digest_files": 6
+  },
+  {
+   "task_id": "sympy__sympy-24661",
+   "registry": {
+    "git_url": "https://github.com/laude-institute/harbor-datasets.git",
+    "git_commit_id": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+    "path": "datasets/swebench-verified/sympy__sympy-24661"
+   },
+   "digest": "sha256:9fab6cf8493ea4909106558f6fa23317b17ab36c7a509851b39dcf22e2f566c0",
+   "digest_files": 6
+  }
+ ]
+}

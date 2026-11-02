@@ -1,0 +1,23 @@
+
+import random
+def sim(r, conc, dep, sims=20000, seed=1):
+    rng = random.Random(seed)
+    clusters = [2,2,2,2,1,1,1,1]
+    admit = 0
+    for _ in range(sims):
+        tot = 0; n = 0
+        for c in clusters:
+            rates = [rng.betavariate(r*conc, (1-r)*conc) for _ in range(c)]
+            hits = [0]*c
+            for p in range(2):
+                shared = rng.random()
+                for i in range(c):
+                    d = shared if rng.random() < dep else rng.random()
+                    if d < rates[i]: hits[i] += 1
+            tot += sum(h/2 for h in hits); n += c
+        read = tot/n
+        if 0.2 - 1e-9 <= read <= 0.6 + 1e-9: admit += 1
+    return admit/sims
+print("true_recall wide_dep0.3 narrow_dep0.3 wide_dep0.6")
+for r in [0.05,0.1,0.15,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
+    print(r, round(sim(r,2,0.3),3), round(sim(r,8,0.3),3), round(sim(r,2,0.6),3))

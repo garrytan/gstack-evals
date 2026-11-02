@@ -1,0 +1,27 @@
+# gain power: none at R, gstack at R+0.20 (--recall R+0.20 --loss 20), alpha 0.025, 3 passes, 2000 sims, seed 1
+# design R dependence power
+headline 0.2 0 0.9095
+headline 0.2 0.3 0.903
+headline 0.2 0.6 0.878
+H-only 0.2 0.3 0.6465
+PU-only 0.2 0.3 0.2715
+headline 0.3 0 0.8685
+headline 0.3 0.3 0.8545
+headline 0.3 0.6 0.8325
+H-only 0.3 0.3 0.5905
+PU-only 0.3 0.3 0.295
+headline 0.4 0 0.8645
+headline 0.4 0.3 0.854
+headline 0.4 0.6 0.8135
+H-only 0.4 0.3 0.595
+PU-only 0.4 0.3 0.2785
+headline 0.5 0 0.8725
+headline 0.5 0.3 0.8475
+headline 0.5 0.6 0.8325
+H-only 0.5 0.3 0.604
+PU-only 0.5 0.3 0.295
+headline 0.6 0 0.902
+headline 0.6 0.3 0.9075
+headline 0.6 0.6 0.8745
+H-only 0.6 0.3 0.6725
+PU-only 0.6 0.3 0.329

@@ -74,16 +74,20 @@
       "tests/lanea-shakedown-tasks.test.ts"
     ],
     "quick/laneb/**": [
+      "quick/laneb/tests/agent.test.ts",
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",
       "quick/laneb/tests/grid.test.ts",
+      "quick/laneb/tests/launch.test.ts",
       "quick/laneb/tests/ledger-serve.test.ts",
       "quick/laneb/tests/placebo.test.ts",
       "quick/laneb/tests/proxy-accounting.test.ts",
       "quick/laneb/tests/proxy-paths.test.ts",
       "quick/laneb/tests/proxy-states.test.ts",
+      "quick/laneb/tests/r3.test.ts",
       "quick/laneb/tests/runner.test.ts",
-      "quick/laneb/tests/stacks.test.ts"
+      "quick/laneb/tests/stacks.test.ts",
+      "quick/laneb/tests/vm-run.test.ts"
     ],
     "quick/lanea-quick/**": [
       "quick/lanea-quick/test/grade.test.ts",

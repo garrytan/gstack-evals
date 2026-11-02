@@ -28,10 +28,12 @@ const upstream = Bun.serve({
   },
 });
 const proxy = new MeteringProxy({ hostname: "127.0.0.1", port: 0, upstream: `http://127.0.0.1:${upstream.port}`, upstreamKey: () => "k" });
+const realSdk = { ...(await import("@anthropic-ai/claude-agent-sdk")) };
 afterAll(() => {
   proxy.stop();
   upstream.stop(true);
   process.env.PATH = path;
+  mock.module("@anthropic-ai/claude-agent-sdk", () => realSdk);
 });
 
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({

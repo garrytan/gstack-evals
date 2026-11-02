@@ -1,0 +1,390 @@
+dry run at 9df4abc, 2026-11-01T21:32:31Z
+== a. variants and prepare-run
+gstack-rewritten manifest matches arms/manifests/gstack-rewritten.json and .files.tsv
+placebo-short manifest matches arms/manifests/placebo-short.json and .files.tsv
+placebo-short-tokens.tsv matches
+placebo-short investigate body tokens=846 target=847
+gstack-rewritten manifest matches arms/manifests/gstack-rewritten.json and .files.tsv
+placebo-short manifest matches arms/manifests/placebo-short.json and .files.tsv
+placebo-short-tokens.tsv matches
+placebo-short investigate body tokens=846 target=847
+a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d  b1/gstack-rewritten.tar
+a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d  b2/gstack-rewritten.tar
+variants: both builds give the same gstack-rewritten digest; manifest a456c0c331612ee39a8293d355ed382505c39a81bd1a3ad4860c0b76ae01607d
+entries of gstack.tar carrying 'Systematic debugging with root cause investigation.':
+  .claude/skills/gstack/gstack/llms.txt
+  .claude/skills/gstack/investigate/SKILL.md
+  .claude/skills/gstack/investigate/SKILL.md.tmpl
+  .claude/skills/investigate/SKILL.md
+entries of placebo.tar carrying 'Systematic debugging with root cause investigation.':
+  .claude/skills/investigate/SKILL.md
+gstack-rewritten investigate frontmatter:
+  ---
+  name: investigate
+  preamble-tier: 2
+  version: 1.0.0
+  description: "Systematic debugging with root cause investigation. Use when a task involves something that does not work as expected: a faili
+  allowed-tools:
+run-d-claude-haiku-5-5: 37 tasks, 7 cells, manifest invoke=false max_turns=60, arm tars copied 4
+  manifest none@claude-code-preset: sha256 8bab483364e4 system_prompt=claude-code-preset
+  manifest gstack@claude-code-preset: sha256 b93994689107 system_prompt=claude-code-preset
+  manifest gstack-rewritten@claude-code-preset: sha256 a456c0c33161 system_prompt=claude-code-preset
+  manifest placebo@claude-code-preset: sha256 ff6b909d89d8 system_prompt=claude-code-preset
+  manifest none@sdk-default: sha256 8bab483364e4 system_prompt=sdk-default
+  manifest gstack@sdk-default: sha256 b93994689107 system_prompt=sdk-default
+  manifest gstack-rewritten@sdk-default: sha256 a456c0c33161 system_prompt=sdk-default
+  job claude-haiku-5-5 none system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-haiku-5-5 gstack system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-haiku-5-5 gstack-rewritten system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-haiku-5-5 placebo system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-haiku-5-5 none system_prompt=sdk-default sdk_max_turns=60 invoke=false skill_map=0
+  job claude-haiku-5-5 gstack system_prompt=sdk-default sdk_max_turns=60 invoke=false skill_map=0
+  job claude-haiku-5-5 gstack-rewritten system_prompt=sdk-default sdk_max_turns=60 invoke=false skill_map=0
+run-d-particle-1: 37 tasks, 4 cells, manifest invoke=false max_turns=60, arm tars copied 4
+  manifest none@claude-code-preset: sha256 8bab483364e4 system_prompt=claude-code-preset
+  manifest gstack@claude-code-preset: sha256 b93994689107 system_prompt=claude-code-preset
+  manifest gstack-rewritten@claude-code-preset: sha256 a456c0c33161 system_prompt=claude-code-preset
+  manifest placebo@claude-code-preset: sha256 ff6b909d89d8 system_prompt=claude-code-preset
+  job particle-1 none system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job particle-1 gstack system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job particle-1 gstack-rewritten system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job particle-1 placebo system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+run-d-claude-sonnet-5-5: 37 tasks, 4 cells, manifest invoke=false max_turns=60, arm tars copied 4
+  manifest none@claude-code-preset: sha256 8bab483364e4 system_prompt=claude-code-preset
+  manifest gstack@claude-code-preset: sha256 b93994689107 system_prompt=claude-code-preset
+  manifest gstack-rewritten@claude-code-preset: sha256 a456c0c33161 system_prompt=claude-code-preset
+  manifest placebo@claude-code-preset: sha256 ff6b909d89d8 system_prompt=claude-code-preset
+  job claude-sonnet-5-5 none system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-sonnet-5-5 gstack system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-sonnet-5-5 gstack-rewritten system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-sonnet-5-5 placebo system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+run-d-claude-opus-5-5: 37 tasks, 7 cells, manifest invoke=false max_turns=60, arm tars copied 4
+  manifest none@claude-code-preset: sha256 8bab483364e4 system_prompt=claude-code-preset
+  manifest gstack@claude-code-preset: sha256 b93994689107 system_prompt=claude-code-preset
+  manifest gstack-rewritten@claude-code-preset: sha256 a456c0c33161 system_prompt=claude-code-preset
+  manifest placebo@claude-code-preset: sha256 ff6b909d89d8 system_prompt=claude-code-preset
+  manifest none@sdk-default: sha256 8bab483364e4 system_prompt=sdk-default
+  manifest gstack@sdk-default: sha256 b93994689107 system_prompt=sdk-default
+  manifest gstack-rewritten@sdk-default: sha256 a456c0c33161 system_prompt=sdk-default
+  job claude-opus-5-5 none system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-opus-5-5 gstack system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-opus-5-5 gstack-rewritten system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-opus-5-5 placebo system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job claude-opus-5-5 none system_prompt=sdk-default sdk_max_turns=60 invoke=false skill_map=0
+  job claude-opus-5-5 gstack system_prompt=sdk-default sdk_max_turns=60 invoke=false skill_map=0
+  job claude-opus-5-5 gstack-rewritten system_prompt=sdk-default sdk_max_turns=60 invoke=false skill_map=0
+run-d-gpt-6.1-sol: 37 tasks, 4 cells, manifest invoke=false max_turns=60, arm tars copied 4
+  manifest none@claude-code-preset: sha256 8bab483364e4 system_prompt=claude-code-preset
+  manifest gstack@claude-code-preset: sha256 b93994689107 system_prompt=claude-code-preset
+  manifest gstack-rewritten@claude-code-preset: sha256 a456c0c33161 system_prompt=claude-code-preset
+  manifest placebo@claude-code-preset: sha256 ff6b909d89d8 system_prompt=claude-code-preset
+  job gpt-6.1-sol none system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job gpt-6.1-sol gstack system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job gpt-6.1-sol gstack-rewritten system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+  job gpt-6.1-sol placebo system_prompt=claude-code-preset sdk_max_turns=60 invoke=false skill_map=0
+a cell listed twice is refused: error: E_USAGE arms gstack:system_prompt=claude-code-preset,gstack:system_prompt=claude-code-preset: an arm is listed twice with the same options
+== b, c. listing check under both system prompts, one lease for the run
+driver: direct. runner/dryrun-direct.py drives claude-agent-sdk 0.2.174 and Claude Code 2.1.312 on the host with laneb_agent.py's options (its SYSTEM_PROMPTS, max_turns 60), env and build_prompt, HOME and CLAUDE_CONFIG_DIR at the arm's extracted .claude/, through the metering proxy.
+ledger: serving discovery-r1 on 127.0.0.1:9911
+fake upstream on 127.0.0.1:8798
+laneb proxy: data 172.17.0.1:8787, control 127.0.0.1:8788
+-- discovery-r1 cell none@claude-code-preset (0 tar)
+init none@claude-code-preset: 2 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct none@claude-code-preset told=0 max_turns=60: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-150bf876c2c8", "trial": "task-public__direct-none-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_token
+none@claude-code-preset: first request 62224 bytes, 13 tools, system 5839 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n\nYou are an agent worki"
+none@claude-code-preset: listing in messages[1].system[0]; skills listed 1 (plugin-authoring); built-ins listed: doctor no, plugin-authoring yes
+none@claude-code-preset: shipped investigate description: absent
+none@claude-code-preset: rewritten investigate description: absent
+-- discovery-r1 cell gstack@claude-code-preset (0 tar)
+init gstack@claude-code-preset: 66 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct gstack@claude-code-preset told=0 max_turns=60: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-3fc2b54d88d9", "trial": "task-public__direct-gstack-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_tok
+gstack@claude-code-preset: first request 68458 bytes, 13 tools, system 5843 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n\nYou are an agent worki"
+gstack@claude-code-preset: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...); built-ins listed: doctor no, plugin-authoring yes
+gstack@claude-code-preset: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+gstack@claude-code-preset: rewritten investigate description: absent
+-- discovery-r1 cell gstack-rewritten@claude-code-preset (4.0K tar)
+init gstack-rewritten@claude-code-preset: 66 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct gstack-rewritten@claude-code-preset told=0 max_turns=60: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-6f5cf20e1f6d", "trial": "task-public__direct-gstack-rewritten-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {
+gstack-rewritten@claude-code-preset: first request 68747 bytes, 13 tools, system 5863 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n\nYou are an agent worki"
+gstack-rewritten@claude-code-preset: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...); built-ins listed: doctor no, plugin-authoring yes
+gstack-rewritten@claude-code-preset: shipped investigate description: absent
+gstack-rewritten@claude-code-preset: rewritten investigate description: messages[1].system[0], preceded by "ty dashboard. (gstack)\n- investigate: Systematic debugging with root cause investigation. "
+-- discovery-r1 cell placebo@claude-code-preset (0 tar)
+init placebo@claude-code-preset: 66 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct placebo@claude-code-preset told=0 max_turns=60: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-0f5a68597246", "trial": "task-public__direct-placebo-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_to
+placebo@claude-code-preset: first request 68461 bytes, 13 tools, system 5845 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n\nYou are an agent worki"
+placebo@claude-code-preset: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...); built-ins listed: doctor no, plugin-authoring yes
+placebo@claude-code-preset: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+placebo@claude-code-preset: rewritten investigate description: absent
+-- discovery-r1 cell none@sdk-default (0 tar)
+init none@sdk-default: 2 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct none@sdk-default told=0 max_turns=60: sdk 0.2.174, 11 SDK messages, result success; session close {"id": "s-32d67fe3f057", "trial": "task-public__direct-none-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_token
+none@sdk-default: first request 56376 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+none@sdk-default: listing in messages[1].system[0]; skills listed 1 (plugin-authoring); built-ins listed: doctor no, plugin-authoring yes
+none@sdk-default: shipped investigate description: absent
+none@sdk-default: rewritten investigate description: absent
+-- discovery-r1 cell gstack@sdk-default (0 tar)
+init gstack@sdk-default: 66 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct gstack@sdk-default told=0 max_turns=60: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-9f1f457f2b77", "trial": "task-public__direct-gstack-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {"input_tok
+gstack@sdk-default: first request 62606 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+gstack@sdk-default: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...); built-ins listed: doctor no, plugin-authoring yes
+gstack@sdk-default: shipped investigate description: messages[1].system[0], preceded by "irectory-scoped edits. (gstack)\n- health: Code quality dashboard. (gstack)\n- investigate: "
+gstack@sdk-default: rewritten investigate description: absent
+-- discovery-r1 cell gstack-rewritten@sdk-default (4.0K tar)
+init gstack-rewritten@sdk-default: 66 skills in the init record, built-ins ['doctor', 'plugin-authoring'], claude_code_version 2.1.312
+direct gstack-rewritten@sdk-default told=0 max_turns=60: sdk 0.2.174, 12 SDK messages, result success; session close {"id": "s-7e7d416d84e4", "trial": "task-public__direct-gstack-rewritten-0", "model": "claude-opus-5-5", "cap_micros": 6000000, "spent_micros": 70625, "usage": {
+gstack-rewritten@sdk-default: first request 62875 bytes, 13 tools, system 136 chars: "x-anthropic-billing-header: cc_version=2.1.312.325; cc_entrypoint=sdk-py;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK."
+gstack-rewritten@sdk-default: listing in messages[1].system[0]; skills listed 65 (_gstack-command, autoplan, benchmark, ...); built-ins listed: doctor no, plugin-authoring yes
+gstack-rewritten@sdk-default: shipped investigate description: absent
+gstack-rewritten@sdk-default: rewritten investigate description: messages[1].system[0], preceded by "ty dashboard. (gstack)\n- investigate: Systematic debugging with root cause investigation. "
+-- lease check for discovery-r1
+{"trial":"task-public__direct-none-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-gstack-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-gstack-rewritten-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-placebo-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-none-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-gstack-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+{"trial":"task-public__direct-gstack-rewritten-0","spent_micros":70625,"requests":5,"ok_responses":5,"ledger_settle":{"ok":true},"close_reason":"agent_finished"}
+approval rows 1, reserves 7, settles 7
+status: cap $125, settled $0.494375, open reserves 0
+second approval: refused (approval row already present)
+reserve past the cap: refused (cap)
+== d. start rule
+discovery-r1 launch claude-haiku-5-5: settled $0.00 + 1.4 x $2.58 = $3.61 vs cap $125 -> PASS
+discovery-r1 launch particle-1: settled $0.00 + 1.4 x $14.13 = $19.79 vs cap $125 -> PASS
+discovery-r1 launch claude-sonnet-5-5: settled $0.00 + 1.4 x $23.41 = $32.78 vs cap $125 -> PASS
+discovery-r1 launch claude-opus-5-5: settled $23.41 + 1.4 x $42.06 = $82.30 vs cap $125 -> PASS
+discovery-r1 launch gpt-6.1-sol: settled $65.48 + 1.4 x $22.98 = $97.65 vs cap $125 -> PASS
+discovery-r1 projected total $88.46
+over-cap case (95 settled, then gpt-6.1-sol) refused; note row: {"kind":"note","item":"discovery-r1","pass":false,"bound_usd":127.17816,"cap_usd":125}
+== e. analysis on synthetic job folders
+--- run-d-factor.json
+# Run D: untold discovery
+Listing check: passed for every arm.
+Primary cells: claude-code-preset on m-claim, m-zero, m-sparse, m-gate. Contrast cells: sdk-default on m-claim, m-zero. D2 primary: pooled across models, one test; per-model D2 exploratory. D3 primary: pooled across the contrast models, one test; per-model D3 exploratory.
+
+## m-claim
+m-claim none@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 1; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 1, turn-cap stops (error_max_turns) 1; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim gstack@claude-code-preset: graded 36, missing 1, refused 0, retried after a response 0; eligible 100.0%; pass 50.0% [33.3%, 66.7%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.040
+m-claim gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim placebo@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 1 (2.7%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 45 opened of 73 trials, rate 62.2% [45.9%, 78.4%] over 37 tasks
+D1 claim: opened an untold gstack skill in 62.2% of eligible trials
+D2 (rewritten minus pooled), exploratory: -2.7 [-8.1, +0.0] pp over 37 tasks, p 1.00 unadjusted; MDD 25 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 60.0% [20.0%, 100.0%], D2 +0.0 [+0.0, +0.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 1, plugin-authoring 0, opened any listed skill 2.7%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 0.0%, opened 22, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 61.1%, loaded /investigate 22 (DEBUG REPORT 14; phase 14, iron_law 0, root_cause 14, hypothesis 0), skills opened {"investigate":22}
+gstack-rewritten@claude-code-preset: browse 2.7%, opened 22, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 1, opened any listed skill 62.2%, loaded /investigate 22 (DEBUG REPORT 14; phase 14, iron_law 0, root_cause 14, hypothesis 0), skills opened {"investigate":22}
+placebo@claude-code-preset: browse 0.0%, opened 23, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 62.2%, loaded /investigate 23 (DEBUG REPORT 15; phase 15, iron_law 0, root_cause 15, hypothesis 0), skills opened {"investigate":23}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.8 [+0.0, +8.3] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.7 [+0.0, +8.1] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.7 [+0.0, +8.1] pp
+### m-claim under sdk-default (secondary)
+m-claim none@sdk-default: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim gstack@sdk-default: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim gstack-rewritten@sdk-default: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 under sdk-default (gstack alone, eligible): 0 opened of 37 trials, rate 0.0% [0.0%, 0.0%]
+D2 under sdk-default (rewritten minus gstack): +48.6 [+32.4, +64.9] pp
+none@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@sdk-default: browse 0.0%, opened 18, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 48.6%, loaded /investigate 18 (DEBUG REPORT 18; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {"investigate":18}
+gstack@sdk-default minus none@sdk-default, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten@sdk-default minus none@sdk-default, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-zero
+m-zero none@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero placebo@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 claim: fewer than 7.8% (95% upper bound)
+D2 (rewritten minus pooled), exploratory: +73.0 [+59.5, +86.5] pp over 37 tasks, p 0.0000100 unadjusted; MDD 25 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +60.0 [+20.0, +100.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@claude-code-preset: browse 0.0%, opened 27, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 73.0%, loaded /investigate 27 (DEBUG REPORT 18; phase 18, iron_law 0, root_cause 18, hypothesis 0), skills opened {"investigate":27}
+placebo@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+### m-zero under sdk-default (secondary)
+m-zero none@sdk-default: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack@sdk-default: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack-rewritten@sdk-default: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 under sdk-default (gstack alone, eligible): 0 opened of 37 trials, rate 0.0% [0.0%, 0.0%]
+D2 under sdk-default (rewritten minus gstack): +48.6 [+32.4, +64.9] pp
+none@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@sdk-default: browse 0.0%, opened 18, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 48.6%, loaded /investigate 18 (DEBUG REPORT 18; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {"investigate":18}
+gstack@sdk-default minus none@sdk-default, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten@sdk-default minus none@sdk-default, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-sparse
+m-sparse none@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse gstack@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse placebo@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 2 opened of 74 trials, rate 2.7% [0.0%, 8.1%] over 37 tasks
+D1 claim: fewer than 8.1% (95% upper bound)
+D2 (rewritten minus pooled), exploratory: -2.7 [-8.1, +0.0] pp over 37 tasks, p 1.00 unadjusted; MDD 25 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 0.0%, opened 1, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 2.7%, loaded /investigate 1 (DEBUG REPORT 1; phase 1, iron_law 0, root_cause 1, hypothesis 0), skills opened {"investigate":1}
+gstack-rewritten@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo@claude-code-preset: browse 0.0%, opened 1, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 2.7%, loaded /investigate 1 (DEBUG REPORT 1; phase 1, iron_law 0, root_cause 1, hypothesis 0), skills opened {"investigate":1}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-gate
+m-gate none@claude-code-preset: graded 37, missing 0, refused 5, retried after a response 0; eligible 86.5%; pass 43.2% [27.0%, 59.5%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.046
+m-gate gstack@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-gate gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-gate placebo@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 no claim (gate)
+D2 (rewritten minus pooled), exploratory: +0.0 [+0.0, +0.0] pp over 37 tasks, p 1.00 unadjusted; MDD 25 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+
+## D2 pooled across models (primary, one test)
+D2 pooled over 3 models (m-claim, m-zero, m-sparse); left out by the gate or missing: m-gate: +22.5 [+17.1, +27.0] pp over 37 tasks, p 0.0000100; MDD 9 points (section 11)
+D2 pooled claim: the rewritten description raised opens by +22.5 points, pooled across models
+Beside D2, no gstack (pooled over the same models): gstack@claude-code-preset minus none@claude-code-preset, pass +0.0 [+0.0, +0.0] pp; gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass +0.0 [+0.0, +0.0] pp; placebo@claude-code-preset minus none@claude-code-preset, pass +0.0 [+0.0, +0.0] pp
+
+## D3, gstack@claude-code-preset minus gstack@sdk-default open rate (pooled primary, one test)
+D3 m-claim, exploratory: +61.1 [+44.4, +77.8] pp over 36 tasks, p 0.0000300 unadjusted; MDD 27 points (section 11); no claim
+D3 m-zero, exploratory: +0.0 [+0.0, +0.0] pp over 37 tasks, p 1.00 unadjusted; MDD 27 points (section 11); no claim
+D3 pooled over m-claim, m-zero: +29.7 [+21.6, +37.8] pp over 37 tasks, p 0.0000200; MDD 15 points (section 11); claim: claude-code-preset raised opens by +29.7 points, pooled
+Beside D3, no gstack (pooled over m-claim, m-zero): gstack@claude-code-preset minus none@claude-code-preset, pass +0.0 [+0.0, +0.0] pp; gstack@sdk-default minus none@sdk-default, pass +0.0 [+0.0, +0.0] pp
+
+Pooled across models, equal weight (secondary): D1 16.2% [12.2%, 20.3%]; rewritten 33.1% [27.7%, 38.5%]
+Retried-trial open sensitivity: at Harbor f3a5a923 a retry deletes the first attempt's trial folder, so no first-attempt messages exist and the reading equals the primary one.
+
+Dropped by the oracle rule: dropped-task (2 trials, $0.04)
+--- run-d.json
+# Run D: untold discovery
+Listing check: passed for every arm.
+
+## m-claim
+m-claim none: graded 37, missing 0, refused 0, retried after a response 1; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 1, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim gstack: graded 36, missing 1, refused 0, retried after a response 0; eligible 100.0%; pass 50.0% [33.3%, 66.7%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.040
+m-claim gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-claim placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 1 (2.7%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 45 opened of 73 trials, rate 62.2% [45.9%, 78.4%] over 37 tasks
+D1 claim: opened an untold gstack skill in 62.2% of eligible trials
+D2 (rewritten minus pooled): -2.7 [-8.1, +0.0] pp over 37 tasks, p 1.00, Holm 1.00
+D2 no claim
+Fit stratum (5 tasks, no verdict): D1 60.0% [20.0%, 100.0%], D2 +0.0 [+0.0, +0.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 22, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 61.1%, loaded /investigate 22 (DEBUG REPORT 14; phase 14, iron_law 0, root_cause 14, hypothesis 0), skills opened {"investigate":22}
+gstack-rewritten: browse 2.7%, opened 22, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 1, opened any listed skill 62.2%, loaded /investigate 22 (DEBUG REPORT 14; phase 14, iron_law 0, root_cause 14, hypothesis 0), skills opened {"investigate":22}
+placebo: browse 0.0%, opened 23, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 62.2%, loaded /investigate 23 (DEBUG REPORT 15; phase 15, iron_law 0, root_cause 15, hypothesis 0), skills opened {"investigate":23}
+gstack minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.8 [+0.0, +8.3] pp
+gstack-rewritten minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.7 [+0.0, +8.1] pp
+placebo minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +2.7 [+0.0, +8.1] pp
+
+## m-zero
+m-zero none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-zero placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 claim: fewer than 7.8% (95% upper bound)
+D2 (rewritten minus pooled): +73.0 [+59.5, +86.5] pp over 37 tasks, p 0.0000100, Holm 0.0000400
+D2 claim: the rewritten description raised opens by +73.0 points
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +60.0 [+20.0, +100.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten: browse 0.0%, opened 27, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 73.0%, loaded /investigate 27 (DEBUG REPORT 18; phase 18, iron_law 0, root_cause 18, hypothesis 0), skills opened {"investigate":27}
+placebo: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+placebo minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-sparse
+m-sparse none: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse gstack: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-sparse placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+D1 (gstack and placebo pooled, eligible): 2 opened of 74 trials, rate 2.7% [0.0%, 8.1%] over 37 tasks
+D1 claim: fewer than 8.1% (95% upper bound)
+D2 (rewritten minus pooled): -2.7 [-8.1, +0.0] pp over 37 tasks, p 1.00, Holm 1.00
+D2 no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 1, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 2.7%, loaded /investigate 1 (DEBUG REPORT 1; phase 1, iron_law 0, root_cause 1, hypothesis 0), skills opened {"investigate":1}
+gstack-rewritten: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo: browse 0.0%, opened 1, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 2.7%, loaded /investigate 1 (DEBUG REPORT 1; phase 1, iron_law 0, root_cause 1, hypothesis 0), skills opened {"investigate":1}
+gstack minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+gstack-rewritten minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+placebo minus none, pass: +0.0 [+0.0, +0.0] pp; retried-after-response scored 0: +0.0 [+0.0, +0.0] pp
+
+## m-gate
+m-gate none: graded 37, missing 0, refused 5, retried after a response 0; eligible 86.5%; pass 43.2% [27.0%, 59.5%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.046
+m-gate gstack: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-gate gstack-rewritten: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+m-gate placebo: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 48.6% [32.4%, 64.9%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 1000; cost per trial $0.020, per success $0.041
+Gate: a cell is under 90% eligible; flagged, no D1 or D2 claim for this model.
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 no claim (gate)
+D2 (rewritten minus pooled): +0.0 [+0.0, +0.0] pp over 37 tasks, p 1.00, Holm 1.00
+D2 no claim (gate)
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack minus none, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+gstack-rewritten minus none, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+placebo minus none, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+
+## D2 pooled across models (secondary)
+D2 pooled over 3 models (m-claim, m-zero, m-sparse); left out by the gate or missing: m-gate: +22.5 [+17.1, +27.0] pp over 37 tasks, p 0.0000100
+Beside D2, no gstack (pooled over the same models): gstack minus none, pass +0.0 [+0.0, +0.0] pp; gstack-rewritten minus none, pass +0.0 [+0.0, +0.0] pp; placebo minus none, pass +0.0 [+0.0, +0.0] pp
+
+Pooled across models, equal weight (secondary): D1 16.2% [12.2%, 20.3%]; rewritten 33.1% [27.7%, 38.5%]
+Retried-trial open sensitivity: at Harbor f3a5a923 a retry deletes the first attempt's trial folder, so no first-attempt messages exist and the reading equals the primary one.
+
+Dropped by the oracle rule: dropped-task (2 trials, $0.04)
+== f. MDD
+Run D MDD: 37 tasks, 1000 simulated datasets x 1000 bootstrap resamples and 1000 sign-flip draws per power value, seed 20261101, 80% power
+MDD is in points of the pooled (or per-model) open-rate difference; for D1 it is the open rate itself.
+| Reading | Opens | Baseline rate | Effect arm's open probability at 80% power | MDD (points) | Power there |
+|---|---|---|---|---|---|
+| D1 per model, r = 1 (gstack and placebo pooled, 2 trials per task) | uniform | - | 7.4 | 7.4 | 0.799 |
+| D1 per model, r = 1 (gstack and placebo pooled, 2 trials per task) | 30% of tasks | - | 7.6 | 7.6 | 0.811 |
+| D2 per model, r = 1 (Holm across 5, first step p < 0.01) | uniform | 0.0 | 26.8 | 26.8 | 0.776 |
+| D2 per model, r = 1 (Holm across 5, first step p < 0.01) | 30% of tasks | 0.0 | 24.0 | 24.0 | 0.803 |
+| D2 per model, r = 1 (Holm across 5, first step p < 0.01) | uniform | 2.0 | 29.9 | 27.9 | 0.816 |
+| D2 per model, r = 1 (Holm across 5, first step p < 0.01) | 30% of tasks | 2.0 | 26.5 | 24.5 | 0.807 |
+| D2 per model, r = 2 (option (a); Holm across 5, first step p < 0.01) | uniform | 0.0 | 14.5 | 14.5 | 0.800 |
+| D2 per model, r = 2 (option (a); Holm across 5, first step p < 0.01) | 30% of tasks | 0.0 | 16.7 | 16.7 | 0.795 |
+| D2 per model, r = 2 (option (a); Holm across 5, first step p < 0.01) | uniform | 2.0 | 18.4 | 16.4 | 0.797 |
+| D2 per model, r = 2 (option (a); Holm across 5, first step p < 0.01) | 30% of tasks | 2.0 | 21.2 | 19.2 | 0.785 |
+| D2 pooled over 5 models, r = 1, effect on all 5 (one test, p < 0.05) | uniform | 0.0 | 4.5 | 4.5 | 0.813 |
+| D2 pooled over 5 models, r = 1, effect on all 5 (one test, p < 0.05) | 30% of tasks | 0.0 | 5.2 | 5.2 | 0.790 |
+| D2 pooled over 5 models, r = 1, effect on all 5 (one test, p < 0.05) | uniform | 2.0 | 8.1 | 6.1 | 0.797 |
+| D2 pooled over 5 models, r = 1, effect on all 5 (one test, p < 0.05) | 30% of tasks | 2.0 | 9.9 | 7.9 | 0.812 |
+| D2 pooled over 5 models, r = 1, effect on 2 of 5 (one test, p < 0.05) | uniform | 0.0 | 10.7 | 4.3 | 0.812 |
+| D2 pooled over 5 models, r = 1, effect on 2 of 5 (one test, p < 0.05) | 30% of tasks | 0.0 | 11.4 | 4.6 | 0.833 |
+| D2 pooled over 5 models, r = 1, effect on 2 of 5 (one test, p < 0.05) | uniform | 2.0 | 17.0 | 6.0 | 0.820 |
+| D2 pooled over 5 models, r = 1, effect on 2 of 5 (one test, p < 0.05) | 30% of tasks | 2.0 | 17.9 | 6.3 | 0.787 |
+| D3 per model, r = 1 (Holm across 2, first step p < 0.025) | uniform | 0.0 | 23.5 | 23.5 | 0.802 |
+| D3 per model, r = 1 (Holm across 2, first step p < 0.025) | 30% of tasks | 0.0 | 20.9 | 20.9 | 0.816 |
+| D3 per model, r = 1 (Holm across 2, first step p < 0.025) | uniform | 2.0 | 28.4 | 26.4 | 0.783 |
+| D3 per model, r = 1 (Holm across 2, first step p < 0.025) | 30% of tasks | 2.0 | 26.0 | 24.0 | 0.807 |
+| D3 pooled over Opus and Haiku, r = 1 (one test, p < 0.05) | uniform | 0.0 | 10.7 | 10.7 | 0.803 |
+| D3 pooled over Opus and Haiku, r = 1 (one test, p < 0.05) | 30% of tasks | 0.0 | 11.5 | 11.5 | 0.812 |
+| D3 pooled over Opus and Haiku, r = 1 (one test, p < 0.05) | uniform | 2.0 | 15.9 | 13.9 | 0.768 |
+| D3 pooled over Opus and Haiku, r = 1 (one test, p < 0.05) | 30% of tasks | 2.0 | 17.3 | 15.3 | 0.819 |
+== g. route-check command (not run)
+PREREG=<merge sha> ITEM=discovery-r1 LEDGER=<captain drive>/ledger/discovery-r1.jsonl MODELS='claude-haiku-5-5 particle-1 claude-sonnet-5-5 claude-opus-5-5 gpt-6.1-sol' SYSTEM_PROMPT=claude-code-preset MAX_TURNS=60 OUT=<work>/route-d quick/laneb/runner/route-check.sh
+exit=0

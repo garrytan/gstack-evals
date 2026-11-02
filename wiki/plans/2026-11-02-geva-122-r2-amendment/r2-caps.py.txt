@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+# R2 cap rule (the R2 amendment, section 3). Reads cap_stops from both source arms' arm.json, as the R2 build writes it
+# ({turn_cap, allowance_stop, units}), and applies GSTA-2's coverage rule: if either arm has more than 2 of its 19
+# sessions ended in turn_cap or allowance_stop, R2 gives no outcome and goes to the Captain as FIX-METHOD with the
+# counts, whatever r2-decide.py says. At 2 or fewer the verdict stands, with these counts and the complete-case
+# sensitivity printed beside it. It always writes the drop file for that sensitivity: a unit column holding the sorted
+# union of both arms' capped units, as noloss derive --drop-file reads it. It refuses an arm.json whose id isn't
+# gstack-full or none-r2, a cap_stops without whole-number counts or with a unit that isn't a suite unit id, and a suite
+# whose units times passes isn't 19 sessions.
+# Exit 0 when the cap rule passes, 4 for no outcome, 5 on bad input (never an outcome).
+# Usage: python3 r2-caps.py <suite json> <gstack-full source arm> <none-r2 source arm> <drop file out>
+import json, os, sys
+
+try:
+    suite, full, none, drop = sys.argv[1:5]
+    ids = [u["id"] for u in json.load(open(suite))["units"]]
+    counts, capped = {}, set()
+    for want, src in (("gstack-full", full), ("none-r2", none)):
+        arm = json.load(open(os.path.join(src, "arm.json")))
+        if arm.get("id") != want:
+            raise ValueError("%s arm.json id is %r, not %r" % (src, arm.get("id"), want))
+        if type(arm.get("passes")) is not int or len(ids) * arm["passes"] != 19:
+            raise ValueError("%s: %d units x %r passes is not 19 sessions" % (want, len(ids), arm.get("passes")))
+        c = arm.get("cap_stops")
+        if not isinstance(c, dict) or not all(type(c.get(k)) is int and c[k] >= 0 for k in ("turn_cap", "allowance_stop")) or not isinstance(c.get("units"), list):
+            raise ValueError("%s arm.json cap_stops is not {turn_cap, allowance_stop, units} with whole-number counts: %r" % (want, c))
+        bad = [u for u in c["units"] if u not in ids]
+        if bad:
+            raise ValueError("%s cap_stops names units not in the suite: %s" % (want, ", ".join(map(str, bad))))
+        n = c["turn_cap"] + c["allowance_stop"]
+        if n > 19 or len(set(c["units"])) > n or (n > 0) != bool(c["units"]):
+            raise ValueError("%s cap_stops counts %d sessions but names %d units" % (want, n, len(set(c["units"]))))
+        counts[want] = n
+        capped |= set(c["units"])
+        print("cap stops %s: %d of 19 sessions (turn_cap %d, allowance_stop %d)" % (want, n, c["turn_cap"], c["allowance_stop"]))
+    with open(drop, "w") as w:
+        w.write("unit\n" + "".join(u + "\n" for u in sorted(capped)))
+    print("complete case: %d of %d units, %d dropped (%s)" % (len(ids) - len(capped), len(ids), len(capped), drop))
+    if max(counts.values()) > 2:
+        print("R2 outcome: none (cap stops: gstack-full %d, none-r2 %d). FIX-METHOD to the Captain with the counts." % (counts["gstack-full"], counts["none-r2"]))
+        sys.exit(4)
+    print("cap rule passes: the verdict stands, printed with these counts and the complete-case sensitivity.")
+except Exception as e:
+    print("E_R2_CAPS %s: %s. This is bad input, not an outcome." % (type(e).__name__, e))
+    sys.exit(5)

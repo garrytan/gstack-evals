@@ -124,4 +124,41 @@ describe("vm-run.sh during the paid batch", () => {
     expect(s.exitFile()).toBe("143");
     expect(code).toBe(143);
   }, 60_000);
+
+  test("with STOP_ON_CAP, a latched cap stop reaches the running Harbor as one SIGINT and out/cap-stop.json records it", async () => {
+    const s = setup(null, true);
+    const log = join(s.run, "..", "sg.log");
+    writeFileSync(join(s.run, "..", "bin", "curl"), `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\ncase "$*" in *8788/status*) if [ -e "${s.run}/CAPPED" ]; then echo '{"cap_stop":"ledger refused a reserve for t1"}'; else echo '{"cap_stop":null}'; fi ;; *) echo '{}' ;; esac\n`);
+    writeFileSync(join(s.run, "STOP_ON_CAP"), "");
+    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 200 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+    for (let i = 0; i < 200 && !s.sg().includes("8788/status"); i++) await Bun.sleep(50);
+    expect(s.sg()).not.toContain("pkill");
+    writeFileSync(join(s.run, "CAPPED"), "");
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    expect(s.sg().match(/pkill -INT -f \/bin\/harbor run/g)).toHaveLength(1);
+    expect(s.sg().match(/harbor got INT/g)).toHaveLength(1);
+    expect(s.sg()).not.toContain("harbor finished");
+    expect(JSON.parse(readFileSync(join(s.run, "out", "cap-stop.json"), "utf8")).cap_stop).toBe("ledger refused a reserve for t1");
+    expect(s.sg()).toContain("8788/close-all");
+    expect(code).toBe(130);
+    expect(s.exitFile()).toBe("130");
+  }, 60_000);
+
+  test("without STOP_ON_CAP, a latched cap stop leaves Harbor running", async () => {
+    const s = setup(null, true);
+    const log = join(s.run, "..", "sg.log");
+    writeFileSync(join(s.run, "..", "bin", "curl"), `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\ncase "$*" in *8788/status*) echo '{"cap_stop":"ledger refused a reserve for t1"}' ;; *) echo '{}' ;; esac\n`);
+    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 200 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+    await Bun.sleep(1000);
+    expect(s.sg()).not.toContain("pkill");
+    expect(existsSync(join(s.run, "out", "cap-stop.json"))).toBe(false);
+    writeFileSync(join(s.run, "STOP"), "");
+    const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
+    expect(await proc.exited).toBe(130);
+    clearTimeout(timer);
+  }, 60_000);
 });

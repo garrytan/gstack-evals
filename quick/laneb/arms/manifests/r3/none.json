@@ -1,0 +1,23 @@
+{
+  "arm": "none",
+  "claude_code": "2.1.312",
+  "tar_gz_sha256": "6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5",
+  "tar": {
+    "file": "none.tar",
+    "bytes": 10240,
+    "sha256": "8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e"
+  },
+  "tree": {
+    "files": 0,
+    "symlinks": 0,
+    "dirs": 2,
+    "bytes": 0,
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "skills": {
+    "count": 0,
+    "tree_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "skill_md_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "names": []
+  }
+}
