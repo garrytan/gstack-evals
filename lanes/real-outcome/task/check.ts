@@ -49,7 +49,11 @@ const RELEASE = /\b(VERSION|CHANGELOG|TODOS)\b/;
 const INSTALLED = new RegExp("(?<=^|/)(?:" + [...INSTALL_DIRS.filter((d) => d !== ".git").map((d) => d.replace(".", "\\.")), "site-packages", "dist-packages", "lib/python\\d[^/]*", "\\.cache/uv", "go/pkg/mod", "usr/local/go"].join("|") + ")/", "g");
 
 const normName = (s: string): string => s.toLowerCase().replace(/[-_.]+/g, "_");
-const stemName = (part: string): string => part.replace(/@.*$/, "").replace(/\.(dist-info|egg-info|egg-link|pth|pyi?)$/, "").replace(/-\d.*$/, "");
+const namesProject = (part: string, name: string): boolean => {
+  const p = normName(part.replace(/@.*$/, "").replace(/\.(dist-info|egg-info|egg-link|pth|pyi?)$/, ""));
+  const n = normName(name);
+  return p === n || (p.startsWith(n + "_") && /\d/.test(p.charAt(n.length + 1)));
+};
 
 /** The names an installed copy of the task's own project carries: the repository's name, its Go module, its top-level
  * Python packages (dirs holding __init__.py at the root or under src/, test dirs aside) and the distribution or package
@@ -82,7 +86,7 @@ export function sortHits(hits: string[], own: string[], tracked: string[]): { le
     const at = [...hit.matchAll(INSTALLED)].at(-1);
     if (inRepo.has(hit) || !at) return false;
     const rest = hit.slice(at.index + at[0].length).replace(/!([a-z])/g, (_, c: string) => c.toUpperCase());
-    return !own.some((name) => (name.includes("/") ? ("/" + rest).includes("/" + name + "/") || ("/" + rest).includes("/" + name + "@") : rest.split("/").some((part) => normName(stemName(part)) === normName(name))));
+    return !own.some((name) => (name.includes("/") ? ("/" + rest).includes("/" + name + "/") || ("/" + rest).includes("/" + name + "@") : rest.split("/").some((part) => namesProject(part, name))));
   };
   const installed = new Set(hits.filter(isInstalled));
   return { leaks: hits.filter((h) => !installed.has(h)), installed: [...installed] };

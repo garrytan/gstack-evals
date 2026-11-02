@@ -54,6 +54,17 @@ describe("L2 scope", () => {
     expect(sortHits(hits, own, [])).toEqual({ leaks: hits, installed: [] });
   });
 
+  test("a project whose name ends in a digit still matches its own installed copy, with or without a version", () => {
+    const own2 = projectNames({ repo: "o/project-2", runner: PYTEST }, [], { "pyproject.toml": '[project]\nname = "project-2"\n' });
+    const mine = [
+      "/root/.cache/uv/sdists-v9/pypi/project-2/1.0/abc/src/main.py",
+      "/usr/local/lib/python3.12/site-packages/project_2-1.0.dist-info/METADATA",
+      "/usr/local/lib/python3.12/site-packages/project-2-1.0.egg-info/PKG-INFO",
+    ];
+    const other = ["/usr/local/lib/python3.12/site-packages/project_20-1.0.dist-info/METADATA", "/usr/local/lib/python3.12/site-packages/project/core.py"];
+    expect(sortHits([...mine, ...other], own2, [])).toEqual({ leaks: mine, installed: other });
+  });
+
   test("the Go module cache holds the task's own module as a leak and other modules as installed code", () => {
     const goOwn = projectNames({ repo: "fixture/clampy", runner: { kind: "go", module: "github.com/Fixture/clampy" } }, [], {});
     const mine = ["/go/pkg/mod/github.com/!fixture/clampy@v1.2.0/clamp/clamp.go", "/go/pkg/mod/cache/download/github.com/!fixture/clampy/@v/v1.2.0.mod"];
