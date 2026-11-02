@@ -6,8 +6,10 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { git } from "../mine/git.ts";
+import { classifyPath, INSTALL_DIRS, isTestPath } from "../mine/paths.ts";
 import { docker, dockerRun } from "./docker.ts";
-import { detectLicence, installProblem, keysInEnv, readTask, regressionFrozen, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
+import { detectLicence, installProblem, keysInEnv, readTask, regressionFrozen, REPO_DIR, sha256, TaskError, validTestId, type TaskJson } from "./format.ts";
 import { resultFor, type TestResult } from "./record.ts";
 import { allPass, idResults, stopped, verifyTree, type TreeResult } from "./verify.ts";
 
@@ -41,6 +43,84 @@ export interface CheckOptions {
 }
 
 const RELEASE = /\b(VERSION|CHANGELOG|TODOS)\b/;
+
+/** Where an image keeps installed third-party code: dependency dirs at any depth, site-packages and dist-packages, the uv
+ * cache, and Go's toolchain and module cache. Python's standard library is scanned like the rest of the image, also when
+ * Python sits in a virtualenv-shaped dir (.venv, venv, .tox): there lib/pythonX.Y counts only under its site-packages or
+ * dist-packages. */
+const INSTALLED = new RegExp("(?<=^|/)(?:" + [...INSTALL_DIRS.filter((d) => d !== ".git").map((d) => d.replace(".", "\\.")), "site-packages", "dist-packages", "\\.cache/uv", "go/pkg/mod", "usr/local/go"].join("|") + ")/", "g");
+const VENVS = [".venv/", "venv/", ".tox/"];
+
+const normName = (s: string): string => {
+  const n = s.toLowerCase().replace(/[-_.]+/g, "_");
+  const bare = n.replace(/^_/, "");
+  return bare.length >= 5 ? bare : n;
+};
+const namesProject = (part: string, name: string): boolean => {
+  const p = normName(part.replace(/@.*$/, "").replace(/\.(dist-info|egg-info|egg-link|pth|pyi?)$/, ""));
+  const n = normName(name);
+  return p === n || (p.startsWith(n + "_") && /\d/.test(p.charAt(n.length + 1)));
+};
+
+/** The names an installed copy of the task's own project carries: the repository's name, its Go module, its top-level
+ * Python packages (dirs holding __init__.py at the root or under src/, test and vendored dirs aside) and the
+ * distribution or package name its pyproject.toml, setup.cfg or package.json declares. A package further down, such as
+ * docs/_ext, names nothing, because a generic name like ext or app would turn installed code that carries it into a leak. */
+export function projectNames(t: Pick<TaskJson, "repo" | "runner">, packages: string[], manifests: Record<string, string>): string[] {
+  const names = [t.repo.slice(t.repo.lastIndexOf("/") + 1)];
+  if (t.runner.kind === "go") names.push(t.runner.module);
+  for (const p of packages) {
+    const pkg = /^(?:src\/)?([^/]+)\/__init__\.py$/.exec(p)?.[1];
+    if (pkg && !isTestPath(p) && classifyPath(p) !== "vendored") names.push(pkg);
+  }
+  const parse = (text: string | undefined, read: (text: string) => unknown) => {
+    try {
+      const name = text === undefined ? undefined : read(text);
+      if (typeof name === "string") names.push(name);
+    } catch {}
+  };
+  parse(manifests["pyproject.toml"], (s) => {
+    const toml = Bun.TOML.parse(s) as { project?: { name?: unknown }; tool?: { poetry?: { name?: unknown } } };
+    return toml.project?.name ?? toml.tool?.poetry?.name;
+  });
+  parse(manifests["setup.cfg"], (s) => /^\[metadata\][^[]*?^name\s*=\s*([^\s#;]+)/m.exec(s)?.[1]);
+  parse(manifests["package.json"], (s) => (JSON.parse(s) as { name?: unknown }).name);
+  return [...new Set(names.filter(Boolean))];
+}
+
+/** L2's hits split into leaks and installed third-party code. A hit is installed code when it sits below an install
+ * location and no path part below that location names the project: an installed or vendored copy of the project itself
+ * stays a leak. Leading underscores don't count once 5 characters remain (setuptools/_distutils names distutils, _json
+ * doesn't name json), and a name split on hyphens, underscores and dots also matches consecutive parts (jaraco-functools
+ * names jaraco/functools). A file git tracks in the repository is always a leak, whatever its directory is called. */
+export function sortHits(hits: string[], own: string[], tracked: string[]): { leaks: string[]; installed: string[] } {
+  const inRepo = new Set(tracked.map((p) => REPO_DIR + "/" + p));
+  const isInstalled = (hit: string): boolean => {
+    const at = [...hit.matchAll(INSTALLED)].at(-1);
+    if (inRepo.has(hit) || !at) return false;
+    const rest = hit.slice(at.index + at[0].length).replace(/!([a-z])/g, (_, c: string) => c.toUpperCase());
+    if (VENVS.includes(at[0]) && /(?:^|\/)lib(?:64)?\/python\d[^/]*\//.test(rest)) return false;
+    const parts = rest.split("/");
+    return !own.some((name) => {
+      if (name.includes("/")) return ("/" + rest).includes("/" + name + "/") || ("/" + rest).includes("/" + name + "@");
+      const pieces = name.split(/[-_.]+/).filter(Boolean);
+      return parts.some((part, i) => namesProject(part, name) || (pieces.length > 1 && pieces.every((piece, k) => i + k < parts.length && namesProject(parts[i + k], piece))));
+    });
+  };
+  const installed = new Set(hits.filter(isInstalled));
+  return { leaks: hits.filter((h) => !installed.has(h)), installed: [...installed] };
+}
+
+/** V6's static half: restored files that are release files themselves, and restored files gold adds or changes that
+ * name one. A restored file gold leaves alone, such as a release-automation test the repository already had, is graded
+ * by the release-edit run instead. git apply reads gold's paths, quoted names included, with no repository
+ * (--git-dir=/dev/null): inside a checkout's subdirectory it would drop every path outside that subdirectory. */
+export function releaseReaders(taskDir: string): string[] {
+  const patch = readFileSync(join(taskDir, "solution/gold.patch"), "utf8");
+  const touched = new Set(patch ? git(taskDir, ["--git-dir=/dev/null", "apply", "--numstat", "-z"], patch).split("\0").filter(Boolean).map((e) => e.split("\t").slice(2).join("\t")) : []);
+  const restored = readFileSync(join(taskDir, "tests/restore.list"), "utf8").split("\n").filter(Boolean);
+  return restored.filter((p) => classifyPath(p) === "release" || (touched.has(p) && RELEASE.test(readFileSync(join(taskDir, "tests/restore", p), "utf8"))));
+}
 
 function inImage(image: string, script: string): string {
   const r = dockerRun("real-check-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", image, "-c", script], { timeoutMs: 600000 });
@@ -87,6 +167,8 @@ export function checkTask(o: CheckOptions): CheckResult {
       "echo '== new_tests'; for p in " + quoted(t.new_test_files) + "; do [ -e \"$p\" ] && echo \"$p\"; done",
       "echo '== licence'; for f in LICENSE LICENSE.md LICENSE.txt LICENCE LICENCE.md COPYING; do [ -f \"$f\" ] && sha256sum \"$f\" && break; done",
       "echo '== lockfile'; " + (t.install.lockfile ? "sha256sum " + quoted([t.install.lockfile]) : "true"),
+      "echo '== packages'; ls -d */__init__.py src/*/__init__.py 2>/dev/null",
+      "echo '== manifests'; for f in pyproject.toml setup.cfg package.json; do [ -f \"$f\" ] && echo \"$f $(base64 -w0 \"$f\")\"; done",
       ...(t.replay ? ["echo '== replay'; git rev-parse " + t.replay.commit + "^1; git diff --binary --full-index --no-renames " + t.base_commit + " " + t.replay.commit + " | sha256sum"] : []),
       "echo '== end'",
     ].join("; "),
@@ -105,9 +187,17 @@ export function checkTask(o: CheckOptions): CheckResult {
 
   const needles = readFileSync(join(o.taskDir, "tests/leak-needles.txt"), "utf8").split("\n").filter(Boolean);
   if (needles.length > 0) {
-    const r = dockerRun("real-check-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-v", join(o.taskDir, "tests/leak-needles.txt") + ":/needles.txt:ro", tag, "-c", "grep -rIlF -f /needles.txt / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude=needles.txt 2>/dev/null; true"], { timeoutMs: 1800000 });
-    const hits = r.stdout.split("\n").filter(Boolean);
-    add("L2 gold lines absent", r.status === 0 && hits.length === 0, hits.length === 0 ? needles.length + " gold-only lines found nowhere in the image" : "gold lines in " + hits.slice(0, 5).join(", "));
+    const scan = [
+      "hits=$(grep -rIlF -f /needles.txt / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude=needles.txt 2>/dev/null)",
+      "echo '== hits'; printf '%s\\n' \"$hits\"",
+      "echo '== tracked'; cd " + t.repo_dir + " && printf '%s\\n' \"$hits\" | sed -n 's|^" + t.repo_dir + "/||p' | tr '\\n' '\\0' | GIT_LITERAL_PATHSPECS=1 xargs -0r git ls-files -z -- | tr '\\0' '\\n'",
+      "true",
+    ].join("; ");
+    const r = dockerRun("real-check-" + randomBytes(6).toString("hex"), ["--rm", "--network", "none", "--user", "0:0", "--entrypoint", "sh", "-v", join(o.taskDir, "tests/leak-needles.txt") + ":/needles.txt:ro", tag, "-c", scan], { timeoutMs: 1800000 });
+    const manifests = Object.fromEntries(section(repo, "manifests").map((l) => [l.slice(0, l.indexOf(" ")), Buffer.from(l.slice(l.indexOf(" ") + 1), "base64").toString("utf8")]));
+    const { leaks: found, installed } = sortHits(section(r.stdout, "hits").sort(), projectNames(t, section(repo, "packages"), manifests), section(r.stdout, "tracked"));
+    const note = installed.length ? " outside installed third-party code (" + installed.length + " files there hold one, such as " + installed.slice(0, 3).join(", ") + ")" : "";
+    add("L2 gold lines absent", r.status === 0 && found.length === 0, found.length === 0 ? needles.length + " gold-only lines found nowhere in the image" + note : "gold lines in " + found.slice(0, 5).join(", "));
   } else add("L2 gold lines absent", t.replay?.role === "decoy", "no gold-only lines to scan for");
   const meta = docker(["image", "inspect", tag]).stdout + docker(["history", "--no-trunc", "--format", "{{.CreatedBy}}", tag]).stdout;
   const shas = [t.upstream.change, t.upstream.fix, t.upstream.revert].filter((s): s is string => !!s).filter((s) => meta.includes(s.slice(0, 12)));
@@ -186,11 +276,10 @@ export function checkTask(o: CheckOptions): CheckResult {
   add("V4 hidden tests call only interfaces at base or named in the statement", v4Mech && v4Audit, (v4Mech ? "every missing name is in the statement" : "names neither at base nor in the statement: " + [...new Set(unnamed)].join(", ")) + (loads.length ? "; load failures at base for the auditor: " + loads.join(", ") : "") + (o.mechanical ? "; audit not read (--mechanical)" : t.audit.v4 ? "; audit by " + t.audit.v4.by + ": " + (t.audit.v4.pass ? "pass" : "fail") : "; no audit record"));
   add("V5 every required behavior follows from the statement", o.mechanical ? true : t.audit.v5?.pass === true, o.mechanical ? "audit not read (--mechanical)" : t.audit.v5 ? "audit by " + t.audit.v5.by + ": " + (t.audit.v5.pass ? "pass" : "fail") + (t.audit.v5.note ? " (" + t.audit.v5.note + ")" : "") : "no audit record");
 
-  const restored = readFileSync(join(o.taskDir, "tests/restore.list"), "utf8").split("\n").filter(Boolean);
-  const readers = restored.filter((p) => RELEASE.test(readFileSync(join(o.taskDir, "tests/restore", p), "utf8")));
+  const readers = releaseReaders(o.taskDir);
   const emptyFails = decoy || required.some((id) => firstStart(id).status !== "pass");
   const editedPass = allPass(edited, required);
-  add("V6 an empty change fails and release files don't matter", emptyFails && editedPass && readers.length === 0, [decoy ? "decoy: the empty-change rule does not apply" : emptyFails ? "the starting tree fails" : "the starting tree passes every hidden test", editedPass ? "gold with VERSION, CHANGELOG and TODOS edits passes" : "gold with release edits fails: " + describe(edited, required.filter((id) => !idResults(edited, id).every((r) => r.status === "pass"))), readers.length ? "restored files name release files: " + readers.join(", ") : ""].filter(Boolean).join("; "));
+  add("V6 an empty change fails and release files don't matter", emptyFails && editedPass && readers.length === 0, [decoy ? "decoy: the empty-change rule does not apply" : emptyFails ? "the starting tree fails" : "the starting tree passes every hidden test", editedPass ? "gold with VERSION, CHANGELOG and TODOS edits passes" : "gold with release edits fails: " + describe(edited, required.filter((id) => !idResults(edited, id).every((r) => r.status === "pass"))), readers.length ? "restored release files, or restored files gold changes that name one: " + readers.join(", ") : ""].filter(Boolean).join("; "));
 
   const all = trees.flatMap((tr) => tr.runs);
   const slowest = Math.max(...all.map((r) => r.wall_ms));

@@ -1,7 +1,8 @@
 // GPT-6.1 Sol in R3a (R3 amendment section 6, Captain ruling A1), keyless: its route row and cell, its arms under the real
 // pinned Agent SDK, the screen per model, the route check, #121's two notes, Sol's stops leaving Opus untouched, and Sol's
 // planned layout against its real $140 cap and $4 allowance through the real proxy and ledger service.
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -421,10 +422,11 @@ describe("#121's notes", () => {
 // three failures on our side: killproxy and killledger (the stub stops that local service after its request) and hang
 // (it writes its pid to <STUB_LOG>.hang and waits to be stopped). hangkid hangs the same way with a child in Harbor's
 // process group (its pid in <STUB_LOG>.kid), and stubborn does too with both ignoring SIGTERM. badtrial writes a trial
-// whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), nomsgs leaves it out
-// (ENOENT), noread makes it unreadable (EACCES), noeval makes the evaluator dir unsearchable (EACCES on stat), and nolog makes the check's own log of the session a directory, so the
+// whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), dirsummary makes
+// evaluator/laneb-summary.json a directory, loopsessions turns the proxy's sessions file into a symlink loop (ELOOP) once
+// the session is closed, nomsgs leaves sdk-messages.jsonl out (ENOENT), noread makes it unreadable (EACCES), noeval makes the evaluator dir unsearchable (EACCES on stat), and nolog makes the check's own log of the session a directory, so the
 // check fails writing it. STUB_SLEEP holds every session that many ms.
-const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = process.argv.slice(2);
 const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
@@ -456,11 +458,13 @@ if (mode === "hangkid" || mode === "stubborn") {
 if (mode === "nolog") mkdirSync(join(process.cwd(), job.job_name + ".log"));
 if (process.env.STUB_SLEEP) await Bun.sleep(Number(process.env.STUB_SLEEP));
 await fetch(control + "/sessions/" + s.id + "/close", { method: "POST", body: "{}" }).catch(() => undefined);
+if (mode === "loopsessions") { const f = join(process.cwd(), "proxy-sessions.jsonl"); rmSync(f, { force: true }); symlinkSync(f, f); }
 const d = join(process.cwd(), "jobs", job.job_name, trial);
 mkdirSync(join(d, "evaluator"), { recursive: true });
 writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: task }, agent: { name: a.name, kwargs: k } }));
 writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: trial, verifier_result: { rewards: { reward: 1 } }, exception_info: null }));
 const msgs = mode === "notool" ? [{ type: "AssistantMessage", content: [{ text: "done" }] }] : [{ type: "AssistantMessage", content: [{ id: "t1", name: "Bash", input: { command: "cat calc.py" } }] }, { type: "UserMessage", content: [{ tool_use_id: "t1", content: "def add" }] }];
+if (mode === "dirsummary") mkdirSync(join(d, "evaluator", "laneb-summary.json"));
 if (mode === "dirmsgs") mkdirSync(join(d, "evaluator", "sdk-messages.jsonl"));
 else if (mode !== "nomsgs") writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), (mode === "badtrial" ? "null\\n" : "") + msgs.map((m) => JSON.stringify(m)).join("\\n") + "\\n");
 if (mode === "noread") chmodSync(join(d, "evaluator", "sdk-messages.jsonl"), 0);
@@ -590,6 +594,46 @@ describe("the route check's verdicts", () => {
     chmodSync(join(dir, "evaluator"), 0);
     expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
     chmodSync(join(dir, "evaluator"), 0o755);
+  });
+
+  test("judge reads config.json and result.json once each, so an EIO, EMFILE, ENFILE or ENOMEM on any read of them throws with its code and counts no try", () => {
+    const d = tmp("sol-judge-errno-");
+    const job = join(d, "job");
+    writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
+    const sessions = readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const clean = judge("told", 0, join(job, "job"), sessions, proxyConfig);
+    expect(clean.pass).toBe(true);
+    const real = fs.readFileSync;
+    for (const file of ["config.json", "result.json"]) for (const code of ["EIO", "EMFILE", "ENFILE", "ENOMEM"]) for (const nth of [1, 2]) {
+      let reads = 0;
+      const spy = spyOn(fs, "readFileSync").mockImplementation(((p: fs.PathOrFileDescriptor, o?: any) => {
+        if (String(p).endsWith("/" + file) && ++reads === nth) throw Object.assign(new Error(`${code}: injected, read '${p}'`), { code });
+        return real(p, o);
+      }) as typeof fs.readFileSync);
+      let thrown: string | null = null, j: ReturnType<typeof judge> | null = null;
+      try {
+        j = judge("told", 0, join(job, "job"), sessions, proxyConfig);
+      } catch (e) {
+        thrown = (e as Error).message;
+      } finally {
+        spy.mockRestore();
+      }
+      expect(reads).toBe(1);
+      if (reads === nth) expect(thrown).toStartWith(`${code} reading the trial: `);
+      else expect(j).toEqual(clean);
+    }
+  });
+
+  test("a directory where evaluator/laneb-summary.json should be is not read for the verdict: each part judges as without it", () => {
+    const d = tmp("sol-judge-summary-");
+    const job = join(d, "job");
+    writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
+    const sessions = readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const clean = { told: judge("told", 0, join(job, "job"), sessions, proxyConfig), smoke: judge("smoke", 0, join(job, "job"), sessions, proxyConfig) };
+    mkdirSync(join(job, "job", "smoke-task__0", "evaluator", "laneb-summary.json"));
+    expect(judge("told", 0, join(job, "job"), sessions, proxyConfig)).toEqual(clean.told);
+    expect(judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toEqual(clean.smoke);
+    expect(clean.told.pass).toBe(true);
   });
 });
 
@@ -772,6 +816,26 @@ describe("route-check.ts failures on our side (A1)", () => {
     expect(missing.calls).toHaveLength(2);
     expect(missing.rec).toMatchObject({ verdict: "drop", incomplete: null });
     expect(missing.rec!.reason).toStartWith("the smoke part failed twice: try 1: ");
+  }, 60_000);
+
+  test("a proxy sessions file the check can't stat or read for a reason other than ENOENT (ELOOP) ends the check incomplete: no try counted", async () => {
+    const r = rig();
+    const { code, out, calls, rec } = await routeCheck(r, { STUB_PLAN: "told1=loopsessions" });
+    expect(calls).toHaveLength(2);
+    expect(rec).toMatchObject({ verdict: null, reason: null });
+    expect(rec!.incomplete).toStartWith("told try 1: the route check failed during the session: ELOOP");
+    expect(out).toContain("route check: gpt-6.1-sol is incomplete on r3a-sol: told try 1: the route check failed during the session: ELOOP");
+    expect(next(rec!)).toEqual({ kind: "told", try: 1 });
+    expect(code).toBe(4);
+  }, 60_000);
+
+  test("a directory where laneb-summary.json should be counts no try: both parts pass on their first try", async () => {
+    const r = rig();
+    const { code, out, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=dirsummary,told1=dirsummary" });
+    expect(out).toContain("route check: gpt-6.1-sol passed on r3a-sol (smoke passed on try 1, told passed on try 1)");
+    expect(calls).toHaveLength(2);
+    expect(rec).toMatchObject({ verdict: "pass", incomplete: null });
+    expect(code).toBe(0);
   }, 60_000);
 
   test("a cap stop the proxy latches ends the check incomplete instead of counting a failed try", async () => {
