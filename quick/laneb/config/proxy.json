@@ -83,6 +83,35 @@
           "allow_fallbacks": false
         }
       }
+    },
+    "gpt-6.1-sol": {
+      "route": "openrouter",
+      "upstream_model": "openai/gpt-6.1-sol",
+      "price_per_mtok": {
+        "input": 2,
+        "output": 10,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 2.5,
+        "cache_read": 0.1
+      },
+      "long_prompt": {
+        "over_tokens": 272000,
+        "price_per_mtok": {
+          "input": 4,
+          "output": 15,
+          "cache_write_5m": 5,
+          "cache_write_1h": 5,
+          "cache_read": 0.2
+        }
+      },
+      "body_overrides": {
+        "provider": {
+          "only": [
+            "openai"
+          ],
+          "allow_fallbacks": false
+        }
+      }
     }
   }
 }
