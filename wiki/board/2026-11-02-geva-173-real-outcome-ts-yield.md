@@ -92,8 +92,9 @@ Shortfalls against the plan's thin-slice targets: 5 of 10 build tasks, 0 of 3 K1
 - Environment build rate: 181 of 189 probes built (96%). The 8 failures were gold conflicts, not environment failures, so image builds succeeded 181 of 181. Task builds succeeded 34 of 34.
 - Probe medians per task: build 4 s, image build 58 s, start 36 s, gold run 39 s.
 - Check medians per task: mechanical 297 s, full 497 s. The task build itself took a median of 5 s.
-- VM: one Ubicloud standard-16, up 214 minutes at $0.00831 a minute, about $1.78 in all. That is about $0.25 per valid task, or $0.10 per sealed task.
-- Model tokens (Capy platform counters): round-1 author (openai/gpt-6.1-sol) 7.08M tokens, 982 credits; round-2 author (openai/gpt-6.1-sol) 6.98M, 792 credits; round-1 auditor (anthropic/claude-opus-5-5) 13.63M, 2,939 credits; round-2 auditor (anthropic/claude-opus-5-5, high reasoning) 15.37M, 3,213 credits. No paid API calls were made.
+- VM: one Ubicloud standard-16, up 214 minutes at $0.00831 a minute, about $1.78 in all.
+- Model tokens (Capy platform counters): round-1 author (openai/gpt-6.1-sol) 7.08M tokens, 982 credits; round-2 author (openai/gpt-6.1-sol) 6.98M, 792 credits; round-1 auditor (anthropic/claude-opus-5-5) 13.63M, 2,939 credits; round-2 auditor (anthropic/claude-opus-5-5, high reasoning) 15.37M, 3,213 credits. Together that is 7,926 credits, about $7.93 at $1 per 1,000 credits. No paid API calls were made.
+- Total: $1.78 of VM time plus $7.93 of model spend is about $9.71. That is about $1.39 per valid task (7) and $0.57 per sealed task (17).
 
 ## Sealed bundle
 
@@ -130,4 +131,4 @@ Labels are opaque ids.
 - No agent has run any task yet, so nothing here says whether the tasks fall inside the plan's difficulty band.
 - Each audit round used one auditor, with no second opinion. The round-2 author scan was by pattern (commit prefixes, issue numbers, URLs, hidden test names, word limits), not by reading.
 - The GST-957 classification was read from checker detail lines. It will only be confirmed when the fixed checker rechecks the 10 pending tasks.
-- The time and cost figures cover this slice's probes and checks. They leave out mining time and the Capy machines.
+- The time and cost figures cover this slice's probes, checks, authoring and audit. They leave out mining time, the Capy machines and the model spend of the agents that mined, probed, checked and wrote this post.
