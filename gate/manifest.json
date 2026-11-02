@@ -34,6 +34,8 @@
         "tests": [
           "pins every action to a full commit sha",
           "keeps every token read-only",
+          "keeps no credentials in any checkout and uses no cache or workflow_run",
+          "runs no merge train while a dispatch runs the head's workflow (GST-254)",
           "names no secret",
           "installs Bun only by the checksummed download, at one version and digest",
           "fetches gstack at one pinned commit",

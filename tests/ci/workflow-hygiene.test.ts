@@ -8,9 +8,9 @@ import { parseManifest } from "../../scripts/gate.ts";
 // cases, so CI and `bun run gate` check the same things. The sealed case is left out of ci.yml because sealed.yml runs it on
 // every pull request and every push to main. No job may write: train-gate.yml, whose publish job posted a check, is removed
 // until a train dispatches the base's workflow instead of the head's (GST-254).
-type Step = { uses?: string; run?: string; env?: Record<string, string> };
+type Step = { uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, unknown> };
 type Job = { permissions?: unknown; steps: Step[] };
-type Workflow = { permissions?: unknown; jobs: Record<string, Job> };
+type Workflow = { on?: unknown; permissions?: unknown; jobs: Record<string, Job> };
 const root = join(import.meta.dir, "..", "..");
 const dir = join(root, ".github", "workflows");
 const files = readdirSync(dir)
@@ -38,6 +38,18 @@ describe("workflow hygiene", () => {
       expect([f, workflows[f]!.permissions]).toEqual([f, READ]);
       for (const [name, job] of jobs(f)) expect([f + "/" + name, job.permissions ?? READ]).toEqual([f + "/" + name, READ]);
     }
+  });
+
+  test("keeps no credentials in any checkout and uses no cache or workflow_run", () => {
+    for (const f of files) {
+      for (const s of steps(f).filter((s) => s.uses?.startsWith("actions/checkout@"))) expect([f, s.with?.["persist-credentials"]]).toEqual([f, false]);
+      expect([f, /actions\/cache@|\bcache:|workflow_run/.test(text[f]!)]).toEqual([f, false]);
+    }
+  });
+
+  test("runs no merge train while a dispatch runs the head's workflow (GST-254)", () => {
+    const policy = JSON.parse(readFileSync(join(root, ".gstack", "ship-policy.json"), "utf8")) as Record<string, unknown>;
+    expect(policy.train).toBeUndefined();
   });
 
   test("names no secret", () => {

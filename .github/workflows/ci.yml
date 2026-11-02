@@ -1,7 +1,8 @@
 # Keyless CI: typecheck, unit tests, the reason-code doc and the wiki check. Nothing here needs a secret.
 # Actions are pinned to commit SHAs. Bun is downloaded at a pinned version and checked against the release's SHA-256.
-# workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19); the token stays
-# read-only and no step writes to GitHub. The checkout keeps no credentials, since no step needs them.
+# workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19). Main's copy keeps
+# the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
+# ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
 # Later units add tests under tests/; `bun test` picks them up without a change here.
 # gstack is fetched at the commit sealed.yml pins, because tests/ci/sealed-workflow.test.ts runs sealed.yml's steps with
 # gstack's real sealed checker on scratch repositories.
