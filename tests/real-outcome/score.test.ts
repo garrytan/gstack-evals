@@ -261,6 +261,22 @@ describe("detectors", () => {
 describe("no-gstack exposure check", () => {
   const SKILLS = ["ship", "review", "investigate"];
   const use = (name: string, input: Record<string, unknown>, phase = "build") => ({ type: "AssistantMessage", phase, content: [{ type: "tool_use", id: "u1", name, input }] });
+  test("a torn tail is scanned like a record: every Skill call it holds, and paths after a JSON-escaped newline", () => {
+    const second = JSON.stringify({ type: "AssistantMessage", content: [{ id: "a", name: "Skill", input: { skill: "frontend-design" }, type: "tool_use" }, { id: "b", name: "Skill", input: { skill: "review" }, type: "tool_use" }, { type: "text", text: "pad pad pad" }] });
+    expect(exposureCheck([JSON.parse(second)], ["review"]).contaminated).toBe(true);
+    expect(exposureCheck([], ["review"], second.slice(0, -10)).evidence).toEqual([{ kind: "torn_tail", detail: "the dropped torn line loads review", phase: null }]);
+    for (const prefix of ["/root", "~", "$HOME", "/home/u"]) {
+      const result = JSON.stringify({ type: "UserMessage", content: [{ type: "tool_result", content: "found:\n" + prefix + "/.gstack/skills/review" }] });
+      expect(exposureCheck([JSON.parse(result)], ["review"]).contaminated).toBe(true);
+      expect(exposureCheck([], ["review"], result.slice(0, -5)).contaminated).toBe(true);
+    }
+    const tab = JSON.stringify({ type: "UserMessage", content: [{ type: "tool_result", content: "ls:\t~/.gstack" }] });
+    expect(exposureCheck([], ["review"], tab.slice(0, -3)).contaminated).toBe(true);
+    const slash = '{"type":"UserMessage","content":[{"type":"tool_result","content":"see \\/root\\/.gstack\\/skills';
+    expect(exposureCheck([], ["review"], slash).contaminated).toBe(true);
+    const clean = JSON.stringify({ type: "AssistantMessage", content: [{ id: "a", name: "Skill", input: { skill: "frontend-design" }, type: "tool_use" }, { type: "text", text: "notes:\nnothing here" }] });
+    expect(exposureCheck([], ["review"], clean.slice(0, -4))).toMatchObject({ contaminated: false, evidence: [] });
+  });
   test("a clean session is not contaminated, and plain gstack mentions or other skills are flags only", () => {
     const x = exposureCheck([{ type: "SystemMessage", subtype: "init", data: { skills: [], slash_commands: ["compact", "review"] } }, use("Bash", { command: "pytest -q" }), use("Grep", { pattern: "gstack", path: "src" }), use("Skill", { skill: "pdf" })], SKILLS);
     expect(x.contaminated).toBe(false);

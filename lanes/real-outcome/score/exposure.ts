@@ -78,11 +78,12 @@ export function exposureCheck(records: readonly unknown[], gstackSkills: readonl
     }
   }
   if (tornTail !== null) {
-    const path = tornTail.match(DRIVE_PATH) ?? tornTail.match(GSTACK_PATH);
+    const decoded = tornTail.replace(/\\(["\\/bfnrt])/g, (_, c: string) => ("bfnrt".includes(c) ? " " : c));
+    const path = tornTail.match(DRIVE_PATH) ?? tornTail.match(GSTACK_PATH) ?? decoded.match(DRIVE_PATH) ?? decoded.match(GSTACK_PATH);
     if (path) add("torn_tail", "the dropped torn line names " + path[0].trim(), null);
-    const skill = tornTail.match(/"name"\s*:\s*"Skill"[\s\S]*?"(?:skill|command|name)"\s*:\s*"([^"]*)/)?.[1];
-    if (skill !== undefined && isGstackSkill(skill, skills)) add("torn_tail", "the dropped torn line loads " + skill, null);
-    else if (!path && /gstack/i.test(tornTail)) flag("gstack_mention", "the dropped torn line: " + tornTail, null);
+    const loaded = [...tornTail.matchAll(/"name"\s*:\s*"Skill"[\s\S]*?"(?:skill|command|name)"\s*:\s*"([^"]*)/g)].map((m) => m[1]).filter((n) => isGstackSkill(n, skills));
+    for (const n of loaded) add("torn_tail", "the dropped torn line loads " + n, null);
+    if (!path && !loaded.length && /gstack/i.test(tornTail)) flag("gstack_mention", "the dropped torn line: " + tornTail, null);
   }
   out.contaminated = out.evidence.length > 0;
   return out;
