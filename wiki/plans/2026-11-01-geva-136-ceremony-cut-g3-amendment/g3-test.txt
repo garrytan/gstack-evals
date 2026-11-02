@@ -1,6 +1,6 @@
 # G3 amendment test run. prereg-122/ holds #122's decide.py.txt and exposure.py.txt, first-head/ and second-head/ this PR's heads 704cc0d and
 # d7a8e01, amended/ this post's, all without the .txt suffix; g3-evidence/ is GEVA-131's handoffs/GEVA-131/g3-evidence from the Captain drive.
-# Python 3.12.3, 2026-11-02T00:48Z.
+# Python 3.12.3, 2026-11-02T01:35Z.
 
 $ sha256sum prereg-122/* first-head/* second-head/* amended/* g3-test.py g3-evidence/SHA256SUMS
 000cfad35b9aab5502802c3027e4fa7d1b0eed423b1beb2499a5f62c50cc95a2  prereg-122/decide.py
@@ -10,8 +10,8 @@ aa6cc5dc89b019568aebc153b426db4c7095b2876c484e64d7c37c9184f5d948  first-head/dec
 eab58f276d04847dd167d08d48f569025b4fbe59b612f786e1c291cd95e4e597  second-head/decide.py
 09f1be132c7ac622954ed0d2ed4ecb10271156e1e6abff3b05c1cc7f0ace323d  second-head/exposure.py
 d8a4f9006bcffd6dd7d4149fae5c708389c45d3b17fd70c9d63c68eaa5728cf1  amended/decide.py
-9874adab84528cc27fb8e231ed9198fd4ff888c5ebaa6314bc93012a93daaebc  amended/exposure.py
-b8b2684ca64f2b8571b5c3819b35451d849e5519346d7430d310e545ebbbe66c  g3-test.py
+033152090fbfe4f5c9e3358ddcf6d8a0bb1c23546221ac7ec7e31fa7d0933486  amended/exposure.py
+78f9c7163e3e0c718665c5c6d6975ec9dc9c0fe25401accfac802ca6d58c6546  g3-test.py
 01d6e7bc0df0752558f4ae9610a60117c02830e24ae1cd121140b20fcae3ce36  g3-evidence/SHA256SUMS
 
 $ (cd g3-evidence && sha256sum -c SHA256SUMS)
@@ -38,47 +38,76 @@ FAIL TB2: Opus variant start lines cut by the session pass: G3 render kind, TB2 
 FAIL a pipe that drops RENDER_KIND but keeps SESSION_KIND (tail -31, sed 1,2d) is a cut, not a fail: G3 render kind, review fail (want pass), other G3 gates pass, Opus FIX-METHOD, variant counts {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut_render': None}
 FAIL a cut session that shows RENDER_KIND: unattended elsewhere stays in the count beside a real miss, and fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': None}
 FAIL a session that only read the source cannot fill the count beside a cut line and a real miss: fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': None, 'start_line_render_kind': None}
+FAIL a head cut that keeps RENDER_KIND: unattended and drops UNATTENDED_SESSION: true (head -20) counts as printed and stays in the count: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'start_line_cut': None, 'start_line_cut_render': None, 'start_line_render_kind': None}
 
 GEVA-131 pilot evidence (g3-evidence):
   review control (n=2, stand-ins that run no start line, as GEVA-131 reports): start_line 0, render_kind_unattended 0, session_kind_unattended 0, render_kind_mismatch 0, session_kind_mismatch None, start_line_cut None, start_line_cut_render None
   review variant (n=2): start_line 2, render_kind_unattended 0, session_kind_unattended 0, render_kind_mismatch 0, session_kind_mismatch None, start_line_cut None, start_line_cut_render None
   decide.py gate G3 render kind, review: fail
   TB2 Opus variant (n=1, the evidence session): start_line 1, render_kind_unattended 1, session_kind_unattended 1, render_kind_mismatch 0, session_kind_mismatch None, start_line_cut None, start_line_cut_render None
-6 of 12 cases as expected
+6 of 13 cases as expected
 exit 1
 
 # 2. Against this PR's first head: cases 10 and 11 catch the two holes the first /ship review round found.
 $ python3 g3-test.py first-head
 ok   clean RENDER_KIND: unattended line passes: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   start line cut by the session, UNATTENDED_SESSION: true kept: not observable, not a fail: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut': 2, 'start_line_cut_render': 2}
+       G3 render kind, review: variant 0 of 0 counted start-line sessions printed RENDER_KIND: unattended, 2 more cut by the session (variant half not observable); control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   RENDER_KIND_MISMATCH line fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 1 RENDER_KIND_MISMATCH, 1 SESSION_KIND
 ok   SESSION_KIND mismatch in control fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 1 SESSION_KIND
 ok   cut line beside a mismatch session fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 1 of 1 counted start-line sessions printed RENDER_KIND: unattended, 1 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 1 RENDER_KIND_MISMATCH, 1 SESSION_KIND
 ok   cut line that kept no UNATTENDED_SESSION: true stays observable and fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 0 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   cut line run without the served --render unattended stays observable and fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 0 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   no control session ran the start line: control half not observable, not a fail: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 0 uncut start-line sessions (control half not observable); mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   TB2: Opus variant start lines cut by the session pass: G3 render kind, TB2 claude-opus-5-5 pass (want pass), other G3 gates pass, Opus CUT
+       G3 render kind, TB2 claude-opus-5-5: variant 0 of 0 counted start-line sessions printed RENDER_KIND: unattended, 2 more cut by the session (variant half not observable); control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 FAIL a pipe that drops RENDER_KIND but keeps SESSION_KIND (tail -31, sed 1,2d) is a cut, not a fail: G3 render kind, review fail (want pass), other G3 gates pass, Opus FIX-METHOD, variant counts {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut_render': 0}
+       G3 render kind, review: variant 0 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 FAIL a cut session that shows RENDER_KIND: unattended elsewhere stays in the count beside a real miss, and fails: G3 render kind, review pass (want fail), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 1}
+       G3 render kind, review: variant 1 of 1 counted start-line sessions printed RENDER_KIND: unattended, 1 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 FAIL a session that only read the source cannot fill the count beside a cut line and a real miss: fails: G3 render kind, review pass (want fail), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 1, 'start_line_render_kind': None}
-9 of 12 cases as expected
+       G3 render kind, review: variant 1 of 1 counted start-line sessions printed RENDER_KIND: unattended, 1 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+FAIL a head cut that keeps RENDER_KIND: unattended and drops UNATTENDED_SESSION: true (head -20) counts as printed and stays in the count: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'start_line_cut': 0, 'start_line_cut_render': 0, 'start_line_render_kind': None}
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+9 of 13 cases as expected
 exit 1
 
 # 3. Against this PR's second head: case 12 catches the hole the second /ship review round found.
 $ python3 g3-test.py second-head
 ok   clean RENDER_KIND: unattended line passes: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   start line cut by the session, UNATTENDED_SESSION: true kept: not observable, not a fail: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut': 2, 'start_line_cut_render': 2}
+       G3 render kind, review: variant 0 of 0 counted start-line sessions printed RENDER_KIND: unattended, 2 more cut by the session (variant half not observable); control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   RENDER_KIND_MISMATCH line fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 1 RENDER_KIND_MISMATCH, 1 SESSION_KIND
 ok   SESSION_KIND mismatch in control fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 1 SESSION_KIND
 ok   cut line beside a mismatch session fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 1 of 1 counted start-line sessions printed RENDER_KIND: unattended, 1 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 1 RENDER_KIND_MISMATCH, 1 SESSION_KIND
 ok   cut line that kept no UNATTENDED_SESSION: true stays observable and fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 0 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   cut line run without the served --render unattended stays observable and fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD
+       G3 render kind, review: variant 0 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   no control session ran the start line: control half not observable, not a fail: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 0 uncut start-line sessions (control half not observable); mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   TB2: Opus variant start lines cut by the session pass: G3 render kind, TB2 claude-opus-5-5 pass (want pass), other G3 gates pass, Opus CUT
+       G3 render kind, TB2 claude-opus-5-5: variant 0 of 0 counted start-line sessions printed RENDER_KIND: unattended, 2 more cut by the session (variant half not observable); control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   a pipe that drops RENDER_KIND but keeps SESSION_KIND (tail -31, sed 1,2d) is a cut, not a fail: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut_render': 2}
+       G3 render kind, review: variant 0 of 0 counted start-line sessions printed RENDER_KIND: unattended, 2 more cut by the session (variant half not observable); control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   a cut session that shows RENDER_KIND: unattended elsewhere stays in the count beside a real miss, and fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 0}
+       G3 render kind, review: variant 1 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 FAIL a session that only read the source cannot fill the count beside a cut line and a real miss: fails: G3 render kind, review pass (want fail), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 1, 'start_line_render_kind': None}
-11 of 12 cases as expected
+       G3 render kind, review: variant 1 of 1 counted start-line sessions printed RENDER_KIND: unattended, 1 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+FAIL a head cut that keeps RENDER_KIND: unattended and drops UNATTENDED_SESSION: true (head -20) counts as printed and stays in the count: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'start_line_cut': 0, 'start_line_cut_render': 0, 'start_line_render_kind': None}
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+11 of 13 cases as expected
 exit 1
 
 # 4. Against the amended scripts, with every count #122 exposure.py prints checked unchanged.
@@ -107,6 +136,8 @@ ok   a cut session that shows RENDER_KIND: unattended elsewhere stays in the cou
        G3 render kind, review: variant 0 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 ok   a session that only read the source cannot fill the count beside a cut line and a real miss: fails: G3 render kind, review fail (want fail), other G3 gates pass, Opus FIX-METHOD, variant counts {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 1, 'start_line_render_kind': 0}; other counts unchanged
        G3 render kind, review: variant 0 of 1 counted start-line sessions printed RENDER_KIND: unattended, 1 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
+ok   a head cut that keeps RENDER_KIND: unattended and drops UNATTENDED_SESSION: true (head -20) counts as printed and stays in the count: G3 render kind, review pass (want pass), other G3 gates pass, Opus CUT, variant counts {'start_line': 2, 'start_line_cut': 0, 'start_line_cut_render': 0, 'start_line_render_kind': 2}; other counts unchanged
+       G3 render kind, review: variant 2 of 2 counted start-line sessions printed RENDER_KIND: unattended, 0 more cut by the session; control 0 printed it, 2 uncut start-line sessions; mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
 
 GEVA-131 pilot evidence (g3-evidence):
   review control (n=2, stand-ins that run no start line, as GEVA-131 reports): start_line 0, render_kind_unattended 0, session_kind_unattended 0, render_kind_mismatch 0, session_kind_mismatch 0, start_line_cut 0, start_line_cut_render 0
@@ -114,5 +145,5 @@ GEVA-131 pilot evidence (g3-evidence):
   decide.py gate G3 render kind, review: pass
   G3 render kind, review: variant 0 of 0 counted start-line sessions printed RENDER_KIND: unattended, 2 more cut by the session (variant half not observable); control 0 printed it, 0 uncut start-line sessions (control half not observable); mismatch sessions: 0 RENDER_KIND_MISMATCH, 0 SESSION_KIND
   TB2 Opus variant (n=1, the evidence session): start_line 1, render_kind_unattended 1, session_kind_unattended 1, render_kind_mismatch 0, session_kind_mismatch 0, start_line_cut 0, start_line_cut_render 0
-12 of 12 cases as expected
+13 of 13 cases as expected
 exit 0

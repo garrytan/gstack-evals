@@ -17,9 +17,9 @@ links:
   - GST-824
 attachments:
   - d8a4f9006bcffd6dd7d4149fae5c708389c45d3b17fd70c9d63c68eaa5728cf1  decide.py.txt
-  - 9874adab84528cc27fb8e231ed9198fd4ff888c5ebaa6314bc93012a93daaebc  exposure.py.txt
-  - b8b2684ca64f2b8571b5c3819b35451d849e5519346d7430d310e545ebbbe66c  g3-test.py.txt
-  - be20d8162bf9ee4e3cdf63c97468207cde6c56150d58f61b3266f0c17b8cd14d  g3-test.txt
+  - 033152090fbfe4f5c9e3358ddcf6d8a0bb1c23546221ac7ec7e31fa7d0933486  exposure.py.txt
+  - 78f9c7163e3e0c718665c5c6d6975ec9dc9c0fe25401accfac802ca6d58c6546  g3-test.py.txt
+  - 3c9bdb00947297edd2d1a86415dea2d8b589295d32477299382553c2b7d34db0  g3-test.txt
 ---
 
 # Ceremony-cut preregistration amendment: G3 and the VM owner
@@ -60,7 +60,7 @@ Section 7's G3, and the second pilot check of section 10.1, which applies G3 to 
 
 A kept SESSION_KIND line doesn't stop a cut: a pipe that drops only the first lines (a tail just short of the whole output, or `sed 1,2d`) hides RENDER_KIND the same way, and the mismatch rule below still reads the kept line.
 
-**The variant half.** A variant session whose start line was cut by the session, whose start-line commands all carry `--render unattended`, and whose tool results show RENDER_KIND: unattended nowhere, is not observable for G3 and leaves the count. The last condition is conservative: a cut session that shows the line anywhere else stays in the count, as a start line that didn't print it. Among the variant sessions left that ran the start line, at least 95% printed RENDER_KIND: unattended, as before. A session counts as printing it only when one of its start-line calls' own results holds a `RENDER_KIND: unattended` line. A match anywhere else, such as a session reading gstack-skill-start's source, doesn't count. A variant session's start line that was cut but kept no UNATTENDED_SESSION: true line, or that ran without `--render unattended`, still counts as a start line that didn't print the line. For a session that left the count, the evidence of render kind is:
+**The variant half.** A variant session whose start line was cut by the session, whose start-line commands all carry `--render unattended`, and whose tool results show RENDER_KIND: unattended nowhere, is not observable for G3 and leaves the count. The last condition is conservative: a cut session that shows the line anywhere else stays in the count, as a start line that didn't print it. Among the variant sessions left that ran the start line, at least 95% printed RENDER_KIND: unattended, as before. A session counts as printing it only when one of its start-line calls' own results holds a `RENDER_KIND: unattended` line. A match anywhere else, such as a session reading gstack-skill-start's source, doesn't count. A variant session's start line that was cut but kept no UNATTENDED_SESSION: true line and no RENDER_KIND: unattended line, or that ran without `--render unattended`, still counts as a start line that didn't print the line. For a session that left the count, the evidence of render kind is:
 
 - the arm's render lock (arm.json in review, the rendered tar's lock in TB2, section 2.1): in the review pilot, arm.json records the variant's render as `full@unattended` with session kind unattended, and control's as `full` with session kind interactive;
 - the install check (G1, section 2.1), which fails unless the lock carries the requested session kind and only the variant's served start lines carry `--render unattended`;
@@ -82,7 +82,7 @@ decide.py's review G3 reads the control and variant arms only, as #122's did. Th
 
 ## 5. The test
 
-[g3-test.py](g3-test.py.txt) was written before the scripts changed. It is keyless and calls no model. It writes synthetic review-units transcripts and Harbor trial folders whose start output follows the marker logic in section 2, runs exposure.py on them and decide.py on its counts, with stub inputs that pass every other gate, and checks, in twelve cases, the one G3 gate each case targets, that every other G3 gate passes, and the Opus verdict:
+[g3-test.py](g3-test.py.txt) was written before the scripts changed. It is keyless and calls no model. It writes synthetic review-units transcripts and Harbor trial folders whose start output follows the marker logic in section 2, runs exposure.py on them and decide.py on its counts, with stub inputs that pass every other gate, and checks, in thirteen cases, the one G3 gate each case targets, that every other G3 gate passes, and the Opus verdict:
 
 1. a clean RENDER_KIND: unattended line passes;
 2. a start line cut by `tail -20` that kept UNATTENDED_SESSION: true is not observable and doesn't fail;
@@ -95,9 +95,10 @@ decide.py's review G3 reads the control and variant arms only, as #122's did. Th
 9. TB2 Opus variant start lines cut by the session pass;
 10. a pipe that drops RENDER_KIND but keeps SESSION_KIND (`tail -31` of 33 lines, `sed 1,2d`) is a cut and doesn't fail;
 11. a cut session that also shows RENDER_KIND: unattended elsewhere in its tool results stays in the count, and beside a real miss G3 fails;
-12. a session that only read gstack-skill-start's source can't fill the count beside a cut start line and a real miss: G3 fails.
+12. a session that only read gstack-skill-start's source can't fill the count beside a cut start line and a real miss: G3 fails;
+13. a start line cut by `head -20` that kept RENDER_KIND: unattended and dropped UNATTENDED_SESSION: true counts as printing the line and stays in the count, so G3 passes.
 
-[g3-test.txt](g3-test.txt) is the run. Against #122's scripts, cases 2, 4, 9 and 10 fail, which is the change, and cases 11 and 12 fail only because #122 lacks the new counts. Against this PR's first head (704cc0d), cases 10, 11 and 12 fail: 10 and 11 are the two holes the first /ship review round found. Against its second head (d7a8e01), case 12 fails: the hole the second round found. Each was fixed here test-first. Against this post's scripts all twelve pass, and in every case each count #122's exposure.py prints is unchanged.
+[g3-test.txt](g3-test.txt) is the run. Against #122's scripts, cases 2, 4, 9 and 10 fail, which is the change, and cases 11, 12 and 13 fail only because #122 lacks the new counts. Against this PR's first head (704cc0d), cases 10, 11 and 12 fail: 10 and 11 are the two holes the first /ship review round found. Against its second head (d7a8e01), case 12 fails: the hole the second round found. Each was fixed here test-first. Case 13 pins the head cut that Capy's review at 33a9105 found section 3's text misread. The scripts already read it as section 3 now says, and against both earlier heads the test fails on case 13 only because they lack `start_line_render_kind` (their G3 passes it). Against this post's scripts all thirteen pass, and in every case each count #122's exposure.py prints is unchanged.
 
 **GEVA-131's evidence.** The test also rebuilds the two review variant sessions from the evidence files: each session's start-line command and the 20 lines it kept. The control arm is two stand-in sessions that run no start line, as GEVA-131 reports. exposure.py reads the variant as 2 start-line sessions with 0 RENDER_KIND: unattended, 0 SESSION_KIND: unattended and 0 mismatch lines, the counts GEVA-131's run of #122's exposure.py gave on the full transcripts. decide.py's G3 then reads:
 

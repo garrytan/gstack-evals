@@ -5,7 +5,7 @@
 # review units are gstack's own pull requests and an agent that reads the repository under review touches the same names. Review
 # sessions are review-units transcripts (<out>/runs/<model>/<arm>/<unit>/p<n>/host/transcript.ndjson); TB2 trials are
 # Harbor trial folders (agent/sdk-messages.jsonl, or evaluator/ when present). No transcript text is printed.
-# G3 as amended by wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment reads three more counts from each start-line Bash call
+# G3 as amended by wiki/plans/2026-11-01-geva-136-ceremony-cut-g3-amendment reads four more counts from each start-line Bash call
 # and its own tool result: start_line_cut (every start line in the session ran with the session's own pipe or redirect, and its kept
 # output holds UNATTENDED_SESSION: true and no RENDER_KIND line), start_line_cut_render (those whose every start line also carried
 # --render unattended and whose tool results hold RENDER_KIND: unattended nowhere, so an excused session never adds to

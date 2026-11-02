@@ -87,6 +87,7 @@ CASES = [
     ('a pipe that drops RENDER_KIND but keeps SESSION_KIND (tail -31, sed 1,2d) is a cut, not a fail', {'control': CONTROL, 'variant': [[run(pipe='tail -31')], [run(pipe='sed 1,2d')]]}, {}, REVIEW, True, {'start_line': 2, 'render_kind_unattended': 0, 'start_line_cut_render': 2}),
     ('a cut session that shows RENDER_KIND: unattended elsewhere stays in the count beside a real miss, and fails', {'control': CONTROL, 'variant': [[run(render=False)], CUT + [SOURCE_HIT]]}, {}, REVIEW, False, {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 0}),
     ('a session that only read the source cannot fill the count beside a cut line and a real miss: fails', {'control': CONTROL, 'variant': [CUT, [run(render=False)], [SOURCE_HIT]]}, {}, REVIEW, False, {'start_line': 2, 'render_kind_unattended': 1, 'start_line_cut_render': 1, 'start_line_render_kind': 0}),
+    ('a head cut that keeps RENDER_KIND: unattended and drops UNATTENDED_SESSION: true (head -20) counts as printed and stays in the count', {'control': CONTROL, 'variant': [[run(pipe='head -20')]] * 2}, {}, REVIEW, True, {'start_line': 2, 'start_line_cut': 0, 'start_line_cut_render': 0, 'start_line_render_kind': 2}),
 ]
 
 def main():
