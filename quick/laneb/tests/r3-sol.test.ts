@@ -10,7 +10,7 @@ import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, toMicros, totals } from "../runner/ledger.ts";
 import { priceFor, costMicros, startProxy, type ProxyConfig } from "../runner/proxy.ts";
 import { loadR3Jobs, type R3Trial } from "../r3/exposure.ts";
-import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, SOL, vmBlock } from "../r3/screen.ts";
+import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, screenIds, SOL, vmBlock } from "../r3/screen.ts";
 import { judge, next, toolResults, type RouteRecord } from "../r3/route-check.ts";
 
 const here = import.meta.dir;
@@ -157,7 +157,9 @@ function load(trials: T[]): R3Trial[] {
 const say = (s: string) => ({ type: "AssistantMessage", content: [{ text: s }] });
 const toldTrial = (task: string, model = SOL, shown = true): T => ({ task, model, arm: "gstack", told: "investigate", spent: 1.1, cmdNames: ["investigate"], lines: [say(shown ? "Phase 1" : "done")] });
 
-// A prepared and pulled R3a work dir for one model: one none trial per band task (the first fails are failed) and one
+// The screened tasks: the band less the drop list.
+const N = screenIds().length;
+// A prepared and pulled R3a work dir for one model: one none trial per screened task (the first fails are failed) and one
 // told trial per pilot task, on that model's item.
 function work(m = sol, opts: { fails?: number; edit?: (parts: Record<string, T[]>) => void; after?: (w: string) => void; ledger?: string } = {}) {
   const w = tmp("sol-work-");
@@ -167,7 +169,7 @@ function work(m = sol, opts: { fails?: number; edit?: (parts: Record<string, T[]
   const pilotIds = pilotTasks(band);
   writeFileSync(join(w, "plan.json"), JSON.stringify({ item: m.item, pilot_tasks: pilotIds }));
   const parts: Record<string, T[]> = {
-    screen: band.map((task, i) => ({ task, model: m.id, reward: i < (opts.fails ?? 35) ? 0 : 1, spent: 0.6 })),
+    screen: screenIds().map((task, i) => ({ task, model: m.id, reward: i < (opts.fails ?? 35) ? 0 : 1, spent: 0.6 })),
     pilot: pilotIds.map((task) => toldTrial(task, m.id)),
   };
   opts.edit?.(parts);
@@ -223,8 +225,8 @@ describe("the screen per model", () => {
     const r = analyzeCli(w, ledger, SOL);
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("r3a-sol: 93 screen trials, 10 pilot trials, settled $0.00 of $140, open reserves 0");
-    expect(r.out).toContain("admission: 35 of 93 graded in-band tasks unsolved by GPT-6.1 Sol none (0 infra); pilot exposure 10 of 10 graded told trials");
+    expect(r.out).toContain(`r3a-sol: ${N} screen trials, 10 pilot trials, settled $0.00 of $140, open reserves 0`);
+    expect(r.out).toContain(`admission: 35 of ${N} graded in-band tasks unsolved by GPT-6.1 Sol none (0 infra); pilot exposure 10 of 10 graded told trials`);
     expect(r.out).toContain("R3b start for GPT-6.1 Sol: 35 tasks; measured cost per trial none $0.60, told $1.10; projection r3b-sol $179; Garry records r3b-sol's cap before Sol's R3b starts");
     const rec = JSON.parse(readFileSync(join(w, "record.json"), "utf8"));
     expect(rec).toMatchObject({ item: "r3a-sol", model: SOL, route_check: { verdict: "pass" }, outcome: "admitted", n: 35 });
@@ -353,6 +355,23 @@ describe("the screen per model", () => {
 
 // #121's notes (R3 amendment 6.6 item 5), for both models: launch.sh against the fake ubi-runner and ssh of
 // launch.test.ts, whose batch leaves a trial directory no config.json attributes, so the screen comes back incomplete.
+describe("image pulls", () => {
+  for (const m of [opus, sol]) {
+    test(`an image that didn't pull makes ${m.label}'s screen incomplete as infra before any model call, and the record keeps the pulls`, () => {
+      const { w, ledger } = work(m, { edit: (p) => { p.screen = []; }, after: (w) => {
+        rmSync(join(w, "screen", "pulled/out/proxy-sessions.jsonl"));
+        writeFileSync(join(w, "screen", "pulled/out/pull-fails.txt"), "img-x (django__django-10097)\n");
+        writeFileSync(join(w, "screen", "pulled/out/pulls.tsv"), "status\ttries\trate_limit_wait_s\timage\nFAIL\t6\t10800\timg-x\nok\t1\t300\timg-y\n");
+        writeFileSync(join(w, "screen.launch-exit"), "10\n");
+      } });
+      const r = analyzeCli(w, ledger, m.id);
+      expect(r.code).toBe(4);
+      expect(r.out).toContain(`R3 outcome${m.tag}: none (incomplete: screen: infra before any model call: an image did not pull (6 tries and up to 3 hours at the rate limit): img-x (django__django-10097)). ${m.incomplete}`);
+      expect(JSON.parse(readFileSync(join(w, "record.json"), "utf8")).pulls).toEqual({ screen: { images: 2, failed: ["img-x"], rate_limit_wait_s: 11100 }, pilot: null });
+    });
+  }
+});
+
 describe("#121's notes", () => {
   for (const m of [opus, sol]) {
     test(`run doesn't launch ${m.label}'s pilot after its screen came back incomplete`, () => {
@@ -371,7 +390,7 @@ describe("#121's notes", () => {
       const out = r.stdout.toString();
       expect(r.exitCode).toBe(0);
       expect(readFileSync(join(w!, "screen.launch-exit"), "utf8")).toBe("0\n");
-      expect(out).toContain("screen is incomplete (screen: 93 of 93 planned tasks have no trial");
+      expect(out).toContain(`screen is incomplete (screen: ${N} of ${N} planned tasks have no trial`);
       expect(existsSync(join(w!, "pilot.launch-exit"))).toBe(false);
       expect(readFileSync(events, "utf8").split("\n").filter((e) => e.startsWith("up "))).toHaveLength(1);
       expect(readRows(ledger).filter((x) => x.kind === "reserve").map((x) => x.id)).toEqual([m.parts[0]!.prefix + "vm"]);
@@ -400,8 +419,12 @@ describe("#121's notes", () => {
 // session and writes the trial. STUB_PLAN sets a session's mode by part and try, as in told2=noexpand: harbor (exit 1,
 // no trial), noexpand, noresponse (no request reaches the model), notool, latefail (a passing trial, then exit 1), and
 // three failures on our side: killproxy and killledger (the stub stops that local service after its request) and hang
-// (it writes its pid to <STUB_LOG>.hang and waits to be stopped). STUB_SLEEP holds every session that many ms.
-const STUB = `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+// (it writes its pid to <STUB_LOG>.hang and waits to be stopped). hangkid hangs the same way with a child in Harbor's
+// process group (its pid in <STUB_LOG>.kid), and stubborn does too with both ignoring SIGTERM. badtrial writes a trial
+// whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), nomsgs leaves it out
+// (ENOENT), noread makes it unreadable (EACCES), noeval makes the evaluator dir unsearchable (EACCES on stat), and nolog makes the check's own log of the session a directory, so the
+// check fails writing it. STUB_SLEEP holds every session that many ms.
+const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = process.argv.slice(2);
 const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
@@ -423,6 +446,14 @@ if (mode !== "noresponse") {
 if (mode === "killproxy") Bun.spawnSync(["pkill", "-f", "proxy.ts --config " + process.env.PROXY_CONFIG]);
 if (mode === "killledger") Bun.spawnSync(["pkill", "-f", "ledger.ts serve --path " + process.env.LEDGER]);
 if (mode === "hang") { writeFileSync(log + ".hang", String(process.pid)); await Bun.sleep(600_000); }
+if (mode === "hangkid" || mode === "stubborn") {
+  if (mode === "stubborn") process.on("SIGTERM", () => {});
+  Bun.spawn(["bash", "-c", (mode === "stubborn" ? "trap '' TERM; " : "") + 'echo $$ > "$0.kid"; exec sleep 600', log], { stdio: ["ignore", "ignore", "ignore"] });
+  while (!existsSync(log + ".kid")) await Bun.sleep(20);
+  writeFileSync(log + ".hang", String(process.pid));
+  await Bun.sleep(600_000);
+}
+if (mode === "nolog") mkdirSync(join(process.cwd(), job.job_name + ".log"));
 if (process.env.STUB_SLEEP) await Bun.sleep(Number(process.env.STUB_SLEEP));
 await fetch(control + "/sessions/" + s.id + "/close", { method: "POST", body: "{}" }).catch(() => undefined);
 const d = join(process.cwd(), "jobs", job.job_name, trial);
@@ -430,7 +461,10 @@ mkdirSync(join(d, "evaluator"), { recursive: true });
 writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: task }, agent: { name: a.name, kwargs: k } }));
 writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: trial, verifier_result: { rewards: { reward: 1 } }, exception_info: null }));
 const msgs = mode === "notool" ? [{ type: "AssistantMessage", content: [{ text: "done" }] }] : [{ type: "AssistantMessage", content: [{ id: "t1", name: "Bash", input: { command: "cat calc.py" } }] }, { type: "UserMessage", content: [{ tool_use_id: "t1", content: "def add" }] }];
-writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), msgs.map((m) => JSON.stringify(m)).join("\\n") + "\\n");
+if (mode === "dirmsgs") mkdirSync(join(d, "evaluator", "sdk-messages.jsonl"));
+else if (mode !== "nomsgs") writeFileSync(join(d, "evaluator", "sdk-messages.jsonl"), (mode === "badtrial" ? "null\\n" : "") + msgs.map((m) => JSON.stringify(m)).join("\\n") + "\\n");
+if (mode === "noread") chmodSync(join(d, "evaluator", "sdk-messages.jsonl"), 0);
+if (mode === "noeval") chmodSync(join(d, "evaluator"), 0);
 process.exit(mode === "latefail" ? 1 : 0);
 `;
 
@@ -504,6 +538,58 @@ describe("the route check's verdicts", () => {
     expect(next(rec([s("smoke", 1, false), ours(s("smoke", 2, false), "the proxy is down (exit 1)")]))).toEqual({ kind: "smoke", try: 2 });
     expect(next(rec([s("smoke", 1, true), ours(s("told", 1, true), "the proxy latched a cap stop: x"), s("told", 1, false)]))).toEqual({ kind: "told", try: 2 });
     expect(next(rec([s("smoke", 1, false, false), s("smoke", 1, false)]))).toEqual({ kind: "smoke", try: 2 });
+  });
+
+  test("a trial whose files can't be read is a failed try with the read error as its reason, not a throw", () => {
+    const d = tmp("sol-judge-bad-");
+    const job = join(d, "job");
+    writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
+    const msgs = join(job, "job", "smoke-task__0", "evaluator", "sdk-messages.jsonl");
+    writeFileSync(msgs, "null\n" + readFileSync(msgs, "utf8"));
+    const sessions = readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    for (const kind of ["smoke", "told"] as const) {
+      const j = judge(kind, 0, join(job, "job"), sessions, proxyConfig);
+      expect(j).toMatchObject({ pass: false, trial: null, tool_results: 0, proxy_session: null });
+      expect(j.reasons).toHaveLength(1);
+      expect(j.reasons[0]).toStartWith("the trial's files could not be read: ");
+    }
+    const failed = judge("told", 1, join(job, "job"), sessions, proxyConfig).reasons;
+    expect(failed[0]).toBe("Harbor exited 1");
+    expect(failed[1]).toStartWith("the trial's files could not be read: ");
+  });
+
+  test.skipIf(process.getuid?.() === 0)("a trial read that fails on our machine (EACCES) throws, so the check ends incomplete; a directory where a trial file should be stays a failed try", () => {
+    const d = tmp("sol-judge-ours-");
+    const job = join(d, "job");
+    writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
+    const msgs = join(job, "job", "smoke-task__0", "evaluator", "sdk-messages.jsonl");
+    const sessions = readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    chmodSync(msgs, 0);
+    expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
+    rmSync(msgs);
+    mkdirSync(msgs);
+    const j = judge("smoke", 0, join(job, "job"), sessions, proxyConfig);
+    expect(j.pass).toBe(false);
+    expect(j.reasons[0]).toStartWith("the trial's files could not be read: ");
+    expect(j.reasons[0]).toContain("EISDIR");
+  });
+
+  test.skipIf(process.getuid?.() === 0)("an unreadable config.json or result.json, or an evaluator dir that can't be searched, throws too; a trial file missing inside the trial dir (ENOENT) stays a failed try", () => {
+    const d = tmp("sol-judge-files-");
+    const job = join(d, "job");
+    writeTrial(job, join(d, "s.jsonl"), toldTrial("smoke-task"), 0);
+    const dir = join(job, "job", "smoke-task__0");
+    const sessions = readFileSync(join(d, "s.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    rmSync(join(dir, "evaluator", "sdk-messages.jsonl"));
+    expect(judge("smoke", 0, join(job, "job"), sessions, proxyConfig).pass).toBe(false);
+    for (const f of ["config.json", "result.json"]) {
+      chmodSync(join(dir, f), 0);
+      expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
+      chmodSync(join(dir, f), 0o644);
+    }
+    chmodSync(join(dir, "evaluator"), 0);
+    expect(() => judge("smoke", 0, join(job, "job"), sessions, proxyConfig)).toThrow("EACCES reading the trial: ");
+    chmodSync(join(dir, "evaluator"), 0o755);
   });
 });
 
@@ -592,6 +678,21 @@ describe("route-check.ts", () => {
     expect(rec).toMatchObject({ verdict: "pass", reason: "smoke passed on try 2, told passed on try 1", incomplete: null, reruns: [{ after: cut }] });
   }, 60_000);
 
+  test("a malformed trial is a failure on the route's side: a failed try, retried once, and a second one drops Sol (A1)", async () => {
+    const r = rig();
+    const { code, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=badtrial" });
+    expect(code).toBe(0);
+    expect(rec!.sessions.map((s) => [s.kind, s.try, s.pass, s.infra])).toEqual([["smoke", 1, false, null], ["smoke", 2, true, null], ["told", 1, true, null]]);
+    expect(rec!.sessions[0]!.reasons).toHaveLength(1);
+    expect(rec!.sessions[0]!.reasons[0]).toStartWith("the trial's files could not be read: ");
+    expect(rec).toMatchObject({ verdict: "pass", reason: "smoke passed on try 2, told passed on try 1", incomplete: null });
+    const twice = rig();
+    const dropped = await routeCheck(twice, { STUB_PLAN: "smoke1=badtrial,smoke2=badtrial" });
+    expect(dropped.code).toBe(1);
+    expect(dropped.rec).toMatchObject({ verdict: "drop", incomplete: null });
+    expect(dropped.rec!.reason).toStartWith("the smoke part failed twice: try 1: the trial's files could not be read: ");
+  }, 60_000);
+
   test("it refuses Opus, another cap, a bound item and arm tars off their manifests, before any session", async () => {
     const r = rig();
     expect((await routeCheck(r, {}, ["--model", OPUS])).out).toContain("E_USAGE claude-opus-5-5 has no route check in R3a (route-checked models: gpt-6.1-sol)");
@@ -636,6 +737,43 @@ describe("route-check.ts failures on our side (A1)", () => {
     }, 60_000);
   }
 
+  test.skipIf(process.getuid?.() === 0)("a trial the check can't read for a reason on our machine (EACCES) ends it incomplete with the errno named: no try counted, and a plain rerun doesn't loop", async () => {
+    const r = rig();
+    const { code, out, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=noread" });
+    expect(code).toBe(4);
+    expect(calls).toHaveLength(1);
+    expect(rec).toMatchObject({ verdict: null, reason: null });
+    expect(rec!.incomplete).toStartWith("smoke try 1: the route check failed during the session: EACCES reading the trial: ");
+    expect(out).toContain("route check: gpt-6.1-sol is incomplete on r3a-sol: smoke try 1: the route check failed during the session: EACCES");
+    expect(next(rec!)).toEqual({ kind: "smoke", try: 1 });
+    const again = await routeCheck(r);
+    expect(again.code).toBe(4);
+    expect(again.calls).toHaveLength(1);
+  }, 60_000);
+
+  test.skipIf(process.getuid?.() === 0)("a trial whose evaluator dir can't be searched (EACCES on stat, not a missing file) ends the check incomplete: no try counted", async () => {
+    const r = rig();
+    const { code, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=noeval" });
+    expect(code).toBe(4);
+    expect(calls).toHaveLength(1);
+    expect(rec).toMatchObject({ verdict: null, reason: null });
+    expect(rec!.incomplete).toStartWith("smoke try 1: the route check failed during the session: EACCES reading the trial: ");
+  }, 60_000);
+
+  test("a malformed trial and a directory where a trial file should be are the route's failures: each counts as a try", async () => {
+    const r = rig();
+    const { code, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=badtrial,smoke2=dirmsgs" });
+    expect(code).toBe(1);
+    expect(rec).toMatchObject({ verdict: "drop", incomplete: null });
+    expect(rec!.reason).toStartWith("the smoke part failed twice: try 1: the trial's files could not be read: ");
+    expect(rec!.reason).toContain("EISDIR");
+    const missing = await routeCheck(rig(), { STUB_PLAN: "smoke1=nomsgs,smoke2=badtrial" });
+    expect(missing.code).toBe(1);
+    expect(missing.calls).toHaveLength(2);
+    expect(missing.rec).toMatchObject({ verdict: "drop", incomplete: null });
+    expect(missing.rec!.reason).toStartWith("the smoke part failed twice: try 1: ");
+  }, 60_000);
+
   test("a cap stop the proxy latches ends the check incomplete instead of counting a failed try", async () => {
     const r = rig();
     const L = new Ledger(r.ledger, "r3a-sol");
@@ -670,6 +808,90 @@ describe("route-check.ts failures on our side (A1)", () => {
       expect(() => process.kill(stub, 0)).toThrow();
       expect(() => routePassed(r.ledger, sol, [join(r.dir, "proxy.json")])).toThrow(`GPT-6.1 Sol's route check on r3a-sol is incomplete (smoke try 1: interrupted by ${sig})`);
     }, 60_000);
+  }
+
+  test("a failure of the check itself during a session ends it incomplete with exit 4, not 1, and a rerun needs --rerun", async () => {
+    const r = rig();
+    const why = "smoke try 1: the route check failed during the session: ";
+    const { code, out, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=nolog" });
+    expect(code).toBe(4);
+    expect(calls).toHaveLength(1);
+    expect(out).toContain(`route check: gpt-6.1-sol is incomplete on r3a-sol: ${why}`);
+    expect(rec).toMatchObject({ verdict: null, reason: null, open_route_reserves: [] });
+    expect(rec!.incomplete).toStartWith(why);
+    expect(rec!.sessions).toHaveLength(1);
+    expect(rec!.sessions[0]!.finished_at).not.toBeNull();
+    expect(rec!.sessions[0]!.infra).toStartWith("the route check failed during the session: ");
+    expect(next(rec!)).toEqual({ kind: "smoke", try: 1 });
+    const again = await routeCheck(r);
+    expect(again.code).toBe(4);
+    expect(again.calls).toHaveLength(1);
+  }, 60_000);
+
+  test("after --rerun past a cut-short session, a failure during this run's session is recorded against that session, not the stale one", async () => {
+    const r = rig();
+    const stale = "the session did not finish: the route check stopped during it (a machine sleep or a kill)";
+    writeFileSync(routeRecordPath(r.ledger), JSON.stringify({ item: "r3a-sol", model: SOL, verdict: null, reason: null, proxy_config_sha256: sha(readFileSync(join(r.dir, "proxy.json"))), sessions: [{ kind: "smoke", try: 1, job: "j", started_at: "x", finished_at: null, pass: false, reasons: [] }] }));
+    const { code, calls, rec } = await routeCheck(r, { STUB_PLAN: "smoke1=nolog" }, ["--rerun"]);
+    expect(code).toBe(4);
+    expect(calls).toHaveLength(1);
+    expect(rec!.sessions).toHaveLength(2);
+    expect(rec!.sessions[0]).toMatchObject({ job: "j", finished_at: null, infra: stale });
+    expect(rec!.sessions[1]).toMatchObject({ job: calls[0].job, kind: "smoke", try: 1 });
+    expect(rec!.sessions[1]!.finished_at).not.toBeNull();
+    expect(rec!.sessions[1]!.infra).toStartWith("the route check failed during the session: ");
+    expect(rec!.incomplete).toStartWith("smoke try 1: the route check failed during the session: ");
+    expect(rec!.reruns).toMatchObject([{ after: `smoke try 1: ${stale}` }]);
+  }, 60_000);
+
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    test(`${sig} while the services come up, before any session, records just that: nothing spent, no try counted, and a plain rerun goes on`, async () => {
+      const r = rig();
+      const marker = join(r.dir, "proxy-starting");
+      writeFileSync(join(r.dir, "slow.ts"), `import { writeFileSync } from "node:fs";\nif (process.argv.some((a) => a.endsWith("proxy.ts"))) { writeFileSync(${JSON.stringify(marker)}, ""); await Bun.sleep(10_000); }\n`);
+      const { p, env } = spawnRouteCheck(r, { BUN_OPTIONS: "--preload " + join(r.dir, "slow.ts") });
+      for (let i = 0; i < 300 && !existsSync(marker); i++) await Bun.sleep(50);
+      p.kill(sig);
+      const { code, out, calls, rec } = await finish(r, p);
+      expect(code).toBe(4);
+      expect(calls).toEqual([]);
+      expect(out).toContain(`route check: gpt-6.1-sol was interrupted by ${sig} on r3a-sol before smoke try 1 started: no session was running, so it spent nothing and counted no try; a plain rerun starts smoke try 1`);
+      expect(rec).toMatchObject({ verdict: null, reason: null, incomplete: null, sessions: [], open_route_reserves: [] });
+      expect(rec!.interruptions).toMatchObject([{ signal: sig, before: "smoke try 1" }]);
+      expect(readRows(r.ledger).filter((x) => x.kind !== "approval")).toEqual([]);
+      for (const port of [env.LEDGER_PORT!, env.PROXY_DATA_PORT!, env.PROXY_CONTROL_PORT!]) expect(portTaken("127.0.0.1", port)).toBe(false);
+      const again = await routeCheck(r);
+      expect(again.code).toBe(0);
+      expect(again.calls.map((c) => c.kind)).toEqual(["smoke", "told"]);
+      expect(again.rec).toMatchObject({ verdict: "pass", incomplete: null, interruptions: [{ signal: sig, before: "smoke try 1" }] });
+    }, 60_000);
+  }
+
+  // A process counts as gone once kill(0) fails or the kernel lists it as a zombie (its parent hasn't reaped it yet).
+  const alive = (pid: number) => {
+    try { process.kill(pid, 0); } catch { return false; }
+    return !existsSync(`/proc/${pid}/stat`) || !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+  };
+  for (const [mode, label, slow] of [["hangkid", "SIGTERM reaches Harbor's whole process group", false], ["stubborn", "the SIGKILL 30 s later reaches Harbor's whole process group", true]] as const) {
+    test(`${label}, so no child of Harbor's outlives the check`, async () => {
+      const r = rig();
+      const { p } = spawnRouteCheck(r, { STUB_PLAN: `smoke1=${mode}` });
+      const marker = join(r.dir, "calls.jsonl.hang");
+      for (let i = 0; i < 300 && !existsSync(marker); i++) await Bun.sleep(100);
+      const pids = [Number(readFileSync(marker, "utf8")), Number(readFileSync(join(r.dir, "calls.jsonl.kid"), "utf8"))];
+      try {
+        const t0 = Date.now();
+        p.kill("SIGTERM");
+        const { code, rec } = await finish(r, p);
+        expect(code).toBe(4);
+        expect(rec!.incomplete).toBe("smoke try 1: interrupted by SIGTERM");
+        if (slow) expect(Date.now() - t0).toBeGreaterThanOrEqual(29_000);
+        else expect(Date.now() - t0).toBeLessThan(25_000);
+        expect(pids.filter(alive)).toEqual([]);
+      } finally {
+        for (const pid of pids) try { process.kill(pid, "SIGKILL"); } catch {}
+      }
+    }, 90_000);
   }
 });
 
