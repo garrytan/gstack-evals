@@ -124,7 +124,7 @@ Tokens per arm, summed from each session's metered usage over 16 sessions ([toke
 | gstack-forced | 200 | 5,239,095 | 951,551 | 168,014 | 6,358,860 | 100 | $9.17 |
 | All arms | 418 | 8,809,055 | 1,702,914 | 313,736 | 10,826,123 | 209 | $16.55 |
 
-So per session, gstack used 2.6 times none's tokens and cost 2.5 times as much (medians), and gstack-forced used 5.1 times the tokens at 4.5 times the cost. Neither bought any recall on this panel.
+So per session, gstack used 2.6 times none's tokens (means) and cost 2.5 times as much (medians), and gstack-forced used 5.1 times the tokens (means) at 4.5 times the cost (medians). Neither bought any recall on this panel.
 
 | Judge stage | Model | Input | Cache write | Output | Reasoning | Requests | Dollars |
 |---|---|---|---|---|---|---|---|
@@ -176,7 +176,7 @@ The panel disposition is NOT ADMITTED and flags F1 and F3 are raised, so one Why
 
 ## Replicate it
 
-1. **Reanalysis (keyless, for holders of the panel key).** Open planning-v2-admission-run-v1.tgz.age under custody and check its digests. Check out the scorer at a5633c6, then run the commands in [commands.txt](commands.txt) from the raw-arm ingest onward. The expected output is the attached files, line for line. Outsiders can't run this today. They can check the digests.
+1. **Reanalysis (keyless, for holders of the panel key).** Open planning-v2-admission-run-v1.tgz.age under custody and check its digests. Check out the scorer at a5633c6, then run the commands in [commands.txt](commands.txt) from the raw-arm ingest onward. The expected output is the attached files, line for line, with two exceptions. commands.txt shows one power call and describes the rest of the power.txt grid in a comment. sessions.txt, readings-extra.txt and tokens.txt come from aggregation passes that are not published (see below). Outsiders can't run this today. They can check the digests.
 2. **Rerun (paid).** Open the run bundle and run the frozen command from prereg section 2, then the judging steps in commands.txt. This run cost $16.55 for 48 sessions and $2.51 for judging. R reads in steps of 1/24, so a rerun that misses one hit reads 0.96, still above the band.
 
 The attached record holds the lines the frozen scripts printed and the commands that ran. It leaves out the machine setup (age, the trial image, the pinned gstack clone) and the paid sessions' transcripts. sessions.txt, readings-extra.txt and tokens.txt come from short aggregation passes over the sealed run records, not from frozen code.
