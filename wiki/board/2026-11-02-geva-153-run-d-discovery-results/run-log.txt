@@ -1,0 +1,129 @@
+===== RECORD.md
+# Run D run record (GEVA-153)
+
+Prereg #125 (main 9820b149). Runner tag laneb-discovery-3-runner 025135a4 on 16e075e0. Worktree <work>/runner; VM copy runner-export/ (git archive of the tag's quick/laneb, byte-identical).
+
+## Steps
+- 02:50:36Z ledger approval row, $200 ceiling (Captain's A, approvals file section "Ledger ceiling raised to $200"), ledger/discovery-r1.jsonl. Written with Ledger.approve, whose appendDurable swallows fsync's ENOTSUP on the Drive mount (ledger.ts line 53); the service's reserve and settle rows use the same function. start-rule.ts appendNote does not swallow it, so each launch gates on `check` without --note (exit 0), then records with --note (exits 1 after writing) and the row is compared with the gate.
+- 02:50:56Z grid check PASS (prep.log): 4 batches, 17 cells, 37 tasks, every arm tar equal to its committed manifest, labels, sdk_max_turns 60, invoke false, empty skill map, oracle.json present, git 16e075e clean.
+
+## Batch caps (proxy --global-cap-usd)
+The proxy's global cap counts this batch's own metered spend plus the worst case of its in-flight requests (proxy.ts line 325); it does not count ledger reserves, and a refusal there does not latch (only a ledger refusal sets capStop, line 212). The Captain's floor still applies: cap >= 1.4 x projection + 12 x session cap, and running caps plus settled under $200.
+
+| Batch | Projection | 1.4x | 12 x session cap | Floor | Running caps + settled at launch (projection / allowance) | Cap |
+|---|---|---|---|---|---|---|
+| particle-1 | $11.56 | $16.18 | $6.00 | $22.18 | 22.18 + 0.79 = $22.97 / 22.18 + 1.11 = $23.29 | $22.18 |
+| claude-opus-5-5 | $42.06 | $58.88 | $60.00 | $118.88 | with r2: 118.88 + 77.18 + 12.35 = $208.41 / + 17.29 = $213.35, over $200 | none ($200, which cannot bind before the ledger) |
+| claude-opus-5-5/r2 | $12.27 | $17.18 | $60.00 | $77.18 | same | none ($200) |
+| gpt-6.1-sol | $22.98 | $32.17 | $30.00 | $62.17 | 62.17 + 66.69 = $128.86 / 62.17 + 93.36 = $155.53 | $62.17 if it fits at launch |
+
+## ubi-runner pack check (GSTA-2 correction)
+- ubi-runner.sh sha256 e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8. Launches sync runner-export/quick/laneb/runner (a git archive export of the tag, not a git checkout) and runs/<batch> (under <work>, not a git checkout). Keyless pack on both Sol dirs: both exit 0 (next section).
+
+- Pack check result: keyless `ubi-runner.sh pack <dir> > /dev/null` exited 0 on runner-export/quick/laneb/runner and exited 0 on runs/gpt-6.1-sol, at 2026-11-02T05:5xZ, before the Sol launch. The run syncs the git archive export path (runner-export), not a git checkout. The Opus rerun batches were already past their first sync when the GSTA-2 correction arrived.
+
+## Opus rerun results (claude-opus-5-5-b, claude-opus-5-5-r2-b)
+- Both controllers exited 0 at 06:00:48Z. claude-opus-5-5-b: 260 sessions, $38.204743 metered, cap_stop null, 0 open sessions, VM ubirun-geva153-1793594096-08ff1544-t12 destroyed 06:00:33Z. claude-opus-5-5-r2-b: 74 sessions, $11.343307, cap_stop null, VM ubirun-geva153-1793594102-ca8ea890-t12 destroyed 05:19:05Z. No oracle failures in any batch so far.
+- Lost settle: session s-3ac119dfbd14 (trial sparql-university__oXRYrEj, gstack-rewritten@sdk-default, Opus) ran 6 requests, then its close call returned 500 (job.log line 651), so the proxy wrote no session row (259 rows for 260 sessions) and the ledger reserve dob-s-3ac119dfbd14 ($5.00) stayed open. Harbor reran the trial (reward 1). Settled by hand at 06:0xZ through the ledger service's /settle at the request-log cost $0.145598 (settle_lost.py), meta manual true. Ledger after: settled $59.259068, open 0.
+- Section 7 treats it as a rerun after a model response. The proxy's sessions file lacks the first attempt, so analysis/lost-session.jsonl rebuilds its row from proxy-requests.jsonl (as GEVA-128's recovered-sessions.jsonl did). The primary reading uses the files as written; the recovered reading adds the row. Only that cell's retried count and its scored-0 sensitivity change.
+- None-arm audit: 0 of 37 none@claude-code-preset and 0 of 37 none@sdk-default Opus transcripts name a drive, gstack or SKILL.md path.
+
+## gpt-6.1-sol launch
+- Start rule: `start-rule.ts check --batch gpt-6.1-sol` exit 0 (settled $59.259068, open 0, projected $22.9844, bound $91.437228 vs $126; sr-sol-gate.json). Then --note (exit 1 from fsync ENOTSUP after writing); the tail row has kind note and start_rule equal to the gate JSON.
+- Batch cap $62.17 = 1.4 x $22.98 + 12 x $2.50. Running caps plus settled at launch: 62.17 + 59.26 = $121.43, under $200. Launched 06:03Z with prefix ds-, VM ubirun-geva153-1793599291-96ce8b9d-t12.
+
+
+===== prep.log (tail)
+<work>/runs/particle-1: 37 tasks x 4 (model, arm) cells x 1 attempts, git 16e075e
+<work>/runs/claude-opus-5-5: 37 tasks x 7 (model, arm) cells x 1 attempts, git 16e075e
+<work>/runs/claude-opus-5-5-r2: 37 tasks x 2 (model, arm) cells x 1 attempts, git 16e075e
+<work>/runs/gpt-6.1-sol: 37 tasks x 4 (model, arm) cells x 1 attempts, git 16e075e
+grid particle-1: 37 tasks, 4 cells ['none@claude-code-preset', 'gstack@claude-code-preset', 'gstack-rewritten@claude-code-preset', 'placebo@claude-code-preset'], max_turns 60, invoke False, arms none=8bab483364e4, gstack=b93994689107, gstack-rewritten=a456c0c33161, placebo=ff6b909d89d8
+  agent kwargs keys: arm,arm_sha256,arm_tar,invoke,max_output_tokens,persona_path,sdk_max_turns,session_cap_usd,skill_map,skip_install,system_prompt,upstream_model,wrapper_path
+grid claude-opus-5-5: 37 tasks, 7 cells ['none@claude-code-preset', 'gstack@claude-code-preset', 'gstack-rewritten@claude-code-preset', 'placebo@claude-code-preset', 'none@sdk-default', 'gstack@sdk-default', 'gstack-rewritten@sdk-default'], max_turns 60, invoke False, arms none=8bab483364e4, gstack=b93994689107, gstack-rewritten=a456c0c33161, placebo=ff6b909d89d8, none=8bab483364e4, gstack=b93994689107, gstack-rewritten=a456c0c33161
+  agent kwargs keys: arm,arm_sha256,arm_tar,invoke,max_output_tokens,persona_path,sdk_max_turns,session_cap_usd,skill_map,skip_install,system_prompt,upstream_model,wrapper_path
+grid claude-opus-5-5-r2: 37 tasks, 2 cells ['gstack@claude-code-preset', 'gstack@sdk-default'], max_turns 60, invoke False, arms gstack=b93994689107, gstack=b93994689107
+  agent kwargs keys: arm,arm_sha256,arm_tar,invoke,max_output_tokens,persona_path,sdk_max_turns,session_cap_usd,skill_map,skip_install,system_prompt,upstream_model,wrapper_path
+grid gpt-6.1-sol: 37 tasks, 4 cells ['none@claude-code-preset', 'gstack@claude-code-preset', 'gstack-rewritten@claude-code-preset', 'placebo@claude-code-preset'], max_turns 60, invoke False, arms none=8bab483364e4, gstack=b93994689107, gstack-rewritten=a456c0c33161, placebo=ff6b909d89d8
+  agent kwargs keys: arm,arm_sha256,arm_tar,invoke,max_output_tokens,persona_path,sdk_max_turns,session_cap_usd,skill_map,skip_install,system_prompt,upstream_model,wrapper_path
+GRID CHECK PASS: 4 batches, 17 cells, every tar = its committed manifest, every label, sdk_max_turns 60, invoke false
+harbor: 0.25.0
+prep done 2026-11-02T02:50:56Z
+===== route-d.log (tail)
+{"model":"gpt-6.1-sol","spent_usd":0.029112,"requests":1,"refused":0,"close_reason":"agent_finished","usage":{"input_tokens":3,"output_tokens":51,"cache_creation_input_tokens":14298,"cache_creation_1h_input_tokens":0,"cache_read_input_tokens":0}}
+<work>/route-d/jobs/route-claude-opus-5-5-1793588044/task__YCVtsZ3/verifier/reward.txt 1
+<work>/route-d/jobs/route-gpt-6.1-sol-1793588137/task__kcg7xUN/verifier/reward.txt 1
+<work>/route-d/jobs/route-particle-1-1793587918/task__PmnyQR2/verifier/reward.txt 1
+{"cap_usd":200,"settled_usd":0.144349,"open_reserved_usd":0,"open_ids":0}
+route check: passed for particle-1 claude-opus-5-5 gpt-6.1-sol
+===== sr-opus-b-gate.json
+{"run":"discovery-r1","cap_usd":126,"settled_usd":9.711018,"open_reserved_usd":0,"batches":[{"model":"claude-opus-5-5","remaining":{"none@claude-code-preset":37,"gstack@claude-code-preset":37,"gstack-rewritten@claude-code-preset":37,"placebo@claude-code-preset":37,"none@sdk-default":37,"gstack@sdk-default":37,"gstack-rewritten@sdk-default":37},"projected_usd":42.0616}],"projected_usd":42.0616,"margin":1.4,"bound_usd":68.597258,"pass":true}
+
+===== sr-opus-gate.json
+{"run":"discovery-r1","cap_usd":126,"settled_usd":9.711018,"open_reserved_usd":0,"batches":[{"model":"claude-opus-5-5","remaining":{"none@claude-code-preset":37,"gstack@claude-code-preset":37,"gstack-rewritten@claude-code-preset":37,"placebo@claude-code-preset":37,"none@sdk-default":37,"gstack@sdk-default":37,"gstack-rewritten@sdk-default":37},"projected_usd":42.0616}],"projected_usd":42.0616,"margin":1.4,"bound_usd":68.597258,"pass":true}
+
+===== sr-opus-r2-b-gate.json
+{"run":"discovery-r1","cap_usd":126,"settled_usd":9.711018,"open_reserved_usd":0,"batches":[{"model":"claude-opus-5-5/r2","remaining":{"gstack@claude-code-preset":37,"gstack@sdk-default":37},"projected_usd":12.2729},{"model":"claude-opus-5-5","remaining":{"none@claude-code-preset":37,"gstack@claude-code-preset":37,"gstack-rewritten@claude-code-preset":37,"placebo@claude-code-preset":37,"none@sdk-default":37,"gstack@sdk-default":37,"gstack-rewritten@sdk-default":37},"projected_usd":42.0616}],"projected_usd":54.3345,"margin":1.4,"bound_usd":85.779318,"pass":true}
+
+===== sr-opus-r2-gate.json
+{"run":"discovery-r1","cap_usd":126,"settled_usd":9.711018,"open_reserved_usd":0,"batches":[{"model":"claude-opus-5-5/r2","remaining":{"gstack@claude-code-preset":37,"gstack@sdk-default":37},"projected_usd":12.2729},{"model":"claude-opus-5-5","remaining":{"none@claude-code-preset":37,"gstack@claude-code-preset":37,"gstack-rewritten@claude-code-preset":37,"placebo@claude-code-preset":37,"none@sdk-default":37,"gstack@sdk-default":37,"gstack-rewritten@sdk-default":37},"projected_usd":42.0616}],"projected_usd":54.3345,"margin":1.4,"bound_usd":85.779318,"pass":true}
+
+===== sr-particle-gate.json
+{"run":"discovery-r1","cap_usd":126,"settled_usd":0.144349,"open_reserved_usd":0,"batches":[{"model":"particle-1","remaining":{"none@claude-code-preset":37,"gstack@claude-code-preset":37,"gstack-rewritten@claude-code-preset":37,"placebo@claude-code-preset":37},"projected_usd":11.5588}],"projected_usd":11.5588,"margin":1.4,"bound_usd":16.326669,"pass":true}
+
+===== sr-sol-gate.json
+{"run":"discovery-r1","cap_usd":126,"settled_usd":59.259068,"open_reserved_usd":0,"batches":[{"model":"gpt-6.1-sol","remaining":{"none@claude-code-preset":37,"gstack@claude-code-preset":37,"gstack-rewritten@claude-code-preset":37,"placebo@claude-code-preset":37},"projected_usd":22.9844}],"projected_usd":22.9844,"margin":1.4,"bound_usd":91.437228,"pass":true}
+
+===== runs/particle-1.ctl.log (tail)
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/discovery-r1-particle-1`
+
+{"global_spent_micros":9566669,"cap_stop":null,"open_sessions":0,"sessions":148}ubi-runner: destroy requested: eu-central-h1/ubirun-geva153-1793588503-ec5f660c-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva153-1793588503-ec5f660c-t12
+2026-11-02T04:28:18Z destroyed ubirun-geva153-1793588503-ec5f660c-t12
+===== runs/claude-opus-5-5-b.ctl.log (tail)
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/discovery-r1-claude-opus-5-5-b`
+
+{"global_spent_micros":38204743,"cap_stop":null,"open_sessions":0,"sessions":260}ubi-runner: destroy requested: eu-central-h1/ubirun-geva153-1793594096-08ff1544-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva153-1793594096-08ff1544-t12
+2026-11-02T06:00:33Z destroyed ubirun-geva153-1793594096-08ff1544-t12
+===== runs/claude-opus-5-5-r2-b.ctl.log (tail)
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/discovery-r1-claude-opus-5-5-r2-b`
+
+{"global_spent_micros":11343307,"cap_stop":null,"open_sessions":0,"sessions":74}ubi-runner: destroy requested: eu-central-h1/ubirun-geva153-1793594102-ca8ea890-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva153-1793594102-ca8ea890-t12
+2026-11-02T05:19:05Z destroyed ubirun-geva153-1793594102-ca8ea890-t12
+===== runs/gpt-6.1-sol.ctl.log (tail)
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/discovery-r1-gpt-6.1-sol`
+
+{"global_spent_micros":24416600,"cap_stop":null,"open_sessions":0,"sessions":148}ubi-runner: destroy requested: eu-central-h1/ubirun-geva153-1793599291-96ce8b9d-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva153-1793599291-96ce8b9d-t12
+2026-11-02T07:10:31Z destroyed ubirun-geva153-1793599291-96ce8b9d-t12
+===== runs/attempt1/claude-opus-5-5.ctl.log (tail)
+ubi-runner: pull: nothing matches work/run/jobs
+find: ‘jobs’: No such file or directory
+find: ‘jobs’: No such file or directory
+ubi-runner: destroy requested: eu-central-h1/ubirun-geva153-1793593790-42618472-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva153-1793593790-42618472-t12
+2026-11-02T04:33:16Z destroyed ubirun-geva153-1793593790-42618472-t12
+===== runs/attempt1/claude-opus-5-5-r2.ctl.log (tail)
+ubi-runner: pull: nothing matches work/run/jobs
+find: ‘jobs’: No such file or directory
+find: ‘jobs’: No such file or directory
+ubi-runner: destroy requested: eu-central-h1/ubirun-geva153-1793593797-269ec195-t12
+ubi-runner: destroyed eu-central-h1/ubirun-geva153-1793593797-269ec195-t12
+2026-11-02T04:33:07Z destroyed ubirun-geva153-1793593797-269ec195-t12
+===== bundle
+redacted files: 23; remaining pattern matches: 3 (each the phrase 'BEGIN PRIVATE KEY' inside /cso's skill text, which lists secret prefixes; no key material)
+ANTHROPIC_API_KEY live-value matches: 0
+OPENAI_API_KEY live-value matches: 0
+OPENROUTER_API_KEY live-value matches: 0
+UBICLOUD_API_KEY live-value matches: 0
+51f09d0cce87e2b17eee52499691c9f854121c75dd19f7be9c6416c954f4cb4b  geva153-rund-data.tar.gz
+===== VM list, UBI_OWNER=geva153 ubi-runner.sh list --mine, 2026-11-02T07:13:03Z: empty, exit 0
+===== ledger
+67ef2e9fc2e598d88b6e288d37c92c952ccfd2572775126ed91e54571a4492f3  <captain-drive>/ledger/discovery-r1.jsonl
+Ledger discovery-r1 (file): 636 settles, settled $83.675668, open reserves 0 ($0.000000), manual settles 1

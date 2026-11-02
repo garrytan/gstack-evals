@@ -1,0 +1,82 @@
+# Run D: untold discovery
+Listing check: passed for every arm.
+Primary cells: claude-code-preset on claude-opus-5-5, particle-1, gpt-6.1-sol. Contrast cells: sdk-default on claude-opus-5-5. D2 primary: pooled across models, one test; per-model D2 exploratory. D3 primary: per model, Holm.
+
+## claude-opus-5-5
+claude-opus-5-5 none@claude-code-preset: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 81.1% [67.6%, 91.9%]; session-cap stops 0 (0.0%), agent timeouts 2, turn-cap stops (error_max_turns) 0; median requests 5, median first-request tokens 22619; cost per trial $0.143, per success $0.177
+claude-opus-5-5 gstack@claude-code-preset: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 86.5% [75.7%, 97.3%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 4, median first-request tokens 25026; cost per trial $0.156, per success $0.180
+claude-opus-5-5 gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 86.5% [75.7%, 97.3%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 5, median first-request tokens 25097; cost per trial $0.162, per success $0.187
+claude-opus-5-5 placebo@claude-code-preset: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 83.8% [73.0%, 94.6%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 5, median first-request tokens 25026; cost per trial $0.143, per success $0.171
+Completeness (tasks graded of 37): none@claude-code-preset 37, gstack@claude-code-preset 37, gstack-rewritten@claude-code-preset 37, placebo@claude-code-preset 37
+D1 (gstack and placebo pooled, eligible): 0 opened of 72 trials, rate 0.0% [0.0%, 0.0%] over 36 tasks, exact one-sided 95% upper bound 8.0%
+D1 claim: fewer than 8.0% (95% upper bound)
+D2 (rewritten minus pooled), exploratory: +0.0 [+0.0, +0.0] pp over 36 tasks, p 1.00 unadjusted; MDD 22.3 to 25.8 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: +5.4 [+0.0, +13.5] pp; retried-after-response scored 0: +5.4 [+0.0, +13.5] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: +2.7 [-8.1, +13.6] pp; retried-after-response scored 0: +2.7 [-8.1, +13.6] pp
+### claude-opus-5-5 under sdk-default (secondary)
+claude-opus-5-5 none@sdk-default: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 83.8% [70.3%, 94.6%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 5, median first-request tokens 20557; cost per trial $0.139, per success $0.166
+claude-opus-5-5 gstack@sdk-default: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 83.8% [70.3%, 94.6%]; session-cap stops 0 (0.0%), agent timeouts 1, turn-cap stops (error_max_turns) 0; median requests 5, median first-request tokens 22964; cost per trial $0.139, per success $0.166
+claude-opus-5-5 gstack-rewritten@sdk-default: graded 37, missing 0, refused 2, retried after a response 0; eligible 97.3%; pass 83.8% [70.3%, 94.6%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 5, median first-request tokens 23035; cost per trial $0.145, per success $0.173
+D1 under sdk-default (gstack alone, eligible): 0 opened of 36 trials, rate 0.0% [0.0%, 0.0%]
+D2 under sdk-default (rewritten minus gstack): +0.0 [+0.0, +0.0] pp
+none@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@sdk-default: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@sdk-default minus none@sdk-default, pass: +0.0 [-8.1, +8.1] pp; retried-after-response scored 0: +0.0 [-8.1, +8.1] pp
+gstack-rewritten@sdk-default minus none@sdk-default, pass: +0.0 [-8.1, +8.1] pp; retried-after-response scored 0: +0.0 [-8.1, +8.1] pp
+
+## particle-1
+particle-1 none@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 73.0% [56.8%, 86.5%]; session-cap stops 1 (2.7%), agent timeouts 2, turn-cap stops (error_max_turns) 1; median requests 15, median first-request tokens 64226.5; cost per trial $0.066, per success $0.091
+particle-1 gstack@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 81.1% [67.6%, 91.9%]; session-cap stops 0 (0.0%), agent timeouts 2, turn-cap stops (error_max_turns) 2; median requests 14, median first-request tokens 70049; cost per trial $0.055, per success $0.068
+particle-1 gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 70.3% [54.1%, 83.8%]; session-cap stops 2 (5.4%), agent timeouts 1, turn-cap stops (error_max_turns) 1; median requests 17, median first-request tokens 70035; cost per trial $0.073, per success $0.104
+particle-1 placebo@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 78.4% [64.9%, 91.9%]; session-cap stops 0 (0.0%), agent timeouts 1, turn-cap stops (error_max_turns) 1; median requests 15, median first-request tokens 70049; cost per trial $0.057, per success $0.073
+Completeness (tasks graded of 37): none@claude-code-preset 37, gstack@claude-code-preset 37, gstack-rewritten@claude-code-preset 37, placebo@claude-code-preset 37
+D1 (gstack and placebo pooled, eligible): 0 opened of 74 trials, rate 0.0% [0.0%, 0.0%] over 37 tasks, exact one-sided 95% upper bound 7.8%
+D1 claim: fewer than 7.8% (95% upper bound)
+D2 (rewritten minus pooled), exploratory: +0.0 [+0.0, +0.0] pp over 37 tasks, p 1.00 unadjusted; MDD 22.3 to 25.8 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 0.0% [0.0%, 0.0%], D2 +0.0 [+0.0, +0.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack-rewritten@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+placebo@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +8.1 [-2.7, +18.9] pp; retried-after-response scored 0: +8.1 [-2.7, +18.9] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: -2.7 [-16.2, +10.8] pp; retried-after-response scored 0: -2.7 [-16.2, +10.8] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: +5.4 [-8.1, +18.9] pp; retried-after-response scored 0: +5.4 [-8.1, +18.9] pp
+
+## gpt-6.1-sol
+gpt-6.1-sol none@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 89.2% [78.4%, 97.3%]; session-cap stops 1 (2.7%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 9, median first-request tokens 64256; cost per trial $0.144, per success $0.161
+gpt-6.1-sol gstack@claude-code-preset: graded 37, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 89.2% [78.4%, 97.3%]; session-cap stops 1 (2.7%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 9, median first-request tokens 70041; cost per trial $0.178, per success $0.199
+gpt-6.1-sol gstack-rewritten@claude-code-preset: graded 37, missing 0, refused 1, retried after a response 0; eligible 100.0%; pass 86.5% [75.7%, 97.3%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 9, median first-request tokens 70027; cost per trial $0.169, per success $0.195
+gpt-6.1-sol placebo@claude-code-preset: graded 37, missing 0, refused 2, retried after a response 0; eligible 100.0%; pass 86.5% [75.7%, 97.3%]; session-cap stops 0 (0.0%), agent timeouts 0, turn-cap stops (error_max_turns) 0; median requests 8, median first-request tokens 70041; cost per trial $0.170, per success $0.197
+Completeness (tasks graded of 37): none@claude-code-preset 37, gstack@claude-code-preset 37, gstack-rewritten@claude-code-preset 37, placebo@claude-code-preset 37
+D1 (gstack and placebo pooled, eligible): 7 opened of 74 trials, rate 9.5% [1.4%, 18.9%] over 37 tasks
+D1 claim: opened an untold gstack skill in 9.5% of eligible trials
+D2 (rewritten minus pooled), exploratory: +17.6 [+4.1, +32.4] pp over 37 tasks, p 0.0393 unadjusted; MDD 22.3 to 25.8 points (section 11); no claim
+Fit stratum (5 tasks, no verdict): D1 40.0% [0.0%, 80.0%], D2 +60.0 [+20.0, +100.0] pp
+none@claude-code-preset: browse 0.0%, opened 0, loaded among opened n/a, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 0.0%, loaded /investigate 0 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {}
+gstack@claude-code-preset: browse 10.8%, opened 4, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 10.8%, loaded /investigate 1 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {"cso":3,"investigate":1}
+gstack-rewritten@claude-code-preset: browse 27.0%, opened 10, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 27.0%, loaded /investigate 8 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 4, hypothesis 4), skills opened {"investigate":8,"cso":2}
+placebo@claude-code-preset: browse 0.0%, opened 3, loaded among opened 100.0%, built-in opens doctor 0, plugin-authoring 0, opened any listed skill 8.1%, loaded /investigate 1 (DEBUG REPORT 0; phase 0, iron_law 0, root_cause 0, hypothesis 0), skills opened {"investigate":1,"cso":2}
+gstack@claude-code-preset minus none@claude-code-preset, pass: +0.0 [-8.1, +8.1] pp; retried-after-response scored 0: +0.0 [-8.1, +8.1] pp
+gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass: -2.7 [-8.1, +0.0] pp; retried-after-response scored 0: -2.7 [-8.1, +0.0] pp
+placebo@claude-code-preset minus none@claude-code-preset, pass: -2.7 [-10.8, +5.4] pp; retried-after-response scored 0: -2.7 [-10.8, +5.4] pp
+
+## D2 pooled across models (primary, one test)
+D2 pooled over 3 models (claude-opus-5-5, particle-1, gpt-6.1-sol): +5.9 [+1.4, +10.8] pp over 37 tasks, p 0.0393; MDD 7.5 to 10.3 points (section 11)
+Gates beside pooled D2 (every preset cell at least 90% eligible and graded on at least 90% of the run's 37 tasks): claude-opus-5-5 in; particle-1 in; gpt-6.1-sol in
+D2 pooled claim: the rewritten description raised opens by +5.9 points, pooled across models
+Beside D2, no gstack (pooled over the same models): gstack@claude-code-preset minus none@claude-code-preset, pass +4.5 [-0.9, +10.8] pp; gstack-rewritten@claude-code-preset minus none@claude-code-preset, pass +0.0 [-4.5, +4.5] pp; placebo@claude-code-preset minus none@claude-code-preset, pass +1.8 [-5.4, +9.0] pp
+
+## D3, gstack@claude-code-preset minus gstack@sdk-default open rate (per model, Holm)
+Completeness beside D3 (tasks graded of 37, both replicates): claude-opus-5-5 gstack@claude-code-preset 37 (74 trials), gstack@sdk-default 37 (74 trials)
+D3 claude-opus-5-5: +0.0 [+0.0, +0.0] pp over 36 tasks, p 1.00, Holm 1.00; MDD 10.9 to 15.4 points (section 11); no claim
+Beside D3, no gstack (pooled over claude-opus-5-5): gstack@claude-code-preset minus none@claude-code-preset, pass +5.4 [+0.0, +13.5] pp; gstack@sdk-default minus none@sdk-default, pass +0.0 [-8.1, +8.1] pp
+
+Pooled across models, equal weight (secondary): D1 3.2% [0.5%, 6.3%]; rewritten 9.0% [4.5%, 14.4%]
+Retried-trial open sensitivity: at Harbor f3a5a923 a retry deletes the first attempt's trial folder, so no first-attempt messages exist and the reading equals the primary one.
