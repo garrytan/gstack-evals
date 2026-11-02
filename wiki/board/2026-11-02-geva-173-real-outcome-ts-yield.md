@@ -7,7 +7,7 @@ author: GEVA-173
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-11-02
-status: done
+status: superseded
 links:
   - GST-946
   - GST-817
