@@ -19,7 +19,10 @@
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only
 // the proxy sees it), OUT (the work dir, default ~/.capy/work/r3-route-check/<item>), PROXY_CONFIG (default
-// config/proxy.json; the record keeps its sha256), LEDGER_PORT, PROXY_DATA_PORT and PROXY_CONTROL_PORT (9911, 8787, 8788).
+// config/proxy.json; the record keeps its sha256), LEDGER_PORT (default the model's own, 9912 for Sol), PROXY_DATA_PORT and
+// PROXY_CONTROL_PORT (8787, 8788). A port something already answers on is refused before the services start, and so is a
+// ledger service that exits early or serves another ledger, so a session can't reserve on another run's item. Harbor's own
+// retries are off (max_retries 0): each try is one session, and the record counts every session.
 // Every phase is public here (Capy cloud kernels cannot run Harbor's egress sidecar), as in Run D's route check.
 // Exit codes: 0 passed, 1 dropped or any other error, 2 usage.
 import { appendFileSync, cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -29,7 +32,7 @@ import { readSessionRows, sessionsByTrial } from "../analysis/analyze.ts";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, reconcile, totals } from "../runner/ledger.ts";
 import { loadR3Trial } from "./exposure.ts";
-import { itemCheck, R3_ARMS, R3A, readRoute, routeRecordPath, SOL, type R3aModel, type RouteVerdict } from "./screen.ts";
+import { itemCheck, portTaken, R3_ARMS, R3A, readRoute, routeRecordPath, SOL, type R3aModel, type RouteVerdict } from "./screen.ts";
 
 const LANEB = resolve(import.meta.dir, "..");
 const RUNNER = join(LANEB, "runner");
@@ -92,8 +95,10 @@ export function next(rec: RouteRecord): { kind: RouteSession["kind"]; try: numbe
   return { verdict: "pass", reason: done.join(", ") };
 }
 
-async function waitUp(urls: string[]) {
+async function waitUp(urls: string[], procs: Record<string, { exitCode: number | null }>) {
   for (let i = 0; i < 80; i++) {
+    const gone = Object.entries(procs).find(([, p]) => p.exitCode !== null);
+    if (gone) throw new Error(`the ${gone[0]} exited ${gone[1].exitCode} before it was up (see its log in OUT); no session ran`);
     const ok = await Promise.all(urls.map((u) => fetch(u).then((r) => r.ok, () => false)));
     if (ok.every(Boolean)) return;
     await Bun.sleep(250);
@@ -154,7 +159,9 @@ async function main(argv: string[]): Promise<number> {
   writeFileSync(join(task, "task.toml"), readFileSync(join(task, "task.toml"), "utf8").replace(/^network_mode = .*$/gm, 'network_mode = "public"'));
   const gw = Bun.spawnSync(["docker", "network", "inspect", "bridge", "--format", "{{(index .IPAM.Config 0).Gateway}}"]).stdout.toString().trim();
   if (!gw) throw new Error("docker gave no bridge gateway");
-  const lport = process.env.LEDGER_PORT ?? "9911", dport = process.env.PROXY_DATA_PORT ?? "8787", cport = process.env.PROXY_CONTROL_PORT ?? "8788";
+  const lport = process.env.LEDGER_PORT ?? m.ledgerPort, dport = process.env.PROXY_DATA_PORT ?? "8787", cport = process.env.PROXY_CONTROL_PORT ?? "8788";
+  const taken = [["127.0.0.1", lport], ["127.0.0.1", cport], [gw, dport]].filter(([h, p]) => portTaken(h!, p!)).map(([h, p]) => `${h}:${p}`);
+  if (taken.length) throw new Error(`E_USAGE something already answers on ${taken.join(", ")} (another run's ledger service or proxy?); set LEDGER_PORT, PROXY_DATA_PORT or PROXY_CONTROL_PORT to a free port; no session ran`);
   const control = `http://127.0.0.1:${cport}`;
   const sessionsFile = join(out, "proxy-sessions.jsonl");
   const log = (name: string) => { const w = createWriteStream(join(out, name), { flags: "a" }); return w; };
@@ -166,7 +173,9 @@ async function main(argv: string[]): Promise<number> {
   Object.assign(harborEnv, { ANTHROPIC_API_KEY: "placeholder-not-a-key", PYTHONPATH: join(RUNNER, "agent") });
   let verdict: ReturnType<typeof next>;
   try {
-    await waitUp([control + "/healthz", `http://127.0.0.1:${lport}/status`]);
+    await waitUp([control + "/healthz", `http://127.0.0.1:${lport}/status`], { "ledger service": ledgerSvc, proxy });
+    const served = await fetch(`http://127.0.0.1:${lport}/status`).then((r) => r.json());
+    if (!Bun.deepEquals(served, JSON.parse(JSON.stringify(totals(readRows(ledger)))))) throw new Error(`the ledger service on port ${lport} does not serve ${ledger}; no session ran`);
     while (!("verdict" in (verdict = next(rec)))) {
       const { kind, try: n } = verdict;
       const job = `route-${m.id}-${kind}-${n}-${Date.now()}`;
@@ -177,6 +186,7 @@ async function main(argv: string[]): Promise<number> {
         agent_dir: join(RUNNER, "agent"), runner_dir: RUNNER, base_url: `http://${gw}:${dport}`, max_output_tokens: cells.max_output_tokens,
         verifier_timeout_multiplier: cells.verifier_timeout_multiplier, repo_dir: "/testbed",
       });
+      config.retry.max_retries = 0;
       if (cport !== "8788") for (const a of config.agents) Object.assign(a.kwargs, { control_url: control });
       writeFileSync(join(out, job + ".json"), JSON.stringify(config, null, 2) + "\n");
       const s: RouteSession = { kind, try: n, job, started_at: new Date().toISOString(), finished_at: null, harbor_exit: null, trial: null, tool_results: 0, model_responded: false, body_loaded: null, proxy_session: null, proxy_cap_stop: null, pass: false, reasons: [] };

@@ -2,7 +2,8 @@
 // admitted list, the pilot exposure and the measured costs, and prints the projection:
 //   bun quick/laneb/r3/screen.ts all <work dir> [--model <id>]       prepare, run and analyze, in order
 //   bun quick/laneb/r3/screen.ts prepare <work dir> [--model <id>]   env LEDGER (the item's jsonl), SWEBV (harbor-datasets checkout), ARMS (arm tar dir)
-//   bun quick/laneb/r3/screen.ts run <work dir> [--model <id>]       env LEDGER, UBI_OWNER, VM_USD_PER_HOUR, the provider keys; launches screen, then pilot
+//   bun quick/laneb/r3/screen.ts run <work dir> [--model <id>]       env LEDGER, UBI_OWNER, VM_USD_PER_HOUR, the provider keys,
+//                                                                    LEDGER_PORT (default the model's own); launches screen, then pilot
 //   bun quick/laneb/r3/screen.ts analyze <work dir> [--model <id>]   env LEDGER; reads the pulled results
 // --model is claude-opus-5-5 (the default) or gpt-6.1-sol. Each model has its own item, cap, parts, ledger and work dir
 // (R3A below): Opus 5.5 on r3a-screen ($150, the prereg's), GPT-6.1 Sol on r3a-sol ($140 with VMs, the R3 amendment's
@@ -12,7 +13,9 @@
 // its first spend by creating <LEDGER>.bound, so any later run is refused. Sol's item also takes its route check first
 // (route-check.ts): its settled rows under the item's route prefix are allowed, and the screen is refused until the route
 // record (<LEDGER>.route.json) says pass. A model's stops read and write only its own ledger, record and work dir, so a
-// Sol stop can't touch Opus's item or outcome. A cap refusal (a VM block, a session reserve
+// Sol stop can't touch Opus's item or outcome. run refuses a plan.json prepared for another model's item, and a ledger
+// port something already answers on, before it binds the item; each model's ledger service has its own default port
+// (Opus 9911, Sol 9912), so the two runs never share one. A cap refusal (a VM block, a session reserve
 // or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing. So does a part whose
 // trials are not one per planned task: a planned task with no trial, a second trial for a task, or a stray trial (one in
 // another arm or on another model). So does a part with more than 10% infra trials, a pulled proxy file that is empty or
@@ -47,6 +50,8 @@ export type R3aModel = {
   id: string; label: string; item: string; capUsd: number; capFrom: string;
   // Ledger prefix of the model's route check sessions on its item, or null when the model has no route check.
   routePrefix: string | null;
+  // Default local port of the item's ledger service (LEDGER_PORT overrides it).
+  ledgerPort: string;
   parts: readonly Part[];
   // Outcome lines: tag follows "R3 outcome" and "R3b start", stop ends a STOP line, incomplete follows an incomplete one.
   tag: string; stop: string; incomplete: string;
@@ -54,7 +59,7 @@ export type R3aModel = {
 };
 export const R3A: Record<string, R3aModel> = {
   [OPUS]: {
-    id: OPUS, label: "Opus 5.5", item: "r3a-screen", capUsd: 150, capFrom: "the prereg's", routePrefix: null,
+    id: OPUS, label: "Opus 5.5", item: "r3a-screen", capUsd: 150, capFrom: "the prereg's", routePrefix: null, ledgerPort: "9911",
     parts: [
       { name: "screen", job: "r3a-screen", arm: R3_ARMS.none, prefix: "r3a-screen/" },
       { name: "pilot", job: "r3a-pilot", arm: R3_ARMS.gstack, prefix: "r3a-pilot/" },
@@ -66,7 +71,7 @@ export const R3A: Record<string, R3aModel> = {
     },
   },
   [SOL]: {
-    id: SOL, label: "GPT-6.1 Sol", item: "r3a-sol", capUsd: 140, capFrom: "the R3 amendment's", routePrefix: "r3a-sol-route/",
+    id: SOL, label: "GPT-6.1 Sol", item: "r3a-sol", capUsd: 140, capFrom: "the R3 amendment's", routePrefix: "r3a-sol-route/", ledgerPort: "9912",
     parts: [
       { name: "screen", job: "r3a-sol-screen", arm: R3_ARMS.none, prefix: "r3a-sol-screen/" },
       { name: "pilot", job: "r3a-sol-pilot", arm: R3_ARMS.gstack, prefix: "r3a-sol-pilot/" },
@@ -196,6 +201,11 @@ export function vmBlock(rate: string, hours: string, capUsd: number): number {
   return block;
 }
 
+// Whether something accepts a TCP connection on host:port, such as another run's ledger service or proxy.
+export function portTaken(host: string, port: string): boolean {
+  return Bun.spawnSync(["bash", "-c", 'exec 3<>"/dev/tcp/$1/$2"', "bash", host, port], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+}
+
 function sh(cmd: string[], env: Record<string, string | undefined>) {
   const p = Bun.spawnSync(cmd, { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   return p.exitCode ?? 1;
@@ -227,6 +237,10 @@ function run(work: string, m: R3aModel) {
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   routePassed(ledger, m);
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  if (plan.item !== undefined && plan.item !== m.item) throw new Error(`E_USAGE ${work}/plan.json is item ${plan.item}'s, not ${m.label}'s ${m.item}; nothing was bound or launched`);
+  const lport = process.env.LEDGER_PORT ?? m.ledgerPort;
+  const busy = `something already answers on 127.0.0.1:${lport} (another run's ledger service?)`;
+  if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; ${m.item} is still unbound`);
   const planned: Record<string, string[]> = { screen: bandIds(), pilot: plan.pilot_tasks };
   const bound = ledger + ".bound";
   try {
@@ -238,7 +252,8 @@ function run(work: string, m: R3aModel) {
   bindCheck(ledger, m);
   for (const [i, part] of m.parts.entries()) {
     const dir = join(work, part.name);
-    const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(m.capUsd)], { ...process.env, LEDGER: ledger, ITEM: m.item, VM_RESERVE_HOURS: hours });
+    if (portTaken("127.0.0.1", lport)) { console.log(`${part.name}: ${busy}; the run stops here`); return; }
+    const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(m.capUsd)], { ...process.env, LEDGER: ledger, LEDGER_PORT: lport, ITEM: m.item, VM_RESERVE_HOURS: hours });
     writeFileSync(join(work, `${part.name}.launch-exit`), `${rc}\n`);
     if (rc !== 0 || existsSync(join(dir, "pulled/out/cap-stop.json")) || existsSync(join(dir, "vm-cap-stop"))) { console.log(`${part.name}: launch exited ${rc}; the run stops here`); return; }
     if (i === m.parts.length - 1) return;

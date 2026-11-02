@@ -2,7 +2,7 @@
 // pinned Agent SDK, the screen per model, the route check, #121's two notes, Sol's stops leaving Opus untouched, and Sol's
 // planned layout against its real $140 cap and $4 allowance through the real proxy and ledger service.
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -643,4 +643,78 @@ describe("r3a-sol's cap against its own rules", () => {
     expect(r.ran).toBe(33);
     expect(r.stop).toStartWith("screen trial 32 of 93: ");
   }, 120_000);
+});
+
+describe("isolation from other runs", () => {
+  for (const v of ["LEDGER_PORT", "PROXY_CONTROL_PORT", "PROXY_DATA_PORT"]) {
+    test(`route-check refuses a ${v} another service already answers on, before any service starts or session runs`, async () => {
+      const r = rig();
+      const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json({ settledMicros: 0 }) });
+      try {
+        const before = readFileSync(r.ledger, "utf8");
+        const { code, out, calls, rec } = await routeCheck(r, { [v]: String(other.port) });
+        expect(code).toBe(2);
+        expect(out).toContain(`E_USAGE something already answers on 127.0.0.1:${other.port} (another run's ledger service or proxy?)`);
+        expect(calls).toEqual([]);
+        expect(rec).toBeNull();
+        expect(readFileSync(r.ledger, "utf8")).toBe(before);
+        expect(existsSync(join(r.dir, "out", "ledger-service.log"))).toBe(false);
+      } finally {
+        other.stop(true);
+      }
+    });
+  }
+
+  test("route-check turns Harbor's own retries off, so each try is one session", async () => {
+    const r = rig();
+    expect((await routeCheck(r)).code).toBe(0);
+    const jobs = readdirSync(join(r.dir, "out")).filter((f) => /^route-.*\.json$/.test(f)).map((f) => JSON.parse(readFileSync(join(r.dir, "out", f), "utf8")));
+    expect(jobs.map((j) => j.retry.max_retries)).toEqual([0, 0]);
+  });
+
+  test("each model's ledger service has its own default port", () => {
+    expect([opus.ledgerPort, sol.ledgerPort]).toEqual(["9911", "9912"]);
+  });
+
+  for (const [m, other] of [[opus, sol], [sol, opus]] as const) {
+    test(`run with ${m.label} refuses a work dir prepared for ${other.label}'s item before it binds or launches anything`, () => {
+      const root = tmp("sol-plan-item-");
+      const w = join(root, "work");
+      mkdirSync(w);
+      writeFileSync(join(w, "plan.json"), JSON.stringify({ item: other.item, pilot_tasks: pilotTasks(bandIds()) }));
+      const ledger = join(root, m.item + ".jsonl");
+      approve(ledger, m.item, m.capUsd);
+      if (m.routePrefix) passRecord(ledger, m);
+      const before = readFileSync(ledger, "utf8");
+      const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(freePort()), UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+      const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, ...(m.id === OPUS ? [] : ["--model", m.id])], { env });
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr.toString()).toContain(`E_USAGE ${w}/plan.json is item ${other.item}'s, not ${m.label}'s ${m.item}; nothing was bound or launched`);
+      expect(existsSync(ledger + ".bound")).toBe(false);
+      expect(existsSync(join(w, "screen.launch-exit"))).toBe(false);
+      expect(readFileSync(ledger, "utf8")).toBe(before);
+    });
+  }
+
+  test("run refuses a ledger port another service already answers on and leaves r3a-sol unbound", () => {
+    const root = tmp("sol-port-");
+    const w = join(root, "work");
+    mkdirSync(w);
+    writeFileSync(join(w, "plan.json"), JSON.stringify({ item: sol.item, pilot_tasks: pilotTasks(bandIds()) }));
+    const ledger = join(root, "r3a-sol.jsonl");
+    approve(ledger, sol.item, sol.capUsd);
+    passRecord(ledger, sol);
+    const before = readFileSync(ledger, "utf8");
+    const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json({}) });
+    try {
+      const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(other.port), UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+      const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env });
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr.toString()).toContain(`E_USAGE something already answers on 127.0.0.1:${other.port} (another run's ledger service?); set LEDGER_PORT to a free port; r3a-sol is still unbound`);
+      expect(existsSync(ledger + ".bound")).toBe(false);
+      expect(readFileSync(ledger, "utf8")).toBe(before);
+    } finally {
+      other.stop(true);
+    }
+  });
 });
