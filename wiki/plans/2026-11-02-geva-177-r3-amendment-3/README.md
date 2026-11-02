@@ -115,7 +115,11 @@ The Captain ruled option A on 2026-11-02: the drop list lives in code, in GEVA-1
 - an image pre-pull in vm-run.sh before the oracle gate, with the same wait rule as section 2's rule 3, so one refused pull can't end a run the way it ended attempt 2. ORACLE=1 stays on;
 - GST-941's route-check fixes, which must land before r3a-sol's first paid step (Captain ruling on #134's notes).
 
-Opus moves off 8ad436d for the band alone. At ddc2cda and after, screen.ts keeps Opus's item, cap, parts, lines and files as #121 wrote them (the R3A table's Opus entry, #134's blast radius), r3.test.ts is byte-identical to 8ad436d's, and #112's r3-dry.ts still prints its 135 R3 lines byte for byte (section 9). What Opus gains from #134 is #121's two notes, which the Captain ruled apply to every model: run() stops before the pilot when the screen is already incomplete, and analyze() removes admitted.txt and r3b-tasks.txt before it reads plan.json. Neither moves an outcome: #133 section 4 already made an incomplete screen an incomplete R3a.
+Opus moves off 8ad436d for the drop list and the pre-pull above. Opus's entry in screen.ts's R3A table (item, cap, ledger port, parts and printed lines) is as #121 wrote it, at ddc2cda and at the pin (#134's blast radius), and #112's r3-dry.ts still prints its 135 R3 lines byte for byte (section 9).
+
+r3.test.ts is byte-identical to 8ad436d's at ddc2cda but not at the pin. GST-941's test-only commit e199f57a7f0885d32748009ec30a3d442a5142e5 changes r3.test.ts and r3-sol.test.ts so their screen fixtures and counts derive from the screened set (screen.ts's screenIds(), the band less the drop list: 93 with an empty list, 91 with the committed one) instead of the hard-coded 93, 92, 84 and 103. Each assertion still checks the same property. e199f57 is the only GST-941 commit that touches r3.test.ts.
+
+What Opus gains from #134 is #121's two notes, which the Captain ruled apply to every model: run() stops before the pilot when the screen is already incomplete, and analyze() removes admitted.txt and r3b-tasks.txt before it reads plan.json. Neither moves an outcome: #133 section 4 already made an incomplete screen an incomplete R3a.
 
 Digests at the pin: <PENDING: dry-run-a3.txt's digest step>.
 
