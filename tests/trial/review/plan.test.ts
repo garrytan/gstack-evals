@@ -10,7 +10,7 @@ import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
 import { main } from "../../../src/trial/review/cli.ts";
-import { ceoMode, compareVersions, GLOBAL_PREFERENCES, GSTACK_AUTO, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_SEVERITY_MAP, planArmLine, planArmOf, parsePlanSession, planPrompt, planSkill, REC_DECLINE, REC_REPLY, REC_USER, REC_USER_SHA256, recAnswer, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, TOLD_PLAN_TEMPLATE } from "../../../src/trial/review/plan.ts";
+import { ceoMode, compareVersions, GLOBAL_PREFERENCES, GSTACK_AUTO, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_SEVERITY_MAP, planArmLine, planArmOf, parsePlanSession, planSkill, REC_DECLINE, REC_REPLY, REC_USER, REC_USER_SHA256, recAnswer, recFreeformFor, renderPlanFindings, PLAN_TURN2, PLAN_TURN2_SHA256, PLAN_TURN2_TEXT } from "../../../src/trial/review/plan.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
 import { NON_APPROVING, UserSim } from "../../../src/usersim/sim.ts";
@@ -46,18 +46,13 @@ const files = (dir: string) => {
 describe("the plan told prompt and arms (B2, B3)", () => {
   // Value: protects=every plan arm gets the same frozen output block and only its own line; fails_when=the block changes without this pin moving on purpose, or an arm's line drifts from the plan's section 2; seam=plan.ts
   test("the template's sha256 is pinned and each arm differs only by its line", () => {
-    expect(TOLD_PLAN_SHA256).toBe("48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291");
-    expect(["none", "gstack", "gstack-auto", "lens", "placebo"].map((a) => planArmLine(a as never, "ceo"))).toEqual([
-      "Review this plan for problems.",
-      "/plan-ceo-review Review this plan for problems.",
-      "/autoplan --ceo-only Review this plan for problems.",
-      "Do a CEO/founder-mode review of this plan. Review this plan for problems.",
-      "/plan-ceo-review Review this plan for problems.",
-    ]);
-    expect(planPrompt("gstack", "ceo")).toBe("/plan-ceo-review Review this plan for problems.\n\n" + TOLD_PLAN_TEMPLATE);
-    for (const field of ["severity", "section", "line", "claim", "evidence", "fix"]) expect(TOLD_PLAN_TEMPLATE).toContain('"' + field + '"');
-    expect(TOLD_PLAN_TEMPLATE).toContain("info string is plan-findings");
-    expect(TOLD_PLAN_TEMPLATE).not.toMatch(/\u2014|gstack/);
+    expect([PLAN_TURN2_SHA256, PLAN_TURN2]).toEqual(["c5a5680ba13f9c91ebc625ca61627d65037a9dab4b002803ae4f3d2ebbb3187c", { text: PLAN_TURN2_TEXT, maxTurns: 5, timeoutS: 300 }]);
+    expect(["none", "gstack", "gstack-auto", "lens", "placebo"].map((a) => planArmLine(a as never, "ceo"))).toEqual(["Review plan.md for problems.", "/plan-ceo-review plan.md", "/autoplan --ceo-only plan.md", "Do a CEO/founder-mode review of this plan. Review plan.md for problems.", "/plan-ceo-review plan.md"]);
+    expect((["eng", "devex", "design"] as const).map((l) => [planArmLine("lens", l), planArmLine("gstack", l)])).toEqual([["Do an eng manager-mode review of this plan. Review plan.md for problems.", "/plan-eng-review plan.md"], ["Do a developer experience review of this plan. Review plan.md for problems.", "/plan-devex-review plan.md"], ["Do a designer's eye review of this plan. Review plan.md for problems.", "/plan-design-review plan.md"]]);
+    expect(PLAN_TURN2_TEXT.split("\n").slice(0, 2)).toEqual(["List every problem you found in plan.md.", ""]);
+    for (const field of ["severity", "section", "line", "claim", "evidence", "fix"]) expect(PLAN_TURN2_TEXT).toContain('"' + field + '"');
+    expect(PLAN_TURN2_TEXT).toContain("info string is plan-findings");
+    expect(PLAN_TURN2_TEXT).not.toMatch(/\u2014|gstack/);
     expect(["none", "gstack", "gstack-auto", "lens", "placebo"].map((a) => planSkill(a as never, "ceo"))).toEqual([null, "plan-ceo-review", "autoplan", null, "plan-ceo-review"]);
   });
 
@@ -85,14 +80,17 @@ describe("the plan told prompt and arms (B2, B3)", () => {
 describe("the rec user (B4, open item 3)", () => {
   // Value: protects=every arm's questions get one deterministic answer that takes the recommendation and declines chaining and docs, under the simulator's binding rules; fails_when=a chain or docs offer is accepted, or a gated effect is approved; seam=recAnswer through UserSim
   test("it takes every recommendation and declines another skill, another review and promoting or committing docs", () => {
-    for (const q of ["Review mode: push scope up, cherry-pick expansions, hold scope, or cut to minimum?", "Which approach should we take?", "Read /work/plan.md first?"]) expect(recAnswer(q)).toBe(REC_REPLY);
-    for (const q of ["Run /plan-eng-review next?", "Want me to start the eng review now?", "Hand off to /autoplan?", "Promote this CEO plan to docs/designs?", "Shall I commit the plan?", "Continue with office hours?"]) expect(recAnswer(q)).toBe(REC_DECLINE);
+    for (const q of ["Review mode: push scope up, cherry-pick expansions, hold scope, or cut to minimum?", "Which approach should we take?", "Read /work/plan.md first?"]) expect(recAnswer(q, "ceo")).toBe(REC_REPLY);
+    for (const q of ["Run /plan-eng-review next?", "Want me to start the eng review now?", "Hand off to /autoplan?", "Promote this CEO plan to docs/designs?", "Shall I commit the plan?", "Continue with office hours?"]) expect(recAnswer(q, "ceo")).toBe(REC_DECLINE);
+    // GST-925 (GSTA-2's ruling): a mode or Step 0 question gets the recommendation even when it names /ship or a commit; the question uses the CEO skill's own mode names at v1.93.17.0
+    for (const q of ["Step 0E, mode selection. A) SCOPE EXPANSION B) SELECTIVE EXPANSION C) HOLD SCOPE (recommended) D) SCOPE REDUCTION. Each mode ends with /ship and a commit.", "How deep should this DX review go?"]) expect(recAnswer(q, "ceo")).toBe(REC_REPLY);
+    expect([recAnswer("Run /plan-eng-review next?", "eng"), recAnswer("Want me to start the eng review now?", "eng"), recAnswer("Run /plan-ceo-review next?", "eng"), recAnswer("Want me to start the design review now?", "eng"), recAnswer("Start the dx review?", "devex")]).toEqual([REC_REPLY, REC_REPLY, REC_DECLINE, REC_DECLINE, REC_REPLY]);
     expect(REC_USER).toEqual({ persona: expect.stringContaining("Go with your recommendation.") });
     expect(REC_USER_SHA256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   test("through the simulator, a gated effect still gets the non-approving answer", async () => {
-    const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-"), "usersim.ndjson"), freeform: async (p, q) => ((await recFreeform(p, q)) as { text: string }).text });
+    const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-"), "usersim.ndjson"), freeform: async (p, q) => ((await recFreeformFor("ceo")(p, q)) as { text: string }).text });
     const ask = async (question: string, options: string[] = ["A", "B"]) => ((await sim.answerAsk([{ question, options: options.map((label) => ({ label })) }])) as { answers: Record<string, string> }).answers[question];
     expect(await ask("Review mode: hold scope or cut to minimum?", ["HOLD SCOPE", "SCOPE REDUCTION"])).toBe(REC_REPLY);
     expect(await ask("Run /plan-eng-review next?")).toBe(REC_DECLINE);
@@ -225,7 +223,7 @@ describe("plan units in the run loop (keyless)", () => {
       expect(readdirSync(join(out, "arms")).sort()).toEqual(["gstack-opus", "lens-opus", "none-haiku", "none-opus"]);
       const arm = (id: string) => JSON.parse(readFileSync(join(out, "arms", id, "arm.json"), "utf8"));
       for (const id of ["gstack-opus", "lens-opus", "none-haiku", "none-opus"]) expect([id, arm(id).status, arm(id).coverage_gaps]).toEqual([id, "complete", undefined]);
-      expect(arm("gstack-opus")).toMatchObject({ models: [{ role: "driver", model: OPUS }], told: { arm: "gstack", lens: "ceo", template_sha256: TOLD_PLAN_SHA256 }, ceo_modes: { "HOLD SCOPE": 1 }, severity_map: PLAN_SEVERITY_MAP });
+      expect(arm("gstack-opus")).toMatchObject({ models: [{ role: "driver", model: OPUS }], told: { arm: "gstack", lens: "ceo", turn2_sha256: PLAN_TURN2_SHA256 }, ceo_modes: { "HOLD SCOPE": 1 }, severity_map: PLAN_SEVERITY_MAP });
       expect(arm("none-opus").diagnostics).toEqual([unit.id + " pass 1: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing"]);
       expect(arm("none-haiku").diagnostics).toEqual([unit.id + " pass 1: incomplete, the session ended timeout; scored as finding nothing"]);
       expect(arm("lens-opus").diagnostics).toEqual([unit.id + " pass 1: missing; scored as finding nothing"]);
@@ -297,7 +295,7 @@ describe("review-units --plan arguments (keyless)", () => {
     expect((await run([...base, "--plan", "ceo", "--arms", "none", "--arm-models", "lens=" + OPUS])).err).toMatch(/^E_USAGE .*--arm-models names arm lens, which --arms does not run/);
     const dry = await run([...base, "--plan", "ceo", "--arms", "none", "lens", GSTACK, "placebo", "--arm-models", "lens=" + OPUS, "placebo=particle-ai/particle-1", "--passes", "3", "--dry-run"]);
     expect([dry.code, dry.err]).toEqual([0, ""]);
-    expect(dry.out).toContain("plan lens ceo; told plan template sha256 " + TOLD_PLAN_SHA256);
+    expect(dry.out).toContain("plan lens ceo; turn 2 sha256 " + PLAN_TURN2_SHA256);
     expect(dry.out).toContain("plan unit: no install or test");
     expect(dry.out).toContain('lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on ' + OPUS + ")");
     expect(dry.out).toContain('placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)');
