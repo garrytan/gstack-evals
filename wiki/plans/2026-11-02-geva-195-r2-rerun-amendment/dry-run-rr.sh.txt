@@ -133,7 +133,7 @@ pilot_round() {
   step 'judge-join|E_' $G judge-join --suite "$S" --key "$X/match-key.json" --reply "$X/judge-match/primary.json" --second "$X/judge-match/second.json" $(third "$X/judge-match") $AR --out "$X/joined"
   step 'published|E_' $G ingest "$X/joined/none-pilot" --suite "$S" --root "$X/judged"
   step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id stacks-r1-pilot --out "$X/d" --root "$X/judged" --drop-gaps
-  step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$X/d/derive.json" "$X/d/stacks-r1-pilot.json" "$X/d/arms/stacks-r1-pilot/none-pilot" "$W/bin/power-rr.py"
+  step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$X/d/derive.json" "$X/d/stacks-r1-pilot.json" "$X/d/arms/stacks-r1-pilot/none-pilot" "$W/run/rr-pilot-none/arms/none-opus/arm.json" "$W/bin/power-rr.py"
 }
 echo "# FAIL at the floor (the fake judge matches nothing)"; pilot_round floor 0
 echo "# PASS in the middle"; pilot_round mid 30
@@ -141,9 +141,16 @@ echo "# FAIL at the top (the fake judge matches every finding)"; pilot_round top
 echo "# Synthetic: the mid round's judged arm with 4 units marked as coverage gaps: incomplete, exit 4."
 X=$W/pilot/gap4; mkdir -p "$X"; jq --slurpfile s "$S" '.status = "stopped" | .coverage_gaps = [$s[0].units[0:4][] | .id + " pass 1: malformed (synthetic)"]' "$W/pilot/mid/joined/none-pilot/arm.json" > "$X/arm.json"
 cp -r "$W/pilot/mid/joined/none-pilot" "$X/none-pilot"; cp "$X/arm.json" "$X/none-pilot/arm.json"
+jq --slurpfile s "$S" '.status = "stopped" | .coverage_gaps = [$s[0].units[0:4][] | .id + " pass 1: malformed (synthetic)"]' "$W/run/rr-pilot-none/arms/none-opus/arm.json" > "$X/run-arm.json"
 step 'published|E_' $G ingest "$X/none-pilot" --suite "$S" --root "$X/judged"
 step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id stacks-r1-pilot --out "$X/d" --root "$X/judged" --drop-gaps
-step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$X/d/derive.json" "$X/d/stacks-r1-pilot.json" "$X/d/arms/stacks-r1-pilot/none-pilot" "$W/bin/power-rr.py"
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$X/d/derive.json" "$X/d/stacks-r1-pilot.json" "$X/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$W/bin/power-rr.py"
+echo "# Synthetic: the pilot run's arm.json shows an interrupted run (5 sessions not run, stopped, no coverage gap): incomplete, exit 4."
+X=$W/pilot/interrupted; mkdir -p "$X"; jq '.status = "stopped" | .parse_outcomes.findings -= 5 | .parse_outcomes.not_run = 5 | .coverage_gaps = []' "$W/run/rr-pilot-none/arms/none-opus/arm.json" > "$X/run-arm.json"
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json" "$W/pilot/mid/d/stacks-r1-pilot.json" "$W/pilot/mid/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$W/bin/power-rr.py"
+echo "# Synthetic: a gap-only stop (stopped with 1 coverage gap, every session run) goes on to the drop rule and the pass line."
+X=$W/pilot/gaponly; mkdir -p "$X"; jq --slurpfile s "$S" '.status = "stopped" | .coverage_gaps = [$s[0].units[0].id + " pass 1: malformed (synthetic)"]' "$W/run/rr-pilot-none/arms/none-opus/arm.json" > "$X/run-arm.json"
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json" "$W/pilot/mid/d/stacks-r1-pilot.json" "$W/pilot/mid/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$W/bin/power-rr.py"
 
 echo; echo "## Grid judging, derive --drop-gaps, noloss score and rr-decide.py (section 7)"
 ARMS="gstack-full none-rr"
@@ -175,7 +182,7 @@ echo; echo "## Beside the KEEP verdict: sensitivities, strata, secondaries (sect
 X=$W/grid/keep
 step '^(recall|new|idea|E_)' $G secondary --suite "$X/stacks-r1-rr/stacks-r1-rr.json" --root "$X/stacks-r1-rr/arms" --variant gstack-full --reference none-rr --seed 20261031
 echo "# rr-admit.py's port of the scorer's bootstrap, on each KEEP arm: its interval should equal the recall interval above."
-for a in gstack-full none-rr; do step '^admission: [a-z]|E_' python3 "$W/bin/rr-admit.py" "$X/stacks-r1-rr/derive.json" "$X/stacks-r1-rr/stacks-r1-rr.json" "$X/stacks-r1-rr/arms/stacks-r1-rr/$a" "$W/bin/power-rr.py"; done
+for a in gstack-full none-rr; do ra="$W/run/rr-full/arms/gstack-full-opus/arm.json"; [ "$a" = none-rr ] && ra="$W/run/rr-none/arms/none-opus/arm.json"; step '^admission: [a-z]|E_' python3 "$W/bin/rr-admit.py" "$X/stacks-r1-rr/derive.json" "$X/stacks-r1-rr/stacks-r1-rr.json" "$X/stacks-r1-rr/arms/stacks-r1-rr/$a" "$ra" "$W/bin/power-rr.py"; done
 echo "# Rescue sensitivity: units with a held-rescued session dropped from both arms."; derive_on "$X" stacks-r1-rr-rescue --drop-file "$W/held/rescue-drop.tsv"
 echo "# Complete-case sensitivity: units with a capped session dropped from both arms."; derive_on "$X" stacks-r1-rr-cc --drop-file "$W/held/caps-drop.tsv"
 (echo unit; jq -r '.units[].id' "$R/lanes/review-noloss/suites/gsta167-14pr.json") > "$W/cohort14.tsv"
