@@ -28,25 +28,39 @@ ratelimit() {
     || echo "ratelimit: unreadable"
 }
 ratelimit > "$out/ratelimit-before.txt" 2>&1
-# pull <image>: up to 6 tries, waiting 60, 120, 240, 480 and 960 seconds between them. Prints one pulls.tsv row.
+# limited: 0 when Docker Hub's pull rate limit for this VM's address is used up (ratelimit-remaining 0). A HEAD request
+# on the registry's ratelimitpreview image reads it without counting as a pull.
+limited() {
+  local t
+  t=$(curl -fsS "https://auth.docker.io/token?service=registry.docker.io&scope=repository:ratelimitpreview/test:pull" | jq -r .token) || return 1
+  curl -sS --head -H "Authorization: Bearer $t" https://registry-1.docker.io/v2/ratelimitpreview/test/manifests/latest | grep -qi '^ratelimit-remaining: 0;'
+}
+# pull <image>: up to 6 tries, waiting 60, 120, 240, 480 and 960 seconds between them. A failure while the rate limit is
+# used up is not a try: it waits 5 minutes and pulls again, for up to 3 hours in all. Prints one pulls.tsv row.
 pull() {
-  local img=$1 n=0 w=60 log
+  local img=$1 n=0 w=60 waited=0 log
   log="$out/pull.d/$(printf '%s' "$img" | tr '/:@' '___').log"
   while :; do
-    n=$((n + 1))
     if sg docker -c "docker pull -q '$img'" >> "$log" 2>&1; then
-      printf 'ok\t%s\t%s\t%s\t-\n' "$n" "$img" "$(sg docker -c "docker image inspect --format '{{join .RepoDigests \",\"}}' '$img'" 2>/dev/null)"
+      printf 'ok\t%s\t%s\t%s\twaited %ss at the rate limit\n' "$((n + 1))" "$img" "$(sg docker -c "docker image inspect --format '{{join .RepoDigests \",\"}}' '$img'" 2>/dev/null)" "$waited"
       return 0
     fi
+    if [ "$waited" -lt 10800 ] && limited; then
+      echo "rate limit used up at $(date -u +%FT%TZ); waiting 300 s" >> "$log"
+      sleep 300
+      waited=$((waited + 300))
+      continue
+    fi
+    n=$((n + 1))
     if [ "$n" -ge 6 ]; then
-      printf 'FAIL\t%s\t%s\t-\t%s\n' "$n" "$img" "$(tail -1 "$log" | tr '\t' ' ' | cut -c1-200)"
+      printf 'FAIL\t%s\t%s\t-\t%s\n' "$n" "$img" "$(grep -v '^rate limit used up' "$log" | tail -1 | tr '\t' ' ' | cut -c1-200)"
       return 0
     fi
     sleep "$w"
     w=$((w * 2))
   done
 }
-export -f pull
+export -f pull limited
 export out
 xargs -a "$out/images.txt" -P 4 -I{} bash -c 'pull "$1"' _ {} | sort -k3 > "$out/pulls.tsv"
 ratelimit > "$out/ratelimit-after.txt" 2>&1
