@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# R3 oracle preflight driver, one pass (GEVA-177; band rule in this post's section 2). Runs on the thread's own machine.
+# It reserves a VM block on item r3-oracle-preflight, brings up one fresh VM with the read-only copy of the pinned
+# ubi-runner.sh, syncs the export's quick/laneb/runner (work/runner) and the screen run dir (work/run) as launch.sh
+# does, plus oracle-pass.sh (work/preflight), runs the pin's vm-bootstrap.sh, starts oracle-pass.sh detached, polls
+# for its pass.exit, pulls work/pass<N>, destroys the VM and settles its hours. No provider key goes to the VM. Each
+# next 4-hour block is reserved 30 minutes before the current one runs out; a refusal stops the pass (void).
+# Usage: UBI_OWNER=GEVA-177 LEDGER=<r3-oracle-preflight.jsonl> \
+#   bash oracle-preflight.sh.txt <runner copy> <export root> <work dir> <pass number> <out dir>
+set -u
+R=$1 E=$2 W=$3 P=$4 O=$5
+D=$(cd "$(dirname "$0")" && pwd)
+L=$E/quick/laneb/runner/ledger.ts
+ITEM=r3-oracle-preflight RATE=0.60 HOURS=4 BLOCK=2.40
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY
+: "${UBI_OWNER:?set UBI_OWNER}" "${LEDGER:?set LEDGER}"
+echo "e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de62753a8  $R" | sha256sum -c --quiet - \
+  || { echo "preflight: $R is not the pinned runner"; exit 1; }
+mkdir -p "$O" "$O/script"
+cp "$D/oracle-pass.sh.txt" "$O/script/oracle-pass.sh"
+vm_id="pass$P-$(date +%s)-vm"
+bun "$L" reserve --path "$LEDGER" --item "$ITEM" --id "$vm_id" --usd "$BLOCK" --detail "VM hours, block 1 of $HOURS h" \
+  || { echo "preflight: the ledger refused block 1; no VM started (cap stop)"; exit 9; }
+blocks=1 name="" t0=$(date +%s)
+settle() {
+  local hours usd i id share
+  hours=$(awk -v s="$t0" -v e="$(date +%s)" 'BEGIN { printf "%.6f", (e - s) / 3600 }')
+  usd=$(awk -v r="$RATE" -v h="$hours" 'BEGIN { printf "%.6f", r * h }')
+  for i in $(seq 1 "$blocks"); do
+    id=$vm_id; [ "$i" = 1 ] || id="$vm_id-$i"
+    share=$(awk -v u="$usd" -v b="$BLOCK" -v i="$i" -v n="$blocks" 'BEGIN { s = u - (i - 1) * b; if (s < 0) s = 0; if (i < n && s > b) s = b; printf "%.6f", s }')
+    bun "$L" settle --path "$LEDGER" --item "$ITEM" --id "$id" --usd "$share" --detail "VM hours: $hours h at \$$RATE/h, block $i of $blocks"
+  done
+}
+finish() {
+  if [ -n "$name" ]; then
+    "$R" down "$name" || { echo "WARNING: VM $name may still exist; run: $R down $name"; return; }
+  fi
+  settle
+  bun "$L" status --path "$LEDGER" --item "$ITEM"
+}
+trap finish EXIT
+trap 'exit 130' INT TERM HUP
+name=$(UBI_TTL_HOURS=8 "$R" up -s standard-16 -S 640) || { echo "preflight: VM did not come up (void pass)"; name=""; exit 3; }
+echo "vm: $name"
+"$R" sync "$name" "$E/quick/laneb/runner" work/runner || exit 3
+"$R" sync "$name" "$W/screen" work/run || exit 3
+"$R" sync "$name" "$O/script" work/preflight || exit 3
+"$R" ssh "$name" 'bash work/runner/vm-bootstrap.sh' > "$O/bootstrap.log" 2>&1 || { echo "preflight: bootstrap failed (void pass)"; exit 3; }
+tail -1 "$O/bootstrap.log"
+"$R" ssh "$name" "setsid nohup bash work/preflight/oracle-pass.sh $P > work/pass$P.log 2>&1 < /dev/null &"
+while :; do
+  sleep 60
+  now=$(date +%s)
+  if [ "$now" -ge $((t0 + blocks * HOURS * 3600 - 1800)) ]; then
+    bun "$L" reserve --path "$LEDGER" --item "$ITEM" --id "$vm_id-$((blocks + 1))" --usd "$BLOCK" --detail "VM hours, block $((blocks + 1)) of $HOURS h" \
+      || { echo "preflight: the ledger refused block $((blocks + 1)); pass stopped (void)"; exit 9; }
+    blocks=$((blocks + 1))
+  fi
+  "$R" ssh "$name" "test -f work/pass$P/pass.exit" < /dev/null > /dev/null 2>&1 && break
+done
+"$R" ssh "$name" "cat work/pass$P.log" > "$O/pass.log" 2>&1
+for try in 1 2 3; do
+  "$R" pull "$name" "work/pass$P" "$O" && [ "$("$R" ssh "$name" "find work/pass$P -type f | wc -l")" = "$(find "$O/pass$P" -type f | wc -l)" ] && break
+  echo "pull try $try failed"; sleep 20
+  [ "$try" = 3 ] && { echo "preflight: results not pulled (void pass)"; exit 7; }
+done
+echo "pass $P: harbor exit $(cat "$O/pass$P/harbor.exit"), $(test -f "$O/pass$P/finished" && echo finished || echo NOT finished), $(wc -l < "$O/pass$P/oracle-fails.txt") oracle fails"
