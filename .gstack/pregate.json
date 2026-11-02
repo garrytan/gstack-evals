@@ -179,7 +179,7 @@
       "**/runs/**"
     ],
     "answer_markers": [
-      "\\bSEALED(?: [A-Z]+)*:"
+      "\\bSEALED(?: [A-Z]+)+:"
     ],
     "seed_patterns": [
       "\\b(?:sealed|holdout|rotation)_seed\\s*[=:]\\s*[\"']?[0-9A-Za-z]{4,}"

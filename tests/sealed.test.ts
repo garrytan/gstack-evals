@@ -55,6 +55,12 @@ describe("sealed publication rules", () => {
     expect(seeds.some((re) => re.test("const seed = 7"))).toBe(false);
   });
 
+  test("an answer marker needs one or more words before the colon, so a bare verdict line passes", () => {
+    const markers = sealed.answer_markers.map((m) => new RegExp(m));
+    for (const line of ["SEALED" + ": error", "SEALED" + ": clear findings=0 commits=1"]) expect(markers.some((re) => re.test(line))).toBe(false);
+    for (const line of ["SEALED" + " ANSWER: 42", "SEALED" + " HIDDEN TEST: t1"]) expect(markers.some((re) => re.test(line))).toBe(true);
+  });
+
   test("no text rule matches a line of the config itself, so the config never refuses its own commit", () => {
     const rules = [...sealed.answer_markers, ...sealed.seed_patterns].map((r) => new RegExp(r));
     for (const line of configText.split("\n")) for (const re of rules) expect(re.test(line)).toBe(false);
