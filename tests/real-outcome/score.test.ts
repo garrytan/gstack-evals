@@ -304,7 +304,7 @@ describe("detectors", () => {
     ];
     for (const [path, hunk] of comments) expect([path, hunk, skipActs(path, hunk)]).toEqual([path, hunk, []]);
     expect(skipActs("tests/test_a.py", '@@ -1,2 +1,3 @@\n def test_old():\n+    pytest.skip("see #12")  # flaky\n     assert f() == 1\n')).toEqual(["skip_added:mechanical own 0"]);
-    expect(skipActs("src/a.test.ts", '@@ -1,3 +1,3 @@\n-it("old", () => {\n+it.skip("old", () => { // flaky\n   expect(f()).toBe(1);\n });\n')).toEqual(["skip_added:mechanical own 0"]);
+    expect(skipActs("src/a.test.ts", '@@ -1,3 +1,4 @@\n it("old", () => {\n+  test.skip(process.platform === "win32", "posix"); // flaky\n   expect(f()).toBe(1);\n });\n')).toEqual(["skip_added:mechanical own 0"]);
   });
 
   test("a skip marker moved from one test to another counts as added on the receiving test", () => {
@@ -323,14 +323,14 @@ describe("detectors", () => {
   test("a renamed test that keeps its skip marker counts as added", () => {
     const renamed = '@@ -1,3 +1,3 @@\n @pytest.mark.skip(reason="flaky")\n-def test_old():\n+def test_new():\n     assert f() == 1\n';
     const acts = gamingActs(diffOf("tests/test_a.py", renamed), [], () => oldSide(renamed));
-    expect(acts.map(kindOwn)).toEqual(["skip_added:mechanical own 0"]);
-    expect(acts[0].detail).toBe('tests/test_a.py: @pytest.mark.skip(reason="flaky")');
+    expect(acts.map(kindOwn)).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
+    expect(acts[1].detail).toBe('tests/test_a.py: @pytest.mark.skip(reason="flaky")');
     expect(skipActs("src/a.test.ts", '@@ -1,3 +1,3 @@\n-it.skip("old name", () => {\n+it.skip("new name", () => {\n   expect(f()).toBe(1);\n });\n')).toEqual(["skip_added:mechanical own 0"]);
   });
 
   test("a Python test header with a trailing comment is still a header, so own_new_test_skips reads its whole body", () => {
     const reused = '@@ -1,3 +1,4 @@\n-def test_old():\n+@pytest.mark.skip(reason="wip")\n+def test_new():  # renamed\n     x = compute()\n     assert x == 1\n';
-    expect(skipActs("tests/test_a.py", reused)).toEqual(["skip_added:mechanical own 0"]);
+    expect(skipActs("tests/test_a.py", reused)).toEqual(["test_removed:mechanical", "skip_added:mechanical own 0"]);
     const whole = '@@ -1,2 +1,7 @@\n def test_old():\n     assert f() == 1\n+\n+@pytest.mark.skip(reason="wip")\n+def test_new():  # added whole\n+    x = compute()\n+    assert x == 2\n';
     expect(skipActs("tests/test_a.py", whole)).toEqual(["skip_added:mechanical own 1"]);
   });
