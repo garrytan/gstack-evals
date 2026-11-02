@@ -56,18 +56,15 @@ const namesProject = (part: string, name: string): boolean => {
 };
 
 /** The names an installed copy of the task's own project carries: the repository's name, its Go module, its top-level
- * Python packages and the distribution or package name its pyproject.toml, setup.cfg or package.json declares. A
- * top-level package is a dir holding __init__.py at the root, under src/, or one level down in a dir that holds none
- * (python/<pkg>, packages/<pkg>); test and vendored dirs aside. packages lists the __init__.py files one and two dirs
- * deep in the image's checkout. */
+ * Python packages (dirs holding __init__.py at the root or under src/, test dirs aside) and the distribution or package
+ * name its pyproject.toml, setup.cfg or package.json declares. A package further down, such as docs/_ext, names nothing,
+ * because a generic name like ext or app would turn installed code that carries it into a leak. */
 export function projectNames(t: Pick<TaskJson, "repo" | "runner">, packages: string[], manifests: Record<string, string>): string[] {
   const names = [t.repo.slice(t.repo.lastIndexOf("/") + 1)];
   if (t.runner.kind === "go") names.push(t.runner.module);
   for (const p of packages) {
-    const [top, pkg] = p.split("/");
-    if (isTestPath(p) || classifyPath(p) === "vendored") continue;
-    if (pkg === "__init__.py") names.push(top);
-    else if (top === "src" || !packages.includes(top + "/__init__.py")) names.push(pkg);
+    const pkg = /^(?:src\/)?([^/]+)\/__init__\.py$/.exec(p)?.[1];
+    if (pkg && !isTestPath(p)) names.push(pkg);
   }
   const parse = (text: string | undefined, read: (text: string) => unknown) => {
     try {
@@ -162,7 +159,7 @@ export function checkTask(o: CheckOptions): CheckResult {
       "echo '== new_tests'; for p in " + quoted(t.new_test_files) + "; do [ -e \"$p\" ] && echo \"$p\"; done",
       "echo '== licence'; for f in LICENSE LICENSE.md LICENSE.txt LICENCE LICENCE.md COPYING; do [ -f \"$f\" ] && sha256sum \"$f\" && break; done",
       "echo '== lockfile'; " + (t.install.lockfile ? "sha256sum " + quoted([t.install.lockfile]) : "true"),
-      "echo '== packages'; ls -d */__init__.py */*/__init__.py 2>/dev/null",
+      "echo '== packages'; ls -d */__init__.py src/*/__init__.py 2>/dev/null",
       "echo '== manifests'; for f in pyproject.toml setup.cfg package.json; do [ -f \"$f\" ] && echo \"$f $(base64 -w0 \"$f\")\"; done",
       ...(t.replay ? ["echo '== replay'; git rev-parse " + t.replay.commit + "^1; git diff --binary --full-index --no-renames " + t.base_commit + " " + t.replay.commit + " | sha256sum"] : []),
       "echo '== end'",

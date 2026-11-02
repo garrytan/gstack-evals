@@ -73,10 +73,16 @@ describe("L2 scope", () => {
     expect(sortHits(mine, projectNames({ repo: "o/jaraco-functools", runner: PYTEST }, [], {}), []).leaks).toEqual([]);
   });
 
-  test("a top-level package one level down in a plain directory names the project, test and vendored dirs aside", () => {
-    const mono = projectNames({ repo: "o/mono", runner: PYTEST }, ["pkg/__init__.py", "python/widget/__init__.py", "pkg/sub/__init__.py", "src/calc/__init__.py", "tests/unit/__init__.py", "third_party/six/__init__.py"], {});
-    expect(mono.sort()).toEqual(["calc", "mono", "pkg", "widget"]);
-    expect(sortHits(["/usr/local/lib/python3.12/site-packages/widget/core.py", "/usr/local/lib/python3.12/site-packages/six.py"], mono, [])).toEqual({ leaks: ["/usr/local/lib/python3.12/site-packages/widget/core.py"], installed: ["/usr/local/lib/python3.12/site-packages/six.py"] });
+  test("only a package at the root or under src/ names the project, so a generic dir further down leaves installed code alone", () => {
+    const deep = projectNames({ repo: "o/proj", runner: PYTEST }, ["calc/__init__.py", "src/fixture/__init__.py", "tests/__init__.py", "docs/_ext/__init__.py", "examples/app/__init__.py", "jaraco/text/__init__.py", "hack/internal/__init__.py"], {});
+    const hits = [
+      "/usr/local/lib/python3.12/site-packages/sphinx/ext/x.py",
+      "/usr/local/lib/python3.12/site-packages/flask/app.py",
+      "/usr/local/lib/python3.12/site-packages/pip/_vendor/rich/text.py",
+      "/usr/local/go/src/internal/abi/abi.go",
+    ];
+    expect(sortHits(hits, deep, [])).toEqual({ leaks: [], installed: hits });
+    expect(deep.sort()).toEqual(["calc", "fixture", "proj"]);
   });
 
   test("a project whose name ends in a digit still matches its own installed copy, with or without a version", () => {
