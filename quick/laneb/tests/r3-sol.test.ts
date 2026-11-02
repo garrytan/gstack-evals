@@ -423,9 +423,10 @@ describe("#121's notes", () => {
 // (it writes its pid to <STUB_LOG>.hang and waits to be stopped). hangkid hangs the same way with a child in Harbor's
 // process group (its pid in <STUB_LOG>.kid), and stubborn does too with both ignoring SIGTERM. badtrial writes a trial
 // whose sdk-messages.jsonl holds a null line, dirmsgs makes that file a directory (EISDIR), dirsummary makes
-// evaluator/laneb-summary.json a directory, nomsgs leaves sdk-messages.jsonl out (ENOENT), noread makes it unreadable (EACCES), noeval makes the evaluator dir unsearchable (EACCES on stat), and nolog makes the check's own log of the session a directory, so the
+// evaluator/laneb-summary.json a directory, loopsessions turns the proxy's sessions file into a symlink loop (ELOOP) once
+// the session is closed, nomsgs leaves sdk-messages.jsonl out (ENOENT), noread makes it unreadable (EACCES), noeval makes the evaluator dir unsearchable (EACCES on stat), and nolog makes the check's own log of the session a directory, so the
 // check fails writing it. STUB_SLEEP holds every session that many ms.
-const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+const STUB = `import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = process.argv.slice(2);
 const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
@@ -457,6 +458,7 @@ if (mode === "hangkid" || mode === "stubborn") {
 if (mode === "nolog") mkdirSync(join(process.cwd(), job.job_name + ".log"));
 if (process.env.STUB_SLEEP) await Bun.sleep(Number(process.env.STUB_SLEEP));
 await fetch(control + "/sessions/" + s.id + "/close", { method: "POST", body: "{}" }).catch(() => undefined);
+if (mode === "loopsessions") { const f = join(process.cwd(), "proxy-sessions.jsonl"); rmSync(f, { force: true }); symlinkSync(f, f); }
 const d = join(process.cwd(), "jobs", job.job_name, trial);
 mkdirSync(join(d, "evaluator"), { recursive: true });
 writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: task }, agent: { name: a.name, kwargs: k } }));
@@ -616,7 +618,7 @@ describe("the route check's verdicts", () => {
       } finally {
         spy.mockRestore();
       }
-      expect(reads).toBeLessThanOrEqual(1);
+      expect(reads).toBe(1);
       if (reads === nth) expect(thrown).toStartWith(`${code} reading the trial: `);
       else expect(j).toEqual(clean);
     }
@@ -814,6 +816,17 @@ describe("route-check.ts failures on our side (A1)", () => {
     expect(missing.calls).toHaveLength(2);
     expect(missing.rec).toMatchObject({ verdict: "drop", incomplete: null });
     expect(missing.rec!.reason).toStartWith("the smoke part failed twice: try 1: ");
+  }, 60_000);
+
+  test("a proxy sessions file the check can't stat or read for a reason other than ENOENT (ELOOP) ends the check incomplete: no try counted", async () => {
+    const r = rig();
+    const { code, out, calls, rec } = await routeCheck(r, { STUB_PLAN: "told1=loopsessions" });
+    expect(calls).toHaveLength(2);
+    expect(rec).toMatchObject({ verdict: null, reason: null });
+    expect(rec!.incomplete).toStartWith("told try 1: the route check failed during the session: ELOOP");
+    expect(out).toContain("route check: gpt-6.1-sol is incomplete on r3a-sol: told try 1: the route check failed during the session: ELOOP");
+    expect(next(rec!)).toEqual({ kind: "told", try: 1 });
+    expect(code).toBe(4);
   }, 60_000);
 
   test("a directory where laneb-summary.json should be counts no try: both parts pass on their first try", async () => {
