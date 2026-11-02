@@ -35,11 +35,11 @@ R3a on Opus 5.5 starts when this post merges, on item r3a-screen at $150 includi
 | gstack for the told arm | garrytan/gstack 61e201ec08bcf59163ef2d3a69a26e334a536c04 (v1.91.295.0), as #109's gstack tar installs it: tar sha256 b93994689107ebc329b83b35c139b6a6e37ce6b4637f5c8a76dce961732c46b1, pinned in quick/laneb/arms/manifests/r3/gstack.json at the build pin. The told arm's /investigate is that commit's |
 | none and placebo arms | #109's tars, none 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e and placebo ff6b909d89d87be16780b817bf799361263e0efcf931a2b1543db2b779c406f7 (the Captain drive's handoffs/GSTA-30/arms/SHA256SUMS.txt) |
 | Harness | Harbor f3a5a923f6d722472c9e797af836ae4425fb215f with claude-agent-sdk 0.2.174 (runner/vm-bootstrap.sh at the pin), Claude Code 2.1.312, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm, the agent's default turn ceiling of 200 |
-| Task set | the 93 ids of #112 (sha256 5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67), with a digest per task at harbor-datasets 86723674f04e4209ac479d0fb75d9d9f44b4377e in tasks/swebv-r3.json (sha256 61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5). Each task keeps the dataset's timeouts: agent 3000 s, verifier 3000 s |
+| Task set | the 93 ids of #112 (sha256 5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67), with a digest per task at harbor-datasets 86723674f04e4209ac479d0fb75d9d9f44b4377e in tasks/swebv-r3.json (sha256 61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5). Each task keeps the dataset's agent timeout of 3000 s. The verifier limit is 6000 s: cells.r3.json's verifier_timeout_multiplier 2 on the dataset's 3000 s, which prepare-run.ts:89 puts in every swebv-r3 job (screen.ts:128 sets CELLS=cells.r3.json) |
 | Cells and prices | config/cells.r3.json 7fe70d5ee4f55cd1efab783f08543192873ec1bd0ff071706df0d5d444ac5dbf (allowances: Opus 5.5 $4, particle-1 $1); config/proxy.json ba3927b68624958714c2fee7ac19836181c76a8bbabe148fbfdddce3d169c474 |
 | Screen and its rules | r3/screen.ts c7a11aff14d42735066b00749cf43b905d2df1a9f95ccdbb48b7c078cf568eb0, r3/exposure.ts 98db9f1310ae3f0e7631ce8666368d2bcc579412636a417b2c4a3e090eae2f4f, runner/launch.sh ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38, runner/vm-run.sh 7c149a38a54f4f52aa3b1e3f660b14bdb2b705c0262c968bea520e236667088a, runner/ledger.ts 9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33, analysis/analyze.ts 6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d |
 | System prompt | claude-code-preset on every arm and model (section 2) |
-| Run settings | 8 trials at a time (screen.ts's CONCURRENT default), a standard-16 VM per part (launch.sh's default), VM hours settled at VM_USD_PER_HOUR=0.60 in blocks of VM_RESERVE_HOURS=4 ($2.40 a block) |
+| Run settings | 8 trials at a time (screen.ts's CONCURRENT default), a standard-16 VM with 600 GB per part (launch.sh's UBI_SIZE and UBI_STORAGE defaults), VM hours settled at VM_USD_PER_HOUR=0.60 in blocks of VM_RESERVE_HOURS=4 ($2.40 a block), the ledger service on LEDGER_PORT=9911 and each next block reserved VM_EXTEND_LEAD_SEC=1800 ahead (launch.sh's defaults). Section 10's commands set each value explicitly. ORACLE=1, so each part's oracle gate runs before its paid batch, and an oracle failure makes R3a incomplete (sections 3 and 10) |
 
 ledger.ts and analyze.ts differ in bytes from tag laneb-stacks-1-runner's, which #112's dry run used: main's lineage changed analyze.ts, and #121 added ledger.ts's reserve, settle and open commands. #112's frozen r3-dry.ts still prints its 135 R3 lines byte for byte at the pin (section 11).
 
@@ -53,6 +53,8 @@ The Captain (GSTA-2) made three rulings on #121 that read the intent of #112's s
 2. **Opened.** A told trial opened /investigate when the proxy saw the slash command expand in the first request (the body-load probe), or when the agent read the skill file itself. A slash command delivers the body without a file open, so either signal counts. The export keeps the two signals apart (cmd_names from the proxy, skill_opens from the agent), and its investigate_opened is true on either. The procedure gate of #112's section 4.5 counts a trial as exposed when it opened /investigate and its output shows the procedure (DEBUG REPORT or a Phase 1 to Phase 5 heading).
 3. **claude-code-preset.** Every R3 arm on every model runs on Claude Code's own system prompt. It is part of R3's arm config (`none:system_prompt=claude-code-preset`, `gstack:told=investigate:system_prompt=claude-code-preset`, `placebo:told=investigate:system_prompt=claude-code-preset`).
 
+Each cell's allowance-stop count, its trials with budget_stop true in trials.jsonl, prints beside every verdict in the run record and the results post: R3a's screen and pilot, and each of R3b's cells. It is report-only and changes no outcome rule.
+
 ## 3. When R3a is incomplete
 
 #112 named one way for R3a to end incomplete: r3a-screen refusing a trial at its cap. The build adds the rules below, all accepted by GSTA-2. Each ends R3a incomplete (screen.ts exits 4) with nothing admitted, R3b does not start, and the Captain gets the record. None is rerun to change a verdict.
@@ -62,13 +64,14 @@ The Captain (GSTA-2) made three rulings on #121 that read the intent of #112's s
 3. **An unreachable ledger.** launch.sh reserves each next VM block through the ledger service before the current block runs out. Only the service's HTTP 409 is a refusal, a cap stop. Any other failure, such as the service being unreachable, is retried until the current block runs out, and then stops the batch the same way. Either way the part's run dir holds vm-cap-stop.
 4. **The infra bound (Captain ruling A1 on #121).** More than 10% infra trials in a part (10 or more of the screen's 93, or 2 or more of the pilot's 10) makes R3a incomplete. It is checked before admission. #112's 10% infra rule in section 4.6 covers R3b's Opus cells and is unchanged.
 5. **Unreadable proxy files (Captain ruling B1 on #121).** An empty or unparseable pulled cap-stop.json, proxy-status-end.json or proxy-sessions.jsonl makes R3a incomplete, and the reason names the file, because a cap stop can't be ruled out. An empty or non-integer `<part>.launch-exit` does the same ("launch exit unreadable").
+6. **An oracle failure (GSTA-2's ruling on this post's review).** Section 10 sets ORACLE=1. A part whose oracle gate fails stops before any paid trial, launch.sh exits non-zero, and R3a is incomplete, having spent only VM hours (section 10).
 
 The build also refuses, from 301d8d3 and f8a279b:
 
 - run() refuses a VM rate or block hours that aren't positive numbers, and a block that rounds to $0, is over the $150 cap, or is under 2 seconds, before it binds the item. launch.sh refuses a non-positive rate or hours and a $0 block.
 - analyze() removes an earlier analysis's admitted.txt and r3b-tasks.txt before it writes, so a reanalysis that ends incomplete leaves no admission list behind.
 
-So R3a is incomplete when: a cap refusal (a session reserve, the proxy's batch cap or a VM block), one of rules 2 to 5, a launch that exits non-zero or never ran, or a part with no pulled results. screen.ts's exit codes are 0 (admission passed), 4 (incomplete), 5 (saturation) and 6 (pilot FIX-METHOD). Exit 1 or 2 is an error, never an outcome.
+So R3a is incomplete when: a cap refusal (a session reserve, the proxy's batch cap or a VM block), one of rules 2 to 6, a launch that exits non-zero or never ran, or a part with no pulled results. screen.ts's exit codes are 0 (admission passed), 4 (incomplete), 5 (saturation) and 6 (pilot FIX-METHOD). Exit 1 or 2 is an error, never an outcome.
 
 ## 4. #121's open notes
 
@@ -116,6 +119,8 @@ Two sessions through R3's proxy and r3a-sol's ledger, both on claude-code-preset
 1. **Smoke.** Arm none. It passes when at least one tool call gets its result back (Run D's rule).
 2. **Told.** Arm gstack, told /investigate. It passes when the proxy's body-load probe records /investigate's expansion in the first request and a model response reaches the agent. If the command's body never reaches Sol, the told arm measures nothing, so this part checks what Run D's listing check checks for its untold design.
 
+The route check also records each session's cache-read tokens and metered cost. They are report-only, and the pin-only amendment re-projects Sol's cost from them (section 6.7). The cap still stops spend.
+
 A part that fails is retried once. A model that fails twice leaves R3: Sol's screen and pilot don't run, and the results say so with the measured failure (which part failed, the Harbor exit, and the proxy's status and refusals). It is never written as "Sol can't run in Lane B".
 
 ### 6.3 Admission and R3b
@@ -154,7 +159,7 @@ The Sol build is one PR to gstack-evals from main. It touches code that spends m
 1. **Route row.** A gpt-6.1-sol row in config/proxy.json: Run D's row from tag laneb-discovery-3-runner (route openrouter, upstream openai/gpt-6.1-sol, provider only openai, allow_fallbacks false), with the cache-write prices at OpenRouter's $2.50 and a long-prompt row over 272,000 tokens at $4, $15, $0.20 and $5, so metered cost is never below the list.
 2. **Cell.** A gpt-6.1-sol entry in config/cells.r3.json: harbor_model anthropic/gpt-6.1-sol, session_cap_usd 4.
 3. **Screen per model.** screen.ts takes the model: Opus (the default) on item r3a-screen at $150, or Sol on item r3a-sol at $140. The item's cap is the batch cap run() passes to launch.sh. Coverage counts a trial of the other model as stray, the allowance table holds Sol at $4, and the admission lines, record and projection name the model (r3b-sol for Sol). With Opus, every line and file stays as #121 writes it.
-4. **Route check.** A command that runs section 6.2's two sessions on r3a-sol's ledger, writes a verdict file naming the part that failed and the proxy's evidence, and exits non-zero on a Harbor failure or a failed part.
+4. **Route check.** A command that runs section 6.2's two sessions on r3a-sol's ledger, writes a verdict file naming the part that failed, the proxy's evidence and each session's cache-read tokens and metered cost, and exits non-zero on a Harbor failure or a failed part. It takes the ledger port from LEDGER_PORT, as launch.sh does, and hard-codes no port.
 5. **Two of #121's notes.** run() reads the screen's stop reason (stopReason) before it launches the pilot and skips the pilot when the screen is already incomplete. analyze() removes admitted.txt and r3b-tasks.txt before it reads plan.json.
 6. **Keyless tests.** Sol's arms under the real pinned Agent SDK with a stub CLI (the preset, bundled skills off, each arm's exact prompt); Sol's screen on fixture trials (admission, saturation, the pilot stop, an Opus trial in a Sol part counted as stray); r3a-sol bound at $140 and refused at any other cap; the route-check verdict on passing and failing fixtures; the pilot skipped after an incomplete screen; the removal order; #112's r3-dry.ts still printing its 135 lines; and r3a-caps.ts at the Sol build's pin.
 
@@ -185,6 +190,8 @@ r3a-caps.ts replays R3a's planned order on the pin's real Ledger at the real cap
 
 So at the planning cost no start, block or round rule stops either screen before every planned trial runs, with every in-flight session reserved at its full allowance and VM hours up to #112's $30. Sol at the high figure completes with VM hours near plan, and stops in its pilot only if its VM hours also reach about $31. No cap of this size can hold every trial at its full allowance: 103 trials at $4 is $412. A run whose trials average more than the break-even ends in a cap stop, which section 3 makes an incomplete run, as #112 intends. The caps are sized to the planning cost, and the break-even says how far above it a run can go.
 
+The replay assumes every settle lands. proxy.ts tries each settle 3 times (proxy.ts:278) and then leaves the session's $4 reserve open until a later close or close-all settles it or launch.sh reconciles the pulled proxy-sessions.jsonl after the pull (launch.sh:195), so each lost settle lowers headroom by up to $4 until then.
+
 ## 8. No gstack on every model
 
 Every model in R3 has a no-gstack arm (Garry, 2026-10-31): Opus 5.5 none in R3a's screen and in R3b, Sol none in its screen and its R3b, and particle-1 none in R3b. R3a has no particle-1 cells: #112 first runs particle-1 in R3b, and the Captain confirmed that reading.
@@ -201,12 +208,26 @@ The A1, B1 and C1 of sections 3 to 5 are a third set: the Captain's rulings on #
 
 Opus's R3a, from a checkout of 8ad436d in the run thread's own machine (section 1). `git rev-parse HEAD` must print 8ad436dc3403e3061440711dfe1d78cc59d7a7f9 first, and the run record keeps that line. LEDGER is r3a-screen's jsonl ledger with one approval row at $150 in the words approvals/2026-11-01-r48-follow-ups-caps.md gives. SWEBV is a harbor-datasets checkout at 86723674 (tasks/swebv_r3.py --checkout leaves one), and ARMS holds #109's three tars, rebuilt from handoffs/GSTA-30/arms and checked against SHA256SUMS.txt. API keys come from the environment, never the command line.
 
-    LEDGER=<r3a-screen.jsonl> SWEBV=<harbor-datasets> ARMS=<arm tars> bun quick/laneb/r3/screen.ts prepare <work>
+    LEDGER=<r3a-screen.jsonl> SWEBV=<harbor-datasets> ARMS=<arm tars> ORACLE=1 CONCURRENT=8 \
+      bun quick/laneb/r3/screen.ts prepare <work>
     LEDGER=<r3a-screen.jsonl> UBI_OWNER=<thread code> VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 \
+      UBI_SIZE=standard-16 UBI_STORAGE=600 LEDGER_PORT=9911 VM_EXTEND_LEAD_SEC=1800 \
       bun quick/laneb/r3/screen.ts run <work>
     LEDGER=<r3a-screen.jsonl> bun quick/laneb/r3/screen.ts analyze <work>
 
-run launches the screen and then the pilot, each on its own VM, and can pass 6 hours, so it runs detached on the run thread's machine and the thread attaches on a timer. analyze exits 0, 4, 5 or 6 (section 3). Sol's commands come with its pin-only amendment.
+CONCURRENT, UBI_SIZE, UBI_STORAGE, LEDGER_PORT and VM_EXTEND_LEAD_SEC equal the pin's defaults (screen.ts:129, launch.sh:145, :33 and :62), and the commands set them anyway, so the run rests on no default. analyze exits 0, 4, 5 or 6 (section 3). Sol's commands come with its pin-only amendment.
+
+**The oracle gate.** With ORACLE=1, prepare-run.ts writes oracle.json beside each part's job (prepare-run.ts:93). vm-run.sh then runs the reference solution on every task of the part, calling no model, before the paid batch, and needs reward 1 on every task; a task with no trial fails too (vm-run.sh:29 to :38). An oracle failure stops the part before any paid trial: vm-run.sh exits 6, launch.sh exits with that code, and R3a is incomplete under section 3, having spent only VM hours. The run record names the failing tasks from the pulled out/oracle-fails.txt, with Harbor's out/oracle.log beside it. The oracle job's trial directories are pulled into pulled/jobs beside the part's job, but exposure.ts reads only trials whose agent is laneb-claude-code (exposure.ts:48), so they never count as trials, stray trials or infra.
+
+**Keeping the machine awake.** run launches the screen and then the pilot, each on its own VM, and can pass 6 hours. It holds the ledger service, the VM extender and the tunnel, so its machine must stay awake until it exits:
+
+- `screen.ts run` runs detached on the run thread's own machine and writes its pid to a pid file.
+- The thread keeps that machine awake with a chain of background watcher operations, each under 6 hours, which it waits on. At each wake it starts a new one while the pid lives.
+- It reads the pid from the pid file, never with pgrep.
+- The ledger service runs on that same machine.
+- One launch runs per machine at a time, because launches share LEDGER_PORT 9911.
+
+One limit stands: the extender's curl has no --max-time, but it calls the local ledger service, so the risk is VM hours, not an outcome.
 
 ## 11. Dry run
 
@@ -218,7 +239,7 @@ dry-run-r3.sh reruns the R3 section of #112's dry-run.sh, keyless, at the build 
 - **Caps.** As section 7.
 - **Rules.** 79 tests pass and none fail in r3.test.ts, launch.test.ts and vm-run.test.ts at the pin. Among them: graded needs a reward and a model response; a trial with no result.json is infra; a missing, second, stray, wrong-arm or unattributable trial makes R3a incomplete; 10 of 93 infra screen trials or 2 of 10 pilot trials make it incomplete, and 9 and 1 go on to admission; each unreadable proxy file and each unreadable launch exit makes it incomplete; a reanalysis that ends incomplete leaves no admission list; run binds the item once and refuses bad VM rates and blocks before it binds; a refused VM block, a refused next block and an unreachable ledger each stop the batch; every R3 arm sends CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 and the preset through the real pinned SDK.
 
-#112's done line asks for the dry run with "the R3 fixtures replaced by a stub run's real trial records". A Harbor trial needs Docker, a SWE-bench image and Harbor itself, so this dry run doesn't run one. The build's tests feed its own trial reader and screen with Harbor-shaped job directories, and the SDK test runs each arm's real agent options through the pinned SDK. The first real Harbor records are vm-run.sh's oracle gate, which needs reward 1 on every task before the paid batch starts and calls no model. Test durations in the output change from run to run.
+#112's done line asks for the dry run with "the R3 fixtures replaced by a stub run's real trial records". A Harbor trial needs Docker, a SWE-bench image and Harbor itself, so this dry run doesn't run one. The build's tests feed its own trial reader and screen with Harbor-shaped job directories, and the SDK test runs each arm's real agent options through the pinned SDK. runner/smoke.sh at the pin can't stand in: it runs the runner's own smoke task with a stub /investigate and passes no told_skill or system_prompt, so it can't run an R3 arm without a code change, and this machine has no Harbor. The first real Harbor records are vm-run.sh's oracle gate, which runs because section 10 sets ORACLE=1, needs reward 1 on every task before the paid batch starts and calls no model. Test durations in the output change from run to run.
 
 ## 12. Changes from #112
 
@@ -231,6 +252,8 @@ dry-run-r3.sh reruns the R3 section of #112's dry-run.sh, keyless, at the build 
 - R3a's caps are checked against the rules that can stop a run, at the real caps (section 7).
 - The attribution of #112's A1 and B1, and of R3b's caps, is corrected (section 9).
 - The dry run reruns at the build pin; it uses the build's tests rather than a stub Harbor run (section 11).
+- After review, GSTA-2's rulings: section 10 sets ORACLE=1 and every run setting explicitly, keeps the controller's machine awake and runs one launch per machine, and an oracle failure makes R3a incomplete (sections 1, 3 and 10).
+- Sol's route check records cache reads and takes LEDGER_PORT, allowance stops print beside every verdict, the verifier limit reads 6000 s, and section 7 notes lost settles (sections 1, 2, 6 and 7).
 
 ## Attachments
 
