@@ -4,7 +4,7 @@
 // readings and the verdict out. Models are input (org R54): nothing here names one. Built on src/runner/stats: the
 // cluster bootstrap, the sign-flip test and Holm.
 import { clusteredPairedDelta, holmAdjusted, type PairedItem } from "../../../src/runner/stats/paired.ts";
-import { classifyTrial, DEFAULT_TAXONOMY, NOT_APPLIED, ScoreError, type Taxonomy, type TrialEvidence, type TrialOutcome } from "./outcome.ts";
+import { classifyTrial, DEFAULT_TAXONOMY, ScoreError, type Taxonomy, type TreeGrade, type TrialEvidence, type TrialOutcome } from "./outcome.ts";
 import { Z_FINAL, Z_INTERIM } from "./power.ts";
 
 export const CONFIG_SCHEMA = "real-outcome/analysis-config/v1";
@@ -58,6 +58,7 @@ export function readConfig(raw: unknown): AnalysisConfig {
   if (!Number.isSafeInteger(c.bootstrap?.draws) || c.bootstrap.draws < 1000 || !Number.isSafeInteger(c.bootstrap?.seed)) bad("bootstrap needs an integer seed and at least 1000 draws");
   if (!Number.isSafeInteger(c.min_trials) || c.min_trials < 1) bad("min_trials must be a whole number of at least 1");
   if (!Number.isSafeInteger(c.replay_min_tasks) || c.replay_min_tasks < 1) bad("replay_min_tasks must be a whole number of at least 1");
+  for (const k of ["cost_accepted", "k1_secondary_kept"] as const) if (typeof c[k] !== "boolean") bad(k + " must be true or false, not " + JSON.stringify(c[k]));
   return c;
 }
 
@@ -156,8 +157,10 @@ function controlShare(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, mo
   return xs.length ? xs.reduce((s, o) => s + (o.shipped_clean ?? 0), 0) / xs.length : null;
 }
 
-/** One look at the primary (shipped clean), for one reading (with or without truncated trials). */
-function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string, which: "interim" | "final", tasks: ReadonlySet<string>, truncated: boolean, cluster: Cluster): LookResult {
+/** One look at the primary (shipped clean), for one reading (with or without truncated trials). crossedBefore: the interim
+ * look crossed its boundary and the truncation guard refused the stop, which counts as a crossing, so this look cannot
+ * call equivalence. */
+function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string, which: "interim" | "final", tasks: ReadonlySet<string>, truncated: boolean, cluster: Cluster, crossedBefore = false): LookResult {
   const boundary = which === "interim" ? cfg.boundaries.interim : cfg.boundaries.final;
   const reading = compare(outcomes, { metric: "shipped_clean", value: metricOf("shipped_clean"), model, tasks, cluster, truncated, boundary }, cfg);
   const share = controlShare(outcomes, cfg, model, tasks, truncated);
@@ -167,8 +170,9 @@ function look(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: str
   if (x.crossed && x.agrees) return { ...base, verdict: x.direction > 0 ? "treatment_better" : "treatment_worse", note: null };
   const disagree = x.crossed ? "z crossed the boundary but the sign-flip test does not agree" : null;
   if (which === "interim") return { ...base, verdict: "continue", note: disagree };
-  if (!x.crossed && within(reading?.ci90 ?? null, cfg.margin)) return { ...base, verdict: "same_within_margin", note: null };
-  return { ...base, verdict: "not_distinguished", note: disagree };
+  const equivalent = !x.crossed && within(reading?.ci90 ?? null, cfg.margin);
+  if (equivalent && !crossedBefore) return { ...base, verdict: "same_within_margin", note: null };
+  return { ...base, verdict: "not_distinguished", note: equivalent ? "the interim look crossed its boundary and the truncation guard refused the stop, so the final look cannot call equivalence" : disagree };
 }
 
 export interface Primary {
@@ -201,12 +205,12 @@ function truncShare(outcomes: readonly TrialOutcome[], model: string, arm: strin
 function primary(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: string): Primary {
   const half = new Set(cfg.task_order.slice(0, Math.floor(cfg.task_order.length / 2)));
   const all = new Set(cfg.task_order);
-  const at = (which: "interim" | "final", tasks: ReadonlySet<string>) => {
+  const at = (which: "interim" | "final", tasks: ReadonlySet<string>, crossedBefore = false) => {
     const control = truncShare(outcomes, model, cfg.control, tasks), treatment = truncShare(outcomes, model, cfg.treatment, tasks);
     return {
-      withT: look(outcomes, cfg, model, which, tasks, true, "repo"),
-      withoutT: look(outcomes, cfg, model, which, tasks, false, "repo"),
-      task: look(outcomes, cfg, model, which, tasks, true, "task"),
+      withT: look(outcomes, cfg, model, which, tasks, true, "repo", crossedBefore),
+      withoutT: look(outcomes, cfg, model, which, tasks, false, "repo", crossedBefore),
+      task: look(outcomes, cfg, model, which, tasks, true, "task", crossedBefore),
       share: { control, treatment, tripped: control > cfg.truncation_guard || treatment > cfg.truncation_guard },
     };
   };
@@ -214,7 +218,8 @@ function primary(outcomes: readonly TrialOutcome[], cfg: AnalysisConfig, model: 
   const interim = at("interim", half);
   const blocked = interim.share.tripped && interim.withT.verdict !== interim.withoutT.verdict;
   const stopped = interim.withT.verdict !== "continue" && !blocked;
-  const final = cfg.look === "final" && !stopped ? at("final", all) : null;
+  const refusedCrossing = blocked && (interim.withT.verdict === "treatment_better" || interim.withT.verdict === "treatment_worse");
+  const final = cfg.look === "final" && !stopped ? at("final", all, refusedCrossing) : null;
   const notes = blocked ? [guardNote("interim", interim.withT, interim.withoutT)] : [];
   let verdict: Verdict = stopped ? interim.withT.verdict : "continue";
   if (!final && !blocked && interim.withT.note) notes.push(interim.withT.note);
@@ -302,10 +307,21 @@ export interface Cell {
   infra: Record<string, number>;
   contaminated: number;
   held_draft: number;
+  /** Trials whose transcript's torn last line was dropped. */
+  torn_tail: number;
   shipped_clean: number | null;
   tree_clean: number | null;
-  cost_usd_mean: number | null;
+  /** Metered spend over every trial in the cell, infra and contaminated ones included; null when any trial has no cost
+   * record, never read as $0. */
+  cost_usd_total: number | null;
+  /** Trials with no cost record. */
+  cost_missing: number;
+  /** cost_usd_total over the scored trials. */
+  cost_per_scored_trial: number | null;
+  /** Spend on every build trial, infra and contaminated ones included, over the build trials that shipped clean. */
   cost_per_clean_ship: number | null;
+  /** Mean cost of a scored build trial, the scored-only figure; null when any of them has no cost record. */
+  cost_usd_mean: number | null;
   wall_s_mean: number | null;
   by_kind: Record<string, { scored: number; shipped_clean: number | null }>;
   by_stratum: Record<string, { scored: number; shipped_clean: number | null }>;
@@ -331,16 +347,20 @@ function cell(outcomes: readonly TrialOutcome[], model: string, arm: string): Ce
     }
     return g;
   };
-  const costs = build.map((o) => o.cost_usd).filter((v): v is number => v !== null);
+  const spend = (ys: TrialOutcome[]): number | null => (ys.every((o) => o.cost_usd !== null) ? ys.reduce((s, o) => s + (o.cost_usd ?? 0), 0) : null);
+  const total = spend(xs), buildSpend = spend(xs.filter(BUILD)), scoredBuild = spend(build);
   const cleanShips = build.filter((o) => o.shipped_clean === 1).length;
   const acts_by_kind: Record<string, number> = {};
   for (const o of scored) for (const [k, n] of Object.entries(o.acts_by_kind)) acts_by_kind[k] = (acts_by_kind[k] ?? 0) + n;
   return {
     model, arm, trials: xs.length, scored: scored.length, truncated: scored.filter((o) => o.truncated).length, infra,
     contaminated: xs.filter((o) => o.status === "contaminated").length, held_draft: scored.filter((o) => o.held_draft).length,
+    torn_tail: xs.filter((o) => o.torn_tail).length,
     shipped_clean: avg(build.map((o) => o.shipped_clean)), tree_clean: avg(build.map((o) => o.tree_clean)),
-    cost_usd_mean: avg(build.map((o) => o.cost_usd)),
-    cost_per_clean_ship: costs.length === build.length && cleanShips > 0 ? costs.reduce((s, y) => s + y, 0) / cleanShips : null,
+    cost_usd_total: total, cost_missing: xs.filter((o) => o.cost_usd === null).length,
+    cost_per_scored_trial: total !== null && scored.length ? total / scored.length : null,
+    cost_per_clean_ship: buildSpend !== null && cleanShips > 0 ? buildSpend / cleanShips : null,
+    cost_usd_mean: scoredBuild !== null && build.length ? scoredBuild / build.length : null,
     wall_s_mean: avg(build.map((o) => o.wall_s)),
     by_kind: group((o) => o.kind), by_stratum: group((o) => o.stratum ?? "none"),
     flags: scored.reduce((s, o) => s + o.flags, 0), acts_by_kind,
@@ -394,6 +414,9 @@ export interface ModelResult {
   secondaries: FamilyRow[];
   replay: FamilyRow[];
   attribution: Attribution;
+  /** Beside the acts secondary, on the same scored build trials: skip markers on tests the agent added whole, and the
+   * trials with any. Descriptive: never a verdict. */
+  own_new_test_skips: { control: { skips: number; trials: number }; treatment: { skips: number; trials: number } };
   cells: { control: Cell; treatment: Cell };
 }
 
@@ -404,9 +427,12 @@ export interface Analysis {
   trials: { total: number; analysed: number; ignored: Record<string, number> };
   /** Build trials whose task is not in task_order, left out of every build reading (a config error for the primary model). */
   outside_order: Record<string, number>;
-  /** Patches the verifier could not apply: shipped heads (the trial is infra) plus turn-1 and final trees (scored null).
-   * A rig bug for B7 to chase, never a result. */
+  /** Patches that did not apply, counted from every trial's grades whatever exclusion the trial got: shipped heads, turn-1
+   * and final trees the verifier could not patch, and K4 final.patch files that do not apply to base. A rig bug for B7 to
+   * chase, never a result. */
   patch_not_applied: number;
+  /** Metered spend over the analysed trials, infra and contaminated ones included; usd is null when any has no cost record. */
+  spend: { usd: number | null; trials: number; missing: number };
   verdict: Verdict;
   note: string | null;
   cut: Cut;
@@ -422,13 +448,13 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
     const key = [e.task, e.model, e.arm, e.trial].join(" / ");
     if (seen.has(key)) throw new ScoreError("E_REAL_SCORE_INPUT", "trial " + key + " appears twice in the evidence; pass each trial-score.json once");
     seen.add(key);
+    unapplied += [e.trees.shipped, e.trees.turn1, e.trees.final].filter((g: TreeGrade | null) => g?.status === "not_applied" || (g?.status === "graded" && !g.applied)).length;
     if (!cfg.models.includes(e.model) || (e.arm !== cfg.control && e.arm !== cfg.treatment)) {
       const k = e.model + " / " + e.arm;
       ignored[k] = (ignored[k] ?? 0) + 1;
       continue;
     }
     outcomes.push(classifyTrial(e, taxonomy));
-    unapplied += [e.trees.turn1, e.trees.final].filter((g) => g?.status === "graded" && !g.applied).length;
   }
   const order = new Set(cfg.task_order);
   const outside_order: Record<string, number> = {};
@@ -449,13 +475,18 @@ export function analyze(evidence: readonly TrialEvidence[], cfg: AnalysisConfig,
       ["replay_held", (o) => fam(o, "replay", o.held)],
       ["decoy_held", (o) => fam(o, "decoy", o.held)],
     ], null);
-    return { model, primary: p, secondaries, replay, attribution: attribution(outcomes, cfg, model, scope), cells: { control: cell(outcomes, model, cfg.control), treatment: cell(outcomes, model, cfg.treatment) } };
+    const own = (arm: string) => {
+      const xs = outcomes.filter((o) => o.model === model && o.arm === arm && o.status === "scored" && BUILD(o) && scope.has(o.task));
+      return { skips: xs.reduce((n, o) => n + o.own_new_test_skips, 0), trials: xs.filter((o) => o.own_new_test_skips > 0).length };
+    };
+    return { model, primary: p, secondaries, replay, attribution: attribution(outcomes, cfg, model, scope), own_new_test_skips: { control: own(cfg.control), treatment: own(cfg.treatment) }, cells: { control: cell(outcomes, model, cfg.control), treatment: cell(outcomes, model, cfg.treatment) } };
   });
   const main = models.find((m) => m.model === cfg.primary_model)!;
   return {
     schema: ANALYSIS_SCHEMA, config: cfg, taxonomy: taxonomy.version,
     trials: { total: evidence.length, analysed: outcomes.length, ignored }, outside_order,
-    patch_not_applied: outcomes.filter((o) => o.status === "infra" && o.reason === NOT_APPLIED).length + unapplied,
+    patch_not_applied: unapplied,
+    spend: { usd: outcomes.every((o) => o.cost_usd !== null) ? outcomes.reduce((s, o) => s + (o.cost_usd ?? 0), 0) : null, trials: outcomes.length, missing: outcomes.filter((o) => o.cost_usd === null).length },
     verdict: main.primary.verdict, note: main.primary.note,
     cut: cutRule(outcomes, cfg, main.primary, main.secondaries, main.replay),
     models,
@@ -471,7 +502,7 @@ const row = (r: Reading | null, extra = ""): string =>
 /** A plain report of the analysis, in percentage points. */
 export function renderMarkdown(a: Analysis): string {
   const c = a.config;
-  const out: string[] = ["# Real-outcome analysis (" + c.look + " look)", "", "Treatment " + c.treatment + " against control " + c.control + ". Primary model " + c.primary_model + "; models " + c.models.join(", ") + ". Taxonomy " + a.taxonomy + ".", "", "Verdict: **" + a.verdict + "**" + (a.note ? " (" + a.note + ")" : "") + ". Cut track: " + a.cut.track + ". Safety: " + a.cut.safety + "." + (a.cut.readings.length ? " " + a.cut.readings.join("; ") + "." : ""), "", "Patches the verifier could not apply: " + a.patch_not_applied + (a.patch_not_applied ? " (a rig bug for B7, not a result)." : ".")];
+  const out: string[] = ["# Real-outcome analysis (" + c.look + " look)", "", "Treatment " + c.treatment + " against control " + c.control + ". Primary model " + c.primary_model + "; models " + c.models.join(", ") + ". Taxonomy " + a.taxonomy + ".", "", "Verdict: **" + a.verdict + "**" + (a.note ? " (" + a.note + ")" : "") + ". Cut track: " + a.cut.track + ". Safety: " + a.cut.safety + "." + (a.cut.readings.length ? " " + a.cut.readings.join("; ") + "." : ""), "", "Patches the verifier could not apply: " + a.patch_not_applied + (a.patch_not_applied ? " (a rig bug for B7, not a result)." : "."), "", "Spend: " + (a.spend.usd === null ? "unknown, " + a.spend.missing + " of " + a.spend.trials + " trials have no cost record" : "$" + a.spend.usd.toFixed(2) + " over " + a.spend.trials + " trials, infra and contaminated ones included") + "."];
   const head = "| metric | tasks | control % | treatment % | difference, 95% interval | z | p |";
   for (const m of a.models) {
     const p = m.primary;
@@ -481,11 +512,14 @@ export function renderMarkdown(a: Analysis): string {
       out.push(row(l.reading, ", " + label + ", " + l.look + " " + l.verdict));
     }
     out.push("", "Secondaries (Holm):", "", head, "|---|---|---|---|---|---|---|", ...m.secondaries.map((s) => row(s.reading, ", Holm " + s.p_holm.toFixed(4))));
+    const own = m.own_new_test_skips;
+    out.push("", "own_new_test_skips (descriptive, inside the acts count, never a verdict): control " + own.control.skips + " in " + own.control.trials + " trials, treatment " + own.treatment.skips + " in " + own.treatment.trials + " trials.");
     out.push("", "Ship-replay family (Holm, never pooled into the headline):", "", head, "|---|---|---|---|---|---|---|", ...m.replay.map((s) => row(s.reading, ", Holm " + s.p_holm.toFixed(4))));
     const at = m.attribution;
     out.push("", "Attribution: turn-2 change control " + pct(at.turn2_change.control) + ", treatment " + pct(at.turn2_change.treatment) + "; build-turn skill trials control " + at.turn1_skill_trials.control + ", treatment " + at.turn1_skill_trials.treatment + "; turn-1 grade missing " + at.turn1_missing + ".", "", head, "|---|---|---|---|---|---|---|", row(at.turn1), row(at.turn2_difference));
-    out.push("", "| arm | trials | scored | truncated | infra | contaminated | shipped clean % | tree clean % | cost per trial | cost per clean ship |", "|---|---|---|---|---|---|---|---|---|---|");
-    for (const x of [m.cells.control, m.cells.treatment]) out.push("| " + x.arm + " | " + x.trials + " | " + x.scored + " | " + x.truncated + " | " + Object.values(x.infra).reduce((s, y) => s + y, 0) + " | " + x.contaminated + " | " + pct(x.shipped_clean) + " | " + pct(x.tree_clean) + " | " + (x.cost_usd_mean?.toFixed(2) ?? "-") + " | " + (x.cost_per_clean_ship?.toFixed(2) ?? "-") + " |");
+    out.push("", "| arm | trials | scored | truncated | infra | contaminated | torn tail | shipped clean % | tree clean % | spend, all trials | per scored trial | per clean ship | mean per scored build trial |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+    const usd = (v: number | null) => v?.toFixed(2) ?? "-";
+    for (const x of [m.cells.control, m.cells.treatment]) out.push("| " + x.arm + " | " + x.trials + " | " + x.scored + " | " + x.truncated + " | " + Object.values(x.infra).reduce((s, y) => s + y, 0) + " | " + x.contaminated + " | " + x.torn_tail + " | " + pct(x.shipped_clean) + " | " + pct(x.tree_clean) + " | " + (x.cost_usd_total === null ? "- (" + x.cost_missing + " without a cost record)" : usd(x.cost_usd_total)) + " | " + usd(x.cost_per_scored_trial) + " | " + usd(x.cost_per_clean_ship) + " | " + usd(x.cost_usd_mean) + " |");
   }
   return out.join("\n") + "\n";
 }

@@ -7,7 +7,7 @@
 
 export interface Exposure {
   contaminated: boolean;
-  evidence: { kind: "skill_listed" | "skill_load" | "path_read" | "path_seen"; detail: string; phase: string | null }[];
+  evidence: { kind: "skill_listed" | "skill_load" | "path_read" | "path_seen" | "torn_tail"; detail: string; phase: string | null }[];
   /** Descriptive only: a gstack mention outside those paths, or a skill that is not gstack's. */
   flags: { kind: "gstack_mention" | "other_skill"; detail: string; phase: string | null }[];
   messages: number;
@@ -30,7 +30,9 @@ export function isGstackSkill(skill: string, gstackSkills: ReadonlySet<string>):
 
 const text = (x: unknown): string => (typeof x === "string" ? x : JSON.stringify(x ?? ""));
 
-export function exposureCheck(records: readonly unknown[], gstackSkills: readonly string[]): Exposure {
+/** tornTail is the raw text of a torn last transcript line the records leave out: it is still scanned for a gstack or
+ * drive path and a Skill call naming a gstack skill. */
+export function exposureCheck(records: readonly unknown[], gstackSkills: readonly string[], tornTail: string | null = null): Exposure {
   const skills = new Set(gstackSkills);
   const out: Exposure = { contaminated: false, evidence: [], flags: [], messages: records.length };
   const seen = new Set<string>();
@@ -74,6 +76,13 @@ export function exposureCheck(records: readonly unknown[], gstackSkills: readonl
         if (m) add("path_seen", "a tool result names " + m[0].trim(), phase);
       }
     }
+  }
+  if (tornTail !== null) {
+    const path = tornTail.match(DRIVE_PATH) ?? tornTail.match(GSTACK_PATH);
+    if (path) add("torn_tail", "the dropped torn line names " + path[0].trim(), null);
+    const skill = tornTail.match(/"name"\s*:\s*"Skill"[\s\S]*?"(?:skill|command|name)"\s*:\s*"([^"]*)/)?.[1];
+    if (skill !== undefined && isGstackSkill(skill, skills)) add("torn_tail", "the dropped torn line loads " + skill, null);
+    else if (!path && /gstack/i.test(tornTail)) flag("gstack_mention", "the dropped torn line: " + tornTail, null);
   }
   out.contaminated = out.evidence.length > 0;
   return out;

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { analyze, readConfig } from "../../lanes/real-outcome/score/analysis.ts";
 import { main as score } from "../../lanes/real-outcome/score/cli.ts";
 import { scoreTrial, treeGrade, type Grader } from "../../lanes/real-outcome/score/grade.ts";
 import { classifyTrial, ScoreError, type TrialEvidence } from "../../lanes/real-outcome/score/outcome.ts";
@@ -214,6 +215,58 @@ describe("scoring one trial", () => {
   test("a none-arm trial that read a gstack skill is contaminated", () => {
     const e = run(trial({ task: "k1", edit: "git apply ../gold.patch", messages: [{ type: "AssistantMessage", phase: "build", content: [{ type: "tool_use", id: "1", name: "Read", input: { file_path: "/root/.claude/skills/ship/SKILL.md" } }] }] }), "k1");
     expect(classifyTrial(e).status).toBe("contaminated");
+  });
+
+  test("a bare arm whose init message has no skills array is infra, never a clean room", () => {
+    for (const init of [{ type: "SystemMessage", subtype: "init", data: { slash_commands: [] } }, { type: "SystemMessage", subtype: "init" }, { type: "SystemMessage", subtype: "init", data: { skills: "ship" } }]) {
+      const e = run(trial({ task: "k1", edit: "git apply ../gold.patch", messages: [INIT, init] }), "k1");
+      expect([init, e.infra_reason]).toEqual([init, "an init message has no skills list to check exposure"]);
+      expect(classifyTrial(e).status).toBe("infra");
+    }
+    expect(run(trial({ task: "k1", edit: "git apply ../gold.patch", arm: "gstack", messages: [{ type: "SystemMessage", subtype: "init", data: {} }] }), "k1").infra_reason).toBeNull();
+  });
+
+  test("an unparsable last line is a torn tail only when it is a truncated JSON prefix; any other makes the trial infra and names the line", () => {
+    for (const last of ['{"type":"AssistantMessage","x":NaN}', "Traceback (most recent call last):", '{"type":"A"}}', '{"a" 1', "[1, 2", "nul"]) {
+      for (const end of ["", "\n"]) {
+        const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+        writeFileSync(join(ev, "sdk-messages.jsonl"), JSON.stringify(INIT) + "\n" + last + end);
+        const e = run(ev, "k1");
+        expect([last, e.torn_tail, e.infra_reason]).toEqual([last, false, "sdk-messages.jsonl line 2 is not JSON"]);
+        expect(classifyTrial(e).status).toBe("infra");
+      }
+    }
+    for (const prefix of ['{"type":"Assis', '{"type":"AssistantMessage","content":[{"n":1.', "{", '{"k":"\\u00', '{"a":tr', '{"a":[1,{"b":-']) {
+      const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+      writeFileSync(join(ev, "sdk-messages.jsonl"), JSON.stringify(INIT) + "\n" + prefix);
+      const e = run(ev, "k1");
+      expect([prefix, e.torn_tail, e.infra_reason]).toEqual([prefix, true, null]);
+    }
+  }, 60_000);
+
+  test("a dropped torn tail's raw text is still scanned for exposure markers", () => {
+    const tails: [string, boolean][] = [
+      ['{"type":"AssistantMessage","phase":"build","content":[{"type":"tool_use","id":"1","name":"Read","input":{"file_path":"/root/.claude/skills/ship/SKI', true],
+      ['{"type":"UserMessage","content":[{"type":"tool_result","tool_use_id":"1","content":"found ~/.capy/drive/user-x/skills/gs', true],
+      ['{"type":"AssistantMessage","content":[{"type":"tool_use","id":"2","name":"Skill","input":{"skill":"gstack-ship"', true],
+      ['{"type":"AssistantMessage","content":[{"type":"text","text":"done with the fix', false],
+    ];
+    for (const [tail, dirty] of tails) {
+      const ev = trial({ task: "k1", edit: "git apply ../gold.patch" });
+      writeFileSync(join(ev, "sdk-messages.jsonl"), JSON.stringify(INIT) + "\n" + tail);
+      const e = run(ev, "k1");
+      expect([tail, e.torn_tail, e.infra_reason, e.exposure.contaminated, e.exposure.evidence.map((x) => x.kind)]).toEqual([tail, true, null, dirty, dirty ? ["torn_tail"] : []]);
+      expect(classifyTrial(e).status).toBe(dirty ? "contaminated" : "scored");
+    }
+  });
+
+  test("a K4 final.patch that does not apply to base is recorded as not applied, scores null and joins the rig count", () => {
+    const e = run(trial({ task: "k4", edit: "git apply ../gold.patch", final: "diff --git a/nope.py b/nope.py\n--- a/nope.py\n+++ b/nope.py\n@@ -1 +1 @@\n-x\n+y\n" }), "k4");
+    expect(e.trees.final).toEqual({ status: "not_applied", reason: expect.stringContaining("final.patch") });
+    expect(calls.map((c) => c.label)).toEqual(["shipped"]);
+    expect(classifyTrial(e)).toMatchObject({ status: "scored", category: "caught", tree_clean: null });
+    const cfg = readConfig({ schema: "real-outcome/analysis-config/v1", primary_model: OPUS, models: [OPUS], treatment: "gstack", control: "none", task_order: ["unused"], look: "final", bootstrap: { seed: 1, draws: 1000 } });
+    expect(analyze([e], cfg).patch_not_applied).toBe(1);
   });
 
   test("treeGrade maps the verifier's runs: every required id must pass in every run, and a stopped run fails them all", () => {
