@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# R3 amendment 3b no-start check (GEVA-192). Reads one bound R3a attempt's record and prints "no-start: <runner line>"
+# (exit 0) only when every check below holds, or "not a no-start: <the first check that failed>" (exit 1).
+#  1. <work>/screen.launch-exit holds 1 and <work>/pilot.launch-exit does not exist: the screen's launch failed and the
+#     pilot never launched.
+#  2. The run log has no "vm: " line. launch.sh prints it only after the runner's up has printed a name, so up failed
+#     and launch.sh never reached its first sync.
+#  3. The run log has one of up's failure lines: "VM did not reach running in 10 minutes" (the Captain's case),
+#     "create failed", "create refused before any request", "SSH did not come up on" or "request failed: ubi vm"
+#     (3b section 4.3 adds these four).
+#  4. <work>/screen/pulled does not exist: nothing was pulled from a VM.
+#  5. The item's reserve and settle rows on the ledger are only the screen part's VM blocks (<prefix>vm and
+#     <prefix>vm-<n>), besides Sol's route-check rows under r3a-sol-route/, and the item has no open reserve: no trial
+#     session reserved anything.
+# Usage: bash no-start.sh.txt <work dir> <run log> <ledger> <claude-opus-5-5|gpt-6.1-sol>
+set -uo pipefail
+[ $# -eq 4 ] || { echo "usage: bash no-start.sh.txt <work dir> <run log> <ledger> <model>" >&2; exit 2; }
+W=$1 LOG=$2 L=$3 M=$4
+case $M in
+  claude-opus-5-5) item=r3a-screen prefix=r3a-screen/ route="" ;;
+  gpt-6.1-sol) item=r3a-sol prefix=r3a-sol-screen/ route=r3a-sol-route/ ;;
+  *) echo "no-start: unknown model $M" >&2; exit 2 ;;
+esac
+no() { echo "not a no-start: $*"; exit 1; }
+[ -f "$W/screen.launch-exit" ] || no "$W/screen.launch-exit is missing"
+[ "$(cat "$W/screen.launch-exit")" = 1 ] || no "the screen's launch exited $(cat "$W/screen.launch-exit"), not 1"
+[ ! -e "$W/pilot.launch-exit" ] || no "the pilot launched"
+[ -f "$LOG" ] || no "the run log $LOG is missing"
+! grep -q '^vm: ' "$LOG" || no "the run log has a vm: line ($(grep -m1 '^vm: ' "$LOG")), so the VM came up"
+line=$(grep -m1 -E '^ubi-runner: (VM did not reach running in 10 minutes|create failed|create refused before any request|SSH did not come up on|request failed: ubi vm)' "$LOG") || no "the run log has none of up's failure lines"
+[ ! -e "$W/screen/pulled" ] || no "$W/screen/pulled exists"
+bad=$(python3 - "$L" "$item" "$prefix" "$route" <<'EOF'
+import json, re, sys
+path, item, prefix, route = sys.argv[1:5]
+rows = [json.loads(l) for l in open(path) if l.strip()]
+vm = re.compile(re.escape(prefix) + r"vm(-[0-9]+)?$")
+spend = [r for r in rows if r.get("item") == item and r.get("kind") in ("reserve", "settle")]
+other = [r["id"] for r in spend if not vm.match(r["id"]) and not (route and r["id"].startswith(route))]
+settled = {r["id"] for r in spend if r["kind"] == "settle"}
+open_ = sorted({r["id"] for r in spend if r["kind"] == "reserve"} - settled)
+if other: print("the ledger holds spend rows that are not VM blocks: " + ", ".join(other[:3]))
+elif open_: print("the ledger holds open reserves: " + ", ".join(open_[:3]))
+elif not any(vm.match(r["id"]) for r in spend): print("the ledger holds no VM block for the screen")
+EOF
+) || no "the ledger could not be read"
+[ -z "$bad" ] || no "$bad"
+echo "no-start: ${line#ubi-runner: }"
