@@ -28,6 +28,14 @@
 // before any text. A reader's think delays its landing turn's text and result that many ms after the turn's init.
 // A reader with at_result true lands in the same stdout write as the prompt turn's result, so that result, its
 // task_notification and the next turn's init reach the SDK together. STUB_BG.final replaces STUB_FINAL as the landing turn's text.
+// STUB_MODE=script answers each user message with the next entry of STUB_SCRIPT (a JSON array; a user message past its
+// end gets the text "done" and a success result), STUB_SCRIPT[i].delay ms after the message, in the same shapes as the
+// modes above: {content} answers with those blocks and a success result, or no result with hang true ({hang: true}
+// alone sends nothing); {turns: N} takes N Bash turns, then an error_max_turns result, or with content ends on those
+// blocks and a success result; {apierror, status} answers as STUB_MODE=apierror does; {exit} answers with one tool_use
+// (or its content) and exits with that code 100 ms later. Message ids carry the user message's number, so no two turns
+// share one. On each user message STUB_PROBE, a JSON list of paths, appends {probe: {path: exists}} to STUB_RECORD, and
+// on the first one the stub creates the file STUB_TOUCH names, after the probe.
 const rl = require("readline").createInterface({ input: process.stdin });
 let buf = null;
 const out = (o) => (buf ? buf.push(JSON.stringify(o) + "\n") : process.stdout.write(JSON.stringify(o) + "\n"));
@@ -53,8 +61,41 @@ rl.on("line", (line) => {
   if (m.type !== "user") return;
   if (env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify(m) + "\n");
   users++;
+  if (env.STUB_PROBE && env.STUB_RECORD) require("fs").appendFileSync(env.STUB_RECORD, JSON.stringify({ probe: Object.fromEntries(JSON.parse(env.STUB_PROBE).map((p) => [p, require("fs").existsSync(p)])) }) + "\n");
+  if (env.STUB_TOUCH && users === 1) require("fs").writeFileSync(env.STUB_TOUCH, "");
   if (users === 1) out({ type: "system", subtype: "init", session_id: "s", model: "stub", tools: [], cwd: "/", permissionMode: "default", apiKeySource: "none", claude_code_version: "0", skills: [], mcp_servers: [], slash_commands: [], output_style: "default", uuid: "u0" });
   if (env.STUB_STDERR) process.stderr.write(env.STUB_STDERR.repeat(Number(env.STUB_STDERR_TIMES ?? 1)));
+  if (env.STUB_MODE === "script") {
+    const n = users;
+    const s = JSON.parse(env.STUB_SCRIPT)[n - 1] ?? { content: [{ type: "text", text: "done" }] };
+    const id = "u" + n;
+    setTimeout(() => {
+      for (let k = 1; k <= (s.turns ?? 0); k++) {
+        out(assistant(id + "t" + k, [{ type: "tool_use", id: "tu_" + id + "t" + k, name: "Bash", input: { command: "true" } }], "tool_use"));
+        out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_" + id + "t" + k, content: "", is_error: false }] }, parent_tool_use_id: null, session_id: "s", uuid: "ur" + id + "t" + k });
+      }
+      if (s.turns !== undefined && !s.content) {
+        out({ type: "result", subtype: "error_max_turns", is_error: true, num_turns: s.turns + 1, errors: ["Reached maximum number of turns (" + s.turns + ")"], terminal_reason: "max_turns", stop_reason: "tool_use", session_id: "s", duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage, uuid: "rmax" + id });
+        return;
+      }
+      if (s.apierror !== undefined) {
+        const status = s.status ?? 402;
+        out(assistant(id + "e1", [{ type: "tool_use", id: "tu_" + id + "e1", name: "Bash", input: { command: "true" } }], "tool_use"));
+        out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_" + id + "e1", content: "", is_error: false }] }, parent_tool_use_id: null, session_id: "s", uuid: "ue1" + id });
+        out({ type: "assistant", message: { id: "synthetic-" + id, type: "message", role: "assistant", model: "<synthetic>", content: [{ type: "text", text: s.apierror }], stop_reason: "stop_sequence", stop_sequence: "", usage: { input_tokens: 0, output_tokens: 0 } }, parent_tool_use_id: null, session_id: "s", uuid: "ae2" + id, error: "unknown", is_api_error_message: true, api_error_status: status });
+        out({ type: "result", subtype: "success", is_error: true, num_turns: 2, result: s.apierror, api_error_status: status, terminal_reason: "api_error", stop_reason: "stop_sequence", session_id: "s", duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage, uuid: "rerr" + id });
+        return;
+      }
+      if (s.exit !== undefined) {
+        out(assistant(id + "x", s.content ?? [{ type: "tool_use", id: "tu_" + id + "x", name: "Read", input: { file_path: "/x" } }], null));
+        setTimeout(() => process.exit(s.exit), 100);
+        return;
+      }
+      if (s.content) out(assistant(id + "c", s.content, "end_turn"));
+      if (!s.hang) out({ ...result(id, s.content.filter((b) => b.type === "text").map((b) => b.text).join("")), num_turns: (s.turns ?? 0) + 1 });
+    }, s.delay ?? 0);
+    return;
+  }
   if (env.STUB_MODE === "turns") {
     const cap = Number((process.argv.find((a) => a.startsWith("--max-turns=")) ?? "=0").split("=")[1]);
     const texts = JSON.parse(env.STUB_TURN_TEXTS || "{}");

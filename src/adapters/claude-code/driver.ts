@@ -9,7 +9,8 @@
 //   skills, updates, telemetry and nonessential traffic are off (CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm).
 // - The system prompt is the Agent SDK's default unless the options ask for Claude Code's: systemPrompt sdk-default
 //   passes no systemPrompt option at all, and claude-code-preset passes the SDK's claude_code preset. init.json records
-//   which one ran (system_prompt). A session takes at most maxTurns model turns, MAX_TURNS unless the run sets another.
+//   which one ran (system_prompt). Each user message (the prompt, a simulator reply, the follow-up) gets at most maxTurns
+//   model turns, MAX_TURNS unless the run sets another: CLI 2.1.314 starts a fresh --max-turns count at every user message.
 // - capStops records a session's own caps as their own terminations: a session the turn cap ends (an error_max_turns
 //   result) is turn_cap, and one whose next call the slot's allowance cannot hold (the proxy's E_ALLOWANCE refusal that
 //   names the slot's allowance) is allowance_stop. Without it, as before, the turn cap ends the session as completed and
@@ -30,6 +31,23 @@
 //   (src/usersim/persona.ts); a source that cannot answer ends the cell with its termination.
 // - After each turn whose last text ends in a question, the simulator's reply goes in as the next user message; the
 //   session ends when it has none.
+// - followUp (plan sessions, GEVA-203): once the first turn ends completed (a success result, no simulator reply, nothing
+//   holding the session for background work), the adapter sends followUp.text once as the next user message in the same
+//   session. From then on the second turn runs on its own clock: its deadline is followUp.timeoutMs from the send, with
+//   its own stall credit of a tenth of that, and the session timeout no longer applies. The adapter counts the second
+//   turn's model turns itself, as distinct main-agent assistant message ids that are not API errors, because the CLI's
+//   own count starts fresh at every user message. Once that count reaches followUp.maxTurns, the next main-agent
+//   tool_result (the CLI is about to call the model again) ends the session as turn_cap under capStops, else as
+//   completed, and so does an error_max_turns result in the second turn. At that tool_result the adapter interrupts the
+//   CLI's turn before it closes the session, because the SDK's teardown leaves the CLI running for 2 s after it closes
+//   its input, time enough for more model calls. The simulator still answers, the background hold
+//   still applies on the second turn's clock, and the second turn spends from the same slot allowance. Any stop in the
+//   first turn ends the session with no follow-up. The outcome's follow_up says whether the text went in and how many
+//   model turns followed it; the session ended in the second turn when it went in.
+// - preflight: before the CLI starts (after the Codex config step), the adapter runs preflight.command in the agent
+//   session with a 30 s limit. A non-zero exit or a timeout ends the session before any model call as a missing cell with
+//   preflight.code, and cli-stderr.log gets the command's output (its last 2000 characters) as "adapter: preflight
+//   refused: ...".
 // - The adapter writes the evaluator's records beside the trial, never into the work dir: every SDK message
 //   (transcript.ndjson), the init message's tools, skills and versions (init.json), calls[] (calls.json), the user
 //   simulator's event log (usersim.ndjson) and the CLI's stderr (cli-stderr.log), which the adapter drains itself, since
@@ -53,8 +71,8 @@
 //   after that stop.
 // - The session's clock reads performance.now, so a wall-clock step never moves it, and runs only while the evaluator's
 //   event loop does: a stall between its 250 ms ticks (another session's synchronous docker step, say) moves the
-//   deadline by the stall, up to a tenth of the session's timeout in all, and the outcome's credited_stall_ms records the
-//   credit. Once the credit reaches that cap, a timeout is infra (E_INFRA_FAILURE), never the arm's. The liveness probe
+//   deadline by the stall, up to a tenth of the session's timeout in all (a follow-up's clock gets its own tenth), and
+//   the outcome's credited_stall_ms records the credit of both. Once the credit reaches that cap, a timeout is infra (E_INFRA_FAILURE), never the arm's. The liveness probe
 //   after a crash runs as a spawned process, so it never stalls other sessions.
 // - The outcome's model_output says whether the model produced any output: an assistant message that is not an API error,
 //   with text or thinking that holds more than whitespace, a thinking block with a non-empty signature (the API's proof
@@ -138,7 +156,7 @@ export interface ClaudeCodeOptions {
   skill: (SkillRef & { dir: string | null }) | null;
   /** The trial's evaluator-side directory for the adapter's records. */
   out: string;
-  /** The most model turns the session may take; MAX_TURNS when unset. */
+  /** The CLI's --max-turns, which it counts per user message; MAX_TURNS when unset. */
   maxTurns?: number;
   /** The session's system prompt; sdk-default when unset. */
   systemPrompt?: SystemPrompt;
@@ -156,11 +174,15 @@ export interface ClaudeCodeOptions {
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
   codex?: { provider: CodexProvider; model: string };
+  /** A second user message, sent once the first turn ends completed, with its own model-turn cap and its own clock (see the header). */
+  followUp?: { text: string; maxTurns: number; timeoutMs: number };
+  /** A shell step the agent session must pass before the CLI starts; a refusal ends the session as a missing cell with code. */
+  preflight?: { command: string; code: ReasonCode };
 }
 
 // The slice of the Agent SDK this adapter uses, typed loosely so a test can stand one in.
 type SdkMessage = Record<string, any>;
-type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
+type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage> & { interrupt(): Promise<unknown> };
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
 export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind">): Record<string, string> {
@@ -316,7 +338,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       return;
     }
   };
-  const without = (termination: Termination): AgentOutcome => ({ turns: [], termination, model_output: false, text_output: false, exit_code: null, signal: null, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null });
+  const without = (termination: Termination): AgentOutcome => ({ turns: [], termination, model_output: false, text_output: false, exit_code: null, signal: null, opened: o.skill ? false : null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null, ...(o.followUp ? { follow_up: { sent: false, model_turns: 0 } } : {}) });
   const driver: ClaudeCodeDriver = {
     sim: null,
     env: claudeCodeEnv(o),
@@ -331,6 +353,13 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         if (wrote.exitCode !== 0) {
           log("adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
           return without({ kind: "missing", code: "E_CODEX_CONFIG" });
+        }
+      }
+      if (o.preflight) {
+        const checked = session.exec(o.preflight.command, 30_000);
+        if (checked.exitCode !== 0 || checked.timedOut) {
+          log("adapter: preflight refused: " + ((checked.stdout + checked.stderr).trim().slice(-2000) || (checked.timedOut ? "timed out" : "exit " + checked.exitCode)) + "\n");
+          return without({ kind: "missing", code: o.preflight.code });
         }
       }
       const transcript = join(o.out, "transcript.ndjson");
@@ -372,8 +401,11 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         end(INFRA);
         log("adapter: " + (before ? "after the " + before.kind + " stop, teardown: " : "infra failure, not the arm's: ") + String((error as Error)?.message ?? error) + "\n");
       };
-      const cap = timeoutMs / 10;
+      let cap = timeoutMs / 10;
       let credited = 0;
+      let creditedBefore = 0;
+      let followed = false;
+      const followTurns = new Set<string>();
       let full = false;
       let deadline = performance.now() + timeoutMs;
       let last = performance.now();
@@ -516,6 +548,11 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             } else if (m.type === "command_lifecycle" && m.state === "started" && m.wakeup_source === "loop_wakeup") {
               wakeup = null;
             } else if (m.type === "user" && !m.parent_tool_use_id) {
+              if (followed && !stop && followTurns.size >= o.followUp!.maxTurns && Array.isArray(m.message?.content) && (m.message.content as SdkMessage[]).some((b) => b.type === "tool_result")) {
+                const capped: Termination = o.capStops ? { kind: "turn_cap" } : { kind: "completed" };
+                stop = capped;
+                q.interrupt().then(() => end(capped), () => end(capped));
+              }
               const r = m.tool_use_result;
               const scheduled = Array.isArray(m.message?.content) && (m.message.content as SdkMessage[]).some((b) => b.type === "tool_result" && wakeupCalls.has(b.tool_use_id) && b.is_error !== true);
               if (scheduled && r?.stopped === true) wakeup = null;
@@ -533,6 +570,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 else if (m.error !== "max_output_tokens") end({ kind: "missing", code: "UPSTREAM" });
               } else {
                 if ((m.message?.content ?? []).some(producedOutput)) modelOutput = true;
+                if (followed && !stop && !m.parent_tool_use_id && m.message?.id) followTurns.add(m.message.id);
                 if (!m.parent_tool_use_id) for (const b of m.message?.content ?? []) if (b.type === "tool_use" && b.name === "ScheduleWakeup") wakeupCalls.add(b.id);
                 if (!m.parent_tool_use_id && text.trim()) {
                   turnText = text;
@@ -557,6 +595,20 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               } else if (waitMs !== null && m.subtype === "success" && holding().length) {
                 idleSince = performance.now();
                 awaitingResult = true;
+              } else if (o.followUp && !followed && !stop && m.subtype === "success") {
+                followed = true;
+                inbox.push(userMessage(o.followUp.text));
+                awaitingResult = true;
+                const now = stalled();
+                creditedBefore += credited;
+                credited = 0;
+                full = false;
+                cap = o.followUp.timeoutMs / 10;
+                deadline = now + o.followUp.timeoutMs;
+                if (pauses === 0) {
+                  clearTimeout(timer);
+                  timer = setTimeout(expire, o.followUp.timeoutMs);
+                } else paused = now;
               } else {
                 if (waitMs === null && holding().length) log("adapter: the session ended at its turn's result with background work still out (" + holding().join("; ") + "); this run sets no background wait, so nothing held it\n");
                 ended = true;
@@ -614,8 +666,9 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         text_output: textOutput,
         exit_code: exitCode,
         signal: exitSignal,
-        credited_stall_ms: Math.round(credited),
+        credited_stall_ms: Math.round(creditedBefore + credited),
         ...(waitMs !== null ? { session_end } : {}),
+        ...(o.followUp ? { follow_up: { sent: followed, model_turns: followTurns.size } } : {}),
         opened: o.skill ? use.opened : null,
         files_read: use.files,
         asked: [...sim.asked],

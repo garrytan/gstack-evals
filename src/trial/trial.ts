@@ -34,10 +34,12 @@ export interface AgentOutcome {
   /** The agent CLI's exit code and signal when it exited on its own; null for both when the adapter's abort or teardown killed it. */
   exit_code?: number | null;
   signal?: string | null;
-  /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout; set by drivers whose clock credits stalls. */
+  /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout (and a tenth of a follow-up's timeout); set by drivers whose clock credits stalls. */
   credited_stall_ms?: number;
   /** How the session ended against the background work it started; set by drivers that track it (Claude Code). */
   session_end?: SessionEnd;
+  /** Whether the follow-up went in after a completed first turn, and how many main-agent model turns followed it; set by drivers that run a follow-up (Claude Code). */
+  follow_up?: { sent: boolean; model_turns: number };
   opened: boolean | null;
   files_read: string[];
   asked: (Category | null)[];
@@ -148,7 +150,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     } finally {
       session.stop();
     }
-    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, credited_stall_ms: outcome.credited_stall_ms, session_end: outcome.session_end, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
+    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, credited_stall_ms: outcome.credited_stall_ms, session_end: outcome.session_end, follow_up: outcome.follow_up, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);

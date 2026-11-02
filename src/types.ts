@@ -244,10 +244,12 @@ export interface TrialRecord {
   /** The agent CLI's exit code and signal when it exited on its own (137 for a kill such as an OOM); null for both when the adapter's abort or teardown killed it. */
   exit_code?: number | null;
   signal?: string | null;
-  /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout; set by adapters whose clock credits stalls. */
+  /** Milliseconds of the evaluator's own event-loop stall the session clock credited back to the session, at most a tenth of its timeout (and a tenth of a follow-up's timeout); set by adapters whose clock credits stalls. */
   credited_stall_ms?: number;
   /** How the session ended against the background work it started; set by the Claude Code adapter (GST-734). */
   session_end?: SessionEnd;
+  /** Whether the follow-up went in after a completed first turn, and how many main-agent model turns followed it; set by the Claude Code adapter for a session with a follow-up (GEVA-203). The session ended in its second turn when sent is true. */
+  follow_up?: { sent: boolean; model_turns: number };
   /** Whether the task's check exited 0 on the graded delta; null when the task has no check or the check did not run. */
   check: boolean | null;
   /** The blinded judge's answer for a task with a judge rubric; null for a task without one or when no judge ran. */

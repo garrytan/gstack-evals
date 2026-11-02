@@ -7,6 +7,7 @@ import type { SidecarTask } from "../skill-eval/contract/sidecar.ts";
 import type { SkillRef } from "../grade/transcript.ts";
 import type { AgentDriver } from "../trial/trial.ts";
 import type { PersonaAnswer } from "../usersim/persona.ts";
+import type { ReasonCode } from "../errors/codes.ts";
 import type { Host } from "../types.ts";
 import { claudeCodeDriver, type SystemPrompt } from "./claude-code/driver.ts";
 import { codexDriver, type CodexProvider } from "./codex/driver.ts";
@@ -39,13 +40,17 @@ export interface HostDriverOptions {
   capStops?: boolean;
   /** Claude Code only: the most idle time, in all, a session may wait on its background work; unset, it ends at its turn's result (no hold). */
   backgroundWaitMs?: number;
+  /** Claude Code only: a second user message after a completed first turn, with its own turn cap and clock (see its driver). */
+  followUp?: { text: string; maxTurns: number; timeoutMs: number };
+  /** Claude Code only: a shell step the agent session must pass before the CLI starts; a refusal is a missing cell with code. */
+  preflight?: { command: string; code: ReasonCode };
 }
 
 /** The adapter for one session. Claude Code takes Anthropic and OpenRouter models; Codex takes OpenAI and OpenRouter ones. */
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}), ...(o.preflight ? { preflight: o.preflight } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
   return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
