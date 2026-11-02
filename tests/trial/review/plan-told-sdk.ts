@@ -16,7 +16,7 @@ import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/rev
 import { harness, localSandbox } from "../../adapters/harness.ts";
 import { PANEL_REPO, planPanel } from "../../noloss/plan-panel.ts";
 
-export const FORCED = "/plan-ceo-review Run every section of the review procedure in order and show each section's output before your findings.";
+export const FORCED = "/plan-ceo-review plan.md Run every section of the review procedure in order and show each section's output before your findings.";
 export const ARMS: ReviewArm[] = [{ name: "none", told: "none" }, { name: "lens", told: "lens" }, { name: "placebo", told: "placebo" }, { name: "gstack", told: "gstack" }, { name: "gstack-forced", told: "gstack", toldPrefix: FORCED }];
 
 if (import.meta.main) {
@@ -28,6 +28,7 @@ if (import.meta.main) {
   const repo = buildUnitRepo({ unit, source: panel.clone, dest: join(scratch("unit-"), "repo"), baseBranch: "main" });
   const tree = buildUnitTree({ repo, task: unitTaskId(unit), dest: join(scratch("tree-"), "tree"), image: "unused", test: null, install: null, scratch: scratch("build-"), run: () => { throw new Error("a plan unit runs no container"); } });
   const home = scratch("gstack-");
+  const cleanRoot = scratch("clean-root-");
   const gdir = join(home, ".claude", "skills", "gstack");
   mkdirSync(join(gdir, "bin"), { recursive: true });
   mkdirSync(join(gdir, "scripts"), { recursive: true });
@@ -38,10 +39,11 @@ if (import.meta.main) {
     const base = localSandbox(() => {});
     return {
       ...base,
-      agent: (task, o) => ({
-        ...base.agent(task, o),
+      agent: (task, o) => ((a) => ({
+        ...a,
+        exec: (command: string, timeoutMs: number) => a.exec("export CLEAN_ROOM_ROOT=" + cleanRoot + "; " + command, timeoutMs),
         spawn: (argv: string[], env: Record<string, string> = {}) => (argv[0] === "true" ? spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [stub, ...argv.slice(1)], { cwd: o.work, env: { ...env, PATH: process.env.PATH ?? "", STUB_MODE: "content", STUB_CONTENT: reply, STUB_RECORD: join(records, arm + ".ndjson") }, stdio: ["pipe", "pipe", "pipe"] })),
-      }),
+      }))(base.agent(task, o)),
     };
   };
   const h = harness(() => [{ type: "text", text: "unused" }]);

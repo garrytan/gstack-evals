@@ -214,7 +214,7 @@ describe("plan units in the run loop (keyless)", () => {
       expect(Object.keys(seen).sort()).toEqual(["gstack " + OPUS, "lens " + OPUS, "none " + HAIKU, "none " + OPUS]);
       for (const s of Object.values(seen)) expect([s.entry, s.freeform, s.codex]).toEqual([{ user: REC_USER }, true, null]);
       expect(bound.every((b) => b.models.length === 1)).toBe(true);
-      expect(seen["gstack " + OPUS]!.prompt).toBe(planPrompt("gstack", "ceo"));
+      expect(seen["gstack " + OPUS]!.prompt).toBe(planArmLine("gstack", "ceo"));
       expect(seen["gstack " + OPUS]!.config).toContain("codex_reviews: disabled\n");
       expect(seen["gstack " + OPUS]!.config).toContain("agent_model: host\n");
       expect(seen["gstack " + OPUS]!.config).not.toContain("codex_reviews: enabled");
@@ -225,7 +225,7 @@ describe("plan units in the run loop (keyless)", () => {
       for (const id of ["gstack-opus", "lens-opus", "none-haiku", "none-opus"]) expect([id, arm(id).status, arm(id).coverage_gaps]).toEqual([id, "complete", undefined]);
       expect(arm("gstack-opus")).toMatchObject({ models: [{ role: "driver", model: OPUS }], told: { arm: "gstack", lens: "ceo", turn2_sha256: PLAN_TURN2_SHA256 }, ceo_modes: { "HOLD SCOPE": 1 }, severity_map: PLAN_SEVERITY_MAP });
       expect(arm("none-opus").diagnostics).toEqual([unit.id + " pass 1: malformed, item 0: severity is not Critical, High, Medium or Low; scored as finding nothing"]);
-      expect(arm("none-haiku").diagnostics).toEqual([unit.id + " pass 1: incomplete, the session ended timeout; scored as finding nothing"]);
+      expect(arm("none-haiku").diagnostics).toEqual([expect.stringMatching(/^example\/plan-panel#1@[0-9a-f]{12} pass 1: missing; ended timeout in turn 1, settled spend \$[0-9.]+, scored as finding nothing$/)]);
       expect(arm("lens-opus").diagnostics).toEqual([unit.id + " pass 1: missing; scored as finding nothing"]);
       expect(arm("lens-opus").ceo_modes).toEqual({ unstated: 1 });
       const file = "findings/" + unit.id.replaceAll("/", "__") + ".jsonl";
@@ -284,8 +284,8 @@ describe("review-units --plan arguments (keyless)", () => {
     expect((await run([...fable, "--policy", rungPolicy])).code).toBe(0);
     const MAP = join(REPO_ROOT, "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
     expect((await run([...base, "--arms", "none", "--plan", "ceo", "--reader-map", MAP])).err).toMatch(/^E_USAGE .*--reader-map runs on code units, not with --plan/);
-    expect((await run([...base, "--arms", "none", "--plan", "ceo", "--cap-stops"])).err).toMatch(/^E_USAGE .*--cap-stops runs on code units, not with --plan/);
-    expect((await run([...base, "--plan", "eng", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan takes a lens: ceo/);
+    expect((await run([...base, "--arms", "none", "--plan", "ceo", "--cap-stops"])).err).toMatch(/^E_USAGE review-units: a run needs a ledger line item/);
+    expect((await run([...base, "--plan", "qa", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan takes a lens: ceo, eng, devex, design/);
     expect((await run(["--suite", "gsta167-14pr", "--units", "3593", "--models", OPUS, "--out", out, "--source", "garrytan/gstack=/nowhere", "--plan", "ceo", "--arms", "none"])).err).toMatch(/^E_USAGE .*--plan needs a plan suite, and suite gsta167-14pr is noloss/);
     expect((await run([...base.slice(0, 2), ...base.slice(4), "--plan", "ceo", "--arms", "none"])).err).toMatch(/pass --sealed-root <dir>/);
     expect((await run([...base, "--plan", "ceo", "--arms", "gstack-auto=garrytan/gstack@" + "a".repeat(40)])).err).toMatch(/^E_USAGE .*arm gstack-auto: gstack-auto \(GST-537\) is not released/);
@@ -297,8 +297,8 @@ describe("review-units --plan arguments (keyless)", () => {
     expect([dry.code, dry.err]).toEqual([0, ""]);
     expect(dry.out).toContain("plan lens ceo; turn 2 sha256 " + PLAN_TURN2_SHA256);
     expect(dry.out).toContain("plan unit: no install or test");
-    expect(dry.out).toContain('lens ("Do a CEO/founder-mode review of this plan. Review this plan for problems." on ' + OPUS + ")");
-    expect(dry.out).toContain('placebo ("/plan-ceo-review Review this plan for problems." on particle-ai/particle-1)');
+    expect(dry.out).toContain('lens ("Do a CEO/founder-mode review of this plan. Review plan.md for problems." on ' + OPUS + ")");
+    expect(dry.out).toContain('placebo ("/plan-ceo-review plan.md" on particle-ai/particle-1)');
     expect(dry.out).toContain("sessions " + 3 * 3 * (2 + 1 + 2 + 1));
     expect(existsSync(out)).toBe(false);
     const inRepo = join(REPO_ROOT, ".review-units-cli-sealed-out");
