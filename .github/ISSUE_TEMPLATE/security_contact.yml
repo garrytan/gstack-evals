@@ -1,0 +1,15 @@
+name: Request a private security contact
+description: Ask for a private channel to report a security problem. Put no details here.
+title: Request for a private security contact
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this only when GitHub private vulnerability reporting does not work for you (see [SECURITY.md](https://github.com/garrytan/gstack-evals/blob/main/SECURITY.md)). A maintainer will reply with a private channel.
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you send
+      options:
+        - label: This issue holds no technical details, file names, secrets or proof of concept.
+          required: true

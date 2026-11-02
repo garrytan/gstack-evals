@@ -4,7 +4,7 @@ A throwaway before/after skill check for gstack's office-hours diet, with /learn
 
 ## Run it
 
-Needs Docker, Bun 1.4.4 and a gstack clone with history (`git clone --filter=blob:none https://git.capy.ai/garrytan/gstack.git ~/.capy/work/gstack`).
+Needs Docker, Bun 1.4.4 and a gstack clone with history (`git clone --filter=blob:none https://github.com/garrytan/gstack.git ~/.capy/work/gstack`).
 
 ```
 cd quick/lanea-quick && bun install

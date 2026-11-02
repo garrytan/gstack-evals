@@ -489,7 +489,7 @@ describe("no-gstack exposure check", () => {
     expect(one({ type: "SystemMessage", subtype: "init", data: { skills: [{ name: "gstack:review" }] } }).contaminated).toBe(true);
     expect(one(use("Skill", { skill: "investigate" })).evidence[0].kind).toBe("skill_load");
     expect(one(use("Read", { file_path: "/root/.claude/skills/ship/SKILL.md" })).evidence[0].kind).toBe("path_read");
-    expect(one(use("Bash", { command: "cat ~/.capy/drive/user-garry-tan/skills/gstack/SKILL.md" })).contaminated).toBe(true);
+    expect(one(use("Bash", { command: "cat ~/.capy/drive/user-x/skills/gstack/SKILL.md" })).contaminated).toBe(true);
     expect(one(use("Bash", { command: "ls $HOME/.local/share/gstack" })).contaminated).toBe(true);
     expect(one({ type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "u1", content: "found /root/.local/share/gstack/ship/SKILL.md" }] }).evidence[0].kind).toBe("path_seen");
   });

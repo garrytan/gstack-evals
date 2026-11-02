@@ -61,7 +61,7 @@ describe("approvals", () => {
     expect(codeOf(() => recordApproval(record, { action: "raise", item: "lanea", cap_micros: 10 * DOLLAR, quotes: [quote] }))).toBe("E_USAGE");
     expect(codeOf(() => recordApproval(record, { action: "raise", item: "nothing", cap_micros: DOLLAR, quotes: [quote] }))).toBe("E_LEDGER_MISSING");
     expect(codeOf(() => recordApproval(record, { action: "init", item: "lanea2", cap_micros: DOLLAR, quotes: [{ ...quote, words: " " }], admission: "warn" }))).toBe("E_USAGE");
-    const raise = { action: "raise" as const, item: "lanea", cap_micros: 15 * DOLLAR, quotes: [quote, { words: "raise ok", by: "Garry Tan", source: "gate 2" }] };
+    const raise = { action: "raise" as const, item: "lanea", cap_micros: 15 * DOLLAR, quotes: [quote, { words: "raise ok", by: "Approver", source: "gate 2" }] };
     expect(recordApproval(record, raise).seq).toBe(2);
     expect(recordApproval(record, raise).seq).toBe(2);
     expect(ledgerStatus(record)).toMatchObject([{ item: "lanea", cap_micros: 15 * DOLLAR, committed_micros: 0, left_micros: 15 * DOLLAR, approval: { quotes: raise.quotes } }]);
@@ -198,7 +198,7 @@ try { openLease(record, null, { item: "lanea", run_id: run }); console.log("ok")
     await local.settle(r.reservation_id, { kind: "spent", spent_micros: DOLLAR, usage });
     settleLease(record, local, lease.lease_id);
     expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a" }))).toBe("CAP_STOP");
-    recordApproval(record, { action: "raise", item: "lanea", cap_micros: 3 * DOLLAR, quotes: [{ words: "raise ok", by: "Garry Tan", source: "gate 2" }] });
+    recordApproval(record, { action: "raise", item: "lanea", cap_micros: 3 * DOLLAR, quotes: [{ words: "raise ok", by: "Approver", source: "gate 2" }] });
     expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: 2 * DOLLAR + 1 }))).toBe("CAP_STOP");
     expect(openLease(record, local, { item: "lanea", run_id: "run-a" }).reserved_micros).toBe(2 * DOLLAR);
   });
@@ -280,7 +280,7 @@ describe("settle failures and recovery", () => {
     expect(ledgerStatus(record)[0]).toMatchObject({ committed_micros: 6 * DOLLAR, left_micros: 4 * DOLLAR });
     const exportFile = join(dir, "anthropic-usage-2026-10-28.csv");
     writeFileSync(exportFile, "date,cost\n2026-10-28,0.81\n");
-    const early = { lease_id: lease.lease_id, spent_micros: 810_000, quotes: [{ words: "settle it at 81 cents", by: "Garry Tan", source: "GSTA-2 relay" }], source: exportFile };
+    const early = { lease_id: lease.lease_id, spent_micros: 810_000, quotes: [{ words: "settle it at 81 cents", by: "Approver", source: "relay" }], source: exportFile };
     expect(codeOf(() => reconcileLease(record, early))).toBe("E_LEASE_UNSETTLED");
     const owner = { ...early, now: new Date(Date.parse(lease.expires_at) + 1) };
     expect(codeOf(() => reconcileLease(record, { ...owner, source: "" }))).toBe("E_USAGE");
