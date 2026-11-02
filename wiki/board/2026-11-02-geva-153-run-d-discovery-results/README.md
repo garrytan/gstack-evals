@@ -37,7 +37,6 @@ Publication status: unpublished; posting is Garry's. Done: the preregistered run
 | Data | geva153-rund-data.tar.gz, sha256 51f09d0cce87e2b17eee52499691c9f854121c75dd19f7be9c6416c954f4cb4b, held by the gstack-evals Captain (handoffs/GEVA-153); not yet public |
 | Reviewed by | /ship review of this file, recorded in the PR's receipt. The cross-family claim check is pending. |
 | Reproduced by | Pending: another Captain's crew, from a clean machine |
-| Disclosures | The gstack, Particle and OpenAI lines, in Disclosures at the end |
 
 ## What we found
 
@@ -77,7 +76,7 @@ An **open** is a Skill call naming an installed skill, a Read of a `/.claude/ski
 
 ![Untold skill opens and pass rate per preset cell](chart.png)
 
-Left: trials that opened a listed skill (the label is the cell's printed rate times 37; Opus cells had 36 eligible trials). Right: pass rate with its 95% interval and metered cost per trial. Both from output-primary.txt.
+Left: trials that opened a listed skill (the label is the cell's printed rate times 37; Opus cells had 36 eligible trials). Right: pass rate with its 95% interval and the scorer's cost per trial, both from output-primary.txt. The cost label on particle-1 none is the scorer's $0.066, which leaves out one trial; that cell's metered cost is $0.073 per trial (see the note under the preset cell table).
 
 **Primary readings, verbatim from the scorer** (output-primary.txt):
 
@@ -121,7 +120,7 @@ Every open loaded the skill's body. The procedure gate (GEVA-100's DEBUG REPORT 
 | Opus gstack | 86.5% [75.7, 97.3] | 0.156 | 0.180 | 25,026 | 0 / 0 / 0 |
 | Opus gstack-rewritten | 86.5% [75.7, 97.3] | 0.162 | 0.187 | 25,097 | 0 / 0 / 0 |
 | Opus placebo | 83.8% [73.0, 94.6] | 0.143 | 0.171 | 25,026 | 0 / 0 / 0 |
-| particle-1 none | 73.0% [56.8, 86.5] | 0.066 | 0.091 | 64,227 | 1 / 2 / 1 |
+| particle-1 none | 73.0% [56.8, 86.5] | 0.073 | 0.100 | 64,227 | 1 / 2 / 1 |
 | particle-1 gstack | 81.1% [67.6, 91.9] | 0.055 | 0.068 | 70,049 | 0 / 2 / 2 |
 | particle-1 gstack-rewritten | 70.3% [54.1, 83.8] | 0.073 | 0.104 | 70,035 | 2 / 1 / 1 |
 | particle-1 placebo | 78.4% [64.9, 91.9] | 0.057 | 0.073 | 70,049 | 0 / 1 / 1 |
@@ -129,6 +128,8 @@ Every open loaded the skill's body. The procedure gate (GEVA-100's DEBUG REPORT 
 | Sol gstack | 89.2% [78.4, 97.3] | 0.178 | 0.199 | 70,041 | 1 / 0 / 0 |
 | Sol gstack-rewritten | 86.5% [75.7, 97.3] | 0.169 | 0.195 | 70,027 | 0 / 0 / 0 |
 | Sol placebo | 86.5% [75.7, 97.3] | 0.170 | 0.197 | 70,041 | 0 / 0 / 0 |
+
+Cost per trial and per success are metered. The scorer reads each trial's cost from that trial's summary file. One particle-1 none trial (torch-pipeline-parallelism) hit the agent timeout and wrote no summary file, so the scorer counted it at $0 and printed $0.066 per trial and $0.091 per success for that cell (output-primary.txt). The proxy metered $0.244 for that trial, so the row gives the cell's metered $2.691 over 37 trials and 27 passes (cost-output.txt). In every other cell the scorer's figure equals the metered one.
 
 Opus under sdk-default (secondary): none, gstack and gstack-rewritten each passed 83.8% [70.3, 94.6], at $0.139, $0.139 and $0.145 per trial.
 
@@ -187,7 +188,7 @@ Sol's row is OpenRouter's list price on 2026-11-01 as the prereg froze it. GEVA-
 
 Three readings are null or lean negative. Each gets one cycle. The exposure rates sit beside each verdict.
 
-**1. D3 on Opus: the preset changed nothing (0 against 0).** Exposure: the listing reached Opus under both prompts (route check, and first-request tokens with gstack 2,400 above none under each prompt), but Opus opened nothing under either: 0 of 148 trials. Task fit: the same tasks drew 17 opens from Sol, so they offer reasons to open. Power and floor: both cells sit at the floor; the MDD is 10.9 to 15.4 points, so a smaller prompt effect is not ruled out. Frontier competence: Opus passes 81.1% with no gstack under the preset and 83.8% under sdk-default, so it solves most tasks without looking. **Verdict: KEEP.** Earlier untold runs that used the stub prompt did not understate Opus's discovery by more than the MDD, and later untold runs may use either prompt. Exposure beside it: opens 0 of 148 Opus gstack trials.
+**1. D3 on Opus: the preset changed nothing (0 against 0).** Exposure: the listing reached Opus under both prompts (route check, and first-request tokens with gstack 2,400 above none under each prompt), but Opus opened nothing under either: 0 of 148 trials. Task fit: the same tasks drew 17 opens from Sol, so they offer reasons to open. Power and floor: both cells sit at the floor; the MDD is 10.9 to 15.4 points, so a smaller prompt effect is not ruled out. Frontier competence: Opus passes 81.1% with no gstack under the preset and 83.8% under sdk-default, so it solves most tasks without looking. **Verdict: KEEP.** No evidence that the stub prompt was why earlier untold runs saw no opens, so this run gives no reason to change the prompt those runs used. The test cannot rule out a prompt effect smaller than its MDD (10.9 to 15.4 points), so it does not claim the effect is absent. Exposure beside it: opens 0 of 148 Opus gstack trials.
 
 **2. Opus and particle-1 opened no skill under either description.** Exposure: the listing reached both models (both quoted /investigate's description in the route check), and the rewritten text was in the listing (the dry run confirmed it), yet neither model made a Skill call, browsed the skills folder or opened a built-in skill in any of 481 trials. Task fit: Sol's opens show that the tasks give the rewritten /investigate a reason to be opened. Power: the D1 upper bounds are 8.0% (Opus) and 7.8% (particle-1); the per-model D2 MDD is 22.3 to 25.8 points. Frontier competence: Opus passes 81.1% and particle-1 73.0% with no gstack. **Verdict: KEEP** the rewrite direction that the pooled D2 supports, and record that description text alone does not produce untold use on Opus 5.5 or particle-1. Untold use on those two models needs another route, such as hooks (agenda item 1). Exposure beside it: 0 opens in 481 trials.
 
