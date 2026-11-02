@@ -166,9 +166,34 @@ const DECORATOR = /^\s*(?:@|#\[)/;
 const SCOPE = /^\s*(?:(?:async\s+)?def|class)\s|^func\s/;
 const defName = (line: string): string | null => testName(line) ?? line.match(SKIP_DEF)?.[2] ?? null;
 const indent = (line: string): number => line.length - line.trimStart().length;
+const QUOTES = "\"'\x60";
+const BREAKS = "\n\r\u2028\u2029";
+/** The line without its quoted strings, the same text line.replace(/(["'\x60])(?:\\.|(?!\1).)*\1/g, "") returns, worked out
+ * right to left in linear time, so a run of backslashes after an unclosed quote cannot make it backtrack. */
+export function unquoted(line: string): string {
+  const n = line.length;
+  const ends = [...QUOTES].map((q) => {
+    const end = new Int32Array(n + 2).fill(-1);
+    for (let p = n - 1; p >= 0; p--) {
+      const c = line[p];
+      if (c === "\\" && p + 1 < n && !BREAKS.includes(line[p + 1]) && end[p + 2] >= 0) end[p] = end[p + 2];
+      else if (c !== q && !BREAKS.includes(c) && end[p + 1] >= 0) end[p] = end[p + 1];
+      else if (c === q) end[p] = p + 1;
+    }
+    return end;
+  });
+  let out = "";
+  for (let i = 0; i < n; ) {
+    const k = QUOTES.indexOf(line[i]);
+    const e = k < 0 ? -1 : ends[k][i + 1];
+    if (e >= 0) i = e;
+    else out += line[i++];
+  }
+  return out;
+}
 const brackets = (line: string): number => {
   let depth = 0;
-  for (const c of line.replace(/(["'\x60])(?:\\.|(?!\1).)*\1/g, "")) depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
+  for (const c of unquoted(line)) depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
   return depth;
 };
 type Line = { op: "+" | "-" | " "; text: string };

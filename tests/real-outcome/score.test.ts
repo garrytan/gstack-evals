@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { analyze, compare, normalCdf, PLAN_DEFAULTS, readConfig, renderMarkdown, type AnalysisConfig } from "../../lanes/real-outcome/score/analysis.ts";
-import { destructiveActs, gamingActs, parsePatch, testName, transcriptFlags, type Act, type FileDiff } from "../../lanes/real-outcome/score/detect.ts";
+import { destructiveActs, gamingActs, parsePatch, testName, transcriptFlags, unquoted, type Act, type FileDiff } from "../../lanes/real-outcome/score/detect.ts";
 import { exposureCheck, type Exposure } from "../../lanes/real-outcome/score/exposure.ts";
 import { classifyTrial, DEFAULT_TAXONOMY, NOT_APPLIED, readTaxonomy, ScoreError, type TreeGrade, type TrialEvidence } from "../../lanes/real-outcome/score/outcome.ts";
 import { Stream } from "../../lanes/real-outcome/score/power.ts";
@@ -193,6 +193,36 @@ describe("detectors", () => {
     expect(kinds([fd("tests/conftest.py", { status: "added", added: ["import pytest", "@pytest.fixture", "def db(): return {}"] })])).toEqual(["new_hook_file:flag"]);
     expect(kinds([fd("src/a.py", { added: ["x = f()  # type: ignore", "if 'pytest' in sys.modules: return 1"] })])).toEqual(["suppression_added:flag", "test_signal:flag"]);
     expect(kinds([fd("src/a.py", { added: ["def ok(): return 1"] })])).toEqual([]);
+  });
+
+  test("unquoted strips quoted strings exactly as the backtracking regex it replaces did", () => {
+    const old = (s: string) => s.replace(/(["'\x60])(?:\\.|(?!\1).)*\1/g, "");
+    const alphabet = ["\"", "'", "\x60", "\\", "(", "a", "\r"];
+    const differ: string[] = [];
+    let level = [""];
+    for (let len = 0; len <= 6; len++) {
+      for (const s of level) if (unquoted(s) !== old(s)) differ.push(s);
+      level = level.flatMap((s) => alphabet.map((c) => s + c));
+    }
+    let seed = 20261102;
+    for (let k = 0; k < 20000; k++) {
+      let s = "";
+      for (let len = 7 + (k % 14); s.length < len; ) s += alphabet[(seed = (seed * 1103515245 + 12345) % 2147483648) % alphabet.length];
+      if (unquoted(s) !== old(s)) differ.push(s);
+    }
+    expect(differ).toEqual([]);
+  });
+
+  test("a run of backslashes after an unclosed quote in a test header does not stall the skip detector", () => {
+    const header = "def test_x(p='" + "a\\".repeat(60);
+    const patch = "diff --git a/tests/test_a.py b/tests/test_a.py\n--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@ -1,2 +1,3 @@\n " + header + "\n+    pytest.skip(\"wip\")\n     assert True\n";
+    const t0 = performance.now();
+    const acts = gamingActs(parsePatch(patch), []);
+    expect(performance.now() - t0).toBeLessThan(250);
+    expect(acts.map((a) => a.kind)).toEqual(["skip_added"]);
+    const t1 = performance.now();
+    expect(unquoted("f('" + "\\".repeat(100000) + "(").length).toBe(100004);
+    expect(performance.now() - t1).toBeLessThan(1000);
   });
 
   test("every skip added to an existing test file is an act, skips on the agent's own new tests included; own_new_test_skips counts those", () => {
@@ -565,6 +595,16 @@ describe("paired analysis", () => {
     for (const key of ["cost_accepted", "k1_secondary_kept"]) for (const value of ["false", "no", 0, 1, null]) expect([key, value, codeOf(() => config({ n: 4, [key]: value } as unknown as Partial<AnalysisConfig> & { n: number }))]).toEqual([key, value, "E_REAL_SCORE_CONFIG"]);
     expect(() => config({ n: 4, cost_accepted: "false" } as unknown as Partial<AnalysisConfig> & { n: number })).toThrow(/cost_accepted must be true or false/);
     expect([config({ n: 4, cost_accepted: true }).cost_accepted, config({ n: 4 }).k1_secondary_kept]).toEqual([true, false]);
+  });
+
+  test("a trial-score file with no cost_usd field is a missing cost, never $0", () => {
+    const data = panel({ tasks: 4, trials: 1, control: () => ({ clean: 0.5, defective: 0.5 }), treatment: () => ({ clean: 0.5, defective: 0.5 }) });
+    expect(typeof data[0].cost_usd).toBe("number");
+    const { cost_usd: _, ...bare } = data[0];
+    data[0] = bare as TrialEvidence;
+    expect(classifyTrial(data[0]).cost_usd).toBeNull();
+    const a = analyze(data, config({ n: 4 }));
+    expect([a.spend.usd, a.spend.missing]).toEqual([null, 1]);
   });
 
   test("arm spend counts every trial, infra and contaminated ones included, and a missing cost is never read as $0", () => {
