@@ -36,7 +36,7 @@ describe("Sol's OpenRouter price row", () => {
     const { long, ...base } = SOL_ROW;
     expect(prices(openai[0].pricing)).toEqual(base);
     expect(openai[0].pricing.overrides.map((o: Record<string, string> & { min_prompt_tokens: number }) => ({ above_input_tokens: o.min_prompt_tokens, ...prices(o) }))).toEqual([long]);
-    expect(openRouterRouting(row)).toEqual({ only: ["openai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 2, completion: 10, request: 0, image: 0 } });
+    expect(openRouterRouting(row)).toEqual({ only: ["openai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 4, completion: 15, request: 0, image: 0 } });
     expect(routable("openrouter", SOL)).toBe(true);
   });
 

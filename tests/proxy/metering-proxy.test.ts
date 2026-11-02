@@ -709,6 +709,17 @@ describe("OpenRouter route", () => {
     expect(t.journal().map(l => [l.kind, l.status ?? null, l.estimated ?? null])).toEqual([["free", 200, true], ["refusal", null, null]]);
     expect((await t.proxy.finalize(a.meter_id))).toMatchObject({ micros: 0, requests: 0, refused: 1 });
   });
+
+  // Value: protects=a Sol prompt past 272,000 tokens still finds the openai endpoint, which bills it at $4 and $15, because max_price carries the long rates; fails_when=max_price sends the base $2 and $10 and OpenRouter has no endpoint for a long prompt; why_new=GST-1019 Capy review finding (max_price above 272k); seam=openRouterRouting on the Messages route; no_claim=OpenRouter's live filtering
+  test("a Sol call past 272,000 prompt tokens goes out with max_price at the long rates and settles at them", async () => {
+    const SOL = "openai/gpt-6.1-sol";
+    const t = setup(() => ok({ input_tokens: 280_000, output_tokens: 10 }));
+    const a = t.bind({ models: [`openrouter:${SOL}`], allowance_micros: 20_000_000 });
+    const res = await t.call(a.slot, a.token, "/openrouter/v1/messages", { model: SOL, max_tokens: 1000, messages: [{ role: "user", content: "x".repeat(1_120_000) }] });
+    expect(res.status).toBe(200);
+    expect(t.calls[0]!.body.provider).toEqual({ only: ["openai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 4, completion: 15, request: 0, image: 0 } });
+    expect(t.ledger.settles[0]![1]).toMatchObject({ kind: "spent", spent_micros: 280_000 * 4 + 10 * 15 });
+  });
 });
 
 describe("retries", () => {

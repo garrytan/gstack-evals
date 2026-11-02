@@ -26,7 +26,7 @@ import type { GateEvidence } from "../verdict/lock.ts";
 import { rederiveLock } from "../verdict/lock.ts";
 import { HOST_PROVIDERS, type Call } from "./call.ts";
 import { plan, type Plan } from "./dry-run.ts";
-import { DEFAULT_POLICY, modelProblem, providerOf, type PolicyProvider } from "./policy.ts";
+import { DEFAULT_POLICY, familyOf, modelProblem, providerOf, type PolicyProvider } from "./policy.ts";
 
 export const PROVIDER_KEYS: Record<PolicyProvider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" };
 
@@ -162,9 +162,11 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
 
   const policy: string[] = call.models.flatMap((m) => modelProblem(call.policy, m, "subject", { smoke: call.smoke, item: call.item }) ?? []);
   const judgeProvider = providerOf(call.policy, call.judgeModel);
+  const judgeFamily = familyOf(call.policy, call.judgeModel);
+  const sameFamily = call.models.filter((m) => familyOf(call.policy, m) === judgeFamily);
   const judgeProblem = modelProblem(call.policy, call.judgeModel, "judge", { smoke: call.smoke });
   if (judgeProblem) policy.push(judgeProblem);
-  else if (subjects.some((s) => s.provider === judgeProvider)) policy.push(call.judgeModel + " as the judge: judges come from another model family than the models under test (" + subjects.filter((s) => s.provider === judgeProvider).map((s) => s.model).join(", ") + ")");
+  else if (sameFamily.length) policy.push(call.judgeModel + " as the judge: judges come from another model family than the models under test (" + sameFamily.join(", ") + ")");
   if (interactive.length) policy.push(...(modelProblem(call.policy, call.usersimModel, "usersim", { smoke: call.smoke }) ?? []));
   if (policy.length) stop("E_MODEL_POLICY", policy.join("\n"));
   else report.passed.push("policy: " + call.models.join(", ") + " under " + call.policy.policy.name + " (sha256 " + call.policy.sha256.slice(0, 12) + ")");

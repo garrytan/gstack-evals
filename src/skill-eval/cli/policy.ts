@@ -120,3 +120,10 @@ export function modelProblem(loaded: LoadedPolicy, model: string, role: Role, op
 }
 
 export const providerOf = (loaded: LoadedPolicy, model: string): PolicyProvider | null => loaded.policy.models[model]?.provider ?? null;
+
+/** The family the judge rule compares: the provider, except that an OpenRouter id whose prefix is a policy provider belongs to that provider (openai/gpt-6.1-sol is openai; particle-1 and DeepSeek stay openrouter). */
+export const familyOf = (loaded: LoadedPolicy, model: string): PolicyProvider | null => {
+  const provider = providerOf(loaded, model);
+  const prefix = model.split("/")[0] as PolicyProvider;
+  return provider === "openrouter" && model.includes("/") && PROVIDERS.includes(prefix) ? prefix : provider;
+};
