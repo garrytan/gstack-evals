@@ -200,7 +200,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
   }
   // A run whose tasks' environment Dockerfiles are the test's, against the fake hub, with fake curl, sleep and sg (whose
   // docker pull asks the hub). The oracle trials pass and the proxy never turns healthy, so a run past the gate exits 8.
-  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; stopOnSleep?: boolean } = {}) {
+  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; stopOnSleep?: boolean; stopOnPull?: boolean } = {}) {
     const s = setup(Object.fromEntries(Object.keys(tasks).map((t) => [t, "1"])));
     const root = join(s.run, "..");
     const url = fake.h.url;
@@ -217,7 +217,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     const bin = (name: string, body: string) => { writeFileSync(join(root, "bin", name), "#!/usr/bin/env bash\n" + body); chmodSync(join(root, "bin", name), 0o755); };
     bin("curl", `case "$*" in *${url}*) exec /usr/bin/curl "$@" ;; *9911/status*) echo '{}' ;; *) exit 7 ;; esac\n`);
     bin("sleep", `echo "$1" >> "${fake.h.sleepLog}"\n` + (opts.stopOnSleep ? `touch "${join(s.run, "STOP")}"\n` : ""));
-    bin("sg", `echo "$3" >> "${join(root, "sg.log")}"\ncase "$3" in "docker pull -q '"*) img=\${3#"docker pull -q '"}; img=\${img%"'"}; [ "$(/usr/bin/curl -s -o /dev/null -w '%{http_code}' -X POST "${url}/pull?image=$img")" = 200 ] ;; *"network inspect"*) echo 172.17.0.1 ;; esac\n`);
+    bin("sg", `echo "$3" >> "${join(root, "sg.log")}"\ncase "$3" in "docker pull -q '"*) ${opts.stopOnPull ? `touch "${join(s.run, "STOP")}"; ` : ""}img=\${3#"docker pull -q '"}; img=\${img%"'"}; [ "$(/usr/bin/curl -s -o /dev/null -w '%{http_code}' -X POST "${url}/pull?image=$img")" = 200 ] ;; *"network inspect"*) echo 172.17.0.1 ;; esac\n`);
     const p = Bun.spawn(s.cmd, { env: { ...s.env, DOCKER_HUB_AUTH_URL: url, DOCKER_HUB_URL: url }, stdout: "pipe", stderr: "pipe" });
     const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
     const code = await p.exited;
@@ -282,5 +282,24 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     expect(r.stderr).toContain("stop requested during the image pulls: no paid trial started");
     expect(r.log).not.toContain("oracle.json");
     expect(r.code).toBe(130);
+  }, 60_000);
+
+  test("a STOP file during the last image's wait at the rate limit ends the pulls even when the next pull would succeed (exit 130)", async () => {
+    const r = await pulls(hub({ limitedUntil: 60, reset: true }), { a: "FROM img-a\n" }, { stopOnSleep: true });
+    expect(r.out("pulls.tsv")).toBe(HEAD + "STOP\t1\t60\timg-a\n");
+    expect(r.pulls).toEqual({ "img-a": 1 });
+    expect(r.stderr).toContain("stop requested during the image pulls: no paid trial started");
+    expect(r.log).not.toContain("oracle.json");
+    expect(r.code).toBe(130);
+    expect(r.exitFile()).toBe("130");
+  }, 60_000);
+
+  test("a STOP file written while the last image pulls ends the run before the oracle gate (exit 130)", async () => {
+    const r = await pulls(hub(), { a: "FROM img-a\n" }, { stopOnPull: true });
+    expect(r.out("pulls.tsv")).toBe(HEAD + "ok\t1\t0\timg-a\n");
+    expect(r.stderr).toContain("stop requested during the image pulls: no paid trial started");
+    expect(r.log).not.toContain("oracle.json");
+    expect(r.code).toBe(130);
+    expect(r.exitFile()).toBe("130");
   }, 60_000);
 });

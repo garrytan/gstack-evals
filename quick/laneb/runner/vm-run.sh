@@ -62,6 +62,7 @@ pull() {
   local img=$1 n=0 w=60 waited=0 s log
   log="$run/out/pull.d/$(printf '%s' "$img" | tr '/:@' '___').log"
   while :; do
+    if [ -e "$run/STOP" ]; then printf 'STOP\t%s\t%s\t%s\n' "$((n + 1))" "$waited" "$img"; return 0; fi
     if sg docker -c "docker pull -q '$img'" < /dev/null >> "$log" 2>&1; then
       echo "$(date -u +%FT%TZ) pulled on try $((n + 1)) after ${waited} s at the rate limit" >> "$log"
       printf 'ok\t%s\t%s\t%s\n' "$((n + 1))" "$waited" "$img"
@@ -95,7 +96,7 @@ while read -r img; do
   if [ -e "$run/STOP" ]; then stopped=yes; break; fi
   pull "$img" >> "$run/out/pulls.tsv"
 done < "$run/out/images.txt"
-if [ "$stopped" = yes ] || grep -q '^STOP' "$run/out/pulls.tsv"; then echo "stop requested during the image pulls: no paid trial started" >&2; exit 130; fi
+if [ "$stopped" = yes ] || grep -q '^STOP' "$run/out/pulls.tsv" || { [ -s "$run/out/images.txt" ] && [ -e "$run/STOP" ]; }; then echo "stop requested during the image pulls: no paid trial started" >&2; exit 130; fi
 awk -F'\t' 'NR > 1 && $1 != "ok" { print $4 }' "$run/out/pulls.tsv" | while read -r img; do
   users=$(for f in "$run"/tasks/*/environment/Dockerfile; do
     if [ -f "$f" ] && awk -v i="$img" 'toupper($1) == "FROM" && $2 == i { found = 1 } END { exit !found }' "$f"; then basename "$(dirname "$(dirname "$f")")"; fi
