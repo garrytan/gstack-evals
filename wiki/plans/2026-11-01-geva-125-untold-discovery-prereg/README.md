@@ -27,12 +27,6 @@ attachments:
 
 This post freezes agenda item 2 of the insight plan (GEVA-98, adopted by Garry on 2026-11-01 under decision F) before any paid call. It calls the experiment Run D. The results go in a separate pull request. GEVA-106 designed it and built most of the runner; this thread (GEVA-125) moved it onto the stacks-3 runner, added the system prompt factor, and froze it under the Captain's rulings of 2026-11-01. It was then revised under org R54 (the Captain's ruling of 2026-11-01): Haiku 5.5 and Sonnet 5.5 are not models under test, so their cells are gone, and D3 runs on Opus 5.5.
 
-gstack is Garry Tan's own project. gstack-evals measures it and reports its losses.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 ## 1. The question and the decision
 
 Quick look 1 installed gstack untold on 20 TB2 tasks, and no agent invoked a gstack skill in 180 gstack-arm trials (Opus 5.5, Haiku 5.5, DeepSeek V4.1 Flash, 60 each). In #109, Opus and Haiku opened no skill beyond the one they were told to use, in any arm; particle-1 opened more in 3% of its placebo trials. gstack's /investigate, the skill that fits these tasks best, ships with a one-line description: "Systematic debugging with root cause investigation. (gstack)". Its trigger phrases sit in a `triggers:` key that Claude Code does not show the model.
@@ -100,10 +94,6 @@ One replicate of every cell, plus a second replicate of Opus's two D3 cells (gst
 
 Session caps and prices are the runner's (`config/cells.json`, `config/proxy.json`), the same as #109 for the shared models. gpt-6.1-sol is new to Lane B: it runs inside Claude Code through OpenRouter's Anthropic-compatible endpoint, priced at OpenRouter's list price on 2026-11-01 ($2 in, $10 out, $0.10 cache read per million tokens).
 
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 **gpt-6.1-sol is conditional.** It runs only if its route check (section 8) completes the smoke task with at least one tool call that gets a result back, within two attempts. Otherwise Run D drops it, D2 pools over Opus and particle-1, and the results say why.
 
 **Models left out, with reasons.** Haiku 5.5 and Sonnet 5.5: under org R54 (Garry, 2026-11-01) they are not models under test, so Run D runs no cell on them and no verdict rests on them. DeepSeek V4.1 Flash: particle-1 is built on it and shares its route, and quick look 1 already measured it untold at 0 of 60. The open-weight slots beyond it: cost. The OpenRouter programming ranking was re-read for this preregistration: Data API `rankings-daily?category=programming`, meta.as_of 2026-11-01T21:24:36.929Z, response sha256 2470cff2cda2f90c50b9a13f632194189ca0aad505af3dfec6e029924504d8b5. In the latest weekly bucket (2026-10-26), deepseek-v4.1-flash-20261017 is first with 25.1% of programming tokens, so DeepSeek stays the open-weight rung. Open weights for the families below it were not verified, since no slot runs.
@@ -153,7 +143,7 @@ Browse rate per cell; load rate among trials that opened; compliance among trial
 
 ### 6.3 Disclosure in the results
 
-The results post prints "Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1." verbatim beside every particle-1 result, prints "Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator." verbatim beside every gpt-6.1-sol result (org research/disclosures.md), and states that gstack is Garry Tan's own project. Opus 5.5 is named plainly, with no disclosure claim.
+The results post ends with a Disclosures section that prints "Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1." and "Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator." verbatim and states that gstack is Garry Tan's own project (org research/disclosures.md; Garry, 2026-11-01: disclosures go at the end of the post, and an X post carries none). Opus 5.5 is named plainly, with no disclosure claim.
 
 ### 6.4 Gates reported beside every verdict
 
@@ -313,3 +303,11 @@ Every null gets one Why-null cycle in the results post (org R48): exposure, task
 ## 13. Out of scope
 
 Agenda item 1 (where an instruction must live to be obeyed: Harness Evals leads), Run T (item 4, its own preregistration), the ceremony eval (GEVA-108), the rendered gstack 142757b arms, Haiku 5.5 and Sonnet 5.5 (org R54), Codex as a host, the open-weight ladder slots beyond DeepSeek, and any posting.
+
+## Disclosures
+
+gstack is Garry Tan's own project. gstack-evals measures it and reports its losses.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
