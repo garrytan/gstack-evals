@@ -1,0 +1,513 @@
+GEVA-184 phase scripts: every script GEVA-184 ran or wrote for this run, each under its original sha256; machine paths are replaced as in run-log.txt. Frozen scripts from the prereg (decide.py, exposure.py, review-cost.py, peak.py, ceremony-tb2.ts) and GEVA-89's chain scripts are named by digest in run-log.txt and not repeated, except ceremony-scrub.sh and casetwin.ts.
+
+===== setup-tb2.sh sha256 61cec42020958f4ed9f0ad3d80e7dbe79324e5dec5765a87ca632511fe666582
+#!/usr/bin/env bash
+set -euo pipefail
+W=$HOME/.capy/work/geva184
+cd /workspace/gstack-evals
+log() { echo "$(date -u +%FT%TZ) $*"; }
+# 1. prepare worktree at the tag (cells.json edited below)
+if [ ! -d $W/laneb ]; then git worktree add --detach $W/laneb laneb-stacks-3-runner; fi
+git -C $W/laneb rev-parse HEAD
+# 2. non-git export of the tag
+rm -rf $W/runner-export && mkdir -p $W/runner-export
+git archive laneb-stacks-3-runner | tar -x -C $W/runner-export
+log "export done"
+# 3. terminal-bench-2
+mkdir -p $W/ref
+if [ ! -d $W/ref/terminal-bench-2/.git ]; then git clone -q https://github.com/laude-institute/terminal-bench-2.git $W/ref/terminal-bench-2; fi
+git -C $W/ref/terminal-bench-2 checkout -q 69671fba && git -C $W/ref/terminal-bench-2 rev-parse HEAD
+log "tb2 done"
+# 4. rendered tars from the export
+bash $W/runner-export/quick/laneb/arms/build-render.sh $W/arms
+log "render build done"
+# 5. none.tar as dry-run.sh step 51
+cd $W/runner-export/quick/laneb && B=$(sed -n 's/^ARG BUILDER_IMAGE=//p' arms/Dockerfile) && mkdir -p $W/arms/none/trees/none/.claude/skills && chmod 755 $W/arms/none/trees/none/.claude $W/arms/none/trees/none/.claude/skills && docker run --rm --network none -u $(id -u):$(id -g) -v $W/arms/none:/out -w /out $B tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -C trees/none -cf none.tar .claude
+cp $W/arms/none/none.tar $W/arms/none.tar
+log "none done"
+cd $W/arms && sha256sum gstack-render.tar gstack-render-unattended.tar gstack-render.tar.gz gstack-render-unattended.tar.gz none.tar | tee $W/arms/SHA256SUMS.built
+cd /workspace/gstack-evals && for f in none gstack-render gstack-render-unattended; do echo "$f manifest(tag) tar.sha256=$(git show laneb-stacks-3-runner:quick/laneb/arms/manifests/$f.json | jq -r .tar.sha256) tar_gz=$(git show laneb-stacks-3-runner:quick/laneb/arms/manifests/$f.json | jq -r '.meta.tar_gz_sha256 // .tar_gz_sha256 // empty')"; done
+for f in gstack-render gstack-render-unattended; do diff <(git show laneb-stacks-3-runner:quick/laneb/arms/manifests/$f.json) $W/runner-export/quick/laneb/arms/manifests/$f.json && echo "$f manifest identical to tag"; done
+log "ALL DONE"
+
+===== tb2/batch.sh sha256 279c6348b825fa8aa7dec6ec20be32975f702a840e5567c6b617c0226cf77525
+#!/usr/bin/env bash
+# Operator controller for one TB2 grid batch (GEVA-89's kit, adapted for GEVA-131 then GEVA-184 ceremony-r1: paths, owner, pinned runner copy and TTL only). It does what the tag's launch.sh does, with two changes
+# the Captain approved: vm-run.sh runs detached on the VM (so this controller can die and be re-attached), and the
+# ledger service is one shared process started separately on port 9911.
+# Usage: batch.sh start <run dir> <prefix> <batch cap usd>   |   batch.sh attach <run dir>
+set -uo pipefail
+S=$HOME/.capy/work/geva184/ubi-runner.sh
+RUNNER=$HOME/.capy/work/geva184/runner-export/quick/laneb/runner
+state_root=${XDG_STATE_HOME:-$HOME/.local/state}/ubi-runner
+export UBI_OWNER=geva184 UBI_ALLOWED_STORAGE='320 600 640 1200'
+mode=$1
+run=$(cd "$2" && pwd)
+meta=$run.vm
+log() { echo "$(date -u +%FT%TZ) $*"; }
+if [ "$mode" = start ]; then
+  prefix=$3; cap=$4
+  [ -e "$meta" ] && { log "refusing: $meta exists"; exit 2; }
+  name=$(UBI_TTL_HOURS=${UBI_TTL_HOURS:-14} "$S" up -s standard-30 -S 600) || { log "up failed"; exit 3; }
+  echo "$name" > "$meta"
+  log "vm: $name"
+  if ! { "$S" sync "$name" "$RUNNER" work/runner && "$S" sync "$name" "$run" work/run && "$S" ssh "$name" 'bash work/runner/vm-bootstrap.sh'; }; then
+    log "setup failed before any trial; destroying $name"; "$S" down "$name"; exit 4
+  fi
+  { printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:-}"; printf 'OPENROUTER_API_KEY=%s\n' "${OPENROUTER_API_KEY:-}"; } | "$S" ssh "$name" 'umask 077; cat > ~/.laneb-keys'
+  printf '#!/bin/bash\numask 022\ncd ~\nbash work/runner/vm-run.sh work/run "$1" "$2" > work/vm-run.log 2>&1\necho $? > work/vm-run.exit\n' | "$S" ssh "$name" 'cat > work/detach.sh'
+else
+  name=$(cat "$meta")
+  prefix=""; cap=""
+fi
+. "$state_root/$name/env"
+key="$state_root/$name/key"
+SSHO=(-i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30)
+rsh() { timeout 120 ssh "${SSHO[@]}" "ubi@$IP" "$@"; }
+tunnel() {
+  while [ ! -e "$run.tunnel-stop" ]; do
+    ssh "${SSHO[@]}" -N -o ServerAliveInterval=30 -o ServerAliveCountMax=4 -o ExitOnForwardFailure=yes -R 127.0.0.1:9911:127.0.0.1:9911 "ubi@$IP" &
+    echo $! > "$run.tunnel-pid"; wait $!
+    [ -e "$run.tunnel-stop" ] || { echo "$(date -u +%FT%TZ) tunnel dropped; reconnecting"; sleep 5; }
+  done
+}
+rm -f "$run.tunnel-stop"
+tunnel & tloop=$!
+stop_tunnel() { touch "$run.tunnel-stop"; kill "$(cat "$run.tunnel-pid" 2>/dev/null)" 2>/dev/null; wait "$tloop" 2>/dev/null; }
+trap stop_tunnel EXIT
+for i in $(seq 1 30); do rsh 'curl -fsS 127.0.0.1:9911/status' >/dev/null 2>&1 && break; sleep 4; done
+rsh 'curl -fsS 127.0.0.1:9911/status' >/dev/null 2>&1 || log "ledger not reachable through the tunnel"
+if [ "$mode" = start ]; then
+  rsh "setsid nohup bash work/detach.sh $prefix $cap < /dev/null > /dev/null 2>&1 & echo detached-started" || { log "detached start failed"; exit 5; }
+fi
+n=0
+while true; do
+  ex=$(rsh 'cat work/vm-run.exit 2>/dev/null' 2>/dev/null)
+  [ -n "$ex" ] && break
+  n=$((n + 1))
+  if [ $((n % 10)) = 1 ]; then log "progress: $(rsh 'ls -d work/run/jobs/*/*/result.json 2>/dev/null | wc -l; tail -c 300 work/vm-run.log 2>/dev/null' 2>/dev/null | tr '\n' ' ' | cut -c1-400)"; fi
+  sleep 60
+done
+log "vm-run exit $ex"
+stop_tunnel; trap - EXIT
+"$S" ssh "$name" 'rm -f ~/.laneb-keys; tail -5 work/vm-run.log' || true
+mkdir -p "$run/pulled"
+pulled=no
+for attempt in 1 2 3; do
+  if "$S" pull "$name" work/run/out "$run/pulled" && "$S" pull "$name" work/run/jobs "$run/pulled" \
+    && [ "$("$S" ssh "$name" 'cd work/run && find out jobs -type f | wc -l')" = "$(cd "$run/pulled" && find out jobs -type f | wc -l)" ]; then
+    pulled=yes; break
+  fi
+  log "pull attempt $attempt failed"; sleep 20
+done
+"$S" pull "$name" work/vm-run.log "$run/pulled" || true
+if [ "$pulled" != yes ]; then log "WARNING: results not fully pulled; VM $name kept"; exit 7; fi
+"$S" down "$name" && log "destroyed $name" && echo "$ex" > "$run.exit"
+exit 0
+
+===== tb2/ledger-sup.sh sha256 72c5017e050b08d8a3dba2dd937e6c4c9f18ce3da1401d0e91b61dc86cd33b0d
+#!/usr/bin/env bash
+# The one Lane B ledger service on 9911 for one ledger file (GEVA-89's ledger-sup.sh, adapted for GEVA-131, then GEVA-184).
+# Starts the service only when nothing listens on 9911, so it never runs a second service, and ends when <stop file> exists.
+# Usage: ledger-sup.sh <ledger file> <item> <stop file>
+W=$HOME/.capy/work/geva184
+LF=$1; ITEM=$2; STOP=$3
+cd $W/runner-export/quick/laneb/runner || exit 1
+while [ ! -e "$STOP" ]; do
+  if ! ss -ltnH 'sport = :9911' | grep -q '127.0.0.1:9911'; then
+    echo "$(date -u +%FT%TZ) ledger-sup: starting the ledger service for $ITEM"
+    bun ledger.ts serve --path "$LF" --item "$ITEM" --port 9911 --prereg 64e4d626f89aeaace0eeabdca00892c5749ee41a &
+    wait $!
+    echo "$(date -u +%FT%TZ) ledger-sup: service exited $?"
+  fi
+  sleep 3
+done
+
+===== tb2/tb2ledger.ts sha256 92faf4baa3d25621235196e88b1252cab33b49908dade19de7868af242234c74
+import { appendFileSync, openSync, fsyncSync, closeSync } from "node:fs";
+import { Ledger, readRows, totals } from "<work>/runner-export/quick/laneb/runner/ledger.ts";
+const F = "<work>/ledger/ceremony-r1-tb2.jsonl";
+const ITEM = "ceremony-r1-tb2";
+const PREREG = "64e4d626f89aeaace0eeabdca00892c5749ee41a";
+const words = "ceremony-r1 cap approved by GSTA-2 under R42, 2026-11-02 (approvals/2026-11-02-ceremony-r1-caps.md); item ceremony-r1-tb2, $168.58, from caps.py on the pilot outputs, as section 9 of the merged prereg (#122, main 64e4d62) and its G3 amendment (#128, main 409ff47); ceiling $496.12.";
+const append = (row: any) => { appendFileSync(F, JSON.stringify(row) + "\n"); const fd = openSync(F, "r"); try { fsyncSync(fd); } catch {} finally { closeSync(fd); } };
+const mode = process.argv[2];
+if (mode === "init") {
+  new Ledger(F, ITEM).approve(168.58, { cap_usd: 168.58, ceiling_usd: 496.12, by: "GEVA-184", approved_by: "GSTA-2 (gstack-evals Captain)", prereg: PREREG, amendment: "409ff47", runner_tag: "laneb-stacks-3-runner", runner: "85de1407955e8f74e539fe85cb2cef033a619528",
+    quotes: [ { words, by: "GSTA-2 (gstack-evals Captain)", context: "Captain drive approvals/2026-11-02-ceremony-r1-caps.md, words for the three post-pilot approval rows" },
+      { words: "just try to notify me when any given thread is going to spend > $5000 but don't bother me for anything under that", by: "Garry Tan", context: "2026-10-30, org rule R42" } ] });
+}
+if (mode === "rule") {
+  const label = process.argv[3];
+  const t = totals(readRows(F));
+  const parts = { pilots_settled: 14.902839, review_grid_settled_log_line: 181.04, review_sdk_settled: 35.046846, tb2_open_reserved: t.openReservedMicros / 1e6, tb2_settled: t.settledMicros / 1e6, launching_item_cap_tb2: 168.58, judges_projection: 6 };
+  const total = 14.902839 + 181.04 + 35.046846 + parts.tb2_open_reserved + 168.58 + 6;
+  const rec = { label, ...parts, total_usd: +total.toFixed(6), ceiling_usd: 496.12, fits: total <= 496.12 };
+  console.log(JSON.stringify(rec));
+  if (process.argv.includes("--record")) append({ ts: new Date().toISOString(), item: ITEM, kind: "note", id: "start-rule-" + label, usd_micros: 0, prereg: PREREG, by: "GEVA-184", start_rule: rec,
+    rule: "prereg section 9: settled spend, plus open reservations, plus the launching item's cap, plus the projection of every item not yet launched (judges, about $6), must be at most the ceiling. review-grid counts at its log line's $181.04 (the lease settled $176.218648 with 2 unknown calls), as GSTA-2 directed." });
+}
+if (mode === "note") append({ ts: new Date().toISOString(), item: ITEM, kind: "note", id: process.argv[3], usd_micros: 0, prereg: PREREG, by: "GEVA-184", ...JSON.parse(process.argv[4]) });
+if (mode === "status") console.log(JSON.stringify(totals(readRows(F))));
+
+===== tb2/watch.sh sha256 79ef7c6455c33b9970abe47b2b9898d84fcbbb708ade6d9e9079b382baec69e9
+#!/usr/bin/env bash
+# Keepalive and progress watch for the two TB2 controllers (GEVA-184). Exits when both runs have .exit files or a controller is gone without one.
+W=$HOME/.capy/work/geva184/tb2/runs
+end=$(( $(date +%s) + ${1:-20000} ))
+while [ $(date +%s) -lt $end ]; do
+  done_n=0
+  for t in opus particle; do
+    r=$W/ceremony-r1-tb2-$t
+    [ -e $r.exit ] && done_n=$((done_n+1))
+  done
+  echo "$(date -u +%FT%TZ) done=$done_n ledger=$(curl -fsS 127.0.0.1:9911/status 2>/dev/null | head -c 200)"
+  for t in opus particle; do tail -1 $W/ceremony-r1-tb2-$t.ctl.log 2>/dev/null | cut -c1-300; done
+  [ $done_n = 2 ] && { echo ALL_EXITED; exit 0; }
+  alive=$(pgrep -f "batch.sh (start|attach) $W/ceremony-r1-tb2" | wc -l)
+  if [ "$alive" -lt $((2 - done_n)) ]; then echo "CONTROLLER_MISSING alive=$alive done=$done_n"; exit 3; fi
+  sleep 120
+done
+echo WATCH_TIMEOUT
+
+===== judge-prep.sh sha256 2c5183f45393da422252c598b05a1813c1d82d0a40f953e86f7d609836391b07
+#!/usr/bin/env bash
+# GEVA-184 judge prep for ceremony-r1 (prereg #122 section 10.3, GEVA-78 dry-run.sh judge steps). Usage: judge-prep.sh <step>
+set -uo pipefail
+W=$HOME/.capy/work/geva184; J=$W/judge; R=$W/rig
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg; S=$P/stacks-r1.json
+. ~/.gstack/install-verdicts/16f8dc7e92d740c441fcb4b01e7873edf56dbb026b34ad45b69f9f269205ba42/addc956f19ee349a149767767cc0497a17d7a7483ce799b4dfb32c244647df08.env
+export GSTACK_EVALS_LEDGER=$J/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$J/record
+GE=$R/bin/gstack-evals; G="$GE noloss"
+ARMS="none-opus control-opus variant-opus control-sdk-opus"
+SUITE=$(jq -r .id $S)
+arms() { for a in $ARMS; do printf -- ' --arm %s' "$1/$SUITE/$a"; done; }
+words() { echo "ceremony-r1 cap approved by GSTA-2 under R42, 2026-11-02 (approvals/2026-11-02-ceremony-r1-caps.md); item $1, \$20, as section 9 of the merged prereg (#122, main 64e4d62); ceiling \$496.12."; }
+case $1 in
+prep)
+  mkdir -p $J/prereg $J/src
+  git -C /workspace/gstack-evals show 64e4d626f89aeaace0eeabdca00892c5749ee41a:wiki/plans/2026-11-01-geva-108-ceremony-cut-prereg/README.md > $J/prereg/README.md
+  sha256sum $J/prereg/README.md
+  echo "suite $SUITE"; sha256sum $S $P/judge-brief.md $P/severity-map.json
+  for a in $ARMS; do $G ingest $J/derived-src/$a --suite $S --root $J/raw 2>&1 | tail -3; done
+  $G judge-packet --suite $S $(arms $J/raw) --seed 20261101 --out $J/match --key $J/match-key.json 2>&1 | tail -5
+  ;;
+init)
+  item=$2
+  $GE ledger init --item $item --cap 20 --admission required --words "$(words $item)" --by "GSTA-2 (gstack-evals Captain)" --source "Captain drive approvals/2026-11-02-ceremony-r1-caps.md (R42)" 2>&1 | tail -5
+  (cd $R && $GE rig admit --item $item --proof direct --prereg $J/prereg/README.md 2>&1 | tail -12)
+  ;;
+match-dry)
+  $G judge-run --suite $S --packets $J/match --key $J/match-key.json $(arms $J/raw) --brief $P/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --item ceremony-r1-judge-match --out $J/judge-match --concurrency 4 --dry-run 2>&1 | grep -E '^(worst case|item )|E_|total|cap' | head -20
+  ;;
+match)
+  $G judge-run --suite $S --packets $J/match --key $J/match-key.json $(arms $J/raw) --brief $P/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --item ceremony-r1-judge-match --out $J/judge-match --concurrency 4
+  ;;
+esac
+
+===== judge/chain.sh sha256 3d75cc96b7fe7e32ef8ae584b004007c03cd630d41d8839135a82958f2b30117
+#!/usr/bin/env bash
+# GEVA-184 derived-arm chain (Captain decision A, 2026-11-02): GEVA-89's sevmap.ts, the case-insensitive twin, then R1's scrub chain
+# with the suite set to stacks-r1. File digests after each step; counts only, never finding text.
+set -u
+W=$HOME/.capy/work/geva184; J=$W/judge; K=$J/scripts; export R=$W/rig
+D=$J/derived-src; rm -rf $D; mkdir -p $D
+snap() { (cd $D/$1 && find . -type f | sort | xargs sha256sum) > $D/$1.$2.sha256; }
+sha256sum $K/judge/scripts/sevmap.ts $K/casetwin.ts $K/scrub.ts $K/scrub2.ts $K/r1-scrub3.ts $K/ceremony-scrub.sh $K/judge/scripts/majorinfo.ts
+for a in none-opus control-opus variant-opus control-sdk-opus; do
+  echo "== $a"; cp -r $J/src/$a $D/$a; snap $a step0-source
+  bun $K/judge/scripts/sevmap.ts $D/$a; snap $a step1-sevmap
+  bun $K/casetwin.ts $D/$a; snap $a step2-casetwin
+  bash $K/ceremony-scrub.sh $D/$a $K/scrub.ts $K/scrub2.ts $K/r1-scrub3.ts; snap $a step3-scrub
+  for s in step1-sevmap step2-casetwin step3-scrub; do :; done
+  p=step0-source; for s in step1-sevmap step2-casetwin step3-scrub; do echo "$s files changed: $(diff $D/$a.$p.sha256 $D/$a.$s.sha256 | grep -c '^>')"; p=$s; done
+  $R/bin/gstack-evals noloss ingest $D/$a --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --check 2>&1 | grep -E '^ingest|^E_NOLOSS_ARM [^cfd]' | head -3
+done
+
+===== judge/scripts/casetwin.ts sha256 218350de091f1951a425da200c16fdb2791adcb0fc6f5a3de6ee52c54359c518
+// GEVA-184, Captain decision A (2026-11-02, ceremony-r1): a case-insensitive twin for an arm's severity_map. For each raw label
+// in the arm's findings that the map does not hold exactly, if a map key equals it ignoring case, the label maps like that key.
+// Runs after GEVA-89's sevmap.ts, before the scrub. Usage: bun casetwin.ts <derived arm dir>. Rewrites <dir>/arm.json only.
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+const dir = process.argv[2]!;
+const armPath = join(dir, "arm.json");
+const arm = JSON.parse(readFileSync(armPath, "utf8"));
+const rawLabel = (f: Record<string, unknown>) => String(typeof f.label === "string" && f.label ? f.label : f.severity).split(",")[0]!.trim();
+const labels = new Set<string>();
+for (const name of readdirSync(join(dir, "findings"))) for (const line of readFileSync(join(dir, "findings", name), "utf8").split("\n")) if (line.trim()) labels.add(rawLabel(JSON.parse(line)));
+const sm = arm.severity_map ?? {};
+const maps: Record<string, string>[] = [sm.default ?? {}, ...Object.values((sm.by_reader ?? {}) as Record<string, Record<string, string>>)];
+let added = 0;
+for (const m of maps) for (const l of labels) {
+  if (l in m || l === "CRITICAL" || l === "INFORMATIONAL") continue;
+  const k = Object.keys(m).find((x) => x.toLowerCase() === l.toLowerCase());
+  if (k !== undefined) { m[l] = m[k]!; added++; }
+}
+sm.default = maps[0];
+arm.severity_map = sm;
+writeFileSync(armPath, JSON.stringify(arm, null, 2) + "\n");
+console.log(arm.id + " labels " + labels.size + " twins added " + added);
+
+===== judge/scripts/ceremony-scrub.sh sha256 17c926af9762c098627451855eb8f60125f3dde3e352abf0202ae1554ad88566
+#!/usr/bin/env bash
+# R1 publication-scan scrub (GEVA-101 prereg, section 2): #108's frozen blind scrub (GEVA-89 items 11 and 12: scrub.ts,
+# then scrub2.ts), then r1-scrub3.ts, each only on the lines the pinned ingest's publication scan still flags.
+# Logs counts and file:line only, never finding text.
+# Usage: R=<rig> bash r1-scrub.sh <source arm dir> <scrub.ts> <scrub2.ts> <r1-scrub3.ts>
+set -u
+A=$1; S=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
+hits() { "$R/bin/gstack-evals" noloss ingest "$A" --suite "$S" --check 2>&1 | sed -n 's/^E_NOLOSS_ARM \(findings\/[^ ]*\.jsonl\) line \([0-9]*\) (finding .*breaks the publication scan.*/\1:\2/p' | sort -t: -k1,1 -k2,2n -u; }
+hits > "$A.hits0"; echo "scan hits before the scrub: $(wc -l < "$A.hits0")"
+n=0
+for s in "$2" "$3" "$4"; do
+  n=$((n + 1)); [ -s "$A.hits$((n - 1))" ] && bun "$s" "$A" "$A.hits$((n - 1))"
+  hits > "$A.hits$n"; echo "scan hits after step $n: $(wc -l < "$A.hits$n")"
+done
+echo "left for --digest-only: $(sed -n 's/^findings\/\(.*\)\.jsonl:\([0-9]*\)$/\1 line \2/p' "$A.hits3" | tr '\n' ',' )"
+
+===== judge2.sh sha256 09e69a2672ce26f5d99b459fc090e8a5eb46d9090c569a5c0471102cbd538c0c
+#!/usr/bin/env bash
+# GEVA-184 judge steps after the match run (GEVA-78 dry-run.sh lines 57-68, seed 20261101). Usage: judge2.sh <step>
+set -uo pipefail
+W=$HOME/.capy/work/geva184; J=$W/judge; R=$W/rig
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg; S=$P/stacks-r1.json
+. ~/.gstack/install-verdicts/16f8dc7e92d740c441fcb4b01e7873edf56dbb026b34ad45b69f9f269205ba42/addc956f19ee349a149767767cc0497a17d7a7483ce799b4dfb32c244647df08.env
+export GSTACK_EVALS_LEDGER=$J/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$J/record
+GE=$R/bin/gstack-evals; G="$GE noloss"
+ARMS="none-opus control-opus variant-opus control-sdk-opus"
+arms() { for a in $ARMS; do printf -- ' --arm %s' "$1/stacks-r1/$a"; done; }
+third() { [ -s "$1/third.json" ] && grep -q . "$1/third.json" && printf -- ' --third %s' "$1/third.json"; }
+A="--suite $S --packets $J/adj --key $J/adj-key.json $(arms $J/judged) --brief $P/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --item ceremony-r1-judge-adj --out $J/judge-adj --concurrency 4 --source garrytan/gstack=$W/src/gstack --source garrytan/gbrain=$W/src/gbrain"
+case $1 in
+join-match)
+  $G judge-join --suite $S --key $J/match-key.json --reply $J/judge-match/primary.json --second $J/judge-match/second.json $(third $J/judge-match) $(arms $J/raw) --out $J/judge-match/joined 2>&1 | grep -v -E 'context:|docs:' | tail -6
+  for a in $ARMS; do $G ingest $J/judge-match/joined/$a --suite $S --root $J/judged 2>&1 | grep -v -E 'context:|docs:' | tail -2; done
+  $G judge-packet --suite $S $(arms $J/judged) --seed 20261101 --out $J/adj --key $J/adj-key.json --adjudicate 2>&1 | tail -3
+  ;;
+adj-dry) $G judge-run $A --dry-run 2>&1 | grep -v -E 'context:|docs:' | tail -6 ;;
+adj) $G judge-run $A ;;
+join-adj)
+  $G judge-join --suite $S --key $J/adj-key.json --reply $J/judge-adj/primary.json --second $J/judge-adj/second.json $(third $J/judge-adj) $(arms $J/judged) --out $J/judge-adj/joined 2>&1 | grep -v -E 'context:|docs:' | tail -6
+  for a in $ARMS; do $G ingest $J/judge-adj/joined/$a --suite $S --root $J/final/arms 2>&1 | grep -v -E 'context:|docs:' | tail -2; done
+  ;;
+esac
+
+===== score-review.sh sha256 c28cbb8667b298b4b4fcb3c05976ab176c22e094c9835d9a8974cad7494929d9
+#!/usr/bin/env bash
+# GEVA-184 review scoring at the rig pin (prereg #122 sections 4 and 6, amendment #128 scripts). Usage: score-review.sh
+set -uo pipefail
+W=$HOME/.capy/work/geva184; J=$W/judge; R=$W/rig; SC=$W/score; Q=$SC/s
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg; S=$P/stacks-r1.json
+RG=$W/review/review-grid/out; RS=$W/review/runs/review-sdk/out
+G="$R/bin/gstack-evals noloss"
+mkdir -p $SC/review
+for f in comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json; do
+  for id in $(jq -r '.comparisons[].id' $Q/$f); do
+    v=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .variant' $Q/$f); r=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .reference' $Q/$f)
+    echo "## $f $id ($v vs $r)"
+    $G score --suite $S --root $J/final/arms --prereg $Q/$f --variant $v --reference $r --out $SC/review/$id.json > $SC/review/$id.txt 2>&1; echo "exit $?"
+    grep -v -E 'context:|docs:' $SC/review/$id.txt | head -40
+  done
+done
+echo "## review-cost"
+python3 $Q/review-cost.py "{\"control\":[\"$RG\",\"control-opus\",\"control\"],\"variant\":[\"$RG\",\"variant-opus\",\"variant\"],\"none\":[\"$RG\",\"none-opus\",\"none\"],\"control-sdk\":[\"$RS\",\"control-sdk-opus\",\"control-sdk\"]}" --json $SC/review-cost.json > $SC/review-cost.txt 2>&1; echo "exit $?"; cat $SC/review-cost.txt
+echo "## exposure review"
+python3 $Q/exposure.py review $RG $RS --json $SC/exposure-review.json > $SC/exposure-review.txt 2>&1; echo "exit $?"; cat $SC/exposure-review.txt
+echo "## peak exposure"
+python3 $Q/peak.py $RG/proxy/journal.ndjson > $SC/peak-review-grid.txt 2>&1; echo "exit $?"; cat $SC/peak-review-grid.txt
+python3 $Q/peak.py $RS/proxy/journal.ndjson > $SC/peak-review-sdk.txt 2>&1; echo "exit $?"; cat $SC/peak-review-sdk.txt
+
+===== score-part2.sh sha256 33798c9653202c648c70bf04dd0ba6e313ca52e5d3068be8788b642190809c87
+#!/usr/bin/env bash
+# GEVA-184 scoring part 2: review-cost on a copy without the gap row, decide.py, the MAJOR-as-INFORMATIONAL sensitivity, complete case.
+set -uo pipefail
+W=$HOME/.capy/work/geva184; J=$W/judge; R=$W/rig; SC=$W/score; Q=$SC/s
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg; S=$P/stacks-r1.json
+RS=$W/review/runs/review-sdk/out
+G="$R/bin/gstack-evals noloss"
+echo "## review-cost on a symlink copy of the grid out dir whose control-opus cost.tsv drops the one unavailable row (gstack#3564 pass 2, the UPSTREAM gap)"
+rm -rf $SC/rgc; mkdir -p $SC/rgc; cp -as $W/review/review-grid/out $SC/rgc/out
+rm $SC/rgc/out/arms/control-opus/cost.tsv; grep -v -P '\tunavailable\t' $W/review/review-grid/out/arms/control-opus/cost.tsv > $SC/rgc/out/arms/control-opus/cost.tsv
+echo "rows before $(wc -l < $W/review/review-grid/out/arms/control-opus/cost.tsv) after $(wc -l < $SC/rgc/out/arms/control-opus/cost.tsv)"
+RG=$SC/rgc/out
+python3 $Q/review-cost.py "{\"control\":[\"$RG\",\"control-opus\",\"control\"],\"variant\":[\"$RG\",\"variant-opus\",\"variant\"],\"none\":[\"$RG\",\"none-opus\",\"none\"],\"control-sdk\":[\"$RS\",\"control-sdk-opus\",\"control-sdk\"]}" --json $SC/review-cost.json > $SC/review-cost.txt 2>&1; echo "exit $?"; cat $SC/review-cost.txt
+echo "## decide.py"
+python3 $Q/decide.py --tb2 $SC/tb2.json --review-score $SC/review/variant-vs-control.json --review-cost $SC/review-cost.json --exposure-review $SC/exposure-review.json --exposure-tb2 $SC/exposure-tb2.json --arms '{"tb2":{"control":"gstack-render","variant":"gstack-render-unattended"},"review":{"control":"control","variant":"variant"}}' --json $SC/decide.json > $SC/decide.txt 2>&1; echo "exit $?"; cat $SC/decide.txt
+echo "## MAJOR-as-INFORMATIONAL sensitivity (majorinfo.ts unchanged; derived root of links under the names it reads; none entry kept)"
+rm -rf $SC/mi; mkdir -p $SC/mi/root
+ln -s $J/derived-src/none-opus $SC/mi/root/none-opus; ln -s $J/derived-src/none-opus $SC/mi/root/none-particle-1
+ln -s $J/derived-src/control-opus $SC/mi/root/gstack-opus; ln -s $J/derived-src/variant-opus $SC/mi/root/gstack-particle-1; ln -s $J/derived-src/control-sdk-opus $SC/mi/root/tstack-opus
+bun $J/scripts/judge/scripts/majorinfo.ts $P/severity-map.json $SC/mi/root $SC/mi/majorinfo-all.json; echo "exit $?"
+jq '{none: .none}' $SC/mi/majorinfo-all.json > $SC/mi/severity-map.major-info.json; sha256sum $SC/mi/severity-map.major-info.json; jq -c '.none.default | with_entries(select(.key|test("^(major|MAJOR|minor|High|high|HIGH)$")))' $SC/mi/severity-map.major-info.json
+$G derive --suite $S --comparisons $Q/comparisons.ceremony-r1-secondary.json --root $J/final/arms --id stacks-r1-major-info --out $SC/mi/stacks-r1-major-info --severity-map $SC/mi/severity-map.major-info.json 2>&1 | grep -v -E 'context:|docs:' | tail -6
+for id in control-vs-none variant-vs-none; do f=$SC/mi/stacks-r1-major-info/comparisons.stacks-r1-major-info.json; v=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .variant' $f); r=$(jq -r --arg i $id '.comparisons[] | select(.id == $i) | .reference' $f); $G score --suite $SC/mi/stacks-r1-major-info/stacks-r1-major-info.json --root $SC/mi/stacks-r1-major-info/arms --prereg $f --variant $v --reference $r --out $SC/mi/$id.json 2>&1 | grep -E '^[a-z0-9-]+ vs |^verdict' | cut -c1-600; done
+echo "## complete case (descriptive): every gap unit dropped, primary comparisons file"
+$G derive --suite $S --comparisons $Q/comparisons.ceremony-r1.json --root $J/final/arms --id stacks-r1-complete --out $SC/cc --drop-gaps 2>&1 | grep -v -E 'context:|docs:' | tail -6
+f=$SC/cc/comparisons.stacks-r1-complete.json; $G score --suite $SC/cc/stacks-r1-complete.json --root $SC/cc/arms --prereg $f --variant variant-opus --reference control-opus --out $SC/cc/variant-vs-control.json 2>&1 | grep -E '^[a-z0-9-]+ vs |^verdict|^size|^false|^claim' | cut -c1-700
+
+===== score-mi.sh sha256 ed5ae69d6f8a9b0a437b791eb3cc9e6085bec6abef02574d10ab89d48beb2e26
+#!/usr/bin/env bash
+# GEVA-184 MAJOR-as-INFORMATIONAL sensitivity, every arm. majorinfo.ts unchanged; its hard-coded arm names are links to the ceremony arms.
+set -uo pipefail
+W=$HOME/.capy/work/geva184; J=$W/judge; R=$W/rig; SC=$W/score; Q=$SC/s; M=$SC/mi2
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg; S=$P/stacks-r1.json
+G="$R/bin/gstack-evals noloss"; MI=$J/scripts/judge/scripts/majorinfo.ts
+rm -rf $M; mkdir -p $M/r1 $M/r2
+echo "## labels in final arms (findings files), MAJOR or major"
+for a in none-opus control-opus variant-opus control-sdk-opus; do echo "$a $(grep -rhoE '"severity": *"[^"]*"' $J/final/arms/stacks-r1/$a/findings | sort | uniq -c | tr '\n' ' ' | cut -c1-300)"; done
+ln -s $J/derived-src/none-opus $M/r1/none-opus; ln -s $J/derived-src/none-opus $M/r1/none-particle-1; ln -s $J/derived-src/control-opus $M/r1/gstack-opus; ln -s $J/derived-src/variant-opus $M/r1/gstack-particle-1; ln -s $J/derived-src/control-sdk-opus $M/r1/tstack-opus
+ln -s $J/derived-src/none-opus $M/r2/none-opus; ln -s $J/derived-src/none-opus $M/r2/none-particle-1; ln -s $J/derived-src/control-sdk-opus $M/r2/gstack-opus; ln -s $J/derived-src/control-sdk-opus $M/r2/gstack-particle-1; ln -s $J/derived-src/control-sdk-opus $M/r2/tstack-opus
+bun $MI $P/severity-map.json $M/r1 $M/mi-run1.json && bun $MI $P/severity-map.json $M/r2 $M/mi-run2.json; echo "exit $?"
+jq -n --slurpfile a $M/mi-run1.json --slurpfile b $M/mi-run2.json '{"none-opus": $a[0].none, "control-opus": $a[0].gstack, "variant-opus": $a[0].gstack, "control-sdk-opus": $b[0].gstack}' > $M/severity-map.major-info.json
+sha256sum $M/severity-map.major-info.json $M/mi-run1.json $M/mi-run2.json
+jq -c 'to_entries|map({k:.key, MAJOR:.value.default.MAJOR, major:.value.default.major, n:(.value.default|length)})' $M/severity-map.major-info.json
+for c in comparisons.ceremony-r1.json comparisons.ceremony-r1-secondary.json; do id=mi-$(echo $c | sed 's/comparisons.//; s/.json//'); 
+ $G derive --suite $S --comparisons $Q/$c --root $J/final/arms --id stacks-r1-$id --out $M/$id --severity-map $M/severity-map.major-info.json 2>&1 | grep -v -E 'context:|docs:|score with' | cut -c1-200
+ f=$M/$id/comparisons.stacks-r1-$id.json
+ for cid in $(jq -r '.comparisons[].id' $f); do v=$(jq -r --arg i $cid '.comparisons[] | select(.id == $i) | .variant' $f); r=$(jq -r --arg i $cid '.comparisons[] | select(.id == $i) | .reference' $f); echo "### $cid"; $G score --suite $M/$id/stacks-r1-$id.json --root $M/$id/arms --prereg $f --variant $v --reference $r --out $M/$cid.json 2>&1 | grep -E '^[a-z0-9-]+ vs |^verdict|^false' | sed -E 's/ at a 10-point margin \([^)]*\)//' | cut -c1-420; done; done
+echo "## mapped severities in sensitivity arms vs primary (none-opus)"; for a in none-opus control-opus; do jq -c '.severity_map.default | {MAJOR, major}' $M/mi-ceremony-r1-secondary/arms/*/$a/arm.json 2>/dev/null || find $M/mi-ceremony-r1-secondary/arms -maxdepth 3 -name arm.json | head -3; done
+
+===== score/tb2-metered.py sha256 adbad3d7f2ea78661be7511ec5166facc15a48a154fa3423b6af03a40ea253cb
+import json,os,glob,collections,sys
+W=os.path.expanduser('~/.capy/work/geva184/tb2/runs')
+out={}
+for t in ['opus','particle']:
+    J=f'{W}/ceremony-r1-tb2-{t}/pulled/jobs/ceremony-r1-tb2-{t}'
+    trials=set(os.path.basename(d.rstrip('/')) for d in glob.glob(J+'/*/'))
+    rows=[json.loads(l) for l in open(f'{W}/ceremony-r1-tb2-{t}/pulled/out/proxy-sessions.jsonl')]
+    by=collections.defaultdict(lambda: {'n':0,'spent':0,'max':0,'max_trial':None,'cap_hits':0,'refused_budget':0})
+    extra=[];unsettled=[];closes=collections.Counter()
+    for r in rows:
+        a=r['meta']['arm']; b=by[a]; b['n']+=1; s=r['spent_micros']; b['spent']+=s
+        if s>b['max']: b['max']=s; b['max_trial']=r['trial']
+        if r.get('refused_budget',0)>0: b['refused_budget']+=1
+        if s>=r['cap_micros']: b['cap_hits']+=1
+        closes[r.get('close_reason')]+=1
+        tn=r['trial'][:-5] if r['trial'].endswith('__env') else r['trial']
+        if tn not in trials: extra.append((tn,a,s,r.get('close_reason'),r.get('ok_responses')))
+        if not (r.get('ledger_settle') or {}).get('ok'): unsettled.append((tn,a,s,r.get('ledger_settle'),r.get('close_reason')))
+    out[t]={'sessions':len(rows),'trials':len(trials),'metered_usd':round(sum(b['spent'] for b in by.values())/1e6,6),
+      'per_arm':{a:{'sessions':b['n'],'metered_usd':round(b['spent']/1e6,6),'max_session_usd':round(b['max']/1e6,6),'max_trial':b['max_trial'],'sessions_at_cap':b['cap_hits'],'sessions_refused_budget':b['refused_budget']} for a,b in sorted(by.items())},
+      'sessions_without_final_trial':extra,'sessions_not_settled_in_ledger':unsettled,'close_reasons':dict(closes)}
+L=[json.loads(l) for l in open(os.path.expanduser('~/.capy/work/geva184/ledger/ceremony-r1-tb2.jsonl'))]
+st=sum(r['usd_micros'] for r in L if r['kind']=='settle')
+out['ledger']={'settle_rows':sum(1 for r in L if r['kind']=='settle'),'reserve_rows':sum(1 for r in L if r['kind']=='reserve'),'settled_usd':st/1e6}
+json.dump(out,open(os.path.expanduser('~/.capy/work/geva184/score/tb2-metered.json'),'w'),indent=1)
+print(json.dumps(out,indent=1))
+
+===== score/tb2-pertask.py sha256 93431e12bd883395dd12ac1cad94910b92eea1d60d32d600c4973092234018e4
+import json,glob,os,collections
+W=os.path.expanduser('~/.capy/work/geva184/tb2/runs')
+for t in ['opus','particle']:
+    J=f'{W}/ceremony-r1-tb2-{t}/pulled/jobs/ceremony-r1-tb2-{t}'
+    p=collections.defaultdict(lambda: collections.Counter())
+    for d in glob.glob(J+'/*/'):
+        c=json.load(open(d+'config.json')); r=json.load(open(d+'result.json'))
+        arm=c['agent']['kwargs']['arm']; task=c['task']['path'].rstrip('/').split('/')[-1]
+        vr=r.get('verifier_result') or {}; rw=(vr.get('rewards') or {}).get('reward', vr.get('reward'))
+        p[task][arm]+= 1 if (rw is not None and float(rw)>=1) else 0
+    diffs=[(task, c['gstack-render'], c['gstack-render-unattended'], c['none']) for task,c in p.items() if c['gstack-render']!=c['gstack-render-unattended']]
+    print(t, 'tasks', len(p), 'tasks where control != variant (control, variant, none passes of 3):')
+    for x in sorted(diffs, key=lambda x: x[2]-x[1]): print('  ', x)
+
+===== score/tb2-tokens.py sha256 d34bea1552fcc97fb173f1c77e46c5f3541833cd827e99c2ab6b971ac4faf974
+import json,collections,sys
+for run in ["opus","particle"]:
+  agg=collections.defaultdict(lambda: collections.Counter()); rm=collections.defaultdict(collections.Counter)
+  for l in open(f"ceremony-r1-tb2-{run}/pulled/out/proxy-sessions.jsonl"):
+    s=json.loads(l); m=s["meta"]; a=m["arm"]; u=s["usage"]
+    c=agg[a]; c["n"]+=1; c["usd"]+=s["spent_micros"]
+    for k in ["input_tokens","output_tokens","cache_creation_input_tokens","cache_read_input_tokens"]: c[k]+=u.get(k,0)
+    for k,v in s["requested_models"].items(): rm[a][k]+=v
+  for a,c in agg.items():
+    tot=c["input_tokens"]+c["output_tokens"]+c["cache_creation_input_tokens"]+c["cache_read_input_tokens"]
+    print(run,a,c["n"],"usd",c["usd"]/1e6,"tok/trial",round(tot/c["n"]),"in",c["input_tokens"],"out",c["output_tokens"],"cw",c["cache_creation_input_tokens"],"cr",c["cache_read_input_tokens"],dict(rm[a]))
+
+===== score/gst734/gst734-scan-sdk.py sha256 4e716818baa44413a27b982b203c79481d405f460a5a44970dfbe59c49b06893
+import json,glob,collections,sys
+roots={'sdk':'<work>/review/runs/review-sdk/out/runs'}
+samples={}
+out={}
+for lane,R in roots.items():
+    per=collections.defaultdict(lambda: collections.Counter())
+    detail=[]
+    for f in sorted(glob.glob(R+'/*/*/*/p*/host/transcript.ndjson')):
+        parts=f.split('/'); arm=parts[-5]; unit=parts[-4]; p=parts[-3]
+        started={}; notified=set(); bgstate=None; result_seen=False; after=0; ended=None
+        for l in open(f,errors='ignore'):
+            try: e=json.loads(l)
+            except: continue
+            t,s=e.get('type'),e.get('subtype')
+            if t=='system' and s in ('task_updated','background_tasks_changed','task_notification') and s not in samples: samples[s]=l[:600]
+            if result_seen:
+                if t=='system' and s=='task_notification': after+=1
+                continue
+            if t=='system' and s=='task_started':
+                started[e.get('task_id')]={'bg':bool(e.get('is_backgrounded')),'type':e.get('task_type')}
+            elif t=='system' and s=='task_updated':
+                tid=e.get('task_id'); st=json.dumps(e)
+                if tid in started and ('background' in st): started[tid]['bg']=True
+            elif t=='system' and s=='task_notification':
+                notified.add(e.get('task_id'))
+            elif t=='system' and s=='background_tasks_changed':
+                bgstate=e
+            elif t=='result':
+                result_seen=True; ended=s
+        running=[k for k,v in started.items() if v['bg'] and k not in notified]
+        anyopen=[k for k,v in started.items() if k not in notified]
+        bgrun=None
+        if bgstate is not None:
+            tasks=bgstate.get('tasks') or bgstate.get('background_tasks') or []
+            bgrun=sum(1 for x in tasks if isinstance(x,dict) and str(x.get('status','')).lower() in ('running','pending','in_progress'))
+        c=per[arm]; c['sessions']+=1
+        c['bg_started']+=sum(1 for v in started.values() if v['bg'])
+        if running: c['sessions_bg_running_at_result']+=1
+        if anyopen: c['sessions_any_task_open_at_result']+=1
+        if bgrun: c['sessions_last_bgstate_running']+=1
+        if after: c['sessions_notification_after_result']+=1
+        if not result_seen: c['sessions_no_result']+=1
+        if running or anyopen or bgrun: detail.append((arm,unit,p,len(running),len(anyopen),bgrun,[started[k]['type'] for k in anyopen]))
+    out[lane]={a:dict(c) for a,c in per.items()}
+    print(lane, json.dumps(out[lane]))
+    for d in detail: print('  ',d)
+json.dump(out,open('<work>/score/gst734/gst734-scan-sdk.json','w'),indent=1)
+for k,v in samples.items(): print('SAMPLE',k,v)
+
+===== build-record.sh sha256 d1a881e9e6c655c692dbe9aa13ba7368813140869eeab8dd106362a85bb6728c
+#!/usr/bin/env bash
+# Builds the post's record files from what ran: run-log.txt (printed lines), phase-scripts.txt (scripts with sha256), derived.sha256.txt (chain digests).
+set -euo pipefail
+W=$HOME/.capy/work/geva184; O=$W/post; mkdir -p $O
+sec() { echo; echo "===== $1"; }
+{
+echo "GEVA-184 run log: the lines each phase printed, in run order. Machine paths: <home> stands for /home and <Users> for /Users in the chain scan names, <work> is GEVA-184's work dir, <rig> the rig worktree at b792646."
+sec "RUNLOG.md (GEVA-184's run notes)"; cat $W/RUNLOG.md
+sec "setup-tb2.sh output: tag export, TB2 checkout, tar rebuild and digest check"; cat $W/setup-tb2.log
+sec "TB2 ledger note rows (ledger/ceremony-r1-tb2.jsonl)"; jq -c 'select(.kind=="note")' $W/ledger/ceremony-r1-tb2.jsonl
+sec "tb2/watch.sh, last lines"; tail -6 $W/tb2/watch.log
+sec "ceremony-tb2.ts (frozen), both readings"; cat $W/score/tb2-output.txt
+sec "exposure.py (frozen, amended by #128) on TB2"; cat $W/score/exposure-tb2.txt
+sec "tb2-metered.py: per-arm proxy spend, peak session, sessions at cap"; jq . $W/score/tb2-metered.json
+sec "tb2-pertask.py: tasks where control and variant differ"; cat $W/score/tb2-pertask.txt
+sec "tb2-tokens.py: tokens per arm from the proxy session file"; cat $W/score/tb2-tokens.txt
+sec "judge/chain.sh: derived-arm chain (GSTA-2 decision A)"; cat $W/judge/chain.log
+sec "judge-match (judge-run, then judge-join)"; cat $W/judge/judge-match.log; jq -c 'with_entries(select(.value|type!="object" and type!="array"))' $W/judge/judge-match/joined/join-b0a0f8160534.json
+sec "judge-adj (judge-run, then judge-join)"; cat $W/judge/judge-adj.log; jq -c 'with_entries(select(.value|type!="object" and type!="array"))' $W/judge/judge-adj/joined/adjudication-f35e73275ff4.json
+sec "score-review.sh: noloss score (primary and secondary), review-cost.py, exposure.py, peak.py"; cat $W/score/score-review.log
+sec "score-part2.sh: review-cost.py on the copy without the gap row, decide.py, first sensitivity try (none arm only) and a complete-case look"; cat $W/score/score-part2.log
+sec "score-mi.sh: MAJOR-as-INFORMATIONAL sensitivity on every arm"; cat $W/score/score-mi.log
+sec "GST-734 check: GEVA-131's scan of review-grid and the pilot (its gst734-scan.txt, sha256 of gst734-scan.py 25f0598f), then the same script on review-sdk with only its paths changed"; grep -v "^SAMPLE" $W/score/gst734/gst734-scan-geva131.txt | grep -v "^$"; grep -v "^SAMPLE" $W/score/gst734/gst734-sdk.txt | grep -v "^$"; echo "(SAMPLE lines, which quote session events, are left out.)"
+} | sed -e "s#$W/rig#<rig>#g" -e "s#$W#<work>#g" -e "s#~#~#g" -e "s#<home>/#<home>/#g" -e "s#<Users>/#<Users>/#g" > $O/run-log.txt
+{
+echo "GEVA-184 phase scripts: every script GEVA-184 ran or wrote for this run, each under its original sha256; machine paths are replaced as in run-log.txt. Frozen scripts from the prereg (decide.py, exposure.py, review-cost.py, peak.py, ceremony-tb2.ts) and GEVA-89's chain scripts are named by digest in run-log.txt and not repeated, except ceremony-scrub.sh and casetwin.ts."
+for f in setup-tb2.sh tb2/batch.sh tb2/ledger-sup.sh tb2/tb2ledger.ts tb2/watch.sh judge-prep.sh judge/chain.sh judge/scripts/casetwin.ts judge/scripts/ceremony-scrub.sh judge2.sh score-review.sh score-part2.sh score-mi.sh score/tb2-metered.py score/tb2-pertask.py score/tb2-tokens.py score/gst734/gst734-scan-sdk.py build-record.sh; do
+  echo; echo "===== $f sha256 $(sha256sum $W/$f | cut -d' ' -f1)"; cat $W/$f; done
+} | sed -e "s#$W/rig#<rig>#g" -e "s#$W#<work>#g" -e "s#~#~#g" -e "s#<home>/#<home>/#g" -e "s#<Users>/#<Users>/#g" > $O/phase-scripts.txt
+{
+echo "Derived-arm chain digests (GSTA-2 decision A). For each arm, sha256 of every file before step 1 (step0-source) and after each step: step1 sevmap.ts, step2 casetwin.ts, step3 ceremony-scrub.sh. Script digests are in run-log.txt."
+for a in none-opus control-opus variant-opus control-sdk-opus; do for s in step0-source step1-sevmap step2-casetwin step3-scrub; do echo; echo "===== $a $s"; cat $W/judge/derived-src/$a.$s.sha256; done; done
+} > $O/derived.sha256.txt
+wc -c $O/*.txt; sha256sum $O/*.txt
+grep -n -i -E 'sk-[a-z0-9]{8}|api[_-]?key *[=:] *[A-Za-z0-9]|bearer [A-Za-z0-9]|secret *[=:]|token *[=:] *[A-Za-z0-9]{16}' $O/*.txt | cut -c1-200 | head || true
+grep -c '<home>/\|\.capy/drive' $O/*.txt || true
