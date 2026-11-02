@@ -9,11 +9,13 @@
 //          command, so its body reaches the model as a user message; this is what Run D's listing check is for its
 //          untold design.
 // A part that fails on the route's side is retried once. A trial whose files can't be read is such a failure, with the
-// read error as its reason. A model whose part fails twice leaves R3a: the record says which part failed and why, with
+// read error as its reason: bad JSON, the wrong shape, a file missing or of the wrong type inside the trial dir (ENOENT,
+// ENOTDIR, EISDIR), or an error code not named below. A model whose part fails twice leaves R3a: the record says which part failed and why, with
 // each session's Harbor exit and the proxy's evidence (its session row, with the cache-read tokens it metered, and any cap
 // stop), and screen.ts refuses the model's screen. A failure on our side is not a try (Captain ruling A1): a local proxy
 // or ledger service that died, a session interrupted by SIGINT or SIGTERM, a session cut short by a machine sleep or a
-// kill, a cap stop the proxy latched, or the check itself failing during a session. The check then ends incomplete: the
+// kill, a cap stop the proxy latched, the check itself failing during a session, or a read of the trial failing on our
+// machine (EACCES, EIO, EMFILE, ENFILE, ENOMEM or ENOSPC; the record names the code). The check then ends incomplete: the
 // verdict stays null, the session's spend stays on the ledger, the screen refuses to bind, and the record names the
 // cause. The Captain decides on a rerun, and only --rerun runs past an incomplete record. A signal while no session runs
 // (the services still coming up, or between sessions) spends nothing and counts no try, so it doesn't mark the record
@@ -79,8 +81,11 @@ export function toolResults(msgs: any[]): number {
   return msgs.filter((m) => m.type === "UserMessage" && Array.isArray(m.content)).flatMap((m) => m.content).filter((b: any) => b?.tool_use_id).length;
 }
 
+const OUR_READ_ERRORS = new Set(["EACCES", "EIO", "EMFILE", "ENFILE", "ENOMEM", "ENOSPC"]);
+
 // One session's route-side verdict from its Harbor exit, its job directory and the proxy's session rows. A trial whose
-// files can't be read fails with the read error as its reason.
+// files can't be read fails with the read error as its reason; a read that fails on our machine (OUR_READ_ERRORS) throws
+// instead, so the check ends incomplete and counts no try (A1).
 export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: string, sessionRows: any[], proxyConfig: any) {
   const bySession = sessionsByTrial(sessionRows);
   let trial: ReturnType<typeof loadR3Trial> = null, toolCount = 0, unreadable: string | null = null;
@@ -91,6 +96,8 @@ export function judge(kind: RouteSession["kind"], harborExit: number, jobDir: st
     const msgs = msgsPath && existsSync(msgsPath) ? readFileSync(msgsPath, "utf8").split("\n").flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : [];
     toolCount = toolResults(msgs);
   } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code && OUR_READ_ERRORS.has(code)) throw new Error(`${code} reading the trial: ${(e as Error).message}`);
     trial = null;
     unreadable = String((e as Error).message ?? e);
   }
