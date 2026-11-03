@@ -79,15 +79,13 @@ describe("the read audit (GEVA-203, keyless)", () => {
     for (const command of ["ls " + skills + " 2>&1 | head -5", "cat " + skills + " 2>&1; false", "cat " + skills + " && false", "cat " + skills + " || false", "cat " + skills + " |& head", "cat " + skills + " &", "cat " + skills + " & false", "cat " + skills + "\nfalse", "(cat " + skills + ")", "echo $(cat " + skills + ")", "echo `cat " + skills + "`"]) expect([command, touch(command)]).toEqual([command, [[shown, false, true]]]);
   });
 
-  // Value: protects=S3 (#176 /ship pass 1, the Captain's ruling): a separator inside single or double quotes separates nothing, so an errored grep with a quoted alternation reads clean, while $( ) or backticks inside double quotes and real separators outside quotes stay compound; fails_when=a quoted | or ; marks a failed simple command contaminated, or a command substitution inside double quotes loses its touches on error; why_new=GST-1121 (S3); seam=auditTranscript's error rule for Bash; no_claim=escaped quotes outside a quoted span
-  test("S3: quoted separators make no compound; $( ) and backticks inside double quotes still do", () => {
-    const failed = (id: string): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "grep: No such file or directory", is_error: true }] }, parent_tool_use_id: null, session_id: "s" });
-    const touch = (command: string) => audit(ndjson(call("t1", "Bash", { command }), failed("t1")), "none").map((t) => [t.target, t.error, t.contaminated]);
-    const skills = join(HOME, ".claude", "skills", "gstack", "SKILL.md");
-    const shown = "~/.claude/skills/gstack/SKILL.md";
-    expect(touch('grep -rE "gstack|skill" ~/.capy/drive')).toEqual([["~/.capy/drive", true, false]]);
-    for (const command of ["cat " + skills + ' "a; b"', "cat " + skills + " 'a | b'", "grep -e 'x&y' " + skills, 'grep "(a)" ' + skills, "cat " + skills + " '$(nope)'"]) expect([command, touch(command)]).toEqual([command, [[shown, true, false]]]);
-    for (const command of ['echo "$(cat ' + skills + ')"', 'echo "`cat ' + skills + '`"', 'grep -E "a|b" ' + skills + " | head", "cat " + skills + ' "a"; false']) expect([command, touch(command)]).toEqual([command, [[shown, false, true]]]);
+  // Value: protects=P2-3 (#176 /ship pass 2, the Captain's ruling): the read audit reads no quotes, so a backslash-escaped quote cannot hide a separator and an errored compound that read a gstack file stays contaminated (it fails closed; a quoted separator makes a compound too, an open note owned by the E1 prereg); fails_when=quote handling returns and an escaped quote opens a fake quoted span that excuses the read; why_new=GST-1121 (P2-3, the pass 2 Red Team's probe of S3, which is reverted); seam=auditTranscript's error rule for Bash; no_claim=quoted separators, which the rule counts as compound by design
+  test("P2-3: an escaped quote hides no separator, so an errored compound that read a gstack file stays contaminated", () => {
+    const failed = (id: string): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "ls: cannot access 'nope': No such file or directory", is_error: true }] }, parent_tool_use_id: null, session_id: "s" });
+    for (const command of ['echo \\"; cat ~/.local/share/gstack/review/SKILL.md; ls nope; echo "done"', "echo \\'; cat ~/.local/share/gstack/review/SKILL.md; false; echo 'ok'"]) {
+      const touches = audit(ndjson(call("t1", "Bash", { command }), failed("t1")), "none");
+      expect([command, touches.length > 0, touches.every((t) => !t.error && t.contaminated)]).toEqual([command, true, true]);
+    }
   });
 
   // Value: protects=a subagent's tool call (parent_tool_use_id set) is audited the same as the main agent's; fails_when=a none arm launches a subagent that reads a skill or drive file and stays clean; why_new=audit.ts reads every tool call, the main agent's and each subagent's; seam=auditTranscript over sidechain messages; no_claim=a subagent whose transcript is written elsewhere

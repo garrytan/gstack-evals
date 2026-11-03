@@ -116,6 +116,19 @@ describe("the rec user (B4, open item 3)", () => {
     }
   });
 
+  // Value: protects=P2-1 (#176 /ship pass 2, the Captain's ruling): each lens's own phrase (CEO/founder-mode review, founder-mode review, eng manager-mode review, designer's eye review) is declined under every other lens and taken under its own, a curly apostrophe matches like a straight one, and every space in a phrase also matches a hyphen; fails_when=a lens-line offer of another review is accepted, a lens declines its own, or a curly apostrophe or a second hyphen slips past; why_new=GST-1121 (P2-1); seam=recAnswer over OTHER_REVIEWS and each lens's phrases; no_claim=other paraphrases
+  test("P2-1: each lens's own phrase is declined under the other lenses and taken under its own; a curly apostrophe and hyphens match", () => {
+    const own = { ceo: ["Want me to run a CEO/founder-mode review next?", "Should I run a founder-mode review too?"], eng: ["Should I do an eng manager-mode review after this?"], design: ["Want a designer's eye review next?", "Want a designer’s eye review next?", "Want a designer's-eye-review next?"] } as const;
+    for (const lens of ["ceo", "eng", "devex", "design"] as const) for (const [owner, qs] of Object.entries(own)) for (const q of qs) expect([lens, q, recAnswer(q, lens)]).toEqual([lens, q, owner === lens ? REC_REPLY : REC_DECLINE]);
+  });
+
+  // Value: protects=P2-2 (#176 /ship pass 2, the Captain's ruling): S1's /ship carve-out covers only GST-925's descriptive wording ("ends with /ship"), so a mode or Step 0 question that offers /ship as the next move is declined while GST-925's pins keep the recommendation; fails_when=every /ship in a mode question is ignored, or GST-925's wording is declined; why_new=GST-1121 (P2-2); seam=recAnswer; no_claim=other descriptive wordings of /ship
+  test("P2-2: a mode question that offers /ship is declined; GST-925's 'ends with /ship' wording keeps the recommendation", () => {
+    expect(recAnswer("Step 0: proceed, or skip review and run /ship now?", "ceo")).toBe(REC_DECLINE);
+    expect(recAnswer("Step 0E, mode selection. A) SCOPE EXPANSION B) SELECTIVE EXPANSION C) HOLD SCOPE (recommended) D) SCOPE REDUCTION. Each mode ends with /ship and a commit.", "ceo")).toBe(REC_REPLY);
+    expect(recAnswer("Review mode: hold scope or cut to minimum? Each option ends with /ship and a commit.", "ceo")).toBe(REC_REPLY);
+  });
+
   test("through the simulator, a gated effect still gets the non-approving answer", async () => {
     const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-"), "usersim.ndjson"), freeform: async (p, q) => ((await recFreeformFor("ceo")(p, q)) as { text: string }).text });
     const ask = async (question: string, options: string[] = ["A", "B"]) => ((await sim.answerAsk([{ question, options: options.map((label) => ({ label })) }])) as { answers: Record<string, string> }).answers[question];
