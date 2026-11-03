@@ -1,8 +1,8 @@
 ---
 id: 2026-11-03-geva-236-waste-baseline
 kind: finding
-title: "Deterministic re-runs at a pushed head are 0.07% of measured ship-check time in the gstack-evals crew sessions, so the waste kill rule applies"
-summary: "A $0 counts-only baseline: pushed-head checks are 1,629 ms of 2,476,601 ms (upper bound 0.56%), all 22 pushes check out against real PR heads, and nothing reaches the 10% trigger."
+title: "Deterministic re-runs at a pushed head are 0.07% of measured ship-check time in the gstack-evals crew sessions, but review rounds past the cap have no measured time, so the waste kill rule is not shown"
+summary: "A $0 counts-only baseline: pushed-head re-runs are 0.07% of ship-check time (upper bound 0.56%), but review rounds past the cap have no measured time, so the kill rule is not shown."
 author: GEVA-236
 model: anthropic/claude-opus-5-5
 date: 2026-11-03
@@ -13,7 +13,7 @@ links:
   - GST-1114
 ---
 
-# Deterministic re-runs at a pushed head are 0.07% of measured ship-check time in the gstack-evals crew sessions (upper bound 0.56%), so the waste kill rule applies
+# Deterministic re-runs at a pushed head are 0.07% of measured ship-check time in the gstack-evals crew sessions (upper bound 0.56%), but review rounds past the cap have no measured time, so the waste kill rule is not shown
 
 Publication status: unpublished; posting is Garry's. Done: the reader runs, the session scan, the head validation and this file. Still blocking a post: the /ship review recorded in the PR, a cross-family claim check, and a rerun by another crew.
 
@@ -28,7 +28,7 @@ Publication status: unpublished; posting is Garry's. Done: the reader runs, the 
 
 ## What we found
 
-The kill rule in 2026-11-03-geva-220-waste-floor asks one question: are deterministic re-runs at a tree CI already ran, plus review rounds past the cap, 10% or more of measured ship-check wall clock? In the gstack-evals crew sessions we could read, they are not.
+The kill rule in 2026-11-03-geva-220-waste-floor asks one question: are deterministic re-runs at a tree CI already ran, plus review rounds past the cap, 10% or more of measured ship-check wall clock? In the gstack-evals crew sessions we could read, the re-run part is far under 10%. The review-round part has no measured wall time, so this baseline can't answer the question.
 
 - **Primary reading:** pushed_head_checks.ms / ship_checks.ms = 1,629 / 2,476,601 = **0.07%**. One check, out of 366 ship checks, ran at a pushed head with nothing changed since.
 - **Head-validated primary reading:** also 1,629 / 2,476,601 = **0.07%**. All 22 pushes in the scanned sessions reached a real PR head, and the one counted check follows a confirmed push.
@@ -37,9 +37,9 @@ The kill rule in 2026-11-03-geva-220-waste-floor asks one question: are determin
 
 Neither pair straddles 10%. Lenient and strict R1 both sit under it, and so do the primary reading and the upper bound.
 
-**Trigger verdict.** Under 10%, so the paid ship-task suite's start trigger does not fire, and the kill rule applies. The other trigger needs a model and arm cell at a 10% waste share or more, with a model contrast whose 95% interval excludes 0. This baseline compares no models, so it can't meet that trigger.
+**Trigger verdict.** Not shown either way. Review rounds past the cap enter as counts only, below: 3 in prs mode and 9 in receipts mode. Their wall time is not measured: the reviewers ran in subagents, and the per-PR panel times are estimates. So the numerator above lacks them. On the same ship-check total, about 234 s of headroom is left under 10% after the upper bound, and nothing here says whether those rounds took more or less. Their counts also cover all 20 sampled PRs, while the ship-check total covers the sessions of 9.
 
-Review rounds past the cap enter as counts only, below. Their wall time is not measured: the reviewers ran in subagents, and the per-PR panel times are estimates. So the numerator above lacks them.
+So the kill rule is not shown to apply. The paid ship-task suite's start trigger does not fire either, because the baseline doesn't show 10% or more, so no paid suite starts. Whether the waste line of work stops waits on a measure of review-round wall time. The other trigger needs a model and arm cell at a 10% waste share or more, with a model contrast whose 95% interval excludes 0. This baseline compares no models, so it can't meet that trigger.
 
 For the six other crew repos, the kill-rule reading is not measured. Their local gates record wall time only as estimates or not at all, so there is no measured ship-check wall clock to divide by.
 
@@ -168,7 +168,7 @@ Paid model calls: $0. The session scan, the head validation and this draft used 
 - **Task fit.** Fair for the question asked. These are real multi-hour ship pipelines, the place 2026-11-03-geva-220-waste-floor said the waste would show. Coverage is the weak point: 19 of 65 subagent sessions and 9 of 20 sampled PRs.
 - **Power and floor.** This baseline is a count, with no contrast and no interval. The primary reading is 0.07% and the upper bound 0.56%, far under the 10% line. To reach 10% on the same ship-check total, pushed-head checks would need about 246 s more call time. The unread subagent sessions can't be bounded from here.
 - **Frontier competence.** One model, Opus 5.5, ran every ship check. Nothing here compares models.
-- **Verdict: KEEP.** The null reading stands as measured, and the kill rule applies: the waste line of work stops and no paid ship-task suite is built. This is not a CUT-CANDIDATE for any gstack skill, because no skill is tested here. What would flip it: a read of the unread subagent sessions that puts pushed-head checks plus R1 at 10% or more.
+- **Verdict: FIX-METHOD** (a measurement gap). The re-run reading stands as measured, but the kill rule's other part, review rounds past the cap, has counts and no wall time, so the method can't read the rule yet. Next step: measure or bound the wall time of the rounds past the cap, then read the kill rule. No paid ship-task suite starts meanwhile, because its start trigger needs a measured 10% or more. This is not a CUT-CANDIDATE for any gstack skill, because no skill is tested here. What would settle it: a measured review-round time that keeps the combined share under 10% (the kill rule applies) or puts it at 10% or more (the start trigger fires). A read of the unread subagent sessions could also move the re-run part.
 
 ## Limits and threats
 
