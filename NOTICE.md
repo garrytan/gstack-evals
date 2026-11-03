@@ -20,6 +20,8 @@ A unit that vendors a file records the exact source commit in its row, keeps the
 | [gstack](https://github.com/garrytan/gstack) `test/fixtures/skill-evals/{learn,office-hours}/` | gstack's contract task files and seed scripts for /learn and office-hours, byte for byte, for the Lane A shakedown | docs/benchmarks/2026-11-lanea-shakedown/tasks/ | MIT, Copyright (c) 2026 Garry Tan | U11 | vendored unchanged from b61744517cc3 (v1.91.334.0); the files carry no header, so this row stands in for the copyright line; digests in that folder's README |
 | GSTA-131's review replay panel (a Capy crew thread working for this repo's owner), from the org drive's handoffs/gsta131-review-replay/ | Panel cases 1 and 2 (gstack #3516 and #3518), build.ts (from build2.ts), two evals' preregistrations, frozen prompt digests, items and results tables, and measured tokens. The harness-evals case, rendered prompts, per-trial model output and run.ts are not vendored | lanes/review-replay/panel/ | Joins under this repo's MIT licence; credited in the lane README and each file header | U13 | vendored, with no source commit (scratch scripts from GSTA-131's machine); every source file's sha256 is in the lane README's digest table, and the changes are listed in build.ts's header and the README |
 
+harness-evals is a private repository, so its links here and in the vendored files' headers do not open for outside readers. Each vendored file still names its source commit and keeps the upstream copyright line.
+
 harness-evals and gbrain-evals carry the same licence text and copyright holder as [LICENSE](LICENSE). skill-diet's licence:
 
 ```

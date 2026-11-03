@@ -34,7 +34,7 @@ const context: VerdictContext = {
   arm_trees: { before: SHA, before2: SHA, after: "c".repeat(64), none: "d".repeat(64) },
   lock: { tasks_sha256: SHA, ext_sha256: null, commit: "e".repeat(40), post_hoc: false },
   levels: { description: { before: 40, after: 38 }, skill_md: { before: 9000, after: 6000 }, references: { before: 2000, after: 2600 } },
-  spend: { ledger: "ledger.sqlite", ledger_record: "ledger-record.json", committed: 41_000_000, reserved: 0, unknown: 0, cap: 60_000_000, line_item: "learn-diet", lease_id: "lease-1", approval: { words: "Approved, $60 cap.", by: "Garry Tan", source: "GSTA-2 gate" }, caps_history: [60_000_000] },
+  spend: { ledger: "ledger.sqlite", ledger_record: "ledger-record.json", committed: 41_000_000, reserved: 0, unknown: 0, cap: 60_000_000, line_item: "learn-diet", lease_id: "lease-1", approval: { words: "Approved, $60 cap.", by: "Approver", source: "gate" }, caps_history: [60_000_000] },
   adjudication: { blinded: true, judge_model: "openai/gpt-6.1-sol" },
   resumed_from: null,
   wall_s: 1830,

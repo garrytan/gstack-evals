@@ -1,0 +1,28 @@
+name: Eval idea
+description: A question about gstack that an eval could answer.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe tasks in general terms. Do not post the body of a task you would want held out.
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: What would the eval tell us about gstack, on which models?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why the answer matters
+      description: What would gstack do differently for each possible result?
+    validations:
+      required: true
+  - type: textarea
+    id: against
+    attributes:
+      label: How it could come out against gstack
+      description: The result that would show a gstack skill does not help, or hurts.
+    validations:
+      required: true
