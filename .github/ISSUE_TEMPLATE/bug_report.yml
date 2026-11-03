@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in gstack-evals is wrong on current main, and it matters to people using the rig or reading a result.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [CONTRIBUTING.md](https://github.com/garrytan/gstack-evals/blob/main/CONTRIBUTING.md) first. A report becomes work only with a repro on current main (or a failing test) and a real consequence for users.
+
+        Security problems, leaked secrets and anything that exposes a held-out task go through [SECURITY.md](https://github.com/garrytan/gstack-evals/blob/main/SECURITY.md), not here.
+  - type: input
+    id: commit
+    attributes:
+      label: Commit on main
+      description: The sha of the latest main commit you reproduced this on.
+      placeholder: <sha from git rev-parse HEAD>
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro
+      description: Exact commands from a clean checkout, or a failing test. Keyless if you can.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: consequence
+    attributes:
+      label: Consequence for users
+      description: A wrong verdict, a crash, a check that passes when it should fail, spend that should not happen, and so on.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Bun version, and the host and model if a run is involved. Windows and Gemini get minimal support.
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you send
+      options:
+        - label: I reproduced this on current main.
+          required: true
+        - label: This report holds no secrets, held-out task material or text copied from private sources.
+          required: true

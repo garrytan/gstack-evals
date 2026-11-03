@@ -19,7 +19,7 @@ This quick look ran before the program ledger ([docs/budget-ledger.md](../../doc
 ## Reproduce
 
 ```
-git clone https://git.capy.ai/garrytan/gstack.git /workspace/gstack
+git clone https://github.com/garrytan/gstack.git /workspace/gstack
 bun quick/replay/build.ts            # fetches PR refs it needs; fails if a diff digest moved
 bun test quick/replay
 bun quick/replay/run.ts --dry-run

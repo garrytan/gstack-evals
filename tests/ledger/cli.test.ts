@@ -44,12 +44,12 @@ describe("gstack-evals ledger init and raise", () => {
     expect(JSON.parse(b.out)).toMatchObject({ item: "laneb-quick", cap_micros: 190_000_000, quotes: [{ words: "Rec", by: "Garry Tan", source: "gate 1 of the v1 plan, approving the $500 first cap" }, { words: "It should be fast like this week", source: "2026-10-28 message moving the quick looks up" }] });
     expect(w.calls().length).toBe(4);
     expect(w.calls()[0]).toContain("add\n--ask\nApprove a gstack-evals spend cap of $130.00 for line item lanea-quick\n--words\nRec\n--by\nGarry Tan\n--scope\ngstack-evals line item lanea-quick in the approval record ");
-    expect((await w.cli("raise", "--cap", "150", "--item", "lanea-quick", "--words", "raise ok", "--by", "Garry Tan", "--source", "gate 2", "--branch", "main")).code).toBe(0);
+    expect((await w.cli("raise", "--cap", "150", "--item", "lanea-quick", "--words", "raise ok", "--by", "Approver", "--source", "gate 2", "--branch", "main")).code).toBe(0);
     expect(w.calls()[4]).toContain("Raise the gstack-evals spend cap for line item lanea-quick to $150.00");
     expect(w.calls()[4]).toContain("--branch\nmain\n");
     const status = await w.cli("status", "--item", "lanea-quick");
     expect(status.out).toContain("ITEM: lanea-quick cap=$150.00 admission=required committed=$0.00 left=$150.00 run=- leases=0 open=-");
-    expect(status.out).toContain('  words: "raise ok" by Garry Tan (gate 2)');
+    expect(status.out).toContain('  words: "raise ok" by Approver (gate 2)');
   });
 
   test("a gstack-approvals failure is E_APPROVAL_RECORD with its path, exit and code, and nothing is recorded", async () => {
@@ -113,7 +113,7 @@ describe("gstack-evals ledger lease, settle, reconcile and status", () => {
     expect((await w.cli("settle", "--lease", lease.lease_id)).err).toStartWith("E_LEASE_UNSETTLED ");
     const usage = join(w.dir, "usage.csv");
     writeFileSync(usage, "date,cost\n2026-10-28,3.10\n");
-    const r = await w.cli("reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "settle it at the export", "--by", "Garry", "--source", usage);
+    const r = await w.cli("reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "settle it at the export", "--by", "Approver", "--source", usage);
     expect(r.out).toMatch(/^RECONCILED: replay-quick\.0001\.[0-9a-f]{6} spent=\$3\.10 source=.* sha256=[0-9a-f]{64}$/);
     expect((await w.cli("lease", "--item", "replay-quick", "--run", "run-1", "--json")).out).toContain('"reserved_micros": 6900000');
   });
