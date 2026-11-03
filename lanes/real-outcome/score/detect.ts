@@ -414,7 +414,8 @@ function everyCaseSkipped(code: string): boolean {
 /** The kinds of the skip markers in a statement's string-free code (scan's bare), named by what each does and not how
  * it is spelled: every unconditional skip (it.skip, xit, a skip mark or decorator with or without a reason,
  * pytest.skip(), t.Skip(), #[ignore] and the like) is "skip", a todo is "todo", and any other marker is its name
- * (skipif, skipunless, importorskip, xfail for xfail and expectedFailure, short) followed by its arguments less its
+ * (skipif, skipunless, importorskip, xfail for the xfail mark and expectedFailure, xfailcall for a pytest.xfail() call,
+ * which stops the test where it stands, short) followed by its arguments less its
  * reason, spaces removed. The reason is a reason= or msg= argument, or the argument in a reason's place: the second of
  * unittest's skipIf and skipUnless, the first of pytest.xfail() and the third of pytest.importorskip(). Each kind is
  * followed, after a space, by the if guard at the marker's offset (guard), when it has one. */
@@ -435,7 +436,8 @@ function skipKinds(code: string, guard: (at: number) => string = () => ""): stri
       }
       const reason = m[0].startsWith("@unittest.") ? 1 : !m[0].endsWith("(") ? -1 : word === "xfail" ? 0 : 2;
       const kept = commaParts(code.slice(open + 1, e)).filter((p, k) => !/^(?:reason|msg)\s*=/.test(p) && (k !== reason || /^\w+\s*=(?!=)/.test(p)));
-      return named((word === "expectedfailure" ? "xfail" : word) + "(" + kept.join(",").replace(/\s+/g, "") + ")");
+      const name = word === "expectedfailure" ? "xfail" : word === "xfail" && m[0].endsWith("(") ? "xfailcall" : word;
+      return named(name + "(" + kept.join(",").replace(/\s+/g, "") + ")");
     }),
   );
 }

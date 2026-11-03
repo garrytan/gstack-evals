@@ -750,6 +750,8 @@ describe("detectors", () => {
       ['@unittest.skipIf(sys.platform == "win32", "posix")', '@pytest.mark.skipif(not HAS_X, reason="posix")'],
       ['@unittest.skipIf(HAS_X, "x")', '@unittest.skipUnless(HAS_X, "x")'],
     ];
+    const marked = ['@pytest.mark.xfail(reason="bug 12")', "def test_b():", "    g()"];
+    for (const call of ['    pytest.xfail("bug 12")', '    pytest.xfail(reason="bug 12")']) expect([call, moveActs([pyFrom(marked), ["tests/test_b.py", newFile(["import pytest", "", "def test_b():", call, "    g()"])]])]).toEqual([call, removed]);
     for (const [from, to] of changed) expect([from, to, move(from, to)]).toEqual([from, to, removed]);
     expect(moveActs([pyFrom(["def test_b():", '    pytest.xfail("bug 12")', "    g()"]), ["tests/test_b.py", newFile(["import pytest", "", "def test_b():", '    pytest.xfail(reason="bug 12")', "    g()"])]])).toEqual(readd);
     expect(moveActs([modFrom(['np = pytest.importorskip("numpy", "1.2", "needs numpy")']), modInto(['np = pytest.importorskip("numpy", "1.2", reason="needs numpy")'])])).toEqual(readd);
