@@ -15,16 +15,18 @@
 # as CAP_STOP (src/trial/review/run.ts at 176fdc7), and derive --drop-gaps can clear an arm's stopped status but never
 # this log. It is read as rr-admit.py reads the pilot's: a log that is missing, empty or unreadable, has no closing exit
 # line, carries a stop line led by any code but E_COVERAGE_GAP, carries a line about a stop that no code leads, or closes
-# with an exit that does not match its stop lines (0 with none, 2 with some) gives no outcome.
+# with an exit that does not match its stop lines (0 with none, 2 with some) gives no outcome. It skips only the pause's
+# own stop line, which rr-pause.py --append writes led by RR_PAUSE_STOP (README section 8).
 # Usage: python3 rr-decide.py <score json> <derive.json> <stacks-r1.json> <gstack-full source arm> <none-rr source arm>
 #   <gstack-full run out dir>/parses.tsv <gstack-full run arm id> <gstack-full run stderr log> <none-rr run stderr log>
 import json, os, re, subprocess, sys
+PAUSED = re.compile(r"RR_PAUSE_STOP CAP_STOP the next round's worst case \(\d+ sessions at their allowance\) does not fit under the cap")
 
 
 def log_stop(path):
     """Why a grid run's saved stderr log keeps the decision from an outcome, or None."""
     try:
-        lines = [x for x in open(path, encoding="utf-8").read().splitlines() if x.strip()]
+        lines = [x for x in open(path, encoding="utf-8").read().splitlines() if x.strip() and not PAUSED.fullmatch(x)]
     except (OSError, UnicodeDecodeError):
         lines = []
     end = re.fullmatch(r"review-units exit (\d+)", lines[-1]) if lines else None

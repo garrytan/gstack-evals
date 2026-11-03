@@ -10,7 +10,14 @@
 # and the item's cap less its committed spend: judge-run at 715f837 opens its lease with no amount, and the ledger then
 # reserves all the item has left (src/runner/ledger/ledger.ts: amount_micros ?? left).
 # Exit 0 to launch, 3 to pause and report to the Captain, 5 on bad input.
+# With --append it adds a review-units launch's saved stderr to the run's log and closes it with the launch's
+# "review-units exit N" line (README section 10). When the headroom set that launch's spend cap (the cap printed for it
+# is below the item's remaining cap), review-units' stop between rounds (run.ts at 176fdc7: CAP_STOP the next round's
+# worst case ... does not fit under the cap) is the pause, and it goes in led by RR_PAUSE_STOP, a marker no review-units
+# or proxy line carries; a launch whose stderr already carries it is refused (exit 5). Every other line goes in as
+# written, a proxy CAP_STOP above all. rr-admit.py and rr-decide.py skip only that marked line.
 # Usage: python3 rr-pause.py <record dir> <next item> <parallel> [<round worst case in dollars>]
+#        python3 rr-pause.py --append <launch stderr> <launch exit code> <run log> <spend cap> <item's remaining cap>
 import json, os, re, sys
 
 JUDGE = {"rr-pilot-judge", "rr-judge-match", "rr-judge-adjudicate"}
@@ -18,6 +25,9 @@ ITEMS = ["rr-pilot-none", "rr-smoke-full", "rr-pilot-judge", "rr-grid-none", "rr
 LIMIT, ALLOWANCE = 4500 * 10**6, 40 * 10**6
 FILE = re.compile(r"^(approval|lease|close)-(\d{4})\.json$")
 usd = lambda m: "$%.2f" % (m / 1e6)
+MARK = "RR_PAUSE_STOP"
+ROUND_STOP = re.compile(r"CAP_STOP the next round's worst case \(\d+ sessions at their allowance\) does not fit under the cap")
+micros = lambda x: round(float(x.lstrip("$").replace(",", "")) * 1e6)
 
 
 def item(record, name):
@@ -35,6 +45,17 @@ def item(record, name):
 
 
 try:
+    if sys.argv[1:2] == ["--append"]:
+        launch, code, log = sys.argv[2], int(sys.argv[3]), sys.argv[4]
+        pause = micros(sys.argv[5]) < micros(sys.argv[6])
+        lines = open(launch, encoding="utf-8").read().splitlines()
+        if any(x.startswith(MARK) for x in lines):
+            raise ValueError("the launch's stderr %s already carries the pause marker %s" % (launch, MARK))
+        lines = [MARK + " " + x if pause and ROUND_STOP.fullmatch(x) else x for x in lines]
+        with open(log, "a", encoding="utf-8") as f:
+            f.write("".join(x + "\n" for x in lines) + "review-units exit %d\n" % code)
+        print("pause: appended %d lines and review-units exit %d to the run log; %d marked %s as the pause's stop%s" % (len(lines), code, sum(x.startswith(MARK) for x in lines), MARK, "" if pause else " (the item's remaining cap set this launch's spend cap, so nothing is the pause)"))
+        sys.exit(0)
     record, nxt, parallel = sys.argv[1], sys.argv[2], int(sys.argv[3])
     if nxt not in ITEMS or parallel < 1 or not os.path.isdir(os.path.join(record, "items")):
         raise ValueError("usage: rr-pause.py <record dir> <one of %s> <parallel> [<round worst case>]" % ", ".join(ITEMS))

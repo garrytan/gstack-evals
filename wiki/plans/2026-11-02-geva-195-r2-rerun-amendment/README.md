@@ -15,15 +15,15 @@ links:
   - 2026-10-31-geva-76-stacks-round-1-prereg
 attachments:
   - e25562c3912735ca7045ef0c6908cd357c906f97e895bbacb51b731651edf653  comparisons.rr.json
-  - 9dbd7d0b8edf6060ef886f35b897c2277f09e32174fe822e7c09dff3e6a20b5f  dry-run-rr.sh.txt
-  - 5b0bf0da01b9fface2b57a35dbb555215d4ed8a091cc8f3a24ca26c9c8de4053  dry-run-rr.txt
+  - fa6e52c94a7d4027dfa85e7f34950f06198d44fc7e10f8e0bb4b0be81c3be881  dry-run-rr.sh.txt
+  - 60e26db6ef7810bc60618affd53d0af63d0d3cf72d34e2dd5877809d0235ddf0  dry-run-rr.txt
   - c1bb431cde482da750f6a6ba3152d3e29357247e5b731cb28a7591d4a6cf3e38  power-rr.py.txt
   - a17fc2c08073053c225258af9448f3e520cfd03cfa7f23593e0750646587051d  reader-map-gstack-5209e9262d80.json
-  - 95ed70447dc13d5cb280c0fc364bfc69ce1d8c52487fe754ac0f86e09c20c3df  rr-admit.py.txt
-  - e50781fe272ffd739ee19659636c49159e944af23bb7e1346ae4dbc30f78a649  rr-decide.py.txt
+  - a091c3d561c7e0414071dcf373995677e99c6ddd02e853b59fb66bdbc15f000b  rr-admit.py.txt
+  - 7b1b88e8bd2d49f41794a790a933daa64c2e4036421f349d2480b10e1827faad  rr-decide.py.txt
   - 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548  rr-gate.py.txt
   - cc708fa60c0c354bc48a6ca54117dcc3357b272a5f5bc9e880c0d4ed7ebb92c3  rr-held.py.txt
-  - e6aefa5da928b40b6aeecd676e6ff09b12d4380ba839eefa6d48a83d4ec92afb  rr-pause.py.txt
+  - d421b6c1500fc87b8886b92cf7f0da8ca7694c1c947647a233be2c973ee87c28  rr-pause.py.txt
   - 473e157f375e12cdebe540c93a7b14f5998e1e084d392c20d9caf2c22b764c76  rr-stub-arms.ts.txt
 ---
 
@@ -190,7 +190,7 @@ Caps are sized for the science (R57): every review-units item's cap is its worst
 
 Every item serves one run: its first lease binds it, and a second run on it is refused (E_ITEM_BOUND). A resume of the same run, with the same run id, may take a further lease, as R2's none-r2 did.
 
-**The pause rule (the Captain's, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. With the caps above, every item's cap together ($13,794) passes $4,500, so the rule binds only if sessions cost far more than R2's.
+**The pause rule (the Captain's, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. rr-pause.py writes that stop line to the run's log led by RR_PAUSE_STOP, a marker no review-units or proxy line carries, and rr-admit.py and rr-decide.py skip only that marked line, so a run resumed on the Captain's word scores as usual while any other stop line, a proxy CAP_STOP above all, still gives no admission and no outcome. With the caps above, every item's cap together ($13,794) passes $4,500, so the rule binds only if sessions cost far more than R2's.
 
 **Launches run one at a time.** A launch is one review-units command or one judge batch. review-units opens its lease only after the arm's image builds (src/skill-eval/cli/run-host.ts at 176fdc7), so the guard can't see a launch that has started but not yet leased. The operator runs rr-pause.py for the next launch only after the previous launch's lease shows in the ledger record, and two launches never run at once. This closes the overlap the /ship red-team found: two grid arms launched together each saw the full $4,500 of headroom, and their leases reserved $5,280.
 
@@ -206,7 +206,7 @@ Every item serves one run: its first lease binds it, and a second run on it is r
 
 ## 10. Commands
 
-Each arm runs alone, one launch at a time (section 8), in its own out dir, on its own item, from a checkout at 176fdc7. The flags not named are stacks round 1's step 5 flags (`--severity-map` from its post, `--test garrytan/gstack=true --test garrytan/gbrain=true`, and `--source` clones holding each unit head), as #129. API keys come from the ledger's run environment, never the command line. P is rr-pause.py's printed spend cap for the launch. The ledger paths are the same everywhere: judge-run takes `--ledger $L --record $R`, the ledger CLI takes `--ledger $L --ledger-record $R`, and rr-pause.py takes `$R`.
+Each arm runs alone, one launch at a time (section 8), in its own out dir, on its own item, from a checkout at 176fdc7. The flags not named are stacks round 1's step 5 flags (`--severity-map` from its post, `--test garrytan/gstack=true --test garrytan/gbrain=true`, and `--source` clones holding each unit head), as #129. API keys come from the ledger's run environment, never the command line. P is rr-pause.py's printed spend cap for the launch, and LEFT the item's remaining cap it prints beside P. The ledger paths are the same everywhere: judge-run takes `--ledger $L --record $R`, the ledger CLI takes `--ledger $L --ledger-record $R`, and rr-pause.py takes `$R`.
 
     S=wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
     A=wiki/plans/2026-11-02-geva-195-r2-rerun-amendment
@@ -217,18 +217,18 @@ Each arm runs alone, one launch at a time (section 8), in its own out dir, on it
 
     # pilot and smoke
     gstack-evals review-units --suite $S --units all --arms none --passes 5 --system-prompt none=claude-code-preset \
-      $COMMON --item rr-pilot-none --spend-cap P --out <dir>/rr-pilot-none <step 5 flags> 2>> <dir>/rr-pilot-none.stderr
-    echo "review-units exit $?" >> <dir>/rr-pilot-none.stderr
+      $COMMON --item rr-pilot-none --spend-cap P --out <dir>/rr-pilot-none <step 5 flags> 2> <dir>/rr-pilot-none.launch
+    python3 $A/rr-pause.py.txt --append <dir>/rr-pilot-none.launch $? <dir>/rr-pilot-none.stderr P LEFT
     gstack-evals review-units --suite $S --units garrytan/gbrain#7789@49eb4da5f7c8 garrytan/gstack#3475@fc69d3ff0bfe \
       garrytan/gstack#3507@8c021d124220 --arms gstack-full=$G --passes 1 --system-prompt gstack-full=claude-code-preset \
       --told-prefix gstack-full=<#129's folder>/told-gstack-full.txt $COMMON --item rr-smoke-full --spend-cap P \
       --out <dir>/rr-smoke-full <step 5 flags>
 
     # grid: the same two commands with --units all --passes 2, items rr-grid-none and rr-grid-full,
-    # and new out dirs <dir>/rr-none and <dir>/rr-full; each appends its stderr (2>>) to <dir>/rr-none.stderr or
-    # <dir>/rr-full.stderr and closes it with the exit line, as the pilot's does, for rr-decide.py
+    # and new out dirs <dir>/rr-none and <dir>/rr-full; each saves its stderr and appends it with rr-pause.py --append
+    # to <dir>/rr-none.stderr or <dir>/rr-full.stderr, closed by the exit line, as the pilot's does, for rr-decide.py
 
-Each run step appends its stderr with `2>>`, so a `--resume` of the same run keeps the earlier launch's stop lines, a proxy CAP_STOP above all, for rr-admit.py and rr-decide.py. The pause's own CAP_STOP line stays in the log too, so a paused and resumed run gets no admission and no outcome from them and goes to the Captain with the counts. Each judge batch runs the judge pre-flight (section 7) before any judge call.
+Each run step appends its launch's stderr and exit line to the run's log through rr-pause.py --append, so a `--resume` of the same run keeps the earlier launch's stop lines, a proxy CAP_STOP above all, for rr-admit.py and rr-decide.py. The pause's own stop line goes in led by RR_PAUSE_STOP (section 8), which both skip, so a run paused and resumed on the Captain's word gets its admission and outcome as usual, while a proxy CAP_STOP in any launch still gives none. Each judge batch runs the judge pre-flight (section 7) before any judge call.
 
 Every command runs `--dry-run` first, which prints the cap-stop line, the reader map, the background wait and the worst case at the allowance. Then, at rig 715f837 with this post's scripts and #129's beside them, dry-run-rr.sh's order: r2-source.py, sevmap and the scrub chain, blind.py, rr-gate.py, judging, `derive --drop-gaps`, scoring, rr-held.py, rr-decide.py, the sensitivities and the strata.
 

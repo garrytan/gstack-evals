@@ -18,10 +18,12 @@
 # stop there as a line led by its code (src/trial/review/run.ts at 176fdc7) and exits 2 on any stop. The pilot is
 # incomplete too (exit 4) when that log is missing, empty or unreadable, has no closing exit line, carries a stop line
 # led by any code but E_COVERAGE_GAP (a proxy CAP_STOP above all), carries a line about a stop that no code leads, or
-# closes with an exit that does not match its stop lines (0 with none, 2 with some).
+# closes with an exit that does not match its stop lines (0 with none, 2 with some). It skips only the pause's own stop
+# line, which rr-pause.py --append writes led by RR_PAUSE_STOP (README section 8); every other line counts as above.
 # Exit 0 PASS, 3 FAIL, 4 incomplete, 5 bad input (never an outcome).
 # Usage: python3 rr-admit.py <derive.json> <derived suite json> <derived arm dir> <pilot run arm.json> <pilot run stderr log> [power-rr.py or power-rr.py.txt]
 import csv, importlib.machinery, importlib.util, json, math, os, re, sys
+PAUSED = re.compile(r"RR_PAUSE_STOP CAP_STOP the next round's worst case \(\d+ sessions at their allowance\) does not fit under the cap")
 from functools import reduce
 from operator import add
 
@@ -119,7 +121,7 @@ if __name__ == "__main__":
             print("admission: incomplete: goes to the Captain, no admission. The pilot run %s has %d sessions not run and status %s with %d coverage gaps, so it was interrupted." % (run["id"], not_run, run["status"], gaps))
             sys.exit(4)
         try:
-            lines = [x for x in open(el, encoding="utf-8").read().splitlines() if x.strip()]
+            lines = [x for x in open(el, encoding="utf-8").read().splitlines() if x.strip() and not PAUSED.fullmatch(x)]
         except (OSError, UnicodeDecodeError):
             lines = []
         end = re.fullmatch(r"review-units exit (\d+)", lines[-1]) if lines else None

@@ -39,9 +39,11 @@ step() {
 JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
 arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
 ST() { env B="$B" MAP="$MAP" TOLD="$PC/told-gstack-full.txt" bun "$W/bin/rr-stub-arms.ts" "$@"; }
-# STE appends a stub run's stderr (2>>) as the README's run step does, closed by its exit line. review-units' CLI exits 2 on any
-# stop (src/trial/review/cli.ts at 176fdc7), so a stub run that logged a stop line and exited 0 closes with exit 2.
-STE() { local f=$1 rc n; shift; mkdir -p "$(dirname "$f")"; ST "$@" 2>> "$f"; rc=$?; n=$rc; [ $rc -eq 0 ] && grep -qE '^[A-Z][A-Z0-9_]*[A-Z0-9]( |:|$)' "$f" && n=2; echo "review-units exit $n" >> "$f"; cat "$f" >&2; return $rc; }
+# STE saves a stub run's stderr and appends it to the run's log with rr-pause.py --append, closed by its exit line, as the
+# README's run step does. PL holds the launch's spend cap and the item's remaining cap; by default the item's cap sets it,
+# so nothing is marked. review-units' CLI exits 2 on any stop (src/trial/review/cli.ts at 176fdc7), so a stub run that
+# logged a stop line and exited 0 closes with exit 2.
+STE() { local f=$1 rc n; shift; mkdir -p "$(dirname "$f")"; ST "$@" 2> "$f.launch"; rc=$?; n=$rc; [ $rc -eq 0 ] && grep -qE '^[A-Z][A-Z0-9_]*[A-Z0-9]( |:|$)' "$f.launch" && n=2; python3 "$W/bin/rr-pause.py" --append "$f.launch" $n "$f" ${PL:-1 1} >&2; cat "$f" >&2; return $rc; }
 GS() { printf 'E_COVERAGE_GAP arm none-opus stopped with %s, so it gets no verdict (synthetic)\nreview-units exit 2\n' "$1"; }
 third() { [ -s "$1/third.json" ] && echo "--third $1/third.json"; }
 init_items() { local rec=$1; shift; for p in "$@"; do ITEM="${p%%:*}" CAP="${p#*:}" REC="$rec" bun -e 'const { recordApproval } = await import(process.env.R + "/src/runner/ledger/ledger.ts"); recordApproval(process.env.REC, { action: "init", item: process.env.ITEM, cap_micros: Math.round(Number(process.env.CAP) * 1e6), quotes: [{ words: "Dry run: keyless item, no spend", by: "GEVA-195", source: "dry-run" }], admission: "warn" });' > /dev/null || echo "E_INIT ${p%%:*}"; echo "item ${p%%:*} at \$${p#*:}"; done; }
@@ -347,9 +349,14 @@ step 'lease_id|E_' $L lease --item rr-grid-full --run rr-dry-grid-full --amount 
 step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-grid-full 4
 echo "# The same \$100 judge batch at \$150 of headroom: refused, since its lease would reserve the item's \$1,130."
 step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-judge-adjudicate 1 100
-echo "# The launch with that spend cap (150) stops before any session; the Captain's word resumes the same run with a larger cap."
-step '^(stub run|CAP_STOP|E_)' ST "$S" "$W/run/pause" none pause --cap 150
+echo "# The launch with that spend cap (150, below the item's 1320) stops before any session, and rr-pause.py --append marks"
+echo "# that stop as the pause's; the Captain's word resumes the same run with a larger cap, the item's own."
+PL="150 1320"; step '^(stub run|CAP_STOP|RR_PAUSE_STOP|pause|E_)' STE "$W/run/pause.stderr" "$S" "$W/run/pause" none pause --cap 150
 step . sh -c "jq -c '{id, status, parse_outcomes}' $W/run/pause/arms/*/arm.json; echo sessions journaled: \$(cat $W/run/pause/cells.ndjson 2>/dev/null | wc -l)"
-step '^(stub run|CAP_STOP|E_)' ST "$S" "$W/run/pause" none pause --cap 1320 --resume
+PL="1320 1320"; step '^(stub run|CAP_STOP|RR_PAUSE_STOP|pause|E_)' STE "$W/run/pause.stderr" "$S" "$W/run/pause" none pause --cap 1320 --resume
 step . sh -c "jq -c '{id, status, parse_outcomes}' $W/run/pause/arms/*/arm.json; echo sessions journaled: \$(wc -l < $W/run/pause/cells.ndjson)"
+echo "# The paused and resumed run's log as none-rr's, on the KEEP round's scores (synthetic): rr-decide.py skips only the marked pause line, so KEEP."
+decide "$K/score.json" "$K/derive.json" "" "" "" "$W/run/pause.stderr"
+echo "# The same log with a proxy CAP_STOP in the resumed launch: no outcome."
+{ sed '$d' "$W/run/pause.stderr"; echo "CAP_STOP the proxy stopped a session at the cap"; echo "review-units exit 2"; } > "$W/pause-proxy.stderr"; decide "$K/score.json" "$K/derive.json" "" "" "" "$W/pause-proxy.stderr"
 echo; echo "## Done"
