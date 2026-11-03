@@ -134,6 +134,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_REAL_SCORE_INPUT](#e_real_score_input) | 2 | U20 |
 | [E_REAL_SCORE_GRADE](#e_real_score_grade) | 2 | U20 |
 | [E_REAL_SCORE_CONFIG](#e_real_score_config) | 2 | U20 |
+| [E_WASTE_INPUT](#e_waste_input) | 2 | U15 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -930,6 +931,14 @@ The real-outcome analysis config or termination taxonomy is not usable: a missin
 Fix: Fix the config to match the preregistration (lanes/real-outcome/score/README.md lists the fields). Never change a frozen number after the run to change a verdict.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_WASTE_INPUT
+
+gstack-evals waste could not read an input: a file is missing or unreadable, a thread export is not a transcript page, item array or JSON lines of either, an item lacks its id, source or createdAt, a gstack-ship-receipt block is not JSON, or per-PR data has no prs array. The message names the input by its position, never by its path. Nothing was printed to stdout.
+
+Fix: Re-export the thread (src/waste/README.md shows the export program) or fix the file the message points to, then run the command again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U15.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

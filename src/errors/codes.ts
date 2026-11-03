@@ -1076,6 +1076,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_WASTE_INPUT: {
+    exit: 2,
+    meaning: "gstack-evals waste could not read an input: a file is missing or unreadable, a thread export is not a transcript page, item array or JSON lines of either, an item lacks its id, source or createdAt, a gstack-ship-receipt block is not JSON, or per-PR data has no prs array. The message names the input by its position, never by its path. Nothing was printed to stdout.",
+    fix: "Re-export the thread (src/waste/README.md shows the export program) or fix the file the message points to, then run the command again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U15",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
