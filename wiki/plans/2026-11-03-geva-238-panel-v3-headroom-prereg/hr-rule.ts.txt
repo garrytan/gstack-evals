@@ -19,7 +19,7 @@
 //   bun hr-rule.ts --readings <readings.json> [--shapes <readings.json of the hr-shapes.json run>] [-- <step 5's flags without --out>]
 // Prints counts only. Exit 0 when at least one stratum reads, 3 when none does, 2 for E_USAGE.
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { armReadings, kappa as kappaOf, kappaRead, loadMods, ndjson, readArm } from "./e0-readings.ts";
 
 export const KIND: Record<string, string> = { ceo: "C-RC", eng: "E-RC", dx: "X-RC", design: "G-RC" };
@@ -148,7 +148,7 @@ export async function rebuild(argv: string[], r: any): Promise<any[]> {
     f.set(k, [...(f.get(k) ?? []), v!]);
   }
   const one = (k: string) => (f.get(k)?.length === 1 ? f.get(k)![0]! : usage("after --, needs one " + k));
-  const mods = await loadMods(one("--scorer"));
+  const mods = await loadMods(resolve(one("--scorer")));
   const suite = JSON.parse(readFileSync(one("--suite"), "utf8")), kinds = JSON.parse(readFileSync(one("--kinds"), "utf8"));
   const outs = [one("--opus"), one("--particle")], arms = outs.map((o) => readArm(o, suite, Number(one("--passes")), mods));
   const key = mods.loadKey({ suite, suiteSha256: kinds.suite_sha256, key: one("--key"), arms: arms.map((a, i) => mods.readArmDir(join(outs[i]!, "arms", a.id), suite, kinds.suite_sha256)) });

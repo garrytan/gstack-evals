@@ -7,8 +7,9 @@
 #     ^<UTC time, YYYY-MM-DDTHH:MM:SSZ> seal bundle <bundle sha256>( |$), the custodian's seal line for this bundle.
 #   hr-custody.sh --reaudit <bundle.tar.age> <age identity> <re-audit dir> <CUSTODY.md> <bundle sha256> -- <command> [<arg>...]
 #     the section 7 re-audit, the only allowed way to open key.json and the unit trees for it (section 4, step 5b): makes the
-#     re-audit dir mode 0700 and runs <command> there in the foreground with E0_SLICE set to the extraction and E0_REAUDIT to
-#     that dir; the command must leave a non-empty reaudit.json in it.
+#     re-audit dir mode 0700 and runs <command> in the foreground, in the caller's working directory (it does not cd), with
+#     E0_SLICE set to the extraction and E0_REAUDIT to that dir; the command must write only under $E0_REAUDIT and leave a
+#     non-empty reaudit.json there.
 # Both refuse, before they decrypt, unless E0_MACHINE names this machine and the bundle's sha256 is the one given. A bundle
 # named .tar.gz.age extracts with tar -xzf, any other with tar -xf. Then they reserve the run or re-audit dir by
 # creating <dir>.lock with mkdir, which is atomic, so a second launch on the same dir refuses while the first runs, and

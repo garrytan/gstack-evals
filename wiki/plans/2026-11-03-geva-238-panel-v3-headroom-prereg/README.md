@@ -16,29 +16,29 @@ links:
   - GST-1197
 source: "Plan by GEVA-238 (autoplan rev d83b55dff1a1, gate_rev 1, answered rec by the Captain); kappa check run by GEVA-238; post and scripts finished by GEVA-241."
 attachments:
-  - 4abc65aeb18ca23376abd65e332065a25e20183f6ff37ac1f9ad017445f210d9  gen-synth-hr.py.txt
+  - 03c115c079a26ba16e9865c5325d4b217c96680f5740e5a1c1d7c7e7f42a9485  gen-synth-hr.py.txt
   - 731a04555a194867cf0dbd8d94bf1af4869ecfc385c965c66a2948b7765f9449  hr-addendum.md
-  - 7f551e3e1277bf0bb3bf32e482fb8cc04828b3abaa2ef1eb6e4f734f89160cf6  hr-build-dry.sh.txt
-  - cae49d388c67bf9d0c28fc3b00ed323634c18a3e099dc72385cbf1652e529050  hr-build-dry.txt
+  - b655209fd77f96a0fdc8bb198583480e9e4054c982bf9c903f5040fd4e2404fa  hr-build-dry.sh.txt
+  - 074158c2079dc49845c80658d1666203de38ef00ac70c28e885d72d8db2aec2c  hr-build-dry.txt
   - 35715aa5afcdacb8e980fd9f738e8068760487abbb363cc28ec31f158a878b42  hr-build.sh.diff
   - 6103e617f4525c16d861c57ae848ebae8fa1df3c21e58a7b9489affb23a3523a  hr-build.sh.txt
-  - c1ce1720d0933085032c790b285b5f1db03a1482a0d878854ac0a4e080460133  hr-convert.py.diff
-  - f1b56a97b16353f80d68dcd3ce7ae1e99457059ef9bd2f99fbccb0bac967eea4  hr-convert.py.txt
-  - b3f1d17d9faf83e29a23e578b74d6f0809571d555f377c1d5156a5c16d62647b  hr-custody.sh.diff
-  - 2a74a8adbb392d7107d262224a36981a35dd6fc07835deb8a070d70d83e9c0fc  hr-custody.sh.txt
+  - b8b8e1ec5294e35b01bd816a27047a6ae60198139d3fd91b742890198fb6709e  hr-convert.py.diff
+  - b9c90b053acfab2da3d61ce5a9372446e9caa25385804968cfda288b5bbcb228  hr-convert.py.txt
+  - 07607a3bd5b255714de3955ef1e3aa465f84515a04539fdf75ad418175d20f36  hr-custody.sh.diff
+  - f2a374c2fac8be6584b35212bb40ede010a5f56113725a49078e7d3bd8ddc82d  hr-custody.sh.txt
   - 6b72962586a1b2f48e03df8890c39757693516593192d799ccfea9dadae2fbb9  hr-dryrun.ts.txt
   - f39c1f7faf22bf7b272963520269b1b5b1f4e1a12b674082b6296c293e4e21c9  hr-dryrun.txt
-  - d9822b7276646d04250b715eb4e913be59b36abbb1f3a0c56daa9d65474a26eb  hr-e2e.ts.txt
-  - 8682674786a326d1b1043c5954b38f246861000f38dabf4982dcd827cd41d915  hr-e2e.txt
+  - d4cbd8b035fd17b0e9a7b873506daffee925c4481913a90c2af6b1403aecb775  hr-e2e.ts.txt
+  - 9df249f91a3fca4c3a7aad1cf5382da5f676686c491e84b76da3972b703d6e87  hr-e2e.txt
   - 72695e86e9fae561f84af86d5e25b524abe444aa7fd048e843ba12e7b84b5b79  hr-exposure.ts.txt
   - 0cd75d1b4e1e0e3bc8dc1496a6cde3781fa91293dbd1fa9976bd45e4a54b73c2  hr-kappa.ts.txt
   - 2d137daa7f893b9a3244816739d1dc88b2c9de7423bfb0fde0bb607b78471c4a  hr-oc.py.txt
   - f0ae5281c889ab0451ee4d3fac677c22cc82407a28317b8f6e514964162422f5  hr-oc.txt
-  - 36f44c95733dc4fac7ac778f2c7d0335c16767b005485eac2eb0a71bbcd3c99a  hr-rule.ts.txt
+  - ce4522513f71b7414f94859012dfb2d5da30d6f622946c5baa3416e422edf4fb  hr-rule.ts.txt
   - e1fe583ca4d2c81aae6e7891b70ef540f88cda7eb6d956b14750a30a77056f2c  hr-rules-dry.ts.txt
   - 3d2cd14520cb8223442b4bd9d6d5f5a7867d640c36c46b1aa20d437d4c7bacac  hr-rules-dry.txt
   - 384e9af32db9831acf2186e90d64735267ca74ef803be5a6b1badeb2285228c2  hr-stops.ts.txt
-  - b0ec7299930de5d6e87050913861eda38a719a6d0253a9ffe67a42a034909c1c  judge-brief-v3.1.md
+  - 82d453a8f6e2c848899040b0700e8d887d2ddb23ee24037819e054b56c607bed  judge-brief-v3.1.md
 ---
 
 # Panel v3 R61 headroom check: preregistration
@@ -67,7 +67,7 @@ One line per stratum (ceo, eng, dx, design), read on the Opus run after all judg
 
 **Prompt delivery.** At the pin the none arm's prompt is the line `Review this plan for problems.`, a blank line and the frozen plan template (src/trial/review/plan.ts: PLAN_ASK and TOLD_PLAN_TEMPLATE, TOLD_PLAN_SHA256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291). The template names plan.md and tells the subject to read what it needs. The unit tree is the session's working directory, and none of it is inlined in the prompt. So the subject reads unit files with its tools, and a unit's size is a search cost for the subject, not a limit on its context.
 
-**Why units stop at 480 KiB.** The cap comes from the judge packet, not from the subject. Each judge packet inlines the whole unit tree, and planMaterial refuses a packet over PLAN_MATERIAL_CAP = 512 * 1024 bytes (lanes/review-noloss/judge.ts, lines 65 and 82 at the pin). A 480 KiB tree leaves 32 KiB for the findings in the packet, and a 480 KiB packet is about 120k tokens, inside every judge's window. The smoke item checks that a packet builds on a unit near the cap.
+**Why units stop at 480 KiB.** The cap comes from the judge packet, not from the subject. Each judge packet inlines the whole unit tree, and planMaterial refuses a packet over PLAN_MATERIAL_CAP = 512 * 1024 bytes (lanes/review-noloss/judge.ts, lines 65 and 82 at the pin). The cap counts only the unit tree's blob bytes, not the findings the packet adds. At 4 to 3 bytes a token, a 480 KiB tree is about 120k to 165k tokens before the findings, inside every judge's window, and step 3b measures the real packets before any judge call. The smoke item checks that a packet builds on a unit near the cap.
 
 **The lens.** As in E0, the run passes `--plan ceo` for all four strata. For the none arm that changes nothing the model sees: planArmLine returns PLAN_ASK for none whatever the lens, and the none arm installs no skill (E0's prereg, section 2).
 
@@ -105,7 +105,8 @@ The authors and auditors get these rules as one frozen addendum to kit v3.1, [hr
 - **Authors and audit (kit v3.1's custody):** 4 google/gemini-4-argon authors on fresh machines, one per base, each writing its two units, blind to gstack, this repo and earlier panels. They get kit v3.1's five files with its digest check (4ed951fb525d16bcc8456f1fb6132ec0b3c0cb43a938f7d9214aba37113ef6e6) and the frozen addendum. One fresh openai/gpt-6.1-sol auditor per author's pair, holding the key, works under kit v3.1's audit brief plus the addendum's [F] reading and CH sub-test.
 - **Checker:** kit v3.1's check_units.py, unchanged. A unit passes when its only problems are (a) the size and count lines the LR lever breaks by design: `context-size`, `src-files`, `src-size`, and the `context-files` line "context/ and src/ hold N files, want 10 to 20" (never the `context-files` line "context/ holds N files, want at least 6"); and (b) `echo`, `echo-heading`, `echo-path` and `signpost` hits in files byte-identical to the pinned commit, which the custodian verifies with git and logs. `clean-room` (which symlinks report as), `auto-load`, `layout` and `ui-scope` are never exempt, and authored or changed files must be clean of every code.
 - **Licences:** only MIT or BSD bases, so no change notice can signpost a planted file. Upstream headers and the licence text stay in each unit (as src/LICENSE.txt or src/LICENSE.md, since the checker refuses a file with no allowed extension).
-- **Drop rule:** at most one fix round per item; an item that still fails is excluded in the manifest. A unit is never dropped for a unit-level failure, only flagged.
+- **Drop rule:** at most one fix round per item; an item that still fails is excluded in the manifest. A unit is never dropped for a unit-level failure, only flagged. An anchor that still fails its fix round is never excluded: the build stops and goes to the Captain, and hr-convert refuses a manifest that excludes an anchor.
+- **Trace rows:** each manifest trace is key.json's trace with `upstream_blob` added inside its terminal, the output of `git rev-parse <base commit>:<upstream_path>` on a clone of the base at its pinned commit. hr-convert refuses a terminal whose file still hashes to that blob, so the value must come from the base itself. Pruning drops hidden paths, because hr-convert refuses a symlink, hidden path or special file under a unit's context/ or src/.
 - **Seal and record:** age to the panel v3 recipient, one bundle, with the custody log at handoffs/<custodian>/sealed/CUSTODY.md. After sealing, the custodian sends the bundle's sha256 and the built counts to the Captain, who records them in approvals/ beside the cap before any lease opens. hr-custody.sh takes that sha256 as an argument and refuses before decrypting unless CUSTODY.md holds exactly one seal line for it.
 - **The smoke unit (before authoring):** one public unit on a base outside the draw, pruned to about 450 KiB, with a plan the custodian writes and one dummy blocker for the suite schema. It is public, unsealed and unaudited, and hr-convert's smoke mode builds it.
 
@@ -116,21 +117,21 @@ Paths as on the run machine: $BUNDLE is the sealed headroom bundle, $SHA its sha
 ```
 # L. Launch check: the files in $B and E0's e0-readings.ts are the ones "Files" lists (sha256sum exits 1 on any mismatch)
 (cd $B && sha256sum --strict -c) <<'EOF'
-4abc65aeb18ca23376abd65e332065a25e20183f6ff37ac1f9ad017445f210d9  gen-synth-hr.py
+03c115c079a26ba16e9865c5325d4b217c96680f5740e5a1c1d7c7e7f42a9485  gen-synth-hr.py
 731a04555a194867cf0dbd8d94bf1af4869ecfc385c965c66a2948b7765f9449  hr-addendum.md
-7f551e3e1277bf0bb3bf32e482fb8cc04828b3abaa2ef1eb6e4f734f89160cf6  hr-build-dry.sh
+b655209fd77f96a0fdc8bb198583480e9e4054c982bf9c903f5040fd4e2404fa  hr-build-dry.sh
 6103e617f4525c16d861c57ae848ebae8fa1df3c21e58a7b9489affb23a3523a  hr-build.sh
-f1b56a97b16353f80d68dcd3ce7ae1e99457059ef9bd2f99fbccb0bac967eea4  hr-convert.py
-2a74a8adbb392d7107d262224a36981a35dd6fc07835deb8a070d70d83e9c0fc  hr-custody.sh
+b9c90b053acfab2da3d61ce5a9372446e9caa25385804968cfda288b5bbcb228  hr-convert.py
+f2a374c2fac8be6584b35212bb40ede010a5f56113725a49078e7d3bd8ddc82d  hr-custody.sh
 6b72962586a1b2f48e03df8890c39757693516593192d799ccfea9dadae2fbb9  hr-dryrun.ts
-d9822b7276646d04250b715eb4e913be59b36abbb1f3a0c56daa9d65474a26eb  hr-e2e.ts
+d4cbd8b035fd17b0e9a7b873506daffee925c4481913a90c2af6b1403aecb775  hr-e2e.ts
 72695e86e9fae561f84af86d5e25b524abe444aa7fd048e843ba12e7b84b5b79  hr-exposure.ts
 0cd75d1b4e1e0e3bc8dc1496a6cde3781fa91293dbd1fa9976bd45e4a54b73c2  hr-kappa.ts
 2d137daa7f893b9a3244816739d1dc88b2c9de7423bfb0fde0bb607b78471c4a  hr-oc.py
-36f44c95733dc4fac7ac778f2c7d0335c16767b005485eac2eb0a71bbcd3c99a  hr-rule.ts
+ce4522513f71b7414f94859012dfb2d5da30d6f622946c5baa3416e422edf4fb  hr-rule.ts
 e1fe583ca4d2c81aae6e7891b70ef540f88cda7eb6d956b14750a30a77056f2c  hr-rules-dry.ts
 384e9af32db9831acf2186e90d64735267ca74ef803be5a6b1badeb2285228c2  hr-stops.ts
-b0ec7299930de5d6e87050913861eda38a719a6d0253a9ffe67a42a034909c1c  judge-brief-v3.1.md
+82d453a8f6e2c848899040b0700e8d887d2ddb23ee24037819e054b56c607bed  judge-brief-v3.1.md
 EOF
 (cd $E0 && sha256sum --strict -c) <<'EOF'
 0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9  e0-readings.ts
@@ -193,6 +194,14 @@ bin/gstack-evals noloss judge-packet --suite $SR/suites/planrev-v3-hr.json \
   --arm $RUN/hr-opus-none/arms/none-opus --arm $RUN/hr-particle-none/arms/none-particle-1 \
   --seed 20261103 --out $RUN/judge/packets --key $RUN/judge/key.json --source panel/plans=$SRC --sealed-root $SR
 
+# 3b. Before the first judge call: the judge size check. Measure each packet file under $RUN/judge/packets (wc -c) and
+#     project the three reads at 3 bytes a token: each packet priced once for each of the three judge models in each of
+#     the three reads, at bytes / 3 input tokens and the pin's prices (src/runner/pricing/prices.ts: Sol and Sonnet $2,
+#     Opus $4 a million input tokens; Sol's long rate, $4, above 272,000), plus 10,000 output tokens a request ($10, $20
+#     and $10 a million, Sol long $15). Log the projection and what is left of $294.96 (the total less every earlier
+#     item's settled spend) in $CUSTODY. If the projection exceeds what is left, stop and go to the Captain before any
+#     judge call.
+
 # 4. Three full reads under brief v3.1, one item each, recorded in this order
 for R in "sol openai/gpt-6.1-sol anthropic/claude-opus-5-5 anthropic/claude-sonnet-5-5" \
          "opus anthropic/claude-opus-5-5 openai/gpt-6.1-sol anthropic/claude-sonnet-5-5" \
@@ -210,7 +219,8 @@ bun $B/e0-readings.ts --scorer . --suite $SR/suites/planrev-v3-hr.json --kinds $
   --read sol=$RUN/judge/read-sol --read opus=$RUN/judge/read-opus --read sonnet=$RUN/judge/read-sonnet --out $RUN/readings
 bun $B/e0-readings.ts <the same flags, with --kinds $SR/hr-shapes.json> --out $RUN/readings-shapes
 
-# 5b. Only when step 5 prints a DEAD headroom kind: the blind re-audit under custody (a fresh openai/gpt-6.1-sol agent)
+# 5b. Only when step 5 prints a DEAD headroom kind in its primary or its sensitivity read (part two needs a re-audit
+#     record for each such kind): the blind re-audit under custody (a fresh openai/gpt-6.1-sol agent)
 E0_MACHINE=$MACHINE bash $B/hr-custody.sh --reaudit $BUNDLE $IDENTITY $RUN/reaudit $CUSTODY $SHA -- <the re-audit command>
 
 # 6. Only after 5b: readings, part two
@@ -224,7 +234,7 @@ bun $B/hr-exposure.ts --scorer . --suite $SR/suites/planrev-v3-hr.json --opus $R
   --readings $READ --passes 4
 ```
 
-If the fallback read prints "fallback yes", every later review-units line uses `--max-turns 200 --timeout 5400` in place of `--max-turns 100 --timeout 3600`, logged in $CUSTODY, and nothing else changes. If judge-packet refuses the smoke packet, the run stops and goes back to the Captain before authoring; no rule changes mid-run.
+If the fallback read prints "fallback yes", every later review-units line uses `--max-turns 200 --timeout 5400` in place of `--max-turns 100 --timeout 3600`, logged in $CUSTODY, and nothing else changes. If judge-packet refuses the smoke packet, the run stops and goes back to the Captain before authoring; no rule changes mid-run. A smoke session that ends on the allowance (ALLOWANCE, which S2 prints as its termination) also goes back to the Captain before authoring.
 
 Notes on the commands:
 - As in E0, a cap stop prints nothing at the pin: review-units adds it to its run stops and exits 2, writes no journal entry for a session the start rule never ran, and counts those sessions in arm.json's parse_outcomes.not_run. review-units also exits 2 with E_COVERAGE_GAP when any session is a coverage gap; that exit does not end the check, because the readings classify each session themselves.
@@ -273,7 +283,7 @@ hr-rule.ts reads e0-readings' readings.json and prints one line per stratum, wit
 
 With 6 items at 4 passes and no stop, n = 24: HEADROOM is 5 to 12 matches, NEAR-CEILING 13 to 14, CEILING 15 or more, FLOOR 1 to 4.
 
-hr-rule.ts refuses (exit 2, E_USAGE) a readings file whose candidate kinds are not C-RC, E-RC, X-RC and G-RC, an item without exactly passes 1 to 4, or a stratum without 2 anchor items. It reads a DEAD stratum's re-audit from e0-readings' part two (KEEP-FLOOR reads FLOOR, DROPPED-UNFAIR reads UNFAIR) and exits 3 while a DEAD stratum awaits it. It exits 0 when at least one stratum reads and 3 when none does. With `--shapes` it also prints the per-shape counts. It prints anchor matches by anchor shape; the results post maps each anchor to its place (context or src) from the sealed manifest to apply the two-hop floor reading below.
+hr-rule.ts refuses (exit 2, E_USAGE) a readings file whose candidate kinds are not C-RC, E-RC, X-RC and G-RC, an item without exactly passes 1 to 4, or a stratum without 2 anchor items. It reads a DEAD stratum's re-audit from e0-readings' part two (KEEP-FLOOR reads FLOOR, DROPPED-UNFAIR reads UNFAIR) . It exits 0 when at least one stratum reads, even while a DEAD stratum still reads AWAITING RE-AUDIT, and 3 when none does. With `--shapes` it also prints the per-shape counts. It prints anchor matches by anchor shape; the results post maps each anchor to its place (context or src) from the sealed manifest to apply the two-hop floor reading below.
 
 **Anchor thresholds.** Re-derived for this slice's 8 anchors, 2 a stratum at 4 passes, so that a true anchor recall of 0.9 reads NO READ at most 5% of the time ([hr-oc.py](hr-oc.py.txt), [hr-oc.txt](hr-oc.txt)): a stratum needs at least 4 anchor matches of its 8 readings. At a true anchor recall of 0.9 it reads NO READ with probability 0.013 at concentration 2 and 0.006 at 8; a threshold of 5 would give 0.052. The pooled count over all 32 anchor readings prints against 24 of 32 (0.035 and 0.018 at 0.9), and a count under it is flagged to the Captain. It decides nothing, so one stratum's stop or GAP can't decide the others. A FLOOR whose src/ anchors pass while its CH items fail reads as a two-hop floor (task fit), not a rig failure.
 
@@ -332,7 +342,7 @@ A stratum at E0's level (0.9 or more) almost never reads HEADROOM under either m
 
 ## Cost, caps, ledger items and the start rule
 
-Priced from E0's measured sessions: Opus $0.236 a session mean (90% upper bound $0.242) at 4.1 turns and about 108k input tokens, particle-1 $0.019 ($0.020). A unit up to ten times larger can't be read whole, so the projection assumes about 25 turns at a mean context near 100k tokens: about 2.5M cache-read, 150k cache-write and 20k output tokens, $1.65 at Opus prices, 7.2 times E0's mean. Projections: Opus $1.70 a session, particle-1 $0.14. Judge packets now carry up to 480 KiB (about 120k tokens) against E0's 45 KB, so a judge request costs about $0.26 on Sol or Sonnet and $0.52 on Opus; about 19 requests a read (8 primary, about 8 second, 3 third) put the three reads near $26.
+Priced from E0's measured sessions: Opus $0.236 a session mean (90% upper bound $0.242) at 4.1 turns and about 108k input tokens, particle-1 $0.019 ($0.020). A unit up to ten times larger can't be read whole, so the projection assumes about 25 turns at a mean context near 100k tokens: about 2.5M cache-read, 150k cache-write and 20k output tokens, $1.65 at Opus prices, 7.2 times E0's mean. Projections: Opus $1.70 a session, particle-1 $0.14. Judge packets now carry up to 480 KiB of unit tree (about 120k tokens at 4 bytes a token) against E0's 45 KB, so a judge request costs about $0.26 on Sol or Sonnet and $0.52 on Opus; about 19 requests a read (8 primary, about 8 second, 3 third) put the three reads near $26. Step 3b reprices the real packets at 3 bytes a token before any judge call.
 
 | Item | Sessions or calls | Projected | Cap |
 |---|---|---|---|
@@ -364,9 +374,9 @@ The total is the approved plan's: gate 1's $264.08, plus the smoke item's $14.08
 
 ## Run rules
 
-- Order: this post merges; the Captain records the $294.96 cap and the hr-smoke-opus row; the smoke item; the base draw, authoring, audit and seal; the Captain records the bundle sha256, the counts and the run rows; build; the Opus run; any repairs; the particle-1 run and its repairs; packets; the three reads; readings part one, twice; the re-audit of any DEAD stratum; readings part two; hr-rule.ts; hr-exposure.ts. The per-stratum reading goes to the Captain at once, because #179 waits on it. The results post follows in its own PR. Preregistration and results never share a PR.
+- Order: this post merges; the Captain records the $294.96 cap and the hr-smoke-opus row; the smoke item; the base draw, authoring, audit and seal; the Captain records the bundle sha256, the counts and the run rows; build; the Opus run; any repairs; the particle-1 run and its repairs; packets; the judge size check (step 3b); the three reads; readings part one, twice; the re-audit of any DEAD stratum; readings part two; hr-rule.ts; hr-exposure.ts. The per-stratum reading goes to the Captain at once, because #179 waits on it. The results post follows in its own PR. Preregistration and results never share a PR.
 - Launch checks, all logged before the first lease of the run items opens: this post is merged; the approval rows are in the ledger at these caps; the pin check passes; the files in $B and e0-readings.ts in $E0 match their sha256s (step L); the bundle's sha256 equals $SHA and $CUSTODY holds exactly one seal line for it; hr-custody.sh's build line for this bundle and $RUN is in $CUSTODY; the built counts equal the counts the Captain recorded; the trial image pin passes; /dev/shm and ~/.capy/work hold no leftover plaintext; and `review-units --dry-run` with the frozen flags plans 32 sessions for each run item.
-- Machine: the waiting agent's own machine, with Docker and at least 16 GB of memory at --parallel 3; vCPU, memory and --parallel recorded beside the run root. Each review-units run goes as a watched background operation under 6 hours, attached on a timer.
+- Machine: the waiting agent's own machine, with Docker and at least 16 GB of memory at --parallel 3; vCPU, memory and --parallel recorded beside the run root. Each review-units run is launched detached (`setsid -f`, its output in a log under $RUN), because the worst case for hr-opus-none (11 rounds at the 3600-second timeout, about 11 hours) passes the 6-hour stop on a Capy background operation. The waiting agent keeps a watched operation open on its machine for the whole run, so the machine stays awake, and reads the log on a timer.
 - Custody: the bundle decrypts only into /dev/shm under a live program, through hr-custody.sh, and every opening, closing, repair and incident is logged in $CUSTODY with the machine id and the path. The run root sits in mode-0700 directories on disk. After the last read it is sealed to the v3 recipient and the plaintext deleted and checked with `test ! -e`. On every wake, check /dev/shm and ~/.capy/work for leftover plaintext before anything else.
 - Spend goes only through the ledger, item by item, as the pinned entry points lease it.
 - Headroom units never become panel material and stay sealed until the confirmatory rounds end.
@@ -400,7 +410,7 @@ No sentence quotes or paraphrases any unit, item or finding. Headroom candidates
 
 - **The GAP repair.** The plan's D1 repair said "review-units --resume --repair on the same item". At the pin that reruns nothing for a journaled GAP cell, so the repair first moves the cell's journal line into a logged repair file and resumes with a spend cap cut to what the item has left (section "Terminations, stops and upstream failures"). The repair's purpose and limit (one rerun, same unit and pass, before judging) are unchanged.
 - **The cap.** The plan's gate text (J1) named gate 1's $264.08. The approved plan's own total is $294.96 (section 8), and the Captain ruled that this post states $294.96, which the Captain records at merge.
-- **hr-convert's added refusals.** hr-convert refuses an added terminal file (a terminal must be a changed upstream file), base pairings other than two eng and dx bases and two ceo and design bases with one unit of each a base, a context anchor whose evidence names no context/ file, and a src anchor whose evidence names no src/ file plan.md names. Each makes a rule in the plan checkable (the planted terminal line, the bases, the anchors).
+- **hr-convert's added refusals.** hr-convert refuses an added terminal file (a terminal must be a changed upstream file), base pairings other than two eng and dx bases and two ceo and design bases with one unit of each a base, a context anchor whose evidence names no context/ file, a src anchor whose evidence names no src/ file plan.md names, a manifest that excludes an anchor, an anchor whose key.json anchor_place is not its anchor_type, and, as smoke mode does, a symlink, hidden path or special file under a unit's context/ or src/. Each makes a rule in the plan checkable (the planted terminal line, the bases, the anchors).
 - **The seal line's form.** hr-custody.sh's build mode needs exactly one line `^YYYY-MM-DDTHH:MM:SSZ seal bundle <sha256>( |$)` (UTC) for the given sha256; seal lines for other bundles don't block.
 - **hr-custody.sh's sha256 changed.** The kappa opening ran hr-custody.sh as committed at bb2e3d5 (sha256 5d306ad7, --reaudit mode). The frozen version adds build mode and rewrites the header; --reaudit is unchanged, and the build dry run reruns it.
 - **Stratum-level cases the plan left open,** as "Terminations, stops and upstream failures" lists, and the pooled anchor count kept descriptive.
@@ -410,8 +420,9 @@ No sentence quotes or paraphrases any unit, item or finding. Headroom candidates
 - No claim about any gstack skill: the check runs no gstack arm.
 - **A fourth ceiling.** Opus may trace code well unprompted. Then every stratum reads CEILING, and the E-line ends as "The headroom rule" says.
 - **A floor.** Two hops may be too far for any plain reader. The audit, the DEAD re-audit, the src/ anchors and the exposure read separate unfair from hard.
-- **The size cap.** 480 KiB is about 120k tokens, a modest repo, set by the judge packet. If the lever needs more size to work, this attempt can't show it, and the results post says so.
+- **The size cap.** 480 KiB is about 120k to 165k tokens, a modest repo, set by the judge packet. If the lever needs more size to work, this attempt can't show it, and the results post says so.
 - **Memorized bases.** Every deciding line is planted, and bases sit under 5,000 stars, but Opus may still assume upstream behavior around a planted change. The exposure read's matched-without-opening count shows how often an item was found without opening its file.
+- **A loose exposure read.** hr-exposure counts a file as opened when a tool call names any path ending in the file's name, so a short src-root name such as src/utils.py also matches tests/utils.py, and code seen only in grep or glob output counts as unopened. Both overstate the read: opens can read high, and so can matched-without-opening. It decides nothing.
 - **One-turn optimism.** The one-turn prompt may cut exploration, so this check could read more headroom than E1's two-turn none arm. E1's band re-reads it.
 - **Lever fit by stratum.** Code tracing is what an eng or DX review does; plan-ceo-review and plan-design-review may not ask a reviewer to trace code. The results post names, per stratum, the reviewer behavior that reaches each kind's facts, and E1 for a ceo or design HEADROOM must read whether its skill asks for that behavior before an E1 null there can count against the skill.
 - **Small samples.** 8 sessions and 2 bases a stratum. The second operating-characteristic table shows how much the session and base effects widen the rule's error.
@@ -424,12 +435,12 @@ The plan went through gstack's /autoplan in its lean form (R65): one anthropic/c
 
 ## Dry run
 
-[hr-dryrun.ts](hr-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic headroom slice that [gen-synth-hr.py](gen-synth-hr.py.txt) writes; it never opens sealed material. [hr-dryrun.txt](hr-dryrun.txt) is its transcript: PASS 58, FAIL 0 for steps a, c, g and h; the parts below add 51, 45 and 27, so 181 checks pass and none fail.
+[hr-dryrun.ts](hr-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic headroom slice that [gen-synth-hr.py](gen-synth-hr.py.txt) writes; it never opens sealed material. [hr-dryrun.txt](hr-dryrun.txt) is its transcript: PASS 58, FAIL 0 for steps a, c, g and h; the parts below add 55, 45 and 28, so 186 checks pass and none fail. Each part exits nonzero when any check fails.
 
 - **a, c, g, h and the repair** ([hr-dryrun.ts](hr-dryrun.ts.txt) and [hr-stops.ts](hr-stops.ts.txt); [hr-dryrun.txt](hr-dryrun.txt), PASS 58, FAIL 0). The pin. Every frozen review-units line at --dry-run plans the right sessions (2, 2, 32 and 32) with the none line, claude-code-preset, the max turns and the cap, and a resume that changes --max-turns refuses E_CACHE_STALE. The ledger: six items at their caps with admission warn, one lease opened and settled each, a second run refused with E_ITEM_BOUND, and the judge envelope at exactly $36.40 when every run settles at its cap. The start rule through the real run loop: Opus runs 32 of 32 sessions at $225.28 and 30 then CAP_STOP at $225.27; particle-1 32 at $19.20 and 30 at $19.19; the smoke 2 at $14.08 and 0 at $14.07. The GAP repair through runReviewUnits, the pinned SDK and Claude Code binary and the real metering proxy against a scripted upstream, with commands R1 and R2 run exactly as frozen: a session missing with UPSTREAM is journaled; `--resume --repair` alone reruns nothing; after the move, a resume at the left-to-spend cap reruns exactly that cell, every other journal line stays byte-identical, and arm.json goes from stopped with 1 gap to complete; leases on the same run_id open at what is left, one cent more refuses CAP_STOP, and another run_id refuses E_ITEM_BOUND; the move refuses a cell with zero or two lines or an earlier repair. The smoke fallback read prints no, yes and yes on scored, turn-cap and timeout smoke runs.
-- **b, build and refusals** ([hr-build-dry.sh](hr-build-dry.sh.txt); [hr-build-dry.txt](hr-build-dry.txt), PASS 51, FAIL 0). The synthetic slice repeats byte for byte under one seed and passes kit v3.1's checker with only the exempt lines; hr-build.sh builds it (8 units, 31 blockers, 23 candidates, unit trees of 355,957 to 363,468 bytes, 202 to 208 blobs and 14 to 15 trees), every candidate's cause ends in its trace, and the run root is mode 0700; hr-convert refuses each slice, base, anchor, trace and size rule on a mutated copy, plus E0's kept refusals; --smoke builds the smoke suite and refuses a bad layout and an oversize unit; hr-build and hr-custody refuse a wrong bundle sha256; hr-custody's build mode refuses zero seal lines, two seal lines and a seal line for another bundle before it decrypts, then on the happy path decrypts an age-encrypted synthetic bundle into /dev/shm, builds, logs and leaves nothing there; --reaudit still runs.
+- **b, build and refusals** ([hr-build-dry.sh](hr-build-dry.sh.txt); [hr-build-dry.txt](hr-build-dry.txt), PASS 55, FAIL 0). The synthetic slice repeats byte for byte under one seed and passes kit v3.1's checker with only the exempt lines; hr-build.sh builds it (8 units, 31 blockers, 23 candidates, unit trees of 355,957 to 363,468 bytes, 202 to 208 blobs and 14 to 15 trees), every candidate's cause ends in its trace, and the run root is mode 0700; hr-convert refuses each slice, base, anchor, trace and size rule on a mutated copy (an excluded anchor, an anchor_place that is not its anchor_type, a symlink and a hidden path included), plus E0's kept refusals; --smoke builds the smoke suite and refuses a bad layout and an oversize unit; hr-build and hr-custody refuse a wrong bundle sha256; hr-custody's build mode refuses zero seal lines, two seal lines and a seal line for another bundle before it decrypts, then on the happy path decrypts an age-encrypted synthetic bundle into /dev/shm, builds, logs and leaves nothing there; --reaudit still runs.
 - **f, rule edges** ([hr-rules-dry.ts](hr-rules-dry.ts.txt); [hr-rules-dry.txt](hr-rules-dry.txt), PASS 45, FAIL 0). Every hr-rule reading at its integer edges at n = 24, 20 and 16 and the 3-item NO READ; stop bounds that agree and disagree; a GAP that makes only its own stratum NO READ while e0-readings reads E0 NO READ; the re-audit split at 0, 1 and 2 failing items; the anchor threshold at 4 and 3 of 8, with a stop, and the pooled count; the whole-run causes and the refusals. Its fixtures come from e0-readings' own exported functions. hr-kappa.ts as run reproduces E0's printed kappa on a synthetic root and matches hand values for the 2x2, raw agreement, PABAK, AC1 and kappa, reading PARADOX at 0.953 and DISAGREEMENT at 0.940. hr-exposure matches hand counts on fixture transcripts.
-- **k, readings end to end** ([hr-e2e.ts](hr-e2e.ts.txt); [hr-e2e.txt](hr-e2e.txt), PASS 27, FAIL 0). Both runs over the full synthetic headroom suite at 4 passes through the pinned run loop, one Opus session ending on the turn cap; judge-packet over both arms; the three judge-run calls against a fake upstream under brief v3.1 on the temporary ledger at the envelope amounts (with a fractional-cent spend rounding down); e0-readings.ts, byte-identical, with hr-kinds.json and with hr-shapes.json; then hr-rule.ts. Each stratum reads its derived value: ceo HEADROOM at 10 of 24; eng NO READ because its 2 stopped readings give HEADROOM scored as misses and NEAR-CEILING scored as matches; dx DEAD, awaiting the re-audit; design NEAR-CEILING at 14 of 24. The headroom-kind counts in readings.json equal those hr-rule takes from the cells, both Sol and Opus splits take Sonnet's answer, the pooled and per-shape lines match, and hr-rule refuses the shapes readings passed as --readings. The repaired GAP is driven in part a's run, not through to the readings.
+- **k, readings end to end** ([hr-e2e.ts](hr-e2e.ts.txt); [hr-e2e.txt](hr-e2e.txt), PASS 28, FAIL 0). hr-rule also runs with step 7's literal `--scorer .` from the pinned checkout and prints the same agreement lines as with an absolute path. Both runs over the full synthetic headroom suite at 4 passes through the pinned run loop, one Opus session ending on the turn cap; judge-packet over both arms; the three judge-run calls against a fake upstream under brief v3.1 on the temporary ledger at the envelope amounts (with a fractional-cent spend rounding down); e0-readings.ts, byte-identical, with hr-kinds.json and with hr-shapes.json; then hr-rule.ts. Each stratum reads its derived value: ceo HEADROOM at 10 of 24; eng NO READ because its 2 stopped readings give HEADROOM scored as misses and NEAR-CEILING scored as matches; dx DEAD, awaiting the re-audit; design NEAR-CEILING at 14 of 24. The headroom-kind counts in readings.json equal those hr-rule takes from the cells, both Sol and Opus splits take Sonnet's answer, the pooled and per-shape lines match, and hr-rule refuses the shapes readings passed as --readings. The repaired GAP is driven in part a's run, not through to the readings.
 
 Each transcript prints no unit id, case id or home path. The dry run does not drive review-units' own main(), which checks the Docker image pin and builds the Docker rig: the repair's resume ran through runReviewUnits, and the CLI's own resume path (run_id reuse at cli.ts line 387, unit reuse at line 358) is read from the code and checked through --dry-run only. It sends no real judge request.
 
@@ -438,15 +449,15 @@ Each transcript prints no unit id, case id or home path. The dry run does not dr
 Each script is attached with a .txt suffix so the repo checks never load it; the run thread removes the suffix ($B in "Frozen commands"). Diffs are against E0's frozen files.
 
 - [hr-addendum.md](hr-addendum.md) `731a04555a194867cf0dbd8d94bf1af4869ecfc385c965c66a2948b7765f9449`: the frozen addendum to kit v3.1 for the authors and auditors: the LR and CH rules, the trace and anchor fields in key.json, the checker exemptions, the [F] reading and the CH sub-test.
-- [judge-brief-v3.1.md](judge-brief-v3.1.md) `b0ec7299930de5d6e87050913861eda38a719a6d0253a9ffe67a42a034909c1c`: judge brief v3.1: brief v3 plus the sentences the kappa check calls for and the code-behavior rule.
-- [gen-synth-hr.py](gen-synth-hr.py.txt) `4abc65aeb18ca23376abd65e332065a25e20183f6ff37ac1f9ad017445f210d9`: writes the synthetic headroom slice (8 units on 4 synthetic git bases) and, with --smoke, a synthetic smoke unit, for the dry run.
-- [hr-convert.py](hr-convert.py.txt) `f1b56a97b16353f80d68dcd3ce7ae1e99457059ef9bd2f99fbccb0bac967eea4`: turns the slice into the suite planrev-v3-hr, the source clone, hr-kinds.json, hr-shapes.json and hr-traces.json, with every refusal in "The levers" and "The headroom slice"; --smoke builds the smoke suite.
-- [hr-convert.py.diff](hr-convert.py.diff) `c1ce1720d0933085032c790b285b5f1db03a1482a0d878854ac0a4e080460133`: its diff against E0's convert-e0.py.
+- [judge-brief-v3.1.md](judge-brief-v3.1.md) `82d453a8f6e2c848899040b0700e8d887d2ddb23ee24037819e054b56c607bed`: judge brief v3.1: brief v3 plus the sentences the kappa check calls for and the code-behavior rule.
+- [gen-synth-hr.py](gen-synth-hr.py.txt) `03c115c079a26ba16e9865c5325d4b217c96680f5740e5a1c1d7c7e7f42a9485`: writes the synthetic headroom slice (8 units on 4 synthetic git bases) and, with --smoke, a synthetic smoke unit, for the dry run.
+- [hr-convert.py](hr-convert.py.txt) `b9c90b053acfab2da3d61ce5a9372446e9caa25385804968cfda288b5bbcb228`: turns the slice into the suite planrev-v3-hr, the source clone, hr-kinds.json, hr-shapes.json and hr-traces.json, with every refusal in "The levers" and "The headroom slice"; --smoke builds the smoke suite.
+- [hr-convert.py.diff](hr-convert.py.diff) `b8b8e1ec5294e35b01bd816a27047a6ae60198139d3fd91b742890198fb6709e`: its diff against E0's convert-e0.py.
 - [hr-build.sh](hr-build.sh.txt) `6103e617f4525c16d861c57ae848ebae8fa1df3c21e58a7b9489affb23a3523a`: builds the run material from the extracted slice under umask 077; the bundle sha256 is a required fifth argument and a dry-run seed an optional sixth.
 - [hr-build.sh.diff](hr-build.sh.diff) `35715aa5afcdacb8e980fd9f738e8068760487abbb363cc28ec31f158a878b42`: its diff against E0's build-e0.sh.
-- [hr-custody.sh](hr-custody.sh.txt) `2a74a8adbb392d7107d262224a36981a35dd6fc07835deb8a070d70d83e9c0fc`: the only allowed way to open the bundle: build mode (needs exactly one seal line for the sha256) and --reaudit mode, both decrypting into /dev/shm under a mkdir lock with every step logged.
-- [hr-custody.sh.diff](hr-custody.sh.diff) `b3f1d17d9faf83e29a23e578b74d6f0809571d555f377c1d5156a5c16d62647b`: its diff against E0's custody-e0.sh.
-- [hr-rule.ts](hr-rule.ts.txt) `36f44c95733dc4fac7ac778f2c7d0335c16767b005485eac2eb0a71bbcd3c99a`: the headroom rule, per stratum, from e0-readings' readings.json.
+- [hr-custody.sh](hr-custody.sh.txt) `f2a374c2fac8be6584b35212bb40ede010a5f56113725a49078e7d3bd8ddc82d`: the only allowed way to open the bundle: build mode (needs exactly one seal line for the sha256) and --reaudit mode, both decrypting into /dev/shm under a mkdir lock with every step logged.
+- [hr-custody.sh.diff](hr-custody.sh.diff) `07607a3bd5b255714de3955ef1e3aa465f84515a04539fdf75ad418175d20f36`: its diff against E0's custody-e0.sh.
+- [hr-rule.ts](hr-rule.ts.txt) `ce4522513f71b7414f94859012dfb2d5da30d6f622946c5baa3416e422edf4fb`: the headroom rule, per stratum, from e0-readings' readings.json.
 - [hr-exposure.ts](hr-exposure.ts.txt) `72695e86e9fae561f84af86d5e25b524abe444aa7fd048e843ba12e7b84b5b79`: the descriptive exposure read.
 - [hr-kappa.ts](hr-kappa.ts.txt) `0cd75d1b4e1e0e3bc8dc1496a6cde3781fa91293dbd1fa9976bd45e4a54b73c2`: the kappa check's reader, as run by GEVA-238 under custody.
 - [hr-oc.py](hr-oc.py.txt) `2d137daa7f893b9a3244816739d1dc88b2c9de7423bfb0fde0bb607b78471c4a`: the operating-characteristic model and the anchor thresholds.
@@ -454,9 +465,9 @@ Each script is attached with a .txt suffix so the repo checks never load it; the
 - [hr-stops.ts](hr-stops.ts.txt) `384e9af32db9831acf2186e90d64735267ca74ef803be5a6b1badeb2285228c2`: dry-run part: the GAP repair, the start rule and the leases through the pinned run loop.
 - [hr-dryrun.ts](hr-dryrun.ts.txt) `6b72962586a1b2f48e03df8890c39757693516593192d799ccfea9dadae2fbb9`: dry-run steps a, c, g and h, and runs hr-stops.ts.
 - [hr-dryrun.txt](hr-dryrun.txt) `f39c1f7faf22bf7b272963520269b1b5b1f4e1a12b674082b6296c293e4e21c9`: its transcript.
-- [hr-build-dry.sh](hr-build-dry.sh.txt) `7f551e3e1277bf0bb3bf32e482fb8cc04828b3abaa2ef1eb6e4f734f89160cf6`: dry-run step b: build, convert and custody, with every refusal.
-- [hr-build-dry.txt](hr-build-dry.txt) `cae49d388c67bf9d0c28fc3b00ed323634c18a3e099dc72385cbf1652e529050`: its transcript.
+- [hr-build-dry.sh](hr-build-dry.sh.txt) `b655209fd77f96a0fdc8bb198583480e9e4054c982bf9c903f5040fd4e2404fa`: dry-run step b: build, convert and custody, with every refusal.
+- [hr-build-dry.txt](hr-build-dry.txt) `074158c2079dc49845c80658d1666203de38ef00ac70c28e885d72d8db2aec2c`: its transcript.
 - [hr-rules-dry.ts](hr-rules-dry.ts.txt) `e1fe583ca4d2c81aae6e7891b70ef540f88cda7eb6d956b14750a30a77056f2c`: dry-run step f: hr-rule, hr-kappa and hr-exposure against hand values.
 - [hr-rules-dry.txt](hr-rules-dry.txt) `3d2cd14520cb8223442b4bd9d6d5f5a7867d640c36c46b1aa20d437d4c7bacac`: its transcript.
-- [hr-e2e.ts](hr-e2e.ts.txt) `d9822b7276646d04250b715eb4e913be59b36abbb1f3a0c56daa9d65474a26eb`: dry-run step k: both runs, packets, the three judge calls, both readings runs and hr-rule end to end at 4 passes.
-- [hr-e2e.txt](hr-e2e.txt) `8682674786a326d1b1043c5954b38f246861000f38dabf4982dcd827cd41d915`: its transcript.
+- [hr-e2e.ts](hr-e2e.ts.txt) `d4cbd8b035fd17b0e9a7b873506daffee925c4481913a90c2af6b1403aecb775`: dry-run step k: both runs, packets, the three judge calls, both readings runs and hr-rule end to end at 4 passes.
+- [hr-e2e.txt](hr-e2e.txt) `9df249f91a3fca4c3a7aad1cf5382da5f676686c491e84b76da3972b703d6e87`: its transcript.

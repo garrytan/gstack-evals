@@ -42,6 +42,10 @@ PASS hr-convert.py refuses a unit missing one of its three E0 shapes (exit 2: E_
 PASS hr-convert.py refuses an anchor outside A-X, A-F and A-T (exit 2: E_USAGE hr-convert: 1 units do not key one item of each of their stratum's three E0 shapes plus one anchor in A-X, A-F or A-T )
 PASS hr-convert.py refuses two context anchors in a stratum (exit 2: E_USAGE hr-convert: 2 strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file p)
 PASS hr-convert.py refuses a src anchor whose file plan.md does not name (exit 2: E_USAGE hr-convert: 1 strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file p)
+PASS hr-convert.py refuses an anchor whose key.json anchor_place is not its anchor_type (exit 2: E_USAGE hr-convert: 1 strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file p)
+PASS hr-convert.py refuses a kept unit that excludes its anchor (exit 2: E_USAGE hr-convert: 1 kept units exclude their anchor; an anchor that still fails its fix round stops the build and goes to the Captain )
+PASS hr-convert.py refuses a symlink under a unit's src/ (exit 2: E_USAGE hr-convert: 1 entries under the kept units' context/ or src/ are symlinks, hidden paths or special files )
+PASS hr-convert.py refuses a hidden path under a unit's context/ (exit 2: E_USAGE hr-convert: 1 entries under the kept units' context/ or src/ are symlinks, hidden paths or special files )
 PASS hr-convert.py refuses a GPL base (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
 PASS hr-convert.py refuses a base at a short commit (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
 PASS hr-convert.py refuses 3 bases (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
@@ -71,4 +75,4 @@ PASS hr-custody.sh build refuses a bundle whose sha256 is not the argument, befo
 PASS hr-custody.sh build decrypts into /dev/shm, runs hr-build.sh (OS-random draw, no seed), logs one line with the suite sha256 and leaves nothing under /dev/shm (exit 0; 0 left)
 PASS hr-custody.sh's run root is mode 700 (700 wanted) with 0 open entries
 PASS hr-custody.sh --reaudit still runs as before (exit 0; 0 left)
-PASS 51, FAIL 0
+PASS 55, FAIL 0

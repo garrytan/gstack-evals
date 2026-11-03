@@ -1,12 +1,12 @@
 PASS e0-readings.ts beside this script is E0's byte-identical copy (sha256 0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9)
-    judge brief sha256 b0ec7299930de5d6e87050913861eda38a719a6d0253a9ffe67a42a034909c1c
+    judge brief sha256 82d453a8f6e2c848899040b0700e8d887d2ddb23ee24037819e054b56c607bed
     fixture: 8 units, 31 blockers; Opus must-fix matches per stratum ceo 10/24, eng 10/18, dx 0/24, design 14/24; one Opus eng session (pass 1) loops on tool calls to the turn cap; one design anchor missed in one pass; two cells where sol and opus differ
 PASS claude-opus-5-5: runReviewUnits on the full suite with the frozen values (none arm, 4 passes, parallel 3, timeout 3600, max turns 100, cap $225.28) through the real SDK and CLI and the metering proxy: 32 sessions, 31 scored with 31 parsed blocks, 1 turn cap (the scripted eng session, pass 1, 101 turns), stops [], stderr log 0 lines
 PASS hr-opus-none: recorded at $225.28 on the temporary ledger, one lease bound to the run and settled at $0.5633
 PASS particle-ai/particle-1: runReviewUnits on the full suite with the frozen values (none arm, 4 passes, parallel 3, timeout 3600, max turns 100, cap $19.20, allowance $0.60) through the real SDK and CLI and the metering proxy: 32 sessions, 32 scored with 32 parsed blocks, 0 turn cap, stops [], stderr log 0 lines
 PASS hr-particle-none: recorded at $19.20 on the temporary ledger, one lease bound to the run and settled at $0.0037
 PASS every review-units model request went to the fake upstream and named its session (163 requests, 0 unmatched)
-PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch b221e3b121b35161019e07aca3375cd7ebb3445f4bc26bae8d2b9cf958f6bc19, 8 packets, 183 findings from 2 arms; the key is outside the packets
+PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch e4ad4f88cb10239b177b8b7aa8c588d4a30e6fa62e73e8dfd8894453644176b0, 8 packets, 183 findings from 2 arms; the key is outside the packets
 PASS hr-judge-sol: recorded at $294.39 ($294.96 less $0.567012 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.957012); judge-run with --brief judge-brief-v3.1.md (primary openai/gpt-6.1-sol, second anthropic/claude-opus-5-5, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (gpt-6.1-sol 8, claude-opus-5-5 8, claude-sonnet-5-5 2); lease settled at $0.0182
 PASS hr-judge-opus: recorded at $294.37 ($294.96 less $0.585212 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.955212); judge-run with --brief judge-brief-v3.1.md (primary anthropic/claude-opus-5-5, second openai/gpt-6.1-sol, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (claude-opus-5-5 8, gpt-6.1-sol 8, claude-sonnet-5-5 2); lease settled at $0.0182
 PASS hr-judge-sonnet: recorded at $294.35 ($294.96 less $0.603412 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.953412); judge-run with --brief judge-brief-v3.1.md (primary anthropic/claude-sonnet-5-5, second openai/gpt-6.1-sol, third anthropic/claude-opus-5-5) exits 0 with every send answered by the fake (claude-sonnet-5-5 8, gpt-6.1-sol 8, claude-opus-5-5 2); lease settled at $0.0140
@@ -27,6 +27,7 @@ PASS readings.json kind X-RC (dx, 6 items): must-fix 0/24, stops 0; by hand 0/24
 PASS readings.json kind G-RC (design, 6 items): must-fix 14/24, stops 0; by hand 14/24, stops 0
 PASS the 2 cells where sol and opus differ (by hand 2: one sol-only miss on a match, one sol-only match on a miss) each take sonnet's answer
 PASS e0-readings --kinds hr-shapes.json --passes 4 exits 0 and writes readings.json; its per-shape must-fix counts are C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8; by hand C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
+PASS hr-rule with step 7's literal --scorer ., run from the pinned checkout, exits as with an absolute scorer (exit 0) and prints the same agreement lines
     hr-rule: Whole run: no whole-run stop
     hr-rule: Stratum ceo (C-RC, 6 items): HEADROOM; m 10 of n 24 = 0.417; stopped readings 0 (all miss 10/24 HEADROOM, all match 10/24 HEADROOM); anchors 8 of 8 (A-F 4/4, A-X 4/4; threshold 4); sessions gap 0, stopped 0
     hr-rule: Stratum eng (E-RC, 5 items): NO READ (stop bounds disagree (all miss HEADROOM, all match NEAR-CEILING)); m 10 of n 18 = 0.556; stopped readings 2 (all miss 10/20 HEADROOM, all match 12/20 NEAR-CEILING); anchors 7 to 8 of 8 (A-T 3/4, A-X 4/4; threshold 4); sessions gap 0, stopped 1
@@ -48,4 +49,4 @@ PASS hr-rule stratum design: by hand NEAR-CEILING, m 14 of n 24, stopped reading
 PASS hr-rule pooled line (decides nothing): by hand 23 candidates, m 34 of n 90, stopped 2; pooled anchors 30 of 32; per shape C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
 PASS hr-rule with step 5's flags after -- prints the agreement line (2x2, raw agreement, PABAK, kappa) for pooled and each stratum, each n and kappa equal to e0-readings' printed kappa
 PASS hr-rule refuses the hr-shapes readings as --readings (exit 2, E_USAGE naming hr-kinds.json)
-PASS 27, FAIL 0
+PASS 28, FAIL 0

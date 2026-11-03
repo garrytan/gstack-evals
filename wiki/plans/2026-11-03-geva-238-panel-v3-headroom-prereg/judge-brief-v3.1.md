@@ -30,5 +30,5 @@ Every finding in these packets was rated must-fix by some review and matches no 
 
 - Three full matching reads of one packet batch, one judge-run call each, each its own ledger item: openai/gpt-6.1-sol (the first judge, cross-family to both subject models), anthropic/claude-opus-5-5 (the second judge) and anthropic/claude-sonnet-5-5 (the third). Each call's primary read answers every blocker in every packet; the headroom check scores from those three primary replies only, as E0 did. judge-run requires a distinct second and third model in every call, so each call names the other two; their partial reads are recorded and decide nothing.
 - Reasoning effort medium (JUDGE_REASONING_EFFORT), at most 16,000 output tokens, no tools.
-- Packet seed 20261104. The headroom check runs no adjudication batch; the adjudication paragraph stands for the rounds after it.
+- Packet seed 20261103. The headroom check runs no adjudication batch; the adjudication paragraph stands for the rounds after it.
 - A reply judge-run refuses is asked again once with the same input. A second refusal leaves that packet unjudged for that role, and the readings treat it as E0's section 6 says.

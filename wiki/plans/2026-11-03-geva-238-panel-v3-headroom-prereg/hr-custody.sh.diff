@@ -1,6 +1,6 @@
---- wiki/plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/custody-e0.sh.txt	2026-11-03 07:16:07.718081935 +0000
-+++ wiki/plans/2026-11-03-geva-238-panel-v3-headroom-prereg/hr-custody.sh.txt	2026-11-03 07:32:40.423519013 +0000
-@@ -1,13 +1,16 @@
+--- wiki/plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/custody-e0.sh.txt	2026-11-03 08:05:23.211659988 +0000
++++ wiki/plans/2026-11-03-geva-238-panel-v3-headroom-prereg/hr-custody.sh.txt	2026-11-03 08:40:08.654933186 +0000
+@@ -1,13 +1,17 @@
  #!/usr/bin/env bash
 -# custody-e0.sh: the only allowed way to open E0's calibration bundle (GEVA-219). Two modes, each in one process:
 -#   custody-e0.sh <bundle.tar.age> <age identity> <run dir> <scorer> <CUSTODY.md> [<bundle sha256>]
@@ -14,16 +14,19 @@
 +#     ^<UTC time, YYYY-MM-DDTHH:MM:SSZ> seal bundle <bundle sha256>( |$), the custodian's seal line for this bundle.
 +#   hr-custody.sh --reaudit <bundle.tar.age> <age identity> <re-audit dir> <CUSTODY.md> <bundle sha256> -- <command> [<arg>...]
  #     the section 7 re-audit, the only allowed way to open key.json and the unit trees for it (section 4, step 5b): makes the
- #     re-audit dir mode 0700 and runs <command> there in the foreground with E0_SLICE set to the extraction and E0_REAUDIT to
- #     that dir; the command must leave a non-empty reaudit.json in it.
+-#     re-audit dir mode 0700 and runs <command> there in the foreground with E0_SLICE set to the extraction and E0_REAUDIT to
+-#     that dir; the command must leave a non-empty reaudit.json in it.
 -# Both refuse, before they decrypt, unless E0_MACHINE names this machine and the bundle's sha256 is the frozen one (the
 -# optional digest binds another, for the keyless dry run only, and says so). Then they reserve the run or re-audit dir by
++#     re-audit dir mode 0700 and runs <command> in the foreground, in the caller's working directory (it does not cd), with
++#     E0_SLICE set to the extraction and E0_REAUDIT to that dir; the command must write only under $E0_REAUDIT and leave a
++#     non-empty reaudit.json there.
 +# Both refuse, before they decrypt, unless E0_MACHINE names this machine and the bundle's sha256 is the one given. A bundle
 +# named .tar.gz.age extracts with tar -xzf, any other with tar -xf. Then they reserve the run or re-audit dir by
  # creating <dir>.lock with mkdir, which is atomic, so a second launch on the same dir refuses while the first runs, and
  # refuse when the dir already exists. Then they decrypt and extract the bundle into a fresh dir under /dev/shm, run their
  # step there, remove the extraction and check it is gone, append one line to CUSTODY.md (UTC time, mode, the bundle's
-@@ -17,18 +20,18 @@
+@@ -17,18 +21,18 @@
  # launch on that dir refuse until it is removed by hand. Prints counts and digests only.
  set -euo pipefail
  umask 077
@@ -48,7 +51,7 @@
    [ "${1:-}" = "--" ] && [ $# -ge 2 ] || usage "--reaudit needs -- <command> after its arguments"
    shift
  fi
-@@ -37,9 +40,12 @@
+@@ -37,9 +41,12 @@
  command -v age >/dev/null || usage "age is not installed"
  GOT=$(sha256sum "$BUNDLE" | cut -c1-64)
  [ "$GOT" = "$WANT" ] || usage "the bundle's sha256 is $GOT, not $WANT"
@@ -63,7 +66,7 @@
  if [ -e "$DIR" ]; then rmdir "$LOCK"; usage "the $MODE dir exists; it must be new, so a failure can only ever remove what this run made"; fi
  HERE=$(cd "$(dirname "$0")" && pwd)
  now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
-@@ -54,10 +60,10 @@
+@@ -54,10 +61,10 @@
    if [ -n "$SHM" ]; then rm -rf "$SHM"; test ! -e "$SHM" || left="$left extraction $SHM"; fi
    if [ "$MADE" = 1 ]; then rm -rf "$DIR"; if test -e "$DIR"; then left="$left dir"; else dir="removed"; fi; fi
    rmdir "$LOCK" || left="$left lock"
@@ -77,7 +80,7 @@
    exit "$code"
  }
  trap failed EXIT
-@@ -65,28 +71,25 @@
+@@ -65,28 +72,25 @@
  trap 'exit 143' TERM
  trap 'exit 129' HUP
  SHM=$(mktemp -d /dev/shm/e0-slice.XXXXXX)

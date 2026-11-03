@@ -88,6 +88,10 @@ ref "a unit missing one of its three E0 shapes" "$PRE"'k=key(0); i=k["items"][0]
 ref "an anchor outside A-X, A-F and A-T" "$PRE"'k=key(0); i=k["items"][3]; i["item_kind"]="A-Q"; put(0,k); U[0]["items"][i["id"]][0]="A-Q"; save()' "three E0 shapes"
 ref "two context anchors in a stratum" "$PRE"'U[2]["anchor_type"]="context"; save()' "anchor rule"
 ref "a src anchor whose file plan.md does not name" "$PRE"'k=key(2); k["items"][3]["evidence"]=[{"path":"src/pkg11/mod15.py","what":"x"}]; put(2,k)' "anchor rule"
+ref "an anchor whose key.json anchor_place is not its anchor_type" "$PRE"'k=key(0); a=[x for x in k["items"] if x["role"]=="anchor"][0]; a["anchor_place"]="src" if U[0]["anchor_type"]=="context" else "context"; put(0,k)' "anchor rule"
+ref "a kept unit that excludes its anchor" "$PRE"'a=[i for i,v in U[0]["items"].items() if v[1]=="anchor"][0]; U[0]["excluded_items"]=U[0].get("excluded_items",[])+[a]; save()' "exclude their anchor"
+ref "a symlink under a unit's src/" "$PRE"'os.symlink("/etc/hostname","units/%s/src/link.py"%U[0]["unit"])' "symlinks, hidden paths"
+ref "a hidden path under a unit's context/" "$PRE"'open("units/%s/context/.notes"%U[1]["unit"],"w").write("x\n")' "symlinks, hidden paths"
 ref "a GPL base" "$PRE"'m["bases"][0]["licence"]="GPL-3.0"; save()' "bases are not 4"
 ref "a base at a short commit" "$PRE"'m["bases"][1]["commit"]="abc123"; save()' "bases are not 4"
 ref "3 bases" "$PRE"'m["bases"].pop(); save()' "bases are not 4"
@@ -136,3 +140,4 @@ ck "hr-custody.sh's run root is mode $(stat -c %a "$RC") (700 wanted) with $(fin
 E0_MACHINE=dry-run-machine K bash "$H/hr-custody.sh" --reaudit "$ENC" "$ID" "$RC/reaudit" "$CL" "$ES" -- bash -c 'test -s "$E0_SLICE/manifest.json" && echo "{}" > "$E0_REAUDIT/reaudit.json"' >/dev/null 2>"$O/e"; R=$?
 ck "hr-custody.sh --reaudit still runs as before (exit $R; $(( $(shm) - B0 )) left)" $([ $R = 0 ] && [ "$(wc -l < "$CL")" = 3 ] && [ "$(shm)" = "$B0" ] && echo 0 || echo 1)
 echo "PASS $P, FAIL $F"
+[ "$F" = 0 ]

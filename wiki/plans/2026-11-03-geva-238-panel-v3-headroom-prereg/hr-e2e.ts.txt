@@ -225,7 +225,11 @@ try {
   const wantShape = [...new Set<string>(shapesBl.filter((b) => b.role === "candidate").map((b) => b.kind))].sort().map((k) => { const cs = cellsOf(shapesBl.filter((b) => b.kind === k)); return k + " " + cs.filter((c) => T.has(c)).length + "/" + cs.length; }).join(", ");
   check("e0-readings --kinds hr-shapes.json --passes 4 exits " + p2.code + " and writes readings.json; its per-shape must-fix counts are " + (p2.j ? Object.entries(p2.j.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") : "absent") + "; by hand " + wantShape, !!p2.j && Object.entries(p2.j.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") === wantShape);
   const rule = (args: string[]) => { const r = spawnSync("bun", [join(HERE, "hr-rule.ts"), ...args], { encoding: "utf8" }); return { code: r.status, out: r.stdout ?? "", err: (r.stderr ?? "").trim().split("\n")[0] ?? "" }; };
-  const hr = rule(["--readings", p1.file, "--shapes", p2.file, "--", "--scorer", scorer, "--suite", SUITE, "--kinds", join(SR, "hr-kinds.json"), "--passes", String(PASSES), "--opus", opus.out, "--particle", particle.out, "--key", keyPath, "--read", "sol=" + jr.sol, "--read", "opus=" + jr.opus, "--read", "sonnet=" + jr.sonnet]);
+  const after = ["--suite", SUITE, "--kinds", join(SR, "hr-kinds.json"), "--passes", String(PASSES), "--opus", opus.out, "--particle", particle.out, "--key", keyPath, "--read", "sol=" + jr.sol, "--read", "opus=" + jr.opus, "--read", "sonnet=" + jr.sonnet];
+  const hr = rule(["--readings", p1.file, "--shapes", p2.file, "--", "--scorer", scorer, ...after]);
+  const lit = spawnSync("bun", [join(HERE, "hr-rule.ts"), "--readings", p1.file, "--shapes", p2.file, "--", "--scorer", ".", ...after], { encoding: "utf8", cwd: scorer });
+  const agr = (s: string) => s.split("\n").filter((l) => l.startsWith("Agreement ")).join("\n");
+  check("hr-rule with step 7's literal --scorer ., run from the pinned checkout, exits as with an absolute scorer (exit " + lit.status + ") and prints the same agreement lines", lit.status === hr.code && agr(lit.stdout ?? "") !== "" && agr(lit.stdout ?? "") === agr(hr.out));
   for (const l of hr.out.split("\n").filter(Boolean)) say("hr-rule: " + l);
   const want0 = STRATA.some((st) => !X[st].why && !X[st].read.startsWith("AWAITING")) ? 0 : 3;
   check("hr-rule --readings (hr-kinds run) --shapes (hr-shapes run) exits " + hr.code + " (by hand " + want0 + ") and prints Whole run: no whole-run stop", hr.code === want0 && /^Whole run: no whole-run stop$/m.test(hr.out));
@@ -248,4 +252,4 @@ try {
   check("hr-e2e ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)).slice(0, 300) + ")", false);
 }
 console.log("PASS " + pass + ", FAIL " + fail);
-process.exit(0);
+process.exit(fail ? 1 : 0);

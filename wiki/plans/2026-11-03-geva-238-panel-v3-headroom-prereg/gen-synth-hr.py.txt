@@ -130,6 +130,7 @@ for n, (uid, (repo, st)) in enumerate(zip(ids, layout)):
             traces[iid] = row_trace
         else:
             it["evidence"] = [{"path": "src/pkg00/mod00.py" if atype == "src" else docs[5], "what": "A synthetic fact."}]
+            it["anchor_place"] = atype
         if kind in ("C-Q", "C-U2"): it.update(decision="Synthetic decision.", should_become="Synthetic replacement decision.")
         if kind == "A-X": it["other_places"] = [heads[4]]
         items.append(it)

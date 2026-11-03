@@ -1,6 +1,6 @@
---- wiki/plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/convert-e0.py.txt	2026-11-03 07:16:07.718081935 +0000
-+++ wiki/plans/2026-11-03-geva-238-panel-v3-headroom-prereg/hr-convert.py.txt	2026-11-03 07:31:44.499586282 +0000
-@@ -1,115 +1,267 @@
+--- wiki/plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/convert-e0.py.txt	2026-11-03 08:05:23.211659988 +0000
++++ wiki/plans/2026-11-03-geva-238-panel-v3-headroom-prereg/hr-convert.py.txt	2026-11-03 08:40:08.650933186 +0000
+@@ -1,115 +1,280 @@
  #!/usr/bin/env python3
 -# convert-e0.py <slice dir> <run dir> [<dry-run seed>]: converts the extracted panel v3 calibration slice (GEVA-217's layout) into E0's run
 -# material: plan cases in the one catalog schema under <run>/sealed-root/catalog/e0/ (lens ceo), one combined source clone
@@ -31,7 +31,8 @@
 +# fewer than 2 hops past its origin, hop files that are not 2 or more distinct src/ files, a hop file missing from the
 +# unit tree or named in plan.md with or without its src/ prefix, a terminal that is not the last hop's file, an added
 +# terminal file (upstream_path null), or a terminal whose git hash-object equals the recorded upstream blob; and a unit
-+# tree (head commit, git ls-tree -r -t -l HEAD) outside 307200 to 491520 bytes, 150 to 600 blobs or under 12 trees.
++# tree (head commit, git ls-tree -r -t -l HEAD) outside 307200 to 491520 bytes, 150 to 600 blobs or under 12 trees; a kept unit that excludes its anchor; an anchor whose key.json anchor_place is not its
++# manifest anchor_type; or a symlink, hidden path or special file under a kept unit's context/ or src/.
 +# e0-kinds.json's flagged rule holds: a blocker is flagged when its unit's failing_unit_codes is non-empty, never the
 +# codes. It creates the run dir mode 0700, refuses to go on when the dir is not 0700, and removes the run dir it made when
 +# it refuses after making it.
@@ -183,6 +184,17 @@
 -FROZEN.update({"C-U2": 5, "G-A11Y": 5, "E-OM": 5})
 -got, anchors = Counter(), 0
 +if bad: refuse("%d kept units have key.json items or traces that do not match the manifest" % bad)
++bad = sum(any(r["items"][x][1] == "anchor" for x in r.get("excluded_items", [])) for r in kept)
++if bad: refuse("%d kept units exclude their anchor; an anchor that still fails its fix round stops the build and goes to the Captain" % bad)
++bad = []
++for r in kept:
++    ud = os.path.join(sl, "units", r["unit"])
++    for sub in ("context", "src"):
++        for root, ds, fs in os.walk(os.path.join(ud, sub)):
++            for n in ds + fs:
++                p = os.path.join(root, n); rel = os.path.relpath(p, ud)
++                if os.path.islink(p) or not (os.path.isfile(p) or os.path.isdir(p)) or any(x.startswith(".") for x in rel.split(os.sep)): bad.append(rel)
++if bad: refuse("%d entries under the kept units' context/ or src/ are symlinks, hidden paths or special files" % len(bad))
 +if len(kept) != 8 or Counter(r["stratum"] for r in kept) != Counter({s: 2 for s in STRATA}): refuse("the slice is not 8 kept units, 2 a stratum")
 +bad = sum(len(r["items"]) != 4 or sorted(k for k, ro in r["items"].values() if ro == "candidate") != SHAPES[r["stratum"]]
 +          or [k in ("A-X", "A-F", "A-T") for k, ro in r["items"].values() if ro == "anchor"] != [True] for r in kept)
@@ -191,11 +203,12 @@
 +plans = {r["unit"]: open(os.path.join(sl, "units", r["unit"], "plan.md"), "rb").read().decode() for r in kept}
 +def anchor_ok(r):
 +    a = [i for i in keys[r["unit"]]["items"] if i["role"] == "anchor"][0]
++    if a.get("anchor_place") != r.get("anchor_type"): return False
 +    paths = [e.get("path", "") for e in a.get("evidence", []) if isinstance(e, dict)]
 +    if r.get("anchor_type") == "context": return any(p.startswith("context/") for p in paths)
 +    return r.get("anchor_type") == "src" and any(p.startswith("src/") and p in plans[r["unit"]] for p in paths)
 +bad = sum(sorted(r.get("anchor_type") for r in kept if r["stratum"] == s) != ["context", "src"] for s in STRATA) + sum(not anchor_ok(r) for r in kept)
-+if bad: refuse("%d strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file plan.md names) a stratum" % bad)
++if bad: refuse("%d strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file plan.md names) a stratum, each with key.json's anchor_place equal to its anchor_type" % bad)
 +bases = man.get("bases")
 +ok = isinstance(bases, list) and len(bases) == 4 and all(good_base(b) and isinstance(b.get("strata"), list) for b in bases) and len({b["repo"] for b in bases}) == 4
 +if ok:
