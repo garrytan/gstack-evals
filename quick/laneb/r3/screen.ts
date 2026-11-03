@@ -2,7 +2,7 @@
 // admitted list, the pilot exposure and the measured costs, and prints the projection:
 //   bun quick/laneb/r3/screen.ts all <work dir> [--model <id>]       prepare, run and analyze, in order
 //   bun quick/laneb/r3/screen.ts prepare <work dir> [--model <id>]   env LEDGER (the item's jsonl), SWEBV (harbor-datasets checkout), ARMS (arm tar dir)
-//   bun quick/laneb/r3/screen.ts run <work dir> [--model <id>]       env LEDGER, UBI_OWNER, VM_USD_PER_HOUR, the provider keys,
+//   bun quick/laneb/r3/screen.ts run <work dir> [--model <id>]       env LEDGER, UBI_RUNNER, UBI_OWNER, VM_USD_PER_HOUR, the provider keys,
 //                                                                    LEDGER_PORT (default the model's own); launches screen, then pilot
 //   bun quick/laneb/r3/screen.ts analyze <work dir> [--model <id>]   env LEDGER; reads the pulled results
 // --model is claude-opus-5-5 (the default) or gpt-6.1-sol. Each model has its own item, cap, parts, ledger and work dir
@@ -15,8 +15,9 @@
 // (route-check.ts): its settled rows under the item's route prefix are allowed, and the screen is refused until the route
 // record (<LEDGER>.route.json) says pass with the proxy config the screen's parts run with (an incomplete record is
 // refused too, Captain ruling A1). A model's stops read and write only its own ledger, record and work dir, so a
-// Sol stop can't touch Opus's item or outcome. run refuses a plan.json prepared for another model's item, and a ledger
-// port something already answers on, before it binds the item; each model's ledger service has its own default port
+// Sol stop can't touch Opus's item or outcome. run refuses a bound item, a UBI_RUNNER that is not an executable file or a
+// command on PATH, a UBI_OWNER with no letters or digits, a plan.json prepared for another model's item, a ledger port
+// something already answers on, and a ledger bindCheck refuses, before it binds the item; each model's ledger service has its own default port
 // (Opus 9911, Sol 9912), so the two runs never share one. A cap refusal (a VM block, a session reserve
 // or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing. So does a part whose
 // trials are not one per planned task: a planned task with no trial, a second trial for a task, or a stray trial (one in
@@ -252,9 +253,15 @@ function prepare(work: string, m: R3aModel) {
 
 function run(work: string, m: R3aModel) {
   const ledger = process.env.LEDGER ?? "";
+  const bound = ledger + ".bound";
+  const boundTo = () => `${m.item} is already bound to a run (${readFileSync(bound, "utf8").trim()}); an item serves one run (prereg section 5)`;
+  if (existsSync(bound)) throw new Error(boundTo());
   const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
   if (!rate) throw new Error(`E_USAGE set VM_USD_PER_HOUR so the VM hours settle to ${m.item}`);
   vmBlock(rate, hours, m.capUsd);
+  const runner = process.env.UBI_RUNNER ?? "";
+  if (!Bun.which(runner)) throw new Error(`E_USAGE ${runner ? `UBI_RUNNER ${JSON.stringify(runner)} is not an executable file or a command on PATH` : "UBI_RUNNER is unset or blank"}; set it to the ubi-runner.sh copy launch.sh starts the VMs with; ${m.item} is still unbound`);
+  if (!/[A-Za-z0-9]/.test(process.env.UBI_OWNER ?? "")) throw new Error(`E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; ${m.item} is still unbound`);
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   routePassed(ledger, m);
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
@@ -263,14 +270,13 @@ function run(work: string, m: R3aModel) {
   const busy = `something already answers on 127.0.0.1:${lport} (another run's ledger service?)`;
   if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; ${m.item} is still unbound`);
   const configs = m.parts.map((part) => join(work, part.name, "proxy.json"));
-  routePassed(ledger, m, configs);
+  bindCheck(ledger, m, configs);
   const planned: Record<string, string[]> = { screen: screenIds(), pilot: plan.pilot_tasks };
-  const bound = ledger + ".bound";
   try {
     writeFileSync(bound, JSON.stringify({ item: m.item, work, at: new Date().toISOString() }) + "\n", { flag: "wx" });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    throw new Error(`${m.item} is already bound to a run (${readFileSync(bound, "utf8").trim()}); an item serves one run (prereg section 5)`);
+    throw new Error(boundTo());
   }
   bindCheck(ledger, m, configs);
   for (const [i, part] of m.parts.entries()) {
