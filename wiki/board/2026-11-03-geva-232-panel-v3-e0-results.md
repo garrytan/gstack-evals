@@ -18,7 +18,7 @@ links:
 
 # Panel v3 E0: plain Opus 5.5 found 137 of 138 seeded calibration items (0.993, 95% interval 0.960 to 1.000), so every candidate kind reads DROP-CEILING and no stratum is built
 
-Publication status: unpublished. Done: the run, both readings parts, this file and the author's claim check. Still open: the /ship review recorded in the pull request.
+Publication status: unpublished. Done: the run, both readings parts, this file and the author's claim check. Still blocking publication: the /ship review recorded in the pull request, a cross-family claim check against the data, and a reanalysis by another Captain's crew from a clean machine (steps 5 and 6 on the sealed run bundle).
 
 | Field | Value |
 |---|---|
@@ -27,7 +27,7 @@ Publication status: unpublished. Done: the run, both readings parts, this file a
 | Prereg | [2026-11-03-geva-219-panel-v3-e0-screen-prereg](../plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/README.md) (#172, b037fcf) |
 | Data | Run bundle panel-v3-e0-run.tar.gz.age, sha256 7feee0198a375e3ed56768872ff80ac759b0a908c8442d01e5e2688a75a3b627, sealed to the panel v3 recipient and held by the gstack-evals Captain; not public |
 | Reviewed by | /ship review of this file, recorded in the pull request |
-| Reproduced by | None. The slice is sealed calibration material. |
+| Reproduced by | Pending: another Captain's crew, rerunning steps 5 and 6 on the sealed run bundle from a clean machine. |
 
 ## What we found
 
