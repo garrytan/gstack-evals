@@ -163,9 +163,10 @@ echo; echo "## The hook readout (section 7)"
 RO() { env B="$B" MAP="$MAP" bun "$W/bin/rr2-hooks.ts" readout "$@"; }
 echo "# On the stub smoke. The stub CLI runs no hooks, so no session has a contract-log line: HOOK_SILENT (exit 3)."
 step . RO "$W/run/rr2-smoke-full" "$W/run/rr2-smoke-full.hooks" --smoke
-echo "# Synthetic copy of the stub smoke. Session 1: its delta lists the log, the linked log has blocked then met_after_block, the"
-echo "# routing log has a routed line, and a findings block now comes before its dispatches. Session 2: the same transcript edit,"
-echo "# and its delta lists the log with no link and no blocked line. Session 3 as the stub ran it."
+echo "# Synthetic copy of the stub smoke. Session 1: its delta lists the log, the linked log has blocked (specialists missing)"
+echo "# then met_after_block, the routing log has a routed line, and a findings block now comes before its dispatches. Session 2:"
+echo "# the same transcript edit, and its delta lists the log with no link (lost). Session 3: its transcript as the stub ran it"
+echo "# (both dispatches before its only block), with a linked log whose blocked line names adversarial-pass as missing."
 FX=$W/run/hooks-fx; cp -a "$W/run/rr2-smoke-full" "$FX"
 python3 -c '
 import glob, json, os, sys
@@ -182,15 +183,20 @@ for k, d in enumerate(dirs[:2]):
         rel = os.path.relpath(d, fx + "/runs"); os.makedirs(links + "/" + rel, exist_ok=True)
         open(links + "/" + rel + "/skill-contract.log", "w").write("2026-11-03T00:00:01.000Z session=fx event=blocked skill=review missing=specialists-dispatched waived=-\n2026-11-03T00:00:09.000Z session=fx event=met_after_block skill=review missing=- waived=-\n")
         open(links + "/" + rel + "/skill-route.log", "w").write("2026-11-03T00:00:00.000Z session=fx event=routed skill=review score=9 variant=a\n")
+d = dirs[2]; rel = os.path.relpath(d, fx + "/runs"); os.makedirs(links + "/" + rel, exist_ok=True)
+dl = json.load(open(d + "/delta.json")); dl["added"].append(".gstack-home/hooks/skill-contract.log"); json.dump(dl, open(d + "/delta.json", "w"))
+open(links + "/" + rel + "/skill-contract.log", "w").write("2026-11-03T00:00:01.000Z session=fx3 event=blocked skill=review missing=adversarial-pass waived=-\n2026-11-03T00:00:09.000Z session=fx3 event=met_after_block skill=review missing=- waived=-\n")
 print("fixture sessions edited: %d of %d" % (min(2, len(dirs)), len(dirs)))' "$FX" "$FX.hooks"
 step . RO "$FX" "$FX.hooks" --smoke
 echo "# The watch on a synthetic launch: a writer plays one session that creates the contract log and a record, appends a"
-echo "# second line, then removes its work dir; the watch ends when the writer does."
+echo "# second line, then removes its work dir; the watch ends when the writer does. The session also planted a routing log"
+echo "# and a record that are links to a host file (synthetic); the watch takes neither."
 WT=$W/watch; SR=$WT/out/runs/m/gstack-full/t/p1/work/t/.gstack-home; mkdir -p "$SR/hooks" "$SR/skill-contracts"
+ln -s /etc/hostname "$SR/hooks/skill-route.log"; ln -s /etc/hostname "$SR/skill-contracts/planted.json"
 ( sleep 1; echo "2026-11-03T00:00:01.000Z session=w event=blocked skill=review" >> "$SR/hooks/skill-contract.log"; echo '{"version": 1}' > "$SR/skill-contracts/w.json"
   sleep 1; echo "2026-11-03T00:00:02.000Z session=w event=met_after_block skill=review" >> "$SR/hooks/skill-contract.log"; sleep 1; rm -rf "$WT/out/runs/m/gstack-full/t/p1/work" ) &
 step '^(watch|E_)' bun "$W/bin/rr2-hooks.ts" watch "$WT/out" "$WT/links" $!
-step . sh -c "cat $WT/links/m/gstack-full/t/p1/skill-contract.log; ls $WT/links/m/gstack-full/t/p1/records; test ! -e $WT/out/runs/m/gstack-full/t/p1/work && echo 'the work dir is gone; the linked log keeps both lines'"
+step . sh -c "cat $WT/links/m/gstack-full/t/p1/skill-contract.log; ls $WT/links/m/gstack-full/t/p1/records; test ! -e $WT/out/runs/m/gstack-full/t/p1/work && echo 'the work dir is gone; the linked log keeps both lines'; test ! -e $WT/links/m/gstack-full/t/p1/skill-route.log && echo 'the planted routing link was not taken'"
 
 echo; echo "## The severity map through the frozen sevmap.ts (section 6)"
 # review-units writes each arm's severity_map from the --severity-map entry named for the arm (src/trial/review/run.ts:497
