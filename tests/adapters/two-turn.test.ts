@@ -225,4 +225,27 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GEVA-203: the follow-up on the real CLI 2.1.31
     expect([r.turn1, r.turn2]).toEqual([2, 2]);
     expect([r.outcome.termination, r.outcome.follow_up]).toEqual([{ kind: "turn_cap" }, { sent: true, model_turns: 2 }]);
   }, 240_000);
+
+  // Value: protects=GST-1121 (Capy's medium on #166 at driver.ts:600): a turn-2 cap reached at a result while background work holds the session interrupts the CLI before it closes, and asks the simulator nothing, so no model call follows the cap; without it CLI 2.1.314 made 50 more calls after the close and 60 while the persona answered; a final answer at the cap with nothing held still ends completed; fails_when=the cap's result end closes the CLI without an interrupt, or awaits the persona while the work is held; why_new=GST-1121 item 2; seam=the driver's result branch on CLI 2.1.314 and MeteringProxy; no_claim=a real model
+  test("a turn-2 cap at a result while background work is held interrupts the CLI, so no model call follows it", async () => {
+    const bg = [{ type: "tool_use" as const, id: "toolu_bg", name: "Bash", input: { command: "sleep 1", run_in_background: true } }];
+    const fg = [{ type: "tool_use" as const, id: "toolu_fg", name: "Bash", input: { command: "true" } }];
+    const persona = { freeform: async () => (await Bun.sleep(3_000), { text: "Go with your recommendation." }), entry: { user: { persona: "p" } } as never };
+    const cases = [
+      ["held, lands after the close", bg, "Waiting.", {}, { kind: "turn_cap" }],
+      ["held, lands while the persona answers", bg, "Which option do you want?", persona, { kind: "turn_cap" }],
+      ["nothing held, a final answer", fg, BLOCK, {}, { kind: "completed" }],
+    ] as const;
+    for (const [name, first, last, sim, termination] of cases) {
+      let n = 0;
+      const script: Script = (t) => {
+        if (!t.users.includes(FOLLOW)) return text("I read plan.md.");
+        n++;
+        return n === 1 ? [...first] : text(n === 2 ? last : "More.");
+      };
+      const r = await real(script, { followUp: { ...FOLLOW_UP, maxTurns: 2 }, capStops: true, backgroundWaitMs: 60_000, ...sim });
+      await Bun.sleep(4_000);
+      expect([name, r.outcome.termination, r.outcome.follow_up, n]).toEqual([name, termination, { sent: true, model_turns: 2 }, 2]);
+    }
+  }, 240_000);
 });
