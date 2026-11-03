@@ -141,6 +141,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_REAL_SCORE_CONFIG](#e_real_score_config) | 2 | U20 |
 | [E_CLEAN_ROOM](#e_clean_room) | 2 | U10 |
 | [E_ARM_CONTAMINATED](#e_arm_contaminated) | 4 | U10 |
+| [E_WASTE_INPUT](#e_waste_input) | 2 | U15 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -985,6 +986,14 @@ A none or lens plan arm could see a Capy drive or gstack (src/trial/review/clean
 Fix: Remove the named paths from the arm image or the unit tree, then rerun the same command; a refusal before the lease left the item unopened. A session's refusal is not journaled, so --resume &lt;out> reruns that cell after the fix and reuses the scored sessions.
 
 Exit 2. Side effects: Before the lease: none, refused before any spend. In a session: no model call in that session; completed cells and their spend are kept. Retry safe: yes. Resumable: yes. Owner: U10.
+
+### E_WASTE_INPUT
+
+gstack-evals waste could not read an input: a file is missing or unreadable, a thread export is not a transcript page, item array or JSON lines of either, an item lacks its id, source or createdAt, a gstack-ship-receipt block is not JSON, or per-PR data has no prs array. The message names the input by its position, never by its path. Nothing was printed to stdout.
+
+Fix: Re-export the thread (src/waste/README.md shows the export program) or fix the file the message points to, then run the command again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U15.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
