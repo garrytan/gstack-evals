@@ -16,7 +16,8 @@
 // record (<LEDGER>.route.json) says pass with the proxy config the screen's parts run with (an incomplete record is
 // refused too, Captain ruling A1). A model's stops read and write only its own ledger, record and work dir, so a
 // Sol stop can't touch Opus's item or outcome. run refuses a bound item, a UBI_RUNNER that is not an executable file or a
-// command on PATH, a UBI_OWNER with no letters or digits, a plan.json prepared for another model's item, a ledger port
+// command on PATH, a UBI_OWNER with no letters or digits, no UBICLOUD_API_KEY (or UBICLOUD_API_TOKEN), a UBI_TTL_HOURS
+// ubi-runner.sh refuses (unset means its default of 3), a plan.json prepared for another model's item, a ledger port
 // something already answers on, and a ledger bindCheck refuses, before it binds the item; each model's ledger service has its own default port
 // (Opus 9911, Sol 9912), so the two runs never share one. A cap refusal (a VM block, a session reserve
 // or the batch cap) stops the run, and analyze then reports it incomplete and admits nothing. So does a part whose
@@ -262,6 +263,9 @@ function run(work: string, m: R3aModel) {
   const runner = process.env.UBI_RUNNER ?? "";
   if (!Bun.which(runner)) throw new Error(`E_USAGE ${runner ? `UBI_RUNNER ${JSON.stringify(runner)} is not an executable file or a command on PATH` : "UBI_RUNNER is unset or blank"}; set it to the ubi-runner.sh copy launch.sh starts the VMs with; ${m.item} is still unbound`);
   if (!/[A-Za-z0-9]/.test(process.env.UBI_OWNER ?? "")) throw new Error(`E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; ${m.item} is still unbound`);
+  if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) throw new Error(`E_USAGE set UBICLOUD_API_KEY; ubi-runner.sh starts no VM without it (UBICLOUD_API_TOKEN also works); ${m.item} is still unbound`);
+  const ttl = process.env.UBI_TTL_HOURS || "3";
+  if (!/^[1-9][0-9]{0,2}$/.test(ttl)) throw new Error(`E_USAGE UBI_TTL_HOURS ${JSON.stringify(ttl)} is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; ${m.item} is still unbound`);
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   routePassed(ledger, m);
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
