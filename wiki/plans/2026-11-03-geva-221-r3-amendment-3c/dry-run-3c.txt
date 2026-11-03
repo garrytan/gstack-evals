@@ -1,0 +1,1227 @@
+## Part A: amendment 3's dry run at the 3c pin
+
+$ sh -c sha256sum $A3/dry-run-a3.sh.txt $B3/capacity-probe.sh.txt $B3/no-start.sh.txt $C/e2e-3c.sh.txt
+f4f96462e696cf430daf9420eb73668171856f7a8f5d28142ef08e7802618f8c  $A3/dry-run-a3.sh.txt
+7740ca150290c91161b3d27d62b1d3b893e99c1d861d875e6e0e89fd87febedb  $B3/capacity-probe.sh.txt
+964ef25ccb04eb40f3942b6bdb9a4bb594e8da5bf9966624e483de1d5b17d38e  $B3/no-start.sh.txt
+fc9523c1e2c9a0a611c5601dadd5236ad013729b571f5e5bd33844c15f865806  $C/e2e-3c.sh.txt
+exit 0 (log/1.txt)
+
+$ env PIN=8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add G=$G SWEBV=$SWEBV ARMS=$ARMS R=$R HARBOR_DIR=$HARBOR_DIR DROPS=$DROPS A2=$A2 bash $A3/dry-run-a3.sh.txt $W/a3
+## The export is the pin
+$ sh -c git -C $G archive --format=tar 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add > $W/pin.tar && git get-tar-commit-id < $W/pin.tar
+8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add
+exit 0 (log/1.txt)
+$ sh -c mkdir $W/export && tar -xf $W/pin.tar -C $W/export && find $W/export -type f -o -type l | wc -l
+1500
+exit 0 (log/2.txt)
+$ sh -c git -C $W/export rev-parse --is-inside-work-tree; echo git exit $?
+fatal: not a git repository (or any of the parent directories): .git
+git exit 128
+exit 0 (log/3.txt)
+$ python3 $W/bin/filelist.py $G 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add $W/export $W
+tree: 1500 files, list sha256 cf500924d28f1de459b0840427e23c7f4bfc1902e762d9e5ef3b31347c5f711b
+export: 1500 files, list sha256 cf500924d28f1de459b0840427e23c7f4bfc1902e762d9e5ef3b31347c5f711b
+exit 0 (log/4.txt)
+$ sh -c cmp $W/tree.txt $W/export.txt && echo 'file list identical to git ls-tree -r 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add'
+file list identical to git ls-tree -r 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add
+exit 0 (log/5.txt)
+$ sh -c cd $W/export/quick/laneb && sha256sum r3/screen.ts r3/exposure.ts r3/route-check.ts runner/launch.sh runner/vm-run.sh runner/ledger.ts runner/materialize.ts runner/prepare-run.ts analysis/analyze.ts config/cells.r3.json config/proxy.json tasks/swebv-r3.txt tasks/swebv-r3.json $(git -C $G diff --name-only ddc2cda 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add -- quick/laneb/tasks | sed 's#^quick/laneb/##' | grep -v -x -e tasks/swebv-r3.txt -e tasks/swebv-r3.json)
+a6c5f38bcfa5c2491e9fe68a324f8e607f83a55ef673b04cefaa11055b35df18  r3/screen.ts
+0014c10d5c985248884451e6a7d50169d40470c95db3fa77326735e9535ef8cd  r3/exposure.ts
+7df4ec57ff0c9ceaf8d76382044321c8deab7a0b0fe03f7f5dad1617249a8c22  r3/route-check.ts
+ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38  runner/launch.sh
+5f0d6aec5d14323a73d61ddb0ef25717309d30b9f71c5bd377820ae606158398  runner/vm-run.sh
+9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33  runner/ledger.ts
+e3c52bcb77ebc8d7ed6f46f3f9a3da400a4b09c6e593d9bc7c241578d62eae2e  runner/materialize.ts
+52b4e8ba5a4878d7633081676495ffe8e83c35cb334e0462fc6173301515e17c  runner/prepare-run.ts
+6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d  analysis/analyze.ts
+387812b219ec229f4a6d19954f68bf71ea608ec49db310278cc98643c1339a05  config/cells.r3.json
+4f54fff079f21a0e4e7f962431015a9ca316656f96a82f5cc8744fcada77ee9a  config/proxy.json
+5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67  tasks/swebv-r3.txt
+61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5  tasks/swebv-r3.json
+1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc  tasks/swebv-r3-drop.json
+exit 0 (log/6.txt)
+$ sh -c git -C $G diff --stat ddc2cda 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add
+ .github/ISSUE_TEMPLATE/bug_report.yml              |   53 +
+ .github/ISSUE_TEMPLATE/config.yml                  |    8 +
+ .github/ISSUE_TEMPLATE/eval_idea.yml               |   28 +
+ .github/ISSUE_TEMPLATE/security_contact.yml        |   15 +
+ .github/pull_request_template.md                   |   16 +
+ .github/workflows/ci.yml                           |   10 +-
+ .github/workflows/sealed.yml                       |    2 +-
+ .github/workflows/train-gate.yml                   |  309 ------
+ .gstack/pregate.json                               |    4 +-
+ .gstack/sealed-allow.tsv                           |    5 +
+ CONTRIBUTING.md                                    |   43 +
+ NOTICE.md                                          |    2 +
+ README.md                                          |   88 +-
+ SECURITY.md                                        |   31 +
+ docs/adapters.md                                   |    2 +-
+ docs/errors.md                                     |   38 +-
+ docs/skill-eval.md                                 |    2 +-
+ gate/manifest.json                                 |    7 +-
+ lanes/real-outcome/score/README.md                 |   98 ++
+ lanes/real-outcome/score/analysis.ts               |  526 ++++++++++
+ lanes/real-outcome/score/cli.ts                    |   99 ++
+ lanes/real-outcome/score/detect.ts                 |  587 +++++++++++
+ lanes/real-outcome/score/exposure.ts               |  112 +++
+ lanes/real-outcome/score/grade.ts                  |  300 ++++++
+ lanes/real-outcome/score/outcome.ts                |  232 +++++
+ lanes/real-outcome/score/power.ts                  |  285 ++++++
+ lanes/real-outcome/task/SPEC.md                    |    4 +-
+ lanes/real-outcome/task/check.ts                   |  103 +-
+ policy/models.json                                 |    5 +-
+ quick/lanea-quick/README.md                        |    2 +-
+ quick/laneb/README.md                              |    4 +-
+ quick/laneb/r3/exposure.ts                         |   12 +-
+ quick/laneb/r3/route-check.ts                      |  110 ++-
+ quick/laneb/r3/screen.ts                           |   53 +-
+ quick/laneb/runner/materialize.ts                  |   41 +
+ quick/laneb/runner/prepare-run.ts                  |   15 +-
+ quick/laneb/runner/vm-run.sh                       |  160 ++-
+ quick/laneb/tasks/swebv-r3-drop.json               |  147 +++
+ quick/laneb/tests/r3-drop.test.ts                  |   87 ++
+ quick/laneb/tests/r3-sol.test.ts                   |  437 ++++++++-
+ quick/laneb/tests/r3.test.ts                       |   85 +-
+ quick/laneb/tests/real-proxy-rig.ts                |   80 ++
+ quick/laneb/tests/vm-run.test.ts                   |  281 +++++-
+ quick/replay/README.md                             |    2 +-
+ scripts/gate.ts                                    |    5 +-
+ src/adapters/claude-code/driver.ts                 |   81 +-
+ src/adapters/host.ts                               |    4 +-
+ src/errors/codes.ts                                |   38 +-
+ src/rig/tier.ts                                    |    2 +-
+ src/runner/pricing/prices.ts                       |   17 +-
+ src/runner/proxy/metering-proxy.ts                 |   16 +-
+ src/skill-eval/cli/policy.ts                       |    7 +
+ src/skill-eval/cli/preflight.ts                    |    6 +-
+ src/trial/review/README.md                         |   14 +-
+ src/trial/review/cli.ts                            |   52 +-
+ src/trial/review/held.ts                           |   60 ++
+ src/trial/review/plan-told.ts                      |   10 +-
+ src/trial/review/run.ts                            |   43 +-
+ src/trial/review/told.ts                           |   11 +-
+ src/trial/trial.ts                                 |    6 +-
+ src/types.ts                                       |   19 +
+ tests/adapters/claude-code.test.ts                 |  240 ++++-
+ tests/adapters/fixtures/stub-cli.cjs               |   85 +-
+ tests/adapters/harness.ts                          |    4 +-
+ tests/ci/sealed-workflow.test.ts                   |    2 +-
+ tests/ci/train-gate-workflow.test.ts               |  155 ---
+ tests/ci/workflow-hygiene.test.ts                  |   54 +-
+ tests/cli/preflight.test.ts                        |    9 +
+ tests/ledger/cli.test.ts                           |    6 +-
+ tests/ledger/ledger.test.ts                        |    6 +-
+ tests/miner/miner.test.ts                          |   28 +-
+ tests/panel-kit-v3-1.test.ts                       |  132 +++
+ tests/proxy/metering-proxy.test.ts                 |   28 +-
+ tests/real-outcome/sandbox.test.ts                 |   12 +-
+ tests/real-outcome/score-grade.test.ts             |  345 +++++++
+ tests/real-outcome/score-power.serial.test.ts      |   79 ++
+ tests/real-outcome/score.test.ts                   | 1021 ++++++++++++++++++++
+ tests/real/check.test.ts                           |  214 ++++
+ tests/real/fixture.ts                              |    6 +-
+ tests/real/task-docker.test.ts                     |   65 +-
+ tests/rig/tier.test.ts                             |    2 +-
+ tests/sealed.test.ts                               |   48 +
+ tests/seeded-mistakes/tasks.test.ts                |   18 +-
+ tests/trial/review/cli.test.ts                     |   96 ++
+ .../review/fixtures/sol-openrouter-session.json    |   94 ++
+ .../review/fixtures/told-identity-176fdc7.json     |  983 +++++++++++++++++++
+ tests/trial/review/fixtures/told-ship-panel.txt    |    1 +
+ tests/trial/review/held.test.ts                    |   74 ++
+ tests/trial/review/r2.test.ts                      |  104 +-
+ tests/trial/review/sol-route.test.ts               |  164 ++++
+ tests/trial/review/told-capture.ts                 |  230 +++++
+ tests/trial/review/told-identity.test.ts           |   62 ++
+ tests/trial/review/told.test.ts                    |   18 +-
+ tests/verdict/verdict.test.ts                      |    2 +-
+ .../README.md                                      |  265 +++++
+ .../analysis-configs.txt                           |  111 +++
+ .../chart.png                                      |  Bin 0 -> 86371 bytes
+ .../cost-output.txt                                |   28 +
+ .../output-primary.txt                             |   82 ++
+ .../output-recovered.txt                           |   82 ++
+ .../phase-scripts.txt                              |  373 +++++++
+ .../recovered-sessions.jsonl                       |    1 +
+ .../run-log.txt                                    |  129 +++
+ .../sol-opens.txt                                  |   27 +
+ .../xcheck.txt                                     |    4 +
+ .../2026-11-02-geva-173-real-outcome-ts-yield.md   |  134 +++
+ .../README.md                                      |  296 ++++++
+ .../cost-gstack-full.tsv                           |  107 ++
+ .../cost-none-r2.tsv                               |   20 +
+ .../parses-gstack-full.tsv                         |   20 +
+ .../parses-none-r2.tsv                             |   20 +
+ .../phase-scripts.txt                              |  561 +++++++++++
+ .../run-log.txt                                    |  552 +++++++++++
+ .../score-cc.json                                  |  342 +++++++
+ .../score-gstack-full-vs-none.json                 |  342 +++++++
+ .../score-ret12.json                               |  285 ++++++
+ .../README.md                                      |  360 +++++++
+ .../derived.sha256.txt                             |  593 ++++++++++++
+ .../phase-scripts.txt                              |  513 ++++++++++
+ .../run-log.txt                                    |  681 +++++++++++++
+ .../2026-11-02-geva-194-real-outcome-ts-recheck.md |  136 +++
+ .../README.md                                      |  325 +++++++
+ .../audit/b1-verdicts-real.json.txt                |   73 ++
+ .../audit/b1-verdicts.json.txt                     |  362 +++++++
+ .../audit/b1-verdicts.md                           |   53 +
+ .../audit/b2-verdicts.json.txt                     |  392 ++++++++
+ .../audit/b2-verdicts.md                           |   27 +
+ .../audit/echo-terms.txt                           |   45 +
+ .../audit/taxonomy-2.md                            |  182 ++++
+ .../manifest.json.txt                              |  859 ++++++++++++++++
+ .../units/D01/context/capacity.md                  |    7 +
+ .../units/D01/context/fieldwork.md                 |    7 +
+ .../units/D01/context/partners.md                  |    7 +
+ .../units/D01/context/remit.md                     |    7 +
+ .../units/D01/key.json.txt                         |   29 +
+ .../units/D01/plan.md                              |   29 +
+ .../units/D02/context/capacity.md                  |    7 +
+ .../units/D02/context/learners.md                  |    7 +
+ .../units/D02/context/purchase.md                  |    7 +
+ .../units/D02/key.json.txt                         |    1 +
+ .../units/D02/plan.md                              |   20 +
+ .../units/D03/context/buyer-requirements.md        |    7 +
+ .../units/D03/context/delivery.md                  |    5 +
+ .../units/D03/context/product.md                   |    7 +
+ .../units/D03/key.json.txt                         |    1 +
+ .../units/D03/plan.md                              |   24 +
+ .../units/D03/src/hosted_renderer.py.txt           |   11 +
+ .../units/D04/context/channel-trial.md             |    6 +
+ .../units/D04/context/limits.md                    |    6 +
+ .../units/D04/context/partners.md                  |    6 +
+ .../units/D04/context/product.md                   |    6 +
+ .../units/D04/key.json.txt                         |    1 +
+ .../units/D04/plan.md                              |   26 +
+ .../units/D05/context/contact-audit.md             |    7 +
+ .../units/D05/context/contracts.md                 |    7 +
+ .../units/D05/context/history.md                   |    7 +
+ .../units/D05/context/measurement.md               |    7 +
+ .../units/D05/key.json.txt                         |   29 +
+ .../units/D05/plan.md                              |   31 +
+ .../units/D06/context/agreements.md                |    7 +
+ .../units/D06/context/coverage.md                  |    7 +
+ .../units/D06/context/requests.md                  |    7 +
+ .../units/D06/key.json.txt                         |    1 +
+ .../units/D06/plan.md                              |   20 +
+ .../units/D07/context/budget.md                    |    7 +
+ .../units/D07/context/guest-research.md            |    7 +
+ .../units/D07/context/operations.md                |    5 +
+ .../units/D07/key.json.txt                         |    1 +
+ .../units/D07/plan.md                              |   22 +
+ .../units/D08/context/contract.md                  |    6 +
+ .../units/D08/context/funding.md                   |    6 +
+ .../units/D08/context/partners.md                  |    6 +
+ .../units/D08/context/work-study.md                |    6 +
+ .../units/D08/key.json.txt                         |    1 +
+ .../units/D08/plan.md                              |   26 +
+ .../units/D09/context/costs-and-results.md         |    7 +
+ .../units/D09/context/employer-agreements.md       |    7 +
+ .../units/D09/context/enrollment.md                |    7 +
+ .../units/D09/context/existing.md                  |    7 +
+ .../units/D09/key.json.txt                         |   29 +
+ .../units/D09/plan.md                              |   31 +
+ .../units/D10/context/product.md                   |    7 +
+ .../units/D10/context/readiness.md                 |    7 +
+ .../units/D10/context/referral-results.md          |    7 +
+ .../units/D10/key.json.txt                         |    1 +
+ .../units/D10/plan.md                              |   20 +
+ .../units/D11/context/coverage-and-budget.md       |    7 +
+ .../units/D11/context/incident-review.md           |    5 +
+ .../units/D11/context/prior-trials.md              |    7 +
+ .../units/D11/key.json.txt                         |    1 +
+ .../units/D11/plan.md                              |   24 +
+ .../units/D12/context/controls.md                  |    6 +
+ .../units/D12/context/guilds.md                    |    6 +
+ .../units/D12/context/objective.md                 |    6 +
+ .../units/D12/context/service-results.md           |    6 +
+ .../units/D12/key.json.txt                         |    1 +
+ .../units/D12/plan.md                              |   26 +
+ .../units/P01/context/booking-rules.md             |    7 +
+ .../units/P01/context/measurement.md               |    7 +
+ .../units/P01/context/opportunity.md               |    7 +
+ .../units/P01/context/service-team.md              |    7 +
+ .../units/P01/key.json.txt                         |   48 +
+ .../units/P01/plan.md                              |   31 +
+ .../units/P02/context/collection-study.md          |    7 +
+ .../units/P02/context/service-envelope.md          |    7 +
+ .../units/P02/context/suppliers.md                 |    7 +
+ .../units/P02/key.json.txt                         |    1 +
+ .../units/P02/plan.md                              |   21 +
+ .../units/P03/context/appointment-options.md       |    7 +
+ .../units/P03/context/authority.md                 |    7 +
+ .../units/P03/context/repair-records.md            |    7 +
+ .../units/P03/key.json.txt                         |    1 +
+ .../units/P03/plan.md                              |   22 +
+ .../units/P04/context/budget.md                    |    6 +
+ .../units/P04/context/company.md                   |    6 +
+ .../units/P04/context/demand.md                    |    6 +
+ .../units/P04/context/insurance.md                 |    6 +
+ .../units/P04/key.json.txt                         |    1 +
+ .../units/P04/plan.md                              |   26 +
+ .../units/S01/context/channels.md                  |    7 +
+ .../units/S01/context/company.md                   |    9 +
+ .../units/S01/context/operations.md                |    7 +
+ .../units/S01/context/research.md                  |    7 +
+ .../units/S01/key.json.txt                         |   44 +
+ .../units/S01/plan.md                              |   29 +
+ .../units/S02/context/market.md                    |    7 +
+ .../units/S02/context/resources.md                 |    7 +
+ .../units/S02/context/work-study.md                |    7 +
+ .../units/S02/key.json.txt                         |    1 +
+ .../units/S02/plan.md                              |   20 +
+ .../units/S03/context/business.md                  |    7 +
+ .../units/S03/context/field-notes.md               |    7 +
+ .../units/S03/context/venue-and-costs.md           |    5 +
+ .../units/S03/key.json.txt                         |    1 +
+ .../units/S03/plan.md                              |   24 +
+ .../units/S04/context/baseline.md                  |    6 +
+ .../units/S04/context/company.md                   |    6 +
+ .../units/S04/context/purchasing.md                |    6 +
+ .../units/S04/context/research.md                  |    6 +
+ .../units/S04/key.json.txt                         |    1 +
+ .../units/S04/plan.md                              |   26 +
+ .../units/S05/context/commercial.md                |    7 +
+ .../units/S05/context/company.md                   |    7 +
+ .../units/S05/context/research.md                  |    7 +
+ .../units/S05/context/scope.md                     |    7 +
+ .../units/S05/key.json.txt                         |   44 +
+ .../units/S05/plan.md                              |   29 +
+ .../units/S06/context/business.md                  |    7 +
+ .../units/S06/context/member-research.md           |    7 +
+ .../units/S06/context/software.md                  |    7 +
+ .../units/S06/key.json.txt                         |    1 +
+ .../units/S06/plan.md                              |   20 +
+ .../units/S06/src/billing.ts.txt                   |   29 +
+ .../units/S07/context/opportunity.md               |    7 +
+ .../units/S07/context/route-study.md               |    7 +
+ .../units/S07/context/trial-options.md             |    5 +
+ .../units/S07/key.json.txt                         |    1 +
+ .../units/S07/plan.md                              |   22 +
+ .../units/S08/context/company.md                   |    6 +
+ .../units/S08/context/current-options.md           |    6 +
+ .../units/S08/context/customers.md                 |    6 +
+ .../units/S08/context/delivery.md                  |    6 +
+ .../units/S08/key.json.txt                         |    1 +
+ .../units/S08/plan.md                              |   26 +
+ .../units/S09/context/product.md                   |    7 +
+ .../units/S09/context/renewals.md                  |    7 +
+ .../units/S09/context/staffing.md                  |    7 +
+ .../units/S09/key.json.txt                         |    1 +
+ .../units/S09/plan.md                              |   20 +
+ .../units/S10/context/launch-record.md             |    5 +
+ .../units/S10/context/product.md                   |    7 +
+ .../units/S10/context/resident-notes.md            |    7 +
+ .../units/S10/key.json.txt                         |    1 +
+ .../units/S10/plan.md                              |   22 +
+ .../units/S11/context/commercial.md                |    6 +
+ .../units/S11/context/customer-notes.md            |    6 +
+ .../units/S11/context/product.md                   |    6 +
+ .../units/S11/context/results.md                   |    6 +
+ .../units/S11/key.json.txt                         |   56 ++
+ .../units/S11/plan.md                              |   26 +
+ .../units/S12/context/customer-notes.md            |    7 +
+ .../units/S12/context/product.md                   |    7 +
+ .../units/S12/context/residents.md                 |    7 +
+ .../units/S12/context/resources.md                 |    7 +
+ .../units/S12/key.json.txt                         |   48 +
+ .../units/S12/plan.md                              |   29 +
+ .../units/S13/context/customer-terms.md            |    7 +
+ .../units/S13/context/delivery.md                  |    7 +
+ .../units/S13/context/discovery.md                 |    7 +
+ .../units/S13/key.json.txt                         |    1 +
+ .../units/S13/plan.md                              |   22 +
+ .../units/S14/context/customers.md                 |    7 +
+ .../units/S14/context/dispatch.md                  |    5 +
+ .../units/S14/context/operating-costs.md           |    7 +
+ .../units/S14/key.json.txt                         |    1 +
+ .../units/S14/plan.md                              |   24 +
+ .../units/S14/src/dispatch.py.txt                  |   42 +
+ .../units/S15/context/business.md                  |    6 +
+ .../units/S15/context/recognition.md               |    6 +
+ .../units/S15/context/resources.md                 |    6 +
+ .../units/S15/context/worker-research.md           |    6 +
+ .../units/S15/key.json.txt                         |    1 +
+ .../units/S15/plan.md                              |   26 +
+ .../units/S16/context/product.md                   |    7 +
+ .../units/S16/context/referrals.md                 |    7 +
+ .../units/S16/context/renewal.md                   |    7 +
+ .../units/S16/context/trial.md                     |    7 +
+ .../units/S16/key.json.txt                         |   44 +
+ .../units/S16/plan.md                              |   29 +
+ .../units/S17/context/access-terms.md              |    5 +
+ .../units/S17/context/account-review.md            |    7 +
+ .../units/S17/context/renter-research.md           |    7 +
+ .../units/S17/key.json.txt                         |    1 +
+ .../units/S17/plan.md                              |   22 +
+ .../units/S18/context/accounts.md                  |    6 +
+ .../units/S18/context/interviews.md                |    6 +
+ .../units/S18/context/resources.md                 |    6 +
+ .../units/S18/context/switching.md                 |    6 +
+ .../units/S18/key.json.txt                         |   52 +
+ .../units/S18/plan.md                              |   26 +
+ .../units/S19/context/member-notes.md              |    7 +
+ .../units/S19/context/metrics.md                   |   11 +
+ .../units/S19/context/product.md                   |    7 +
+ .../units/S19/context/staffing.md                  |    7 +
+ .../units/S19/key.json.txt                         |   48 +
+ .../units/S19/plan.md                              |   31 +
+ .../units/S20/context/operations.md                |    7 +
+ .../units/S20/context/process.md                   |    7 +
+ .../units/S20/context/results.md                   |   14 +
+ .../units/S20/key.json.txt                         |    1 +
+ .../units/S20/plan.md                              |   21 +
+ .../units/S21/context/current-product.md           |    7 +
+ .../units/S21/context/finance-and-team.md          |    5 +
+ .../units/S21/context/refund-audit.md              |    7 +
+ .../units/S21/key.json.txt                         |    1 +
+ .../units/S21/plan.md                              |   22 +
+ .../units/S22/context/capacity.md                  |    6 +
+ .../units/S22/context/provider.md                  |    8 +
+ .../units/S22/context/service.md                   |    6 +
+ .../units/S22/context/support.md                   |    6 +
+ .../units/S22/key.json.txt                         |   52 +
+ .../units/S22/plan.md                              |   30 +
+ .../units/S23/context/current-tools.md             |    7 +
+ .../units/S23/context/grant.md                     |    7 +
+ .../units/S23/context/service.md                   |    7 +
+ .../units/S23/context/workload.md                  |    7 +
+ .../units/S23/key.json.txt                         |   52 +
+ .../units/S23/plan.md                              |   31 +
+ .../units/S23/src/roster.py.txt                    |   20 +
+ .../units/S24/context/archive.md                   |    7 +
+ .../units/S24/context/customer-evidence.md         |    7 +
+ .../units/S24/context/service-costs.md             |    7 +
+ .../units/S24/key.json.txt                         |    1 +
+ .../units/S24/plan.md                              |   20 +
+ .../README.md                                      |  396 ++++++++
+ .../power.txt                                      |   73 ++
+ .../price3.py                                      |   44 +
+ .../price3.txt                                     |   36 +
+ .../review-record.md                               |  125 +++
+ .../2026-11-02-geva-177-r3-amendment-3/README.md   |  202 ++++
+ .../drop-list.py.txt                               |  114 +++
+ .../dry-run-a3.sh.txt                              |  140 +++
+ .../dry-run-a3.txt                                 |  388 ++++++++
+ .../openrouter-gpt-6.1-sol.json                    |    1 +
+ .../oracle-pass.sh.txt                             |   76 ++
+ .../oracle-preflight.sh.txt                        |   68 ++
+ .../oracle-table.tsv                               |   94 ++
+ .../2026-11-02-geva-192-r3-amendment-3b/README.md  |  208 ++++
+ .../capacity-probe.sh.txt                          |   58 ++
+ .../dry-run-3b.sh.txt                              |  178 ++++
+ .../dry-run-3b.txt                                 |  711 ++++++++++++++
+ .../no-start.sh.txt                                |   47 +
+ .../KIT.sha256.txt                                 |    5 +
+ .../README.md                                      |   92 ++
+ .../audit-brief.md                                 |   58 ++
+ .../author-spec.md                                 |  153 +++
+ .../check_units.py.txt                             |  598 ++++++++++++
+ .../draw.py.txt                                    |   85 ++
+ .../echo-terms.txt                                 |  210 ++++
+ .../KIT.sha256.txt                                 |    5 +
+ .../README.md                                      |  149 +++
+ .../audit-brief.md                                 |   59 ++
+ .../author-spec.md                                 |  186 ++++
+ .../check_units.py.txt                             |  854 ++++++++++++++++
+ .../draw.py.txt                                    |   85 ++
+ .../echo-terms.txt                                 |  226 +++++
+ 386 files changed, 25285 insertions(+), 766 deletions(-)
+exit 0 (log/7.txt)
+## Dependencies, task set, arm tars and the drop list
+$ sh -c cd $W/export && bun install --frozen-lockfile
+bun install v1.4.4 (38afee6c8)
+112 packages installed [71.00ms]
+exit 0 (log/8.txt)
+$ git -C $HARBOR_DIR rev-parse HEAD
+f3a5a923f6d722472c9e797af836ae4425fb215f
+exit 0 (log/9.txt)
+$ sh -c cd $W/export/quick/laneb/tasks && HARBOR_DIR=$HARBOR_DIR python3 fetch_registry.py | cut -c1-160
+terminal-bench 2.0 89 tasks [('https://github.com/laude-institute/terminal-bench-2.git', '69671fbaac6d67a7ef0dfec016cc38a64ef7a77c')]
+swebench-verified 1.0 500 tasks [('https://github.com/laude-institute/harbor-datasets.git', '86723674f04e4209ac479d0fb75d9d9f44b4377e')]
+exit 0 (log/10.txt)
+$ sh -c cd $W/export/quick/laneb/tasks && python3 swebv_r3.py --checkout $SWEBV
+ok: 93 tasks match swebv-r3.json
+exit 0 (log/11.txt)
+$ sh -c cd $ARMS && printf '%s\n' '28bfc18d5e55f7146332eebf8c86b873a8f60043a43027ef18930414e0878419  gstack.tar.gz' '6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5  none.tar.gz' 'c181857c01a7ee8d8c4434845c14b74a879bb7b6e6f4aa5ac328bfe3ccd3025b  placebo.tar.gz' | sha256sum -c -
+gstack.tar.gz: OK
+none.tar.gz: OK
+placebo.tar.gz: OK
+exit 0 (log/12.txt)
+$ sh -c sha256sum $DROPS; jq -r '.dropped[].task' $DROPS | sort | sha256sum; jq -r '.dropped_ids_sha256, .kept_size, .kept_ids_sha256' $DROPS
+1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc  $DROPS
+cdf1d975279ad7705cfebac71de83859705f27575f217e08f96c2fdf431a69c5  -
+cdf1d975279ad7705cfebac71de83859705f27575f217e08f96c2fdf431a69c5
+91
+2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe
+exit 0 (log/13.txt)
+## Prepare claude-opus-5-5 from the export on a temporary ledger (r3a-screen at $150), ORACLE=1
+$ sh -c LEDGER=$W/r3a-screen.jsonl bun $W/bin/approve.ts $W/export r3a-screen 150 && wc -l < $W/r3a-screen.jsonl
+1
+exit 0 (log/14.txt)
+$ sh -c cd $W/export && LEDGER=$W/r3a-screen.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/work-r3a-screen --model claude-opus-5-5
+$W/work-r3a-screen/screen: 91 tasks x 1 models x 1 arms x 1 attempts, git 
+$W/work-r3a-screen/pilot: 10 tasks x 1 models x 1 arms x 1 attempts, git 
+prepared $W/work-r3a-screen: screen (91 tasks, none) and pilot (scikit-learn__scikit-learn-14087, sympy__sympy-15599, sphinx-doc__sphinx-8056, django__django-15973, matplotlib__matplotlib-25960, django__django-12406, sphinx-doc__sphinx-8548, sympy__sympy-22456, django__django-15572, pytest-dev__pytest-7490, told /investigate), item r3a-screen unbound
+exit 0 (log/15.txt)
+$ python3 $W/bin/jobtasks.py $DROPS $W/work-r3a-screen
+screen/job.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
+screen/oracle.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
+pilot/job.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
+pilot/oracle.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
+exit 0 (log/16.txt)
+$ bash -c jq -c .pilot_tasks $W/work-r3a-screen/plan.json; jq -c .pilot_tasks $A2; cmp <(jq -c .pilot_tasks $W/work-r3a-screen/plan.json) <(jq -c .pilot_tasks $A2) && echo 'pilot identical to attempt 2'
+["scikit-learn__scikit-learn-14087","sympy__sympy-15599","sphinx-doc__sphinx-8056","django__django-15973","matplotlib__matplotlib-25960","django__django-12406","sphinx-doc__sphinx-8548","sympy__sympy-22456","django__django-15572","pytest-dev__pytest-7490"]
+["scikit-learn__scikit-learn-14087","sympy__sympy-15599","sphinx-doc__sphinx-8056","django__django-15973","matplotlib__matplotlib-25960","django__django-12406","sphinx-doc__sphinx-8548","sympy__sympy-22456","django__django-15572","pytest-dev__pytest-7490"]
+pilot identical to attempt 2
+exit 0 (log/17.txt)
+$ bash $W/export/wiki/plans/2026-11-02-geva-168-r3a-attempt-2/preflight.sh.txt $R $W/export $W/work-r3a-screen
+preflight ok $W/export/quick/laneb/runner: pack exit 0, 38 entries
+preflight ok $W/work-r3a-screen/screen: pack exit 0, 1010 entries
+preflight ok $W/work-r3a-screen/pilot: pack exit 0, 119 entries
+preflight: all 3 directories pack; run may bind
+exit 0 (log/18.txt)
+## Prepare gpt-6.1-sol from the export on a temporary ledger (r3a-sol at $140), ORACLE=1
+$ sh -c LEDGER=$W/r3a-sol.jsonl bun $W/bin/approve.ts $W/export r3a-sol 140 && wc -l < $W/r3a-sol.jsonl
+1
+exit 0 (log/19.txt)
+$ sh -c printf '{"item":"r3a-sol","model":"gpt-6.1-sol","verdict":"pass","reason":null,"incomplete":null,"proxy_config_sha256":"%s"}\n' $(sha256sum $W/export/quick/laneb/config/proxy.json | cut -d' ' -f1) > $W/r3a-sol.jsonl.route.json && echo 'fixture route record: pass (dry run only)'
+fixture route record: pass (dry run only)
+exit 0 (log/20.txt)
+$ sh -c cd $W/export && LEDGER=$W/r3a-sol.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/work-r3a-sol --model gpt-6.1-sol
+$W/work-r3a-sol/screen: 91 tasks x 1 models x 1 arms x 1 attempts, git 
+$W/work-r3a-sol/pilot: 10 tasks x 1 models x 1 arms x 1 attempts, git 
+prepared $W/work-r3a-sol: screen (91 tasks, none) and pilot (scikit-learn__scikit-learn-14087, sympy__sympy-15599, sphinx-doc__sphinx-8056, django__django-15973, matplotlib__matplotlib-25960, django__django-12406, sphinx-doc__sphinx-8548, sympy__sympy-22456, django__django-15572, pytest-dev__pytest-7490, told /investigate), item r3a-sol unbound
+exit 0 (log/21.txt)
+$ python3 $W/bin/jobtasks.py $DROPS $W/work-r3a-sol
+screen/job.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
+screen/oracle.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
+pilot/job.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
+pilot/oracle.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
+exit 0 (log/22.txt)
+$ bash -c jq -c .pilot_tasks $W/work-r3a-sol/plan.json; jq -c .pilot_tasks $A2; cmp <(jq -c .pilot_tasks $W/work-r3a-sol/plan.json) <(jq -c .pilot_tasks $A2) && echo 'pilot identical to attempt 2'
+["scikit-learn__scikit-learn-14087","sympy__sympy-15599","sphinx-doc__sphinx-8056","django__django-15973","matplotlib__matplotlib-25960","django__django-12406","sphinx-doc__sphinx-8548","sympy__sympy-22456","django__django-15572","pytest-dev__pytest-7490"]
+["scikit-learn__scikit-learn-14087","sympy__sympy-15599","sphinx-doc__sphinx-8056","django__django-15973","matplotlib__matplotlib-25960","django__django-12406","sphinx-doc__sphinx-8548","sympy__sympy-22456","django__django-15572","pytest-dev__pytest-7490"]
+pilot identical to attempt 2
+exit 0 (log/23.txt)
+$ bash $W/export/wiki/plans/2026-11-02-geva-168-r3a-attempt-2/preflight.sh.txt $R $W/export $W/work-r3a-sol
+preflight ok $W/export/quick/laneb/runner: pack exit 0, 38 entries
+preflight ok $W/work-r3a-sol/screen: pack exit 0, 1010 entries
+preflight ok $W/work-r3a-sol/pilot: pack exit 0, 119 entries
+preflight: all 3 directories pack; run may bind
+exit 0 (log/24.txt)
+## #112's r3-dry.ts with the export as TAG
+$ sh -c cd $W/export/wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg && sha256sum r3-dry.ts.txt dry-run.txt
+2fcd024d11074a4692816ea5bd9bf94ae90e77b45d4fe345612c060597cce7ec  r3-dry.ts.txt
+1dff5530ea0e698a306595bcce4be7c6c606cea71292903441a5f3c87ab8299c  dry-run.txt
+exit 0 (log/25.txt)
+# R3 scenario lift
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/lift lift
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.73 of $150, open reserves 0
+admission: 41 of 91 graded in-band tasks unsolved by Opus 5.5 none (2 infra); pilot exposure 8 of 9 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.76, told $1.22; projection r3b-opus $244, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $266.60 of $450, open reserves 0
+r3b-particle: settled $72.96 of $100, open reserves 0
+cell claude-opus-5-5 none: 121 trials on 41 tasks, pass 29.3% [20.3, 39.0], cost $90.93
+cell claude-opus-5-5 gstack: 118 trials on 41 tasks, pass 49.2% [39.4, 58.9], cost $166.41
+cell particle-1 none: 121 trials on 41 tasks, pass 17.9% [11.4, 25.2], cost $18.22
+cell particle-1 gstack: 121 trials on 41 tasks, pass 23.6% [15.4, 32.5], cost $34.26
+cell particle-1 placebo: 115 trials on 41 tasks, pass 12.6% [6.9, 19.1], cost $18.21
+contrast claude-opus-5-5 gstack - none: 19.9 points [95% CI 10.2, 30.5] on 41 tasks
+contrast particle-1 gstack - none: 5.7 points [95% CI -4.9, 16.3] on 41 tasks
+contrast particle-1 gstack - placebo: 11.0 points [95% CI 1.2, 21.1] on 41 tasks
+contrast particle-1 placebo - none: -5.3 points [95% CI -14.2, 3.3] on 41 tasks
+gap: particle-1 told closes 0.50 of the Opus none gap [-0.80, 2.29]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 111 of 118 graded Opus told trials (94.1 percent; the gate needs 90)
+R3 outcome: KEEP. Told /investigate lifts Opus 5.5 by 19.9 points [10.2, 30.5].
+exit 0 (log/26.txt)
+# R3 scenario small
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/small small
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.24 of $150, open reserves 0
+admission: 42 of 93 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 42 tasks; measured cost per trial none $0.74, told $1.44; projection r3b-opus $274, r3b-particle $57 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $280.10 of $450, open reserves 0
+r3b-particle: settled $73.64 of $100, open reserves 0
+cell claude-opus-5-5 none: 123 trials on 42 tasks, pass 31.3% [23.0, 39.3], cost $91.25
+cell claude-opus-5-5 gstack: 123 trials on 42 tasks, pass 35.3% [26.2, 44.8], cost $182.72
+cell particle-1 none: 124 trials on 42 tasks, pass 16.7% [9.5, 24.6], cost $18.03
+cell particle-1 gstack: 124 trials on 42 tasks, pass 20.2% [12.3, 29.0], cost $36.91
+cell particle-1 placebo: 125 trials on 42 tasks, pass 12.7% [7.1, 18.3], cost $17.77
+contrast claude-opus-5-5 gstack - none: 4.0 points [95% CI -7.1, 15.5] on 42 tasks
+contrast particle-1 gstack - none: 3.6 points [95% CI -6.7, 14.3] on 42 tasks
+contrast particle-1 gstack - placebo: 7.5 points [95% CI -2.4, 17.5] on 42 tasks
+contrast particle-1 placebo - none: -4.0 points [95% CI -13.5, 4.8] on 42 tasks
+gap: particle-1 told closes 0.24 of the Opus none gap [-0.73, 1.00]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 115 of 123 graded Opus told trials (93.5 percent; the gate needs 90)
+R3 outcome: FIX-METHOD. The lift (4.0 points) is inside the interval's reach of zero; MDD at 42 tasks is 14.1 points.
+exit 2 (log/27.txt)
+# R3 scenario nolift
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/nolift nolift
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.26 of $150, open reserves 0
+admission: 42 of 93 graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 42 tasks; measured cost per trial none $0.76, told $1.42; projection r3b-opus $276, r3b-particle $57 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $276.66 of $450, open reserves 0
+r3b-particle: settled $75.65 of $100, open reserves 0
+cell claude-opus-5-5 none: 124 trials on 42 tasks, pass 33.3% [23.8, 42.1], cost $93.96
+cell claude-opus-5-5 gstack: 126 trials on 42 tasks, pass 32.5% [23.0, 42.9], cost $181.79
+cell particle-1 none: 122 trials on 42 tasks, pass 17.9% [11.1, 25.0], cost $18.63
+cell particle-1 gstack: 123 trials on 42 tasks, pass 15.1% [7.9, 23.4], cost $36.82
+cell particle-1 placebo: 123 trials on 42 tasks, pass 16.7% [9.5, 24.6], cost $18.10
+contrast claude-opus-5-5 gstack - none: -0.8 points [95% CI -11.1, 9.5] on 42 tasks
+contrast particle-1 gstack - none: -2.8 points [95% CI -11.9, 6.3] on 42 tasks
+contrast particle-1 gstack - placebo: -1.6 points [95% CI -11.1, 7.9] on 42 tasks
+contrast particle-1 placebo - none: -1.2 points [95% CI -9.9, 7.1] on 42 tasks
+gap: particle-1 told closes -0.18 of the Opus none gap [-1.21, 0.41]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 118 of 126 graded Opus told trials (93.7 percent; the gate needs 90)
+R3 outcome: CUT-CANDIDATE. Told /investigate gave Opus 5.5 no lift (-0.8 points); to Garry with this record.
+exit 1 (log/28.txt)
+# R3 scenario gatefail
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/gatefail gatefail
+r3a-screen: 93 screen trials, 10 pilot trials, settled $96.33 of $150, open reserves 0
+admission: 41 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.72, told $1.53; projection r3b-opus $278, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $269.82 of $450, open reserves 0
+r3b-particle: settled $70.76 of $100, open reserves 0
+cell claude-opus-5-5 none: 122 trials on 41 tasks, pass 25.2% [17.9, 33.3], cost $91.91
+cell claude-opus-5-5 gstack: 123 trials on 41 tasks, pass 48.0% [38.2, 57.7], cost $176.94
+cell particle-1 none: 121 trials on 41 tasks, pass 10.6% [4.9, 17.1], cost $17.87
+cell particle-1 gstack: 121 trials on 41 tasks, pass 20.3% [12.2, 29.3], cost $34.01
+cell particle-1 placebo: 122 trials on 41 tasks, pass 15.4% [8.9, 22.8], cost $17.96
+contrast claude-opus-5-5 gstack - none: 22.8 points [95% CI 9.8, 35.0] on 41 tasks
+contrast particle-1 gstack - none: 9.8 points [95% CI 0.8, 19.5] on 41 tasks
+contrast particle-1 gstack - placebo: 4.9 points [95% CI -4.9, 16.3] on 41 tasks
+contrast particle-1 placebo - none: 4.9 points [95% CI -2.4, 12.2] on 41 tasks
+gap: particle-1 told closes 0.67 of the Opus none gap [0.05, 1.78]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 67 of 123 graded Opus told trials (54.5 percent; the gate needs 90)
+R3 outcome: none (procedure gate failed). FIX-METHOD to the Captain.
+exit 4 (log/29.txt)
+# R3 scenario saturated
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/saturated saturated
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.61 of $150, open reserves 0
+admission: 9 of 91 graded in-band tasks unsolved by Opus 5.5 none (2 infra); pilot exposure 10 of 10 graded told trials
+R3 outcome: STOP (saturation). Only 9 in-band tasks are unsolved by Opus 5.5 with no skill, fewer than 30, so told /investigate can't be tested on Opus 5.5 on SWE-bench Verified. This report is the finding; R3b does not start.
+exit 5 (log/30.txt)
+# R3 scenario pilotfail
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/pilotfail pilotfail
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.89 of $150, open reserves 0
+admission: 41 of 91 graded in-band tasks unsolved by Opus 5.5 none (2 infra); pilot exposure 4 of 10 graded told trials
+R3 outcome: STOP (FIX-METHOD). Told /investigate ran its procedure in 4 of 10 pilot trials, under 7; R3b does not start.
+exit 6 (log/31.txt)
+# R3 scenario screenstop
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/screenstop screenstop
+r3a-screen: 36 screen trials, 0 pilot trials, settled $40.60 of $150, open reserves 1
+R3 outcome: none (incomplete: r3a-screen refused claude-opus-5-5|none|django__django-15957|1 (cap)). R3a stopped at its cap, so R3b does not start; the Captain gets the record.
+exit 4 (log/32.txt)
+# R3 scenario opusstop
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/opusstop opusstop
+r3a-screen: 93 screen trials, 10 pilot trials, settled $97.50 of $150, open reserves 0
+admission: 41 of 90 graded in-band tasks unsolved by Opus 5.5 none (3 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.74, told $1.40; projection r3b-opus $264, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $56.42 of $450, open reserves 1
+r3b-particle: settled $73.38 of $100, open reserves 0
+cell claude-opus-5-5 none: 24 trials on 8 tasks, pass 16.7% [4.2, 29.2], cost $18.98
+cell claude-opus-5-5 gstack: 22 trials on 8 tasks, pass 50.0% [29.2, 70.8], cost $34.00
+cell particle-1 none: 119 trials on 41 tasks, pass 15.9% [9.8, 22.4], cost $19.10
+cell particle-1 gstack: 121 trials on 41 tasks, pass 22.0% [13.8, 30.9], cost $34.91
+cell particle-1 placebo: 119 trials on 41 tasks, pass 7.3% [3.3, 12.2], cost $17.51
+contrast claude-opus-5-5 gstack - none: 33.3 points [95% CI 12.5, 50.0] on 8 tasks
+contrast particle-1 gstack - none: 6.1 points [95% CI -2.4, 15.0] on 41 tasks
+contrast particle-1 gstack - placebo: 14.6 points [95% CI 4.1, 25.2] on 41 tasks
+contrast particle-1 placebo - none: -8.5 points [95% CI -15.1, -2.0] on 41 tasks
+gap: particle-1 told closes NaN of the Opus none gap [-2.00, 8.00]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 21 of 22 graded Opus told trials (95.5 percent; the gate needs 90)
+R3 outcome: none (incomplete: r3b-opus refused claude-opus-5-5|none|django__django-11790|1 (cap)). The Captain gets the record; no rerun to change a verdict.
+exit 4 (log/33.txt)
+# R3 scenario partstop
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/partstop partstop
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.89 of $150, open reserves 0
+admission: 41 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra); pilot exposure 9 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.75, told $1.56; projection r3b-opus $285, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $275.49 of $450, open reserves 0
+r3b-particle: settled $19.03 of $100, open reserves 1
+particle-1: incomplete (r3b-particle refused particle-1|gstack|django__django-13590|1 (cap)). Its cells, contrasts and gap share are reported beside the result marked [incomplete] and decide nothing; the Opus 5.5 outcome below stands.
+cell claude-opus-5-5 none: 117 trials on 41 tasks, pass 30.5% [21.1, 40.7], cost $88.80
+cell claude-opus-5-5 gstack: 119 trials on 41 tasks, pass 43.1% [32.9, 53.3], cost $176.49
+cell particle-1 none: 34 trials on 12 tasks, pass 19.4% [8.3, 33.3], cost $4.99 [incomplete]
+cell particle-1 gstack: 33 trials on 11 tasks, pass 24.2% [9.1, 42.4], cost $9.67 [incomplete]
+cell particle-1 placebo: 32 trials on 11 tasks, pass 3.0% [0.0, 9.1], cost $4.20 [incomplete]
+contrast claude-opus-5-5 gstack - none: 12.6 points [95% CI 3.7, 22.0] on 41 tasks
+contrast particle-1 gstack - none: 3.0 points [95% CI -15.2, 21.2] on 11 tasks [incomplete]
+contrast particle-1 gstack - placebo: 21.2 points [95% CI 3.0, 39.4] on 11 tasks [incomplete]
+contrast particle-1 placebo - none: -18.2 points [95% CI -30.3, -6.1] on 11 tasks [incomplete]
+gap: particle-1 told closes 0.07 of the Opus none gap [-0.44, 0.45] [incomplete]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 113 of 119 graded Opus told trials (95.0 percent; the gate needs 90)
+R3 outcome: KEEP. Told /investigate lifts Opus 5.5 by 12.6 points [3.7, 22.0].
+exit 0 (log/34.txt)
+# R3 scenario infra
+$ env TAG=$W/export bun $W/bin/r3-dry.ts $W/export/quick/laneb/tasks/swebv-r3.txt $W/laneb $W/r3/infra infra
+r3a-screen: 93 screen trials, 10 pilot trials, settled $99.78 of $150, open reserves 0
+admission: 41 of 92 graded in-band tasks unsolved by Opus 5.5 none (1 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 41 tasks; measured cost per trial none $0.77, told $1.40; projection r3b-opus $267, r3b-particle $55 (planning estimate $0.15 a trial); Garry records both caps before R3b starts
+r3b-opus: settled $264.11 of $450, open reserves 0
+r3b-particle: settled $73.21 of $100, open reserves 0
+cell claude-opus-5-5 none: 120 trials on 41 tasks, pass 34.6% [26.4, 43.1], cost $84.54
+cell claude-opus-5-5 gstack: 106 trials on 40 tasks, pass 47.5% [35.8, 59.2], cost $153.87
+cell particle-1 none: 120 trials on 41 tasks, pass 19.5% [12.2, 27.6], cost $19.09
+cell particle-1 gstack: 123 trials on 41 tasks, pass 24.4% [17.1, 32.5], cost $35.37
+cell particle-1 placebo: 121 trials on 41 tasks, pass 17.5% [10.2, 25.2], cost $17.99
+contrast claude-opus-5-5 gstack - none: 12.1 points [95% CI -0.4, 24.6] on 40 tasks
+contrast particle-1 gstack - none: 4.9 points [95% CI -4.1, 13.8] on 41 tasks
+contrast particle-1 gstack - placebo: 6.9 points [95% CI -2.4, 17.1] on 41 tasks
+contrast particle-1 placebo - none: -2.0 points [95% CI -11.8, 6.5] on 41 tasks
+gap: particle-1 told closes 0.32 of the Opus none gap [-0.46, 1.03]
+contamination: SWE-bench Verified and its fixes have been public since 2024, so R3 measures told /investigate on these tasks only and makes no claim about unseen bugs.
+procedure gate: told /investigate ran its procedure in 104 of 106 graded Opus told trials (98.1 percent; the gate needs 90)
+R3 outcome: none (incomplete: infra over 10% in an Opus cell (none 2.4%, told 13.8%)). The Captain gets the record; no rerun to change a verdict.
+exit 4 (log/35.txt)
+## Byte for byte: these R3 lines against #112's dry-run.txt
+$ sh -c wc -l < $W/r3/want.txt; wc -l < $W/r3/got.txt; diff $W/r3/want.txt $W/r3/got.txt && echo 'R3 lines identical:' $(wc -l < $W/r3/got.txt) of $(wc -l < $W/r3/want.txt)
+135
+135
+R3 lines identical: 135 of 135
+exit 0 (log/36.txt)
+## #133's r3a-caps.ts at the export, against #133's dry-run-r3.txt
+$ sh -c cd $W/export && B=$W/export bun $W/bin/r3a-caps.ts $W/caps > $W/caps.txt 2>&1; echo exit $?; grep -c . $W/caps.txt; grep -F -x -f $W/caps.txt $W/export/wiki/plans/2026-11-02-geva-152-r3-amendment/dry-run-r3.txt | wc -l
+exit 0
+17
+17
+exit 0 (log/37.txt)
+## The pin's keyless R3 tests
+$ sh -c cd $W/export && bun test quick/laneb/tests/r3.test.ts quick/laneb/tests/r3-sol.test.ts quick/laneb/tests/launch.test.ts quick/laneb/tests/vm-run.test.ts
+ 200 pass
+ 0 fail
+Ran 200 tests across 4 files. [142.60s]
+exit 0 (log/38.txt)
+## Done
+exit 0 (log/2.txt)
+
+## Part B: what changed from 3b's pin (b82ecf9) to the 3c pin
+
+$ git -C $G diff --stat b82ecf997c70daf9e4596b80baec3953f187a30e 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add -- quick
+ quick/lanea-quick/README.md         |   2 +-
+ quick/laneb/README.md               |   2 +-
+ quick/laneb/r3/screen.ts            |  22 ++++--
+ quick/laneb/runner/vm-run.sh        |  53 ++++++++++-----
+ quick/laneb/tests/r3-sol.test.ts    | 131 ++++++++++++++++++++++++++++++++++--
+ quick/laneb/tests/r3.test.ts        |  51 +++++++++++++-
+ quick/laneb/tests/real-proxy-rig.ts |  80 ++++++++++++++++++++++
+ quick/laneb/tests/vm-run.test.ts    |  82 +++++++++++++---------
+ quick/replay/README.md              |   2 +-
+ 9 files changed, 363 insertions(+), 62 deletions(-)
+exit 0 (log/3.txt)
+
+$ git -C $G diff --name-only b82ecf997c70daf9e4596b80baec3953f187a30e 8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add
+.github/ISSUE_TEMPLATE/bug_report.yml
+.github/ISSUE_TEMPLATE/config.yml
+.github/ISSUE_TEMPLATE/eval_idea.yml
+.github/ISSUE_TEMPLATE/security_contact.yml
+.github/pull_request_template.md
+.github/workflows/ci.yml
+.github/workflows/sealed.yml
+.github/workflows/train-gate.yml
+.gstack/pregate.json
+.gstack/sealed-allow.tsv
+CONTRIBUTING.md
+NOTICE.md
+README.md
+SECURITY.md
+docs/adapters.md
+docs/errors.md
+docs/skill-eval.md
+gate/manifest.json
+lanes/real-outcome/score/README.md
+lanes/real-outcome/score/analysis.ts
+lanes/real-outcome/score/detect.ts
+lanes/real-outcome/score/exposure.ts
+lanes/real-outcome/score/grade.ts
+lanes/real-outcome/task/SPEC.md
+lanes/real-outcome/task/check.ts
+policy/models.json
+quick/lanea-quick/README.md
+quick/laneb/README.md
+quick/laneb/r3/screen.ts
+quick/laneb/runner/vm-run.sh
+exit 0 (log/4.txt)
+
+$ sh -c cd $W/a3/export/quick/laneb && for f in r3/screen.ts r3/exposure.ts r3/route-check.ts runner/launch.sh runner/vm-run.sh runner/proxy.ts runner/ledger.ts runner/materialize.ts runner/prepare-run.ts analysis/analyze.ts config/cells.r3.json config/proxy.json tasks/swebv-r3.txt tasks/swebv-r3.json tasks/swebv-r3-drop.json; do o=$(git -C $G show b82ecf997c70daf9e4596b80baec3953f187a30e:quick/laneb/$f | sha256sum | cut -c1-64); p=$(sha256sum $f | cut -c1-64); if [ $o = $p ]; then s='same as b82ecf9'; else s='changed'; fi; echo "$p  $f  $s"; done
+a6c5f38bcfa5c2491e9fe68a324f8e607f83a55ef673b04cefaa11055b35df18  r3/screen.ts  changed
+0014c10d5c985248884451e6a7d50169d40470c95db3fa77326735e9535ef8cd  r3/exposure.ts  same as b82ecf9
+7df4ec57ff0c9ceaf8d76382044321c8deab7a0b0fe03f7f5dad1617249a8c22  r3/route-check.ts  same as b82ecf9
+ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38  runner/launch.sh  same as b82ecf9
+5f0d6aec5d14323a73d61ddb0ef25717309d30b9f71c5bd377820ae606158398  runner/vm-run.sh  changed
+af8fd9af8261a64ea86ecf20dff76fe1591e7715fec26e710ba352d4b0c995bb  runner/proxy.ts  same as b82ecf9
+9d9499646f21ba5a673a09ccb69ab70fb7f5850ee27f8b31fb9e6084b5ea7c33  runner/ledger.ts  same as b82ecf9
+e3c52bcb77ebc8d7ed6f46f3f9a3da400a4b09c6e593d9bc7c241578d62eae2e  runner/materialize.ts  same as b82ecf9
+52b4e8ba5a4878d7633081676495ffe8e83c35cb334e0462fc6173301515e17c  runner/prepare-run.ts  same as b82ecf9
+6ddca47eb3248768071428ae73428a511ddac00594c9a62000e3474208bbc68d  analysis/analyze.ts  same as b82ecf9
+387812b219ec229f4a6d19954f68bf71ea608ec49db310278cc98643c1339a05  config/cells.r3.json  same as b82ecf9
+4f54fff079f21a0e4e7f962431015a9ca316656f96a82f5cc8744fcada77ee9a  config/proxy.json  same as b82ecf9
+5d555f1ff7eb6d7f3b5fb760ad46992ab5fb49d975f4cbd4585a0cfa637fdc67  tasks/swebv-r3.txt  same as b82ecf9
+61cff3ff899591a0bf8c3caecb3917520bfe71a2bbf99d10f80e0f870dc4c0f5  tasks/swebv-r3.json  same as b82ecf9
+1f801fb38283714510fd850ddb59068c29f5e2a5a15d444f9055774df8ab26dc  tasks/swebv-r3-drop.json  same as b82ecf9
+exit 0 (log/5.txt)
+
+## Part C: 3b's capacity probe and screen.ts run at the pin, stub runner, no VM
+# 3b's probe fixtures and the run step's guard, with 3b's capacity-probe.sh.txt
+
+$ sh -c LEDGER=$W/probe-fixtures/fail.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/fail.jsonl eu-central-h1 $W/probe-fixtures/fail; echo probe exit $?; test ! -e $W/probe-fixtures/fail/probe-pass && echo 'no probe-pass'; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/fail.jsonl --item r3-capacity-probe
+probe: eu-central-h1 standard-16 640 GB, window 5s, at least 2s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
+probe 1 at 2026-11-03T01:58:08Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671088-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2026-11-03T01:58:10Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671090-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2026-11-03T01:58:12Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671092-3-t1 confirmed gone, 0 s, settled $0.000000
+probe 4 at 2026-11-03T01:58:13Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671093-4-t1 confirmed gone, 0 s, settled $0.000000
+probe: every probe in eu-central-h1 failed in the 5s window (4 probes); nothing binds
+probe exit 1
+no probe-pass
+{"cap_usd":5,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
+exit 0 (log/6.txt)
+
+$ sh -c LEDGER=$W/probe-fixtures/window.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && echo 1800000000 > $W/probe-fixtures/clock && PATH=$W/bin/clock:$PATH FAKE_CLOCK=$W/probe-fixtures/clock STUB_STATE=$W/probe-fixtures/s-window UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/window.jsonl eu-central-h1 $W/probe-fixtures/window; echo probe exit $?; echo fake clock at the end: first probe start + $(( $(cat $W/probe-fixtures/clock) - 1800000000 )) s; echo up calls: $(grep -c '^up ' $W/probe-fixtures/s-window/calls); bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/window.jsonl --item r3-capacity-probe
+probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
+probe 1 at 2027-01-15T08:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800000000-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2027-01-15T08:10:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800000600-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2027-01-15T08:20:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800001200-3-t1 confirmed gone, 0 s, settled $0.000000
+probe 4 at 2027-01-15T08:30:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800001800-4-t1 confirmed gone, 0 s, settled $0.000000
+probe 5 at 2027-01-15T08:40:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800002400-5-t1 confirmed gone, 0 s, settled $0.000000
+probe 6 at 2027-01-15T08:50:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800003000-6-t1 confirmed gone, 0 s, settled $0.000000
+probe 7 at 2027-01-15T09:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800003600-7-t1 confirmed gone, 0 s, settled $0.000000
+probe 8 at 2027-01-15T09:10:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800004200-8-t1 confirmed gone, 0 s, settled $0.000000
+probe 9 at 2027-01-15T09:20:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800004800-9-t1 confirmed gone, 0 s, settled $0.000000
+probe 10 at 2027-01-15T09:30:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800005400-10-t1 confirmed gone, 0 s, settled $0.000000
+probe 11 at 2027-01-15T09:40:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800006000-11-t1 confirmed gone, 0 s, settled $0.000000
+probe 12 at 2027-01-15T09:50:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800006600-12-t1 confirmed gone, 0 s, settled $0.000000
+probe 13 at 2027-01-15T10:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800007200-13-t1 confirmed gone, 0 s, settled $0.000000
+probe 14 at 2027-01-15T10:10:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800007800-14-t1 confirmed gone, 0 s, settled $0.000000
+probe 15 at 2027-01-15T10:20:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800008400-15-t1 confirmed gone, 0 s, settled $0.000000
+probe 16 at 2027-01-15T10:30:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800009000-16-t1 confirmed gone, 0 s, settled $0.000000
+probe 17 at 2027-01-15T10:40:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800009600-17-t1 confirmed gone, 0 s, settled $0.000000
+probe 18 at 2027-01-15T10:50:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800010200-18-t1 confirmed gone, 0 s, settled $0.000000
+probe 19 at 2027-01-15T11:00:00Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1800010800-19-t1 confirmed gone, 0 s, settled $0.000000
+probe: every probe in eu-central-h1 failed in the 10800s window (19 probes); nothing binds
+probe exit 1
+fake clock at the end: first probe start + 10800 s
+up calls: 19
+{"cap_usd":5,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
+exit 0 (log/7.txt)
+
+$ sh -c LEDGER=$W/probe-fixtures/late.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/late.jsonl eu-north-h1 $W/probe-fixtures/late; echo probe exit $?; cat $W/probe-fixtures/late/probe-pass; cat $W/probe-fixtures/s-late/calls
+probe: eu-north-h1 standard-16 640 GB, window 60s, at least 2s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
+probe 1 at 2026-11-03T01:58:15Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671095-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2026-11-03T01:58:17Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671097-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2026-11-03T01:58:19Z: pass, ubirun-fixture-1793671099-3-t1 reached running and is destroyed, 0 s, settled $0.000000; list --mine empty
+probe exit 0
+location=eu-north-h1
+vm=ubirun-fixture-1793671099-3-t1
+passed=2026-11-03T01:58:19Z
+up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793671095-1-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793671097-2-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793671099-3-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+exit 0 (log/8.txt)
+
+$ sh -c LEDGER=$W/probe-fixtures/left.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/left.jsonl eu-central-h1 $W/probe-fixtures/left; echo probe exit $?; test ! -e $W/probe-fixtures/left/probe-pass && echo 'no probe-pass'; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/left.jsonl --item r3-capacity-probe
+probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
+probe 1 at 2026-11-03T01:58:19Z: VM ubirun-fixture-1793671099-1-t1 may still exist (down exit 1, list --mine exit 0, listed: eu-central-h1  ubirun-fixture-1793671099-1-t1); reserve probe-1-1793671099 stays open and must be settled for the VM's full life after cleanup; destroy the VM before anything else
+probe exit 3
+no probe-pass
+{"cap_usd":5,"settled_usd":0,"open_reserved_usd":0.3,"open_ids":1}
+exit 0 (log/9.txt)
+
+$ sh -c LEDGER=$W/probe-fixtures/cap.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 0.2 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-cap UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/cap.jsonl eu-central-h1 $W/probe-fixtures/cap; echo probe exit $?; test ! -e $W/probe-fixtures/s-cap/calls && echo 'the runner was never called'
+probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
+probe 1: the probe ledger refused the $0.30 reserve ({"ok":false,"reason":"cap","totals":{"capMicros":200000,"settledMicros":0,"openReservedMicros":0,"openIds":[]}}); no VM was asked for
+probe exit 9
+the runner was never called
+exit 0 (log/10.txt)
+
+$ bash -c guard () 
+{ 
+    test -f "$1/probe-pass" && grep -qx "location=$2" "$1/probe-pass" && test $(( $(date +%s) - $(stat -c %Y "$1/probe-pass") )) -le 1800
+}; guard $W/probe-fixtures/late eu-north-h1 && echo 'fresh pass in eu-north-h1: the run step may start'; guard $W/probe-fixtures/late eu-central-h1 || echo 'pass in another location: the run step refuses'; touch -d '31 minutes ago' $W/probe-fixtures/late/probe-pass; guard $W/probe-fixtures/late eu-north-h1 || echo 'pass 31 minutes old: the run step refuses'; guard $W/probe-fixtures/fail eu-central-h1 || echo 'no pass: the run step refuses'
+fresh pass in eu-north-h1: the run step may start
+pass in another location: the run step refuses
+pass 31 minutes old: the run step refuses
+no pass: the run step refuses
+exit 0 (log/11.txt)
+
+# Refusals before the bind, on part A's unbound temporary ledgers and work dirs
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-blank $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 UBI_RUNNER=
+E_USAGE UBI_RUNNER is unset or blank; set it to the ubi-runner.sh copy launch.sh starts the VMs with; r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/12.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-noexec $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 UBI_RUNNER=$W/bin/stub-noexec.sh
+E_USAGE UBI_RUNNER "$W/bin/stub-noexec.sh" is not an executable file or a command on PATH; set it to the ubi-runner.sh copy launch.sh starts the VMs with; r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/13.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-owner $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 UBI_OWNER=
+E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/14.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-owner2 $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 UBI_OWNER=--
+E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/15.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-nokey $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 -u UBICLOUD_API_KEY
+E_USAGE set UBICLOUD_API_KEY; ubi-runner.sh starts no VM without it (UBICLOUD_API_TOKEN also works); r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/16.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-ttl0 $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 UBI_TTL_HOURS=0
+E_USAGE UBI_TTL_HOURS "0" is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/17.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-screen-ttl03 $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911 UBI_TTL_HOURS=03
+E_USAGE UBI_TTL_HOURS "03" is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; r3a-screen is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/18.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-blank $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_RUNNER=
+E_USAGE UBI_RUNNER is unset or blank; set it to the ubi-runner.sh copy launch.sh starts the VMs with; r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/19.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-noexec $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_RUNNER=$W/bin/stub-noexec.sh
+E_USAGE UBI_RUNNER "$W/bin/stub-noexec.sh" is not an executable file or a command on PATH; set it to the ubi-runner.sh copy launch.sh starts the VMs with; r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/20.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-owner $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_OWNER=
+E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/21.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-owner2 $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_OWNER=--
+E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/22.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-nokey $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 -u UBICLOUD_API_KEY
+E_USAGE set UBICLOUD_API_KEY; ubi-runner.sh starts no VM without it (UBICLOUD_API_TOKEN also works); r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/23.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-ttl0 $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_TTL_HOURS=0
+E_USAGE UBI_TTL_HOURS "0" is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/24.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-r3a-sol-ttl03 $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_TTL_HOURS=03
+E_USAGE UBI_TTL_HOURS "03" is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; r3a-sol is still unbound
+run exit 2
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: yes, fix the input and run the step again
+exit 0 (log/25.txt)
+
+# A fresh approved ledger that already holds a reserve: refused before the bind, and the retry check says no
+
+$ sh -c LEDGER=$W/c/hist.jsonl bun $W/bin/approve.ts $W/a3/export r3a-screen 150 'Dry run: a temporary ledger, no spend' GEVA-221 && echo '{"ts":"1970-01-01T00:00:00.000Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/django__django-10973__a1","usd_micros":4000000}' >> $W/c/hist.jsonl && jq -c '{kind, item, id, usd_micros}' $W/c/hist.jsonl
+{"kind":"approval","item":"r3a-screen","id":"approval","usd_micros":150000000}
+{"kind":"reserve","item":"r3a-screen","id":"r3a-screen/django__django-10973__a1","usd_micros":4000000}
+exit 0 (log/26.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-hist $W/c/hist.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911
+E_INTERNAL $W/c/hist.jsonl: r3a-screen already holds 1 reserve or settle rows; an item serves one run (prereg section 5)
+run exit 1
+bound before: no, bound after: no
+ledger unchanged
+the runner was never called
+retry check: no, the record goes to the Captain (rows besides the approval: {"ts":"1970-01-01T00:00:00.000Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/django__django-10973__a1","usd_micros":4000000} )
+exit 0 (log/27.txt)
+
+# no-start.sh.txt on a refusal before the bind (exit 2): not a no-start
+
+$ bash -c cd $W/a3/export && $W/bin/runenv.sh $W/a3/r3a-screen.jsonl $W/c/s-pre 9911 eu-central-h1 env UBI_RUNNER= bun quick/laneb/r3/screen.ts run $W/a3/work-r3a-screen --model claude-opus-5-5 > $W/c/run-pre.log 2>&1; echo run exit $?; cat $W/c/run-pre.log; bash $B3/no-start.sh.txt $W/a3/work-r3a-screen $W/c/run-pre.log $W/a3/r3a-screen.jsonl claude-opus-5-5
+run exit 2
+E_USAGE UBI_RUNNER is unset or blank; set it to the ubi-runner.sh copy launch.sh starts the VMs with; r3a-screen is still unbound
+not a no-start: $W/a3/work-r3a-screen/screen.launch-exit is missing
+exit 1 (log/28.txt)
+
+# 3b's no-start rule at the pin: each model's run binds, the stub's up fails, no-start.sh.txt classifies it
+
+$ bash -c cd $W/a3/export && $W/bin/runenv.sh $W/a3/r3a-screen.jsonl $W/c/s-a5 9911 eu-central-h1 bun quick/laneb/r3/screen.ts run $W/a3/work-r3a-screen --model claude-opus-5-5 > $W/c/run-a5.log 2>&1; echo run exit $?; cat $W/a3/work-r3a-screen/screen.launch-exit; cat $W/c/run-a5.log; cat $W/c/s-a5/calls
+run exit 0
+1
+{"cap_usd":150,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
+{"ok":true,"existing":false}
+ubi-runner: reap: no expired VMs
+ubi-runner: creating eu-central-h1/ubirun-fixture-1793671101-1-t1 (standard-16)
+ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)
+ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793671101-1-t1
+{"ok":true}
+screen: launch exited 1; the run stops here
+up -s standard-16 -S 640 UBI_LOCATION=eu-central-h1 UBI_SIZE=standard-16 UBI_STORAGE=640
+exit 0 (log/29.txt)
+
+$ bash $B3/no-start.sh.txt $W/a3/work-r3a-screen $W/c/run-a5.log $W/a3/r3a-screen.jsonl claude-opus-5-5
+no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
+exit 0 (log/30.txt)
+
+$ sh -c cd $W/a3/export && LEDGER=$W/a3/r3a-screen.jsonl bun quick/laneb/r3/screen.ts analyze $W/a3/work-r3a-screen --model claude-opus-5-5; echo analyze exit $?
+r3a-screen: 0 screen trials, 0 pilot trials, settled $0.00 of $150, open reserves 0
+R3 outcome: none (incomplete: screen's launch exited 1). R3a stopped, so R3b does not start; the Captain gets the record.
+analyze exit 4
+exit 0 (log/31.txt)
+
+$ bash -c cd $W/a3/export && $W/bin/runenv.sh $W/a3/r3a-sol.jsonl $W/c/s-sol 9912 eu-central-h1 bun quick/laneb/r3/screen.ts run $W/a3/work-r3a-sol --model gpt-6.1-sol > $W/c/run-sol.log 2>&1; echo run exit $?; cat $W/c/run-sol.log; bash $B3/no-start.sh.txt $W/a3/work-r3a-sol $W/c/run-sol.log $W/a3/r3a-sol.jsonl gpt-6.1-sol
+run exit 0
+{"cap_usd":140,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
+{"ok":true,"existing":false}
+ubi-runner: reap: no expired VMs
+ubi-runner: creating eu-central-h1/ubirun-fixture-1793671101-1-t1 (standard-16)
+ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)
+ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793671101-1-t1
+{"ok":true}
+screen: launch exited 1; the run stops here
+no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
+exit 0 (log/32.txt)
+
+# 3b's four records that are not no-starts
+
+$ bash -c cp -r $W/a3/work-r3a-screen $W/c/x1 && echo 6 > $W/c/x1/screen.launch-exit && { cat $W/c/run-a5.log; echo 'vm: ubirun-fixture-x1-t24'; } > $W/c/x1.log && bash $B3/no-start.sh.txt $W/c/x1 $W/c/x1.log $W/a3/r3a-screen.jsonl claude-opus-5-5
+not a no-start: the screen's launch exited 6, not 1
+exit 1 (log/33.txt)
+
+$ bash -c cp -r $W/a3/work-r3a-screen $W/c/x2 && echo 9 > $W/c/x2/screen.launch-exit && bash $B3/no-start.sh.txt $W/c/x2 $W/c/run-a5.log $W/a3/r3a-screen.jsonl claude-opus-5-5
+not a no-start: the screen's launch exited 9, not 1
+exit 1 (log/34.txt)
+
+$ bash -c cp -r $W/a3/work-r3a-screen $W/c/x3 && echo 0 > $W/c/x3/pilot.launch-exit && bash $B3/no-start.sh.txt $W/c/x3 $W/c/run-a5.log $W/a3/r3a-screen.jsonl claude-opus-5-5
+not a no-start: the pilot launched
+exit 1 (log/35.txt)
+
+$ bash -c cp $W/a3/r3a-screen.jsonl $W/c/x4.jsonl && echo '{"ts":"1970-01-01T00:00:00.000Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/django__django-10973__a1","usd_micros":4000000}' >> $W/c/x4.jsonl && bash $B3/no-start.sh.txt $W/a3/work-r3a-screen $W/c/run-a5.log $W/c/x4.jsonl claude-opus-5-5
+not a no-start: the ledger holds spend rows that are not VM blocks: r3a-screen/django__django-10973__a1
+exit 1 (log/36.txt)
+
+# A rerun on a bound item is refused as bound, before any other check
+
+$ bash $W/bin/refuse.sh $W/c/s-rerun $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911
+E_INTERNAL r3a-screen is already bound to a run ({"item":"r3a-screen","work":"$W/a3/work-r3a-screen","at":"2026-11-03T01:58:21.007Z"}); an item serves one run (prereg section 5)
+run exit 1
+bound before: yes, bound after: yes
+ledger unchanged
+the runner was never called
+retry check: no, the record goes to the Captain (rows besides the approval: {"kind_detail":"VM hours, block 1 of 4 h","ts":"2026-11-03T01:58:21.060Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/vm","usd_micros":2400000} {"kind_detail":"VM hours: 0.000000 h at $0.60/h, block 1 of 1","ts":"2026-11-03T01:58:21.135Z","item":"r3a-screen","kind":"settle","id":"r3a-screen/vm","usd_micros":0,"reserved_micros":2400000,"over_reserve":false} )
+exit 0 (log/37.txt)
+
+$ bash $W/bin/refuse.sh $W/c/s-rerun-sol $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_RUNNER=
+E_INTERNAL r3a-sol is already bound to a run ({"item":"r3a-sol","work":"$W/a3/work-r3a-sol","at":"2026-11-03T01:58:21.290Z"}); an item serves one run (prereg section 5)
+run exit 1
+bound before: yes, bound after: yes
+ledger unchanged
+the runner was never called
+retry check: no, the record goes to the Captain (rows besides the approval: {"kind_detail":"VM hours, block 1 of 4 h","ts":"2026-11-03T01:58:21.351Z","item":"r3a-sol","kind":"reserve","id":"r3a-sol-screen/vm","usd_micros":2400000} {"kind_detail":"VM hours: 0.000000 h at $0.60/h, block 1 of 1","ts":"2026-11-03T01:58:21.413Z","item":"r3a-sol","kind":"settle","id":"r3a-sol-screen/vm","usd_micros":0,"reserved_micros":2400000,"over_reserve":false} )
+exit 0 (log/38.txt)
+
+# Sol a2: a fresh ledger with a1's passed route record carried forward (3b section 4.5 item 2)
+
+$ sh -c LEDGER=$W/c/r3a-sol-a2.jsonl bun $W/bin/approve.ts $W/a3/export r3a-sol 140 'Dry run: a temporary ledger, no spend' GEVA-221 && cd $W/a3/export && (LEDGER=$W/c/r3a-sol-a2.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/c/work-sol-a2 --model gpt-6.1-sol; echo 'prepare without the route record: exit' $?) 2>&1 | tail -2
+E_INTERNAL GPT-6.1 Sol has not passed its route check on r3a-sol ($W/c/r3a-sol-a2.jsonl.route.json); run r3/route-check.ts first
+prepare without the route record: exit 1
+exit 0 (log/39.txt)
+
+$ sh -c test ! -e $W/c/r3a-sol-a2.jsonl.route.json && cp $ROUTE $W/c/r3a-sol-a2.jsonl.route.json && sha256sum $ROUTE $W/c/r3a-sol-a2.jsonl.route.json && jq -c '{item, model, verdict, proxy_config_sha256}' $W/c/r3a-sol-a2.jsonl.route.json && sha256sum $W/a3/export/quick/laneb/config/proxy.json && cd $W/a3/export && LEDGER=$W/c/r3a-sol-a2.jsonl SWEBV=$SWEBV ARMS=$ARMS ORACLE=1 CONCURRENT=8 bun quick/laneb/r3/screen.ts prepare $W/c/work-sol-a2b --model gpt-6.1-sol && python3 $W/a3/bin/jobtasks.py $DROPS $W/c/work-sol-a2b
+386c4ef6021c8802aa5b68aa0a0e382c152870f66a00b1546ae09f7095b2a5b9  $ROUTE
+386c4ef6021c8802aa5b68aa0a0e382c152870f66a00b1546ae09f7095b2a5b9  $W/c/r3a-sol-a2.jsonl.route.json
+{"item":"r3a-sol","model":"gpt-6.1-sol","verdict":"pass","proxy_config_sha256":"4f54fff079f21a0e4e7f962431015a9ca316656f96a82f5cc8744fcada77ee9a"}
+4f54fff079f21a0e4e7f962431015a9ca316656f96a82f5cc8744fcada77ee9a  $W/a3/export/quick/laneb/config/proxy.json
+$W/c/work-sol-a2b/screen: 91 tasks x 1 models x 1 arms x 1 attempts, git 
+$W/c/work-sol-a2b/pilot: 10 tasks x 1 models x 1 arms x 1 attempts, git 
+prepared $W/c/work-sol-a2b: screen (91 tasks, none) and pilot (scikit-learn__scikit-learn-14087, sympy__sympy-15599, sphinx-doc__sphinx-8056, django__django-15973, matplotlib__matplotlib-25960, django__django-12406, sphinx-doc__sphinx-8548, sympy__sympy-22456, django__django-15572, pytest-dev__pytest-7490, told /investigate), item r3a-sol unbound
+screen/job.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
+screen/oracle.json: 91 tasks, ids sha256 2a2cfc68303918b20987888cbb2ceb2148796d60683595cfc3dbfb2cdb03debe, dropped tasks in it: 0; kept ids match
+pilot/job.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
+pilot/oracle.json: 10 tasks, ids sha256 9cdc862b048fb3275cdcaac57f25844e82ce5a18805e1ff7bf48cc615ae79294, dropped tasks in it: 0
+exit 0 (log/40.txt)
+
+$ bash -c cd $W/a3/export && $W/bin/runenv.sh $W/c/r3a-sol-a2.jsonl $W/c/s-sol-a2 9912 eu-central-h1 bun quick/laneb/r3/screen.ts run $W/c/work-sol-a2b --model gpt-6.1-sol > $W/c/run-sol-a2.log 2>&1; echo run exit $?; bash $B3/no-start.sh.txt $W/c/work-sol-a2b $W/c/run-sol-a2.log $W/c/r3a-sol-a2.jsonl gpt-6.1-sol
+run exit 0
+no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
+exit 0 (log/41.txt)
+
+## Part D: e2e-3c.sh.txt on the export
+
+$ bash $C/e2e-3c.sh.txt $W/a3/export/quick/laneb $ARMS $W/e2e
+harbor 0.25.0, bun 1.4.4, docker 29.9.2
+wrote $W/e2e/D1/job.json: 1 tasks x 1 agents x 2 attempts
+## D1: ledger cap $20, batch cap $150, STOP_ON_CAP no
+vm-run.sh exit 0 after 38 s
+out/: close-all.json harbor.log images.txt job.resolved.json ledger-status-end.json ledger-status-start.json proxy-requests.jsonl proxy-sessions.jsonl proxy-status-end.json proxy-totals.json proxy.log pull.d pulls.tsv vm-run.exit 
+--- out/vm-run.exit
+0
+--- out/proxy-status-end.json
+{"sessions":2,"open_sessions":0,"unsettled_sessions":[],"cap_stop":null,"global_spent_micros":103000}
+rule 5: readable, no cap stop
+--- out/cap-stop.json
+(missing or empty)
+rule 5: absent, not read
+--- out/proxy-totals.json
+{"global_spent_micros":103000,"cap_stop":null,"open_sessions":0,"unsettled_sessions":[],"sessions":2}
+--- out/close-all.json
+[]
+--- out/proxy-sessions.jsonl
+{"trial":"smoke-task__6D4ia7a__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
+{"trial":"smoke-task__GvmXYMv__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
+--- out/proxy-requests.jsonl events
+      2 body_load_probe
+     10 request
+      2 session_open
+--- out/ledger-status-start.json
+{"capMicros":20000000,"settledMicros":0,"openReservedMicros":0,"openIds":[]}
+--- out/ledger-status-end.json
+{"capMicros":20000000,"settledMicros":103000,"openReservedMicros":0,"openIds":[]}
+--- ledger rows
+{"kind":"approval","id":"approval","usd_micros":20000000}
+{"kind":"reserve","id":"dry-D1/s-94bf61dec450","usd_micros":4000000}
+{"kind":"reserve","id":"dry-D1/s-73401b7b69b2","usd_micros":4000000}
+{"kind":"settle","id":"dry-D1/s-94bf61dec450","usd_micros":51500}
+{"kind":"settle","id":"dry-D1/s-73401b7b69b2","usd_micros":51500}
+--- spend agrees: sessions 103000, proxy 103000, ledger settled 103000 (micros)
+--- out/pulls.tsv
+status	tries	rate_limit_wait_s	image
+ok	1	0	gogost/gost:3.2.7-nightly.20260602@sha256:afc0137758ab4ce399d47a299f9abbacbf522b52a17e59cbb4b4e7a1a66e9196
+ok	1	0	node:24-bookworm-slim
+ok	1	0	python:3.11-slim-bookworm
+--- trials
+smoke-task__6D4ia7a: result.json yes, reward 1, exception none
+smoke-task__GvmXYMv: result.json yes, reward 1, exception none
+--- harbor.log, last 5 lines
+Total runtime: 31s
+Results written to jobs/dry-3c/result.json
+Inspect results by running `harbor view jobs`
+Share results by running `harbor upload jobs/dry-3c`
+--- fake upstream requests so far: 20
+wrote $W/e2e/D2/job.json: 1 tasks x 1 agents x 2 attempts
+## D2: ledger cap $5, batch cap $150, STOP_ON_CAP yes
+vm-run.sh exit 130 after 27 s
+out/: cap-stop.json close-all.json harbor.log images.txt job.resolved.json ledger-status-end.json ledger-status-start.json proxy-requests.jsonl proxy-sessions.jsonl proxy-status-end.json proxy-totals.json proxy.log pull.d pulls.tsv vm-run.exit 
+--- out/vm-run.exit
+130
+--- out/proxy-status-end.json
+{"sessions":1,"open_sessions":0,"unsettled_sessions":[],"cap_stop":"ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z","global_spent_micros":51500}
+rule 5: cap stop: incomplete (ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z)
+--- out/cap-stop.json
+{"sessions":1,"open_sessions":0,"unsettled_sessions":[],"cap_stop":"ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z","global_spent_micros":51500}
+rule 5: cap stop: incomplete (ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z)
+--- out/proxy-totals.json
+{"global_spent_micros":51500,"cap_stop":"ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z","open_sessions":0,"unsettled_sessions":[],"sessions":1}
+--- out/close-all.json
+[]
+--- out/proxy-sessions.jsonl
+{"trial":"smoke-task__ZEnpUVE__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
+--- out/proxy-requests.jsonl events
+      1 body_load_probe
+      1 cap_stop
+      5 request
+      1 session_open
+--- out/ledger-status-start.json
+{"capMicros":5000000,"settledMicros":0,"openReservedMicros":0,"openIds":[]}
+--- out/ledger-status-end.json
+{"capMicros":5000000,"settledMicros":51500,"openReservedMicros":0,"openIds":[]}
+--- ledger rows
+{"kind":"approval","id":"approval","usd_micros":5000000}
+{"kind":"reserve","id":"dry-D2/s-1ca66d6ec802","usd_micros":4000000}
+{"kind":"settle","id":"dry-D2/s-1ca66d6ec802","usd_micros":51500}
+--- spend agrees: sessions 51500, proxy 51500, ledger settled 51500 (micros)
+--- out/pulls.tsv
+status	tries	rate_limit_wait_s	image
+ok	1	0	gogost/gost:3.2.7-nightly.20260602@sha256:afc0137758ab4ce399d47a299f9abbacbf522b52a17e59cbb4b4e7a1a66e9196
+ok	1	0	node:24-bookworm-slim
+ok	1	0	python:3.11-slim-bookworm
+--- trials
+smoke-task__ZEnpUVE: result.json yes, reward 1, exception none
+smoke-task__q5y7tYA: result.json yes, reward none, exception LedgerCapStop
+--- harbor.log, last 5 lines
+Task smoke-task: Configured runtime overrides apply only to the agent environment and are not propagated to separate verifier environments (extra_docker_compose: $W/a3/export/quick/laneb/runner/agent-caps.compose.yaml). Bake grading dependencies into the verifier image under tests/ or declare required agent outputs as artifacts.
+Task smoke-task: Configured runtime overrides apply only to the agent environment and are not propagated to separate verifier environments (extra_docker_compose: $W/a3/export/quick/laneb/runner/agent-caps.compose.yaml). Bake grading dependencies into the verifier image under tests/ or declare required agent outputs as artifacts.
+WARNING: Error loading config file: open /root/.docker/config.json: permission denied
+  2/2 Mean: 0.500 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:19 0:00:00
+--- fake upstream requests so far: 30
+## leftovers
+containers: 0, ports: none else
+## assertions
+PASS D1: vm-run.sh exits 0
+PASS D1: proxy-status-end.json has cap_stop null
+PASS D1: spend agrees across sessions, proxy and ledger
+PASS D2: vm-run.sh exits 130
+PASS D2: proxy-status-end.json has cap_stop set
+PASS D2: cap-stop.json has cap_stop set
+PASS D2: spend agrees across sessions, proxy and ledger
+exit 0 (log/42.txt)
+
+## Done
+dry exit 0 after 355 s
