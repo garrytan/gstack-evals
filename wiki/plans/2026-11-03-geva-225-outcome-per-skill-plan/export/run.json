@@ -1,0 +1,1070 @@
+{
+  "schema_version": 1,
+  "run": "autoplan-20261103023817",
+  "status": "complete",
+  "required_phases": [
+    "ceo",
+    "design",
+    "dx",
+    "eng"
+  ],
+  "phases": {
+    "ceo": {
+      "confirm": {
+        "round": 2,
+        "previous_sha256": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b",
+        "added": 159,
+        "removed": 117
+      },
+      "snapshot": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "snapshot_dir": "<local notes (not committed)>/autoplan-ceo-3xMLJc",
+      "snapshot_path": "<local notes (not committed)>/autoplan-ceo-3xMLJc/ceo-implementation.md",
+      "methodology": "<local notes (not committed)>/autoplan-ceo-methodology-u6Pe1j/methodology.md",
+      "opened_at": "2026-11-03T14:22:39.210Z",
+      "sections": {
+        "loaded": [
+          "review-sections"
+        ],
+        "skipped": [],
+        "checklist": true
+      },
+      "native": {
+        "status": "completed",
+        "attempts": [
+          {
+            "attempt": "autoplan-20261103023817-a5",
+            "state": "submitted",
+            "prompt": "<local notes (not committed)>/ceo-native-prompt.md",
+            "result": "<local notes (not committed)>/ceo-native.a5.md",
+            "estimate_usd": 5,
+            "dispatched_at": "2026-11-03T14:22:39.214Z",
+            "terminal_at": "2026-11-03T14:46:16.863Z"
+          }
+        ],
+        "attempt": "autoplan-20261103023817-a5",
+        "model": "anthropic/claude-opus-5-5",
+        "provider": "host-subagent",
+        "output": "ceo-native.a5.bound.md",
+        "result_sha256": "95c535c72b227e82c271b4400449972b736abe7688117bebeff39d9a099183b7",
+        "findings": 15,
+        "usage": {
+          "usd": "unknown"
+        },
+        "receipt": "verified",
+        "findings_source": "fence",
+        "reviewed_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283"
+      },
+      "outside": {
+        "status": "disabled"
+      },
+      "prompts": {
+        "native": "<local notes (not committed)>/ceo-native-prompt.md",
+        "outside": "<local notes (not committed)>/ceo-outside-prompt.md",
+        "nativeResult": "<local notes (not committed)>/ceo-native.md",
+        "outsideResult": "<local notes (not committed)>/ceo-outside.md"
+      },
+      "consensus": {
+        "confirmed": 0,
+        "unverified": 0,
+        "disagree": 0,
+        "new": 0,
+        "native_only": 15,
+        "coverage": "native_only"
+      },
+      "closed_at": "2026-11-03T14:46:16.878Z"
+    },
+    "design": {
+      "native": {
+        "status": "skipped",
+        "detail": "deferred: Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the design measurement text is unchanged from the reviewed v1, and its open findings carry to the gate."
+      },
+      "outside": {
+        "status": "skipped",
+        "detail": "deferred: Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the design measurement text is unchanged from the reviewed v1, and its open findings carry to the gate."
+      },
+      "deferred": {
+        "reason": "Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the design measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.",
+        "by": "agent:GEVA-2",
+        "cause": "owner",
+        "at": "2026-11-03T14:23:22.259Z",
+        "round": 2,
+        "counts": {
+          "Critical": 1,
+          "High": 4,
+          "Medium": 6,
+          "Low": 1,
+          "Informational": 0
+        },
+        "carried_file": "design-deferred.findings.jsonl",
+        "blockers": [
+          "autoplan-20261103023817-design-native-1"
+        ],
+        "open": 12
+      },
+      "consensus": {
+        "confirmed": 0,
+        "unverified": 0,
+        "disagree": 0,
+        "new": 0,
+        "native_only": 0,
+        "coverage": "none",
+        "deferred": true
+      },
+      "closed_at": "2026-11-03T14:23:22.259Z"
+    },
+    "dx": {
+      "native": {
+        "status": "skipped",
+        "detail": "deferred: Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the devex measurement text is unchanged from the reviewed v1, and its open findings carry to the gate."
+      },
+      "outside": {
+        "status": "skipped",
+        "detail": "deferred: Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the devex measurement text is unchanged from the reviewed v1, and its open findings carry to the gate."
+      },
+      "deferred": {
+        "reason": "Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the devex measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.",
+        "by": "agent:GEVA-2",
+        "cause": "owner",
+        "at": "2026-11-03T14:23:33.437Z",
+        "round": 2,
+        "counts": {
+          "Critical": 1,
+          "High": 6,
+          "Medium": 6,
+          "Low": 3,
+          "Informational": 0
+        },
+        "carried_file": "dx-deferred.findings.jsonl",
+        "blockers": [
+          "autoplan-20261103023817-dx-native-3"
+        ],
+        "open": 16
+      },
+      "consensus": {
+        "confirmed": 0,
+        "unverified": 0,
+        "disagree": 0,
+        "new": 0,
+        "native_only": 0,
+        "coverage": "none",
+        "deferred": true
+      },
+      "closed_at": "2026-11-03T14:23:33.437Z"
+    },
+    "eng": {
+      "confirm": {
+        "round": 2,
+        "previous_sha256": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b",
+        "added": 159,
+        "removed": 117
+      },
+      "snapshot": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "snapshot_dir": "<local notes (not committed)>/autoplan-eng-hAbM7X",
+      "snapshot_path": "<local notes (not committed)>/autoplan-eng-hAbM7X/eng-implementation.md",
+      "methodology": "<local notes (not committed)>/autoplan-eng-methodology-sQPrVX/methodology.md",
+      "opened_at": "2026-11-03T14:46:17.473Z",
+      "sections": {
+        "loaded": [
+          "review-sections"
+        ],
+        "skipped": [],
+        "checklist": true
+      },
+      "native": {
+        "status": "completed",
+        "attempts": [
+          {
+            "attempt": "autoplan-20261103023817-a6",
+            "state": "submitted",
+            "prompt": "<local notes (not committed)>/eng-native-prompt.md",
+            "result": "<local notes (not committed)>/eng-native.a6.md",
+            "estimate_usd": 5,
+            "dispatched_at": "2026-11-03T14:46:17.477Z",
+            "terminal_at": "2026-11-03T15:11:06.513Z"
+          }
+        ],
+        "attempt": "autoplan-20261103023817-a6",
+        "model": "anthropic/claude-opus-5-5",
+        "provider": "host-subagent",
+        "output": "eng-native.a6.bound.md",
+        "result_sha256": "8913be6f0aac906124f1133a628e1bed6cb52f2b8f4f9a50787d0bc6cf91d327",
+        "findings": 20,
+        "usage": {
+          "usd": "unknown"
+        },
+        "receipt": "verified",
+        "findings_source": "fence",
+        "reviewed_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283"
+      },
+      "outside": {
+        "status": "disabled"
+      },
+      "prompts": {
+        "native": "<local notes (not committed)>/eng-native-prompt.md",
+        "outside": "<local notes (not committed)>/eng-outside-prompt.md",
+        "nativeResult": "<local notes (not committed)>/eng-native.md",
+        "outsideResult": "<local notes (not committed)>/eng-outside.md"
+      },
+      "consensus": {
+        "confirmed": 0,
+        "unverified": 0,
+        "disagree": 0,
+        "new": 0,
+        "native_only": 20,
+        "coverage": "native_only"
+      },
+      "closed_at": "2026-11-03T15:11:06.518Z"
+    }
+  },
+  "artifacts": {
+    "ceo-native.a1.bound.md": {
+      "path": "ceo-native.a1.bound.md",
+      "sha256": "7b8ff40b303716900e2d99746c676652ebdbfbde3c158f0bdb8cc09b7d741fa1"
+    },
+    "design-native.a2.bound.md": {
+      "path": "design-native.a2.bound.md",
+      "sha256": "59452992c178c07108f5f4e25119c1cf13eb775ba779ceee59e7e9c433587a78"
+    },
+    "dx-native.a3.bound.md": {
+      "path": "dx-native.a3.bound.md",
+      "sha256": "64a6e1a84ced700d4e4379c8cdb301ef23b5829b483a8588ed30b64afe5eb09b"
+    },
+    "eng-native.a4.bound.md": {
+      "path": "eng-native.a4.bound.md",
+      "sha256": "5a355f851fe0a2d7146a449f800614e8d40e1641e87978f02f3e15048e9a6a34"
+    },
+    "plan.md": {
+      "path": "plan.md",
+      "sha256": "23e4f822ce28ce74cef83152799bd33600bedaaf2d119ecdb1057826b980f1c8"
+    },
+    "review-record.md": {
+      "path": "review-record.md",
+      "sha256": "a1df750fe68e9cce741b0e72195dcfab2b1799fafb634e4ef2fecaf6dee92da5"
+    },
+    "findings.jsonl": {
+      "path": "findings.jsonl",
+      "sha256": "58e47081d1a8438b03db647159ae3e234d1860cd645fe1f2dba5f43ae7cc9152"
+    },
+    "tasks.jsonl": {
+      "path": "tasks.jsonl",
+      "sha256": "b0282337363738724403137afc5af835972e27fb5c85a2ebdf01684f2d7ce254"
+    },
+    "decisions.jsonl": {
+      "path": "decisions.jsonl",
+      "sha256": "c33b36a42e1bb8edb4a4c654d4df59146a79a000768a92b6e57ca98f87c05216"
+    },
+    "timing.json": {
+      "path": "timing.json",
+      "sha256": "cba4413319936196fb17b148b9e239c2c5b90004f42dc6cdc03a2cec956a2050"
+    },
+    "design-deferred.findings.jsonl": {
+      "path": "design-deferred.findings.jsonl",
+      "sha256": "8620222e1705c522c967933e8c6edd98412723077fb4f2e15eadecc40ae41408"
+    },
+    "dx-deferred.findings.jsonl": {
+      "path": "dx-deferred.findings.jsonl",
+      "sha256": "5896ce894bc642d93a92c77f234e1d15492849ab86680185d8b183cccd0977d2"
+    },
+    "ceo-native.a5.bound.md": {
+      "path": "ceo-native.a5.bound.md",
+      "sha256": "9381ba86192ca37bdc5e3126a5964c7ff4336ca6e54cb0b4c47ff6b75439ea7b"
+    },
+    "eng-native.a6.bound.md": {
+      "path": "eng-native.a6.bound.md",
+      "sha256": "a88f4a2a9ea2f1073fa729ab3c6a00685266058f3583548480f4802051ce6328"
+    },
+    "gate.json": {
+      "path": "gate.json",
+      "sha256": "b0ca7fbcb9e549f764c0040b1162dd8a2cdf1ea692efa5b8904f4e7d8338c86d"
+    },
+    "ceo-consensus.md": {
+      "path": "ceo-consensus.md",
+      "sha256": "3cc6ef2b786307fdfa62248c67c91facee27dd624f101970424b1a6e3d6979d1"
+    },
+    "ceo-consensus.json": {
+      "path": "ceo-consensus.json",
+      "sha256": "a8783199c2ba931048b8ab045edccc9bbb37c9056ca1a0d4201e923bef82cc7d"
+    },
+    "design-consensus.md": {
+      "path": "design-consensus.md",
+      "sha256": "19f84c449cbc3ecf7e6ef3b960b9c1e3ef15a0cf4132d2f1b3977e30db88ef05"
+    },
+    "design-consensus.json": {
+      "path": "design-consensus.json",
+      "sha256": "a13c5331c9723103c6e6c266beda6552a7fe176d8f4f105ed76ddfcb2e14dae8"
+    },
+    "dx-consensus.md": {
+      "path": "dx-consensus.md",
+      "sha256": "09d6823371803bfef28a8c89c75a04aeda5ef9f59e6f1f770cebe95e622405ce"
+    },
+    "dx-consensus.json": {
+      "path": "dx-consensus.json",
+      "sha256": "edb62d11430e42a99e149677217f416c7d4ebc6ac81d81cf1250f1bebfa6bb61"
+    },
+    "eng-consensus.md": {
+      "path": "eng-consensus.md",
+      "sha256": "3ed20c51a82d2f6721d8419138d8359003d15d085fbb3c493682f4e79d884098"
+    },
+    "eng-consensus.json": {
+      "path": "eng-consensus.json",
+      "sha256": "ef1f751fdce3b946e498f20466e27bd25928e98cfc9690e84744ab6de857cfd0"
+    }
+  },
+  "revision": 36,
+  "out": "<local notes (not committed)>",
+  "plan_source": "<local notes (not committed)>/plan-source.v3.md",
+  "active_plan": "<local notes (not committed)>/plan-active.md",
+  "restore": "<local notes (not committed)>/restore.md",
+  "scope": {
+    "ui": true,
+    "dx": true,
+    "ui_matches": 16,
+    "dx_matches": 97,
+    "developer_tool": true,
+    "agent_primary": false,
+    "sources": {
+      "ui": "flag",
+      "dx": "flag"
+    },
+    "ui_evidence": {
+      "terms": [
+        {
+          "term": "screen",
+          "count": 10
+        },
+        {
+          "term": "form",
+          "count": 3
+        },
+        {
+          "term": "button",
+          "count": 1
+        },
+        {
+          "term": "layout",
+          "count": 1
+        },
+        {
+          "term": "dashboard",
+          "count": 1
+        }
+      ],
+      "visual": [],
+      "files": []
+    },
+    "dx_terms": [
+      {
+        "term": "API",
+        "count": 2
+      },
+      {
+        "term": "endpoint",
+        "count": 1
+      },
+      {
+        "term": "REST",
+        "count": 2
+      },
+      {
+        "term": "CLI",
+        "count": 1
+      },
+      {
+        "term": "command",
+        "count": 3
+      },
+      {
+        "term": "flag",
+        "count": 2
+      },
+      {
+        "term": "shell",
+        "count": 1
+      },
+      {
+        "term": "package",
+        "count": 2
+      },
+      {
+        "term": "import",
+        "count": 1
+      },
+      {
+        "term": "SKILL.md",
+        "count": 1
+      },
+      {
+        "term": "Claude Code",
+        "count": 3
+      },
+      {
+        "term": "agent",
+        "count": 71
+      },
+      {
+        "term": "action",
+        "count": 3
+      },
+      {
+        "term": "debug",
+        "count": 2
+      },
+      {
+        "term": "implement",
+        "count": 2
+      }
+    ],
+    "cli_flags": [
+      "--ui",
+      "--developer-tool"
+    ],
+    "marker": null,
+    "pin": {
+      "marker": "<!-- gstack-autoplan-scope: --ui --developer-tool -->",
+      "file": "<local notes (not committed)>/plan-v3.md"
+    },
+    "docs_only": false,
+    "docs_only_source": "detected"
+  },
+  "phase_order": [
+    "ceo",
+    "design",
+    "dx",
+    "eng"
+  ],
+  "outside_enabled": false,
+  "attempt_counter": 6,
+  "spend_cap_usd": null,
+  "session_kind": "unattended",
+  "host": "gstack-autoplan",
+  "max_rounds": 2,
+  "history": [
+    {
+      "event": "reopened",
+      "phase": "ceo",
+      "gate_rev": 1,
+      "reason": "revise v1",
+      "at": "2026-11-03T14:22:27.004Z",
+      "previous": {
+        "snapshot": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b",
+        "snapshot_dir": "<local notes (not committed)>/autoplan-ceo-OtBuoZ",
+        "snapshot_path": "<local notes (not committed)>/autoplan-ceo-OtBuoZ/ceo-implementation.md",
+        "methodology": "<local notes (not committed)>/autoplan-ceo-methodology-LkyY2W/methodology.md",
+        "opened_at": "2026-11-03T02:38:18.014Z",
+        "sections": {
+          "loaded": [
+            "review-sections"
+          ],
+          "skipped": [],
+          "checklist": true
+        },
+        "native": {
+          "status": "completed",
+          "attempts": [
+            {
+              "attempt": "autoplan-20261103023817-a1",
+              "state": "submitted",
+              "prompt": "<local notes (not committed)>/ceo-native-prompt.md",
+              "result": "<local notes (not committed)>/ceo-native.a1.md",
+              "estimate_usd": 5,
+              "dispatched_at": "2026-11-03T02:38:18.018Z",
+              "terminal_at": "2026-11-03T02:46:25.371Z"
+            }
+          ],
+          "attempt": "autoplan-20261103023817-a1",
+          "model": "anthropic/claude-opus-5-5",
+          "provider": "host-subagent",
+          "output": "ceo-native.a1.bound.md",
+          "result_sha256": "7b8ff40b303716900e2d99746c676652ebdbfbde3c158f0bdb8cc09b7d741fa1",
+          "findings": 15,
+          "usage": {
+            "usd": "unknown"
+          },
+          "receipt": "verified",
+          "findings_source": "fence",
+          "reviewed_sha256": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b"
+        },
+        "outside": {
+          "status": "disabled"
+        },
+        "prompts": {
+          "native": "<local notes (not committed)>/ceo-native-prompt.md",
+          "outside": "<local notes (not committed)>/ceo-outside-prompt.md",
+          "nativeResult": "<local notes (not committed)>/ceo-native.md",
+          "outsideResult": "<local notes (not committed)>/ceo-outside.md"
+        },
+        "consensus": {
+          "confirmed": 0,
+          "unverified": 0,
+          "disagree": 0,
+          "new": 0,
+          "native_only": 15,
+          "coverage": "native_only"
+        },
+        "closed_at": "2026-11-03T02:46:25.385Z"
+      }
+    },
+    {
+      "event": "reopened",
+      "phase": "design",
+      "gate_rev": 1,
+      "reason": "revise v1",
+      "at": "2026-11-03T14:22:27.004Z",
+      "previous": {
+        "snapshot": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b",
+        "snapshot_dir": "<local notes (not committed)>/autoplan-design-n3BNKB",
+        "snapshot_path": "<local notes (not committed)>/autoplan-design-n3BNKB/design-implementation.md",
+        "methodology": "<local notes (not committed)>/autoplan-design-methodology-yrx8Jg/methodology.md",
+        "opened_at": "2026-11-03T02:46:25.598Z",
+        "sections": {
+          "loaded": [
+            "review-sections"
+          ],
+          "skipped": [],
+          "checklist": true
+        },
+        "native": {
+          "status": "completed",
+          "attempts": [
+            {
+              "attempt": "autoplan-20261103023817-a2",
+              "state": "submitted",
+              "prompt": "<local notes (not committed)>/design-native-prompt.md",
+              "result": "<local notes (not committed)>/design-native.a2.md",
+              "estimate_usd": 5,
+              "dispatched_at": "2026-11-03T02:46:25.602Z",
+              "terminal_at": "2026-11-03T02:52:03.770Z"
+            }
+          ],
+          "attempt": "autoplan-20261103023817-a2",
+          "model": "anthropic/claude-opus-5-5",
+          "provider": "host-subagent",
+          "output": "design-native.a2.bound.md",
+          "result_sha256": "59452992c178c07108f5f4e25119c1cf13eb775ba779ceee59e7e9c433587a78",
+          "findings": 12,
+          "usage": {
+            "usd": "unknown"
+          },
+          "receipt": "verified",
+          "findings_source": "fence",
+          "reviewed_sha256": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b"
+        },
+        "outside": {
+          "status": "disabled"
+        },
+        "prompts": {
+          "native": "<local notes (not committed)>/design-native-prompt.md",
+          "outside": "<local notes (not committed)>/design-outside-prompt.md",
+          "nativeResult": "<local notes (not committed)>/design-native.md",
+          "outsideResult": "<local notes (not committed)>/design-outside.md"
+        },
+        "consensus": {
+          "confirmed": 0,
+          "unverified": 0,
+          "disagree": 0,
+          "new": 0,
+          "native_only": 12,
+          "coverage": "native_only"
+        },
+        "closed_at": "2026-11-03T02:52:03.772Z"
+      }
+    },
+    {
+      "event": "reopened",
+      "phase": "dx",
+      "gate_rev": 1,
+      "reason": "revise v1",
+      "at": "2026-11-03T14:22:27.004Z",
+      "previous": {
+        "snapshot": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b",
+        "snapshot_dir": "<local notes (not committed)>/autoplan-dx-gdG9cO",
+        "snapshot_path": "<local notes (not committed)>/autoplan-dx-gdG9cO/dx-implementation.md",
+        "methodology": "<local notes (not committed)>/autoplan-dx-methodology-ZLMMxN/methodology.md",
+        "opened_at": "2026-11-03T02:52:04.026Z",
+        "sections": {
+          "loaded": [
+            "review-sections"
+          ],
+          "skipped": [],
+          "checklist": true
+        },
+        "native": {
+          "status": "completed",
+          "attempts": [
+            {
+              "attempt": "autoplan-20261103023817-a3",
+              "state": "submitted",
+              "prompt": "<local notes (not committed)>/dx-native-prompt.md",
+              "result": "<local notes (not committed)>/dx-native.a3.md",
+              "estimate_usd": 5,
+              "dispatched_at": "2026-11-03T02:52:04.031Z",
+              "terminal_at": "2026-11-03T02:58:25.697Z"
+            }
+          ],
+          "attempt": "autoplan-20261103023817-a3",
+          "model": "anthropic/claude-opus-5-5",
+          "provider": "host-subagent",
+          "output": "dx-native.a3.bound.md",
+          "result_sha256": "64a6e1a84ced700d4e4379c8cdb301ef23b5829b483a8588ed30b64afe5eb09b",
+          "findings": 17,
+          "usage": {
+            "usd": "unknown"
+          },
+          "receipt": "verified",
+          "findings_source": "fence",
+          "reviewed_sha256": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b"
+        },
+        "outside": {
+          "status": "disabled"
+        },
+        "prompts": {
+          "native": "<local notes (not committed)>/dx-native-prompt.md",
+          "outside": "<local notes (not committed)>/dx-outside-prompt.md",
+          "nativeResult": "<local notes (not committed)>/dx-native.md",
+          "outsideResult": "<local notes (not committed)>/dx-outside.md"
+        },
+        "consensus": {
+          "confirmed": 0,
+          "unverified": 0,
+          "disagree": 0,
+          "new": 0,
+          "native_only": 17,
+          "coverage": "native_only"
+        },
+        "closed_at": "2026-11-03T02:58:25.699Z"
+      }
+    },
+    {
+      "event": "reopened",
+      "phase": "eng",
+      "gate_rev": 1,
+      "reason": "revise v1",
+      "at": "2026-11-03T14:22:27.004Z",
+      "previous": {
+        "snapshot": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b",
+        "snapshot_dir": "<local notes (not committed)>/autoplan-eng-iu2R2D",
+        "snapshot_path": "<local notes (not committed)>/autoplan-eng-iu2R2D/eng-implementation.md",
+        "methodology": "<local notes (not committed)>/autoplan-eng-methodology-BfHRgY/methodology.md",
+        "opened_at": "2026-11-03T02:58:26.047Z",
+        "sections": {
+          "loaded": [
+            "review-sections"
+          ],
+          "skipped": [],
+          "checklist": true
+        },
+        "native": {
+          "status": "completed",
+          "attempts": [
+            {
+              "attempt": "autoplan-20261103023817-a4",
+              "state": "submitted",
+              "prompt": "<local notes (not committed)>/eng-native-prompt.md",
+              "result": "<local notes (not committed)>/eng-native.a4.md",
+              "estimate_usd": 5,
+              "dispatched_at": "2026-11-03T02:58:26.051Z",
+              "terminal_at": "2026-11-03T03:08:04.801Z"
+            }
+          ],
+          "attempt": "autoplan-20261103023817-a4",
+          "model": "anthropic/claude-opus-5-5",
+          "provider": "host-subagent",
+          "output": "eng-native.a4.bound.md",
+          "result_sha256": "e6ffd1edefb12452605d8269482f1ce51a2f6e0aa278242b05394011c0ad2130",
+          "findings": 20,
+          "usage": {
+            "usd": "unknown"
+          },
+          "receipt": "verified",
+          "findings_source": "fence",
+          "reviewed_sha256": "42e28cee6c4f4bd89595766e39d43fcb547548ab81f48bf191bdf1c0c7b07b0b"
+        },
+        "outside": {
+          "status": "disabled"
+        },
+        "prompts": {
+          "native": "<local notes (not committed)>/eng-native-prompt.md",
+          "outside": "<local notes (not committed)>/eng-outside-prompt.md",
+          "nativeResult": "<local notes (not committed)>/eng-native.md",
+          "outsideResult": "<local notes (not committed)>/eng-outside.md"
+        },
+        "consensus": {
+          "confirmed": 0,
+          "unverified": 0,
+          "disagree": 0,
+          "new": 0,
+          "native_only": 20,
+          "coverage": "native_only"
+        },
+        "closed_at": "2026-11-03T03:08:04.804Z"
+      }
+    }
+  ],
+  "created_at": "2026-11-03T02:38:17.969Z",
+  "updated_at": "2026-11-03T16:42:09.612Z",
+  "deviations": [
+    "autoplan guard: not enforced by this host; publication order is unverified (GUARD_NOT_INSTALLED)"
+  ],
+  "shadow": {
+    "enabled": false,
+    "reason": "off by default",
+    "source": "default"
+  },
+  "gstack_version": "1.93.34.0",
+  "plan_input": "<local notes (not committed)>/plan-v3.md",
+  "scope_flags": {
+    "ui": true,
+    "developerTool": true,
+    "agentPrimary": false
+  },
+  "native_model": "anthropic/claude-opus-5-5",
+  "gate_rev": 4,
+  "gate": {
+    "rev": 4,
+    "items": 18,
+    "written_at": "2026-11-03T16:37:34.261Z",
+    "answered_at": "2026-11-03T16:41:40.020Z",
+    "reply": "rec",
+    "gate_rev": 4,
+    "plan": "b",
+    "overrides": [
+      "d1b"
+    ],
+    "answered_by": "agent:GEVA-2",
+    "answer_words": "GSTA-2: these edits record the owner's gate_rev 2 picks, Q1, and the Captain's one-round fix of the gate_rev 3 carry-check findings F1 to F3.",
+    "answer_words_parsed": false,
+    "words_by": "agent:GEVA-2"
+  },
+  "dispatches": {
+    "total": 6,
+    "by_phase": {
+      "ceo": {
+        "native": 2
+      },
+      "design": {
+        "native": 1
+      },
+      "dx": {
+        "native": 1
+      },
+      "eng": {
+        "native": 2
+      }
+    }
+  },
+  "est_input_tokens": 157966,
+  "counts": {
+    "decisions": 72,
+    "decisions_pending": 3,
+    "findings": 63,
+    "tasks": 36
+  },
+  "plan_revision": 3,
+  "carry": {
+    "gate_rev": 4,
+    "from_gate_rev": 3,
+    "verdict": "refused",
+    "reason": "gate_rev 3 was not answered",
+    "lines": [
+      "CARRY: no (gate_rev 3 was not answered)"
+    ],
+    "at": "2026-11-03T16:37:34.266Z"
+  },
+  "amendments": [
+    {
+      "decision": "autoplan-20261103023817-r2-d1",
+      "title": "U's wave-1 confirmatory buys a 15 to 16 point reading the plan says can't move a design skill to a cut [autoplan-20261103023817-ceo-r2-native-7]",
+      "chosen": "b",
+      "text": "accept the change",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d1",
+      "changes": "cost",
+      "phase": "ceo",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d2",
+      "title": "Critical: Futility look is one-sided: a skill trending to hurts stops at half the panel and is posted as not distinguished [autoplan-20261103023817-ceo-r2-native-1]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Stop for futility only when conditional power is under 10% for a true effect of both plus and minus the planned MDD, so a skill whose interim estimate favors none runs the full panel and can read hurts. Print the interim estimate, its 95% interval and its direction at every stop, and have R48 treat an interim estimate in none's favor as a loss lead, not a plain null. Add both cases to O5's keyless dry run.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d2",
+      "phase": "ceo",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d3",
+      "title": "High: The 1.5x cost-per-solved guard can't be passed by most wave-1 told skills at the plan's own 2.2x to 5.0x multiples, and the plan doesn't say whether it binds [autoplan-20261103023817-ceo-r2-native-2]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: State whether the guard binds told skills and in which form (#169 binds it on H-inv as an upper bound <= 1.5, README.md:178). Print each skill's break-even gain beside its MDD in section 8 (at a 50% control rate: plan-eng-review +23, plan-devex-review and plan-design-review +30, devex-review +33, design-review +50, autoplan unreachable). Define solved for U's and X's cost figure, reuse #169's G3 definition in O4, and write the R48 rule that turns the ratio interval into KEEP or CUT-CANDIDATE. Ask Garry before admission whether 1.5x on hidden-test solves is the bar for a told skill.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d3",
+      "phase": "ceo",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d4",
+      "title": "High: The promise that wave 1 settles GST-1218 rests on an unnamed after pin and on a null inference the plan disowns [autoplan-20261103023817-ceo-r2-native-3]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Replace 'A null rules out a gain of that size' with an interval rule: a gain is ruled out only above the upper 95% bound of told minus none, or against F2's break-even gain. Tie GST-1218's keep-or-cut reading to a told arm on the named after pin. If the pin isn't named by G admission, tell the Captain then that plan-eng-review's and plan-devex-review's rows can only inform GST-1218 (a forced-line verdict can't KEEP or CUT, line 27), and let the Captain choose between waiting and reading the forced line as information.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d4",
+      "phase": "ceo",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d5",
+      "title": "High: Central prices sit at half the house's real-task central (R3 amendment 4: 5x Verified) and the price-risk case stresses only the none session [autoplan-20261103023817-ceo-r2-native-4]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Stress section 8 at the house central (5x Verified) and high (10x), with particle-1 at quick look 3's 0.41 of Opus, told multiples at 1.5x their central and the agent user at 2x, and print which rows survive and their MDDs. Show the wave-1 table's MDDs at both central and house central. Reuse R3 amendment 4's between-part projection check between admission, screening and confirmatory, so a stage that would push a skill's re-sized MDD past what can change its decision stops before it spends. Recheck particle-1's 2-point fit at admission's metered ratio before any particle-1 spend.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d5",
+      "phase": "ceo",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d6",
+      "title": "High: autoplan's told arm names no kind, voice count or gate setting; the before pin predates R66's kinds and the 5.0x price assumes the full panel [autoplan-20261103023817-ceo-r2-native-5]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Freeze autoplan's told invocation in O1: the kind (crews now run --kind feature on features), the phases scope chooses, the outside voice and its model, the gate answer, and the exact slash line per pin. Meter that configuration on admission sessions before autoplan's place, size and MDD in the wave-1 table are fixed, align the four-way stand-in with it, and name the configuration in every autoplan verdict. If the after pin's default kind differs, the prereg says which one it tests and why.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d6",
+      "phase": "ceo",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d7",
+      "title": "High: Per-skill plans assume both skills in a family pass admission; a lone survivor costs $1,986 to $2,376 at its planned size [autoplan-20261103023817-eng-r2-native-1]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Price the one-survivor branch per family in section 8. At planned sizes the survivor pays every unspent shared cost (bulk authoring, screening, the whole none arm, the prereg thread) and costs autoplan $1,986, plan-eng-review $2,272, plan-devex-review $2,357, devex-review $2,376, plan-design-review $2,319 and design-review $2,237. Freeze a re-size rule (drop the particle-1 row first, then trials, then tasks) and print the MDD it buys (about 15 to 17 in G and X, 18.6 to 19.2 in U), or stop the survivor when that MDD passes the bound in F4. Apply the same rule when one skill stops at the futility look.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d7",
+      "phase": "eng",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d8",
+      "title": "High: Told prices come from sessions where the procedure mostly did not run, and the forced arm that decision 3 expects to run has no price [autoplan-20261103023817-eng-r2-native-2]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Add forced and told-exposed price rows to section 8. The only metered told session (R3a told /investigate, $0.424) had exposure 2 of 10, E0's $0.236 is a plain none session, and v2 deleted v1's forced row (told plus 15%, with panel v3's forced lines at 1.7 times told on plan units). Price the confirmatory on the arm that will run: forced at told x1.15 central and x1.5 as the risk case (planned designs $1,704 to $1,777 and $1,836 to $2,081, autoplan over its ceiling; re-sized G MDDs 14.4/15.0 and 16.2/15.6). Have admission meter exposed and unexposed told sessions separately, and freeze the pin at admission: a pin named after admission needs a new admission paid from the reserve.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d8",
+      "phase": "eng",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    },
+    {
+      "decision": "autoplan-20261103023817-r2-d9",
+      "title": "High: Authoring is priced at TS's paid author and audit spend; the crew thread that mined, built, checked and sealed the tasks cost about five times that and has no line [autoplan-20261103023817-eng-r2-native-3]",
+      "chosen": "a",
+      "text": "apply the fix to the plan: Add a crew line per valid task for mining, building, checking and sealing, measured on each family's thin-slice thread and re-sized at admission. TS spent $7.93 of author and auditor calls plus $1.78 of VM for 7 valid tasks while its thread used about 43,500 credits before its /ship tail (GEVA-173.md:16), about $6.20 a valid task. Wave 1 needs about 800 valid tasks (G 372, U 192, X 237). At a fifth of TS's rate the planned designs cost $1,761 to $1,912 and re-size to MDDs of G 14.4/15.0, U 15.6 and X 14.4; at TS's full rate G alone needs about $2,300, more than both G reserves. Also price two preregs per family (admission and confirmatory) inside the $70 line, not one.",
+      "gate_rev": 2,
+      "status": "incorporated",
+      "at": "2026-11-03T16:05:59.492Z",
+      "item": "d9",
+      "phase": "eng",
+      "plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "settled_at": "2026-11-03T16:27:03.263Z",
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244"
+    }
+  ],
+  "capped_deltas": [
+    {
+      "k": 2,
+      "phase": "ceo",
+      "round": 2,
+      "cap": 2,
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244",
+      "added": 200,
+      "removed": 141,
+      "status": "accepted",
+      "at": "2026-11-03T16:27:03.263Z",
+      "decided_at": "2026-11-03T16:41:40.021Z"
+    },
+    {
+      "k": 2,
+      "phase": "eng",
+      "round": 2,
+      "cap": 2,
+      "old_plan_sha256": "9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283",
+      "new_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244",
+      "added": 200,
+      "removed": 141,
+      "status": "accepted",
+      "at": "2026-11-03T16:27:03.263Z",
+      "decided_at": "2026-11-03T16:41:40.021Z"
+    },
+    {
+      "k": 3,
+      "phase": "ceo",
+      "round": 2,
+      "cap": 2,
+      "old_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244",
+      "new_plan_sha256": "b18f7150831fed77917ec5bb672f61bfc7f263e4e80263f576c79dcf177ca74e",
+      "added": 32,
+      "removed": 25,
+      "status": "accepted",
+      "at": "2026-11-03T16:37:34.189Z",
+      "decided_at": "2026-11-03T16:41:40.021Z"
+    },
+    {
+      "k": 3,
+      "phase": "eng",
+      "round": 2,
+      "cap": 2,
+      "old_plan_sha256": "182918be9f1bcd9747d22786f117fe16426dd7960238e4acfa6e7fe58e8ab244",
+      "new_plan_sha256": "b18f7150831fed77917ec5bb672f61bfc7f263e4e80263f576c79dcf177ca74e",
+      "added": 32,
+      "removed": 25,
+      "status": "accepted",
+      "at": "2026-11-03T16:37:34.189Z",
+      "decided_at": "2026-11-03T16:41:40.021Z"
+    }
+  ],
+  "provenance": {
+    "private_run": "autoplan-20261103023817",
+    "private_manifest_sha256": "5d73e8aaddb793280eeaace5e266cede50a0e7f9da003bfdd2f13a4c29e9910c",
+    "exported_at": "2026-11-03T16:42:17.526Z",
+    "roots": [
+      "checkpoint",
+      "run",
+      "plan_input",
+      "home"
+    ],
+    "files": {
+      "ceo-native.a1.bound.md": {
+        "private_sha256": "7b8ff40b303716900e2d99746c676652ebdbfbde3c158f0bdb8cc09b7d741fa1",
+        "public_sha256": "7b8ff40b303716900e2d99746c676652ebdbfbde3c158f0bdb8cc09b7d741fa1"
+      },
+      "design-native.a2.bound.md": {
+        "private_sha256": "59452992c178c07108f5f4e25119c1cf13eb775ba779ceee59e7e9c433587a78",
+        "public_sha256": "59452992c178c07108f5f4e25119c1cf13eb775ba779ceee59e7e9c433587a78"
+      },
+      "dx-native.a3.bound.md": {
+        "private_sha256": "64a6e1a84ced700d4e4379c8cdb301ef23b5829b483a8588ed30b64afe5eb09b",
+        "public_sha256": "64a6e1a84ced700d4e4379c8cdb301ef23b5829b483a8588ed30b64afe5eb09b"
+      },
+      "eng-native.a4.bound.md": {
+        "private_sha256": "e6ffd1edefb12452605d8269482f1ce51a2f6e0aa278242b05394011c0ad2130",
+        "public_sha256": "5a355f851fe0a2d7146a449f800614e8d40e1641e87978f02f3e15048e9a6a34"
+      },
+      "plan.md": {
+        "private_sha256": "23e4f822ce28ce74cef83152799bd33600bedaaf2d119ecdb1057826b980f1c8",
+        "public_sha256": "23e4f822ce28ce74cef83152799bd33600bedaaf2d119ecdb1057826b980f1c8"
+      },
+      "review-record.md": {
+        "private_sha256": "a1df750fe68e9cce741b0e72195dcfab2b1799fafb634e4ef2fecaf6dee92da5",
+        "public_sha256": "a1df750fe68e9cce741b0e72195dcfab2b1799fafb634e4ef2fecaf6dee92da5"
+      },
+      "findings.jsonl": {
+        "private_sha256": "58e47081d1a8438b03db647159ae3e234d1860cd645fe1f2dba5f43ae7cc9152",
+        "public_sha256": "58e47081d1a8438b03db647159ae3e234d1860cd645fe1f2dba5f43ae7cc9152"
+      },
+      "tasks.jsonl": {
+        "private_sha256": "b0282337363738724403137afc5af835972e27fb5c85a2ebdf01684f2d7ce254",
+        "public_sha256": "b0282337363738724403137afc5af835972e27fb5c85a2ebdf01684f2d7ce254"
+      },
+      "decisions.jsonl": {
+        "private_sha256": "c33b36a42e1bb8edb4a4c654d4df59146a79a000768a92b6e57ca98f87c05216",
+        "public_sha256": "c33b36a42e1bb8edb4a4c654d4df59146a79a000768a92b6e57ca98f87c05216"
+      },
+      "timing.json": {
+        "private_sha256": "cba4413319936196fb17b148b9e239c2c5b90004f42dc6cdc03a2cec956a2050",
+        "public_sha256": "cba4413319936196fb17b148b9e239c2c5b90004f42dc6cdc03a2cec956a2050"
+      },
+      "design-deferred.findings.jsonl": {
+        "private_sha256": "8620222e1705c522c967933e8c6edd98412723077fb4f2e15eadecc40ae41408",
+        "public_sha256": "8620222e1705c522c967933e8c6edd98412723077fb4f2e15eadecc40ae41408"
+      },
+      "dx-deferred.findings.jsonl": {
+        "private_sha256": "5896ce894bc642d93a92c77f234e1d15492849ab86680185d8b183cccd0977d2",
+        "public_sha256": "5896ce894bc642d93a92c77f234e1d15492849ab86680185d8b183cccd0977d2"
+      },
+      "ceo-native.a5.bound.md": {
+        "private_sha256": "95c535c72b227e82c271b4400449972b736abe7688117bebeff39d9a099183b7",
+        "public_sha256": "9381ba86192ca37bdc5e3126a5964c7ff4336ca6e54cb0b4c47ff6b75439ea7b"
+      },
+      "eng-native.a6.bound.md": {
+        "private_sha256": "8913be6f0aac906124f1133a628e1bed6cb52f2b8f4f9a50787d0bc6cf91d327",
+        "public_sha256": "a88f4a2a9ea2f1073fa729ab3c6a00685266058f3583548480f4802051ce6328"
+      },
+      "gate.json": {
+        "private_sha256": "7d71bad82b28417cf2b12f638c29a6567c692d45186c4c10c7a8a4406d567cf5",
+        "public_sha256": "b0ca7fbcb9e549f764c0040b1162dd8a2cdf1ea692efa5b8904f4e7d8338c86d"
+      },
+      "ceo-consensus.md": {
+        "private_sha256": "3cc6ef2b786307fdfa62248c67c91facee27dd624f101970424b1a6e3d6979d1",
+        "public_sha256": "3cc6ef2b786307fdfa62248c67c91facee27dd624f101970424b1a6e3d6979d1"
+      },
+      "ceo-consensus.json": {
+        "private_sha256": "a8783199c2ba931048b8ab045edccc9bbb37c9056ca1a0d4201e923bef82cc7d",
+        "public_sha256": "a8783199c2ba931048b8ab045edccc9bbb37c9056ca1a0d4201e923bef82cc7d"
+      },
+      "design-consensus.md": {
+        "private_sha256": "19f84c449cbc3ecf7e6ef3b960b9c1e3ef15a0cf4132d2f1b3977e30db88ef05",
+        "public_sha256": "19f84c449cbc3ecf7e6ef3b960b9c1e3ef15a0cf4132d2f1b3977e30db88ef05"
+      },
+      "design-consensus.json": {
+        "private_sha256": "a13c5331c9723103c6e6c266beda6552a7fe176d8f4f105ed76ddfcb2e14dae8",
+        "public_sha256": "a13c5331c9723103c6e6c266beda6552a7fe176d8f4f105ed76ddfcb2e14dae8"
+      },
+      "dx-consensus.md": {
+        "private_sha256": "09d6823371803bfef28a8c89c75a04aeda5ef9f59e6f1f770cebe95e622405ce",
+        "public_sha256": "09d6823371803bfef28a8c89c75a04aeda5ef9f59e6f1f770cebe95e622405ce"
+      },
+      "dx-consensus.json": {
+        "private_sha256": "edb62d11430e42a99e149677217f416c7d4ebc6ac81d81cf1250f1bebfa6bb61",
+        "public_sha256": "edb62d11430e42a99e149677217f416c7d4ebc6ac81d81cf1250f1bebfa6bb61"
+      },
+      "eng-consensus.md": {
+        "private_sha256": "3ed20c51a82d2f6721d8419138d8359003d15d085fbb3c493682f4e79d884098",
+        "public_sha256": "3ed20c51a82d2f6721d8419138d8359003d15d085fbb3c493682f4e79d884098"
+      },
+      "eng-consensus.json": {
+        "private_sha256": "ef1f751fdce3b946e498f20466e27bd25928e98cfc9690e84744ab6de857cfd0",
+        "public_sha256": "ef1f751fdce3b946e498f20466e27bd25928e98cfc9690e84744ab6de857cfd0"
+      }
+    }
+  }
+}

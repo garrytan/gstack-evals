@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "phase": "design",
+  "native": null,
+  "outside": null,
+  "confirmed": 0,
+  "unverified": 0,
+  "disagree": 0,
+  "new": 0,
+  "native_only": 0,
+  "rows": [],
+  "native_only_ids": [],
+  "coverage": "none",
+  "deferred": {
+    "reason": "Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the design measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.",
+    "by": "agent:GEVA-2",
+    "cause": "owner",
+    "at": "2026-11-03T14:23:22.259Z",
+    "round": 2,
+    "counts": {
+      "Critical": 1,
+      "High": 4,
+      "Medium": 6,
+      "Low": 1,
+      "Informational": 0
+    },
+    "carried_file": "design-deferred.findings.jsonl",
+    "blockers": [
+      "autoplan-20261103023817-design-native-1"
+    ],
+    "open": 12
+  }
+}
