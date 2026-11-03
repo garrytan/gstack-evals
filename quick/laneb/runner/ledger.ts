@@ -25,8 +25,9 @@ export function readRows(path: string): Row[] {
     .map((l) => JSON.parse(l) as Row);
 }
 
+// The cap is the newest approval row's: the first approval, or the latest raise (Ledger.raise) after it.
 export function totals(rows: Row[]): Totals {
-  const approval = rows.find((r) => r.kind === "approval");
+  const approval = rows.findLast((r) => r.kind === "approval");
   if (!approval) throw new Error("ledger has no approval row");
   const reserved = new Map<string, number>();
   const settled = new Map<string, number>();
@@ -63,6 +64,16 @@ export class Ledger {
   approve(capUsd: number, extra: Record<string, unknown>) {
     if (readRows(this.path).some((r) => r.kind === "approval")) throw new Error("approval row already present");
     appendDurable(this.path, { ...extra, ts: new Date().toISOString(), item: this.item, kind: "approval", id: "approval", usd_micros: toMicros(capUsd) });
+  }
+
+  // A cap raise the owner approved after the first approval: one more approval row, above the current cap.
+  raise(capUsd: number, extra: Record<string, unknown>) {
+    const rows = readRows(this.path), approvals = rows.filter((r) => r.kind === "approval");
+    if (!approvals.length) throw new Error("ledger has no approval row to raise");
+    if (approvals[0].item !== this.item) throw new Error(`ledger's approval row is for item ${approvals[0].item}, not ${this.item}`);
+    const from = totals(rows).capMicros;
+    if (toMicros(capUsd) <= from) throw new Error(`a raise to $${capUsd} is not above the current cap of $${fromMicros(from)}`);
+    appendDurable(this.path, { ...extra, ts: new Date().toISOString(), item: this.item, kind: "approval", id: `raise-${approvals.length}`, usd_micros: toMicros(capUsd), raised_from_micros: from });
   }
 
   reserve(id: string, usdMicros: number, meta: Record<string, unknown> = {}): { ok: true; existing: boolean } | { ok: false; reason: string; totals: Totals } {
@@ -171,13 +182,26 @@ if (import.meta.main) {
     const reused = "existing" in out && out.existing;
     console.log(JSON.stringify(reused ? { ok: false, reason: "id already reserved" } : out));
     process.exit(out.ok && !reused ? 0 : 3);
+  } else if (cmd === "raise") {
+    // A cap raise the owner approved, with its approver on the row.
+    if (!args.path || !args.item || !args["approved-by"] || !/^\d+(\.\d+)?$/.test(args.usd ?? "")) {
+      console.error("E_USAGE usage: bun ledger.ts raise --path <jsonl> --item <name> --usd <new cap> --approved-by <approver> [--detail <text>]");
+      process.exit(2);
+    }
+    try {
+      new Ledger(args.path, args.item).raise(Number(args.usd), { approved_by: args["approved-by"], ...(args.detail ? { detail: args.detail } : {}) });
+    } catch (e) {
+      console.log(JSON.stringify({ ok: false, reason: (e as Error).message }));
+      process.exit(3);
+    }
+    console.log(JSON.stringify({ ok: true, cap_usd: fromMicros(new Ledger(args.path, args.item).status().capMicros) }));
   } else if (cmd === "open") {
     for (const id of new Ledger(args.path, args.item).status().openIds) console.log(id);
   } else if (cmd === "status") {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("E_USAGE usage: bun ledger.ts serve|status|open|reconcile|reserve|settle --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status|open|reconcile|reserve|settle|raise --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>] [--approved-by <approver>]");
     process.exit(2);
   }
 }

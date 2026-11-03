@@ -22,11 +22,21 @@ const proxyConfig = JSON.parse(readFileSync(join(laneb, "config/proxy.json"), "u
 const cells = JSON.parse(readFileSync(join(laneb, "config/cells.r3.json"), "utf8"));
 const solCell = cells.models.find((c: any) => c.id === SOL);
 const opus = R3A[OPUS]!, sol = R3A[SOL]!;
+// Ports for the route check's services (GST-1145). A port-0 probe hands back a port the kernel can give the next probe,
+// another test file's probe or an outgoing connection before the service binds it; the service then exits before it is
+// up and the check ends with exit 1, not the case under test. So each port comes from below the kernel's ephemeral
+// range, from this test process's own slice, once, after a bind probe.
+const EPHEMERAL_LOW = Number(readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8").trim().split(/\s+/)[0]);
+let nextPort = 10000 + (process.pid % 64) * 350;
 function freePort() {
-  const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
-  const port = s.port;
-  s.stop(true);
-  return port;
+  for (const end = nextPort + 350; nextPort < Math.min(end, EPHEMERAL_LOW); ) {
+    const port = nextPort++;
+    try {
+      Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response() }).stop(true);
+      return port;
+    } catch {}
+  }
+  throw new Error("no free test port left below the ephemeral range");
 }
 const approve = (path: string, item: string, cap: number) => new Ledger(path, item).approve(cap, { words: "test", by: "test" });
 // The proxy config a test work dir's parts run with, as work() and #121's notes write it; passRecord binds a pass to it.

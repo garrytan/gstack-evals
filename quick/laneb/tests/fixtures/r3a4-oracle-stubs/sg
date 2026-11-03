@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Stub sg: "sg docker -c <command>" runs the command.
+[ "$2" = -c ] && exec bash -c "$3"
+exit 2

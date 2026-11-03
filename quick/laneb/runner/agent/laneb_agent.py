@@ -36,7 +36,7 @@ from harbor.agents.installed.claude_code import ClaudeCode, ClaudeCodeOptions
 from harbor.environments.base import BaseEnvironment
 from harbor.environments.docker.docker import _sanitize_docker_compose_project_name
 from harbor.models.agent.context import AgentContext
-from prompt_builder import build_prompt
+from prompt_builder import PROCEDURE_LINES, build_prompt
 from pydantic import Field
 from usersim import Simulator
 
@@ -179,6 +179,7 @@ class LanebOptions(ClaudeCodeOptions):
     system_prompt: str = Field(default="sdk-default", description="A key of SYSTEM_PROMPTS: sdk-default or claude-code-preset.")
     session_kind: str = Field(default="", description="GSTACK_SESSION_KIND in the container: empty (unset) or unattended.")
     told_skill: str = Field(default="", description="Skill this arm is told: the prompt opens with '/<told_skill> ' so the CLI expands it and injects that SKILL.md body. Empty sends the wrapper unchanged.")
+    procedure_line: str = Field(default="", description="A key of prompt_builder.PROCEDURE_LINES: a told prompt ends with that line after a blank line. Empty adds nothing.")
 
 
 class LanebAgent(ClaudeCode):
@@ -271,7 +272,10 @@ class LanebAgent(ClaudeCode):
             raise ValueError(f"system_prompt {self.options.system_prompt!r} is not one of {sorted(SYSTEM_PROMPTS)}")
         if self.options.session_kind not in SESSION_KINDS:
             raise ValueError(f"session_kind {self.options.session_kind!r} is not one of {list(SESSION_KINDS)}")
-        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind, **({"told_skill": self.options.told_skill} if self.options.told_skill else {})}
+        if self.options.procedure_line and (self.options.procedure_line not in PROCEDURE_LINES or not self.options.told_skill):
+            raise ValueError(f"procedure_line {self.options.procedure_line!r} is not one of {sorted(PROCEDURE_LINES)} on a told arm")
+        agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind, **({"told_skill": self.options.told_skill} if self.options.told_skill else {}),
+                         **({"procedure_line": self.options.procedure_line} if self.options.procedure_line else {})}
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
@@ -336,8 +340,10 @@ class LanebAgent(ClaudeCode):
 
             wrapper_text = Path(self.options.wrapper_path).read_text()
             told = self.options.told_skill
-            prompt_text = build_prompt(wrapper_text, instruction, bool(told), told)
-            log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(), "told_skill": told})
+            line = self.options.procedure_line
+            prompt_text = build_prompt(wrapper_text, instruction, bool(told), told, procedure_line=line)
+            log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(), "told_skill": told,
+                 **({"procedure_line": line, "procedure_line_sha256": hashlib.sha256(PROCEDURE_LINES[line].encode()).hexdigest()} if line else {})})
 
             host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
             wrapper = host_dir / "claude-in-container"
