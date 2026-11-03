@@ -416,13 +416,16 @@ function everyCaseSkipped(code: string): boolean {
  * pytest.skip(), t.Skip(), #[ignore] and the like) is "skip", a todo is "todo", and any other marker is its name
  * (skipif, skipunless, importorskip, xfail for xfail and expectedFailure, short) followed by its arguments less its
  * reason, spaces removed. The reason is a reason= or msg= argument, or the argument in a reason's place: the second of
- * unittest's skipIf and skipUnless, the first of pytest.xfail() and the third of pytest.importorskip(). */
-function skipKinds(code: string): string[] {
+ * unittest's skipIf and skipUnless, the first of pytest.xfail() and the third of pytest.importorskip(). Each kind is
+ * followed, after a space, by the if guard at the marker's offset (guard), when it has one. */
+function skipKinds(code: string, guard: (at: number) => string = () => ""): string[] {
   return SKIP_ALL.flatMap((re) =>
     [...code.matchAll(re)].map((m) => {
       const word = m[0].match(/\w+/g)!.pop()!.toLowerCase();
-      if (/^(?:skip|skiptest|skipf|skipnow|xit|xdescribe|xtest|ignore)$/.test(word)) return "skip";
-      if (word === "todo") return "todo";
+      const g = guard(m.index!);
+      const named = (kind: string) => (g ? kind + " " + g : kind);
+      if (/^(?:skip|skiptest|skipf|skipnow|xit|xdescribe|xtest|ignore)$/.test(word)) return named("skip");
+      if (word === "todo") return named("todo");
       let open = m.index! + m[0].length - (m[0].endsWith("(") ? 1 : 0);
       while (code[open] === " ") open++;
       let e = open;
@@ -432,59 +435,110 @@ function skipKinds(code: string): string[] {
       }
       const reason = m[0].startsWith("@unittest.") ? 1 : !m[0].endsWith("(") ? -1 : word === "xfail" ? 0 : 2;
       const kept = commaParts(code.slice(open + 1, e)).filter((p, k) => !/^(?:reason|msg)\s*=/.test(p) && (k !== reason || /^\w+\s*=(?!=)/.test(p)));
-      return (word === "expectedfailure" ? "xfail" : word) + "(" + kept.join(",").replace(/\s+/g, "") + ")";
+      return named((word === "expectedfailure" ? "xfail" : word) + "(" + kept.join(",").replace(/\s+/g, "") + ")");
     }),
   );
 }
 
-/** Where the body of an if, elif or else header opens in string-free code that starts just past its keyword: the first
- * colon (Python) or brace (Go) outside brackets, or -1 when the text holds none. */
-function bodyOpen(rest: string, py: boolean): number {
+/** Where the body of a Python if, elif or else header opens in string-free code that starts just past its keyword: the
+ * first colon outside brackets that is not a walrus, or -1 when the text holds none. */
+function bodyOpen(rest: string): number {
   for (let i = 0, depth = 0; i < rest.length; i++) {
     const c = rest[i];
-    if (depth === 0 && (py ? c === ":" && rest[i + 1] !== "=" : c === "{")) return i;
-    depth += (py ? "([{" : "([").includes(c) ? 1 : (py ? ")]}" : ")]").includes(c) ? -1 : 0;
+    if (depth === 0 && c === ":" && rest[i + 1] !== "=") return i;
+    depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
   }
   return -1;
 }
 
-/** The if guard of each statement in a Python or Go file's string-free code (scan's bare), at the statement's first
- * line: the if, elif and else blocks around it inside its def, class or func, and the one-line if (Python's if A: body,
- * Go's if A { body }) the statement is, outermost first. Each if or elif is named by its condition up to its body
- * (bodyOpen), spaces and line continuations removed, and each elif or else follows the branches before it in its
- * chain, so an else block is guarded by the if it negates. Python reads blocks by indentation and Go by brackets; a Go
- * header continues onto the next line while a line ends in an operator, a comma or an open bracket. "" for an
- * unguarded statement and for every line of a file in another language. */
-function guards(bare: string[], start: boolean[], path: string): string[] {
+/** Go's if guards (guards), read character by character in string-free code. A header runs from the last statement
+ * boundary (a brace; a semicolon or a case colon outside an if, for or switch header; a line end where Go ends a
+ * statement, so a comment-only line inside a header is passed over) to its brace. The block an if, else if or else
+ * header opens takes the guard around it and its chain, and so does the header itself, so testing.Short() in a
+ * condition carries the rest of its if line. A func at file level clears the guard, and a brace inside brackets (a func
+ * or composite literal) opens a block that keeps the guard around it. */
+function goGuards(bare: string[]): [number, string][][] {
+  type Block = { guard: string; chain: string | null; statement: boolean; parens: number; header: string; tail: string; at: [number, number]; closed: Block | null };
+  const block = (guard: string, chain: string | null, statement: boolean): Block => ({ guard, chain, statement, parens: 0, header: "", tail: "", at: [0, 0], closed: null });
+  const stack = [block("", null, true)];
+  const out: [number, string][][] = bare.map(() => []);
+  bare.forEach((line, i) => {
+    out[i].push([0, stack[stack.length - 1].guard]);
+    for (let j = 0; j <= line.length; j++) {
+      const b = stack[stack.length - 1];
+      const c = j < line.length ? line[j] : "\n";
+      if (c === "{" && b.parens === 0) {
+        const h = b.header.trim();
+        const word = h.match(/^(?:if|else\s+if|else)\b/)?.[0];
+        const before = b.closed?.chain ?? null;
+        const cond = "(" + h.slice(word?.length ?? 0).replace(/\s+/g, "") + ")";
+        const chain = word === "if" ? "if" + cond : word === undefined || before === null ? null : word === "else" ? before + "else" : before + "elif" + cond;
+        const next = block(stack.length === 1 && /^func\b/.test(h) ? "" : b.guard + (chain ?? ""), chain, true);
+        if (chain !== null) for (let l = b.at[0]; l <= i; l++) out[l] = l === b.at[0] ? [...out[l].filter(([col]) => col < b.at[1]), [b.at[1], next.guard]] : [[0, next.guard]];
+        stack.push(next);
+        out[i].push([j + 1, next.guard]);
+      } else if (c === "{") stack.push(block(b.guard, null, false));
+      else if (c === "}" && stack.length > 1) {
+        const done = stack.pop()!;
+        const o = stack[stack.length - 1];
+        Object.assign(o, done.statement ? { header: "", tail: "", closed: done } : { header: o.header + c, tail: (o.tail + c).slice(-2) });
+        out[i].push([j + 1, o.guard]);
+      } else if (b.parens === 0 && (c === ";" || (c === ":" && line[j + 1] !== "=") ? !/^\s*(?:if|else\s+if|for|switch)\b/.test(b.header) : c === "\n" && /(?:[\w)\]}"'\x60]|\+\+|--)$/.test(b.tail))) Object.assign(b, { header: "", tail: "", closed: null });
+      else {
+        if (!b.tail && c.trim()) b.at = [i, j];
+        if (c.trim()) b.tail = (b.tail + c).slice(-2);
+        b.parens += "([".includes(c) ? 1 : ")]".includes(c) ? -1 : 0;
+        b.header += c;
+      }
+    }
+  });
+  return out;
+}
+
+/** The if guard over a Python or Go file's string-free code (scan's bare): for each line, the guard from each column on,
+ * as [column, guard] pairs in order. A guard is the if, elif and else blocks around the code inside its def, class or
+ * func, and the one-line if (Python's if A: body, Go's if A { body }) it sits in, outermost first. Each if or elif is
+ * named by its condition, spaces and line continuations removed, and each elif or else follows the branches before it
+ * in its chain, so an else block is guarded by the if it negates. Python reads blocks by indentation, one guard per
+ * statement, and Go by brackets (goGuards). "" everywhere in a file in another language. */
+function guards(bare: string[], start: boolean[], path: string): [number, string][][] {
   const lang = languageOf(path);
-  const out = bare.map(() => "");
-  if (lang !== "python" && lang !== "go") return out;
-  const py = lang === "python";
+  if (lang === "go") return goGuards(bare);
+  const out: [number, string][][] = bare.map(() => [[0, ""]]);
+  if (lang !== "python") return out;
   const open: { level: number; guard: string; chain: string | null }[] = [];
-  let depth = 0;
   for (let i = 0; i < bare.length; i++) {
-    if (!bare[i].trim() || (py && !start[i])) continue;
-    const h = i;
+    if (!start[i] || !bare[i].trim()) continue;
+    let end = i;
     let text = bare[i];
-    for (let j = i + 1; py && j < bare.length && !start[j]; j++) text += "\n" + bare[j];
-    const lead = py ? "" : text.trim().match(/^(?:[)\]}]\s*)*/)![0];
-    const level = py ? indent(text) : depth - (lead.match(/[)\]}]/g)?.length ?? 0);
+    while (end + 1 < bare.length && !start[end + 1]) text += "\n" + bare[++end];
+    const level = indent(text);
     let prev: { level: number; chain: string | null } | undefined;
     while (open.length && open[open.length - 1].level >= level) prev = open.pop();
     const before = prev?.level === level ? prev.chain : null;
-    const word = text.trim().slice(lead.length).match(py ? /^(?:if|elif|else)\b/ : /^(?:if|else\s+if|else)\b/)?.[0];
-    while (!py && word !== undefined && i + 1 < bare.length && /[^\w)\]}{"'\x60\s]\s*$/.test(bare[i])) text += "\n" + bare[++i];
-    const rest = word === undefined ? "" : text.trim().slice(lead.length + word.length);
-    const k = bodyOpen(rest, py);
+    const word = text.trim().match(/^(?:if|elif|else)\b/)?.[0];
+    const rest = word === undefined ? "" : text.trim().slice(word.length);
+    const k = bodyOpen(rest);
     const cond = "(" + (k < 0 ? rest : rest.slice(0, k)).replace(/\\\s*\n|\s+/g, "") + ")";
     const chain = word === "if" ? "if" + cond : word === undefined || before === null ? null : word === "else" ? before + "else" : before + "elif" + cond;
-    const reset = py ? PY_DEF.test(text) : /^func\b/.test(text);
-    out.fill(reset ? "" : (open.length ? open[open.length - 1].guard : "") + (chain ?? ""), h, i + 1);
-    if (!py) for (const c of text) depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
-    if (chain !== null || reset || (py ? /:\s*$/.test(text) : depth > level)) open.push({ level, guard: out[h], chain });
+    const reset = PY_DEF.test(text);
+    const guard = reset ? "" : (open.length ? open[open.length - 1].guard : "") + (chain ?? "");
+    for (let j = i; j <= end; j++) out[j] = [[0, guard]];
+    if (chain !== null || reset || /:\s*$/.test(text)) open.push({ level, guard, chain });
   }
   return out;
 }
+
+/** The guard (guards) at each offset of a statement's text, the lines from first on joined by newlines. */
+const guardAt = (lines: [number, string][][], first: number, text: string) => {
+  const starts = [0];
+  for (let k = text.indexOf("\n"); k >= 0; k = text.indexOf("\n", k + 1)) starts.push(k + 1);
+  return (o: number): string => {
+    let l = starts.length - 1;
+    while (starts[l] > o) l--;
+    return lines[first + l].reduce((g, [col, v]) => (col <= o - starts[l] ? v : g), "");
+  };
+};
 
 type TestState = { name: string; skip: Set<string>; focus: boolean };
 
@@ -511,7 +565,7 @@ function testStates(text: string, path: string): Map<number, TestState> {
   const statement = (i: number) => {
     if (!statements.has(first[i])) {
       const s = bare.slice(first[i], last[i] + 1).join("\n");
-      statements.set(first[i], { kinds: skipKinds(s).map((k) => (guard[first[i]] ? k + " " + guard[first[i]] : k)), cases: py && PARAMETRIZE.test(s) ? everyCaseSkipped(s) : null, wraps: py && WRAPPING.test(s) });
+      statements.set(first[i], { kinds: skipKinds(s, guardAt(guard, first[i], s)), cases: py && PARAMETRIZE.test(s) ? everyCaseSkipped(s) : null, wraps: py && WRAPPING.test(s) });
     }
     return statements.get(first[i])!;
   };

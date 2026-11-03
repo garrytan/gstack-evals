@@ -702,6 +702,10 @@ describe("detectors", () => {
       [short("if testing.Short() {"), ['\tif testing.Short() { t.Skip("short") }']],
       [goos, ['\tif runtime.GOOS == "windows" { t.Skip("not on windows") }']],
       [["\tif HasGPU() {", "\t\th()", "\t}", '\tt.Skip("later")'], ['\tt.Skip("later")']],
+      [["\tif HasGPU() {", "\t\th()", "\t} else {", '\t\tt.Skip("gpu")', "\t}"], ['\tif HasGPU() { h() } else { t.Skip("gpu") }']],
+      [["\tif HasGPU() {", "\t\tif HasDriver() {", '\t\t\tt.Skip("gpu")', "\t\t}", "\t}"], ['\tif HasGPU() { if HasDriver() { t.Skip("gpu") } }']],
+      [["\tif HasGPU() &&", "\t\t// a driver too", "\t\tHasDriver() {", '\t\tt.Skip("gpu")', "\t}"], ["\tif HasGPU() && HasDriver() {", '\t\tt.Skip("gpu")', "\t}"]],
+      [["\tif ok := HasGPU(); !ok {", '\t\tt.Skip("gpu")', "\t}"], ['\tif ok:=HasGPU();!ok { t.Skip("no gpu") }']],
     ];
     for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
     const goChanged: [string[], string[]][] = [
@@ -710,6 +714,8 @@ describe("detectors", () => {
       [split, short("if testing.Short() {")],
       [short("if testing.Short() {"), ['\tt.Skip("short")']],
       [goos, ['\tt.Skip("posix")']],
+      [['\tif HasGPU() { h() } else { t.Skip("gpu") }'], ['\tif HasGPU() { t.Skip("gpu") }']],
+      [["\tswitch runtime.GOOS {", '\tcase "windows":', "\t\tif testing.Short() {", '\t\t\tt.Skip("short")', "\t\t}", "\t}"], ["\tswitch runtime.GOOS {", '\tcase "windows":', '\t\tt.Skip("short")', "\t}"]],
       [["\tif HasGPU() {", '\t\tt.Skip("gpu")', "\t}"], ["\tif HasGPU() {", "\t\th()", "\t} else {", '\t\tt.Skip("gpu")', "\t}"]],
     ];
     for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
