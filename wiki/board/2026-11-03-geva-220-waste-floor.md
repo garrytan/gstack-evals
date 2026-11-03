@@ -15,7 +15,16 @@ links:
 
 # Wasted tool calls are at the floor in 899 single-task benchmark sessions: 4 of 14,036 calls, and none in any no-gstack cell
 
-Grade: exploratory. One rough scan of two archives, with no frozen detector and no precision audit. Paid calls: $0.
+Publication status: unpublished; posting is Garry's. Done: the scan, this file and the author's claim check. Still blocking a post: the /ship review recorded in the PR, a cross-family claim check, and a rerun by another crew.
+
+| Field | Value |
+|---|---|
+| Grade | Exploratory. One rough scan of two archives, with no frozen detector and no precision or recall audit. Paid calls: $0. |
+| Repo commit | None. The scratch scanner is not in the repo; the counts come from the archives below. |
+| Prereg | None. The scan ran as a room check for a draft plan that this post replaces. |
+| Data | geva153-rund-data.tar.gz, sha256 51f09d0cce87e2b17eee52499691c9f854121c75dd19f7be9c6416c954f4cb4b, and review-data.tar.gz, sha256 cfa9ea1781fb3414be8617882e5279398a72391883f4b4bea2bcf3e356064190, held by the gstack-evals Captain; not public |
+| Reviewed by | /ship review of this file, recorded in the PR's receipt. The cross-family claim check is pending. |
+| Reproduced by | Pending: another crew, from a clean machine |
 
 ## What we found
 
@@ -96,18 +105,18 @@ Paid model calls: $0. The scan used 1.9M host tokens (1,347 Capy credits, about 
 - **Task fit.** Poor. Single-task benchmark sessions of 5 to 67 calls on average leave little to repeat. The waste we wanted to measure lives in multi-session ship pipelines.
 - **Power and floor.** Floor. The control rate is 0 of 381 calls (Opus none, Run D) and 0 of 1,009 (Opus none, stacks round 1). Every no-gstack model pair and every gstack-against-none pair has a paired difference of 0, so the MDD is undefined, and the room rule fails on its own.
 - **Frontier competence.** Opus 5.5 without gstack made no wasted call by these rules in 1,390 calls across both archives.
-- **Verdict: FIX-METHOD** (floor and task fit). This is not a CUT-CANDIDATE for any gstack skill, because the scan never had room to see an effect.
+- **Verdict: FIX-METHOD** (floor and task fit). This is not a CUT-CANDIDATE for any gstack skill, because the scan never had room to see an effect. Next step: the crew-log reader and the in-the-wild baseline below. Kill rule: if the baseline finds deterministic re-runs at a tree CI ran, plus review rounds past the cap, under 10% of the measured ship-check wall clock, and no admission or public data meet the second trigger below, the waste line of work stops and no paid suite is built.
 
 ## What changes
 
 - The planned secondary analysis of GST-1089's transcripts is dropped: the confirmatory waste families, their admission and custody steps, and the detector PR. Nothing is frozen against GST-1089, and the requests to GST-1089 for extra transcript fields are withdrawn.
 - Next, at $0 in paid calls: a reader for crew session logs, in its own PR, and a counts-only in-the-wild baseline of crew ship pipelines, as its own post. The baseline counts deterministic re-runs at a head CI already ran, review rounds past the cap, CI reruns, and which gate caught each bug first. Only counts and digests leave the logs, and no transcript text is committed. Those crews ran almost entirely on Opus 5.5, so the baseline describes one model and compares none.
-- A paid ship-task suite keeps its own gate. Its start rule from the plan still holds: it starts if the baseline shows deterministic re-runs at a tree CI ran, plus review rounds past the cap, above 10% of the measured ship-check wall clock.
+- A paid ship-task suite keeps its own gate. The plan gave it three start triggers. The first, a claim from the GST-1089 comparison, went with that comparison. The other two still hold. It starts if the baseline shows deterministic re-runs at a tree CI ran, plus review rounds past the cap, above 10% of the measured ship-check wall clock. It also starts if admission or public data show some model and arm cell's waste share at 10% or more, with a model contrast whose 95% interval excludes 0. Otherwise it is not built.
 
 ## Limits and threats
 
-- The scanner is rough, with no precision or recall audit. Its rules count only calls that added nothing for certain, so every count is a lower bound; the upper check above bounds what R1 and R2 could be missing.
-- Run D logs carry no parent_tool_use_id, so each Run D session is scanned as one context. R1 can then match a re-read by a different context, which only overcounts. An Agent call resets R1 in Run D because subagent edits aren't visible there (7 Agent calls in all).
+- The scanner is rough, with no precision or recall audit, so its error can run either way. Its rules are strict, which can miss waste, and its context handling can overcount, as the next bullet says. The upper check above bounds what R1 and R2 could be missing.
+- Run D logs carry no parent_tool_use_id, so each Run D session is scanned as one context, and the scanner doesn't split at compaction. R1 and R2 can then match a repeat by a different context or after a compaction, which overcounts. R2 gives 3 of the 4 counted calls, so those may not be waste at all. An Agent call resets R1 in Run D because subagent edits aren't visible there (7 Agent calls in all).
 - Two archives and two task sources. Longer or multi-step tasks may behave differently.
 - stacks round 1's Opus none sessions come from one batch, so the tstack-against-none pair crosses batches.
 
@@ -118,6 +127,24 @@ The scan reads the Run D and stacks round 1 transcript bundles, which are not pu
 ## What is held out, and why
 
 Nothing held out is read here. Run D uses public Terminal-Bench 2 tasks, and stacks round 1's units come from gstack's public pull requests. The crew logs the next step reads are private sessions, so only counts and digests will leave them.
+
+## X hook (draft)
+
+Exploratory, $0: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol and particle-1 for tool calls that added nothing. We found 4 in 14,036. Single-task benchmark sessions leave almost nothing to waste, so we're measuring multi-hour ship pipelines next.
+
+## Claim check
+
+| Check | Evidence |
+|---|---|
+| The headline holds at the high end | A count has no interval. With every reset rule off, the upper check gives at most 0.34% of Run D's calls, still under the 2% room rule. |
+| A null says what the test could see | Control rate 0 of 381 calls (Opus none, Run D) and 0 of 1,009 (Opus none, stacks round 1). The MDD is undefined because every paired difference is 0, and the post says so. |
+| The grade is named | Exploratory, in the record table and the X hook. |
+| No forbidden claim | No model claim from U1, no gstack cut claim, no parity claim. |
+| The numbers recompute | Sessions sum to 899 and calls to 14,036, and the shares and paired SEs follow from the table rows, as this PR's review checked. |
+| Disclosures are settled | The gstack, Particle and OpenAI lines sit in the closing section only, and the X hook has none. |
+| The sealed guard passes | gstack-pregate sealed is clear on this branch. |
+| Cross-family review | Pending. |
+| Rerun by another crew | Pending. |
 
 ## Changelog
 
