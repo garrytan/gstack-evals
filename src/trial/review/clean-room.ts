@@ -1,7 +1,9 @@
 // The clean room for no-gstack plan arms (panel v3 plan, sections 4 and 5; FOUN-32's rule from GGST-6, 2026-11-02). A
 // none or lens arm runs where it can see no Capy drive and no gstack. CLEAN_ROOM_SCRIPT is one POSIX sh script that checks
 // this. Its arguments are the home directory, then each unit directory. It prints "found <path>" per hit and exits 3 on
-// any hit, 0 when clean. A path that exists counts, a dangling symlink included. CLEAN_ROOM_CHECKS lists the checks for
+// any hit, 0 when clean. A path that exists counts, a dangling symlink included. When the scan cannot finish (find or
+// grep is not on PATH, find reports an error, or grep cannot read a file that exists) it prints a reason line on stderr
+// and exits 4, hits or not; a dangling AGENTS.md or CLAUDE.md link is no error. CLEAN_ROOM_CHECKS lists the checks for
 // the authoring kit's check_units.py, which carries the same list.
 //
 // review-units runs the script twice. cleanRoomPreflight runs it in each none and lens arm image, per model too, before
@@ -31,12 +33,20 @@ export const CLEAN_ROOM_SCRIPT = [
   "home=$1",
   "shift",
   'for p in "$home/.capy" "$home/.local/share/gstack" "$home/.claude/skills" "${CLEAN_ROOM_ROOT:-}"/home/*/.capy/drive "${CLEAN_ROOM_ROOT:-}/root/.capy/drive"; do there "$p" && found "$p"; done',
-  'for p in "$home/.claude/CLAUDE.md" "$home/AGENTS.md"; do [ -f "$p" ] && grep -qi gstack "$p" 2>/dev/null && found "$p"; done',
+  "bad=0",
+  'fail() { printf "clean-room: %s\\n" "$1" >&2; bad=1; }',
+  'named() { grep -qi gstack "$1" 2>/dev/null; s=$?; if [ "$s" = 0 ]; then found "$1"; elif [ "$s" != 1 ] && [ -e "$1" ]; then fail "grep could not read $1 (exit $s)"; fi; }',
+  'for t in find grep; do command -v "$t" >/dev/null 2>&1 || fail "$t is not on PATH, so the scan cannot run"; done',
+  '[ "$bad" = 0 ] || exit 4',
+  'for p in "$home/.claude/CLAUDE.md" "$home/AGENTS.md"; do [ -f "$p" ] && named "$p"; done',
   'for u in "$@"; do',
   '  there "$u/.claude/skills" && found "$u/.claude/skills"',
-  '  named=$(find "$u" -name .git -prune -o \\( -name AGENTS.md -o -name CLAUDE.md \\) -type f -exec grep -li gstack {} + 2>/dev/null)',
-  '  [ -n "$named" ] && printf "%s\\n" "$named" | sed "s/^/found /" && hit=1',
+  '  list=$(find "$u" -name .git -prune -o \\( -name AGENTS.md -o -name CLAUDE.md \\) \\( -type f -o -type l \\) -print 2>/dev/null) || fail "find could not finish under $u"',
+  '  while IFS= read -r f; do [ -n "$f" ] && named "$f"; done <<EOF',
+  "$list",
+  "EOF",
   "done",
+  '[ "$bad" = 0 ] || exit 4',
   '[ "$hit" = 0 ] || exit 3',
 ].join("\n");
 

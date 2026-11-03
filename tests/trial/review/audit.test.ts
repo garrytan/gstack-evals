@@ -2,7 +2,7 @@
 // transcript.ndjson, the main agent's and each subagent's, is classed by what it touched. A non-error touch under a
 // home's .capy is contamination in every arm; in the none and lens arms a gstack skill file, anything under
 // .local/share/gstack and a gstack-* command are contamination too. A touch whose result is an error is printed and
-// never counts, a call with no result counts as done, and printed targets show HOME as ~ and /work/<task> as <unit>.
+// never counts unless its Bash command is compound, a call with no result counts as done, and printed targets show HOME as ~ and /work/<task> as <unit>.
 // Every transcript here is built in code, with a fake home made at runtime; nothing on this machine is read.
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
@@ -57,6 +57,16 @@ describe("the read audit (GEVA-203, keyless)", () => {
     const text = ndjson(call("t1", "Read", { file_path: DRIVE }), result("t1", true), call("t2", "Read", { file_path: SKILL }), result("t2", true));
     for (const arm of ARMS) expect([arm, audit(text, arm).map((t) => [t.class, t.error, t.contaminated])]).toEqual([arm, [["capy", true, false], ["skill", true, false]]]);
     expect(audit(text, "none").map(touchLine)).toEqual(["Read capy " + DRIVE_SHOWN + " (error, not contamination)", "Read skill " + SKILL_SHOWN + " (error, not contamination)"]);
+  });
+
+  // Value: protects=an error clears a Bash call's touches only for a single simple command: a compound command that read a drive file before a later part failed stays contaminated, in a none arm and a gstack arm alike, while a simple command that errors stays clean; fails_when="cat <drive file>; false" returns the file and reads clean, or a failed simple cat marks the arm untested; why_new=PR #166 review (O1); seam=auditTranscript's error rule for Bash; no_claim=how a shell parses quoting, which the rule does not read
+  test("a compound Bash command that errors after a drive read stays contaminated; a simple one that errors does not", () => {
+    const failed = (id: string, content: string): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content, is_error: true }] }, parent_tool_use_id: null, session_id: "s" });
+    const compound = ndjson(call("t1", "Bash", { command: "cat " + DRIVE + "; false" }), failed("t1", "sealed notes\n"));
+    for (const arm of ["none", "gstack"] as const) expect([arm, audit(compound, arm)]).toEqual([arm, [{ tool: "Bash", class: "capy", target: DRIVE_SHOWN, error: false, contaminated: true }]]);
+    expect(audit(compound, "none").map(touchLine)).toEqual(["Bash capy " + DRIVE_SHOWN + " (contamination)"]);
+    const simple = ndjson(call("t1", "Bash", { command: "cat " + DRIVE }), failed("t1", "cat: no such file or directory"));
+    for (const arm of ["none", "gstack"] as const) expect([arm, audit(simple, arm)]).toEqual([arm, [{ tool: "Bash", class: "capy", target: DRIVE_SHOWN, error: true, contaminated: false }]]);
   });
 
   // Value: protects=a subagent's tool call (parent_tool_use_id set) is audited the same as the main agent's; fails_when=a none arm launches a subagent that reads a skill or drive file and stays clean; why_new=audit.ts reads every tool call, the main agent's and each subagent's; seam=auditTranscript over sidechain messages; no_claim=a subagent whose transcript is written elsewhere

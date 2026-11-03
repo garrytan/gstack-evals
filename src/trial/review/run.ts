@@ -60,7 +60,9 @@
 //   failed, a gap as missing. A record with no model_output flag is a gap whose note says so; plan units run on host
 //   claude only, whose driver records the flag. <out>/terminations.tsv lists every plan session's termination, turn, model
 //   output and score.
-// - Every plan session's transcript goes through the read audit (audit.ts), and each touch is logged. An arm with a
+// - Every plan session's transcript goes through the read audit (audit.ts), and each touch is logged. A plan session
+//   whose host/transcript.ndjson cannot be read gets no audit, so unless planScore already makes it a gap it becomes a
+//   missing cell (E_INFRA_FAILURE), a coverage gap journaled like the driver's own E_INFRA_FAILURE cells. An arm with a
 //   contaminated session is untested: its arm.json is stopped with an untested block (the sessions, the paths and the
 //   arm's paid spend), and the run stops with E_ARM_CONTAMINATED, so review-units exits 4.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
@@ -411,17 +413,23 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const deadline = ended.kind === "missing" && ended.code === "E_BACKGROUND_DEADLINE";
     const waited = kind === "completed" && (trial.record.session_end?.waited_ms ?? 0) > 0;
     let transcript = "";
+    let unreadable = false;
     try {
       transcript = readers || plan || capStopped || waited || deadline ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
     } catch {
       transcript = "";
-      if (plan) log(cellName(cell) + ": host/transcript.ndjson is unreadable, so a stop scores as finding nothing and the read audit sees no call");
+      unreadable = plan !== null;
       if (!plan && (waited || deadline)) log(cellName(cell) + ": host/transcript.ndjson is unreadable, so the session is scored on its final turn" + (deadline ? " and its findings_block is false" : ""));
     }
     const texts = mainAgentTexts(transcript);
     if (deadline && trial.record.session_end) trial.record.session_end = { ...trial.record.session_end, findings_block: plan ? parsePlanSession({ termination: { kind: "completed" }, turns: trial.record.turns }).kind === "findings" : hasFindingsBlock(texts) };
     const code = plan ? null : codeParse(trial.record, texts, mainAgentTurns(transcript));
-    const parse = code ? code.parse : planStop(trial.record) ? cappedPlanParse(texts) : parsePlanSession(trial.record);
+    let parse = code ? code.parse : planStop(trial.record) ? cappedPlanParse(texts) : parsePlanSession(trial.record);
+    if (unreadable && planScore({ record: trial.record, parse }) !== "gap") {
+      log(cellName(cell) + ": host/transcript.ndjson is unreadable, so the read audit cannot run and the session, which ended " + kind + ", is a missing cell (E_INFRA_FAILURE), a coverage gap that stops its arm");
+      trial.record.termination = { kind: "missing", code: "E_INFRA_FAILURE" };
+      parse = parsePlanSession(trial.record);
+    }
     const audit = plan ? auditTranscript(transcript, { arm: arm.told as PlanArm, home, work: "/work/" + unit.task }) : [];
     for (const t of audit) log(cellName(cell) + ": read audit: " + touchLine(t));
     const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns), audit } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };

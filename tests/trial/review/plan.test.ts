@@ -228,6 +228,8 @@ describe("plan units in the run loop (keyless)", () => {
           const read = (f: string) => session.exec('cat "$GSTACK_STATE_ROOT/' + f + '" 2>/dev/null', 10_000).stdout;
           seen[cell.arm + " " + cell.model] = { prompt: task.prompt, entry: o.entry, freeform: typeof o.freeform === "function", codex: o.codex ?? null, config: read("config.yaml"), prefs: read(GLOBAL_PREFERENCES) };
           const t = turns[cell.arm + " " + cell.model]!;
+          mkdirSync(o.out, { recursive: true });
+          writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "system", subtype: "init" }) + "\n");
           return { turns: t, termination: cell.model === HAIKU ? { kind: "timeout" } : { kind: "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: t.length, loaded_bytes: null };
         },
       }),

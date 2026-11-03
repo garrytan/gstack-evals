@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { removeTree } from "../../../src/trial/cleanup.ts";
@@ -18,6 +18,13 @@ const put = (path: string, text: string | null = null) => (text === null ? mkdir
 const check = (r: { home: string; unit: string; root: string }) => {
   const c = spawnSync("sh", ["-c", CLEAN_ROOM_SCRIPT, "clean-room", r.home, r.unit], { encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", CLEAN_ROOM_ROOT: r.root } });
   return { code: c.status, out: c.stdout };
+};
+const SH = Bun.which("sh")!;
+const without = (tool: "find" | "grep") => {
+  const bin = mkdtempSync(join(tmpdir(), "clean-room-bin-"));
+  roots.push(bin);
+  for (const t of ["sh", "find", "grep"].filter((t) => t !== tool)) symlinkSync(Bun.which(t)!, join(bin, t));
+  return bin;
 };
 
 describe("the clean-room script (GEVA-203, keyless)", () => {
@@ -42,5 +49,31 @@ describe("the clean-room script (GEVA-203, keyless)", () => {
       const got = check(r);
       expect([name, got.code, got.out.includes("found " + where(r))]).toEqual([name, 3, true]);
     }
+  });
+
+  // Value: protects=an instruction file the arm would load through a link is checked like a plain one; fails_when=a unit CLAUDE.md that links to a file naming gstack passes, or a dangling link is refused; seam=CLEAN_ROOM_SCRIPT's find over <unit>
+  test("a unit CLAUDE.md that is a symlink to a file naming gstack prints found <path> and exits 3; a dangling one stays clean", () => {
+    const r = fresh();
+    put(join(r.root, "notes.md"), "Load gstack first.\n");
+    symlinkSync(join(r.root, "notes.md"), join(r.unit, "CLAUDE.md"));
+    expect(check(r)).toEqual({ code: 3, out: "found " + join(r.unit, "CLAUDE.md") + "\n" });
+    const dangling = fresh();
+    symlinkSync(join(dangling.root, "gone.md"), join(dangling.unit, "CLAUDE.md"));
+    expect(check(dangling)).toEqual({ code: 0, out: "" });
+  });
+
+  // Value: protects=a scan that cannot run fails closed: with find or grep off PATH the script prints its reason on stderr and exits 4, never 0 or a bare 3, even on a unit whose AGENTS.md names gstack, and so does a CLAUDE.md link grep cannot read; fails_when=a missing tool or a read error leaves the scan silent and exits 0, or prints found from a scan that never ran; seam=CLEAN_ROOM_SCRIPT under sh with a PATH built at runtime
+  test("with find or grep missing from PATH, or a link grep cannot read, the script prints its reason on stderr and exits 4", () => {
+    for (const tool of ["find", "grep"] as const) {
+      const r = fresh();
+      put(join(r.unit, "AGENTS.md"), "Load gstack first.\n");
+      const c = spawnSync(SH, ["-c", CLEAN_ROOM_SCRIPT, "clean-room", r.home, r.unit], { encoding: "utf8", env: { PATH: without(tool), CLEAN_ROOM_ROOT: r.root } });
+      expect([tool, c.status, c.stdout, c.stderr]).toEqual([tool, 4, "", "clean-room: " + tool + " is not on PATH, so the scan cannot run\n"]);
+    }
+    const unread = fresh();
+    put(join(unread.root, "notes"));
+    symlinkSync(join(unread.root, "notes"), join(unread.unit, "CLAUDE.md"));
+    const c = spawnSync(SH, ["-c", CLEAN_ROOM_SCRIPT, "clean-room", unread.home, unread.unit], { encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", CLEAN_ROOM_ROOT: unread.root } });
+    expect([c.status, c.stdout, c.stderr]).toEqual([4, "", "clean-room: grep could not read " + join(unread.unit, "CLAUDE.md") + " (exit 2)\n"]);
   });
 });

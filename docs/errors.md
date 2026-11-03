@@ -217,7 +217,7 @@ Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing.
 
 ### E_ROUTE_TOOL_ROUNDTRIP
 
-route-check's tool part failed on the model's OpenRouter route: in a one-turn session that reads a random token from token.txt, no main-agent tool call got a non-error result holding the token, the main agent's last text did not quote it, or the session did not complete. The try counts against the part's two; a second failure takes the model out of E1 with this code.
+route-check's tool part failed on the model's OpenRouter route: in a one-turn session that reads a random token from token.txt, no main-agent tool call got a non-error result holding the token, the main agent's last text did not quote it, the session did not complete, or the provider answered one of the session's own calls with a 4xx other than 401, 403 or 429 (the reason holds the status and the response body). The try counts against the part's two; a second failure takes the model out of E1 with this code.
 
 Fix: Apply a named repair from the frozen list (--repair provider-pin=&lt;openrouter provider>), then rerun route-check with the same --out. After the second failure there is no fix inside the check: the results name this code.
 
@@ -225,7 +225,7 @@ Exit 1. Side effects: Spend on the model's e1-route line item, settled in the le
 
 ### E_ROUTE_NO_BLOCK
 
-route-check's block part failed on the model's OpenRouter route: the two-turn none-arm plan session on the fixture unit (the plan ask, then the turn-2 ask with the frozen output block) did not complete with a plan-findings block that parses. An empty list ([]) passes. The try counts against the part's two; a second failure takes the model out of E1 with this code.
+route-check's block part failed on the model's OpenRouter route: the two-turn none-arm plan session on the fixture unit (the plan ask, then the turn-2 ask with the frozen output block) did not complete with a plan-findings block that parses, or the provider answered one of the session's own calls with a 4xx other than 401, 403 or 429 (the reason holds the status and the response body). An empty list ([]) passes. The try counts against the part's two; a second failure takes the model out of E1 with this code.
 
 Fix: Raise the output allowance (--repair output-allowance=&lt;tokens>, above 32000), then rerun route-check with the same --out. After the second failure there is no fix inside the check: the results name this code.
 
@@ -907,7 +907,7 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_ROUTE_INFRA
 
-route-check hit an endpoint, credential or proxy failure, which is not a compatibility failure: a session ended missing (such as UPSTREAM or E_INFRA_FAILURE), with rejected credentials, as an infra incident or before any model output; the rig failed without a reason code of its own; or OpenRouter's generation lookup refused the key or kept failing. It uses no try. Two infra failures stop the check for the Captain, and the model stays in E1.
+route-check hit an endpoint, credential or proxy failure, which is not a compatibility failure: a session ended missing (such as UPSTREAM or E_INFRA_FAILURE), with rejected credentials, as an infra incident or before any model output; the rig failed without a reason code of its own; OpenRouter's generation lookup refused the key, kept failing or ran out of time; or a call of the try had a spend the proxy could not read, a 5xx with no usage (the proxy charges it at its full reservation, a retried attempt included) or an unknown outcome (a broken stream), so the metering part is infra and its charge stays as settled. A session that ended that way after the provider answered one of its own calls with a 4xx other than 401, 403 or 429 is not infra: it fails the part the session serves (E_ROUTE_TOOL_ROUNDTRIP or E_ROUTE_NO_BLOCK). 5xx answers, network errors, 401, 403, 429 and the proxy's own refusals stay infra. It uses no try. Two infra failures stop the check for the Captain, and the model stays in E1.
 
 Fix: Check the endpoint, credential or proxy that stderr names, then rerun route-check with the same --out. After the second infra failure, report the check to the Captain instead.
 

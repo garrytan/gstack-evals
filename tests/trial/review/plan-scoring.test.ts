@@ -546,8 +546,10 @@ describe("the seeded question preferences (keyless)", () => {
       egress: () => ({ open: false, detail: "test rig" }),
       close: async () => ({ committed: 0, unknown: 0, lease_id: null }),
       recovery: null,
-      driver: () => ({
+      driver: (o) => ({
         async run(session): Promise<AgentOutcome> {
+          mkdirSync(o.out, { recursive: true });
+          writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "system", subtype: "init" }) + "\n");
           seen.prefs = session.exec('cat "$GSTACK_STATE_ROOT/' + GLOBAL_PREFERENCES + '"', 10_000).stdout;
           seen.project = session.exec('cat "$GSTACK_STATE_ROOT/projects/demo/' + PROJECT_PREFERENCES + '"', 10_000).stdout;
           return { turns: [block([])], termination: { kind: "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: 1, loaded_bytes: null };

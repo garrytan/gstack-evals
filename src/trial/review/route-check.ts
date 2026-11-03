@@ -8,14 +8,23 @@
 //   driver's follow-up, with the rec user and cap stops on. It passes when parsePlanSession gives findings, [] included.
 // - metering: every call of both sessions has a spent outcome in the proxy journal with its spend and reasoning tokens,
 //   and each session's metered spend is within 10% of what OpenRouter billed for its calls. The bill comes from
-//   GET /api/v1/generation?id=<upstream id>, polled until every id is found or one shared deadline passes.
+//   GET /api/v1/generation?id=<upstream id>, polled until every id is found or one shared deadline passes. A call settled
+//   at $0 because the provider refused it (4xx or 429) or the proxy never sent it (a null status) needs no upstream id.
+//   A call whose spend the proxy could not read makes the metering part infra, with no bill lookup: a 5xx answer with no
+//   usage, which the proxy settles at its full reservation (a retried attempt included), or an unknown outcome (a broken
+//   stream). The proxy's charge stays in the ledger and the try's record as it was settled.
 // - A run of the command is one try of every part not yet passed: both sessions while metering is open, else the one
 //   session the open part needs. <out>/route-check.json keeps every try. A part gets two tries; a model that fails a part
 //   twice leaves E1 with that part's code, and a third try is refused. Between tries the only change allowed is a repair
 //   from the frozen list (REPAIRS), named with --repair and recorded with the try.
 // - An endpoint, credential or proxy failure is E_ROUTE_INFRA (exit 2) and uses no try: a session that ended missing,
 //   with rejected credentials, as an infra incident or before any model output; a rig that failed without a reason code;
-//   a bill lookup the key or the network refused. Two infra failures stop the check for the Captain, and the model stays.
+//   a bill lookup the key or the network refused, or one the shared wait cut off; a metered call charged at its
+//   reservation after a 5xx with no usage, or with an unknown outcome. Two infra failures stop the check for the
+//   Captain, and the model stays. A session that would be infra after the provider answered one of its own calls with a
+//   4xx other than 401, 403 or 429 is the route's answer instead: the part that session serves (tool or block) fails
+//   with the status and the response body, and the try counts. 5xx answers, network errors, 401, 403, 429 and the
+//   proxy's own refusals stay infra.
 // - Sessions run on review-units' Docker rig (dockerRig, one bare none arm) under --item. The check's cap is four sessions
 //   at the model's full allowance; a try starts only when its worst case fits under what is left, and its lease holds that
 //   worst case. A ledger cap stop leaves the check incomplete (CAP_STOP, exit 2): neither passed nor failed.
@@ -124,6 +133,14 @@ export function sessionInfra(record: Pick<TrialRecord, "termination" | "model_ou
 
 const blockText = (content: unknown): string => (typeof content === "string" ? content : Array.isArray(content) ? content.map((b) => (typeof b?.text === "string" ? b.text : "")).join("\n") : "");
 
+/** A provider 4xx other than 401, 403 or 429 on one of the session's own calls (an outcome on its meter), with the response body from the transcript's last API error: the route's answer, or null. */
+export function providerRefusal(lines: readonly Line[], meter: string, transcript: string): string | null {
+  const status = lines.findLast((l) => l.kind === "outcome" && l.meter_id === meter && typeof l.status === "number" && l.status >= 400 && l.status < 500 && l.status !== 401 && l.status !== 403 && l.status !== 429)?.status;
+  if (status === undefined) return null;
+  const body = (readTranscript(transcript) as unknown as Line[]).findLast((m) => m.type === "assistant" && (m.is_api_error_message || m.error));
+  return "the provider answered " + status + " to Claude Code's request" + (body ? ": " + blockText(body.message?.content) : ", and the transcript holds no response body");
+}
+
 /** The tool part's judge: null when a main-agent tool call got a non-error result holding the token and the last main-agent text quotes it, else why not. */
 export function judgeTool(record: Pick<TrialRecord, "termination">, transcript: string, token: string): string | null {
   if (record.termination.kind !== "completed") return "the session ended " + record.termination.kind;
@@ -163,8 +180,8 @@ export function journalCalls(lines: readonly Line[], meters: Partial<Record<Sess
 }
 
 const knownOutcome = (c: JournalCall): boolean => c.outcome?.kind === "spent" && typeof c.outcome.spent_micros === "number" && typeof c.outcome.usage?.reasoning === "number";
-/** A call the provider refused (4xx or 429) and the proxy settled at nothing: billed nothing, so it needs no upstream id. */
-const refusedFree = (c: JournalCall): boolean => knownOutcome(c) && c.outcome!.spent_micros === 0 && c.status !== null && c.status >= 400 && c.status < 500;
+/** A call the proxy settled at nothing because the provider refused it (4xx or 429) or the proxy never sent it (a null status, "not sent: ..."): billed nothing, so it needs no upstream id. */
+const refusedFree = (c: JournalCall): boolean => knownOutcome(c) && c.outcome!.spent_micros === 0 && (c.status === null || (c.status >= 400 && c.status < 500));
 /** The upstream ids whose bill the metering part reads. */
 export const billIds = (calls: readonly JournalCall[]): string[] => calls.filter((c) => knownOutcome(c) && !refusedFree(c) && c.upstream_id).map((c) => c.upstream_id!);
 
@@ -182,6 +199,18 @@ export interface CallRow {
   metered_micros: number | null;
   billed_micros: number | null;
   reasoning_tokens: { metered: number | null; billed: number | null };
+}
+
+/** Why the metering part is infra, or null: a call whose spend the proxy could not read, a 5xx without usage (charged at its full reservation) or an unknown outcome (a broken stream), so no bill can be compared with it. */
+export function meteringInfra(calls: readonly JournalCall[]): string | null {
+  const lost = calls.flatMap((c) => {
+    const name = "call " + c.reservation_id + " (" + c.session + " session)";
+    if (c.outcome?.kind === "unknown") return [name + " has an unknown outcome, so its spend is not known"];
+    const usage = c.outcome?.usage;
+    const none = !usage || ["input", "output", "reasoning", "cache_read", "cache_write"].every((k) => !usage[k]);
+    return c.outcome?.kind === "spent" && c.status !== null && c.status >= 500 && none ? [name + ": the provider answered " + c.status + " with no usage, so the proxy charged its full reservation"] : [];
+  });
+  return lost.length ? lost.join("; ") : null;
 }
 
 /** The metering part's judge: the per-call comparison and every problem found; no problem is a pass. */
@@ -219,17 +248,20 @@ export interface BillDeps {
 /**
  * OpenRouter's billed cost for each generation id, polled until found or one shared deadline passes. An id still not
  * found (404) at the deadline is left out, which the metering judge reports. A refused key, or a lookup that still fails
- * (a network error, another status, no total_cost) at the deadline, is infra.
+ * (a network error, another status, no total_cost) at the deadline, is infra. So is an id whose first lookup would start
+ * at or past the deadline. Each lookup, its body read included, is aborted once the deadline passes, or one poll after
+ * it starts if that is later, and an aborted lookup fails like any other.
  */
 export async function billedCosts(ids: readonly string[], d: BillDeps): Promise<{ billed: Map<string, Billed> } | { infra: string }> {
   const poll = d.pollMs ?? BILLED_POLL_MS;
   const deadline = d.now() + (d.waitMs ?? BILLED_WAIT_MS);
   const billed = new Map<string, Billed>();
   for (const id of new Set(ids)) {
+    if (d.now() >= deadline) return { infra: "the shared wait ran out before generation " + id + " was looked up" };
     for (;;) {
       let problem: string | null = null;
       try {
-        const res = await d.fetch(GENERATION_URL + "?id=" + encodeURIComponent(id), { headers: { authorization: "Bearer " + d.key } });
+        const res = await d.fetch(GENERATION_URL + "?id=" + encodeURIComponent(id), { headers: { authorization: "Bearer " + d.key }, signal: AbortSignal.timeout(Math.max(deadline - d.now(), poll)) });
         if (res.status === 401 || res.status === 403) return { infra: "OpenRouter answered " + res.status + " to the generation lookup's key" };
         if (res.ok) {
           const data = ((await res.json()) as { data?: { total_cost?: unknown; native_tokens_reasoning?: unknown } } | null)?.data;
@@ -558,20 +590,25 @@ async function routeCheck(argv: string[], io: Io, env: Env, deps: Deps): Promise
   entry.spent_micros = round.spent_micros;
   entry.claude_code_version = round.sessions.block?.claude_code_version ?? round.sessions.tool?.claude_code_version ?? null;
   if (Object.values(round.sessions).some((s) => s.record.termination.kind === "cap_stop")) return capStop("the proxy stopped a session at the lease's cap");
+  const refusalOf = (s: Session): string | null => {
+    const r = round.sessions[s];
+    return r && sessionInfra(r.record) ? providerRefusal(round.journal, r.meter_id, r.transcript) : null;
+  };
   const infraOf = (s: Session): string | null => {
     const r = round.sessions[s];
-    return r ? sessionInfra(r.record) : "the " + s + " session did not run";
+    return r ? (refusalOf(s) ? null : sessionInfra(r.record)) : "the " + s + " session did not run";
   };
   const judged = (p: Part, why: string | null): PartResult => (why === null ? { result: "pass" } : { result: "fail", code: PART_CODES[p], reason: why });
   const rows: CallRow[] = [];
   for (const p of open) {
     const why = p === "metering" ? (infraOf("tool") ?? infraOf("block")) : infraOf(p);
     if (why) entry.parts[p] = { result: "infra", reason: why };
-    else if (p === "tool") entry.parts.tool = judged("tool", judgeTool(round.sessions.tool!.record, round.sessions.tool!.transcript, token));
-    else if (p === "block") entry.parts.block = judged("block", judgeBlock(round.sessions.block!.record));
+    else if (p === "tool") entry.parts.tool = judged("tool", refusalOf("tool") ?? judgeTool(round.sessions.tool!.record, round.sessions.tool!.transcript, token));
+    else if (p === "block") entry.parts.block = judged("block", refusalOf("block") ?? judgeBlock(round.sessions.block!.record));
     else {
       const calls = journalCalls(round.journal, { tool: round.sessions.tool!.meter_id, block: round.sessions.block!.meter_id });
-      const bill = await billedCosts(billIds(calls), { fetch: deps.fetch, now: deps.now, sleep: deps.sleep, key });
+      const lost = meteringInfra(calls);
+      const bill = lost ? { infra: lost } : await billedCosts(billIds(calls), { fetch: deps.fetch, now: deps.now, sleep: deps.sleep, key });
       if ("infra" in bill) entry.parts.metering = { result: "infra", reason: bill.infra };
       else {
         const m = judgeMetering(calls, bill.billed, ["tool", "block"]);

@@ -40,7 +40,10 @@
 //   tool_result (the CLI is about to call the model again) ends the session as turn_cap under capStops, else as
 //   completed, and so does an error_max_turns result in the second turn. At that tool_result the adapter interrupts the
 //   CLI's turn before it closes the session, because the SDK's teardown leaves the CLI running for 2 s after it closes
-//   its input, time enough for more model calls. The simulator still answers, the background hold
+//   its input, time enough for more model calls. A result at or past that count ends the session the same way when the
+//   next step would be a simulator reply or a background hold, since either starts another model call: the CLI is idle
+//   at a result, so the adapter closes it with no interrupt and sends nothing. A final answer at that count with no
+//   reply and nothing held still ends completed. Below the count the simulator still answers, the background hold
 //   still applies on the second turn's clock, and the second turn spends from the same slot allowance. Any stop in the
 //   first turn ends the session with no follow-up. The outcome's follow_up says whether the text went in and how many
 //   model turns followed it; the session ended in the second turn when it went in.
@@ -589,6 +592,12 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               if (m.subtype === "error_max_turns" && o.capStops) stop ??= { kind: "turn_cap" };
               const next = m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" };
               turnText = "";
+              if (followed && !stop && followTurns.size >= o.followUp!.maxTurns && ("reply" in next || (waitMs !== null && m.subtype === "success" && holding().length))) {
+                if (o.capStops) stop = { kind: "turn_cap" };
+                ended = true;
+                inbox.close();
+                break;
+              }
               if ("reply" in next) {
                 inbox.push(userMessage(next.reply));
                 awaitingResult = true;

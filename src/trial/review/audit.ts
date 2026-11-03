@@ -4,7 +4,9 @@
 // segment), anything under .local/share/gstack, anything under a home's .capy (~/.capy, $HOME/.capy, /home/*/.capy,
 // /root/.capy) and a gstack-* command in Bash. It reads a call's file_path, path, pattern and notebook_path, and a Bash
 // call's command text. A touch whose result is an error (a missing file, a failed command) is printed and is never
-// contamination; a call with no result counts as done. Contamination, in any arm, is a non-error touch under .capy; in
+// contamination, except in a compound Bash command (one with ;, &, |, a newline, a subshell or a command substitution),
+// where an earlier part may have read the file before a later one failed, so every touch keeps counting. A call with no
+// result counts as done. Contamination, in any arm, is a non-error touch under .capy; in
 // the none and lens arms it is also a non-error touch of a skill file or of .local/share/gstack, or a gstack-* command.
 // A contaminated arm is untested (E_ARM_CONTAMINATED). Printed targets replace the session's HOME with ~ and its
 // /work/<task> with <unit>. AUDIT_SHA256, this file's sha256, joins every plan session key's verifier.
@@ -49,7 +51,7 @@ export function auditTranscript(transcript: string, o: { arm: PlanArm; home: str
   for (const m of messages) for (const b of m.type === "assistant" && Array.isArray(m.message?.content) ? m.message.content : []) {
     if (b?.type !== "tool_use" || !b.input || typeof b.input !== "object") continue;
     const input = b.input as Record<string, unknown>;
-    const error = errors.get(b.id) === true;
+    const error = errors.get(b.id) === true && !(b.name === "Bash" && typeof input.command === "string" && /[;&|\n()`]/.test(input.command));
     const found: [TouchClass, string][] = INPUTS.flatMap((k) => (typeof input[k] === "string" ? pathClasses(input[k] as string, o.home).map((c): [TouchClass, string] => [c, input[k] as string]) : []));
     if (b.name === "Bash" && typeof input.command === "string") {
       for (const w of input.command.split(/[\s;|&()<>`'"=]+/)) if (w) for (const c of pathClasses(w, o.home)) found.push([c, w]);

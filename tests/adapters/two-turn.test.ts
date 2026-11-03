@@ -74,7 +74,7 @@ const sh = (command: string, ms: number): StepResult => {
   return { exitCode: r.status ?? 1, timedOut: r.error?.message.includes("ETIMEDOUT") ?? false, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 };
 
-// Value: protects=plan v3's two-turn sessions (GEVA-165 plan, sections 4 and 5; GEVA-203 contract 1): the follow-up goes in verbatim once, in the same CLI session, only after a completed first turn and after any simulator reply; every first-turn stop ends the session with no follow-up; every second-turn stop keeps its own termination with follow_up sent and the adapter's own count of main-agent model turns; the second turn's own cap binds at exactly maxTurns and its own clock replaces the session's; a refused preflight ends the session before any CLI spawn and logs why; fails_when=the follow-up goes in after a stop, twice, or before a simulator reply, the turn-2 cap fires early, late or without the CLI being about to call again, turn 2 inherits the session deadline, or a refused preflight still spawns the CLI; why_new=C1 adds a second scripted user message to every plan session and a clean-room check before it; seam=the driver's result, user and assistant branches and its clock, through the real Agent SDK 0.3.314 and the stub CLI's script mode; no_claim=the real CLI, which the describe below covers
+// Value: protects=plan v3's two-turn sessions (GEVA-165 plan, sections 4 and 5; GEVA-203 contract 1): the follow-up goes in verbatim once, in the same CLI session, only after a completed first turn and after any simulator reply; every first-turn stop ends the session with no follow-up; every second-turn stop keeps its own termination with follow_up sent and the adapter's own count of main-agent model turns; the second turn's own cap binds at exactly maxTurns and its own clock replaces the session's; a refused preflight ends the session before any CLI spawn and logs why; fails_when=the follow-up goes in after a stop, twice, or before a simulator reply, the turn-2 cap fires early, late or without the CLI being about to call again, a simulator reply goes in after the cap, turn 2 inherits the session deadline, or a refused preflight still spawns the CLI; why_new=C1 adds a second scripted user message to every plan session and a clean-room check before it; seam=the driver's result, user and assistant branches and its clock, through the real Agent SDK 0.3.314 and the stub CLI's script mode; no_claim=the real CLI, which the describe below covers
 describe("GEVA-203: the follow-up and preflight on the pinned Agent SDK against a stub CLI (keyless)", () => {
   test("the follow-up goes in verbatim as the second user message of the same CLI session once the first turn ends completed", async () => {
     const touched = join(mkdtempSync(join(tmpdir(), "two-turn-touch-")), "touched");
@@ -146,6 +146,15 @@ describe("GEVA-203: the follow-up and preflight on the pinned Agent SDK against 
       expect([name, r.outcome.termination, r.outcome.follow_up, r.users]).toEqual([name, termination, { sent: true, model_turns: turns }, [PROMPT, FOLLOW]]);
     }
   }, 120_000);
+
+  test("a simulator reply after the second turn's last allowed model turn ends the session at the cap with no further user message", async () => {
+    const sim = { freeform: async () => ({ text: "Go with your recommendation." }), entry: { user: { persona: "p" } } as never };
+    const script = [{ content: text("I read plan.md.") }, { turns: 4, content: text("Which option do you want?") }, { content: text(BLOCK) }];
+    const capped = await stub(script, { followUp: FOLLOW_UP, capStops: true, ...sim });
+    expect([capped.outcome.termination, capped.outcome.follow_up, capped.users]).toEqual([{ kind: "turn_cap" }, { sent: true, model_turns: 5 }, [PROMPT, FOLLOW]]);
+    const plain = await stub(script, { followUp: FOLLOW_UP, ...sim });
+    expect([plain.outcome.termination, plain.outcome.follow_up, plain.users]).toEqual([{ kind: "completed" }, { sent: true, model_turns: 5 }, [PROMPT, FOLLOW]]);
+  }, 60_000);
 
   test("the second turn runs on its own clock: its own timeout while the session's is far off, and its full timeoutMs after a long first turn", async () => {
     const own = await stub([{ content: text("I read plan.md.") }, { content: text("Listing."), hang: true }], { followUp: { ...FOLLOW_UP, timeoutMs: 1_000 } }, { timeoutMs: 60_000 });
