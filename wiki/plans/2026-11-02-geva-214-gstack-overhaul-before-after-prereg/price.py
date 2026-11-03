@@ -54,9 +54,18 @@ def item(inst, model, with_attrib=True):
     allow = ALLOW["hinv" if inst == "hinv" else KIND[inst]][model]
     return arms, exp, allow
 
+def round_worst(kind, arms, allow):
+    # review-units admits max(1, floor(parallel / arms)) units across every arm per round and stops when
+    # spent + that round's worst case passes the cap (src/trial/review/run.ts); Lane B admits parallel sessions.
+    if kind == "review":
+        return max(1, PARALLEL[kind] // len(arms)) * len(arms) * allow
+    return PARALLEL[kind] * allow
+
 def launch(name, kind, model, arms, n, rate_e, allow):
-    return {"name": name, "arms": arms, "n": n, "allow": allow, "e": rate_e,
-            "c": ceil10(1.5 * rate_e + PARALLEL[kind] * allow), "kind": kind, "model": model, "repair": True}
+    head = round_worst(kind, arms, allow)
+    rhead = head if kind == "review" else REPAIR_PARALLEL * allow
+    return {"name": name, "arms": arms, "n": n, "allow": allow, "e": rate_e, "c": ceil10(1.5 * rate_e + head),
+            "kind": kind, "model": model, "repair": True, "rhead": rhead}
 
 def rows(inst, model):
     arms, e, a = item(inst, model)
@@ -80,7 +89,7 @@ def judges(prefix, total, passes=(1, 2)):
     names = [f"{prefix}-{mo}-p{k}-{step}" for mo in MODELS for k in passes for step in ("match", "adjudicate")]
     for nm in names:
         e = total / len(names)
-        out.append({"name": nm, "arms": None, "e": e, "c": ceil10(1.5 * e + JUDGE_HEAD), "repair": False})
+        out.append({"name": nm, "arms": None, "e": e, "c": ceil10(1.5 * e + JUDGE_HEAD), "repair": False, "judge": True})
     return out
 
 def fixed(name, e, c):
@@ -101,8 +110,10 @@ THREADS = {
     "T-hrev": [r for mo in MODELS for r in rows("hrev", mo)] + judges("judge-hrev", 120),
 }
 out = ["price.py: planning spend and caps in dollars. One ledger item per launch (E_ITEM_BOUND: an item funds one run).",
-       "Launch cap = ceil10(1.5 x expected + parallel x allowance); judge batch cap = ceil10(1.5 x expected + 5);",
-       "each launch has its own repair item for named relaunches: expected 5% of the launch, cap ceil10(1.5 x expected + 2 x allowance).", ""]
+       "Launch cap = ceil10(1.5 x expected + one admission round's worst case): Lane B parallel x allowance; review-units",
+       "max(1, floor(parallel / arms)) x arms x allowance. Judge batch cap = ceil10(1.5 x expected + 5), with one judge repair item",
+       "capped the same and expected at 0. Each launch has a repair item: expected 5% of the launch, cap ceil10(1.5 x expected",
+       "+ 2 x allowance) on Lane B and ceil10(1.5 x expected + one round's worst case) on review-units.", ""]
 ge = gc = 0.0
 for t, items in THREADS.items():
     out.append(t)
@@ -111,10 +122,13 @@ for t, items in THREADS.items():
         desc = f"arms {','.join(it['arms']):<52} sessions {it['n']:>4}/arm  allowance {it['allow']:>5}" if it["arms"] else ""
         out.append(f"  {it['name']:<44} {desc:<86} expected {it['e']:8.2f}  cap {it['c']:6d}")
         te += it["e"]; tc += it["c"]
-    rep_items = [(it["name"].split(" ")[0] + "-repair", REPAIR_SHARE * it["e"], ceil10(1.5 * REPAIR_SHARE * it["e"] + REPAIR_PARALLEL * it["allow"])) for it in items if it["repair"]]
+    rep_items = [(it["name"].split(" ")[0] + "-repair", REPAIR_SHARE * it["e"], ceil10(1.5 * REPAIR_SHARE * it["e"] + it["rhead"])) for it in items if it["repair"]]
     re_ = sum(e for _, e, _ in rep_items); rc = sum(c for _, _, c in rep_items)
     out.append(f"  repair items: {len(rep_items)} (one per launch above), expected {re_:8.2f}, caps {rc:6d}")
-    te += re_; tc += rc
+    jr = [it["c"] for it in items if it.get("judge")]
+    if jr:
+        out.append(f"  judge repair items: {len(jr)} (one per judge batch, a fresh run after a transport stop), expected     0.00, caps {sum(jr):6d}")
+    te += re_; tc += rc + sum(jr)
     out.append(f"  {t} total: expected {te:8.2f}, item caps {tc:8.0f}; the pause line is $4,900 of settled + reserved + host model use + VMs")
     out.append("")
     ge += te; gc += tc
