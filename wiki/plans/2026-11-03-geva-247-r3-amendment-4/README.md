@@ -91,7 +91,7 @@ A note from review: `tasks/swerebench_r3a4.py`'s filter keeps tasks that ask for
 
 ## 6. Contamination window
 
-The pool's tasks were created from 2025-10-01 to May 2026, the newest the pinned package holds. Monthly counts: 2025-10 51, 2025-11 47, 2025-12 48, 2026-01 48, 2026-02 57, 2026-03 46, 2026-04 43, 2026-05 21.
+The pool's tasks were created from 2025-10-01 to May 2026, the newest the pinned package holds. Monthly counts for the package's 361 tasks in that window: 2025-10 51, 2025-11 47, 2025-12 48, 2026-01 48, 2026-02 57, 2026-03 46, 2026-04 43, 2026-05 21. The 7 tasks left out for memory (section 5) came from 2025-10 and 2026-01, so the pool's 354 count 46 in each of those two months.
 
 Anthropic's help center says Opus 5.5 was trained on data up to June 2026. GPT-6.1 Sol's knowledge cutoff is reported as 2026-04-30 by third-party summaries of OpenAI's model page; OpenAI's launch post states none. So every pool task predates Opus's cutoff, and all but the May 2026 tasks predate Sol's. The tasks, their issues and their fixing commits were public before both cutoffs, so either model may have seen them.
 
@@ -245,7 +245,9 @@ dry-run-r3a4.sh.txt ran at the pin on 2026-11-03, from 11:27:48Z to 11:38:24Z, a
 
 The dry run stands in for Ubicloud and the model with stubs. It drives no real VM, no real capacity and no model call, and its draws come from a fixture drop list.
 
-**To repeat it**, check the attachments with `sha256sum -c` against the front matter, then run `dry-run-r3a4.sh.txt` with the inputs its usage line names (a checkout holding the pin, the pinned Harbor's export of the Hub package, a harbor-datasets checkout, the three arm tars, the pinned ubi-runner.sh, Harbor at f3a5a92, GEVA-177's drop list, attempt 2's plan.json, amendment 3's and 3c's post folders, this post's folder, r3a-sol's route record and the real-oracle record and script), and read every step's exit line and the 16 assertion lines.
+**To repeat it**, check the attachments with `sha256sum -c` against the front matter, then run `dry-run-r3a4.sh.txt` with the inputs its usage line names (a checkout holding the pin, the pinned Harbor's export of the Hub package, a harbor-datasets checkout, the three arm tars, the pinned ubi-runner.sh, Harbor at f3a5a92, GEVA-177's drop list, attempt 2's plan.json, amendment 3's and 3c's post folders, a scratch copy of this post's folder, r3a-sol's route record and the real-oracle record and script), and read every step's exit line and the 16 assertion lines. Point P at that scratch copy, never at a checkout: Part H copies the unmasked real-oracle originals into $P, which would overwrite the two masked attachments here.
+
+Run a replay only on a disposable machine or VM that holds no other work. Part F starts the export's vm-run.sh locally, and in E2 its cap watcher runs `pkill -INT -f "/bin/harbor run"`, which signals every Harbor job of the same user on that machine, not only its own. The real-oracle script, oracle-dryrun-r3a4.sh.txt, ends with `docker system prune -af --volumes`, which removes every stopped container, unused image and unused volume on that Docker daemon. Its record line prints that command without `--volumes`.
 
 ## 16. No-gstack arm
 
