@@ -177,6 +177,25 @@ describe("thread exports", () => {
     expect(scan(run([tool("pr_create", { title: "t" })]), run([bash("bun run typecheck", "ok")])).pushed_head_checks.calls).toBe(1);
   });
 
+  test("only a successful push in the same machine and directory makes a pushed head", () => {
+    const after = (push: C, check = bash("bun test", "ok")) => scan(run([push]), run([check])).pushed_head_checks.calls;
+    expect(after(bash("git push", "rejected", { error: true }))).toBe(0);
+    expect(after(bash("git push", "ok", { machine: { subagent: "1" } }))).toBe(0);
+    expect(after(bash("cd repo-a && git push"), bash("cd repo-b && bun test", "ok"))).toBe(0);
+    expect(after(bash("cd repo-a && git push"), bash("cd repo-a && bun test", "ok"))).toBe(1);
+  });
+
+  test("patches, sourced scripts and attached in-place flags cross the boundary", () => {
+    const again = (mid: C) => scan(run([bash("bun test", "ok")]), run([mid]), run([bash("bun test", "ok")]));
+    for (const mid of [tool("apply_patch", { patch: "x" }), bash("source ./repair.sh", ""), bash(". ./repair.sh", "")]) {
+      expect(again(mid).r1.calls).toBe(0);
+      expect(again(mid).r1_strict.calls).toBe(0);
+    }
+    expect(again(bash(". ./launch.env", "")).r1.calls).toBe(1);
+    expect(bashTraits("sed --in-place=.bak s/a/b/ f").changes).toBe(true);
+    expect(bashTraits("sort -oout.txt in.txt").changes).toBe(true);
+  });
+
   test("R4a counts identical status polls separated only by polls, sleeps and waits", () => {
     const s = scan(
       run([bash("gh pr checks 7", "pending")]),
@@ -229,6 +248,8 @@ describe("thread exports", () => {
     expect(() => readExport(JSON.stringify({ items: [{ id: "x", source: "tool" }] }))).toThrow("createdAt");
     expect(() => readExport(JSON.stringify({ rows: [] }))).toThrow("not a transcript page");
     expect(() => readExport("{\n")).toThrow("line 1 is not JSON");
+    expect(() => readExport("\n\n")).toThrow("no JSON value");
+    expect(readExport("[]")).toEqual([]);
   });
 
   test("scanThreads digests each export and sums the sessions", () => {
@@ -245,19 +266,19 @@ describe("receipts", () => {
   test("reads rounds from the receipt block, or passes plus fix-checks", () => {
     expect(receiptLoop(block({ passes: 2, rounds: 3 }))).toEqual({ passes: 2, rounds: 3 });
     expect(receiptLoop(block({ passes: 2, fix_checks: 1 }))).toEqual({ passes: 2, rounds: 3 });
-    expect(receiptLoop(block({ passes: 1 }))).toEqual({ passes: 1, rounds: null });
+    expect(receiptLoop(block({ passes: 1 }))).toEqual({ passes: 1, rounds: 1 });
     expect(receiptLoop(block({ passes: 1 }) + block({ passes: 3, rounds: 3 }))).toEqual({ passes: 3, rounds: 3 });
   });
 
   test("falls back to the last REVIEW_LOOP line", () => {
     expect(receiptLoop("REVIEW_LOOP: passes=1 fix_checks=0\nREVIEW_LOOP: passes=3 blocking_found=1 fix_checks=1 scope=frozen")).toEqual({ passes: 3, rounds: 4 });
-    expect(receiptLoop("REVIEW_LOOP: passes=2 blocking_found=0")).toEqual({ passes: 2, rounds: null });
+    expect(receiptLoop("REVIEW_LOOP: passes=2 blocking_found=0")).toEqual({ passes: 2, rounds: 2 });
     expect(receiptLoop("no receipt here")).toBeNull();
   });
 
   test("counts rounds and passes past the cap of 2", () => {
     const out = scanReceipts([block({ passes: 2, rounds: 3 }), block({ passes: 1, rounds: 1 }), "REVIEW_LOOP: passes=4", "nothing"]);
-    expect(out).toMatchObject({ files: 4, no_receipt: 1, with_passes: 3, passes: 7, passes_past_cap: 2, prs_passes_past_cap: 1, with_rounds: 2, rounds: 4, rounds_past_cap: 1, prs_rounds_past_cap: 1, rounds_by_count: { "1": 1, "3": 1 } });
+    expect(out).toMatchObject({ files: 4, no_receipt: 1, with_passes: 3, passes: 7, passes_past_cap: 2, prs_passes_past_cap: 1, with_rounds: 3, rounds: 8, rounds_past_cap: 3, prs_rounds_past_cap: 2, rounds_by_count: { "1": 1, "3": 1, "4": 1 } });
     expect(out.digests).toHaveLength(4);
   });
 
@@ -312,6 +333,9 @@ describe("per-PR data", () => {
     const out = scanPrs({ prs: [{ heads: [] }] });
     expect(out.ci.reruns).toBeNull();
     expect(out.review.passes).toBeNull();
+    const unmatched = scanPrs({ prs: [{ heads: [{ jobs: 1 }, { jobs: 1 }], review_loop: { passes: 2 }, gates: [{ gate: "capy_review", runs: 2 }] }, { review_loop: { passes: 20 }, gates: [{ gate: "capy_review", runs: 20 }] }] });
+    expect(unmatched.review.passes_per_head).toBe(1);
+    expect(unmatched.review.platform_review_runs_per_head).toBe(1);
     expect(out.review.rounds_past_cap).toBeNull();
     expect(out.catches).toBeNull();
     expect(() => scanPrs({ rows: [] })).toThrow("prs array");

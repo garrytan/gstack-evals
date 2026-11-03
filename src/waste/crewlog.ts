@@ -310,9 +310,10 @@ export function segChanges(seg: Segment): boolean {
   const { name, args } = program(seg);
   if (name === "git") return GIT_CHANGE.has(gitSub(args));
   if (FILE_CHANGE.has(name)) return true;
-  if ((name === "sed" || name === "perl") && args.some((a) => a === "--in-place" || /^-[A-Za-z]*i/.test(a))) return true;
+  if ((name === "." || name === "source") && !/\.env$/.test(args[0] ?? "")) return true;
+  if ((name === "sed" || name === "perl") && args.some((a) => a === "--in-place" || a.startsWith("--in-place=") || /^-[A-Za-z]*i/.test(a))) return true;
   if (name === "find") return args.some((a) => /^-(exec|execdir|delete|ok|okdir|fprint0?|fprintf|fls)$/.test(a));
-  if (name === "sort") return args.some((a) => a === "-o" || a.startsWith("--output"));
+  if (name === "sort") return args.some((a) => /^-[A-Za-z]*o/.test(a) || a.startsWith("--output"));
   if (name === "curl") return args.some((a) => /^(-o|-O|--output|--remote-name)/.test(a));
   if (name === "gstack-pregate") return args.includes("push");
   return SCRIPT_RUNNERS.has(name) && !isCheck(seg);
@@ -336,6 +337,8 @@ export interface BashTraits {
   changes: boolean;
   strictChanges: boolean;
   push: boolean;
+  /** The directory of the last cd in the command, or "" with none. */
+  dir: string;
 }
 
 export function bashTraits(command: string): BashTraits {
@@ -352,6 +355,7 @@ export function bashTraits(command: string): BashTraits {
     changes,
     strictChanges: changes || !segs.every(segReadOnly),
     push: segs.some((s, i) => (names[i] === "git" && gitSub(program(s).args) === "push") || (names[i] === "gstack-pregate" && program(s).args.includes("push"))),
+    dir: segs.filter((_, i) => names[i] === "cd").map((s) => program(s).args[0] ?? "").pop() ?? "",
   };
 }
 
@@ -396,6 +400,7 @@ export function readExport(text: string): ExportItem[] {
       }
     }
   }
+  if (values.length === 0) throw new InputError("no JSON value");
   const raw: unknown[] = [];
   for (const v of values) {
     if (Array.isArray(v)) raw.push(...v);
@@ -444,7 +449,7 @@ function json(text: string): Record<string, unknown> | null {
 
 const POLL_TOOLS = new Set(["operation_get", "operation_list", "subagent_get", "subagent_list", "pr_get_checks", "pr_get_overview", "pr_get_findings", "pr_get_comments", "port_list"]);
 const QUIET_TOOLS = new Set(["thread_get", "thread_list", "end_turn", "wait", "read"]);
-const TREE_TOOLS = new Set(["edit", "write", "pr_create", "transfer_files"]);
+const TREE_TOOLS = new Set(["edit", "write", "apply_patch", "pr_create", "transfer_files"]);
 const AGENT_TOOLS = new Set(["subagent_create", "subagent_start"]);
 
 const zero = () => ({ calls: 0, ms: 0 });
@@ -479,6 +484,7 @@ export function scanSession(items: ExportItem[]) {
   let epoch = 0;
   let strictEpoch = 0;
   let pushedEpoch = -1;
+  let pushedAt = "";
   const last = new Map<string, { epochAfter: number; strictAfter: number; digest: string; chars: number; isError: boolean; cut: boolean }>();
   const polls = new Map<string, { digest: string; chars: number; isError: boolean; cut: boolean }>();
   const calls: Call[] = [];
@@ -512,7 +518,8 @@ export function scanSession(items: ExportItem[]) {
       if (t.check) add(s.checks, c);
       if (t.check && background) s.background_checks++;
       if (t.check || t.gstack) add(s.ship_checks, c);
-      if (t.check && !t.changes && pushedEpoch === epoch) add(s.pushed_head_checks, c);
+      const at = JSON.stringify(input!.machine ?? "primary") + "\u0000" + t.dir;
+      if (t.check && !t.changes && pushedEpoch === epoch && pushedAt === at) add(s.pushed_head_checks, c);
       if (t.sleep) {
         s.r4b.sleep_calls++;
         s.r4b.sleep_ms += c.ms;
@@ -537,7 +544,10 @@ export function scanSession(items: ExportItem[]) {
       }
       if (t.changes || background) epoch++;
       if (t.strictChanges || background) strictEpoch++;
-      if (t.push) pushedEpoch = epoch;
+      if (t.push && !c.isError) {
+        pushedEpoch = epoch;
+        pushedAt = at;
+      }
       if (!background) last.set(key, { epochAfter: epoch, strictAfter: strictEpoch, digest, chars: c.resultChars, isError: c.isError, cut: c.resultCut });
       continue;
     }
@@ -564,7 +574,10 @@ export function scanSession(items: ExportItem[]) {
     if (TREE_TOOLS.has(c.tool) || AGENT_TOOLS.has(c.tool) || toSubagent) {
       epoch++;
       strictEpoch++;
-      if (c.tool === "pr_create") pushedEpoch = epoch;
+      if (c.tool === "pr_create" && !c.isError) {
+        pushedEpoch = epoch;
+        pushedAt = JSON.stringify("primary") + "\u0000";
+      }
     }
   }
   return s;
@@ -616,14 +629,14 @@ export function receiptLoop(text: string): ReviewLoop | null {
     const loop = rl as Record<string, unknown>;
     const passes = num(loop.passes);
     const fixChecks = num(loop.fix_checks);
-    return { passes, rounds: num(loop.rounds) ?? (passes !== null && fixChecks !== null ? passes + fixChecks : null) };
+    return { passes, rounds: num(loop.rounds) ?? (passes !== null ? passes + (fixChecks ?? 0) : null) };
   }
   const lines = [...text.matchAll(/^REVIEW_LOOP:\s*(.*)$/gm)];
   if (lines.length === 0) return null;
   const fields = new Map([...lines.at(-1)![1]!.matchAll(/(\w+)=(\d+)/g)].map((m) => [m[1]!, Number(m[2])]));
   const passes = fields.get("passes") ?? null;
   const fixChecks = fields.get("fix_checks") ?? null;
-  return { passes, rounds: fields.get("rounds") ?? (passes !== null && fixChecks !== null ? passes + fixChecks : null) };
+  return { passes, rounds: fields.get("rounds") ?? (passes !== null ? passes + (fixChecks ?? 0) : null) };
 }
 
 export function scanReceipts(texts: string[]) {
@@ -728,15 +741,17 @@ export function scanPrs(data: unknown) {
     const panel = gates(p, "ship_panel")[0];
     const passes = count(rl?.passes) ?? count(panel?.passes);
     const fixChecks = count(rl?.fix_checks);
-    const rounds = count(rl?.rounds) ?? count(panel?.rounds) ?? (passes !== null && fixChecks !== null ? passes + fixChecks : null);
+    const rounds = count(rl?.rounds) ?? count(panel?.rounds) ?? (passes !== null ? passes + (fixChecks ?? 0) : null);
     const headCount = Array.isArray(p.heads) ? p.heads.length : null;
     return { passes, rounds, heads: headCount, shipRuns: count(panel?.runs), platform: count(gates(p, "capy_review")[0]?.runs) };
   });
   const withPasses = loops.filter((l) => l.passes !== null);
+  const passPerHead = withPasses.filter((l) => l.heads !== null);
   const withRounds = loops.filter((l) => l.rounds !== null);
-  const passHeads = withPasses.reduce((a, l) => a + (l.heads ?? 0), 0);
+  const passHeads = passPerHead.reduce((a, l) => a + l.heads!, 0);
   const platform = loops.filter((l) => l.platform !== null);
-  const platformHeads = platform.reduce((a, l) => a + (l.heads ?? 0), 0);
+  const platformPerHead = platform.filter((l) => l.heads !== null);
+  const platformHeads = platformPerHead.reduce((a, l) => a + l.heads!, 0);
   let catches: Rec | null = null;
   if (Array.isArray(root.catches)) {
     const by: Record<string, number> = {};
@@ -778,14 +793,14 @@ export function scanPrs(data: unknown) {
       passes: withPasses.length === 0 ? null : withPasses.reduce((a, l) => a + l.passes!, 0),
       passes_past_cap: withPasses.length === 0 ? null : withPasses.reduce((a, l) => a + Math.max(0, l.passes! - ROUND_CAP), 0),
       prs_passes_past_cap: withPasses.length === 0 ? null : withPasses.filter((l) => l.passes! > ROUND_CAP).length,
-      passes_per_head: withPasses.length === 0 || passHeads === 0 ? null : Math.round((withPasses.reduce((a, l) => a + l.passes!, 0) / passHeads) * 100) / 100,
+      passes_per_head: passHeads === 0 ? null : Math.round((passPerHead.reduce((a, l) => a + l.passes!, 0) / passHeads) * 100) / 100,
       prs_with_rounds: withRounds.length,
       rounds: withRounds.length === 0 ? null : withRounds.reduce((a, l) => a + l.rounds!, 0),
       rounds_past_cap: withRounds.length === 0 ? null : withRounds.reduce((a, l) => a + Math.max(0, l.rounds! - ROUND_CAP), 0),
       prs_rounds_past_cap: withRounds.length === 0 ? null : withRounds.filter((l) => l.rounds! > ROUND_CAP).length,
       ship_runs: total(loops.map((l) => l.shipRuns)),
       platform_review_runs: platform.length === 0 ? null : platform.reduce((a, l) => a + l.platform!, 0),
-      platform_review_runs_per_head: platform.length === 0 || platformHeads === 0 ? null : Math.round((platform.reduce((a, l) => a + l.platform!, 0) / platformHeads) * 100) / 100,
+      platform_review_runs_per_head: platformHeads === 0 ? null : Math.round((platformPerHead.reduce((a, l) => a + l.platform!, 0) / platformHeads) * 100) / 100,
     },
     catches,
   };
