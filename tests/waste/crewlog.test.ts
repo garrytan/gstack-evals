@@ -160,6 +160,17 @@ describe("thread exports", () => {
     expect(s.r1.calls).toBe(0);
   });
 
+  test("a call that crosses the boundary itself is never R1 or a pushed-head check", () => {
+    const s = scan(run([bash("printf x >> counter.txt", "")]), run([bash("printf x >> counter.txt", "")]));
+    expect(s.r1.calls).toBe(0);
+    expect(s.r1_strict.calls).toBe(0);
+    expect(scan(run([bash("git push -u origin topic")]), run([bash("printf x >> f && bun test", "ok")])).pushed_head_checks.calls).toBe(0);
+  });
+
+  test("the command key keeps whitespace inside quotes", () => {
+    expect(scan(run([bash("grep -q 'a  b' f", "")]), run([bash("grep -q 'a b' f", "")])).r1.calls).toBe(0);
+  });
+
   test("checks after a push with no change since are at a pushed head", () => {
     const s = scan(run([bash("bun test", "ok")]), run([bash("git push -u origin topic")]), run([bash("bun test", "ok", { ms: 4000 })]), run([tool("edit", { path: "f" })]), run([bash("bun test", "ok")]));
     expect(s.pushed_head_checks).toEqual({ calls: 1, ms: 4000 });
@@ -183,6 +194,12 @@ describe("thread exports", () => {
     expect(scan(run([bash("gh pr checks 7", "pending")]), run([bash("bun test", "ok")]), run([bash("gh pr checks 7", "pending")])).r4a.calls).toBe(0);
     const s = scan(run([bash("git status --short", "M a")]), run([bash("git status --short", "M b")]), run([bash("git status --short", "M b")]));
     expect(s.r4a.calls).toBe(1);
+  });
+
+  test("only a pure sleep keeps a poll run", () => {
+    for (const between of ["echo x > f; sleep 1", "sleep 5; bun test"]) expect(scan(run([bash("gh pr checks 7", "pending")]), run([bash(between, "")]), run([bash("gh pr checks 7", "pending")])).r4a.calls).toBe(0);
+    expect(bashTraits("sleep 30").idle).toBe(true);
+    expect(bashTraits("git status > out.txt").poll).toBe(false);
   });
 
   test("Capy status tools poll too", () => {
@@ -279,12 +296,16 @@ describe("per-PR data", () => {
     const out = scanPrs(data);
     expect(out.prs).toBe(2);
     expect(out.heads).toBe(3);
-    expect(out.ci).toEqual({ heads_with_jobs: 2, heads_without_jobs: 1, workflow_runs: 4, reruns: 1, red_heads: 0, job_minutes: 10, wall_min_all_heads: 8.5, wall_min_final_heads: 5 });
+    expect(out.ci).toEqual({ heads_with_jobs: 2, heads_without_jobs: 1, heads_jobs_not_measured: 0, workflow_runs: 4, reruns: 1, red_heads: 0, job_minutes: 10, wall_min_all_heads: 8.5, wall_min_final_heads: 5 });
     expect(out.local_checks.pregate).toEqual({ prs_with_gate: 2, runs: 2, runs_not_measured: 1, wall_min: null, wall_estimate_only: 1 });
     expect(out.local_checks.ship_preflight).toEqual({ prs_with_gate: 1, runs: 1, runs_not_measured: 0, wall_min: 4, wall_estimate_only: 0 });
     expect(out.local_checks.ubicloud_verify).toEqual({ prs_with_gate: 0, runs: null, runs_not_measured: 0, wall_min: null, wall_estimate_only: 0 });
     expect(out.review).toEqual({ prs_with_passes: 2, passes: 4, passes_past_cap: 1, prs_passes_past_cap: 1, passes_per_head: 1.33, prs_with_rounds: 2, rounds: 6, rounds_past_cap: 2, prs_rounds_past_cap: 1, ship_runs: 1, platform_review_runs: 2, platform_review_runs_per_head: 1 });
     expect(out.catches).toEqual({ counted: 5, by_first_gate: { ship_panel: 1, ci: 3, pregate: 1 }, escapes: 1, not_strict: 1, outside_window: 1 });
+  });
+
+  test("a head with no job count is not measured, never a head without jobs", () => {
+    expect(scanPrs({ prs: [{ heads: [{}] }] }).ci).toMatchObject({ heads_with_jobs: 0, heads_without_jobs: 0, heads_jobs_not_measured: 1 });
   });
 
   test("a field the data lacks is null, not zero", () => {

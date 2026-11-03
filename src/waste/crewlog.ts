@@ -332,6 +332,7 @@ export interface BashTraits {
   gstack: boolean;
   poll: boolean;
   sleep: boolean;
+  idle: boolean;
   changes: boolean;
   strictChanges: boolean;
   push: boolean;
@@ -340,13 +341,14 @@ export interface BashTraits {
 export function bashTraits(command: string): BashTraits {
   const segs = parseShell(command);
   const names = segs.map((s) => program(s).name);
-  const poll = segs.some(isPollSeg) && segs.every((s, i) => isPollSeg(s) || CONTROL.has(names[i]!) || names[i] === "sleep");
   const changes = segs.some(segChanges);
+  const poll = segs.some(isPollSeg) && segs.every((s, i) => isPollSeg(s) || CONTROL.has(names[i]!) || names[i] === "sleep") && !changes;
   return {
     check: segs.some(isCheck),
     gstack: names.some((n) => n.startsWith("gstack-")),
     poll,
     sleep: names.includes("sleep"),
+    idle: names.includes("sleep") && names.every((n) => n === "sleep" || CONTROL.has(n)) && !changes,
     changes,
     strictChanges: changes || !segs.every(segReadOnly),
     push: segs.some((s, i) => (names[i] === "git" && gitSub(program(s).args) === "push") || (names[i] === "gstack-pregate" && program(s).args.includes("push"))),
@@ -510,18 +512,18 @@ export function scanSession(items: ExportItem[]) {
       if (t.check) add(s.checks, c);
       if (t.check && background) s.background_checks++;
       if (t.check || t.gstack) add(s.ship_checks, c);
-      if (t.check && pushedEpoch === epoch) add(s.pushed_head_checks, c);
+      if (t.check && !t.changes && pushedEpoch === epoch) add(s.pushed_head_checks, c);
       if (t.sleep) {
         s.r4b.sleep_calls++;
         s.r4b.sleep_ms += c.ms;
       }
-      const key = JSON.stringify(input!.machine ?? "primary") + "\u0000" + command.trim().replace(/\s+/g, " ");
+      const key = JSON.stringify(input!.machine ?? "primary") + "\u0000" + command.trim();
       if (t.poll && !background) {
         const p = polls.get(key);
         if (p && same(p)) add(s.r4a, c, p.cut || c.resultCut);
         polls.set(key, { digest, chars: c.resultChars, isError: c.isError, cut: c.resultCut });
-      } else if (!t.sleep) polls.clear();
-      if (!background && !t.poll && !t.sleep) {
+      } else if (!t.idle || background) polls.clear();
+      if (!background && !t.poll && !t.sleep && !t.changes) {
         const p = last.get(key);
         if (p && p.epochAfter === epoch) {
           if (same(p)) {
@@ -531,7 +533,7 @@ export function scanSession(items: ExportItem[]) {
             if (t.check || t.gstack) add(s.r1_ship_checks, c, approx);
           } else s.informative_reruns++;
         }
-        if (p && p.strictAfter === strictEpoch && same(p)) add(s.r1_strict, c, p.cut || c.resultCut);
+        if (!t.strictChanges && p && p.strictAfter === strictEpoch && same(p)) add(s.r1_strict, c, p.cut || c.resultCut);
       }
       if (t.changes || background) epoch++;
       if (t.strictChanges || background) strictEpoch++;
@@ -550,7 +552,7 @@ export function scanSession(items: ExportItem[]) {
       continue;
     }
     if (POLL_TOOLS.has(c.tool)) {
-      const key = c.tool + "\u0000" + c.input.trim().replace(/\s+/g, " ");
+      const key = c.tool + "\u0000" + c.input.trim();
       const p = polls.get(key);
       if (p && same(p) && !c.inputCut) add(s.r4a, c, p.cut || c.resultCut);
       polls.set(key, { digest, chars: c.resultChars, isError: c.isError, cut: c.resultCut });
@@ -761,7 +763,8 @@ export function scanPrs(data: unknown) {
     heads: heads.length,
     ci: {
       heads_with_jobs: heads.filter((h) => (count(h.jobs) ?? 0) > 0).length,
-      heads_without_jobs: heads.filter((h) => (count(h.jobs) ?? 0) === 0).length,
+      heads_without_jobs: heads.filter((h) => count(h.jobs) === 0).length,
+      heads_jobs_not_measured: heads.filter((h) => count(h.jobs) === null).length,
       workflow_runs: total(ci.map((c) => c.workflow_runs)),
       reruns: total(ci.map((c) => c.reruns)),
       red_heads: total(ci.map((c) => c.red_heads)),
