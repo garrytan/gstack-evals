@@ -21,5 +21,6 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | runner/pricing/ | The price table the proxy and preflight read, vendored with the proxy | U3 |
 | trial/ | The trial module: isolation, images, network, env allowlist, state root, grading delta, cache | U9 |
 | trial/review/ | Review units as trials: unit repos and trees, the told prompt, the findings parser, cost.tsv from the proxy journal, the run loop and the review-units command | U9, GST-381 |
+| waste/ | The gstack-evals waste crew-log reader behind `gstack-evals waste`: Capy thread exports, /ship receipts and per-PR replay data, counts and digests only | GST-1114 |
 
 Vendored files keep their upstream copyright line in the file header and get an entry in [NOTICE.md](../NOTICE.md).
