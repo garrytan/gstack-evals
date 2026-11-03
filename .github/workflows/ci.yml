@@ -1,6 +1,8 @@
 # Keyless CI: typecheck, unit tests, the reason-code doc and the wiki check. Nothing here needs a secret.
 # Actions are pinned to commit SHAs. Bun is downloaded at a pinned version and checked against the release's SHA-256.
-# workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19).
+# workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19). Main's copy keeps
+# the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
+# ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
 # Later units add tests under tests/; `bun test` picks them up without a change here.
 # gstack is fetched at the commit sealed.yml pins, because tests/ci/sealed-workflow.test.ts runs sealed.yml's steps with
 # gstack's real sealed checker on scratch repositories.
@@ -24,6 +26,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Install Bun, checked against the release's SHA-256
         env:
           BUN_VERSION: 1.4.4
@@ -37,7 +40,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Fetch gstack at the pinned commit
         env:
-          GSTACK_SHA: 61e201ec08bcf59163ef2d3a69a26e334a536c04 # gstack v1.91.295.0
+          GSTACK_SHA: 68410828fd85611caea2c8429846f683849f425a # gstack v1.93.17.0
         run: |
           git init -q "$RUNNER_TEMP/gstack"
           git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"

@@ -55,6 +55,54 @@ describe("sealed publication rules", () => {
     expect(seeds.some((re) => re.test("const seed = 7"))).toBe(false);
   });
 
+  test("the guard's own verdict lines pass, and every other bare or labelled marker still trips", () => {
+    const markers = sealed.answer_markers.map((m) => new RegExp(m));
+    const trips = (line: string) => markers.some((re) => re.test(line));
+    const bare = "SEALED" + ": ";
+    const tail = " skipped=0 visibility=public waived=0 exempt=0 policy=origin/main";
+    for (const verdict of [
+      "clear findings=0 commits=1" + tail,
+      "refused findings=7 commits=11" + tail + " + commit 578129a3039f",
+      "warned findings=1 commits=1" + tail,
+      "error findings=0 commits=0 visibility=public waived=0 policy=origin/main",
+      "no-policy findings=0 commits=1" + tail,
+      "clear findings=0 commits=1 skipped=0 visibility=public waived=0 exempt=0 unchecked=2 policy=origin/main + commit 578129a3039f",
+      "error findings=0 commits=0 skipped=0 visibility=unknown (counted public) waived=0 exempt=0 policy=no sealed key on refs/remotes/origin/main or HEAD",
+      "clear findings=0 commits=1 visibility=public waived=0 policy=origin/main + pushed 0123456789ab",
+      "clear findings=0 commits=1 visibility=public waived=0 policy=pushed 0123456789ab",
+      "no-policy findings=0 commits=1 visibility=public waived=0 policy=no sealed key on origin/main or HEAD",
+      "clear findings=0 commits=1",
+      "clear",
+      "refused",
+      "error",
+      "not checked (exit 3)",
+      "not checked (exit null)",
+    ]) {
+      expect(trips(bare + verdict)).toBe(false);
+    }
+    const label = (words: string, rest: string) => "SEALED " + words + ": " + rest;
+    for (const line of [
+      bare + "42",
+      bare + "fixture-only-answer=42",
+      bare + "clearly 42",
+      bare + "clear 42",
+      bare + "error 42",
+      bare + "clear findings=0 commits=1 the hidden answer is 42",
+      bare + "clear findings=0 commits=1 the hidden answer is 42 policy=origin/main",
+      bare + "clear findings=0 commits=1 skipped=0 visibility=public the hidden answer is 42 policy=origin/main",
+      bare + "clear findings=0 commits=1 visibility=public waived=0 policy=origin/main + the hidden answer is 42",
+      bare + "no-policy findings=0 commits=1 visibility=public waived=0 policy=no sealed key on the hidden answer",
+      bare + "not checked (exit foo)",
+      label("ANSWER", "42"),
+      label("ANSWER", "error"),
+      label("ANSWER", "clear findings=0 commits=1"),
+      label("HIDDEN TEST", "t1"),
+      label("HIDDEN TEST", "not checked yet"),
+    ]) {
+      expect(trips(line)).toBe(true);
+    }
+  });
+
   test("no text rule matches a line of the config itself, so the config never refuses its own commit", () => {
     const rules = [...sealed.answer_markers, ...sealed.seed_patterns].map((r) => new RegExp(r));
     for (const line of configText.split("\n")) for (const re of rules) expect(re.test(line)).toBe(false);

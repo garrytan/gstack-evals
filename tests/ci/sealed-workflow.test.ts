@@ -110,7 +110,7 @@ describe("sealed.yml", () => {
 });
 
 // The fixture runs: sealed.yml's own steps, minus the Bun and gstack downloads, after a checkout like actions/checkout's, with
-// gstack's real checker. ci.yml and train-gate.yml fetch it at sealed.yml's pin into $RUNNER_TEMP/gstack; elsewhere a local
+// gstack's real checker. ci.yml fetches it at sealed.yml's pin into $RUNNER_TEMP/gstack; elsewhere a local
 // install serves, and without one these tests skip.
 const CHECKER = [process.env.RUNNER_TEMP ? join(process.env.RUNNER_TEMP, "gstack") : "", join(homedir(), ".local", "share", "gstack")].find(
   (d) => d && existsSync(join(d, "bin", "gstack-pregate")),
