@@ -372,7 +372,7 @@ function prepare(work: string, m: R3aModel) {
 }
 
 // run's and resume's checks of the VM, runner and ledger port settings, before anything launches.
-function launchEnv(m: R3aModel, state = `${state}`) {
+function launchEnv(m: R3aModel, state = `${m.item} is still unbound`) {
   const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
   if (!rate) throw new Error(`E_USAGE set VM_USD_PER_HOUR so the VM hours settle to ${m.item}`);
   vmBlock(rate, hours, m.capUsd);

@@ -24,6 +24,8 @@ echo "${RUNNER_SHA256:-e53f11384dd6faa14bab96aff14ea42577787df285470e8a192ef24de
   || { echo "preflight: $R is not the pinned runner"; exit 1; }
 cap=$(bun "$L" status --path "$LEDGER" --item "$ITEM" | jq -r .cap_usd) || { echo "preflight: $LEDGER has no approval row"; exit 1; }
 [ "$cap" = "$CAP" ] || { echo "preflight: $ITEM's cap is \$$cap, not amendment 4's \$$CAP"; exit 1; }
+owner=$(jq -rs '[.[] | select(.kind == "approval")][0].item // ""' "$LEDGER") || owner=""
+[ "$owner" = "$ITEM" ] || { echo "preflight: $LEDGER's approval row is for item ${owner:-none}, not $ITEM"; exit 1; }
 [ -f "$W/oracle.json" ] || { echo "preflight: $W has no oracle.json; prepare it with ORACLE=1"; exit 1; }
 mkdir -p "$O" "$O/script"
 cp "$D/oracle-pass.sh" "$O/script/oracle-pass.sh"

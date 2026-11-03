@@ -101,13 +101,18 @@ describe("the oracle preflight with a stub runner", () => {
     expect(v.out).toContain("exited 1, not 0; it is void");
   }, 120_000);
 
-  test("a runner off its pin, a cap that isn't $20, a refused block or a VM that won't come up starts no pass", () => {
+  test("a runner off its pin, a cap that isn't $20, another item's ledger, a refused block or a VM that won't come up starts no pass", () => {
     const off = shard(TASKS);
     const a = preflight(off, { RUNNER_SHA256: "0".repeat(64) });
     expect([a.code, a.out.includes("is not the pinned runner"), a.log]).toEqual([1, true, ""]);
     const wrong = shard(TASKS);
     const b = preflight(wrong, {}, 21);
     expect([b.code, b.out.includes("r3a4-oracle's cap is $21, not amendment 4's $20"), b.log]).toEqual([1, true, ""]);
+    const other = shard(TASKS);
+    new Ledger(other.ledger, "r3a4-opus").approve(20, { words: "test", by: "test" });
+    const o = preflight(other);
+    expect([o.code, o.out.includes("approval row is for item r3a4-opus, not r3a4-oracle"), o.log]).toEqual([1, true, ""]);
+    expect(readRows(other.ledger).filter((r) => r.kind !== "approval")).toEqual([]);
     const spent = shard(TASKS);
     const l = new Ledger(spent.ledger, "r3a4-oracle");
     l.approve(20, { words: "test", by: "test" });
