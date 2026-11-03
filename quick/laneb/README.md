@@ -51,7 +51,7 @@ sequenceDiagram
 
 ## Checks
 
-Keyless: `bun test quick/laneb` (its agent tests run `tests/agent_test.py` under `python3`, and `tests/agent_sdk_test.py` under the real `claude-agent-sdk` at `runner/vm-bootstrap.sh`'s pin, which the test installs into a venv in the temp dir; `tests/r3.test.ts` runs `tests/agent_r3_sdk_test.py` the same way) and `npx tsc --noEmit -p quick/laneb/tsconfig.json`. `NETWORK=public bash quick/laneb/runner/smoke.sh` needs Docker and Harbor (`uv tool install "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" --with claude-agent-sdk==0.2.174`).
+Keyless: `bun test quick/laneb` (its agent tests run `tests/agent_test.py` under `python3`, and `tests/agent_sdk_test.py` under the real `claude-agent-sdk` at `runner/vm-bootstrap.sh`'s pin, which the test installs into a venv in the temp dir; `tests/r3.test.ts` and `tests/r3a4.test.ts` run `tests/agent_r3_sdk_test.py` the same way) and `npx tsc --noEmit -p quick/laneb/tsconfig.json`. `NETWORK=public bash quick/laneb/runner/smoke.sh` needs Docker and Harbor (`uv tool install "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" --with claude-agent-sdk==0.2.174`).
 
 ## What M2a should know
 
